@@ -68,6 +68,18 @@
 #   * VTSEARCH_VERSION  — bake a version string into the image
 # -----------------------------------------------------------------
 
+# ---------- frontend build stage ----------
+# Builds the Angular SPA inside the image so callers never have to run
+# `npm run build:prod` on the host. Output lands at /static because
+# frontend/angular.json sets outputPath to "../static" relative to the
+# frontend/ workdir. The final stage COPYs /static into /app/static.
+FROM node:20-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build:prod
+
 FROM python:3.10-slim AS base
 
 WORKDIR /app
@@ -203,6 +215,11 @@ print('EUPE weights cached via torch.hub.', flush=True)" \
 
 # ---------- application layer ----------
 COPY . .
+
+# Overlay the freshly-built Angular bundle from the frontend stage so
+# the image is never served with a stale checked-in static/ snapshot.
+RUN rm -rf /app/static
+COPY --from=frontend /static/ /app/static/
 
 # Bake the version into the image. See Dockerfile for the pattern.
 ARG VTSEARCH_VERSION=

@@ -168,7 +168,7 @@ def run_settings_export(body: dict):
         abort(400, message=f"Missing required field(s): {missing}", missing_fields=missing)
 
     if "filepath" in field_values and str(field_values["filepath"]).strip():
-        import vtsearch.security.path_validation as _paths
+        import vtscore.security.path_validation as _paths
 
         try:
             _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())

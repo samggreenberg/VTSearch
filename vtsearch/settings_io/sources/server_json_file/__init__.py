@@ -63,26 +63,48 @@ class ServerFileSettingsSource(SettingsSource):
             os.fsync(f.fileno())
         os.replace(tmp, filepath)
 
+    def peek_version(self, field_values: dict[str, Any]) -> int | None:
+        """Return the source file's ``st_mtime_ns`` as a freshness token.
+
+        A change in the returned value signals the file has been
+        rewritten since the last sync.  Returns ``None`` if the file
+        doesn't exist (or the path can't be resolved / statted) — the
+        settings layer interprets that as "skip the auto re-sync until
+        the file appears."
+        """
+        try:
+            path = Path(_resolve_filepath(field_values))
+        except Exception:
+            return None
+        try:
+            return path.stat().st_mtime_ns
+        except OSError:
+            return None
+
 
 def _resolve_filepath(field_values: dict[str, Any]) -> str:
     """Resolve the filepath, expanding the ``{username}`` template.
 
     The substituted username is sanitized so that a name containing path
     separators or ``..`` cannot escape the directory implied by the
-    admin-configured template.
+    admin-configured template.  The fully-resolved path is then run
+    through :func:`validate_server_filepath` so that a template
+    containing ``../`` cannot escape either.
     """
+    from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
+
     filepath = (field_values.get("filepath") or "").strip()
     if not filepath:
         raise ValueError("A file path is required.")
 
     if "{username}" in filepath:
         from vtsearch.auth import get_current_user
-        from vtsearch.security.path_validation import sanitize_template_value
+        from vtscore.security.path_validation import sanitize_template_value
 
         username = get_current_user() or "default"
         filepath = filepath.replace("{username}", sanitize_template_value(username))
 
-    return filepath
+    return str(validate_server_filepath(filepath, base_dir=get_file_access_base_dir()))
 
 
 SETTINGS_SOURCE = ServerFileSettingsSource()

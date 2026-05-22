@@ -1,15 +1,14 @@
 """SSE endpoint streaming all progress channels to connected clients.
 
 Replaces per-tracker REST polling (``/api/dataset/progress``,
-``/api/sort/progress``, etc.) with a single push channel — see
-``docs/plans/feature-brainstorm.md`` §12.5.
+``/api/sort/progress``, etc.) with a single push channel.
 """
 
 from __future__ import annotations
 
 from flask import Blueprint, Response, stream_with_context
 
-from vtsearch.concurrency.events import stream_progress_events
+from vtscore.concurrency.events import stream_progress_events
 
 events_bp = Blueprint("events", __name__)
 

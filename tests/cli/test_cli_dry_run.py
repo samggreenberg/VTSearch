@@ -33,7 +33,7 @@ def _clean_tm_dir():
 
 
 def _write_trainable_model(name: str, labelset: dict, media_type: str = "audio") -> Path:
-    from vtsearch.detectors.store import _detector_path, _write_detector
+    from vtscore.detectors.store import _detector_path, _write_detector
 
     path = _detector_path(name)
     _write_detector(
@@ -85,7 +85,7 @@ class TestDryRunPickle:
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
         out_path = tmp_path / "results.json"
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         autodetect_main(
             str(dataset_path),
@@ -114,7 +114,7 @@ class TestDryRunPickle:
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
-        from vtsearch.cli import autodetect_main_chunked
+        from vtscore.cli import autodetect_main_chunked
 
         autodetect_main_chunked(
             str(dataset_path),
@@ -131,7 +131,7 @@ class TestDryRunPickle:
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
         bogus = tmp_path / "does-not-exist.pkl"
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         with pytest.raises(SystemExit):
             autodetect_main(str(bogus), settings_path=str(settings_path), dry_run=True)
@@ -144,7 +144,7 @@ class TestDryRunPickle:
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["ghost-tm"])
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         autodetect_main(str(dataset_path), settings_path=str(settings_path), dry_run=True)
 
@@ -156,7 +156,7 @@ class TestDryRunPickle:
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         settings_path = _settings_file_with_detectors(tmp_path, [])
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         autodetect_main(str(dataset_path), settings_path=str(settings_path), dry_run=True)
 
@@ -169,7 +169,7 @@ class TestDryRunImporter:
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
-        from vtsearch.cli import autodetect_importer_main
+        from vtscore.cli import autodetect_importer_main
 
         autodetect_importer_main(
             "server_folder",
@@ -187,7 +187,7 @@ class TestDryRunImporter:
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
-        from vtsearch.cli import autodetect_importer_main
+        from vtscore.cli import autodetect_importer_main
 
         # server_folder requires "path" — empty value should error during dry-run.
         with pytest.raises(SystemExit):
@@ -205,7 +205,7 @@ class TestDryRunImporter:
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
-        from vtsearch.cli import autodetect_importer_main
+        from vtscore.cli import autodetect_importer_main
 
         with pytest.raises(SystemExit):
             autodetect_importer_main(
@@ -225,7 +225,7 @@ class TestDryRunExporterValidation:
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         with pytest.raises(SystemExit):
             autodetect_main(
@@ -244,7 +244,7 @@ class TestDryRunExporterValidation:
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         # server_json_file requires "filepath".
         with pytest.raises(SystemExit):

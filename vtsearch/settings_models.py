@@ -26,7 +26,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-from vtsearch.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
+from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
 
 __all__ = [
     "FocusMode",
@@ -87,17 +87,17 @@ def _upper(v: Any) -> Any:
 def _default_concurrent_downloads() -> int:
     """Lazily resolve the hardware-derived default for parallel downloads.
 
-    Imported lazily to avoid pulling :mod:`vtsearch.embedding.loader` (and
+    Imported lazily to avoid pulling :mod:`vtscore.embedding.loader` (and
     transitively torch) at settings-model import time.
     """
-    from vtsearch.embedding.loader import default_concurrent_downloads
+    from vtscore.embedding.loader import default_concurrent_downloads
 
     return default_concurrent_downloads()
 
 
 def _default_concurrent_embeddings() -> int:
     """Lazily resolve the hardware-derived default for parallel embeddings."""
-    from vtsearch.embedding.loader import default_concurrent_embeddings
+    from vtscore.embedding.loader import default_concurrent_embeddings
 
     return default_concurrent_embeddings()
 
@@ -145,6 +145,14 @@ class UserSettings(BaseModel):
     label_hint_dismissed: bool = False
     autopilot_enabled: bool = True
     hide_autopilot: bool = False
+    # When True, the Achievements tab/button and unlock pop-ups are
+    # hidden, every ``record_*`` hook is a no-op, and ``get_full_state``
+    # returns zeroed counters with no pending announcements. Flipping it
+    # on also wipes any stored ``achievement_state`` so the counters
+    # start at zero if the user ever turns the feature back on. See the
+    # ``disable_achievements`` route handler in
+    # ``vtsearch/routes/settings/api.py``.
+    disable_achievements: bool = False
     autopilot_top_greens: Annotated[int, _clamp_min(1)] = 3
     autopilot_hard_reds: Annotated[int, _clamp_min(1)] = 4
     autopilot_resort_interval: Annotated[int, _clamp_min(1)] = 10

@@ -50,39 +50,25 @@
 
 .demo-picker { gap: 12px; }
 
-.demo-embedder-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  .form-label { margin: 0; font-size: .85rem; white-space: nowrap; }
-  .form-select--inline { width: auto; min-width: 140px; }
-  .form-select { max-width: 200px; }
-}
-
 .clipper-btn {
   text-align: left;
   white-space: nowrap;
 }
 
-// Phase 3 of smart-clipper-defaults: the clipper picker hides behind a
-// subtle "Advanced ▾" link. Designed to disappear into the surrounding
-// form so users who don't need the override aren't distracted by it.
+// The embedder + clipper pickers hide behind a single subtle "Advanced ▾"
+// link below the required fields. Designed to disappear into the
+// surrounding form so users who don't need overrides aren't distracted.
 .advanced-toggle {
   align-self: flex-start;
   background: transparent;
   border: none;
   padding: 2px 0;
-  font-size: .82rem;
-  color: var(--text-muted, #666);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
   cursor: pointer;
 
-  &:hover { color: var(--text, #222); text-decoration: underline; }
-  &:focus-visible { outline: 2px solid var(--focus, #4a90e2); outline-offset: 2px; }
-}
-
-.advanced-toggle--inline {
-  margin-left: 4px;
+  &:hover { color: var(--text-primary); text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 
 .server-folder-browser { gap: 12px; }
@@ -97,70 +83,23 @@
 // without distracting from the form.
 .detection-hint {
   margin: 6px 0 0;
-  font-size: .82rem;
+  font-size: var(--font-sm);
   line-height: 1.35;
-  color: var(--text-muted, #666);
+  color: var(--text-muted);
   font-style: italic;
-}
-
-.embedder-raw-id {
-  display: block;
-  margin-top: 2px;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: .75rem;
-  color: var(--text-muted, #888);
-  line-height: 1.2;
 }
 
 .license-warning {
   margin-top: 6px;
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: rgba(255, 196, 0, 0.12);
   border: 1px solid rgba(255, 196, 0, 0.4);
-  color: #b87b00;
-  font-size: .82rem;
+  color: var(--text-warning);
+  font-size: var(--font-sm);
   line-height: 1.35;
 }
 
 
-// Multi-media import: per-source-spec row.  Each row is either an
-// "include directly" label or an "Also include … via <converter>" with
-// inline param inputs.  See docs/plans/multi-media-import.md.
-.sf-source-specs {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-
-  .sf-spec-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    padding: 4px 0;
-  }
-
-  .sf-spec-direct {
-    font-style: italic;
-    color: var(--text-muted, #666);
-  }
-
-  .sf-spec-converter { min-width: 180px; }
-
-  .sf-spec-param {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: .85rem;
-
-    .sf-spec-param-input { width: 70px; }
-  }
-
-  .sf-spec-remove {
-    margin-left: auto;
-    padding: 0 6px;
-    line-height: 1;
-  }
-
-  .sf-spec-add { align-self: flex-start; }
-}
+// Multi-media import UI lives in
+// ``<vt-source-specs-picker>`` (see source-specs-picker.component.scss).

@@ -57,28 +57,28 @@ def _fake_paddleocr_module(fake_cls: type) -> object:
 
 class TestAudio2ImageMediaConverter:
     def test_source_and_target_types(self):
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         c = Audio2ImageMediaConverter()
         assert c.source_type == "audio"
         assert c.target_type == "image"
 
     def test_name_and_display(self):
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         c = Audio2ImageMediaConverter()
         assert c.name == "audio2image"
         assert "Spectrogram" in c.display_name or "spectrogram" in c.display_name
 
     def test_fields_have_expected_keys(self):
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         c = Audio2ImageMediaConverter()
         keys = {f.key for f in c.fields}
         assert {"spectrogram_type", "n_mels", "time_window_s", "colormap"} <= keys
 
     def test_field_defaults(self):
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         c = Audio2ImageMediaConverter()
         assert c.get_param({}, "spectrogram_type") == "mel"
@@ -87,13 +87,13 @@ class TestAudio2ImageMediaConverter:
         assert c.get_param({}, "colormap") == "magma"
 
     def test_convert_no_data(self):
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         c = Audio2ImageMediaConverter()
         assert c.convert({"filename": "x.wav"}) == []
 
     def test_convert_empty_bytes(self):
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         c = Audio2ImageMediaConverter()
         assert c.convert({"filename": "x.wav", "media_bytes": b""}) == []
@@ -101,7 +101,7 @@ class TestAudio2ImageMediaConverter:
     def test_convert_mel_spectrogram(self):
         pytest.importorskip("librosa")
         pytest.importorskip("matplotlib")
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         wav_bytes = _make_sine_wav(duration_s=0.5)
         media = {"filename": "tone.wav", "media_bytes": wav_bytes}
@@ -120,7 +120,7 @@ class TestAudio2ImageMediaConverter:
     def test_convert_cqt_spectrogram(self):
         pytest.importorskip("librosa")
         pytest.importorskip("matplotlib")
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         wav_bytes = _make_sine_wav(duration_s=0.5)
         media = {"filename": "tone.wav", "media_bytes": wav_bytes}
@@ -135,7 +135,7 @@ class TestAudio2ImageMediaConverter:
     def test_convert_custom_colormap(self):
         pytest.importorskip("librosa")
         pytest.importorskip("matplotlib")
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         wav_bytes = _make_sine_wav(duration_s=0.3)
         media = {"filename": "tone.wav", "media_bytes": wav_bytes}
@@ -148,7 +148,7 @@ class TestAudio2ImageMediaConverter:
         """A small time_window_s caps how much audio gets rendered."""
         pytest.importorskip("librosa")
         pytest.importorskip("matplotlib")
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         wav_bytes = _make_sine_wav(duration_s=1.0)
         media = {"filename": "tone.wav", "media_bytes": wav_bytes}
@@ -160,7 +160,7 @@ class TestAudio2ImageMediaConverter:
     def test_convert_from_path(self, tmp_path):
         pytest.importorskip("librosa")
         pytest.importorskip("matplotlib")
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         wav_bytes = _make_sine_wav(duration_s=0.3)
         wav_path = tmp_path / "tone.wav"
@@ -173,7 +173,7 @@ class TestAudio2ImageMediaConverter:
 
     def test_convert_bad_audio_returns_empty(self):
         pytest.importorskip("librosa")
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         # Random bytes are not a decodable audio container
         media = {"filename": "bad.wav", "media_bytes": b"not really audio data" * 32}
@@ -183,7 +183,7 @@ class TestAudio2ImageMediaConverter:
     def test_invalid_spectrogram_type_falls_back_to_mel(self):
         pytest.importorskip("librosa")
         pytest.importorskip("matplotlib")
-        from vtsearch.converters.audio2image import Audio2ImageMediaConverter
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
 
         wav_bytes = _make_sine_wav(duration_s=0.3)
         media = {"filename": "tone.wav", "media_bytes": wav_bytes}
@@ -191,6 +191,44 @@ class TestAudio2ImageMediaConverter:
         results = c.convert(media, {"spectrogram_type": "garbage"})
         assert len(results) == 1
         assert results[0]["filename"].endswith("_spec_mel.png")
+
+    def test_validate_params_rejects_out_of_range_n_mels(self):
+        """Regression for H20: a huge ``n_mels`` would build a multi-GB mel
+        filter bank inside librosa.  ``validate_params`` must reject it
+        before the converter is even invoked."""
+        from marshmallow import ValidationError
+
+        from vtscore.converters.audio2image import Audio2ImageMediaConverter
+
+        c = Audio2ImageMediaConverter()
+        with pytest.raises(ValidationError) as exc:
+            c.validate_params({"n_mels": 10_000_000})
+        assert "n_mels" in exc.value.messages
+        # Below the declared floor is also rejected.
+        with pytest.raises(ValidationError):
+            c.validate_params({"n_mels": 1})
+        # In-range values are accepted and the schema returns the coerced
+        # dict (with defaults for unspecified fields).
+        loaded = c.validate_params({"n_mels": 128})
+        assert loaded["n_mels"] == 128
+
+    def test_source_spec_parser_rejects_oversized_n_mels(self):
+        """End-to-end: the multi-media source-spec parser must reject a
+        converter ``params`` dict that violates the converter's declared
+        :class:`PluginField` range."""
+        from vtscore.datasets.importers.base import _parse_multi_media_specs
+
+        raw = [
+            {
+                "source_type": "audio",
+                "converter": "audio2image",
+                "params": {"n_mels": 99_999_999},
+            }
+        ]
+        with pytest.raises(ValueError) as exc:
+            _parse_multi_media_specs(raw, output_type="image")
+        assert "audio2image" in str(exc.value)
+        assert "n_mels" in str(exc.value)
 
 
 # ===========================================================================
@@ -200,48 +238,48 @@ class TestAudio2ImageMediaConverter:
 
 class TestImage2TextMediaConverter:
     def test_source_and_target_types(self):
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         c = Image2TextMediaConverter()
         assert c.source_type == "image"
         assert c.target_type == "text"
 
     def test_name_and_display(self):
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         c = Image2TextMediaConverter()
         assert c.name == "image2text"
         assert "OCR" in c.display_name
 
     def test_fields_have_expected_keys(self):
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         c = Image2TextMediaConverter()
         keys = {f.key for f in c.fields}
         assert {"language", "threshold"} <= keys
 
     def test_field_defaults(self):
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         c = Image2TextMediaConverter()
         assert c.get_param({}, "language") == "en"
         assert c.get_param({}, "threshold") == "0.5"
 
     def test_convert_no_data(self):
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         c = Image2TextMediaConverter()
         assert c.convert({"filename": "x.png"}) == []
 
     def test_convert_empty_bytes(self):
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         c = Image2TextMediaConverter()
         assert c.convert({"filename": "x.png", "media_bytes": b""}) == []
 
     def test_convert_no_paddleocr_returns_empty(self):
         """When PaddleOCR is not importable, convert returns []."""
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         png_bytes = _make_png_bytes()
         media = {"filename": "x.png", "media_bytes": png_bytes}
@@ -253,7 +291,7 @@ class TestImage2TextMediaConverter:
 
     def test_convert_with_mocked_paddleocr(self):
         """Mock PaddleOCR to verify result-flattening and threshold filtering."""
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         png_bytes = _make_png_bytes()
         media = {"filename": "screenshot.png", "media_bytes": png_bytes}
@@ -288,7 +326,7 @@ class TestImage2TextMediaConverter:
 
     def test_convert_with_mocked_paddleocr_no_hits(self):
         """When OCR finds no text above threshold, returns []."""
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         png_bytes = _make_png_bytes()
         media = {"filename": "blank.png", "media_bytes": png_bytes}
@@ -306,7 +344,7 @@ class TestImage2TextMediaConverter:
 
     def test_convert_passes_language_to_paddleocr(self):
         """The language param flows into the PaddleOCR constructor."""
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         png_bytes = _make_png_bytes()
         media = {"filename": "x.png", "media_bytes": png_bytes}
@@ -327,7 +365,7 @@ class TestImage2TextMediaConverter:
         assert captured.get("lang") == "fr"
 
     def test_convert_from_path(self, tmp_path):
-        from vtsearch.converters.image2text import Image2TextMediaConverter
+        from vtscore.converters.image2text import Image2TextMediaConverter
 
         png_bytes = _make_png_bytes()
         png_path = tmp_path / "x.png"
@@ -356,39 +394,39 @@ class TestImage2TextMediaConverter:
 
 class TestNewConverterRegistryIntegration:
     def test_audio2image_in_registry(self):
-        from vtsearch.converters import get_converter, list_converters
+        from vtscore.converters import get_converter, list_converters
 
         assert get_converter("audio2image") is not None
         names = [c.name for c in list_converters()]
         assert "audio2image" in names
 
     def test_image2text_in_registry(self):
-        from vtsearch.converters import get_converter, list_converters
+        from vtscore.converters import get_converter, list_converters
 
         assert get_converter("image2text") is not None
         names = [c.name for c in list_converters()]
         assert "image2text" in names
 
     def test_audio2image_listed_for_image_target(self):
-        from vtsearch.converters import list_converters_for_target
+        from vtscore.converters import list_converters_for_target
 
         names = [c.name for c in list_converters_for_target("image")]
         assert "audio2image" in names
 
     def test_audio2image_listed_for_audio_source(self):
-        from vtsearch.converters import list_converters_for_source
+        from vtscore.converters import list_converters_for_source
 
         names = [c.name for c in list_converters_for_source("audio")]
         assert "audio2image" in names
 
     def test_image2text_listed_for_text_target(self):
-        from vtsearch.converters import list_converters_for_target
+        from vtscore.converters import list_converters_for_target
 
         names = [c.name for c in list_converters_for_target("text")]
         assert "image2text" in names
 
     def test_image2text_listed_for_image_source(self):
-        from vtsearch.converters import list_converters_for_source
+        from vtscore.converters import list_converters_for_source
 
         names = [c.name for c in list_converters_for_source("image")]
         assert "image2text" in names

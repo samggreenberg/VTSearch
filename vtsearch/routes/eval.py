@@ -10,7 +10,7 @@ as 422 with the standard ``errors`` envelope; handler-level rejects
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.detectors.labeling_progress import (
+from vtscore.detectors.labeling_progress import (
     analyze_labeling_progress,
     calculate_diversity_level_over_time,
     calculate_error_cost_over_time,
@@ -18,6 +18,7 @@ from vtsearch.detectors.labeling_progress import (
     compute_labeling_status,
 )
 from vtsearch.schemas.eval import (
+    EvalTrainAndScoreCancelResponseSchema,
     EvalTrainAndScoreRequestSchema,
     EvalTrainAndScoreResponseSchema,
     EvalTrainAndScoreResultQuerySchema,
@@ -34,7 +35,7 @@ from vtsearch.state import (
     label_history,
     snapshot_medias,
 )
-from vtsearch.concurrency.progress import (
+from vtscore.concurrency.progress import (
     get_eval_progress,
     update_eval_progress,
 )
@@ -154,8 +155,8 @@ def eval_train_and_score(body: dict):
 
     Tests can pass ``{"wait": true}`` to block until the job completes.
     """
-    from vtsearch.concurrency.async_jobs import eval_jobs
-    from vtsearch.state.core import (
+    from vtscore.concurrency.async_jobs import eval_jobs
+    from vtscore.state.core import (
         get_active_context,
         get_active_detector_context,
         set_thread_dataset_context,
@@ -235,7 +236,7 @@ def eval_train_and_score(body: dict):
 @eval_bp.alt_response(500, description="Background evaluation job failed.")
 def eval_train_and_score_result(query: dict):
     """Poll a background eval train-and-score job."""
-    from vtsearch.concurrency.async_jobs import eval_jobs
+    from vtscore.concurrency.async_jobs import eval_jobs
 
     job_id = query["job_id"]
 
@@ -256,3 +257,22 @@ def eval_train_and_score_result(query: dict):
     if job.status == "cancelled":
         return {"job_id": job.job_id, "status": "cancelled"}
     return _eval_done_payload(job)
+
+
+@eval_bp.route("/api/eval/train-and-score/cancel/<job_id>", methods=["POST"])
+@eval_bp.response(200, EvalTrainAndScoreCancelResponseSchema)
+@eval_bp.alt_response(404, description="Job not found.")
+def cancel_eval_train_and_score(job_id: str):
+    """Cancel an in-flight eval train-and-score job.
+
+    Sets the cancel flag on the :class:`AsyncJob`; the per-step retrain
+    loop polls it cooperatively. Returns 200 even when the job has
+    already finished — see ``cancel_learned_sort`` for the rationale.
+    """
+    from vtscore.concurrency.async_jobs import eval_jobs
+
+    job = eval_jobs.get(job_id)
+    if job is None:
+        abort(404, message="Job not found")
+    job.cancel()
+    return {"ok": True}

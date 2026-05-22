@@ -24,8 +24,8 @@ from typing import Any
 from flask import Response, jsonify, make_response, request, send_file
 from flask_smorest import Blueprint, abort
 
-from vtsearch.media.audio.ffmpeg import get_ffmpeg_exe
-from vtsearch.media.base import MediaResponse
+from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
+from vtscore.media.base import MediaResponse
 from vtsearch.schemas.media import (
     MediaAddToPileResponseSchema,
     MediaBatchRequestSchema,
@@ -35,6 +35,7 @@ from vtsearch.schemas.media import (
     MediaVoteRequestSchema,
     MediaVoteResponseSchema,
 )
+from vtsearch.routes._shared import require_dataset_header, require_detector_header
 from vtsearch.state import (
     _state_lock,
     apply_label,
@@ -42,8 +43,8 @@ from vtsearch.state import (
     get_media,
     medias,
     next_media_id,
+    set_vote,
     snapshot_medias,
-    toggle_vote,
 )
 
 medias_bp = Blueprint(
@@ -290,7 +291,7 @@ def batch_medias(body: dict):
     Returns a JSON array of media metadata dicts; unknown IDs are silently
     omitted.
     """
-    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+    from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     ids = body["ids"]
 
@@ -423,7 +424,7 @@ def media_image(media_id: int):  # noqa: C901
 
     # For non-image types, delegate to the media type's image_response if available
     if media_type and media_type != "image":
-        from vtsearch.media import get as get_media_type  # noqa: PLC0415
+        from vtscore.media import get as get_media_type  # noqa: PLC0415
 
         try:
             mt = get_media_type(media_type)
@@ -495,8 +496,8 @@ def media_generic(media_id: int):
     """Serve the media content for any type via a single generic endpoint.
 
     Determines the media type from the media item's ``"type"`` field and
-    delegates to the registered :class:`~vtsearch.media.base.MediaType`'s
-    :meth:`~vtsearch.media.base.MediaType.media_response` method. This
+    delegates to the registered :class:`~vtscore.media.base.MediaType`'s
+    :meth:`~vtscore.media.base.MediaType.media_response` method. This
     endpoint works for all current and future media types without
     modification. Response body is either binary (image/audio/video bytes
     with the appropriate mimetype) or JSON (text content); the spec leaves
@@ -506,7 +507,7 @@ def media_generic(media_id: int):
     if not c:
         abort(404, message="not found")
 
-    from vtsearch.media import get as media_get
+    from vtscore.media import get as media_get
 
     try:
         mt = media_get(c.get("type", ""))
@@ -519,48 +520,79 @@ def media_generic(media_id: int):
 @medias_bp.route("/api/medias/<int:media_id>/vote", methods=["POST"])
 @medias_bp.arguments(MediaVoteRequestSchema)
 @medias_bp.response(200, MediaVoteResponseSchema)
-@medias_bp.alt_response(400, description="region_box is malformed, or a bad-vote carries a region_box.")
+@medias_bp.alt_response(400, description="region_box is malformed, or a non-good target carries a region_box.")
 @medias_bp.alt_response(404, description="Media not found.")
+@require_dataset_header
+@require_detector_header
 def vote_media(body: dict, media_id: int):
-    """Record or toggle a good/bad vote for a single media item.
+    """Set a single media's vote to an **absolute target state**.
 
-    Voting behaviour (toggle semantics):
+    ``target`` is one of:
 
-    - If ``vote == "good"`` and the media is already in ``good_votes``, the
-      vote is *removed* (toggled off).
-    - If ``vote == "good"`` and the media is not yet in ``good_votes``, it is
-      added to ``good_votes`` (removed from ``bad_votes`` if present) and the
-      event is appended to ``label_history``.
-    - The same toggle logic applies symmetrically for ``vote == "bad"``.
+    - ``"good"`` — set to good (overrides ``bad`` if present).
+    - ``"bad"`` — set to bad (overrides ``good`` if present).
+    - ``"none"`` — un-vote (remove any existing vote).
 
-    Yes-votes may carry ``"region_box": [x0, y0, x1, y1]`` (normalised image
-    coords in ``[0, 1]``) to designate the good region. No-votes that
-    include ``region_box`` are rejected — by design no-votes are
-    image-level always (patch-embedder v2).
+    Behaviour is **idempotent**: sending the current state is a no-op
+    that does not append to ``label_history``, does not credit
+    achievements, and returns the existing click-time.  This is the
+    fix for logical-bug-audit H1 — two stale-view tabs that race the
+    same media no longer alternate ADD/REMOVE on the server, so the
+    achievement counter no longer inflates beyond the number of real
+    labeling decisions.
+
+    Yes-targets may carry ``"region_box": [x0, y0, x1, y1]`` (normalised
+    image coords in ``[0, 1]``) to designate the good region.
+    ``"bad"`` and ``"none"`` targets must not include ``region_box`` — by
+    design no-votes are image-level always (patch-embedder v2).
+
+    Returns ``{"ok": true, "state": <new state>, "click_time": <int|null>}``
+    so the client can reconcile its optimistic view directly from the
+    response.
     """
     if get_media(media_id) is None:
         abort(404, message="not found")
 
-    vote = body["vote"]
+    target = body["target"]
 
     try:
         region_box = _parse_region_box(body.get("region_box"))
     except ValueError as exc:
         abort(400, message=str(exc))
-    if vote == "bad" and region_box is not None:
-        abort(400, message="no-votes cannot carry a region_box")
+    if target != "good" and region_box is not None:
+        abort(400, message="region_box is only valid on 'good' targets")
 
-    toggle_vote(media_id, vote, region_box=region_box)
+    _old, new_state, click_time = set_vote(media_id, target, region_box=region_box)
 
-    from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+    # Persist the resulting labelset.  A failure here (e.g. ``os.replace``
+    # EBUSY/ENOSPC under ``_write_detector``) used to bubble as an
+    # uncaught 500 with no rollback, leaving the in-memory vote committed
+    # while the on-disk labelset stayed at its prior value (audit finding
+    # H30).  Now we explicitly surface the failure as a 500 with a clear
+    # message; the in-memory mutation is rare enough to be acceptable
+    # since the next vote re-merges and retries.  ``sync_to_labelset_source``
+    # stays best-effort: it's the debounced background-timer scheduling
+    # call, so only a synchronous scheduling failure could fault here.
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
-    sync_labels_to_loaded_detector()
+    try:
+        sync_labels_to_loaded_detector()
+    except Exception as exc:
+        import logging
 
-    from vtsearch.labels.sync import sync_to_labelset_source
+        logging.getLogger(__name__).exception("vote_media: detector label sync failed")
+        abort(500, message=f"Failed to persist vote to detector store: {exc}")
 
-    sync_to_labelset_source()
+    from vtscore.labels.sync import sync_to_labelset_source
 
-    return {"ok": True}
+    try:
+        sync_to_labelset_source()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("vote_media: labelset source scheduling failed")
+
+    return {"ok": True, "state": new_state, "click_time": click_time}
 
 
 @medias_bp.route("/api/medias/add-to-pile", methods=["POST"])
@@ -577,6 +609,8 @@ def vote_media(body: dict, media_id: int):
         "invalid label), no dataset loaded, or no embedder available."
     ),
 )
+@require_dataset_header
+@require_detector_header
 def add_media_to_pile():  # noqa: C901
     """Upload a media file and add it directly to the Good or Bad pile.
 
@@ -603,15 +637,19 @@ def add_media_to_pile():  # noqa: C901
 
     file_md5 = hashlib.md5(file_bytes).hexdigest()
 
-    # Check if a media with this MD5 already exists
+    # First-pass MD5 lookup (outside _state_lock). When this hits we can
+    # skip the expensive embedding step and vote the existing media right
+    # away. When it misses we still have to re-check under the lock just
+    # before insertion (see below) because embedding holds no lock and a
+    # concurrent upload of the same bytes could land between the two.
     snap = snapshot_medias()
     _, md5_lookup, _ = build_media_lookup(snap)
     existing_cids = md5_lookup.get(file_md5, [])
 
     if existing_cids:
-        # MD5 match — vote the existing media(s).
         for cid in existing_cids:
             apply_label(cid, label)
+        _sync_pile_label_to_storage()
         return {"ok": True, "media_id": existing_cids[0], "is_new": False}
 
     # No match — embed and insert as new media.
@@ -622,7 +660,7 @@ def add_media_to_pile():  # noqa: C901
     dataset_media_type = first_media.get("type", "audio")
     dataset_embedder_name = first_media.get("embedder", "")
 
-    from vtsearch.media import embedders_for_type, get_embedder
+    from vtscore.media import embedders_for_type, get_embedder
 
     embedder = None
     if dataset_embedder_name:
@@ -645,7 +683,7 @@ def add_media_to_pile():  # noqa: C901
         tmp.write(file_bytes)
         tmp_path = Path(tmp.name)
 
-    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
     try:
         embedding = embedder.embed_media(media_from_path(tmp_path))
@@ -658,11 +696,11 @@ def add_media_to_pile():  # noqa: C901
     # Generate thumbnail for non-image media
     thumb = None
     if dataset_media_type == "audio":
-        from vtsearch.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
+        from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
 
         thumb = generate_waveform_thumbnail(file_bytes)
     elif dataset_media_type == "video":
-        from vtsearch.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
+        from vtscore.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
 
         thumb = generate_video_thumbnail(file_bytes)
 
@@ -684,11 +722,48 @@ def add_media_to_pile():  # noqa: C901
     if thumb is not None:
         new_media["thumbnail_bytes"] = thumb
 
+    # Re-check the MD5 lookup under _state_lock immediately before inserting.
+    # Embedding above ran without the lock (it can take seconds), so a
+    # concurrent request uploading the same bytes may have inserted a media
+    # with this MD5 in the meantime. Without this re-check, both requests
+    # would each insert a fresh media — producing duplicates with identical
+    # md5/embedding/bytes. (logical-bug-audit.md H32.)
     with _state_lock:
-        new_id = next_media_id(medias)
-        new_media["id"] = new_id
-        medias[new_id] = new_media
+        _, md5_lookup_now, _ = build_media_lookup(medias)
+        collided_cids = md5_lookup_now.get(file_md5, [])
+        if collided_cids:
+            target_cids: list[int] = list(collided_cids)
+            target_id = collided_cids[0]
+            is_new = False
+        else:
+            target_id = next_media_id(medias)
+            new_media["id"] = target_id
+            medias[target_id] = new_media
+            target_cids = [target_id]
+            is_new = True
 
-    apply_label(new_id, label)
+    for cid in target_cids:
+        apply_label(cid, label)
+    _sync_pile_label_to_storage()
 
-    return {"ok": True, "media_id": new_id, "is_new": True}, 201
+    if is_new:
+        return {"ok": True, "media_id": target_id, "is_new": True}, 201
+    return {"ok": True, "media_id": target_id, "is_new": False}
+
+
+def _sync_pile_label_to_storage() -> None:
+    """Persist a newly-applied add-to-pile label to the detector's storage.
+
+    Mirrors the tail of :func:`vote_media` so the in-memory good/bad-votes
+    update also reaches the detector's on-disk labelset and any configured
+    :class:`LabelsetSource`. Without this, the label vanishes the next time
+    ``ensure_votes_match_active_dataset`` rehydrates the detector from disk.
+    (logical-bug-audit.md H33.)
+    """
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector  # noqa: PLC0415
+
+    sync_labels_to_loaded_detector()
+
+    from vtscore.labels.sync import sync_to_labelset_source  # noqa: PLC0415
+
+    sync_to_labelset_source()

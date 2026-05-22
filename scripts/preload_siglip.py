@@ -20,7 +20,7 @@ import sys
 
 from huggingface_hub import snapshot_download
 
-from vtsearch.config import SIGLIP_MODEL_ID
+from vtscore.config import SIGLIP_MODEL_ID
 
 
 def main() -> int:

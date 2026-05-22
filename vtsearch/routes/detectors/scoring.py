@@ -16,14 +16,16 @@ from typing import Any
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.concurrency.memory_budget import cap_workers_by_memory
-from vtsearch.concurrency.progress import update_find_progress
+from vtscore.concurrency.memory_budget import cap_workers_by_memory
+from vtscore.concurrency.progress import find_progress, update_find_progress
+from vtsearch.routes._shared import require_dataset_header, require_detector_header
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
     FindLabelRequestSchema,
     FindLabelResponseSchema,
 )
+from vtscore.utils.scores import sigmoid_to_finite_scores
 from vtsearch.state import snapshot_medias
 
 logger = logging.getLogger(__name__)
@@ -60,9 +62,17 @@ def _resolve_or_train_detector(  # noqa: C901
     origin importer.  Returns ``(None, _, diag)`` when training is not
     possible.
     """
-    from vtsearch.state.core import get_detector_context
+    from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
+    from vtscore.state.core import get_detector_context
 
     det_ctx = get_detector_context(detector_id)
+    if det_ctx is not None:
+        # Defense against H5: scoring autorun detectors iterates contexts
+        # that aren't the active one, so the before_request hook can't
+        # have invalidated their stale MLPs.  Drop them here so the next
+        # branch trains fresh against *snap*'s embedder.
+        snap_embedder = next(iter(snap.values()), {}).get("embedder", "") or "" if snap else ""
+        invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
     if det_ctx is not None and det_ctx.model is not None:
         return det_ctx.model, det_ctx.threshold, None
 
@@ -82,14 +92,22 @@ def _resolve_or_train_detector(  # noqa: C901
         total_steps=progress_total_steps,
     )
 
-    from vtsearch.detectors.training import train_and_threshold
-    from vtsearch.detectors.resolver import resolve_label_embeddings
+    from vtscore.detectors.training import train_and_threshold
+    from vtscore.detectors.resolver import resolve_label_embeddings
 
     X_list: list = []
     y_list: list[float] = []
     md5_to_emb = {}
     if snap:
         md5_to_emb = {c["md5"]: c["embedding"] for c in snap.values()}
+
+    # Match origin-resolved label vectors to the snap's embedder space so
+    # the two paths don't produce a mixed-space training set (silently
+    # garbage MLP).  Empty when the snap is empty or untyped, which falls
+    # back to the media type's default embedder.
+    dataset_embedder = ""
+    if snap:
+        dataset_embedder = next(iter(snap.values()), {}).get("embedder", "") or ""
 
     unresolved: list[dict] = []
     for entry in label_entries:
@@ -130,6 +148,7 @@ def _resolve_or_train_detector(  # noqa: C901
             unresolved,
             media_type,
             progress_callback=_origin_progress,
+            embedder_name=dataset_embedder,
         )
         X_list.extend(resolved.embeddings)
         y_list.extend(resolved.labels)
@@ -181,6 +200,8 @@ def _resolve_or_train_detector(  # noqa: C901
 @detector_scoring_bp.response(200, FindLabelResponseSchema)
 @detector_scoring_bp.alt_response(400, description="No medias loaded, or the detector has no labels for scoring.")
 @detector_scoring_bp.alt_response(404, description="Detector not found.")
+@require_dataset_header
+@require_detector_header
 def find_label(body: dict):  # noqa: C901
     """Score all loaded medias with a detector and apply labels based on threshold.
 
@@ -190,8 +211,8 @@ def find_label(body: dict):  # noqa: C901
     """
     import torch  # noqa: PLC0415
 
-    from vtsearch.detectors.registry import get_detector as reg_get_detector
-    from vtsearch.detectors.store import _detector_path, _read_detector
+    from vtscore.detectors.registry import get_detector as reg_get_detector
+    from vtscore.detectors.store import _detector_path, _read_detector
     from vtsearch.state import (
         apply_labels_bulk_with_click_time,
         set_find_initial_labels,
@@ -202,16 +223,9 @@ def find_label(body: dict):  # noqa: C901
 
     detector_id = body["detector_id"]
 
-    # If the request body specifies a dataset_id, override the request-scoped
-    # context so scoring runs against the correct dataset.
-    dataset_id = body.get("dataset_id") or ""
-    if dataset_id:
-        from flask import g
-        from vtsearch.state import get_context
-
-        ctx = get_context(dataset_id)
-        if ctx is not None:
-            g._dataset_context = ctx
+    # Clear a leftover cancel flag from a previously-cancelled run so
+    # the new operation doesn't trip on it immediately.
+    find_progress.reset_cancel()
 
     update_find_progress(
         "running",
@@ -287,7 +301,7 @@ def find_label(body: dict):  # noqa: C901
         total_steps=_FIND_LABEL_STEPS,
     )
 
-    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
     X_all = torch.from_numpy(all_embs).to(next(mlp.parameters()).device)
@@ -298,7 +312,7 @@ def find_label(body: dict):  # noqa: C901
         for start in range(0, n_total, batch_size):
             end = min(start + batch_size, n_total)
             batch_logits = mlp(X_all[start:end])
-            scores.extend(torch.sigmoid(batch_logits).squeeze(1).cpu().tolist())
+            scores.extend(sigmoid_to_finite_scores(batch_logits))
             update_find_progress(
                 "running",
                 f"Scoring {n_total} items…",
@@ -308,7 +322,7 @@ def find_label(body: dict):  # noqa: C901
                 total_steps=_FIND_LABEL_STEPS,
             )
 
-    results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores)]
+    results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores, strict=True)]
     results.sort(key=lambda x: x["score"], reverse=True)
 
     update_find_progress(
@@ -333,11 +347,11 @@ def find_label(body: dict):  # noqa: C901
 
     set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
 
-    from vtsearch.detectors.registry import set_find_mode
+    from vtscore.detectors.registry import set_find_mode
 
     set_find_mode(True)
 
-    from vtsearch.labels.sync import sync_to_labelset_source
+    from vtscore.labels.sync import sync_to_labelset_source
 
     sync_to_labelset_source()
 
@@ -385,8 +399,8 @@ def _resolve_autorun_names(body: dict, media_type: str) -> list[str]:
 
 def _collect_detectors_for_media_type(autorun_names: list[str], media_type: str) -> list[tuple[str, dict, dict | None]]:
     """Load detector data + registry entry for each autorun name matching *media_type*."""
-    from vtsearch.detectors.registry import find_by_name, list_detectors  # noqa: PLC0415
-    from vtsearch.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.detectors.registry import find_by_name, list_detectors  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
 
     detectors: list[tuple[str, dict, dict | None]] = []
     for name in autorun_names:
@@ -431,11 +445,11 @@ def _score_detector_for_auto_detect(
 
         with torch.no_grad():
             X_in = X_all.to(next(mlp.parameters()).device)
-            scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
+            scores = sigmoid_to_finite_scores(mlp(X_in))
 
         positive_hits = []
         negative_hits = []
-        for cid, score in zip(all_ids, scores):
+        for cid, score in zip(all_ids, scores, strict=True):
             clip_info = _media_info_for_response(snap[cid])
             clip_info["score"] = round(score, 4)
             if score >= threshold:
@@ -481,12 +495,15 @@ def auto_detect(body: dict):
 
     media_type = next(iter(snap.values())).get("type", "audio")
 
+    # Clear a leftover cancel flag from a previously-cancelled run.
+    find_progress.reset_cancel()
+
     autorun_names = _resolve_autorun_names(body, media_type)
     detectors_to_run = _collect_detectors_for_media_type(autorun_names, media_type)
     if not detectors_to_run:
         abort(400, message=f"No autorun detectors found for media type: {media_type}")
 
-    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
     X_all = torch.from_numpy(all_embs)

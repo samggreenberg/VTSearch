@@ -31,11 +31,9 @@ from pathlib import Path
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.datasets.load_pipeline import (
-    _load_embedder_with_progress as _load_embedder_for_clips_with_progress,
-)
-from vtsearch.datasets.loader import load_dataset_from_pickle
-from vtsearch.datasets.registry import (
+from vtscore.datasets.load_pipeline import _warmup_embedder_async
+from vtscore.datasets.loader import load_dataset_from_pickle
+from vtscore.datasets.registry import (
     add_loaded_id as _reg_add_loaded,
     can_user_access as _reg_can_access,
     get_dataset as _reg_get,
@@ -66,8 +64,9 @@ from vtsearch.state import (
     register_context,
     unregister_context,
 )
-from vtsearch.concurrency.progress import CancelledError
-from vtsearch.concurrency.progress import loading_tasks as _loading_tasks
+from vtscore.concurrency.progress import CancelledError
+from vtscore.concurrency.progress import loading_tasks as _loading_tasks
+from vtscore.embedding.matrix import invalidate_embedding_matrix
 
 datasets_registry_bp = Blueprint(
     "datasets_registry",
@@ -88,7 +87,7 @@ def list_registered_datasets():
 
     entries = _reg_list_for_user(get_current_user())
     loaded_ids = _reg_loaded_ids()
-    from vtsearch.media import get_clipper
+    from vtscore.media import get_clipper
 
     for entry in entries:
         ds_id = entry["id"]
@@ -120,7 +119,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     (made the current UI-facing dataset) without re-reading the pkl.
     """
     from vtsearch.auth import get_current_user
-    from vtsearch.concurrency.progress import clear_thread_progress, set_thread_progress
+    from vtscore.concurrency.progress import clear_thread_progress, set_thread_progress
     from vtsearch.state import build_diversity_tree_for_context
 
     entry = _reg_get(dataset_id)
@@ -138,7 +137,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     if not pkl_path or not Path(pkl_path).is_file():
         abort(404, message=f"Saved dataset file not found: {pkl_path}")
 
-    _LOAD_STEPS = 3  # read pickle + process items, build diversity index, warm up embedder
+    _LOAD_STEPS = 2  # read pickle + process items, build diversity index
 
     # Create a per-task tracker for this load operation.
     task_id = f"_regload_{dataset_id[:8]}"
@@ -197,6 +196,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
 
             _dedup_progress(0, 0)
             collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
+            invalidate_embedding_matrix(ctx)
 
             def _diversity_progress(current: int, total: int) -> None:
                 tracker.check_cancelled()
@@ -221,13 +221,10 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
             _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
             ctx.dataset_display_name = entry.get("name", "")
 
-            # Warm up the embedder using the task tracker.
-            def _task_progress(status, message="", current=0, total=0, **kw):
-                tracker.update(status, message, current, total, **kw)
-
-            _load_embedder_for_clips_with_progress(
-                ctx.medias, _task_progress, step=_LOAD_STEPS, total_steps=_LOAD_STEPS
-            )
+            # Embedder warm-up runs fire-and-forget so the dashboard row
+            # goes green immediately; text sort waits behind its own
+            # progress bar on first use if the model isn't ready yet.
+            _warmup_embedder_async(ctx.medias)
         except CancelledError:
             unregister_context(dataset_id)
             _reg_remove_loaded(dataset_id)
@@ -292,7 +289,7 @@ def preload_dataset_embedder(dataset_id: str):
     type).
     """
     from vtsearch.auth import get_current_user
-    from vtsearch.embedding.loader import preload_embedder_for_dataset
+    from vtscore.embedding.loader import preload_embedder_for_dataset
 
     if _reg_get(dataset_id) is None:
         abort(404, message="Dataset not found")
@@ -378,7 +375,7 @@ def update_dataset_readers(body: dict, dataset_id: str):
 @datasets_registry_bp.alt_response(404, description="Dataset not found.")
 def get_dataset_stats(dataset_id: str):
     """Return ingest statistics for a registered dataset."""
-    from vtsearch.media import get_clipper
+    from vtscore.media import get_clipper
 
     entry = _reg_get(dataset_id)
     if entry is None:

@@ -14,10 +14,10 @@ from pathlib import Path
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.config import DATA_DIR, EMBEDDINGS_DIR
-from vtsearch.datasets import DEMO_DATASETS
-from vtsearch.datasets.loader import read_pkl_clipper, read_pkl_embedder
-from vtsearch.datasets.load_pipeline import _origin_to_str
+from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
+from vtscore.datasets import DEMO_DATASETS
+from vtscore.datasets.loader import read_pkl_clipper, read_pkl_embedder
+from vtscore.datasets.load_pipeline import _origin_to_str
 from vtsearch.routes._shared import format_mtime
 from vtsearch.schemas.datasets import (
     BrowseMediaFilesQuerySchema,
@@ -96,9 +96,13 @@ def _calculate_demo_num_files(dataset_info: dict) -> int:
     slice_frac_start = dataset_info.get("slice_frac_start")
 
     if slice_frac_start is not None:
-        frac_end = dataset_info.get("slice_frac_end") or 1.0
+        # Mirror vtscore.media.base.demo_slice: floor each endpoint independently
+        # so the count matches what the loader actually produces.
         base_per_cat = items_per_category if items_per_category > 0 else 40
-        per_cat = int(base_per_cat * (frac_end - slice_frac_start))
+        frac_end = dataset_info.get("slice_frac_end")
+        start = int(base_per_cat * slice_frac_start)
+        end = int(base_per_cat * frac_end) if frac_end is not None else base_per_cat
+        per_cat = end - start
     else:
         slice_start = dataset_info.get("slice_start", 0)
         slice_end = dataset_info.get("slice_end")
@@ -131,8 +135,8 @@ def demo_dataset_list(query: dict):
     * ``"needs_embedding"`` – source data is downloaded but not yet embedded.
     * ``"needs_download"`` – source data must be downloaded (and then embedded).
     """
-    from vtsearch.converters import list_converters_for_source
-    from vtsearch.media import get as media_get
+    from vtscore.converters import list_converters_for_source
+    from vtscore.media import get as media_get
 
     requested_embedder = query.get("embedder", "").strip()
     requested_clipper = query.get("clipper", "").strip()
@@ -206,7 +210,7 @@ def _media_extensions() -> set[str]:
     """Lazily build the set of known media-file extensions (lowercase, with dot)."""
     global _MEDIA_EXTENSIONS
     if _MEDIA_EXTENSIONS is None:
-        from vtsearch.media import all_types
+        from vtscore.media import all_types
 
         exts: set[str] = set()
         for mt in all_types():
@@ -225,6 +229,10 @@ def _resolve_browse_root(source: str) -> Path | None:
 
     * ``demo:<name>`` — the ``required_folder`` of the named demo dataset.
     * ``folder`` — the configured ``saved_datasets_dir``.
+    * ``server_fs`` — the whole server filesystem (single-user mode) or the
+      current user's data directory (multi-user mode). Matches the actual
+      runtime scope of the ``server_folder``/``server_files`` importers,
+      which accept any absolute path readable by the server process.
 
     Returns ``None`` if the source is unrecognised or the directory does not
     exist.
@@ -246,7 +254,38 @@ def _resolve_browse_root(source: str) -> Path | None:
         ds_dir.mkdir(parents=True, exist_ok=True)
         return ds_dir.resolve()
 
+    if source == "server_fs":
+        from vtscore.security.path_validation import get_file_access_base_dir
+
+        base = get_file_access_base_dir()
+        if base is None:
+            return Path("/")
+        return base.resolve()
+
     return None
+
+
+def _default_browse_path(source: str, root: Path) -> str:
+    """Pick a sensible initial relative path for *source* under *root*.
+
+    For ``server_fs`` in single-user mode (root == ``/``) we start the
+    picker at the server user's home directory if it exists — saves the
+    user three or four clicks to drill down from ``/``. Falls back to the
+    root itself otherwise.
+    """
+    if source != "server_fs":
+        return ""
+    try:
+        home = Path.home().resolve()
+    except (RuntimeError, OSError):
+        return ""
+    try:
+        rel = home.relative_to(root)
+    except ValueError:
+        return ""
+    if not home.is_dir():
+        return ""
+    return str(rel) if str(rel) != "." else ""
 
 
 @datasets_ui_bp.route("/api/browse-media-files")
@@ -309,7 +348,12 @@ def browse_media_files(query: dict):
                 }
             )
 
-    return {"directories": directories, "files": files, "root_path": str(root)}
+    return {
+        "directories": directories,
+        "files": files,
+        "root_path": str(root),
+        "default_path": _default_browse_path(source, root),
+    }
 
 
 @datasets_ui_bp.route("/api/dataset/detect-media-type")
@@ -329,7 +373,7 @@ def detect_media_type(query: dict):
     intercepted by the app-level ``NotFound`` errorhandler and keeps the
     legacy ``{"error": "Not Found", "request_id": ...}`` envelope.
     """
-    from vtsearch.datasets.media_type_detection import detect_media_types_in_folder
+    from vtscore.datasets.media_type_detection import detect_media_types_in_folder
 
     source = query["source"].strip() or "folder"
     subpath = query["path"].strip()
@@ -371,7 +415,7 @@ def select_browsed_file(body: dict):
     import shutil
     import uuid
 
-    from vtsearch.config import DATA_DIR
+    from vtscore.config import DATA_DIR
 
     source = body["source"].strip()
     file_path = body["path"].strip()

@@ -1,0 +1,90 @@
+// Source-specs picker — column of checkboxes for choosing which media
+// types feed a multi-media import.  See SourceSpecsPickerComponent.
+
+.ssp {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  row-gap: 4px;
+  column-gap: 12px;
+}
+
+.ssp-row {
+  display: contents;
+}
+
+.ssp-row--native {
+  // Native row spans both columns (no Advanced opener on the right).
+  grid-column: 1 / -1;
+}
+
+.ssp-row-main,
+.ssp-row--native {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.ssp-row-main {
+  grid-column: 1;
+}
+
+.ssp-checkbox {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.ssp-row-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ssp-native-tag {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-muted, #888);
+  border: 1px solid var(--border, #d0d0d0);
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.3;
+}
+
+.ssp-details-toggle {
+  justify-self: end;
+  white-space: nowrap;
+  grid-column: 2;
+}
+
+.ssp-details-panel {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0 8px 28px;  // align with checkbox label text
+  border-bottom: 1px dashed var(--border, #e0e0e0);
+  margin-bottom: 2px;
+}
+
+.ssp-details-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .85rem;
+}
+
+.ssp-details-field-label {
+  color: var(--text-muted, #555);
+}
+
+.ssp-converter-select {
+  min-width: 180px;
+}
+
+.ssp-num-input {
+  width: 80px;
+}

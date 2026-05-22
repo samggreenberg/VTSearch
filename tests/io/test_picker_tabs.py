@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from vtsearch.datasets.importers.tabs import (
+from vtscore.datasets.importers.tabs import (
     _PICKER_TABS,
     list_picker_tabs,
     register_picker_tab,

@@ -6,8 +6,8 @@ import warnings
 # Limit threads to reduce memory overhead in constrained environments.  Native
 # math libraries read these env vars during *their* import, which happens the
 # moment torch / numpy / scipy are imported — so they have to be set before
-# anything triggers that.  Mirrors ``vtsearch.config.TORCH_THREADS`` but
-# resolved inline to avoid importing ``vtsearch.config`` (and therefore
+# anything triggers that.  Mirrors ``vtscore.config.TORCH_THREADS`` but
+# resolved inline to avoid importing ``vtscore.config`` (and therefore
 # everything it transitively imports) this early.
 _torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
 os.environ["OMP_NUM_THREADS"] = _torch_threads
@@ -37,8 +37,9 @@ from flask import Flask, g
 from werkzeug.exceptions import MethodNotAllowed, NotFound
 
 # Import refactored modules
+from vtscore.state.core import DatasetNotLoadedError, DetectorNotLoadedError  # noqa: E402
 from vtsearch.auth import get_login_provider  # noqa: E402
-from vtsearch.embedding import initialize_models, preload_predicted_embedders  # noqa: E402
+from vtscore.embedding import initialize_models, preload_predicted_embedders  # noqa: E402
 from vtsearch.routes import (  # noqa: E402
     achievements_bp,
     auth_bp,
@@ -73,8 +74,8 @@ from vtsearch.routes import (  # noqa: E402
     sorting_bp,
     sync_sources_bp,
 )
-from vtsearch.media import set_progress_callback  # noqa: E402
-from vtsearch.concurrency.progress import update_progress
+from vtscore.media import set_progress_callback  # noqa: E402
+from vtscore.concurrency.progress import update_progress
 
 # Wire media types into the Flask app's progress reporting system.
 # Without this call, media types use a silent no-op callback and can run
@@ -90,24 +91,26 @@ app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-
 # Install Flask-aware request-context resolvers on the (library-candidate)
 # ``vtsearch.state`` core so its ``get_active_*_context()`` helpers can read
 # the per-request dataset/detector context from ``flask.g`` without
-# ``vtsearch.state.core`` itself having to import Flask.  Also wire the
+# ``vtscore.state.core`` itself having to import Flask.  Also wire the
 # library's "persist this" hooks (currently just last-embedder-per-media-
-# type) to ``vtsearch.settings``.  See ``docs/plans/extract-library.md`` for
+# type) to ``vtsearch.settings``.  See ``vtscore/docs/architecture.md`` for
 # the seam.
 from vtsearch.shim import (  # noqa: E402
     register_app_config_builder,
     register_app_persistence_hooks,
+    register_app_plugin_families,
     register_flask_context_resolvers,
 )
 
 register_flask_context_resolvers()
 register_app_persistence_hooks()
 register_app_config_builder()
+register_app_plugin_families()
 
 # Optional cap on request body size (uploads).  ``MAX_UPLOAD_MB == 0`` leaves
 # Flask's default of no limit in place; a positive value rejects oversized
 # requests with HTTP 413 before they consume disk.
-from vtsearch.config import MAX_UPLOAD_MB as _MAX_UPLOAD_MB  # noqa: E402
+from vtscore.config import MAX_UPLOAD_MB as _MAX_UPLOAD_MB  # noqa: E402
 
 if _MAX_UPLOAD_MB > 0:
     app.config["MAX_CONTENT_LENGTH"] = _MAX_UPLOAD_MB * 1024 * 1024
@@ -134,7 +137,28 @@ app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-
 
 from flask_smorest import Api  # noqa: E402
 
+from vtsearch.openapi_postprocess import assign_operation_ids  # noqa: E402
+
 api = Api(app)
+
+
+# flask-smorest / apispec doesn't populate ``operationId`` on its own, so
+# ng-openapi-gen ends up synthesising client method names from path+method
+# (``apiDetectorsRegistryDatasetIdRenamePut`` etc.). Wrap ``spec.to_dict``
+# so both the live ``/api/openapi.json`` endpoint and ``dump_openapi.py``
+# see operations tagged with their Flask view function name. The patch is
+# safe to apply now because ``to_dict`` is only called lazily — blueprints
+# registered later in this module are picked up automatically.
+_apispec_to_dict = api.spec.to_dict
+
+
+def _to_dict_with_operation_ids() -> dict:
+    spec = _apispec_to_dict()
+    assign_operation_ids(app, spec)
+    return spec
+
+
+api.spec.to_dict = _to_dict_with_operation_ids
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +177,6 @@ if TYPE_CHECKING:
     from typing import Any
 
     NUM_MEDIAS: int
-    SAMPLE_RATE: int
     generate_wav: Callable[..., bytes]
     train_and_score: Callable[..., Any]
     medias: dict[int, dict[str, Any]]
@@ -212,17 +235,27 @@ def _set_request_context():
     (``medias``, ``good_votes``, etc.) resolve to it for the duration of
     this request — without mutating global "active" state.
 
-    When the headers are absent the proxies fall back to the global active
-    pointers, preserving backward compatibility.
+    When a header is absent the proxies fall back to the thread-local /
+    empty context. When a header is **present but names an unloaded id**,
+    the unloaded id is stashed on ``g`` so the resolver raises
+    ``DatasetNotLoadedError`` / ``DetectorNotLoadedError`` on proxy
+    access (mapped to 409). Routes that never touch the proxies still
+    respond normally — see logical-bug-audit H16.
 
     Any failure here must not 500 every subsequent request — fall back to
     the default (empty) context.
     """
     from flask import request
-    from vtsearch.state.core import (
+    from vtscore.state.core import (
         get_context,
         get_detector_context,
     )
+
+    # Pin a marker so the request-missing-context predicate can distinguish
+    # "actively inside a route handler" from "Flask test client is still
+    # preserving the popped request context for inspection". Cleared in
+    # teardown_request below.
+    g._vts_in_request_handler = True
 
     try:
         # Headers (Angular HttpClient interceptor) take priority, with query
@@ -233,12 +266,22 @@ def _set_request_context():
             ctx = get_context(ds_id)
             if ctx is not None:
                 g._dataset_context = ctx
+            else:
+                # Header refers to a dataset that isn't loaded.  Stash the id
+                # so the resolver raises DatasetNotLoadedError at proxy
+                # access — silent fallback to the empty context hid stale
+                # results from the client (logical-bug-audit H16).  Routes
+                # that never touch the dataset proxies (registry listings,
+                # auth, file browser, etc.) still respond normally.
+                g._unloaded_dataset_id = ds_id
 
         detector_id = request.headers.get("X-Detector-Id") or request.args.get("detector_id")
         if detector_id:
             det_ctx = get_detector_context(detector_id)
             if det_ctx is not None:
                 g._detector_context = det_ctx
+            else:
+                g._unloaded_detector_id = detector_id
     except Exception:
         logging.getLogger(__name__).exception("Request context resolution failed")
 
@@ -247,10 +290,24 @@ def _set_request_context():
     # labelset against the active dataset's medias.  Media ids are dataset-
     # specific, so without this the left-pane shows stale cids from the
     # previous dataset as if they were votes in the current one.
+    #
+    # Also drop the detector's cached MLP / per-label embedding cache when
+    # the active dataset's embedder differs from the one the MLP was
+    # trained on — scoring with a cross-space MLP either crashes (different
+    # dim) or silently produces garbage labels (same dim).  See H5 in
+    # docs/plans/logical-bug-audit.md.
     try:
-        from vtsearch.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.detectors.dataset_sync import (
+            ensure_detector_model_matches_active_embedder,
+            ensure_votes_match_active_dataset,
+        )
 
         ensure_votes_match_active_dataset()
+        ensure_detector_model_matches_active_embedder()
+    except (DatasetNotLoadedError, DetectorNotLoadedError):
+        # The route handler will hit the same error when it touches the
+        # proxies; the global error handler turns it into a clean 409.
+        pass
     except Exception:
         logging.getLogger(__name__).exception("Vote rehydrate failed")
 
@@ -258,6 +315,17 @@ def _set_request_context():
 # ---------------------------------------------------------------------------
 # Prevent browser caching of API responses
 # ---------------------------------------------------------------------------
+
+
+@app.teardown_request
+def _clear_in_request_handler_marker(exc):  # noqa: ARG001
+    """Clear the in-handler marker so the request-missing predicate
+    doesn't fire while Flask's test client is preserving a popped
+    request context after the response."""
+    from flask import g, has_request_context
+
+    if has_request_context():
+        g._vts_in_request_handler = False
 
 
 @app.after_request
@@ -321,6 +389,63 @@ def _handle_405(exc):
     if not _req.path.startswith("/api/"):
         return exc
     return error_response(exc.name, 405)
+
+
+@app.errorhandler(DatasetNotLoadedError)
+def _handle_dataset_not_loaded(exc):
+    """Return a JSON 409 when ``X-Dataset-Id`` names an unloaded dataset.
+
+    Raised by the Flask resolver when a route handler touches the
+    dataset proxies and the header doesn't resolve to a loaded context.
+    Replaces the silent fallback to the empty context that returned 200
+    with stale data (logical-bug-audit H16). The frontend can
+    distinguish 409 + ``code="dataset_not_loaded"`` from a generic 500
+    and offer a load action.
+    """
+    from vtsearch.routes._shared import error_response
+
+    return error_response(
+        "Dataset is not loaded",
+        409,
+        dataset_id=exc.dataset_id,
+        code="dataset_not_loaded",
+    )
+
+
+@app.errorhandler(DetectorNotLoadedError)
+def _handle_detector_not_loaded(exc):
+    """Detector counterpart of :func:`_handle_dataset_not_loaded` (H16/H34)."""
+    from vtsearch.routes._shared import error_response
+
+    return error_response(
+        "Detector is not loaded",
+        409,
+        detector_id=exc.detector_id,
+        code="detector_not_loaded",
+    )
+
+
+from vtscore.state.core import RequestMissingContextError as _RequestMissingContextError
+
+
+@app.errorhandler(_RequestMissingContextError)
+def _handle_request_missing_context(exc):
+    """Convert ``RequestMissingContextError`` into a clean 400.
+
+    Raised by the frozen ``_RequestMissingDatasetContext`` /
+    ``_RequestMissingDetectorContext`` sentinels when a mutation endpoint
+    was hit without an ``X-Dataset-Id`` / ``X-Detector-Id`` header and no
+    thread-local pinned context exists. The unloaded-id case is handled
+    separately by :func:`_handle_dataset_not_loaded` /
+    :func:`_handle_detector_not_loaded` (409 with a specific code). See
+    ``docs/plans/logical-bug-audit.md`` H13.
+    """
+    from flask import request as _req
+    from vtsearch.routes._shared import error_response
+
+    if not _req.path.startswith("/api/"):
+        raise exc
+    return error_response(str(exc), 400)
 
 
 @app.errorhandler(Exception)
@@ -406,7 +531,8 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
 
     Per-user ``settings_source`` sync runs lazily on each user's first
     settings access (see
-    :func:`vtsearch.settings._maybe_sync_from_source_locked`), not at
+    :func:`vtsearch.settings._run_sync_from_source`) and re-fires
+    whenever the source's ``peek_version`` token changes, not at
     server boot — there is no server-wide user to sync for.
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
@@ -475,8 +601,8 @@ if __name__ == "__main__":
 
     # Per-family shortcuts: ``--list-importers`` ≡ ``--list-plugins
     # --plugin-family importers``, and so on for every family in
-    # vtsearch.plugins.inventory.FAMILIES.
-    from vtsearch.plugins.inventory import register_family_shortcuts
+    # vtscore.plugins.inventory.FAMILIES.
+    from vtscore.plugins.inventory import register_family_shortcuts
 
     register_family_shortcuts(parser)
     parser.add_argument(
@@ -573,7 +699,7 @@ if __name__ == "__main__":
         help=(
             "Format for CLI status output. 'text' (default) prints "
             "human-readable prose; 'json' emits NDJSON on stdout, one event "
-            "per line, for scripted callers and CI. See vtsearch.cli_progress "
+            "per line, for scripted callers and CI. See vtscore.cli_progress "
             "for the event schema. Applies to --autodetect."
         ),
     )
@@ -586,7 +712,7 @@ if __name__ == "__main__":
     # These run before the autodetect / server paths so they don't trigger
     # model loading or the full Flask app boot.
     if args.list_plugins:
-        from vtsearch.plugins.inventory import format_json, format_names, format_plain, gather_plugins
+        from vtscore.plugins.inventory import format_json, format_names, format_plain, gather_plugins
 
         inventory = gather_plugins()
         if args.plugin_family:
@@ -628,7 +754,7 @@ if __name__ == "__main__":
                 f"--pipeline does not accept extra flags ({' '.join(remaining)}); "
                 "declare plugin field values in the YAML file instead."
             )
-        from vtsearch.cli_pipeline import run_pipeline_file
+        from vtscore.cli_pipeline import run_pipeline_file
 
         run_pipeline_file(args.pipeline)
         sys.exit(0)
@@ -637,7 +763,7 @@ if __name__ == "__main__":
     exporter = None
 
     if args.autodetect and args.importer:
-        from vtsearch.datasets.importers import get_importer, list_importers
+        from vtscore.datasets.importers import get_importer, list_importers
 
         importer = get_importer(args.importer)
         if importer is None:
@@ -647,7 +773,7 @@ if __name__ == "__main__":
         importer.add_cli_arguments(parser)
 
     if args.autodetect and args.exporter:
-        from vtsearch.exporters import get_exporter, list_exporters
+        from vtscore.exporters import get_exporter, list_exporters
 
         exporter = get_exporter(args.exporter)
         if exporter is None:
@@ -668,7 +794,7 @@ if __name__ == "__main__":
         # produces output. In JSON mode we also re-route the global media
         # progress callback from update_progress (which writes to a tracker
         # nothing reads in CLI mode) to an NDJSON emitter on stdout.
-        from vtsearch import cli_progress
+        from vtscore import cli_progress
 
         cli_progress.set_format(args.progress_format)
         if args.progress_format == "json":
@@ -710,7 +836,7 @@ if __name__ == "__main__":
                 if cli_progress.get_format() == "text":
                     print("", flush=True)
             else:
-                from vtsearch.cli import import_labels_into_detector_from_file
+                from vtscore.cli import import_labels_into_detector_from_file
 
                 try:
                     applied, skipped = import_labels_into_detector_from_file(
@@ -737,7 +863,7 @@ if __name__ == "__main__":
             field_values = {f.key: getattr(args, f.key, f.default) for f in importer.fields}
 
             if chunk_size:
-                from vtsearch.cli import autodetect_importer_main_chunked
+                from vtscore.cli import autodetect_importer_main_chunked
 
                 autodetect_importer_main_chunked(
                     args.importer,
@@ -749,7 +875,7 @@ if __name__ == "__main__":
                     dry_run=dry_run,
                 )
             else:
-                from vtsearch.cli import autodetect_importer_main
+                from vtscore.cli import autodetect_importer_main
 
                 autodetect_importer_main(
                     args.importer,
@@ -763,7 +889,7 @@ if __name__ == "__main__":
         elif args.dataset:
             # Pickle-file path
             if chunk_size:
-                from vtsearch.cli import autodetect_main_chunked
+                from vtscore.cli import autodetect_main_chunked
 
                 autodetect_main_chunked(
                     args.dataset,
@@ -774,7 +900,7 @@ if __name__ == "__main__":
                     dry_run=dry_run,
                 )
             else:
-                from vtsearch.cli import autodetect_main
+                from vtscore.cli import autodetect_main
 
                 autodetect_main(
                     args.dataset,
@@ -787,7 +913,7 @@ if __name__ == "__main__":
         else:
             parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")
 
-    elif args.local or not args.autodetect:
+    else:
         # Activate the chosen login provider before starting the server.
         login_choice = getattr(args, "login", None)
         if login_choice == "trivial":
@@ -797,7 +923,7 @@ if __name__ == "__main__":
             print("\U0001f511 Trivial login enabled \u2014 users will be prompted for a username", flush=True)
         elif login_choice == "api_key":
             from vtsearch.auth import ApiKeyLoginProvider, set_login_provider
-            from vtsearch.config import DATA_DIR
+            from vtscore.config import DATA_DIR
 
             provider = ApiKeyLoginProvider()
             set_login_provider(provider)

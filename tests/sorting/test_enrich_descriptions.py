@@ -16,14 +16,14 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtsearch.eval.config import EvalQuery
-from vtsearch.eval.runner import eval_text_sort
-from vtsearch.media.audio.embedder_clap import AudioClapEmbedder
-from vtsearch.media.embedder import MediaEmbedder
-from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
-from vtsearch.media.text.embedder_e5 import TextE5Embedder
-from vtsearch.media.video.embedder_xclip import VideoXClipEmbedder
-from vtsearch.embedding.helpers import embed_text_query
+from vtscore.eval.config import EvalQuery
+from vtscore.eval.runner import eval_text_sort
+from vtscore.media.audio.embedder_clap import AudioClapEmbedder
+from vtscore.media.embedder import MediaEmbedder
+from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+from vtscore.media.text.embedder_e5 import TextE5Embedder
+from vtscore.media.video.embedder_xclip import VideoXClipEmbedder
+from vtscore.embedding.helpers import embed_text_query
 
 
 # =====================================================================
@@ -219,7 +219,7 @@ class TestEmbedTextQueryEnrich:
             def embed_text_enriched(self, text):
                 raise AssertionError("Should not be called")
 
-        with patch("vtsearch.embedding.helpers._get_embedder_for_media_type", return_value=FakeEmbedder()):
+        with patch("vtscore.embedding.helpers._get_embedder_for_media_type", return_value=FakeEmbedder()):
             result = embed_text_query("test", "audio", enrich=False)
         np.testing.assert_array_equal(result, mock_vec)
 
@@ -236,7 +236,7 @@ class TestEmbedTextQueryEnrich:
             def embed_text_enriched(self, text):
                 return mock_vec
 
-        with patch("vtsearch.embedding.helpers._get_embedder_for_media_type", return_value=FakeEmbedder()):
+        with patch("vtscore.embedding.helpers._get_embedder_for_media_type", return_value=FakeEmbedder()):
             result = embed_text_query("test", "audio", enrich=True)
         np.testing.assert_array_equal(result, mock_vec)
 
@@ -349,7 +349,7 @@ class TestEvalTextSortEnrich:
                 return cat_dir.copy()
             return dog_dir.copy()
 
-        with patch("vtsearch.embedding.helpers.embed_text_query", side_effect=mock_embed):
+        with patch("vtscore.embedding.helpers.embed_text_query", side_effect=mock_embed):
             results = eval_text_sort(medias, queries, "image", k_values=[5], enrich=True)
 
         assert len(results) == 1
@@ -366,7 +366,7 @@ class TestEvalTextSortEnrich:
             call_kwargs.append({"enrich": enrich})
             return cat_dir.copy()
 
-        with patch("vtsearch.embedding.helpers.embed_text_query", side_effect=mock_embed):
+        with patch("vtscore.embedding.helpers.embed_text_query", side_effect=mock_embed):
             eval_text_sort(medias, queries, "image", k_values=[5], enrich=False)
 
         assert all(kw["enrich"] is False for kw in call_kwargs)

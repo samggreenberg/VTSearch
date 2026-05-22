@@ -11,6 +11,7 @@ from vtsearch.logging_config import (
     ContextFilter,
     JsonFormatter,
     TextFormatter,
+    install_transformers_logging_bridge,
     new_request_id,
     setup_logging,
 )
@@ -60,7 +61,7 @@ def _emit_with_empty_context(stream: io.StringIO, fmt: str, fn):
     ``_test_default`` contexts; tests that assert *absence* of context need
     those out of the way."""
     from vtsearch.auth import set_thread_user
-    from vtsearch.state.core import (
+    from vtscore.state.core import (
         get_thread_dataset_context,
         get_thread_detector_context,
         set_thread_dataset_context,
@@ -149,7 +150,7 @@ class TestTextFormatter:
 
     def test_basic_line_with_thread_local_context(self):
         """When thread-local context is set, the bracketed tags appear."""
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DatasetContext,
             get_thread_dataset_context,
             get_thread_detector_context,
@@ -264,7 +265,7 @@ class TestThreadLocalContext:
         assert captured[0]["user"] == "alice"
 
     def test_thread_local_dataset_and_detector_id(self):
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DatasetContext,
             DetectorContext,
             set_thread_dataset_context,
@@ -344,6 +345,98 @@ class TestSetupLogging:
             setup_logging(level="NOSUCHLEVEL")
             assert logging.getLogger().level == logging.WARNING
         finally:
+            setup_logging()
+
+
+class TestTransformersVocabTokenFilter:
+    """Filter installed by setup_logging() drops only the bos/eos/pad
+    vocab-range warning from transformers; everything else passes through."""
+
+    def test_drops_bos_token_warning(self):
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            logging.getLogger("transformers.configuration_utils").warning(
+                "Model config: bos_token_id must be `None` or an integer within "
+                "the vocabulary (between 0 and 31999), got 49406."
+            )
+            assert stream.getvalue() == ""
+        finally:
+            setup_logging()
+
+    def test_drops_eos_token_warning_on_descendant_logger(self):
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            logging.getLogger("transformers.models.clap.configuration_clap").warning(
+                "Model config: eos_token_id must be `None` or an integer within "
+                "the vocabulary (between 0 and 31999), got 49407."
+            )
+            assert stream.getvalue() == ""
+        finally:
+            setup_logging()
+
+    def test_unrelated_transformers_warning_passes_through(self):
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            logging.getLogger("transformers").warning("some other thing happened")
+            assert "some other thing happened" in stream.getvalue()
+        finally:
+            setup_logging()
+
+    def test_non_transformers_logger_with_matching_text_passes_through(self):
+        """Filter is scoped to transformers loggers so it can't accidentally
+        eat a same-shaped message logged from elsewhere."""
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            logging.getLogger("vtsearch.test").warning(
+                "bos_token_id must be `None` or an integer within the vocabulary..."
+            )
+            assert "bos_token_id" in stream.getvalue()
+        finally:
+            setup_logging()
+
+
+class TestTransformersLoggingBridge:
+    """The bridge disables transformers' default handler and re-enables
+    propagation so its records flow through our root handler (and our
+    vocab-token filter)."""
+
+    def test_bridge_disables_default_handler_and_enables_propagation(self):
+        import transformers.utils.logging as hf_logging
+
+        hf_logging._reset_library_root_logger()
+        hf_logging._configure_library_root_logger()
+        hf_root = hf_logging._get_library_root_logger()
+        try:
+            assert hf_root.propagate is False
+            assert any(isinstance(h, logging.StreamHandler) for h in hf_root.handlers)
+
+            install_transformers_logging_bridge()
+
+            assert hf_root.propagate is True
+            assert hf_root.handlers == []
+        finally:
+            hf_logging._reset_library_root_logger()
+            hf_logging._configure_library_root_logger()
+
+    def test_bridge_lets_vocab_token_warning_be_filtered(self):
+        import transformers.utils.logging as hf_logging
+
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            install_transformers_logging_bridge()
+            logging.getLogger("transformers.configuration_utils").warning(
+                "Model config: bos_token_id must be `None` or an integer within "
+                "the vocabulary (between 0 and 31999), got 49406."
+            )
+            assert stream.getvalue() == ""
+        finally:
+            hf_logging._reset_library_root_logger()
+            hf_logging._configure_library_root_logger()
             setup_logging()
 
 

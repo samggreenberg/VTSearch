@@ -46,55 +46,55 @@ def _fake_whisper_module(transcribe_result: dict, load_model_calls: list | None 
 
 class TestAudio2TextMediaConverter:
     def test_source_and_target_types(self):
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         c = Audio2TextMediaConverter()
         assert c.source_type == "audio"
         assert c.target_type == "text"
 
     def test_name_and_display(self):
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         c = Audio2TextMediaConverter()
         assert c.name == "audio2text"
         assert "Whisper" in c.display_name or "ASR" in c.display_name
 
     def test_fields_have_expected_keys(self):
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         c = Audio2TextMediaConverter()
         keys = {f.key for f in c.fields}
         assert {"model_size", "language"} <= keys
 
     def test_field_defaults(self):
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         c = Audio2TextMediaConverter()
         assert c.get_param({}, "model_size") == "base"
         assert c.get_param({}, "language") == ""
 
     def test_model_size_options_include_standard_sizes(self):
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         c = Audio2TextMediaConverter()
         size_field = next(f for f in c.fields if f.key == "model_size")
         assert {"tiny", "base", "small", "medium", "large"} <= set(size_field.options or [])
 
     def test_convert_no_data(self):
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         c = Audio2TextMediaConverter()
         assert c.convert({"filename": "x.wav"}) == []
 
     def test_convert_empty_bytes(self):
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         c = Audio2TextMediaConverter()
         assert c.convert({"filename": "x.wav", "media_bytes": b""}) == []
 
     def test_convert_no_whisper_returns_empty(self):
         """When ``whisper`` is not importable, convert returns []."""
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         media = {"filename": "x.wav", "media_bytes": _make_silent_wav()}
         c = Audio2TextMediaConverter()
@@ -104,7 +104,7 @@ class TestAudio2TextMediaConverter:
 
     def test_convert_with_mocked_whisper(self):
         """End-to-end happy path: whisper returns a transcript, we emit one text media."""
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         media = {"filename": "podcast.wav", "media_bytes": _make_silent_wav()}
         c = Audio2TextMediaConverter()
@@ -128,7 +128,7 @@ class TestAudio2TextMediaConverter:
 
     def test_convert_empty_transcript_returns_empty_list(self):
         """Whisper returning blank text shouldn't produce a zero-content media."""
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         media = {"filename": "silent.wav", "media_bytes": _make_silent_wav()}
         c = Audio2TextMediaConverter()
@@ -139,7 +139,7 @@ class TestAudio2TextMediaConverter:
 
     def test_convert_passes_language_to_whisper(self):
         """The language param flows into model.transcribe() kwargs."""
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         media = {"filename": "fr.wav", "media_bytes": _make_silent_wav()}
         c = Audio2TextMediaConverter()
@@ -155,7 +155,7 @@ class TestAudio2TextMediaConverter:
 
     def test_blank_language_omits_language_kwarg(self):
         """Blank language string must NOT be passed (would force Whisper to '')."""
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         media = {"filename": "x.wav", "media_bytes": _make_silent_wav()}
         c = Audio2TextMediaConverter()
@@ -167,7 +167,7 @@ class TestAudio2TextMediaConverter:
         assert "language" not in fake._FakeModel.last_kwargs  # pyright: ignore[reportAttributeAccessIssue]
 
     def test_convert_passes_model_size(self):
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         media = {"filename": "x.wav", "media_bytes": _make_silent_wav()}
         c = Audio2TextMediaConverter()
@@ -180,7 +180,7 @@ class TestAudio2TextMediaConverter:
         assert load_calls == ["small"]
 
     def test_convert_default_model_size_is_base(self):
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         media = {"filename": "x.wav", "media_bytes": _make_silent_wav()}
         c = Audio2TextMediaConverter()
@@ -194,7 +194,7 @@ class TestAudio2TextMediaConverter:
 
     def test_convert_from_path(self, tmp_path):
         """Converter accepts a media_path and does NOT delete a user-owned file."""
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         wav_path = tmp_path / "tone.wav"
         wav_path.write_bytes(_make_silent_wav())
@@ -212,7 +212,7 @@ class TestAudio2TextMediaConverter:
 
     def test_convert_handles_load_model_failure(self):
         """A failed model load returns [] cleanly without raising."""
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         media = {"filename": "x.wav", "media_bytes": _make_silent_wav()}
         c = Audio2TextMediaConverter()
@@ -228,7 +228,7 @@ class TestAudio2TextMediaConverter:
 
     def test_convert_handles_transcribe_failure(self):
         """A failed transcribe call returns [] cleanly without raising."""
-        from vtsearch.converters.audio2text import Audio2TextMediaConverter
+        from vtscore.converters.audio2text import Audio2TextMediaConverter
 
         media = {"filename": "x.wav", "media_bytes": _make_silent_wav()}
         c = Audio2TextMediaConverter()
@@ -246,20 +246,20 @@ class TestAudio2TextMediaConverter:
 
 class TestAudio2TextRegistryIntegration:
     def test_audio2text_in_registry(self):
-        from vtsearch.converters import get_converter, list_converters
+        from vtscore.converters import get_converter, list_converters
 
         assert get_converter("audio2text") is not None
         names = [c.name for c in list_converters()]
         assert "audio2text" in names
 
     def test_audio2text_listed_for_text_target(self):
-        from vtsearch.converters import list_converters_for_target
+        from vtscore.converters import list_converters_for_target
 
         names = [c.name for c in list_converters_for_target("text")]
         assert "audio2text" in names
 
     def test_audio2text_listed_for_audio_source(self):
-        from vtsearch.converters import list_converters_for_source
+        from vtscore.converters import list_converters_for_source
 
         names = [c.name for c in list_converters_for_source("audio")]
         assert "audio2text" in names

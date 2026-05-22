@@ -6,12 +6,15 @@
 #   ./run-tests.sh core         # run only core group + frontend build check
 #   ./run-tests.sh sorting      # run only sorting group
 #   ./run-tests.sh core sorting # run core + sorting groups + frontend build check
+#   ./run-tests.sh vtscore-clean  # run tests_lib/ with Flask import blocked
 #
 # Available groups: core, api, sorting, datasets, io, detectors,
 #                   downloads, integration, cli, converters
 #
-# Each group is a folder under tests/. Marker assignment is automatic:
-# any file at tests/<group>/test_*.py gets marked <group> by conftest.
+# Each group is a folder under tests/ AND tests_lib/. Marker assignment is
+# automatic: any file at tests[_lib]/<group>/test_*.py gets marked <group>
+# by the respective conftest.  tests_lib/ holds Flask-free library tests
+# (Phase 7 of vtscore/docs/architecture.md).
 #
 # Extra pytest args can follow a '--':
 #   ./run-tests.sh core -- -x --tb=short
@@ -21,6 +24,15 @@ cd "$(dirname "$0")"
 
 # Install deps if needed
 bash .claude/hooks/ensure-test-deps.sh
+
+# vtscore-clean: run only the library-tier tests with Flask blocked.
+# Skips the linter / frontend stages because the goal of this mode is
+# specifically to verify that the library tier can run independent of
+# Flask — not to re-run the linting we already do in the main path.
+if [[ "${1:-}" == "vtscore-clean" ]]; then
+    shift
+    exec python scripts/check-vtscore-clean.py "$@"
+fi
 
 # Ruff lint + format check.
 # Runs early because it's fast (~1s) and catches mistakes the pytest /
@@ -63,8 +75,30 @@ fi
 # pip-audit — scans installed Python packages against the PyPI advisory
 # database. Auditing the resolved venv (not requirements files) catches
 # transitive vulnerabilities and matches what production will actually run.
+#
+# `PIP_AUDIT_IGNORE` lists advisory IDs that pip-audit currently reports
+# with no fix version available — pinning a "fixed" release isn't an
+# option, so the gate would otherwise block indefinitely on upstream
+# CVEs that have nothing to do with VTSearch code.  Re-audit the list
+# whenever upstream ships a patched release; remove the entry and let
+# `ensure-test-deps.sh` upgrade the dep instead of ignoring the CVE.
+#   joblib 1.5.3       PYSEC-2024-277             (no upstream fix)
+#   pyjwt  2.12.1      PYSEC-2025-183             (no upstream fix)
+#   transformers 5.8.1 PYSEC-2025-211..218        (no upstream fix)
+PIP_AUDIT_IGNORE=(
+    --ignore-vuln PYSEC-2024-277
+    --ignore-vuln PYSEC-2025-183
+    --ignore-vuln PYSEC-2025-211
+    --ignore-vuln PYSEC-2025-212
+    --ignore-vuln PYSEC-2025-213
+    --ignore-vuln PYSEC-2025-214
+    --ignore-vuln PYSEC-2025-215
+    --ignore-vuln PYSEC-2025-216
+    --ignore-vuln PYSEC-2025-217
+    --ignore-vuln PYSEC-2025-218
+)
 echo "Running pip-audit..."
-if ! pip-audit ; then
+if ! pip-audit "${PIP_AUDIT_IGNORE[@]}" ; then
     echo ""
     echo "============================================================"
     echo "TESTS BLOCKED: pip-audit found known vulnerabilities"
@@ -226,8 +260,12 @@ fi
 #   --no-header — skip the platform/plugin header noise
 #   -q          — quiet mode (dots instead of full test names)
 #   -n auto     — parallel execution via pytest-xdist (one worker per CPU)
+#
+# Both tests/ (app tier) and tests_lib/ (library tier) are passed in.
+# The two trees have independent conftests; pytest's auto-merge picks
+# the right autouse fixtures per test based on file location.
 if [[ -n "$MARKER_EXPR" ]]; then
-    python -m pytest tests/ -q --tb=short --no-header -n auto -m "$MARKER_EXPR" "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
+    python -m pytest tests/ tests_lib/ -q --tb=short --no-header -n auto -m "$MARKER_EXPR" "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
 else
-    python -m pytest tests/ -q --tb=short --no-header -n auto "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
+    python -m pytest tests/ tests_lib/ -q --tb=short --no-header -n auto "${COV_ARGS[@]}" "${EXTRA_ARGS[@]}"
 fi

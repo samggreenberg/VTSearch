@@ -1,13 +1,8 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { map } from 'rxjs/operators';
+import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
-import {
-  FolderBrowserBrowseFn,
-  FolderBrowserComponent,
-  FolderBrowserFileEntry,
-} from '../../folder-browser/folder-browser.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { DetectorsApiService } from '../../../services/detectors-api.service';
@@ -29,7 +24,7 @@ type MediaPickerView = 'sources' | 'browse-items' | 'file-browser';
 @Component({
   selector: 'vt-load-sort-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, IconComponent, FolderBrowserComponent, MediaCropModalComponent, DetectorSwatchComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DetectorSwatchComponent],
   templateUrl: './load-sort-modal.component.html',
   styleUrl: './load-sort-modal.component.scss',
 })
@@ -52,23 +47,14 @@ export class LoadSortModalComponent implements OnInit {
   browseItems: BrowseItem[] = [];
   browseLoading = false;
 
-  // File browser state (for demo & folder drill-down)
+  // Typed-path state for the example-media picker (demo & folder drill-down).
+  // The user types a path relative to the picked source; the server validates
+  // it when the form is submitted.
   browseSource = '';
   browseSourceLabel = '';
   fileLoading = false;
-
-  /** Browse fn for the embedded ``<vt-folder-browser>``.  Routes through
-   *  ``/api/browse-media-files`` with whichever source the user picked
-   *  (``demo:<name>`` or ``folder``). */
-  readonly browseFn: FolderBrowserBrowseFn = (path: string) =>
-    this.datasetsApi.browseMediaFiles(this.browseSource, path).pipe(
-      map((res) => ({
-        directories: res.directories || [],
-        files: res.files || [],
-        rootPath: res.root_path,
-        currentPath: path,
-      })),
-    );
+  typedPath = '';
+  typedPathError = '';
 
   // Pending crop confirmation state.
   pendingFile: File | null = null;
@@ -253,31 +239,37 @@ export class LoadSortModalComponent implements OnInit {
     this.mediaPickerView = 'file-browser';
     this.browseSource = source;
     this.browseSourceLabel = label;
+    this.typedPath = '';
+    this.typedPathError = '';
   }
 
-  /** Back-arrow handler for the file-browser view — returns to the
+  /** Back-arrow handler for the typed-path view — returns to the
    *  source-listing step that opened it (demo list / saved-datasets
    *  list). */
   backFromFileBrowser(): void {
     this.mediaPickerView = this.selectedSource?.name === 'demo' ? 'browse-items' : 'sources';
     this.browseSource = '';
     this.browseSourceLabel = '';
+    this.typedPath = '';
+    this.typedPathError = '';
   }
 
-  /** Confirm handler for the file browser — materialises the picked
-   *  file via ``/api/browse-media-files/select`` and kicks off an
-   *  example sort. */
-  onFileConfirmed(entry: FolderBrowserFileEntry): void {
+  /** Submit the typed path to ``/api/browse-media-files/select`` and
+   *  kick off an example sort. The server validates the path. */
+  submitTypedPath(): void {
+    const raw = (this.typedPath || '').trim();
+    if (!raw) return;
+    this.typedPathError = '';
     this.fileLoading = true;
-    this.datasetsApi.selectBrowsedFile(this.browseSource, entry.path).subscribe({
+    this.datasetsApi.selectBrowsedFile(this.browseSource, raw).subscribe({
       next: (res) => {
         this.fileLoading = false;
         this.showMediaPicker = false;
         this.loadServerMedia(res.filename);
       },
-      error: () => {
-        this.error = 'Failed to select file';
+      error: (err) => {
         this.fileLoading = false;
+        this.typedPathError = err?.error?.message || 'Path not found on the server.';
       },
     });
   }

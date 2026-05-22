@@ -77,7 +77,7 @@ option_string  # noqa: F821
 secret_key  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# Public-API forwarders in ``vtsearch.concurrency.progress`` that mirror
+# Public-API forwarders in ``vtscore.concurrency.progress`` that mirror
 # their ``update_<tracker>_progress`` partners. The corresponding
 # trackers (``sort_progress``, ``find_progress``, ``dataset_progress``)
 # are imported and read directly in tests / routes; the helper wrappers
@@ -91,8 +91,8 @@ get_find_progress  # noqa: F821
 # Public module constants — referenced by callers via ``module.NAME`` or
 # settings lookup, which vulture treats as the only assignment.
 # ---------------------------------------------------------------------------
-SAVED_DATASETS_DIR  # noqa: F821 — vtsearch.datasets.registry default dir
-DETECTORS_DIR  # noqa: F821 — vtsearch.detectors.store default dir
+SAVED_DATASETS_DIR  # noqa: F821 — vtscore.datasets.registry default dir
+DETECTORS_DIR  # noqa: F821 — vtscore.detectors.store default dir
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB  # noqa: F821 — downloader size budget constant
 
 # ---------------------------------------------------------------------------
@@ -109,11 +109,11 @@ default_concurrent_embeddings  # noqa: F821
 # extension authors). Documented in CLAUDE.md but not currently called
 # from within vtsearch/ or tests/.
 # ---------------------------------------------------------------------------
-find_by_pkl_path  # noqa: F821 — vtsearch.datasets.registry
-recreate_model_at_time  # noqa: F821 — vtsearch.detectors.labeling_progress
-update_cache_for_cid  # noqa: F821 — vtsearch.detectors.labelset_training
-collect_media_origins  # noqa: F821 — vtsearch.detectors.training
-train_detector_from_origins  # noqa: F821 — vtsearch.detectors.training
+find_by_pkl_path  # noqa: F821 — vtscore.datasets.registry
+recreate_model_at_time  # noqa: F821 — vtscore.detectors.labeling_progress
+update_cache_for_cid  # noqa: F821 — vtscore.detectors.labelset_training
+collect_media_origins  # noqa: F821 — vtscore.detectors.training
+train_detector_from_origins  # noqa: F821 — vtscore.detectors.training
 
 # ---------------------------------------------------------------------------
 # Public context managers exported from ``vtsearch.state`` for callers
@@ -134,3 +134,89 @@ get_audio_playing  # noqa: F821
 get_swipe_animation  # noqa: F821
 get_hide_autopilot  # noqa: F821
 get_autopilot_resort_interval  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# DetectorContext attributes written in ``vtsearch/routes/detectors/registry.py``
+# and read in ``vtscore/detectors/dataset_sync.py`` /
+# ``vtscore/detectors/label_sync.py``. The reader lives in ``vtscore/``,
+# which the standard vulture command does not scan — so the write sites in
+# ``vtsearch/`` look "unused" even though both attributes are real and
+# heavily used.
+# ---------------------------------------------------------------------------
+cached_labelset_mtime  # noqa: F821
+votes_dataset_id  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``tests/helpers.py`` exports test helpers; ``make_wav_file`` is consumed
+# by ``tests_lib/`` (the library-tier test suite mirrored from ``tests/``),
+# which the default vulture command does not scan.
+# ---------------------------------------------------------------------------
+make_wav_file  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Stub / mock methods defined in test classes that override real abstract
+# methods on ``MediaEmbedder`` (``_load_models_impl``, ``_embed_media_impl``)
+# or mimic third-party API surfaces — ``PaddleOCR`` / ``ocr`` shadow
+# ``paddleocr.PaddleOCR``, ``transcribe`` shadows the Whisper / Faster-Whisper
+# API, ``_detect_speech_intervals`` shadows a VAD helper, ``_processor``
+# shadows a HuggingFace processor attribute. The framework / production
+# code calls them by name; vulture sees the test override but not the
+# caller.
+# ---------------------------------------------------------------------------
+_load_models_impl  # noqa: F821
+_embed_media_impl  # noqa: F821
+PaddleOCR  # noqa: F821
+ocr  # noqa: F821
+transcribe  # noqa: F821
+_detect_speech_intervals  # noqa: F821
+_processor  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Mock attributes that mimic the shape of third-party return values:
+# ``conf`` / ``xyxy`` look like an ultralytics YOLO ``Result`` row;
+# ``relative_bounding_box`` / ``location_data`` look like a MediaPipe
+# detection. The production reader pulls them by name off the mock.
+# ---------------------------------------------------------------------------
+conf  # noqa: F821
+xyxy  # noqa: F821
+relative_bounding_box  # noqa: F821
+location_data  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Test-internal attributes assigned for later access through fixtures or
+# saved-state replay. ``_detector`` holds the unit under test inside
+# clipper / processor tests; ``_extract_dir`` / ``dir_key`` mirror the
+# corresponding production attribute on a fake media source; ``text_sort``
+# / ``learned_sort`` are stub-result dataclass attributes for the eval CLI
+# tests; ``multi_media`` is the class-level marker on a stub importer.
+# ---------------------------------------------------------------------------
+_detector  # noqa: F821
+_extract_dir  # noqa: F821
+dir_key  # noqa: F821
+text_sort  # noqa: F821
+learned_sort  # noqa: F821
+multi_media  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Pytest fixture parameters whose side effects are the point — the body
+# never references the argument name, but the fixture must be requested
+# by name in the signature. Vulture flags each parameter at 100 %
+# confidence because the local name has no read.
+# ---------------------------------------------------------------------------
+stub_run_eval  # noqa: F821
+stub_pipeline  # noqa: F821
+stub_extractor_factory  # noqa: F821
+stub_localizer_factory  # noqa: F821
+stubbed_resolver  # noqa: F821
+reset_state  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Test-local names that exist only to document the shape of an unpacked
+# tuple, a captured Flask view function, or a fixture-yielded id. They
+# are unused after binding by design.
+# ---------------------------------------------------------------------------
+view  # noqa: F821
+first_chunk_medias  # noqa: F821
+demo_id  # noqa: F821
+folder_path_for_origin  # noqa: F821
+output_type  # noqa: F821

@@ -48,13 +48,13 @@ def _seed_cross_dataset_model(tm_name: str = "cross-ds-model", *, mark_loaded: b
     entry are created, so a subsequent ``POST /api/detectors/registry/load``
     triggers the full load task.
     """
-    from vtsearch.detectors.registry import (
+    from vtscore.detectors.registry import (
         add_loaded_detector_id,
         register_detector,
         reset_for_tests,
     )
-    from vtsearch.detectors.store import _detector_path, _write_detector
-    from vtsearch.state.core import (
+    from vtscore.detectors.store import _detector_path, _write_detector
+    from vtscore.state.core import (
         DetectorContext,
         register_detector_context,
         set_thread_detector_context,
@@ -246,8 +246,8 @@ class TestCrossDatasetVoteDoesNotWipeLabels:
     """
 
     def test_vote_in_active_dataset_merges_with_saved_labelset(self, client):
-        from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
-        from vtsearch.detectors.store import _detector_path, _read_detector
+        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+        from vtscore.detectors.store import _detector_path, _read_detector
         from vtsearch.state import good_votes
 
         _seed_cross_dataset_model()
@@ -295,7 +295,7 @@ class TestCrossDatasetMLPTraining:
         from contextlib import contextmanager
         from pathlib import Path
 
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.media.audio.audio_generator import generate_wav
 
         files: dict[str, Path] = {}
         for name, freq in (("alpha.wav", 220), ("beta.wav", 330), ("gamma.wav", 440)):
@@ -310,8 +310,8 @@ class TestCrossDatasetMLPTraining:
         # labelset_training imports resolve_file_context inside _embed_one,
         # so patching the resolver symbol is enough — the function-level
         # import picks the patched value.
-        import vtsearch.detectors.labelset_training as lt_mod
-        import vtsearch.detectors.resolver as resolver_mod
+        import vtscore.detectors.labelset_training as lt_mod
+        import vtscore.detectors.resolver as resolver_mod
 
         monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_resolve_ctx)
         # Defensive: patch the binding inside labelset_training too in case
@@ -322,8 +322,8 @@ class TestCrossDatasetMLPTraining:
         return _seed_cross_dataset_model(mark_loaded=False)
 
     def test_load_resolves_and_embeds_cross_dataset_labels(self, client, tmp_path, monkeypatch):
-        from vtsearch.detectors.labelset_elements import stable_element_id
-        from vtsearch.state.core import get_detector_context
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.state.core import get_detector_context
 
         detector_id = self._seed_with_resolvable_labelset(tmp_path, monkeypatch)
 
@@ -339,8 +339,8 @@ class TestCrossDatasetMLPTraining:
 
         # Verify the cache is keyed by stable_element_id (so subsequent
         # lookups find the right vector).
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.detectors.store import _detector_path, _read_detector
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.store import _detector_path, _read_detector
 
         saved = _read_detector(_detector_path("cross-ds-model"))
         assert saved is not None
@@ -372,8 +372,8 @@ def _load_detector_and_wait_local(client, detector_id, timeout=5.0):
     """
     import time
 
-    from vtsearch.concurrency.progress import detector_loading_tasks
-    from vtsearch.state.core import get_detector_context, set_thread_detector_context
+    from vtscore.concurrency.progress import detector_loading_tasks
+    from vtscore.state.core import get_detector_context, set_thread_detector_context
 
     res = client.post("/api/detectors/registry/load", json={"detector_id": detector_id})
     assert res.status_code in (200, 202), res.get_data(as_text=True)

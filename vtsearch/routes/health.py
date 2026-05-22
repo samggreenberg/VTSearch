@@ -22,9 +22,9 @@ import os
 from flask import jsonify
 from flask_smorest import Blueprint
 
-from vtsearch.config import DATA_DIR
-from vtsearch.embedding.loader import predict_embedders_to_preload
-from vtsearch.media import get_embedder
+from vtscore.config import DATA_DIR
+from vtscore.embedding.loader import predict_embedders_to_preload
+from vtscore.media import get_embedder
 from vtsearch.schemas.health import HealthSchema, ReadinessSchema
 
 health_bp = Blueprint(
@@ -91,7 +91,7 @@ def readyz():
 
     Sub-checks:
 
-    * ``data_dir`` — :data:`vtsearch.config.DATA_DIR` exists and is
+    * ``data_dir`` — :data:`vtscore.config.DATA_DIR` exists and is
       writable (the app needs this for embeddings, model cache, settings).
     * ``models`` — every embedder implied by the dataset/detector
       registries is warm (``_model is not None``).

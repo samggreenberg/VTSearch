@@ -4,13 +4,13 @@ import json
 import threading
 import time
 
-from vtsearch.concurrency.events import (
+from vtscore.concurrency.events import (
     _TASK_CHANNELS,
     _TRACKER_CHANNELS,
     initial_snapshot,
     stream_progress_events,
 )
-from vtsearch.concurrency.progress import (
+from vtscore.concurrency.progress import (
     LoadingTasksTracker,
     ProgressTracker,
     dataset_progress,
@@ -74,6 +74,109 @@ class TestProgressTrackerSubscriptions:
 
         assert received[0]["error"] == "kapow"
         assert received[0]["step"] == 2
+
+
+class TestProgressTrackerEta:
+    """``ProgressTracker`` should fill in a smoothed ``eta_seconds`` once a
+    bar has been running >5s, reset its phase clock when the status or total
+    changes, and stay silent otherwise. We patch :func:`time.monotonic` for
+    determinism — the clock advance values matter, not wall time."""
+
+    def _make_tracker(self) -> ProgressTracker:
+        return ProgressTracker(extra_fields={"eta_seconds": None})
+
+    def test_eta_is_none_until_min_elapsed(self, monkeypatch):
+        now = [1000.0]
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
+        tracker = self._make_tracker()
+
+        tracker.update("loading", "", 0, 100)
+        assert tracker.get()["eta_seconds"] is None
+
+        now[0] += 2.0  # <5s elapsed
+        tracker.update("loading", "", 5, 100)
+        assert tracker.get()["eta_seconds"] is None
+
+    def test_eta_appears_after_min_elapsed(self, monkeypatch):
+        now = [1000.0]
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
+        tracker = self._make_tracker()
+
+        tracker.update("loading", "", 0, 100)
+        now[0] += 10.0
+        tracker.update("loading", "", 10, 100)
+        eta = tracker.get()["eta_seconds"]
+        # 10s elapsed for 10/100 done → 90 units remain at 1 unit/sec → 90s.
+        assert eta is not None
+        assert 89.0 <= eta <= 91.0
+
+    def test_eta_smoothed_via_ema(self, monkeypatch):
+        now = [1000.0]
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
+        tracker = self._make_tracker()
+
+        tracker.update("loading", "", 0, 100)
+        now[0] += 10.0
+        tracker.update("loading", "", 10, 100)
+        first = tracker.get()["eta_seconds"]
+        assert first is not None
+
+        # Pretend the rate suddenly doubles: 10 more units in just 1s.
+        now[0] += 1.0
+        tracker.update("loading", "", 20, 100)
+        smoothed = tracker.get()["eta_seconds"]
+        # Raw new ETA = (11 / 20) * 80 = 44s. Smoothed with alpha=0.3 against
+        # the previous ~90s sample sits well above 44 and below the old 90.
+        assert smoothed is not None
+        assert 44.0 < smoothed < first
+
+    def test_eta_resets_when_status_changes(self, monkeypatch):
+        now = [1000.0]
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
+        tracker = self._make_tracker()
+
+        tracker.update("downloading", "", 0, 100)
+        now[0] += 10.0
+        tracker.update("downloading", "", 50, 100)
+        assert tracker.get()["eta_seconds"] is not None
+
+        # New phase: clock should restart, ETA hidden until the next 5s elapse.
+        tracker.update("embedding", "", 0, 100)
+        assert tracker.get()["eta_seconds"] is None
+        now[0] += 1.0
+        tracker.update("embedding", "", 5, 100)
+        assert tracker.get()["eta_seconds"] is None
+
+    def test_eta_resets_when_total_changes(self, monkeypatch):
+        now = [1000.0]
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
+        tracker = self._make_tracker()
+
+        tracker.update("loading", "", 0, 100)
+        now[0] += 10.0
+        tracker.update("loading", "", 50, 100)
+        assert tracker.get()["eta_seconds"] is not None
+
+        # A new bar with a different total resets the phase clock.
+        tracker.update("loading", "", 0, 200)
+        assert tracker.get()["eta_seconds"] is None
+
+    def test_eta_none_for_indeterminate_bars(self, monkeypatch):
+        now = [1000.0]
+        monkeypatch.setattr("vtscore.concurrency.progress.time.monotonic", lambda: now[0])
+        tracker = self._make_tracker()
+
+        tracker.update("loading", "", 0, 0)
+        now[0] += 20.0
+        tracker.update("loading", "", 42, 0)
+        assert tracker.get()["eta_seconds"] is None
+
+    def test_eta_field_absent_when_extra_not_declared(self):
+        """Trackers created without an ``eta_seconds`` extra get no key —
+        the feature is opt-in via :data:`_PROGRESS_COMMON_EXTRAS`."""
+        tracker = ProgressTracker()
+        tracker.update("loading", "", 1, 2)
+        assert "eta_seconds" not in tracker.get()
 
 
 class TestLoadingTasksTrackerSubscriptions:

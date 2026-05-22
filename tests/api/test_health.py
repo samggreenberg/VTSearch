@@ -75,7 +75,7 @@ class TestReadiness:
 
     def test_reports_loaded_embedder_as_ok(self, client):
         """When the expected embedder has a non-None ``_model``, models check passes."""
-        from vtsearch.media import get_embedder
+        from vtscore.media import get_embedder
 
         emb = get_embedder("clap")
         sentinel = object()

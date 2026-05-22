@@ -1,6 +1,6 @@
 <vt-modal title="Load Sort" [open]="true" (closed)="close()">
   @if (loading) {
-    <p class="empty-state">Loading...</p>
+    <p class="empty-state">Loading detectors…</p>
   } @else if (showMediaPicker) {
     <div class="media-picker">
       <button class="btn btn--secondary btn--sm back-btn" (click)="closeMediaPicker()" title="Return to sort options">&larr; Back</button>
@@ -9,7 +9,7 @@
       @if (mediaPickerView === 'sources') {
         <p class="picker-instructions">Choose a source to browse media from:</p>
         @if (browseLoading) {
-          <p class="empty-state">Loading sources...</p>
+          <p class="empty-state">Loading media sources…</p>
         } @else {
           <div class="source-list">
             @for (src of mediaSources; track src.name) {
@@ -28,7 +28,7 @@
       @if (mediaPickerView === 'browse-items') {
         <p class="picker-instructions">Select an item from <strong>{{ selectedSource?.display_name || selectedSource?.name }}</strong>:</p>
         @if (browseLoading) {
-          <p class="empty-state">Loading items...</p>
+          <p class="empty-state">Loading items from {{ selectedSource?.display_name || selectedSource?.name }}…</p>
         } @else if (browseItems.length > 0) {
           <div class="browse-list">
             @for (item of browseItems; track item.key) {
@@ -42,19 +42,33 @@
         }
       }
 
-      <!-- File browser (recursive directory navigation) -->
+      <!-- Typed path for example media -->
       @if (mediaPickerView === 'file-browser') {
         <div class="file-browser-step">
           @if (selectedSource?.name === 'demo') {
             <button class="btn btn--secondary btn--sm back-btn" (click)="backFromFileBrowser()" title="Return to the demo list">&larr; Back to demo list</button>
           }
-          <vt-folder-browser
-            [browse]="browseFn"
-            [rootLabel]="browseSourceLabel"
-            [busy]="fileLoading"
-            emptyMessage="No media files found in this directory."
-            (confirm)="onFileConfirmed($event)"
-          ></vt-folder-browser>
+          <p class="picker-instructions">
+            Enter a path to a media file in <strong>{{ browseSourceLabel }}</strong>:
+          </p>
+          <input
+            type="text"
+            class="form-input"
+            placeholder="path/to/file"
+            [(ngModel)]="typedPath"
+            (keydown.enter)="submitTypedPath(); $event.preventDefault()"
+          />
+          <button
+            type="button"
+            class="btn btn--primary"
+            [disabled]="fileLoading || !typedPath.trim()"
+            (click)="submitTypedPath()"
+          >
+            @if (fileLoading) { Loading… } @else { Load }
+          </button>
+          @if (typedPathError) {
+            <p class="error-text">{{ typedPathError }}</p>
+          }
         </div>
       }
     </div>

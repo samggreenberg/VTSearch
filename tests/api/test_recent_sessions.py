@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from vtsearch import settings
-from vtsearch.datasets.registry import register_dataset
-from vtsearch.detectors.registry import register_detector
+from vtscore.datasets.registry import register_dataset
+from vtscore.detectors.registry import register_detector
 from vtsearch.routes.sessions import MAX_RECENT_SESSIONS
 
 

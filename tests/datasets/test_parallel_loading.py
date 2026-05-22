@@ -7,7 +7,7 @@ from unittest import mock
 import numpy as np
 import pytest
 
-from vtsearch.concurrency.progress import (
+from vtscore.concurrency.progress import (
     CancelledError,
     LoadingTasksTracker,
     get_progress,
@@ -241,7 +241,7 @@ class TestGetProgressWithLoadingTasks:
 
     def test_falls_back_to_global(self):
         """With no loading tasks, get_progress() returns the global tracker."""
-        from vtsearch.concurrency.progress import update_progress
+        from vtscore.concurrency.progress import update_progress
 
         update_progress("idle", "Ready")
         progress = get_progress()
@@ -321,7 +321,7 @@ class TestImportEndpointsReturnTaskId:
     """Verify that import endpoints include task_id in the response."""
 
     def test_load_demo_returns_task_id(self, client):
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.datasets import DEMO_DATASETS
 
         demo_name = list(DEMO_DATASETS.keys())[0]
 
@@ -475,7 +475,7 @@ class TestResetCancelSafety:
 
     def test_reset_cancel_skipped_when_tasks_active(self):
         """dataset_progress.reset_cancel() must not fire when loads are in progress."""
-        from vtsearch.concurrency.progress import dataset_progress
+        from vtscore.concurrency.progress import dataset_progress
 
         # Create an active task
         pt = loading_tasks.create_task("active_task", "Running")
@@ -489,9 +489,9 @@ class TestResetCancelSafety:
             # Start a new load — should NOT reset global cancel since a task is active
             from unittest.mock import patch
 
-            from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+            from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
-            with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
+            with patch("vtscore.datasets.load_pipeline.threading.Thread"):
                 _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},
@@ -505,16 +505,16 @@ class TestResetCancelSafety:
 
     def test_reset_cancel_allowed_when_no_tasks_active(self):
         """dataset_progress.reset_cancel() fires when no loads are in progress."""
-        from vtsearch.concurrency.progress import dataset_progress
+        from vtscore.concurrency.progress import dataset_progress
 
         dataset_progress.cancel()
         assert dataset_progress.is_cancelled
 
         from unittest.mock import patch
 
-        from vtsearch.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
-        with patch("vtsearch.datasets.load_pipeline.threading.Thread"):
+        with patch("vtscore.datasets.load_pipeline.threading.Thread"):
             task_id = _run_origin_load_in_background(
                 lambda: None,
                 {"importer": "test", "params": {}},
@@ -535,7 +535,7 @@ class TestConcurrentModelLoading:
         """Two threads calling load_models() on the same embedder must not
         both execute _load_models_impl() concurrently — the lock should
         serialise them so the second caller sees the model already loaded."""
-        from vtsearch.media.embedder import MediaEmbedder
+        from vtscore.media.embedder import MediaEmbedder
 
         call_count = 0
         started = threading.Event()
@@ -602,7 +602,7 @@ class TestLoadingGates:
         both gates to settle at zero before yielding, then does the
         same again on teardown so the next test starts clean.
         """
-        from vtsearch.datasets.load_pipeline import _download_gate, _embed_gate
+        from vtscore.datasets.load_pipeline import _download_gate, _embed_gate
 
         def drain(timeout_s: float = 10.0) -> None:
             loading_tasks.cancel_all()
@@ -626,7 +626,7 @@ class TestLoadingGates:
         """With the download limit at 1, a second load should show 'Waiting…'
         for the download gate and only proceed after the first releases it."""
         from vtsearch import settings as settings_mod
-        from vtsearch.datasets.load_pipeline import (
+        from vtscore.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
@@ -698,7 +698,7 @@ class TestLoadingGates:
         """Cancelling a queued task must not release the gate it never
         acquired, which would let extra loads through."""
         from vtsearch import settings as settings_mod
-        from vtsearch.datasets.load_pipeline import (
+        from vtscore.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
@@ -747,11 +747,66 @@ class TestLoadingGates:
         finally:
             settings_mod.set_max_concurrent_dataset_downloads(original)
 
+    def test_minimalist_importer_releases_both_gates(self):
+        """C1 regression: an importer that never fires ``status="embedding"``
+        must still release both gates after the task finishes.
+
+        The callback-driven download→embed swap in
+        ``_make_stepped_progress`` only triggers when an importer
+        signals per-file embedding.  Minimalist importers that don't
+        emit progress at all rely on the unconditional
+        ``controller.swap_to_embed()`` after ``_run_importer`` returns
+        plus the ``finally: controller.release()`` block to keep the
+        gates from leaking.  If either safety net is removed, the
+        download gate would stay held forever and every subsequent
+        dataset load would block.
+        """
+        from vtscore.datasets.load_pipeline import (
+            _download_gate,
+            _embed_gate,
+            _run_origin_load_in_background,
+        )
+
+        started = threading.Event()
+
+        def minimalist_load(medias):
+            # Return immediately without firing any progress callback —
+            # the callback-driven swap in stepped() never triggers.
+            started.set()
+
+        task_id = _run_origin_load_in_background(
+            minimalist_load,
+            {"importer": "minimalist", "params": {}},
+            name="Minimalist",
+        )
+
+        assert started.wait(timeout=10), "Minimalist importer never started"
+
+        # The task's ``finally`` block calls ``controller.release()`` after
+        # the post-load stages finish.  Poll the gates (rather than
+        # ``has_active_tasks``) because a successful task leaves its
+        # progress status at "loading"; gate release is the true signal
+        # that the task has exited.
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            if _download_gate.active == 0 and _embed_gate.active == 0:
+                break
+            time.sleep(0.05)
+
+        assert _download_gate.active == 0, (
+            "Download gate leaked after a minimalist importer — the "
+            "unconditional swap_to_embed() after the importer, or the "
+            "finally-release in the task body, has regressed (audit C1)."
+        )
+        assert _embed_gate.active == 0, "Embed gate leaked after minimalist importer"
+
+        loading_tasks.remove_task(task_id)
+
     def test_download_and_embed_can_overlap(self):
         """When the importer signals the embedding phase, the download gate
         is released so a second dataset can start downloading in parallel
         even though the first hasn't finished embedding."""
-        from vtsearch.datasets.load_pipeline import (
+        from vtscore.datasets.load_pipeline import (
             _download_gate,
             _embed_gate,
             _run_origin_load_in_background,
@@ -814,7 +869,7 @@ class TestLoadingGates:
         """Bumping ``max_concurrent_dataset_downloads`` should let the second
         load start its download phase in parallel with the first."""
         from vtsearch import settings as settings_mod
-        from vtsearch.datasets.load_pipeline import (
+        from vtscore.datasets.load_pipeline import (
             _download_gate,
             _run_origin_load_in_background,
         )
@@ -868,7 +923,7 @@ class TestConcurrencyGate:
 
     def test_blocking_acquire_when_limit_changes(self):
         """A waiter blocked at limit=1 must wake up when limit grows to 2."""
-        from vtsearch.datasets.load_pipeline import ConcurrencyGate
+        from vtscore.datasets.load_pipeline import ConcurrencyGate
 
         limit = [1]
         gate = ConcurrencyGate(lambda: limit[0])
@@ -897,7 +952,7 @@ class TestConcurrencyGate:
         assert gate.active == 0
 
     def test_non_blocking_acquire_respects_limit(self):
-        from vtsearch.datasets.load_pipeline import ConcurrencyGate
+        from vtscore.datasets.load_pipeline import ConcurrencyGate
 
         gate = ConcurrencyGate(lambda: 2)
         assert gate.acquire(blocking=False)
@@ -910,7 +965,7 @@ class TestConcurrencyGate:
 
     def test_zero_limit_is_clamped_to_one(self):
         """A configured limit of 0 should still allow one acquisition."""
-        from vtsearch.datasets.load_pipeline import ConcurrencyGate
+        from vtscore.datasets.load_pipeline import ConcurrencyGate
 
         gate = ConcurrencyGate(lambda: 0)
         assert gate.acquire(blocking=False)
@@ -922,8 +977,8 @@ class TestBuildDiversityTreeForContext:
     """Test the context-specific diversity tree builder."""
 
     def test_builds_tree_on_context(self):
-        from vtsearch.state.core import DatasetContext
-        from vtsearch.state.diversity import build_diversity_tree_for_context
+        from vtscore.state.core import DatasetContext
+        from vtscore.state.diversity import build_diversity_tree_for_context
 
         rng = np.random.default_rng(42)
         ctx = DatasetContext("test_diversity")
@@ -937,9 +992,119 @@ class TestBuildDiversityTreeForContext:
         assert ctx.diversity_tree is not None
 
     def test_empty_context_sets_none(self):
-        from vtsearch.state.core import DatasetContext
-        from vtsearch.state.diversity import build_diversity_tree_for_context
+        from vtscore.state.core import DatasetContext
+        from vtscore.state.diversity import build_diversity_tree_for_context
 
         ctx = DatasetContext("test_empty")
         build_diversity_tree_for_context(ctx)
         assert ctx.diversity_tree is None
+
+
+class TestBackgroundLoadThreadContext:
+    """Regression for C3: background load tasks must pin the in-flight
+    DatasetContext to the worker thread so importer / clipper / dedup /
+    diversity-tree helpers that resolve via ``get_active_context()`` see
+    the dataset being built, not the empty fallback context.
+    """
+
+    def test_load_fn_sees_in_flight_dataset_context(self):
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.state.core import (
+            _empty_dataset_context,
+            get_active_context,
+            get_thread_dataset_context,
+        )
+
+        from vtscore.state.core import DatasetContext
+
+        observed: dict[str, DatasetContext | None] = {}
+        ran = threading.Event()
+
+        def capture_load(target_medias):
+            import numpy as np  # noqa: PLC0415
+
+            observed["thread_ctx"] = get_thread_dataset_context()
+            observed["active_ctx"] = get_active_context()
+            # Mutating the active context from the load_fn must land on
+            # the in-flight context, not on the empty fallback.  Give the
+            # stub media a real embedding so the load pipeline's
+            # ``_drop_none_embeddings_stage`` (M11 finalize) doesn't
+            # remove it before we can assert on it.
+            get_active_context().medias[1] = {"id": 1, "embedding": np.ones(4, dtype=np.float32)}
+            ran.set()
+
+        task_id = _run_origin_load_in_background(
+            capture_load,
+            {"importer": "ctx_probe", "params": {}},
+            name="ctx-probe",
+        )
+
+        try:
+            assert ran.wait(timeout=10), "load_fn never ran"
+            deadline = time.time() + 10
+            while loading_tasks.has_active_tasks() and time.time() < deadline:
+                time.sleep(0.05)
+
+            thread_ctx = observed["thread_ctx"]
+            active_ctx = observed["active_ctx"]
+
+            assert thread_ctx is not None, (
+                "Background task did not set a thread-local dataset context; "
+                "importer-level get_active_context() would land on the empty fallback."
+            )
+            assert active_ctx is not None
+            assert active_ctx is not _empty_dataset_context, (
+                "get_active_context() resolved to _empty_dataset_context inside the background load — C3 regression."
+            )
+            assert thread_ctx is active_ctx, "Thread-local context and active context disagreed inside the load."
+            # Mutation through the active context proxy must have hit the
+            # in-flight context, not the empty fallback.
+            assert 1 in active_ctx.medias
+            assert 1 not in _empty_dataset_context.medias
+        finally:
+            loading_tasks.remove_task(task_id)
+
+    def test_thread_context_cleared_after_task(self):
+        """The worker thread's dataset-context thread-local must be cleared
+        when the task finishes so a reused thread does not leak the prior
+        context to unrelated work.  Patch ``set_thread_dataset_context`` so
+        we can observe both the in-task pin and the post-task clear without
+        racing the daemon worker's thread-local from another thread.
+        """
+        import vtscore.state.core as state_core
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+
+        original_setter = state_core.set_thread_dataset_context
+        calls: list[object] = []
+
+        def recording_setter(ctx):
+            calls.append(ctx)
+            original_setter(ctx)
+
+        ran = threading.Event()
+
+        def load_fn(target_medias):
+            ran.set()
+
+        with mock.patch.object(state_core, "set_thread_dataset_context", recording_setter):
+            task_id = _run_origin_load_in_background(
+                load_fn,
+                {"importer": "ctx_cleanup", "params": {}},
+                name="ctx-cleanup",
+            )
+            try:
+                assert ran.wait(timeout=10)
+                deadline = time.time() + 10
+                while loading_tasks.has_active_tasks() and time.time() < deadline:
+                    time.sleep(0.05)
+            finally:
+                loading_tasks.remove_task(task_id)
+
+        # The task should have both pinned a real context and cleared it.
+        non_none_pins = [c for c in calls if c is not None]
+        none_clears = [c for c in calls if c is None]
+        assert non_none_pins, "Background task never pinned a dataset context"
+        assert none_clears, (
+            "Background task never cleared its thread-local dataset context — "
+            "a reused worker thread would leak the prior dataset to unrelated work."
+        )

@@ -191,7 +191,7 @@ VTSearch/
 │   │   └── sync.py                 sync_to/from_labelset_source utilities
 │   │
 │   ├── eval/                       Evaluation framework
-│   │   ├── __main__.py             CLI entry point (python -m vtsearch.eval)
+│   │   ├── __main__.py             CLI entry point (python -m vtscore.eval)
 │   │   ├── config.py               Eval dataset catalogue
 │   │   ├── runner.py               run_eval() orchestrator
 │   │   ├── metrics.py              mAP, P@k, R@k, F1 calculations
@@ -379,7 +379,7 @@ modules on the right.
 
 ### The ML training pipeline
 
-**Files:** `vtsearch/training/mlp.py` / `vtsearch/training/thresholds.py`, `vtsearch/config.py` (for `TRAIN_EPOCHS`)
+**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds.py`, `vtscore/config.py` (for `TRAIN_EPOCHS`)
 
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
@@ -391,8 +391,8 @@ trade-off via an `inclusion` parameter.  A separate
 thresholds.
 
 ```python
-from vtsearch.training.mlp import train_model
-from vtsearch.training.thresholds import find_optimal_threshold
+from vtscore.training.mlp import train_model
+from vtscore.training.thresholds import find_optimal_threshold
 
 model = train_model(X_train, y_train, input_dim=512, inclusion_value=0)
 threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
@@ -400,7 +400,7 @@ threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
 
 ### Embedding models (CLAP, CLIP, E5, X-CLIP)
 
-**Files:** `vtsearch/media/{audio,image,text,video}/embedder.py`
+**Files:** `vtscore/media/{audio,image,text,video}/embedder.py`
 
 **Dependencies:** `torch`, `transformers`, `librosa` (audio), `PIL`
 (image/video), `sentence-transformers` (text)
@@ -411,8 +411,8 @@ Instantiate it, call `load_models()`, then use `embed_media()` /
 dataset loader builds); for ad-hoc files, use the `media_from_path` helper:
 
 ```python
-from vtsearch.media.audio.embedder_clap import AudioClapEmbedder
-from vtsearch.media.embedder import media_from_path
+from vtscore.media.audio.embedder_clap import AudioClapEmbedder
+from vtscore.media.embedder import media_from_path
 
 embedder = AudioClapEmbedder()
 embedder.load_models()                                            # loads CLAP (cached)
@@ -452,7 +452,7 @@ embedder.load_models()
 To use an exporter standalone:
 
 ```python
-from vtsearch.exporters.server_json_file import EXPORTER
+from vtscore.exporters.server_json_file import EXPORTER
 
 result = EXPORTER.export(
     results={"media_type": "audio", "results": {...}},
@@ -463,7 +463,7 @@ result = EXPORTER.export(
 ### Dataset loading (without Flask)
 
 ```python
-from vtsearch.datasets.loader import load_dataset_from_folder
+from vtscore.datasets.loader import load_dataset_from_folder
 
 medias = {}
 load_dataset_from_folder(
@@ -477,7 +477,7 @@ load_dataset_from_folder(
 
 ### Progress tracking
 
-**Files:** `vtsearch/concurrency/progress.py`
+**Files:** `vtscore/concurrency/progress.py`
 
 A thread-safe progress tracker with no framework dependencies.  Uses
 `threading.Lock` and module-level dicts.  Can be dropped into any
@@ -493,7 +493,7 @@ All plugin systems (dataset importers, exporters, label importers,
 processor importers, settings importers/exporters/sources, labelset
 sources, media converters, and media sources) share a common
 `PluginBase` / `PluginField` / `PluginRegistry` architecture in
-`vtsearch/plugins/__init__.py`:
+`vtscore/plugins/__init__.py`:
 
 1. **Base class** (`PluginBase`) defines `name`, `display_name`, `fields`,
    and an abstract `run()`/`export()`/`load()`/`save()` method.
@@ -515,7 +515,7 @@ sources, media converters, and media sources) share a common
 ### Explicitly registered plugins (media types / embedders / clippers)
 
 Media types, embedders, and clippers use three separate dict-based
-registries in `vtsearch/media/__init__.py`:
+registries in `vtscore/media/__init__.py`:
 
 | Registry | Registration function | Lookup functions |
 |----------|----------------------|------------------|
@@ -529,7 +529,7 @@ same value. Both `get(type_id)` and `get_by_folder_name(name)` accept
 the canonical type ID.
 
 Media converters use the same `PluginRegistry` auto-discovery pattern
-(sentinel: `CONVERTER`) in `vtsearch/converters/__init__.py`, with
+(sentinel: `CONVERTER`) in `vtscore/converters/__init__.py`, with
 `list_converters()`, `get_converter(name)`,
 `list_converters_for_source()`, and `list_converters_for_target()`.
 
@@ -711,10 +711,10 @@ Each clip dict includes two provenance fields:
 | `origin_name` | `str` | Unique name within the origin (typically the filename) |
 | `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent |
 
-### Origin class (`vtsearch/datasets/origin.py`)
+### Origin class (`vtscore/datasets/origin.py`)
 
 ```python
-from vtsearch.datasets.origin import Origin
+from vtscore.datasets.origin import Origin
 
 o = Origin("server_folder", {"path": "/data/audio", "media_type": "audio"})
 o.display()   # "server_folder(/data/audio)"
@@ -729,7 +729,7 @@ Origins are set automatically when data is loaded:
 - **Pickle loads** preserve the per-element origins stored in the file.
   Old pickles without origins fall back to the legacy `creation_info` stored in the pickle (if any).
 
-### LabelSet (`vtsearch/datasets/labelset.py`)
+### LabelSet (`vtscore/datasets/labelset.py`)
 
 A `LabelSet` extends the dataset concept: each element carries its origin,
 its name within that origin, its label (`"good"` / `"bad"`), and optional
@@ -737,7 +737,7 @@ its name within that origin, its label (`"good"` / `"bad"`), and optional
 `contentID`, `mediaID`, etc.).
 
 ```python
-from vtsearch.datasets.labelset import LabelSet
+from vtscore.datasets.labelset import LabelSet
 
 # Build from current state
 ls = LabelSet.from_clips_and_votes(medias, good_votes, bad_votes)

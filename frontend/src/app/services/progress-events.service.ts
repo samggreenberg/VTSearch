@@ -9,8 +9,7 @@ import {
 /**
  * Single EventSource subscription that fans out progress updates to every
  * consumer in the app. Replaces the old REST polling (timer(0, 500) +
- * /api/dataset/progress, etc.) with a server-push stream — see
- * `docs/plans/feature-brainstorm.md` §12.5.
+ * /api/dataset/progress, etc.) with a server-push stream.
  *
  * Every channel carries the same `ProgressEvent` shape (see
  * `models/api.models.ts`) so any consumer can render any of them with the

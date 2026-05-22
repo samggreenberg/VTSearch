@@ -4,9 +4,9 @@ import pickle
 
 import numpy as np
 
-from vtsearch.datasets.importers import get_importer
-from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.datasets.loader import export_dataset_to_file, load_dataset_from_pickle
+from vtscore.datasets.importers import get_importer
+from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.loader import export_dataset_to_file, load_dataset_from_pickle
 
 
 # ---------------------------------------------------------------------------

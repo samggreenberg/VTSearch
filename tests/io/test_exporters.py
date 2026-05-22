@@ -55,7 +55,7 @@ EMPTY_RESULTS = {
 
 class TestExporterField:
     def test_to_dict_contains_required_keys(self):
-        from vtsearch.exporters.base import ExporterField
+        from vtscore.exporters.base import ExporterField
 
         f = ExporterField(key="fp", label="File Path", field_type="text")
         d = f.to_dict()
@@ -69,7 +69,7 @@ class TestExporterField:
         assert "placeholder" in d
 
     def test_defaults(self):
-        from vtsearch.exporters.base import ExporterField
+        from vtscore.exporters.base import ExporterField
 
         f = ExporterField(key="x", label="X", field_type="text")
         assert f.required is True
@@ -79,7 +79,7 @@ class TestExporterField:
         assert f.description == ""
 
     def test_custom_values(self):
-        from vtsearch.exporters.base import ExporterField
+        from vtscore.exporters.base import ExporterField
 
         f = ExporterField(
             key="mode",
@@ -104,14 +104,14 @@ class TestExporterField:
 
 class TestLabelsetExporterBase:
     def test_export_raises_not_implemented(self):
-        from vtsearch.exporters.base import LabelsetExporter
+        from vtscore.exporters.base import LabelsetExporter
 
         exp = LabelsetExporter()
         with pytest.raises(NotImplementedError):
             exp.export({}, {})
 
     def test_to_dict_contains_standard_keys(self):
-        from vtsearch.exporters.base import ExporterField, LabelsetExporter
+        from vtscore.exporters.base import ExporterField, LabelsetExporter
 
         class Dummy(LabelsetExporter):
             name = "dummy"
@@ -139,7 +139,7 @@ class TestLabelsetExporterBase:
 
 class TestExporterRegistry:
     def test_list_exporters_returns_all_builtins(self):
-        from vtsearch.exporters import list_exporters
+        from vtscore.exporters import list_exporters
 
         names = {e.name for e in list_exporters()}
         assert "gui" in names
@@ -148,7 +148,7 @@ class TestExporterRegistry:
         assert "email_smtp" in names
 
     def test_get_exporter_known(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         for name in ("gui", "server_json_file", "server_csv_file", "email_smtp"):
             exp = get_exporter(name)
@@ -156,12 +156,12 @@ class TestExporterRegistry:
             assert exp.name == name
 
     def test_get_exporter_unknown_returns_none(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         assert get_exporter("no_such_exporter") is None
 
     def test_each_exporter_has_display_name_and_icon(self):
-        from vtsearch.exporters import list_exporters
+        from vtscore.exporters import list_exporters
 
         for exp in list_exporters():
             assert exp.display_name, f"{exp.name} missing display_name"
@@ -169,7 +169,7 @@ class TestExporterRegistry:
             assert exp.description, f"{exp.name} missing description"
 
     def test_each_exporter_fields_are_valid(self):
-        from vtsearch.exporters import list_exporters
+        from vtscore.exporters import list_exporters
 
         for exp in list_exporters():
             for f in exp.fields:
@@ -195,13 +195,13 @@ class TestExporterRegistry:
 
 class TestDisplayLabelsetExporter:
     def test_has_no_fields(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("gui")
         assert exp.fields == []
 
     def test_export_returns_message_and_display_results(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("gui")
         result = exp.export(SAMPLE_RESULTS, {})
@@ -210,7 +210,7 @@ class TestDisplayLabelsetExporter:
         assert result["display_results"] is SAMPLE_RESULTS
 
     def test_export_counts_hits_in_message(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("gui")
         result = exp.export(SAMPLE_RESULTS, {})
@@ -219,7 +219,7 @@ class TestDisplayLabelsetExporter:
         assert "2" in result["message"]  # 2 detectors
 
     def test_export_empty_results(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("gui")
         result = exp.export(EMPTY_RESULTS, {})
@@ -227,7 +227,7 @@ class TestDisplayLabelsetExporter:
         assert result["display_results"] is EMPTY_RESULTS
 
     def test_export_cli_prints_origins_and_names(self, capsys):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         results_with_origin = {
             "media_type": "audio",
@@ -270,7 +270,7 @@ class TestDisplayLabelsetExporter:
         assert "dog" not in captured.out
 
     def test_export_cli_no_hits(self, capsys):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("gui")
         result = exp.export_cli(EMPTY_RESULTS, {})
@@ -281,7 +281,7 @@ class TestDisplayLabelsetExporter:
     def test_export_converts_labelset_to_display_format(self):
         """When results come from /api/labels/export (LabelSet format),
         the GUI exporter should convert them to the display format."""
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         labelset_data = {
             "labels": [
@@ -315,14 +315,14 @@ class TestDisplayLabelsetExporter:
 
 class TestServerJsonLabelsetExporter:
     def test_has_filepath_field(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_json_file")
         keys = [f.key for f in exp.fields]
         assert "filepath" in keys
 
     def test_export_writes_json(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_json_file")
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -335,7 +335,7 @@ class TestServerJsonLabelsetExporter:
             assert written["detectors_run"] == 2
 
     def test_export_creates_parent_dirs(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_json_file")
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -344,14 +344,14 @@ class TestServerJsonLabelsetExporter:
             assert fpath.exists()
 
     def test_export_raises_on_empty_filepath(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_json_file")
         with pytest.raises(ValueError, match="file path"):
             exp.export(SAMPLE_RESULTS, {"filepath": ""})
 
     def test_export_message_contains_hit_count(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("server_json_file")
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -360,7 +360,7 @@ class TestServerJsonLabelsetExporter:
             assert "4" in result["message"]  # 3 + 1 hits
 
     def test_to_dict_has_all_keys(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         d = get_exporter("server_json_file").to_dict()
         assert d["name"] == "server_json_file"
@@ -375,35 +375,35 @@ class TestServerJsonLabelsetExporter:
 
 class TestEmailLabelsetExporter:
     def test_has_required_fields(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         keys = {f.key for f in exp.fields}
         assert "to" in keys
 
     def test_fields_are_from_and_to(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         keys = {f.key for f in exp.fields}
         assert keys == {"from", "to"}
 
     def test_export_raises_on_missing_to(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Recipient"):
             exp.export(SAMPLE_RESULTS, {"from": "me@example.com", "to": ""})
 
     def test_export_raises_on_missing_from(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Sender"):
             exp.export(SAMPLE_RESULTS, {"from": "", "to": "you@example.com"})
 
     def test_export_calls_smtp_via_mx(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
 
@@ -413,8 +413,8 @@ class TestEmailLabelsetExporter:
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("vtsearch.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
-            patch("vtsearch.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
+            patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+            patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
         ):
             result = exp.export(
                 SAMPLE_RESULTS,
@@ -430,7 +430,7 @@ class TestEmailLabelsetExporter:
         assert "you@example.com" in result["message"]
 
     def test_plain_text_builder(self):
-        from vtsearch.exporters.email_smtp import _build_plain_text
+        from vtscore.exporters.email_smtp import _build_plain_text
 
         text = _build_plain_text(SAMPLE_RESULTS)
         assert "Auto-Detect Results" in text
@@ -439,7 +439,7 @@ class TestEmailLabelsetExporter:
         assert "bark1.wav" in text
 
     def test_html_builder(self):
-        from vtsearch.exporters.email_smtp import _build_html
+        from vtscore.exporters.email_smtp import _build_html
 
         html = _build_html(SAMPLE_RESULTS)
         assert "<html>" in html
@@ -574,8 +574,8 @@ class TestExportEndpoint:
         mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("vtsearch.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
-            patch("vtsearch.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
+            patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+            patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
         ):
             res = client.post(
                 "/api/exporters/export",
@@ -653,7 +653,7 @@ class TestExportEndpoint:
 
         with caplog.at_level(logging.ERROR, logger="vtsearch.routes.labels.exporters"):
             with patch(
-                "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+                "vtscore.exporters.server_json_file.ServerJsonLabelsetExporter.export",
                 side_effect=OSError("No space left on device"),
             ):
                 res = client.post(
@@ -677,7 +677,7 @@ class TestExportEndpoint:
 
         with caplog.at_level(logging.ERROR, logger="vtsearch.routes.labels.exporters"):
             with patch(
-                "vtsearch.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+                "vtscore.exporters.server_json_file.ServerJsonLabelsetExporter.export",
                 side_effect=PermissionError("Permission denied"),
             ):
                 res = client.post(

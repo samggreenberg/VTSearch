@@ -5,7 +5,7 @@ and ``request_id`` active when the record was created. Inside a Flask
 request handler the values come from ``flask.g`` (populated by the
 ``before_request`` middleware in :mod:`app`); inside a background thread
 they come from the thread-locals already maintained by
-:mod:`vtsearch.auth` and :mod:`vtsearch.state.core`
+:mod:`vtsearch.auth` and :mod:`vtscore.state.core`
 (``set_thread_user``, ``set_thread_dataset_context``,
 ``set_thread_detector_context``).
 
@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import time
 import uuid
@@ -125,7 +126,7 @@ def _resolve_context() -> dict[str, Any]:  # noqa: C901
 
     if ds_ctx is None or det_ctx is None:
         try:
-            from vtsearch.state.core import (
+            from vtscore.state.core import (
                 get_thread_dataset_context,
                 get_thread_detector_context,
             )
@@ -229,6 +230,27 @@ class TextFormatter(logging.Formatter):
         return base
 
 
+_VOCAB_TOKEN_WARN_RE = re.compile(r"(bos|eos|pad)_token_id must be `None` or an integer within the vocabulary")
+
+
+class _TransformersVocabTokenFilter(logging.Filter):
+    """Drop transformers' bos/eos/pad token-out-of-vocab warnings.
+
+    CLIP-derived models (CLAP, X-CLIP, plain CLIP) carry CLIP's 49406/49407
+    BOS/EOS tokens against a 32k sentencepiece vocab in a sibling text
+    sub-config. transformers logs a config-validation warning on every load;
+    the mismatch is harmless and there's nothing for the user to fix.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not record.name.startswith("transformers"):
+            return True
+        try:
+            return _VOCAB_TOKEN_WARN_RE.search(record.getMessage()) is None
+        except Exception:
+            return True
+
+
 def setup_logging(
     level: str | None = None,
     fmt: str | None = None,
@@ -255,6 +277,7 @@ def setup_logging(
     handler = logging.StreamHandler(stream or sys.stderr)
     handler.setFormatter(formatter)
     handler.addFilter(ContextFilter())
+    handler.addFilter(_TransformersVocabTokenFilter())
 
     root = logging.getLogger()
     for existing in list(root.handlers):
@@ -266,6 +289,35 @@ def setup_logging(
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
     logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
     logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
+
+
+def install_transformers_logging_bridge() -> None:
+    """Route the ``transformers`` library's logs through our root handler.
+
+    transformers configures its own stderr handler with a ``[transformers]``
+    prefix formatter and sets ``propagate=False`` on its library root logger,
+    so records from ``transformers.*`` never reach the handler installed by
+    :func:`setup_logging`. That makes our context tags and our
+    :class:`_TransformersVocabTokenFilter` ineffective for transformers' own
+    output. This bridge disables their default handler and re-enables
+    propagation so transformers records flow through our formatter and
+    filters like every other library's.
+
+    Deferred from ``setup_logging`` because importing ``transformers.utils.logging``
+    pulls in the full ``transformers`` package (~0.7s), which we don't want
+    to pay for in unit tests that stub embedders. Call once during app
+    startup before any model load — :func:`vtscore.embedding.loader.initialize_models`
+    is the canonical site.
+    """
+    try:
+        import transformers.utils.logging as hf_logging  # noqa: PLC0415
+    except Exception:
+        return
+    try:
+        hf_logging.disable_default_handler()
+        hf_logging.enable_propagation()
+    except Exception:
+        pass
 
 
 def new_request_id() -> str:

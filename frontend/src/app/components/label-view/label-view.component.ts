@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject, timer, Subscription, pairwise } from 'rxjs';
-import { takeUntil, switchMap, filter, take } from 'rxjs/operators';
+import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
+import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -100,6 +100,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private statusPolling$: Subscription | null = null;
   private scoringProgressPoll$: Subscription | null = null;
   private learnedSortPending = false;
+  /** Active learned-sort job id while a training run is in flight. Set in
+   *  ``onLearnedSort`` once the backend returns a job id, cleared in
+   *  ``applyLearnedSortResult`` / the error/cancel paths. Used by the
+   *  Cancel button on the sort progress bar to target the right job. */
+  private currentLearnedSortJobId: string | null = null;
   /** Held subscription to the one-shot `labelsetGoodCount$` watcher that
    *  re-fires `onLearnedSort` after a pair switch, when sortMode was
    *  already `learned`. Cleared on each switch so back-to-back switches
@@ -434,7 +439,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.statusPolling$ = timer(0, 2000)
       .pipe(
         takeUntil(this.destroy$),
-        switchMap(() => this.sortingApi.getLabelingStatus()),
+        // catchError inside switchMap keeps the polling alive across
+        // transient /api/labeling-status failures; without it, one bad
+        // tick terminates the timer and the labeling-status panel
+        // freezes for the rest of the view's lifetime.
+        switchMap(() => this.sortingApi.getLabelingStatus().pipe(catchError(() => EMPTY))),
       )
       .subscribe({
         next: (status) => {
@@ -484,6 +493,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (response.status === 'done') {
           this.applyLearnedSortResult(response, autoSelect);
         } else if (response.status === 'running') {
+          this.currentLearnedSortJobId = response.job_id;
           this.pollLearnedSortJob(response.job_id, autoSelect);
         } else {
           this.sortState.setSortBusy(false);
@@ -509,12 +519,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         next: (res) => {
           if (res.status === 'done') {
             this.applyLearnedSortResult(res, autoSelect);
+          } else if (res.status === 'cancelled') {
+            this.currentLearnedSortJobId = null;
+            this.sortState.setSortBusy(false);
+            this.sortState.setSortStatus('Cancelled');
           } else {
+            this.currentLearnedSortJobId = null;
             this.sortState.setSortBusy(false);
             this.sortState.setSortStatus(res.error || 'Training failed');
           }
         },
         error: () => {
+          this.currentLearnedSortJobId = null;
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('Training failed');
         },
@@ -528,10 +544,31 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       results.map((r) => ({ id: r['id'], score: r['score'], bestRegion: r['best_region'] })),
       threshold,
     );
+    this.currentLearnedSortJobId = null;
     this.sortState.setSortBusy(false);
     this.sortState.setSortStatus('');
     if (autoSelect) {
       this.autoSelectNext();
+    }
+  }
+
+  /** Cancel whatever sort run is currently in flight.
+   *
+   *  - Learned sort: targets the active ``AsyncJob`` by id.
+   *  - Load-sort (find-label): trips the shared ``find_progress`` cancel
+   *    flag, which the scoring loop polls.
+   *  - Text / example sort: no cancellation endpoint — those calls run
+   *    synchronously and complete before the user can usefully cancel.
+   */
+  onSortCancel(): void {
+    if (this.currentLearnedSortJobId) {
+      const jobId = this.currentLearnedSortJobId;
+      this.currentLearnedSortJobId = null;
+      this.sortingApi.cancelLearnedSort(jobId).pipe(takeUntil(this.destroy$)).subscribe();
+      return;
+    }
+    if (this.sortState.sortMode === 'load') {
+      this.detectorsApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
     }
   }
 
@@ -837,12 +874,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
-    this.voteState.recordVote(event.id, event.vote, this.mediaDisplayName(event.id));
-    this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
-      next: () => {
-        this.onMediaVoted(event);
-      },
-    });
+    this.voteState
+      .submitToggleVoteAndRecord(event.id, event.vote, this.mediaDisplayName(event.id))
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.onMediaVoted(event);
+        },
+      });
   }
 
   private mediaDisplayName(id: number): string {
@@ -851,7 +890,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
-    this.voteState.applyOptimisticVote(event.id, event.vote);
+    // Local vote state is already reconciled from the POST response inside
+    // submitToggleVote; loadVotes() only refreshes derived counters.
     this.voteState.loadVotes();
     this.autoSelectNext(event.id);
     if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {

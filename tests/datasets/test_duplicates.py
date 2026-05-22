@@ -13,7 +13,7 @@ import copy
 import numpy as np
 
 import app as app_module
-from vtsearch.datasets.labelset import LabelSet
+from vtscore.datasets.labelset import LabelSet
 from vtsearch.state import collapse_duplicates, get_dupe_count
 
 
@@ -152,6 +152,30 @@ class TestCollapseDuplicates:
         }
         count = collapse_duplicates(media_dict, on_progress=None)
         assert count == 1
+
+
+def test_collapse_duplicates_yields_unique_md5_lookup():
+    """`resolve_current_dataset_cid` is allowed to return `cids[0]` because
+    dedup guarantees each md5 maps to exactly one cid in the active dataset.
+
+    This invariant is what makes audit finding M5 a non-issue. If a future
+    change inserts post-load duplicates without re-running
+    ``collapse_duplicates``, this test fails loudly.
+    """
+    from vtsearch.state import build_media_lookup
+
+    media_dict = {
+        1: _make_media(1, md5="aaa"),
+        2: _make_media(2, md5="aaa"),
+        3: _make_media(3, md5="bbb"),
+        4: _make_media(4, md5="bbb"),
+        5: _make_media(5, md5="bbb"),
+        6: _make_media(6, md5="ccc"),
+    }
+    collapse_duplicates(media_dict)
+    _, md5_lookup, _ = build_media_lookup(media_dict)
+    for md5, cids in md5_lookup.items():
+        assert len(cids) == 1, f"md5 {md5!r} maps to multiple cids after dedup: {cids}"
 
 
 class TestGetDupeCount:

@@ -15,8 +15,9 @@ import numpy as np
 import pytest
 
 import app as app_module
-from vtsearch.detectors.training import train_and_score
-from vtsearch.training.thresholds import (
+from vtscore.detectors.training import train_and_score
+from vtscore.training.thresholds import (
+    NO_GOOD_THRESHOLD,
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     calculate_safe_threshold,
@@ -74,6 +75,39 @@ class TestCalculateSafeThreshold:
         xcal = 0.45
         safe = calculate_safe_threshold(xcal, scores, n_labels=20)
         assert safe == pytest.approx(xcal, abs=1e-6)
+
+    def test_infinite_xcal_falls_back_to_gmm_without_nan(self):
+        """Regression: ``inf`` xcal with label_weight=0 used to produce NaN
+        via ``0.0 * inf``. The guard now returns the GMM threshold cleanly."""
+        import math
+
+        scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
+        gmm = calculate_gmm_threshold(scores)
+        safe = calculate_safe_threshold(float("inf"), scores, n_labels=4)
+        assert math.isfinite(safe)
+        assert safe == pytest.approx(gmm, abs=1e-6)
+
+    def test_nan_xcal_falls_back_to_gmm_without_nan(self):
+        """A NaN xcal must not propagate into the detector threshold."""
+        import math
+
+        scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
+        gmm = calculate_gmm_threshold(scores)
+        safe = calculate_safe_threshold(float("nan"), scores, n_labels=13)
+        assert math.isfinite(safe)
+        assert safe == pytest.approx(gmm, abs=1e-6)
+
+    def test_no_good_sentinel_blends_to_gmm_below_floor(self):
+        """The finite ``NO_GOOD_THRESHOLD`` sentinel returned by
+        ``calculate_cross_calibration_threshold`` must blend cleanly to
+        pure GMM at n_labels < 6 (label_weight=0)."""
+        import math
+
+        scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
+        gmm = calculate_gmm_threshold(scores)
+        safe = calculate_safe_threshold(NO_GOOD_THRESHOLD, scores, n_labels=4)
+        assert math.isfinite(safe)
+        assert safe == pytest.approx(gmm, abs=1e-6)
 
 
 class TestTrainAndScoreWithSafeThresholds:
@@ -193,6 +227,85 @@ class TestSafeThresholdsAPI:
         assert "safe_thresholds" in resp.get_json()["errors"]["json"]
 
 
+class TestTrainingSettingsInvalidateLoadedDetector:
+    """Regression for M7: changing a training-relevant setting must drop the
+    cached MLP / threshold on every loaded detector so the next
+    ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` retrains
+    under the new setting instead of scoring with a stale threshold.
+    """
+
+    def _loaded_ctx(self):
+        from vtsearch.state import DetectorContext, register_detector_context
+
+        # Sentinel object stands in for a trained MLP — invalidation just
+        # needs to drop the reference, it doesn't introspect the model.
+        ctx = DetectorContext("det-m7", name="m7")
+        ctx.model = object()
+        ctx.threshold = 0.73
+        register_detector_context(ctx)
+        return ctx
+
+    def test_set_safe_thresholds_invalidates_loaded_model(self):
+        from vtsearch.state import get_safe_thresholds, set_safe_thresholds
+
+        ctx = self._loaded_ctx()
+        set_safe_thresholds(not get_safe_thresholds())
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_set_safe_thresholds_unchanged_keeps_model(self):
+        from vtsearch.state import get_safe_thresholds, set_safe_thresholds
+
+        ctx = self._loaded_ctx()
+        # Set to the current value — no-op, must not invalidate.
+        set_safe_thresholds(get_safe_thresholds())
+        assert ctx.model is not None
+        assert ctx.threshold == 0.73
+
+    def test_set_inclusion_invalidates_loaded_model(self):
+        from vtsearch.state import get_inclusion, set_inclusion
+
+        ctx = self._loaded_ctx()
+        set_inclusion(get_inclusion() + 1)
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_set_calibrate_count_invalidates_loaded_model(self):
+        from vtsearch.state import get_calibrate_count, set_calibrate_count
+
+        ctx = self._loaded_ctx()
+        set_calibrate_count(get_calibrate_count() + 1)
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_set_calibration_fraction_invalidates_loaded_model(self):
+        from vtsearch.state import get_calibration_fraction, set_calibration_fraction
+
+        ctx = self._loaded_ctx()
+        new_fraction = 0.25 if get_calibration_fraction() != 0.25 else 0.35
+        set_calibration_fraction(new_fraction)
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_settings_put_safe_thresholds_invalidates_loaded_model(self, client):
+        ctx = self._loaded_ctx()
+        # PUT through /api/settings routes through vtsearch.state setters
+        # so the invalidation hook fires even on this code path (M7 fix).
+        resp = client.put("/api/settings", json={"safe_thresholds": True})
+        assert resp.status_code == 200
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+    def test_settings_put_calibrate_count_invalidates_loaded_model(self, client):
+        from vtsearch.state import get_calibrate_count
+
+        ctx = self._loaded_ctx()
+        resp = client.put("/api/settings", json={"calibrate_count": get_calibrate_count() + 1})
+        assert resp.status_code == 200
+        assert ctx.model is None
+        assert ctx.threshold == 0.5
+
+
 class TestSafeThresholdsEval:
     """Test that eval functions accept safe_thresholds parameter."""
 
@@ -215,7 +328,7 @@ class TestSafeThresholdsEval:
         return medias
 
     def test_simulate_voting_iterations_accepts_safe_thresholds(self):
-        from vtsearch.eval.voting_iterations import simulate_voting_iterations
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
 
         medias = self._make_clips()
         rows_off = simulate_voting_iterations(
@@ -240,7 +353,7 @@ class TestSafeThresholdsEval:
             assert "fnr" in row
 
     def test_run_voting_iterations_eval_accepts_safe_thresholds(self):
-        from vtsearch.eval.voting_iterations import run_voting_iterations_eval
+        from vtscore.eval.voting_iterations import run_voting_iterations_eval
 
         medias = self._make_clips()
         df = run_voting_iterations_eval(
@@ -254,8 +367,8 @@ class TestSafeThresholdsEval:
 
     def test_eval_runner_accepts_safe_thresholds(self):
         """Verify eval_learned_sort accepts safe_thresholds kwarg."""
-        from vtsearch.eval.runner import eval_learned_sort
-        from vtsearch.eval.config import EvalQuery
+        from vtscore.eval.runner import eval_learned_sort
+        from vtscore.eval.config import EvalQuery
 
         medias = self._make_clips()
         queries = [EvalQuery(text="target things", target_category="target")]
@@ -299,12 +412,18 @@ class TestCalibrationFractionCrossCalibration:
         t = calculate_cross_calibration_threshold(X, y, dim, calibration_fraction=0.8)
         assert 0.0 <= t <= 1.0
 
-    def test_extreme_fraction_returns_inf(self):
-        """When fraction is so extreme that a valid split is impossible, return inf."""
+    def test_extreme_fraction_returns_no_good_sentinel(self):
+        """When fraction is so extreme that a valid split is impossible, return a
+        finite sentinel above the sigmoid range (so nothing is predicted as Good)
+        without poisoning ``calculate_safe_threshold`` blends with NaN."""
+        import math
+
         # With n=4 and calibration_fraction=0.99, n_cal=4, n_train=0 → can't split
         X, y, dim = self._make_data(n=4)
         t = calculate_cross_calibration_threshold(X, y, dim, calibration_fraction=0.99)
-        assert t == float("inf")
+        assert t == NO_GOOD_THRESHOLD
+        assert math.isfinite(t)
+        assert t > 1.0
 
     def test_extreme_fraction_near_zero_returns_inf(self):
         """With fraction near 0, n_cal rounds to 1, n_train = n-1 ≥ 2, should still work."""
@@ -427,7 +546,7 @@ class TestCalibrationFractionEval:
         return medias
 
     def test_simulate_voting_iterations_accepts_calibration_fraction(self):
-        from vtsearch.eval.voting_iterations import simulate_voting_iterations
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
 
         medias = self._make_clips()
         rows = simulate_voting_iterations(
@@ -441,7 +560,7 @@ class TestCalibrationFractionEval:
             assert "cost" in row
 
     def test_run_voting_iterations_eval_accepts_calibration_fraction(self):
-        from vtsearch.eval.voting_iterations import run_voting_iterations_eval
+        from vtscore.eval.voting_iterations import run_voting_iterations_eval
 
         medias = self._make_clips()
         df = run_voting_iterations_eval(
@@ -453,8 +572,8 @@ class TestCalibrationFractionEval:
         assert len(df) > 0
 
     def test_eval_runner_accepts_calibration_fraction(self):
-        from vtsearch.eval.runner import eval_learned_sort
-        from vtsearch.eval.config import EvalQuery
+        from vtscore.eval.runner import eval_learned_sort
+        from vtscore.eval.config import EvalQuery
 
         medias = self._make_clips()
         queries = [EvalQuery(text="target things", target_category="target")]

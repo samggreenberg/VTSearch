@@ -246,29 +246,30 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     const regionBox = vote === 'good' ? this.currentRegionBox : null;
     this.pendingBadConfirm = false;
     this.isVoting = true;
-    this.voteState.recordVote(this.media.id, vote, this.mediaDisplayName(this.media));
 
-    this.mediasApi.vote(this.media.id, vote, regionBox).subscribe({
-      next: () => {
-        const animate = this.swipeAnimation && !!this.media && !prefersReducedMotion();
-        if (animate) {
-          this.swipeClass = vote === 'good' ? 'swipe-right' : 'swipe-left';
-          this.spinningVote = vote;
-          if (this.spinTimer) clearTimeout(this.spinTimer);
-          this.spinTimer = setTimeout(() => (this.spinningVote = null), 300);
-          setTimeout(() => {
+    this.voteState
+      .submitToggleVoteAndRecord(this.media.id, vote, this.mediaDisplayName(this.media), regionBox)
+      .subscribe({
+        next: () => {
+          const animate = this.swipeAnimation && !!this.media && !prefersReducedMotion();
+          if (animate) {
+            this.swipeClass = vote === 'good' ? 'swipe-right' : 'swipe-left';
+            this.spinningVote = vote;
+            if (this.spinTimer) clearTimeout(this.spinTimer);
+            this.spinTimer = setTimeout(() => (this.spinningVote = null), 300);
+            setTimeout(() => {
+              this.mediaVoted.emit({ id: this.media!.id, vote });
+              this.isVoting = false;
+            }, 180);
+          } else {
             this.mediaVoted.emit({ id: this.media!.id, vote });
             this.isVoting = false;
-          }, 180);
-        } else {
-          this.mediaVoted.emit({ id: this.media!.id, vote });
+          }
+        },
+        error: () => {
           this.isVoting = false;
-        }
-      },
-      error: () => {
-        this.isVoting = false;
-      },
-    });
+        },
+      });
   }
 
   onRegionBoxChange(box: RegionBox | null): void {

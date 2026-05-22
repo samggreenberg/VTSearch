@@ -26,16 +26,35 @@ POST /api/label-importers/import/<importer_name>
 POST /api/label-importers/ingest-missing
     Accept a list of missing label entries, re-ingest them from their
     origins, and apply the labels. JSON-only — fully spec'd.
+
+Partial-failure semantics
+-------------------------
+:func:`_apply_labels` isolates each entry with a per-entry try/except.
+If ``apply_label`` raises mid-loop, that entry is recorded in the
+``failed`` return list and the loop continues with the remaining
+entries.  This addresses logical-bug-audit H31 — a single bad entry no
+longer aborts the whole import and silently strands the already-applied
+labels behind a 500 response.  The handler still runs the downstream
+sync block (``sync_labels_to_loaded_detector``,
+``sync_to_labelset_source``, ``record_detector_import``) whenever
+``applied > 0`` so the in-memory detector, the labelset source, and the
+achievement counters all reflect what actually landed.
 """
 
 from __future__ import annotations
 
+import logging
+
 from flask import jsonify
 from flask_smorest import Blueprint
 
-from vtsearch.labels.importers import get_label_importer, list_label_importers
+logger = logging.getLogger(__name__)
+
+from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.routes._shared import (
     get_plugin_or_404,
+    require_dataset_header,
+    require_detector_header,
     run_plugin_or_error,
     validate_filepath_field,
     validate_plugin_args,
@@ -66,13 +85,19 @@ def _apply_labels(
     origin_lookup: dict[str, list[int]],
     md5_lookup: dict[str, list[int]],
     name_lookup: dict[str, list[int]] | None = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, list[dict]]:
     """Apply label entries to the global vote state.
 
-    Returns ``(applied, skipped)`` counts.
+    Returns ``(applied, skipped, failed)``.  ``failed`` is a list of
+    ``{"entry": <original entry>, "error": <message>}`` dicts — one per
+    entry whose ``apply_label`` call raised.  A single bad entry never
+    aborts the loop (logical-bug-audit H31); the caller is expected to
+    surface the ``failed`` list to the user so they can retry just those
+    entries.
     """
     applied = 0
     skipped = 0
+    failed: list[dict] = []
 
     for entry in label_entries:
         label = entry.get("label", "")
@@ -84,11 +109,16 @@ def _apply_labels(
             skipped += 1
             continue
 
-        for cid in cids:
-            apply_label(cid, label)
+        try:
+            for cid in cids:
+                apply_label(cid, label)
+        except Exception as exc:
+            logger.exception("Failed to apply label for entry %r", entry)
+            failed.append({"entry": entry, "error": str(exc) or exc.__class__.__name__})
+            continue
         applied += 1
 
-    return applied, skipped
+    return applied, skipped, failed
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +147,8 @@ def get_label_importers():
 
 
 @label_importers_bp.route("/api/label-importers/import/<importer_name>", methods=["POST"])
+@require_dataset_header
+@require_detector_header
 def run_label_import(importer_name: str):  # noqa: C901
     """Run the named label importer and apply the resulting labels.
 
@@ -142,7 +174,7 @@ def run_label_import(importer_name: str):  # noqa: C901
 
     # Apply labels to global vote state
     origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
-    applied, skipped = _apply_labels(label_entries, origin_lookup, md5_lookup, name_lookup)
+    applied, skipped, failed = _apply_labels(label_entries, origin_lookup, md5_lookup, name_lookup)
 
     # Detect entries that could not be matched at all
     missing = find_missing_entries(label_entries, origin_lookup, md5_lookup, name_lookup)
@@ -155,17 +187,20 @@ def run_label_import(importer_name: str):  # noqa: C901
     resolved_applied = 0
     unresolved: list[dict] = []
     if missing:
-        from vtsearch.datasets.ingest import ingest_missing_medias
+        from vtscore.datasets.ingest import ingest_missing_medias
 
         ingested = ingest_missing_medias(missing, medias)
 
         if ingested > 0:
             # Re-apply labels now that new medias are available.  These entries
             # were already removed from `skipped` above when we subtracted
-            # `len(missing)`, so we only need to bump `applied` here.
+            # `len(missing)`, so we only need to bump `applied` here.  Any
+            # per-entry mutation errors from the auto-resolve pass are
+            # appended to the same `failed` list as the first pass.
             origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
-            resolved_applied, _ = _apply_labels(missing, origin_lookup, md5_lookup, name_lookup)
+            resolved_applied, _, resolved_failed = _apply_labels(missing, origin_lookup, md5_lookup, name_lookup)
             applied += resolved_applied
+            failed.extend(resolved_failed)
 
         # Check which entries still couldn't be resolved
         if ingested < len(missing):
@@ -175,16 +210,16 @@ def run_label_import(importer_name: str):  # noqa: C901
     # Sync updated votes into the loaded model so the dashboard reflects
     # the new label count (num_training) immediately.
     if applied > 0:
-        from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
         sync_labels_to_loaded_detector()
 
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtscore.labels.sync import sync_to_labelset_source
 
         sync_to_labelset_source()
 
         from vtsearch.achievements import record_detector_import
-        from vtsearch.state.core import get_active_detector_context
+        from vtscore.state.core import get_active_detector_context
 
         record_detector_import(get_active_detector_context().detector_id)
 
@@ -193,6 +228,8 @@ def run_label_import(importer_name: str):  # noqa: C901
         msg += f" Auto-resolved {ingested} missing element(s) from their sources."
     if unresolved:
         msg += f" {len(unresolved)} element(s) could not be resolved."
+    if failed:
+        msg += f" {len(failed)} element(s) failed to apply (see 'failed' for details)."
 
     return jsonify(
         {
@@ -201,6 +238,8 @@ def run_label_import(importer_name: str):  # noqa: C901
             "missing_count": len(unresolved),
             "missing": unresolved,
             "ingested": ingested,
+            "failed_count": len(failed),
+            "failed": failed,
             "message": msg,
         }
     )
@@ -214,31 +253,39 @@ def run_label_import(importer_name: str):  # noqa: C901
 @label_importers_bp.route("/api/label-importers/ingest-missing", methods=["POST"])
 @label_importers_bp.arguments(IngestMissingRequestSchema)
 @label_importers_bp.response(200, IngestMissingResponseSchema)
+@require_dataset_header
+@require_detector_header
 def ingest_missing(body: dict):
     """Re-ingest missing medias from their origins, then apply their labels."""
     entries = body["entries"]
 
-    from vtsearch.datasets.ingest import ingest_missing_medias
+    from vtscore.datasets.ingest import ingest_missing_medias
 
     ingested = ingest_missing_medias(entries, medias)
 
     # Now apply labels to the newly ingested medias
     origin_lookup, md5_lookup, name_lookup = build_media_lookup(snapshot_medias())
-    applied, _ = _apply_labels(entries, origin_lookup, md5_lookup, name_lookup)
+    applied, _, failed = _apply_labels(entries, origin_lookup, md5_lookup, name_lookup)
 
     # Sync updated votes into the loaded model so the dashboard reflects
     # the new label count immediately.
     if applied > 0:
-        from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
         sync_labels_to_loaded_detector()
 
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtscore.labels.sync import sync_to_labelset_source
 
         sync_to_labelset_source()
+
+    message = f"Ingested {ingested} media(s), applied {applied} label(s)."
+    if failed:
+        message += f" {len(failed)} element(s) failed to apply."
 
     return {
         "ingested": ingested,
         "applied": applied,
-        "message": f"Ingested {ingested} media(s), applied {applied} label(s).",
+        "failed_count": len(failed),
+        "failed": failed,
+        "message": message,
     }

@@ -19,6 +19,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import threading
 
 import pytest
 
@@ -77,21 +78,21 @@ class TestSettingsSourceBase:
 
 class TestLabelsetSourceBase:
     def test_load_raises_not_implemented(self):
-        from vtsearch.labels.sources.base import LabelsetSource
+        from vtscore.labels.sources.base import LabelsetSource
 
         src = LabelsetSource()
         with pytest.raises(NotImplementedError):
             src.load({})
 
     def test_save_raises_not_implemented(self):
-        from vtsearch.labels.sources.base import LabelsetSource
+        from vtscore.labels.sources.base import LabelsetSource
 
         src = LabelsetSource()
         with pytest.raises(NotImplementedError):
             src.save(None, {})  # pyright: ignore[reportArgumentType]
 
     def test_to_dict_contains_standard_keys(self):
-        from vtsearch.labels.sources.base import LabelsetSource
+        from vtscore.labels.sources.base import LabelsetSource
 
         class Minimal(LabelsetSource):
             name = "minimal"
@@ -139,21 +140,21 @@ class TestSettingsSourceRegistry:
 
 class TestLabelsetSourceRegistry:
     def test_list_labelset_sources(self):
-        from vtsearch.labels.sources import list_labelset_sources
+        from vtscore.labels.sources import list_labelset_sources
 
         sources = list_labelset_sources()
         names = [s.name for s in sources]
         assert "server_json_file" in names
 
     def test_get_labelset_source(self):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         src = get_labelset_source("server_json_file")
         assert src is not None
         assert src.name == "server_json_file"
 
     def test_get_nonexistent_returns_none(self):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         assert get_labelset_source("nonexistent") is None
 
@@ -241,6 +242,30 @@ class TestServerFileSettingsSource:
         assert "alice.settings.json" in result
         assert "{username}" not in result
 
+    def test_resolved_template_path_outside_base_dir_rejected(self, monkeypatch):
+        """Regression for ``logical-bug-audit.md`` C9.
+
+        A template containing ``../`` survives per-value sanitization (because
+        no template variable is involved), so the resolved path must also be
+        validated against the file-access base directory before any file
+        operation runs.
+        """
+        from vtsearch.settings_io.sources import get_settings_source
+        from vtsearch.settings_io.sources.server_json_file import _resolve_filepath
+
+        monkeypatch.setattr("vtsearch.auth.get_current_user", lambda: "alice")
+
+        traversal_template = "../../../../etc/{username}.settings.json"
+
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            _resolve_filepath({"filepath": traversal_template})
+
+        src = get_settings_source("server_json_file")
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.load({"filepath": traversal_template})
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.save({"volume": 0.5}, {"filepath": traversal_template})
+
 
 # ---------------------------------------------------------------------------
 # ServerFileLabelsetSource load/save round-trip
@@ -249,14 +274,14 @@ class TestServerFileSettingsSource:
 
 class TestServerFileLabelsetSource:
     def test_load_nonexistent_returns_empty(self, tmp_path):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         src = get_labelset_source("server_json_file")
         result = src.load({"filepath": str(tmp_path / "missing.json")})
         assert result == []
 
     def test_load_valid_file(self, tmp_path):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "labels.json"
         labels = {"labels": [{"md5": "abc123", "label": "good"}, {"md5": "def456", "label": "bad"}]}
@@ -269,8 +294,8 @@ class TestServerFileLabelsetSource:
         assert result[0]["label"] == "good"
 
     def test_save_creates_file(self, tmp_path):
-        from vtsearch.datasets.labelset import LabelSet, LabeledElement
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.datasets.labelset import LabelSet, LabeledElement
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "labels.json"
         src = get_labelset_source("server_json_file")
@@ -289,8 +314,8 @@ class TestServerFileLabelsetSource:
         assert len(data["labels"]) == 2
 
     def test_load_save_round_trip(self, tmp_path):
-        from vtsearch.datasets.labelset import LabelSet, LabeledElement
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.datasets.labelset import LabelSet, LabeledElement
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "labels.json"
         src = get_labelset_source("server_json_file")
@@ -308,7 +333,7 @@ class TestServerFileLabelsetSource:
         assert loaded[0]["md5"] == "abc"
 
     def test_load_invalid_json_raises(self, tmp_path):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "bad.json"
         filepath.write_text("not valid json")
@@ -318,7 +343,7 @@ class TestServerFileLabelsetSource:
             src.load({"filepath": str(filepath)})
 
     def test_load_no_labels_key_raises(self, tmp_path):
-        from vtsearch.labels.sources import get_labelset_source
+        from vtscore.labels.sources import get_labelset_source
 
         filepath = tmp_path / "no_labels.json"
         filepath.write_text(json.dumps({"data": []}))
@@ -326,6 +351,40 @@ class TestServerFileLabelsetSource:
         src = get_labelset_source("server_json_file")
         with pytest.raises(ValueError, match="labels"):
             src.load({"filepath": str(filepath)})
+
+    def test_resolved_template_path_outside_base_dir_rejected(self):
+        """Regression for ``logical-bug-audit.md`` C9.
+
+        A template containing ``../`` survives per-value sanitization (because
+        the sanitized detector_name has no separators), so the resolved path
+        must also be validated against the file-access base directory before
+        any file operation runs.
+        """
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.labels.sources import get_labelset_source
+        from vtscore.labels.sources.server_json_file import _resolve_filepath, resolve_filepath_for
+
+        traversal_template = "../../../../etc/{detector_name}.labels.json"
+
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            resolve_filepath_for(
+                {"filepath": traversal_template},
+                detector_id="abc",
+                detector_name="evil",
+            )
+
+        # _resolve_filepath also validates when no template variable is
+        # present (so a bare "../" template is rejected too).
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            _resolve_filepath({"filepath": "../../../../etc/passwd"})
+
+        src = get_labelset_source("server_json_file")
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.load({"filepath": "../../../../etc/passwd"})
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.load_full({"filepath": "../../../../etc/passwd"})
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            src.save(LabelSet([]), {"filepath": "../../../../etc/passwd"})
 
 
 # ---------------------------------------------------------------------------
@@ -580,19 +639,271 @@ class TestStartupAutoImport:
 
 
 # ---------------------------------------------------------------------------
+# M16 regression tests — lazy auto-sync semantics (race, retry, freshness)
+# ---------------------------------------------------------------------------
+
+
+class TestSyncFromSourceFreshness:
+    """Regression tests for M16 and the two adjacent defects.
+
+    See ``docs/plans/logical-bug-audit.md`` § Settings / sync — M16.
+    """
+
+    def test_source_file_change_triggers_resync_on_next_read(self, tmp_path, isolated_settings):
+        """Auto re-sync fires when ``peek_version`` (st_mtime_ns) bumps.
+
+        Before the M16 fix this test would have failed: ``_synced_users``
+        recorded "synced once" and no subsequent read pulled the new
+        value, so ``get_volume`` returned the stale local cache.
+        """
+        import os
+
+        from vtsearch import settings
+
+        source_file = tmp_path / "remote.json"
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(source_file)},
+        }
+        settings.set_settings_source_config(config)
+
+        # First read primes the cache: source has volume=0.40.
+        source_file.write_text(json.dumps({"volume": 0.40}))
+        # Bump mtime past the just-stamped post-configure sync token.
+        new_mtime = source_file.stat().st_mtime_ns + 10_000_000_000
+        os.utime(source_file, ns=(new_mtime, new_mtime))
+        # Push past the 1s freshness window so the slow path probes.
+        settings._sync_state["default"].last_check_monotonic -= 5.0
+        assert settings.get_volume() == 0.40
+
+        # External writer overwrites the source.
+        source_file.write_text(json.dumps({"volume": 0.80}))
+        new_mtime += 10_000_000_000
+        os.utime(source_file, ns=(new_mtime, new_mtime))
+        # Force the freshness window open again.
+        settings._sync_state["default"].last_check_monotonic -= 5.0
+
+        # Next read picks up the new source value automatically.
+        assert settings.get_volume() == 0.80
+
+    def test_first_sync_failure_does_not_lock_out_retry(self, tmp_path, isolated_settings, monkeypatch):
+        """A transient source failure on the first sync must allow retry.
+
+        Before the M16 fix this test would have failed: ``_synced_users``
+        was set inside the lock *before* the sync ran, so even if the
+        first attempt raised, the user was permanently marked synced
+        and the source was never tried again until process restart.
+        """
+        from vtsearch import settings
+        from vtsearch.settings_io.sources import get_settings_source
+
+        source_file = tmp_path / "remote.json"
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(source_file)},
+        }
+        settings.set_settings_source_config(config)
+        source_file.write_text(json.dumps({"volume": 0.55}))
+
+        src = get_settings_source("server_json_file")
+        assert src is not None
+        calls = {"n": 0}
+        real_load = src.load
+
+        def flaky_load(field_values):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("transient")
+            return real_load(field_values)
+
+        monkeypatch.setattr(src, "load", flaky_load)
+        # Reset state so the first read forces a sync attempt.
+        settings._sync_state.pop("default", None)
+        # First read: load() raises, last_sync_succeeded stays False.
+        settings.get_volume()
+        state = settings._sync_state.get("default")
+        assert state is not None
+        assert state.last_sync_succeeded is False
+        # Push past the retry rate-limit window.
+        state.last_check_monotonic -= 5.0
+        # Second read: load() succeeds, value gets pulled from source.
+        assert settings.get_volume() == 0.55
+        assert calls["n"] >= 2
+
+    def test_concurrent_readers_observe_post_sync_cache(self, tmp_path, isolated_settings):
+        """A second thread entering during the first sync must not see stale local.
+
+        Before the M16 fix this test would have failed: the marker was
+        set before the sync ran (TOCTOU race), so a concurrent reader
+        would see the pre-sync local cache.  The per-user sync RLock
+        now serialises the slow path so the second thread blocks until
+        the first finishes and sees the freshly-applied source values.
+        """
+        import threading
+
+        from vtsearch import settings
+        from vtsearch.settings_io.sources import get_settings_source
+
+        source_file = tmp_path / "remote.json"
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(source_file)},
+        }
+        settings.set_settings_source_config(config)
+        source_file.write_text(json.dumps({"volume": 0.31}))
+
+        # Force a fresh sync attempt and slow down the source load so
+        # the racing window is wide and deterministic.
+        settings._sync_state.pop("default", None)
+        src = get_settings_source("server_json_file")
+        assert src is not None
+        real_load = src.load
+        first_load_in_flight = threading.Event()
+        release_first_load = threading.Event()
+
+        def slow_load(field_values):
+            if not first_load_in_flight.is_set():
+                first_load_in_flight.set()
+                release_first_load.wait(timeout=5)
+            return real_load(field_values)
+
+        src.load = slow_load  # type: ignore[assignment]
+
+        results: dict[str, float] = {}
+
+        def reader(name: str):
+            results[name] = settings.get_volume()
+
+        try:
+            t_a = threading.Thread(target=reader, args=("a",))
+            t_a.start()
+            assert first_load_in_flight.wait(timeout=5), "first load never started"
+            t_b = threading.Thread(target=reader, args=("b",))
+            t_b.start()
+            # Let A's sync complete.
+            release_first_load.set()
+            t_a.join(timeout=5)
+            t_b.join(timeout=5)
+        finally:
+            src.load = real_load  # type: ignore[assignment]
+
+        # Both threads must observe the post-sync value.  Before the
+        # race fix, thread B would have observed the pre-sync local
+        # default for ``volume``.
+        assert results["a"] == 0.31
+        assert results["b"] == 0.31
+
+    def test_local_write_dirty_key_survives_auto_resync(self, tmp_path, isolated_settings):
+        """An auto re-sync (version-bump) must not silently overwrite a
+        key the user has just written locally.
+        """
+        import os
+
+        from vtsearch import settings
+
+        source_file = tmp_path / "remote.json"
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(source_file)},
+        }
+        settings.set_settings_source_config(config)
+
+        # User locally sets volume to 0.91.  ``_sync_to_source`` exports
+        # this, so source == local == 0.91, dirty_keys cleared.
+        settings.set_volume(0.91)
+
+        # Simulate an external writer who's seen an older volume value.
+        # We need to write the file directly without going through our
+        # ``_sync_to_source``, then bump mtime past the rate-limit window.
+        source_file.write_text(json.dumps({"volume": 0.10, "theme": "highviz"}))
+        new_mtime = source_file.stat().st_mtime_ns + 10_000_000_000
+        os.utime(source_file, ns=(new_mtime, new_mtime))
+
+        # Re-introduce the dirty marker as if the local write happened
+        # *after* the external write but *before* ``_sync_to_source``
+        # could update the source.  In real life this is the race
+        # window: local writer flips ``volume``, an external process
+        # writes a different value to the source file, and an auto
+        # re-sync fires before ``_sync_to_source`` catches up.
+        settings._sync_state["default"].dirty_keys.add("volume")
+        settings._sync_state["default"].last_check_monotonic -= 5.0
+        settings._sync_state["default"].last_version = None  # force probe
+
+        # Next read: auto re-sync runs, sees ``volume`` is dirty → skips
+        # it, applies the other source keys.  Local ``volume`` survives.
+        assert settings.get_volume() == 0.91
+        assert settings.get_theme() == "highviz"
+
+    def test_manual_sync_clears_dirty_keys(self, tmp_path, isolated_settings):
+        """A manual POST sync ignores ``dirty_keys`` (explicit user pull)."""
+        from vtsearch import settings
+
+        source_file = tmp_path / "remote.json"
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(source_file)},
+        }
+        settings.set_settings_source_config(config)
+        settings.set_volume(0.91)  # local + source = 0.91
+        settings._sync_state["default"].dirty_keys.add("volume")  # simulate unflushed dirty
+
+        source_file.write_text(json.dumps({"volume": 0.10}))
+
+        # Manual sync explicitly overrides local edits.
+        settings.sync_from_settings_source()
+        assert settings.get_volume() == 0.10
+        assert not settings._sync_state["default"].dirty_keys
+
+    def test_freshness_window_avoids_repeat_probes(self, tmp_path, isolated_settings, monkeypatch):
+        """Inside the 1s rate-limit window the slow path doesn't probe.
+
+        Pins the freshness optimisation: settings reads should stay hot
+        even with a configured source.  Without it, every
+        ``get_volume()`` would stat the source file.
+        """
+        from vtsearch import settings
+        from vtsearch.settings_io.sources import get_settings_source
+
+        source_file = tmp_path / "remote.json"
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(source_file)},
+        }
+        settings.set_settings_source_config(config)
+        source_file.write_text(json.dumps({"volume": 0.40}))
+
+        src = get_settings_source("server_json_file")
+        assert src is not None
+        probes = {"n": 0}
+        real_peek = src.peek_version
+
+        def counted(fv):
+            probes["n"] += 1
+            return real_peek(fv)
+
+        monkeypatch.setattr(src, "peek_version", counted)
+
+        # Many reads inside the freshness window — at most one probe.
+        baseline = probes["n"]
+        for _ in range(20):
+            settings.get_volume()
+        assert probes["n"] - baseline <= 1
+
+
+# ---------------------------------------------------------------------------
 # DetectorContext.labelset_source field
 # ---------------------------------------------------------------------------
 
 
 class TestDetectorContextLabelsetSource:
     def test_default_is_none(self):
-        from vtsearch.state.core import DetectorContext
+        from vtscore.state.core import DetectorContext
 
         ctx = DetectorContext("test")
         assert ctx.labelset_source is None
 
     def test_can_set_and_read(self):
-        from vtsearch.state.core import DetectorContext
+        from vtscore.state.core import DetectorContext
 
         ctx = DetectorContext("test")
         ctx.labelset_source = {
@@ -610,18 +921,18 @@ class TestDetectorContextLabelsetSource:
 class TestLabelsetSync:
     def test_sync_to_source_no_source_no_error(self):
         """sync_to_labelset_source should not raise when no source is configured."""
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtscore.labels.sync import sync_to_labelset_source
 
         sync_to_labelset_source()  # Should silently do nothing
 
     def test_sync_from_source_no_source_returns_none(self):
-        from vtsearch.labels.sync import sync_from_labelset_source
+        from vtscore.labels.sync import sync_from_labelset_source
 
         assert sync_from_labelset_source() is None
 
     def test_sync_to_source_writes_labels(self, tmp_path):
-        from vtsearch.labels.sync import sync_to_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -648,6 +959,7 @@ class TestLabelsetSync:
             good_votes[mid] = None
 
             sync_to_labelset_source()
+            flush_pending_label_syncs()
 
             # Check the file was written
             filepath = tmp_path / "labels.json"
@@ -664,8 +976,8 @@ class TestLabelsetSync:
             unregister_detector_context("test_sync")
 
     def test_sync_from_source_applies_labels(self, tmp_path):
-        from vtsearch.labels.sync import sync_from_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.labels.sync import sync_from_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -707,9 +1019,9 @@ class TestLabelsetSync:
 
     def test_sync_to_source_emits_detector_meta(self, tmp_path):
         """sync_to_labelset_source writes the detector's input_spec / threshold."""
-        from vtsearch.detectors.store import _detector_path, _write_detector
-        from vtsearch.labels.sync import sync_to_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.detectors.store import _detector_path, _write_detector
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -749,6 +1061,7 @@ class TestLabelsetSync:
             medias[mid] = {"id": mid, "md5": "fake_md5", "type": "audio"}
             good_votes[mid] = None
             sync_to_labelset_source()
+            flush_pending_label_syncs()
 
             data = json.loads((tmp_path / "labels.json").read_text())
             meta = data.get("detector_meta")
@@ -770,9 +1083,9 @@ class TestLabelsetSync:
 
     def test_sync_to_source_skips_threshold_without_model(self, tmp_path):
         """A detector that hasn't been trained yet has no live threshold to emit."""
-        from vtsearch.detectors.store import _detector_path, _write_detector
-        from vtsearch.labels.sync import sync_to_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.detectors.store import _detector_path, _write_detector
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -803,6 +1116,7 @@ class TestLabelsetSync:
             medias[mid] = {"id": mid, "md5": "fake_md5_2", "type": "audio"}
             good_votes[mid] = None
             sync_to_labelset_source()
+            flush_pending_label_syncs()
 
             data = json.loads((tmp_path / "labels.json").read_text())
             meta = data.get("detector_meta")
@@ -820,9 +1134,9 @@ class TestLabelsetSync:
 
     def test_sync_from_source_writes_input_spec_to_detector(self, tmp_path):
         """An inbound detector_meta updates the receiving detector JSON's input_spec."""
-        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
-        from vtsearch.labels.sync import sync_from_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+        from vtscore.labels.sync import sync_from_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -880,9 +1194,9 @@ class TestLabelsetSync:
 
     def test_sync_from_source_without_detector_meta_leaves_detector_alone(self, tmp_path):
         """Legacy labelsets (no detector_meta) don't mutate the receiving detector."""
-        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
-        from vtsearch.labels.sync import sync_from_labelset_source
-        from vtsearch.state.core import (
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+        from vtscore.labels.sync import sync_from_labelset_source
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             set_thread_detector_context,
@@ -1033,7 +1347,7 @@ class TestLabelsetSourcesAPI:
         assert resp.status_code == 404
 
     def test_set_unknown_labelset_source_returns_404(self, client):
-        from vtsearch.state.core import (
+        from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
             unregister_detector_context,
@@ -1050,3 +1364,226 @@ class TestLabelsetSourcesAPI:
             assert resp.status_code == 404
         finally:
             unregister_detector_context("api_test")
+
+
+# ---------------------------------------------------------------------------
+# Labelset sync_to debounce: rapid calls coalesce, slow targets don't stall
+# ---------------------------------------------------------------------------
+
+
+class TestLabelsetSyncDebounce:
+    def _make_ctx(self, name, filepath):
+        from vtscore.state.core import DetectorContext, register_detector_context
+
+        ctx = DetectorContext(name, name=name)
+        ctx.labelset_source = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(filepath)},
+        }
+        register_detector_context(ctx)
+        return ctx
+
+    def test_sync_does_not_block_caller(self, tmp_path, monkeypatch):
+        """sync_to_labelset_source returns before the (potentially slow) push runs."""
+        import time
+
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx = self._make_ctx("dbnc_block", tmp_path / "labels.json")
+        set_thread_detector_context(ctx)
+
+        # Slow the underlying save to expose any synchronous blocking.
+        from vtscore.labels.sources import get_labelset_source
+
+        src = get_labelset_source("server_json_file")
+        original_save = src.save
+        save_started = threading.Event()
+        release_save = threading.Event()
+
+        def slow_save(labelset, fv):
+            save_started.set()
+            assert release_save.wait(timeout=5)
+            return original_save(labelset, fv)
+
+        monkeypatch.setattr(src, "save", slow_save)
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 30000
+        try:
+            medias[mid] = {"id": mid, "md5": "dbnc_block_md5", "type": "audio"}
+            good_votes[mid] = None
+
+            t0 = time.monotonic()
+            sync_to_labelset_source()
+            elapsed = time.monotonic() - t0
+            # Scheduling must be effectively free — well under the 200ms
+            # debounce window, let alone the timer + slow save.
+            assert elapsed < 0.1
+
+            # The slow save shouldn't have started yet: the debounce timer
+            # hasn't fired (200ms), and even if it had, the save would be
+            # blocked on release_save.
+            assert not save_started.is_set()
+
+            # Allow the eventual write to finish so flush() returns.
+            release_save.set()
+            flush_pending_label_syncs()
+            assert (tmp_path / "labels.json").exists()
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_block")
+
+    def test_rapid_calls_coalesce_to_one_write(self, tmp_path):
+        """Many rapid sync_to calls within the debounce window produce one save."""
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx = self._make_ctx("dbnc_coalesce", tmp_path / "labels.json")
+        set_thread_detector_context(ctx)
+
+        from vtscore.labels.sources import get_labelset_source
+
+        src = get_labelset_source("server_json_file")
+        original_save = src.save
+        save_count = 0
+
+        def counting_save(labelset, fv):
+            nonlocal save_count
+            save_count += 1
+            return original_save(labelset, fv)
+
+        from unittest.mock import patch
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 30100
+        try:
+            medias[mid] = {"id": mid, "md5": "dbnc_coalesce_md5", "type": "audio"}
+            good_votes[mid] = None
+
+            with patch.object(src, "save", side_effect=counting_save):
+                for _ in range(20):
+                    sync_to_labelset_source()
+                flush_pending_label_syncs()
+
+            # 20 scheduling calls collapse into a single push.
+            assert save_count == 1
+            assert (tmp_path / "labels.json").exists()
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_coalesce")
+
+    def test_two_detectors_keep_separate_debounce_slots(self, tmp_path):
+        """Per-detector keying: voting on A doesn't cancel B's pending push."""
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx_a = self._make_ctx("dbnc_a", tmp_path / "a.json")
+        ctx_b = self._make_ctx("dbnc_b", tmp_path / "b.json")
+
+        saved_medias = dict(medias)
+        mid_a = max(medias.keys(), default=0) + 30200
+        mid_b = mid_a + 1
+        try:
+            medias[mid_a] = {"id": mid_a, "md5": "dbnc_a_md5", "type": "audio"}
+            medias[mid_b] = {"id": mid_b, "md5": "dbnc_b_md5", "type": "audio"}
+
+            set_thread_detector_context(ctx_a)
+            good_votes[mid_a] = None
+            sync_to_labelset_source()
+
+            set_thread_detector_context(ctx_b)
+            good_votes[mid_b] = None
+            sync_to_labelset_source()
+
+            flush_pending_label_syncs()
+
+            assert (tmp_path / "a.json").exists()
+            assert (tmp_path / "b.json").exists()
+            a_data = json.loads((tmp_path / "a.json").read_text())
+            b_data = json.loads((tmp_path / "b.json").read_text())
+            assert any(e["md5"] == "dbnc_a_md5" for e in a_data["labels"])
+            assert any(e["md5"] == "dbnc_b_md5" for e in b_data["labels"])
+        finally:
+            good_votes.pop(mid_a, None)
+            good_votes.pop(mid_b, None)
+            medias.pop(mid_a, None)
+            medias.pop(mid_b, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_a")
+            unregister_detector_context("dbnc_b")
+
+    def test_latest_state_wins_on_coalesced_burst(self, tmp_path):
+        """The push uses the state at flush time, not at first-schedule time."""
+        from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx = self._make_ctx("dbnc_latest", tmp_path / "labels.json")
+        set_thread_detector_context(ctx)
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 30300
+        try:
+            medias[mid] = {"id": mid, "md5": "dbnc_latest_md5", "type": "audio"}
+            good_votes[mid] = None
+            sync_to_labelset_source()
+
+            # Within the debounce window, undo the vote.  flush() should
+            # serialize the latest (empty-good) state, not the original one.
+            good_votes.pop(mid, None)
+            sync_to_labelset_source()
+            flush_pending_label_syncs()
+
+            data = json.loads((tmp_path / "labels.json").read_text())
+            assert not any(e["md5"] == "dbnc_latest_md5" for e in data["labels"])
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_latest")
+
+    def test_reset_drops_pending_without_writing(self, tmp_path):
+        """reset_label_sync_for_tests cancels the timer instead of running it."""
+        from vtscore.labels.sync import (
+            reset_label_sync_for_tests,
+            sync_to_labelset_source,
+        )
+        from vtscore.state.core import set_thread_detector_context, unregister_detector_context
+        from vtsearch.state import medias, good_votes
+
+        ctx = self._make_ctx("dbnc_reset", tmp_path / "labels.json")
+        set_thread_detector_context(ctx)
+
+        saved_medias = dict(medias)
+        mid = max(medias.keys(), default=0) + 30400
+        try:
+            medias[mid] = {"id": mid, "md5": "dbnc_reset_md5", "type": "audio"}
+            good_votes[mid] = None
+            sync_to_labelset_source()
+
+            reset_label_sync_for_tests()
+
+            # Give any (cancelled) timer a chance to fire.
+            import time
+
+            time.sleep(0.3)
+
+            assert not (tmp_path / "labels.json").exists()
+        finally:
+            good_votes.pop(mid, None)
+            medias.pop(mid, None)
+            medias.update(saved_medias)
+            set_thread_detector_context(None)
+            unregister_detector_context("dbnc_reset")

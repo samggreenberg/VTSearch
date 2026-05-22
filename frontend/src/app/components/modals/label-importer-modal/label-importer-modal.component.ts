@@ -2,7 +2,6 @@ import { Component, ElementRef, EventEmitter, Input, OnInit, Output, ViewChild }
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
-import { FileBrowserComponent } from '../../file-browser/file-browser.component';
 import { IconComponent } from '../../icon/icon.component';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { MediasApiService } from '../../../services/medias-api.service';
@@ -15,7 +14,7 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-label-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, IconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
   templateUrl: './label-importer-modal.component.html',
   styleUrl: './label-importer-modal.component.scss',
 })
@@ -137,8 +136,14 @@ export class LabelImporterModalComponent implements OnInit {
           // Show unresolved elements as a warning but don't prompt — the
           // backend already tried to auto-resolve them.
           this.error = `${res.missing_count} element(s) could not be resolved from their original sources.`;
+        } else if (res.failed_count > 0) {
+          // Per-entry application failures (logical-bug-audit H31) — the
+          // import partially landed and the user should know which entries
+          // need to be retried.
+          this.error = `${res.failed_count} element(s) failed to apply. The remaining labels were applied successfully.`;
         }
-        setTimeout(() => this.close(), res.missing_count > 0 ? 3000 : 1500);
+        const hasIssue = res.missing_count > 0 || res.failed_count > 0;
+        setTimeout(() => this.close(), hasIssue ? 3000 : 1500);
       },
       error: (err) => {
         this.submitting = false;

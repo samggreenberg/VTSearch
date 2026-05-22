@@ -76,48 +76,26 @@
       }
 
       @if (fileBrowsing) {
-        <div class="breadcrumbs">
-          @for (seg of browsePath; track $index) {
-            @if ($index > 0) { <span class="breadcrumb-sep">/</span> }
-            @if ($index < browsePath.length - 1) {
-              <button class="breadcrumb-link" (click)="navigateBreadcrumb($index)">{{ seg }}</button>
-            } @else {
-              <span class="breadcrumb-current">{{ seg }}</span>
-            }
-          }
-        </div>
-
-        @if (fileLoading) {
-          <p class="empty-state">Loading...</p>
-        }
-
-        @if (!fileLoading && browseEntries.length > 0) {
-          <div class="browse-list">
-            @for (entry of browseEntries; track entry.path) {
-              @if (entry.isDir) {
-                <button class="browse-item browse-dir" (click)="enterDirectory(entry)" [title]="entry.path">
-                  <span class="entry-icon"><vt-icon type="folder"></vt-icon></span> {{ entry.name }}
-                  @if (entry.modified_at) {
-                    <span class="entry-date">{{ entry.modified_at }}</span>
-                  }
-                </button>
-              } @else {
-                <button class="browse-item browse-file" (click)="selectFile(entry)" [title]="entry.path">
-                  <span class="entry-icon"><vt-icon type="file-text"></vt-icon></span> {{ entry.name }}
-                  @if (entry.modified_at) {
-                    <span class="entry-date">{{ entry.modified_at }}</span>
-                  }
-                  @if (entry.size_bytes != null) {
-                    <span class="entry-size">{{ formatSize(entry.size_bytes) }}</span>
-                  }
-                </button>
-              }
-            }
-          </div>
-        }
-
-        @if (!fileLoading && browseEntries.length === 0) {
-          <p class="empty-state">No media files found in this directory.</p>
+        <p class="picker-instructions">
+          Enter a path to a media file in <strong>{{ browseSourceLabel }}</strong>:
+        </p>
+        <input
+          type="text"
+          class="form-input"
+          placeholder="path/to/file"
+          [(ngModel)]="typedPath"
+          (keydown.enter)="submitTypedPath(); $event.preventDefault()"
+        />
+        <button
+          type="button"
+          class="btn btn--primary"
+          [disabled]="fileLoading || !typedPath.trim()"
+          (click)="submitTypedPath()"
+        >
+          @if (fileLoading) { Loading… } @else { Load }
+        </button>
+        @if (typedPathError) {
+          <p class="error-text">{{ typedPathError }}</p>
         }
       }
 

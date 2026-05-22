@@ -28,7 +28,7 @@ from flask_smorest import Blueprint, abort
 from vtsearch.routes._shared import format_mtime
 from vtsearch.schemas.file_browser import BrowseQuerySchema, BrowseResponseSchema
 
-import vtsearch.security.path_validation as _paths
+import vtscore.security.path_validation as _paths
 
 file_browser_bp = Blueprint(
     "file_browser",
@@ -41,13 +41,13 @@ def _get_browse_root() -> Path:
     """Return the root directory users are allowed to browse.
 
     In single-user mode this is the first entry of
-    :data:`vtsearch.config.SERVER_ROOTS` (which defaults to
+    :data:`vtscore.config.SERVER_ROOTS` (which defaults to
     ``Path.cwd()`` when the env var is unset).  In multi-user mode it is
     the current user's data directory.
     """
     base = _paths.get_file_access_base_dir()
     if base is None:
-        from vtsearch.config import SERVER_ROOTS  # noqa: PLC0415
+        from vtscore.config import SERVER_ROOTS  # noqa: PLC0415
 
         return SERVER_ROOTS[0]
     return base
@@ -105,6 +105,15 @@ def browse(query: dict):  # noqa: C901
     for entry in entries:
         if entry.name.startswith("."):
             continue
+        # is_dir() / is_file() / stat() follow symlinks by default, so an
+        # in-root symlink pointing outside root would otherwise be listed
+        # like an ordinary entry and leak the target's name/size/mtime.
+        # Resolve symlinks up front and skip any that escape root.
+        if entry.is_symlink():
+            try:
+                entry.resolve(strict=True).relative_to(root)
+            except (OSError, ValueError):
+                continue
         rel = str(entry.relative_to(root))
         if entry.is_dir():
             directories.append({"name": entry.name, "path": rel, "modified_at": format_mtime(entry)})

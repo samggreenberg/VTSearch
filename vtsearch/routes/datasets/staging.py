@@ -22,10 +22,10 @@ from uuid import uuid4
 from flask import jsonify, request
 from flask_smorest import Blueprint, abort
 
-import vtsearch.security.path_validation as _paths
-from vtsearch.config import EMBEDDINGS_DIR
-from vtsearch.datasets import DEMO_DATASETS, get_importer, list_importers
-from vtsearch.datasets.load_pipeline import (
+import vtscore.security.path_validation as _paths
+from vtscore.config import EMBEDDINGS_DIR
+from vtscore.datasets import DEMO_DATASETS, get_importer, list_importers
+from vtscore.datasets.load_pipeline import (
     STAGING_DIR,
     _run_importer_in_background,
     _stage_importer_in_background,
@@ -43,7 +43,7 @@ from vtsearch.schemas.datasets import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
 )
-from vtsearch.security.pickle import peek_pickle_dataset_summary
+from vtscore.security.pickle import peek_pickle_dataset_summary
 
 datasets_staging_bp = Blueprint(
     "datasets_staging",
@@ -113,7 +113,11 @@ def stage_file():
     file.save(staging_path)
 
     # Peek the pkl's dict structure cheaply — embeddings and inline media
-    # bytes are skipped, so this stays light even on multi-GB uploads.
+    # bytes are skipped, so this stays light even on multi-GB uploads. The
+    # response always returns 200 (so the client keeps the staged path and
+    # can clean it up); peek failures are surfaced via the ``error`` field
+    # instead of swallowed silently.
+    error = ""
     try:
         with open(staging_path, "rb") as f:
             peeked = peek_pickle_dataset_summary(f)
@@ -130,12 +134,19 @@ def stage_file():
             if isinstance(first, dict):
                 media_type = first.get("type", "audio") or "unknown"
         del peeked, media_dict
-    except Exception:
+    except Exception as e:
         count = 0
         media_type = "unknown"
+        error = f"{type(e).__name__}: {e}"
 
     name = file.filename or "Uploaded dataset"
-    return {"path": str(staging_path), "name": name, "count": count, "media_type": media_type}
+    return {
+        "path": str(staging_path),
+        "name": name,
+        "count": count,
+        "media_type": media_type,
+        "error": error,
+    }
 
 
 # ---------------------------------------------------------------------------

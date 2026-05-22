@@ -48,12 +48,12 @@ from pathlib import Path
 from flask import jsonify, send_file
 from flask_smorest import Blueprint, abort
 
-from vtsearch.detectors.store import (
+from vtscore.detectors.store import (
     _detector_path,
     _read_detector,
     _write_detector,
 )
-from vtsearch.detectors.workflow import apply_and_retrain as _apply_and_retrain
+from vtscore.detectors.workflow import apply_and_retrain as _apply_and_retrain
 from vtsearch.schemas.detectors import (
     DetectorLabelsDetailResponseSchema,
     DetectorLabelVoteRequestSchema,
@@ -106,6 +106,7 @@ _DEFAULT_MIMETYPE_BY_TYPE = {
 @detectors_labels_bp.route("/api/detectors/<name>/labels", methods=["POST"])
 @detectors_labels_bp.response(200, DetectorSaveLabelsResponseSchema)
 @detectors_labels_bp.alt_response(404, description="Detector not found.")
+@detectors_labels_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
 def save_detector_labels(name: str):
     """Save the current votes as the detector's labelset.
 
@@ -117,22 +118,24 @@ def save_detector_labels(name: str):
     if data is None:
         abort(404, message=f"Detector '{name}' not found")
 
-    from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.detectors.input_spec import extract_input_spec_from_medias
-    from vtsearch.state import (
-        bad_votes,
-        good_votes,
-        snapshot_medias,
-        vote_region_boxes,
-    )
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.dataset_sync import validated_vote_snapshot
+    from vtscore.detectors.input_spec import extract_input_spec_from_medias
 
-    medias_snap = snapshot_medias()
+    snap = validated_vote_snapshot()
+    if not snap.safe:
+        # Refuse to overwrite the on-disk labelset with an empty composition
+        # when the (dataset, detector) state can't be proved consistent.
+        # Surfacing 409 lets the frontend retry on a stable request instead
+        # of silently destroying labels.
+        abort(409, message="Cannot save labels: detector vote state is not aligned with the active dataset")
+    medias_snap = snap.medias
     labelset = LabelSet.from_clips_and_votes(
         medias_snap,
-        good_votes,
-        bad_votes,
+        snap.good_votes,
+        snap.bad_votes,
         expand_dupes=False,
-        vote_region_boxes=dict(vote_region_boxes),
+        vote_region_boxes=snap.vote_region_boxes,
     )
     data["labelset"] = labelset.to_dict()
 
@@ -149,7 +152,7 @@ def save_detector_labels(name: str):
     _write_detector(path, data)
 
     # Also update the detector registry entry if one exists
-    from vtsearch.detectors.registry import find_by_name, update_detector
+    from vtscore.detectors.registry import find_by_name, update_detector
 
     import time as _time
 
@@ -201,7 +204,7 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
     if data is None:
         return jsonify({"error": f"Detector '{name}' not found"}), 404
 
-    from vtsearch.labels.importers import get_label_importer, list_label_importers
+    from vtscore.labels.importers import get_label_importer, list_label_importers
     from vtsearch.routes._shared import (
         get_plugin_or_404,
         run_plugin_or_error,
@@ -228,7 +231,7 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
     # ------------------------------------------------------------------
     # 1) Merge into the persisted labelset (always, whether loaded or not)
     # ------------------------------------------------------------------
-    from vtsearch.datasets.labelset import LabeledElement, LabelSet
+    from vtscore.datasets.labelset import LabeledElement, LabelSet
 
     existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 
@@ -261,7 +264,7 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
     _write_detector(path, data)
 
     # Update the detector registry entry
-    from vtsearch.detectors.registry import find_by_name, update_detector
+    from vtscore.detectors.registry import find_by_name, update_detector
 
     reg_entry = find_by_name(name)
     if reg_entry:
@@ -273,7 +276,7 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
     resolved = 0
     trained = False
     if applied > 0 and reg_entry:
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         det_ctx = get_detector_context(reg_entry["id"])
         if det_ctx is not None:
@@ -321,7 +324,7 @@ def get_detector_labels_detail(name: str):
     ``/api/votes`` it is *not* gated on the loaded dataset, so detector
     labels survive across dataset switches.
     """
-    from vtsearch.detectors.labelset_elements import build_labels_detail
+    from vtscore.detectors.labelset_elements import build_labels_detail
 
     path = _detector_path(name)
     data = _read_detector(path)
@@ -351,8 +354,8 @@ def preview_detector_label(name: str, element_id: str):
     chosen by the detector's ``media_type``.  Returns 404 if the element
     is unknown or its file cannot be located.
     """
-    from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.detectors.labelset_elements import find_element_by_id, resolve_element_to_path
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.labelset_elements import find_element_by_id, resolve_element_to_path
 
     path = _detector_path(name)
     data = _read_detector(path)
@@ -426,7 +429,7 @@ def _in_memory_thumbnail_response(media: dict, media_type: str):
             download_name=f"media_{media.get('id', 0)}{suffix or '.jpg'}",
         )
 
-    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+    from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     try:
         mt = get_media_type(media_type)
@@ -460,7 +463,7 @@ def _origin_thumbnail_response(file_path: Path, media_type: str, elem):
             abort(404, message="Element media file unreadable")
 
     if media_type == "audio":
-        from vtsearch.media.audio.media_type import generate_waveform_thumbnail_from_file  # noqa: PLC0415
+        from vtscore.media.audio.media_type import generate_waveform_thumbnail_from_file  # noqa: PLC0415
 
         thumb = generate_waveform_thumbnail_from_file(file_path)
         if thumb is None:
@@ -472,7 +475,7 @@ def _origin_thumbnail_response(file_path: Path, media_type: str, elem):
         )
 
     if media_type == "video":
-        from vtsearch.media.video.media_type import generate_video_thumbnail_from_file  # noqa: PLC0415
+        from vtscore.media.video.media_type import generate_video_thumbnail_from_file  # noqa: PLC0415
 
         thumb = generate_video_thumbnail_from_file(file_path)
         if thumb is None:
@@ -502,8 +505,8 @@ def thumbnail_detector_label(name: str, element_id: str):
     otherwise we resolve the underlying file via the importer and generate
     on the fly. Much smaller than ``/preview`` (which serves the full file).
     """
-    from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.detectors.labelset_elements import (
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.labelset_elements import (
         find_element_by_id,
         resolve_current_dataset_cid,
         resolve_element_to_path,
@@ -561,7 +564,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     detector's in-memory ``good_votes`` / ``bad_votes`` are kept in sync so
     MLP retraining and learned-sort see the change.
     """
-    from vtsearch.detectors.labelset_elements import (
+    from vtscore.detectors.labelset_elements import (
         apply_element_vote_in_data,
         resolve_current_dataset_cid,
     )
@@ -573,8 +576,8 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     if data is None:
         abort(404, message=f"Detector '{name}' not found")
 
-    from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.detectors.labelset_elements import find_element_by_id
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.labelset_elements import find_element_by_id
 
     pre_labelset = LabelSet.from_dict(data.get("labelset") or {})
     pre_found = find_element_by_id(pre_labelset.elements, element_id)
@@ -597,7 +600,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
 
         toggle_vote(cid_before, vote)
 
-    from vtsearch.detectors.registry import find_by_name, update_detector
+    from vtscore.detectors.registry import find_by_name, update_detector
 
     reg_entry = find_by_name(name)
     if reg_entry:

@@ -396,73 +396,13 @@ describe('DashboardComponent', () => {
     expect(component.importerModalOpen).toBeFalse();
   });
 
-  it('should render welcome banner when no datasets', () => {
+  it('should render empty state when no datasets', () => {
     flushInitialRequests();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    const banner = el.querySelector('.welcome-banner');
-    expect(banner).toBeTruthy();
-    expect(banner?.textContent || '').toContain('Welcome');
-  });
-
-  describe('welcome banner', () => {
-    it('should default to pushing Server Folder when no Services importers are registered', () => {
-      flushInitialRequests([], [], [
-        { name: 'server_folder', category: 'server' },
-        { name: 'demo', category: 'demo' },
-      ]);
-      expect(component.welcomeBannerMessage).toContain('Server Folder');
-      expect(component.welcomeBannerCtaLabel).toBe('Open Server');
-      expect(component.welcomeBannerCtaTab).toBe('server');
-    });
-
-    it('should name a single Services importer when exactly one is registered', () => {
-      flushInitialRequests([], [], [
-        { name: 'recaller', display_name: 'ReCaller', category: 'services' },
-        { name: 'server_folder', category: 'server' },
-      ]);
-      expect(component.welcomeBannerMessage).toContain('ReCaller');
-      expect(component.welcomeBannerMessage).toContain('Services');
-      expect(component.welcomeBannerCtaLabel).toBe('Open Services');
-      expect(component.welcomeBannerCtaTab).toBe('services');
-    });
-
-    it('should use generic wording when multiple Services importers are registered', () => {
-      flushInitialRequests([], [], [
-        { name: 'recaller', display_name: 'ReCaller', category: 'services' },
-        { name: 'other_service', display_name: 'Other', category: 'services' },
-      ]);
-      expect(component.welcomeBannerMessage).not.toContain('ReCaller');
-      expect(component.welcomeBannerMessage).toContain('Services');
-      expect(component.welcomeBannerCtaLabel).toBe('Open Services');
-      expect(component.welcomeBannerCtaTab).toBe('services');
-    });
-
-    it('should ignore hidden_from_picker importers when picking the welcome branch', () => {
-      flushInitialRequests([], [], [
-        { name: 'recaller', display_name: 'ReCaller', category: 'services', hidden_from_picker: true },
-        { name: 'server_folder', category: 'server' },
-      ]);
-      expect(component.servicesImporters.length).toBe(0);
-      expect(component.welcomeBannerMessage).toContain('Server Folder');
-    });
-
-    it('should open the importer modal pre-pinned to the chosen tab', () => {
-      flushInitialRequests();
-      const flows = TestBed.inject(NewThingFlowsService);
-      component.openImporterModalOnTab('services');
-      expect(component.importerModalOpen).toBeTrue();
-      expect(flows.importer.initialTab).toBe('services');
-    });
-
-    it('should reset the initial tab when the modal closes', () => {
-      flushInitialRequests();
-      const flows = TestBed.inject(NewThingFlowsService);
-      component.openImporterModalOnTab('server');
-      expect(flows.importer.initialTab).toBe('server');
-      flows.closeImporter();
-      expect(flows.importer.initialTab).toBe('');
-    });
+    const empty = el.querySelector('.empty-state');
+    expect(empty).toBeTruthy();
+    expect(empty?.textContent || '').toContain('No datasets yet. Click + to add one.');
   });
 
   it('should render dataset table when datasets exist', () => {

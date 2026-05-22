@@ -7,9 +7,8 @@ pipeline accepts an ordered list of converter/clipper steps via a new
 end-to-end. Frontend chooser, sidecar JSON, and detector `input_spec`
 migration are deferred — see Open follow-ups.*
 
-This plan implements [feature-brainstorm.md §3.6](feature-brainstorm.md#36-cross-cutting)
-("clipper_chain abstraction so we can run e.g. `document_section →
-text_token_window` without writing a custom clipper").
+This plan implements a `clipper_chain` abstraction so we can run e.g.
+`document_section → text_token_window` without writing a custom clipper.
 
 ## Problem
 
@@ -26,8 +25,8 @@ import. Real use cases want composition:
 - **`sound_speech_activity → sound_tiling`** — VAD to find speech turns,
   then tile each turn. Same.
 
-The brainstorm specifically names cross-type composition (document →
-text) as the headline case. That can't be expressed by chaining
+The headline case is cross-type composition (document → text). That
+can't be expressed by chaining
 `MediaClipper`s alone — a `MediaClipper` produces output of the same
 media type by contract. It needs a `MediaConverter` step (the existing
 `Document2TextMediaConverter` already does document → text).
@@ -50,7 +49,7 @@ Three approaches were considered when scoping this work:
 
 Option C was chosen because:
 
-- The brainstorm example is **literally** `document → text`, which is
+- The headline example is **literally** `document → text`, which is
   what `MediaConverter` already exists for. Forcing the same capability
   into clippers (Option B) duplicates the converter family rather than
   reusing it.
@@ -95,7 +94,7 @@ importers.
 
 ### Validation rules
 
-Implemented in `vtsearch/datasets/clipper_chain.py:validate_chain`:
+Implemented in `vtscore/datasets/clipper_chain.py:validate_chain`:
 
 1. Every step resolves in its respective registry (`get_clipper` /
    `get_converter`). Unknown names raise `ValueError`.
@@ -142,7 +141,7 @@ Each final clip gets, in addition to the existing single-clipper stamp:
 
 ### Resolver replay
 
-`vtsearch/detectors/resolver.py:_apply_clip_and_embed` is the
+`vtscore/detectors/resolver.py:_apply_clip_and_embed` is the
 cross-dataset replay path: given a resolved file and a label's origin,
 re-derive the embedding by re-applying whatever clipping the original
 dataset did.
@@ -168,7 +167,7 @@ pre-chain datasets keep working.
 
 ### Files
 
-- **New** `vtsearch/datasets/clipper_chain.py` —
+- **New** `vtscore/datasets/clipper_chain.py` —
   - `ChainStep` typed dict.
   - `validate_chain(steps, source_media_type) → final_media_type`.
   - `apply_chain_to_clips(clips_dict, steps, on_progress=...)` —
@@ -178,13 +177,13 @@ pre-chain datasets keep working.
   - `replay_chain_on_file(file_path, steps, target_media_type) →
     media_dict` — used by the resolver replay path; walks the chain in
     memory and returns the final clip dict.
-- **Modified** `vtsearch/datasets/load_pipeline.py` —
+- **Modified** `vtscore/datasets/load_pipeline.py` —
   - `_apply_clipper` accepts optional `chain_steps` and dispatches to
     the chain runner when provided.
   - `_run_origin_load_in_background` / `_run_importer_in_background`
     accept and forward `chain_steps`. The importer field `clipper_chain`
     (JSON string) is parsed and passed through.
-- **Modified** `vtsearch/detectors/resolver.py` —
+- **Modified** `vtscore/detectors/resolver.py` —
   - `_apply_clip_and_embed` checks for `params["clipper_chain"]` first;
     on hit, calls `replay_chain_on_file` and embeds the result.
 - **New** tests under `tests/detectors/test_clipper_chain.py` —

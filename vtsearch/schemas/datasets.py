@@ -193,7 +193,7 @@ class BrowseMediaFilesQuerySchema(Schema):
 
     source = fields.String(
         load_default="",
-        metadata={"description": "One of ``demo:<name>`` or ``folder``."},
+        metadata={"description": "One of ``demo:<name>``, ``folder``, or ``server_fs``."},
     )
     path = fields.String(
         load_default="",
@@ -215,6 +215,17 @@ class BrowseMediaFilesResponseSchema(Schema):
     directories = fields.List(fields.Nested(BrowseDirectoryEntrySchema), required=True)
     files = fields.List(fields.Nested(BrowseFileEntrySchema), required=True)
     root_path = fields.String(required=True)
+    default_path = fields.String(
+        load_default="",
+        dump_default="",
+        metadata={
+            "description": (
+                "Suggested initial relative sub-path for this source — for example "
+                "the server user's home directory when ``source=server_fs``. Empty "
+                "for sources where the root is already the right starting point."
+            )
+        },
+    )
 
 
 class BrowseMediaFilesSelectRequestSchema(Schema):
@@ -255,7 +266,7 @@ class DetectMediaTypeQuerySchema(Schema):
 class DetectMediaTypeResponseSchema(Schema):
     """Response for ``GET /api/dataset/detect-media-type``.
 
-    Mirrors :func:`vtsearch.datasets.media_type_detection.detect_media_types_in_folder`'s
+    Mirrors :func:`vtscore.datasets.media_type_detection.detect_media_types_in_folder`'s
     return value.
     """
 
@@ -405,12 +416,16 @@ class DatasetStageFileResponseSchema(Schema):
 
     ``count`` and ``media_type`` are derived from a cheap pickle peek and
     fall back to ``0`` / ``"unknown"`` when the file can't be inspected.
+    ``error`` carries the reason peek failed (empty string on success), so
+    the UI can distinguish "valid pickle with 0 medias" from "couldn't
+    parse this file".
     """
 
     path = fields.String(required=True)
     name = fields.String(required=True)
     count = fields.Integer(required=True)
     media_type = fields.String(required=True)
+    error = fields.String(load_default="", dump_default="")
 
 
 class DatasetStagingStartedResponseSchema(Schema):

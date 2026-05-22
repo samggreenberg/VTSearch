@@ -1,6 +1,6 @@
 # OpenAPI schema + generated TS client
 
-Status: every blueprint migrated; per-plugin runtime validation in place for the six plugin-field routes; one cosmetic follow-up (real spec types for plugin-field bodies) is deferred — see *Open follow-ups*. Tracking issue: feature-brainstorm.md §12.9.
+Status: every blueprint migrated; per-plugin runtime validation in place for the six plugin-field routes; one cosmetic follow-up (real spec types for plugin-field bodies) is deferred — see *Open follow-ups*.
 
 ## The problem
 
@@ -221,8 +221,8 @@ When the migration completes, these files should not exist:
 
 ## Relationship to the pre-existing permissive spec
 
-The previous OpenAPI work (feature-brainstorm §12.9, shipped in commit
-`44e9657`) added a separate, lighter-weight implementation:
+The previous OpenAPI work (shipped in commit `44e9657`) added a
+separate, lighter-weight implementation:
 `vtsearch.openapi.generate_openapi_spec` walked `app.url_map` and
 emitted a permissive spec (every route/method/path-param/docstring, but
 `{type: object}` for every body and response). It was served at
@@ -248,7 +248,7 @@ checks off this follow-up.
   option (c) and option (b).**
 
   Per-plugin marshmallow schemas are built lazily from each plugin's
-  `fields` declaration (`vtsearch/plugins/schema.py::make_plugin_arg_schema`)
+  `fields` declaration (`vtscore/plugins/schema.py::make_plugin_arg_schema`)
   and cached on the plugin instance — the runtime validation tier.
   Each route handler looks up `plugin._arg_schema_instance` via
   `validate_plugin_args(plugin, ...)` and feeds the request body
@@ -995,7 +995,7 @@ checks off this follow-up.
       ``selectedMedia`` getter).
 - [x] Per-plugin marshmallow schemas built from each plugin's ``fields``
       declaration, cached on the plugin instance
-      (``vtsearch/plugins/schema.py``). The six plugin-field routes
+      (``vtscore/plugins/schema.py``). The six plugin-field routes
       (``stage-import``, ``import``, ``label-importers/import``,
       ``detectors/<name>/import-labels``, ``from-labelset``,
       ``settings-importers/import``) now run their request bodies
@@ -1019,7 +1019,7 @@ checks off this follow-up.
   ``POST /api/detectors/registry/from-labelset/<imp>``,
   ``POST /api/settings-importers/import/<imp>``) now validate the
   request body against a marshmallow schema built from the named
-  plugin's :attr:`fields` declaration (``vtsearch/plugins/schema.py``).
+  plugin's :attr:`fields` declaration (``vtscore/plugins/schema.py``).
   Schema-level rejects (missing required field, invalid select value,
   unparseable number) surface as 422 with the standard ``errors``
   envelope, matching the rest of the API. Pass-through keys

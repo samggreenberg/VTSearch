@@ -165,6 +165,9 @@
           "detectors_dir": {
             "type": "string"
           },
+          "disable_achievements": {
+            "type": "boolean"
+          },
           "enrich_descriptions": {
             "type": "boolean"
           },
@@ -564,6 +567,11 @@
       "BrowseMediaFilesResponse": {
         "additionalProperties": false,
         "properties": {
+          "default_path": {
+            "default": "",
+            "description": "Suggested initial relative sub-path for this source \u2014 for example the server user's home directory when ``source=server_fs``. Empty for sources where the root is already the right starting point.",
+            "type": "string"
+          },
           "directories": {
             "items": {
               "$ref": "#/components/schemas/BrowseDirectoryEntry"
@@ -1189,6 +1197,10 @@
         "properties": {
           "count": {
             "type": "integer"
+          },
+          "error": {
+            "default": "",
+            "type": "string"
           },
           "media_type": {
             "type": "string"
@@ -2084,6 +2096,18 @@
         },
         "type": "object"
       },
+      "EvalTrainAndScoreCancelResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
       "EvalTrainAndScoreRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2386,6 +2410,18 @@
         },
         "type": "object"
       },
+      "FindCancelResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
       "FindCheckLabelsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2422,10 +2458,6 @@
       "FindLabelRequest": {
         "additionalProperties": false,
         "properties": {
-          "dataset_id": {
-            "default": "",
-            "type": "string"
-          },
           "detector_id": {
             "minLength": 1,
             "type": "string"
@@ -2657,6 +2689,16 @@
           "applied": {
             "type": "integer"
           },
+          "failed": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "failed_count": {
+            "type": "integer"
+          },
           "ingested": {
             "type": "integer"
           },
@@ -2666,6 +2708,8 @@
         },
         "required": [
           "applied",
+          "failed",
+          "failed_count",
           "ingested",
           "message"
         ],
@@ -2910,6 +2954,18 @@
         "required": [
           "applied",
           "skipped"
+        ],
+        "type": "object"
+      },
+      "LearnedSortCancelResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
         ],
         "type": "object"
       },
@@ -3175,36 +3231,53 @@
       "MediaVoteRequest": {
         "properties": {
           "region_box": {
-            "description": "Optional 4-element ``[x0, y0, x1, y1]`` in normalised image coordinates ``[0, 1]``. Only valid on good votes.",
+            "description": "Optional 4-element ``[x0, y0, x1, y1]`` in normalised image coordinates ``[0, 1]``. Only valid when ``target`` is ``good``.",
             "items": {
               "type": "number"
             },
             "nullable": true,
             "type": "array"
           },
-          "vote": {
-            "description": "``good`` or ``bad``.",
+          "target": {
+            "description": "Absolute target state: ``good``, ``bad``, or ``none`` (un-vote). Idempotent.",
             "enum": [
               "good",
-              "bad"
+              "bad",
+              "none"
             ],
             "type": "string"
           }
         },
         "required": [
-          "vote"
+          "target"
         ],
         "type": "object"
       },
       "MediaVoteResponse": {
         "additionalProperties": false,
         "properties": {
+          "click_time": {
+            "description": "Click-time ordinal of the new label, or ``null`` when the target is ``none`` or the call was a no-op.",
+            "nullable": true,
+            "type": "integer"
+          },
           "ok": {
             "type": "boolean"
+          },
+          "state": {
+            "description": "The media's vote state after the call.",
+            "enum": [
+              "good",
+              "bad",
+              "none"
+            ],
+            "type": "string"
           }
         },
         "required": [
-          "ok"
+          "click_time",
+          "ok",
+          "state"
         ],
         "type": "object"
       },
@@ -3713,6 +3786,9 @@
           },
           "detectors_dir": {
             "type": "string"
+          },
+          "disable_achievements": {
+            "type": "boolean"
           },
           "enrich_descriptions": {
             "type": "boolean"
@@ -4649,6 +4725,7 @@
   "paths": {
     "/": {
       "get": {
+        "operationId": "index",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -4662,6 +4739,7 @@
     },
     "/api/achievements": {
       "get": {
+        "operationId": "get_achievements",
         "responses": {
           "200": {
             "content": {
@@ -4685,6 +4763,7 @@
     },
     "/api/achievements/check-phrase": {
       "post": {
+        "operationId": "check_phrase",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4722,6 +4801,7 @@
     "/api/achievements/docs/{doc_id}/raw": {
       "get": {
         "description": "Plain-text response \u2014 intentionally undecorated so it stays out of\nthe OpenAPI spec (the spec is for JSON APIs).",
+        "operationId": "get_doc_raw",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -4757,6 +4837,7 @@
         }
       ],
       "post": {
+        "operationId": "acknowledge_achievement",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4793,6 +4874,7 @@
     },
     "/api/auth/login": {
       "post": {
+        "operationId": "auth_login",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4832,6 +4914,7 @@
     },
     "/api/auth/logout": {
       "post": {
+        "operationId": "auth_logout",
         "responses": {
           "200": {
             "content": {
@@ -4858,6 +4941,7 @@
     },
     "/api/auth/status": {
       "get": {
+        "operationId": "auth_status",
         "responses": {
           "200": {
             "content": {
@@ -4882,6 +4966,7 @@
     "/api/auto-detect": {
       "post": {
         "description": "Iterates :func:`~vtsearch.settings.get_autorun_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single autorun detector.",
+        "operationId": "auto_detect",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4924,6 +5009,7 @@
     },
     "/api/auto-extract": {
       "post": {
+        "operationId": "auto_extract",
         "responses": {
           "200": {
             "content": {
@@ -4950,6 +5036,7 @@
     },
     "/api/auto-localize": {
       "post": {
+        "operationId": "auto_localize",
         "responses": {
           "200": {
             "content": {
@@ -4976,6 +5063,7 @@
     },
     "/api/autorun-extractors": {
       "get": {
+        "operationId": "get_autorun_extractors_route",
         "responses": {
           "200": {
             "content": {
@@ -4997,6 +5085,7 @@
         ]
       },
       "post": {
+        "operationId": "add_autorun_extractor_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5036,6 +5125,7 @@
     },
     "/api/autorun-extractors/{name}": {
       "delete": {
+        "operationId": "delete_autorun_extractor_route",
         "responses": {
           "200": {
             "content": {
@@ -5084,6 +5174,7 @@
         }
       ],
       "put": {
+        "operationId": "rename_autorun_extractor_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5123,6 +5214,7 @@
     },
     "/api/autorun-localizers": {
       "get": {
+        "operationId": "get_autorun_localizers_route",
         "responses": {
           "200": {
             "content": {
@@ -5144,6 +5236,7 @@
         ]
       },
       "post": {
+        "operationId": "add_autorun_localizer_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5183,6 +5276,7 @@
     },
     "/api/autorun-localizers/{name}": {
       "delete": {
+        "operationId": "delete_autorun_localizer_route",
         "responses": {
           "200": {
             "content": {
@@ -5231,6 +5325,7 @@
         }
       ],
       "put": {
+        "operationId": "rename_autorun_localizer_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5271,6 +5366,7 @@
     "/api/browse": {
       "get": {
         "description": "Returns a directories+files listing with names, relative paths,\nmodification times, and (for files) sizes in bytes. The server's\nabsolute root is intentionally omitted from the response.",
+        "operationId": "browse",
         "parameters": [
           {
             "description": "Relative path within the allowed root. Empty string means the root itself.",
@@ -5329,9 +5425,10 @@
     "/api/browse-media-files": {
       "get": {
         "description": "Query parameters:\n\n* ``source`` \u2014 one of ``demo:<name>`` or ``folder``.\n* ``path`` \u2014 relative sub-path within the root (default ``\"\"``).\n\nReturns::\n\n    {\n        \"directories\": [{\"name\": \"dog\"}, {\"name\": \"cat\"}, ...],\n        \"files\": [\n            {\"name\": \"bark.wav\", \"path\": \"dog/bark.wav\", \"size_bytes\": 12345},\n            ...\n        ]\n    }",
+        "operationId": "browse_media_files",
         "parameters": [
           {
-            "description": "One of ``demo:<name>`` or ``folder``.",
+            "description": "One of ``demo:<name>``, ``folder``, or ``server_fs``.",
             "in": "query",
             "name": "source",
             "required": false,
@@ -5384,6 +5481,7 @@
     "/api/browse-media-files/select": {
       "post": {
         "description": "Expects JSON::\n\n    {\"source\": \"demo:esc50_s\", \"path\": \"dog/1-100032-A-0.wav\"}\n\nReturns::\n\n    {\"filename\": \"<safe-name>\", \"original_name\": \"1-100032-A-0.wav\"}",
+        "operationId": "select_browsed_file",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5427,6 +5525,7 @@
     "/api/clippers": {
       "get": {
         "description": "Query parameters:\nmedia_type: A ``type_id`` (e.g. ``\"image\"``) or ``folder_import_name``\n    (e.g. ``\"images\"``).  When provided, only clippers whose\n    ``media_type`` matches are returned.",
+        "operationId": "clippers_list",
         "parameters": [
           {
             "description": "Optional ``type_id`` (e.g. ``image``) or ``folder_import_name`` (e.g. ``images``). When provided, only matching entries are returned.",
@@ -5466,6 +5565,7 @@
     "/api/converters": {
       "get": {
         "description": "Query parameters:\ntarget: A ``type_id`` (e.g. ``\"image\"``) or ``folder_import_name``\n    (e.g. ``\"images\"``).  When provided, only converters whose\n    ``target_type`` matches are returned.\nsource: A ``type_id`` (e.g. ``\"video\"``) or ``folder_import_name``\n    (e.g. ``\"videos\"``).  When provided, only converters whose\n    ``source_type`` matches are returned.",
+        "operationId": "converters_list",
         "parameters": [
           {
             "in": "query",
@@ -5513,6 +5613,7 @@
     "/api/dashboard/dataset-info": {
       "get": {
         "description": "Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and\n``origin`` extracted from the first media that has origin info.",
+        "operationId": "dashboard_dataset_info",
         "responses": {
           "200": {
             "content": {
@@ -5539,6 +5640,7 @@
     },
     "/api/dashboard/dataset-rename": {
       "put": {
+        "operationId": "dashboard_dataset_rename",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5575,6 +5677,7 @@
     },
     "/api/dashboard/disk-usage": {
       "get": {
+        "operationId": "dashboard_disk_usage",
         "responses": {
           "200": {
             "content": {
@@ -5598,6 +5701,7 @@
     },
     "/api/dataset/all-importers": {
       "get": {
+        "operationId": "dataset_all_importers",
         "responses": {
           "200": {
             "content": {
@@ -5621,6 +5725,7 @@
     },
     "/api/dataset/available-files": {
       "get": {
+        "operationId": "available_dataset_files",
         "responses": {
           "200": {
             "content": {
@@ -5645,6 +5750,7 @@
     "/api/dataset/cancel": {
       "post": {
         "description": "Cancels all active loading tasks and the legacy global tracker.",
+        "operationId": "cancel_dataset_load",
         "responses": {
           "200": {
             "content": {
@@ -5679,6 +5785,7 @@
         }
       ],
       "post": {
+        "operationId": "cancel_dataset_load_task",
         "responses": {
           "200": {
             "content": {
@@ -5706,6 +5813,7 @@
     "/api/dataset/clear": {
       "post": {
         "description": "Uses the ``X-Dataset-Id`` header (via ``get_active_context()``) to\ndetermine which dataset to clear.",
+        "operationId": "clear_dataset_route",
         "responses": {
           "200": {
             "content": {
@@ -5729,6 +5837,7 @@
     },
     "/api/dataset/combine": {
       "post": {
+        "operationId": "combine_datasets_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5772,6 +5881,7 @@
     "/api/dataset/demo-categories/{name}": {
       "get": {
         "description": "Returns ``{\"categories\": [\"cat1\", \"cat2\", ...]}`` for the named demo.",
+        "operationId": "demo_dataset_categories",
         "responses": {
           "200": {
             "content": {
@@ -5810,6 +5920,7 @@
     "/api/dataset/demo-list": {
       "get": {
         "description": "Each dataset has a ``status`` field with one of three values:\n\n* ``\"ready\"`` \u2013 embeddings are cached and source data is present.\n* ``\"needs_embedding\"`` \u2013 source data is downloaded but not yet embedded.\n* ``\"needs_download\"`` \u2013 source data must be downloaded (and then embedded).",
+        "operationId": "demo_dataset_list",
         "parameters": [
           {
             "in": "query",
@@ -5857,6 +5968,7 @@
     "/api/dataset/detect-media-type": {
       "get": {
         "description": "Powers the auto-detect hint in the import modal: rather than making\nthe user pick ``media_type`` blindly, the modal calls this after the\nuser selects a folder and pre-fills the dropdown with whichever type\nhas the most matching files in the first ``limit`` files of the tree.\n\nThe 404 returned when the source is unavailable on disk is\nintercepted by the app-level ``NotFound`` errorhandler and keeps the\nlegacy ``{\"error\": \"Not Found\", \"request_id\": ...}`` envelope.",
+        "operationId": "detect_media_type",
         "parameters": [
           {
             "description": "One of ``demo:<name>`` or ``folder`` (matches ``/api/browse-media-files``).",
@@ -5929,6 +6041,7 @@
     "/api/dataset/export": {
       "get": {
         "description": "Success returns a binary ``application/octet-stream`` download; that\nbody is left undescribed in the spec (mirroring the audio / video /\nimage streaming routes in ``media/list.py``).",
+        "operationId": "export_dataset",
         "responses": {
           "400": {
             "description": "No dataset is currently loaded."
@@ -5946,9 +6059,10 @@
         ]
       }
     },
-    "/api/dataset/import-local-folder": {
+    "/api/dataset/import-local-files": {
       "post": {
-        "description": "The browser uses ``<input type=\"file\" webkitdirectory>`` to let the\nuser pick a directory; each selected ``File`` is appended to the\nmultipart body under the key ``\"files\"`` with its ``webkitRelativePath``\nas the multipart filename.  We stream each file to a temporary\ndirectory on the server (preserving sub-directory structure) and then\ndelegate to the regular folder importer to do the actual scanning,\nembedding, and dataset registration.  The temp directory is removed\nonce the importer finishes (success or failure).\n\nLocal-files uploads may additionally include a ``vectors_file`` form\nfield carrying a ``.npz`` archive of pre-computed embedding vectors\nkeyed by uploaded-file name (basename or relative path).  Files\nwhose name matches an NPZ key reuse the supplied vector instead of\nrunning the embedding model.",
+        "description": "The browser picks a single file (a ``.txt`` / ``.list`` with one\nserver-side media path per line, or a ``.npz`` archive that also\nsupplies pre-computed embedding vectors) and POSTs it as the\nmultipart field ``paths_file``.  We stream it to a server-side\ntemporary directory and then delegate to the regular\n:mod:`server_files` importer for resolution and embedding.  The\ntemp directory is removed once the importer finishes (success or\nfailure).",
+        "operationId": "import_local_files",
         "responses": {
           "200": {
             "content": {
@@ -5961,7 +6075,38 @@
             "description": "OK"
           },
           "400": {
-            "description": "Multipart body is missing the ``files`` field, has no valid files, is missing ``media_type``, or carries malformed ``clipper_params`` / ``vectors_file``."
+            "description": "Multipart body is missing the ``paths_file`` field, is missing ``media_type``, or carries malformed ``clipper_params``."
+          },
+          "500": {
+            "description": "The server_files importer is unavailable."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Import a paths file uploaded from the user's *browser* machine.",
+        "tags": [
+          "datasets_load"
+        ]
+      }
+    },
+    "/api/dataset/import-local-folder": {
+      "post": {
+        "description": "The browser uses ``<input type=\"file\" webkitdirectory>`` to let the\nuser pick a directory; each selected ``File`` is appended to the\nmultipart body under the key ``\"files\"`` with its ``webkitRelativePath``\nas the multipart filename.  We stream each file to a temporary\ndirectory on the server (preserving sub-directory structure) and then\ndelegate to the regular folder importer to do the actual scanning,\nembedding, and dataset registration.  The temp directory is removed\nonce the importer finishes (success or failure).",
+        "operationId": "import_local_folder",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetLoadStartedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Multipart body is missing the ``files`` field, has no valid files, is missing ``media_type``, or carries malformed ``clipper_params``."
           },
           "500": {
             "description": "The server_folder importer is unavailable."
@@ -5990,6 +6135,7 @@
       ],
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6015,6 +6161,7 @@
       ],
       "post": {
         "description": "The importer's ``get_field_options(field_key, current_values)`` is\ncalled with the supplied snapshot of current form values. Errors\nfrom the plugin (network failure, auth error, etc.) are surfaced as\na 502 with the original message so the frontend can display them\ninline.",
+        "operationId": "importer_field_options",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6066,6 +6213,7 @@
     },
     "/api/dataset/importers": {
       "get": {
+        "operationId": "dataset_importers",
         "responses": {
           "200": {
             "content": {
@@ -6090,6 +6238,7 @@
     "/api/dataset/load-demo": {
       "post": {
         "description": "When a ``converter`` is specified, the demo data is loaded using its\noriginal media type, then converted to the converter's target type.\nThe resulting dataset has the *target* type, not the demo's original\ntype.",
+        "operationId": "load_demo_dataset_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6132,6 +6281,7 @@
     },
     "/api/dataset/load-file": {
       "post": {
+        "operationId": "load_dataset_file",
         "responses": {
           "200": {
             "content": {
@@ -6158,6 +6308,7 @@
     },
     "/api/dataset/load-folder": {
       "post": {
+        "operationId": "load_dataset_folder",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6197,6 +6348,7 @@
     },
     "/api/dataset/load-source": {
       "post": {
+        "operationId": "load_dataset_from_source",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6247,6 +6399,7 @@
         }
       ],
       "post": {
+        "operationId": "stage_demo",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6289,6 +6442,7 @@
     },
     "/api/dataset/stage-file": {
       "post": {
+        "operationId": "stage_file",
         "responses": {
           "200": {
             "content": {
@@ -6327,6 +6481,7 @@
       ],
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6340,6 +6495,7 @@
     },
     "/api/dataset/staging": {
       "delete": {
+        "operationId": "clear_staging",
         "responses": {
           "200": {
             "content": {
@@ -6363,6 +6519,7 @@
     },
     "/api/dataset/status": {
       "get": {
+        "operationId": "dataset_status",
         "responses": {
           "200": {
             "content": {
@@ -6387,6 +6544,7 @@
     "/api/datasets/registry": {
       "get": {
         "description": "Each entry includes:\n- ``loaded``: whether the dataset is currently in memory",
+        "operationId": "list_registered_datasets",
         "responses": {
           "200": {
             "content": {
@@ -6410,6 +6568,7 @@
     },
     "/api/datasets/registry/{dataset_id}": {
       "delete": {
+        "operationId": "delete_registered_dataset",
         "responses": {
           "200": {
             "content": {
@@ -6462,6 +6621,7 @@
       ],
       "post": {
         "description": "If the dataset is already loaded in memory, it is simply activated\n(made the current UI-facing dataset) without re-reading the pkl.",
+        "operationId": "load_registered_dataset",
         "responses": {
           "200": {
             "content": {
@@ -6503,6 +6663,7 @@
       ],
       "post": {
         "description": "Called by the dashboard when the user selects a dataset row so that\nthe embedder is ready by the time they click Train. Idempotent: the\nbackground worker exits immediately if the embedder is already in\nmemory. Returns ``embedder`` set to the resolved embedder name (or\n``\"\"`` if no embedder could be resolved for this dataset's media\ntype).",
+        "operationId": "preload_dataset_embedder",
         "responses": {
           "200": {
             "content": {
@@ -6544,6 +6705,7 @@
       ],
       "put": {
         "description": "Body: ``{\"readers\": [\"alice\", \"bob\"]}``\nUse ``[\"*\"]`` to make the dataset public to all users.",
+        "operationId": "update_dataset_readers",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6597,6 +6759,7 @@
         }
       ],
       "put": {
+        "operationId": "rename_registered_dataset",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6639,6 +6802,7 @@
     },
     "/api/datasets/registry/{dataset_id}/stats": {
       "get": {
+        "operationId": "get_dataset_stats",
         "responses": {
           "200": {
             "content": {
@@ -6688,6 +6852,7 @@
       ],
       "post": {
         "description": "The dataset's context is removed, freeing its RAM.  If it was the\nactive dataset, the active pointer is cleared.",
+        "operationId": "unload_registered_dataset",
         "responses": {
           "200": {
             "content": {
@@ -6717,6 +6882,7 @@
     },
     "/api/detectors": {
       "get": {
+        "operationId": "list_detectors",
         "responses": {
           "200": {
             "content": {
@@ -6739,6 +6905,7 @@
       },
       "post": {
         "description": "Requires ``name`` and ``media_type``; at least one of ``text_query``,\n``media_example``, or ``examples`` must be provided.",
+        "operationId": "create_detector",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6792,6 +6959,7 @@
         }
       ],
       "post": {
+        "operationId": "cancel_detector_loading_task",
         "responses": {
           "200": {
             "content": {
@@ -6819,6 +6987,7 @@
     "/api/detectors/combine": {
       "post": {
         "description": "All source detectors must share the same ``media_type``.  The new\ndetector's labelset is the merge of all source labelsets, keyed by\n``Origin`` (importer + params + origin_name) and falling back to\n``md5`` for legacy entries.  Per ``conflict_policy=\"drop\"`` (the only\nsupported policy today), any element key that appears with disagreeing\nlabels across the sources is removed entirely.\n\nThe combined detector is *purely a labelset entry* \u2014 no\nlabelset-source is inherited from the sources, and the threshold/MLP\nare computed later when the detector is activated against a dataset.",
+        "operationId": "combine_detectors",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6864,6 +7033,7 @@
     },
     "/api/detectors/registry": {
       "get": {
+        "operationId": "list_registered_detectors",
         "responses": {
           "200": {
             "content": {
@@ -6885,6 +7055,7 @@
         ]
       },
       "post": {
+        "operationId": "register_detector_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6936,6 +7107,7 @@
       ],
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "register_detector_from_labelset",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6950,6 +7122,7 @@
     "/api/detectors/registry/load": {
       "post": {
         "description": "Pass ``detector_id=null`` (or omit the field) to unload the active\ndetector without loading another one.",
+        "operationId": "load_detector_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6989,6 +7162,7 @@
     },
     "/api/detectors/registry/{detector_id}": {
       "delete": {
+        "operationId": "delete_registered_detector",
         "responses": {
           "200": {
             "content": {
@@ -7038,6 +7212,7 @@
       ],
       "put": {
         "description": "The flag is stored in ``settings.json`` under ``autorun_detectors`` so the\nCLI's ``--autodetect`` flow and the active-dataset ``/api/auto-detect``\nroute both see it.",
+        "operationId": "set_detector_autorun",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7092,6 +7267,7 @@
       ],
       "post": {
         "description": "Called by the frontend when the user confirms the *Move existing\nlabelset file?* prompt that surfaces after a rename leaves the file\nat the OLD template-resolved path on disk.",
+        "operationId": "move_labelset_source_file",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7148,6 +7324,7 @@
         }
       ],
       "put": {
+        "operationId": "rename_registered_detector",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7201,6 +7378,7 @@
         }
       ],
       "post": {
+        "operationId": "unload_detector_route",
         "responses": {
           "200": {
             "content": {
@@ -7230,6 +7408,7 @@
     },
     "/api/detectors/{detector_name}/labelset-source": {
       "get": {
+        "operationId": "get_detector_labelset_source",
         "responses": {
           "200": {
             "content": {
@@ -7263,6 +7442,7 @@
       ],
       "put": {
         "description": "A body of ``{}`` or one with empty ``source_name`` clears the source.",
+        "operationId": "set_detector_labelset_source",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7313,6 +7493,7 @@
         }
       ],
       "post": {
+        "operationId": "sync_detector_labelset_from_source",
         "responses": {
           "200": {
             "content": {
@@ -7339,6 +7520,7 @@
     },
     "/api/detectors/{name}": {
       "delete": {
+        "operationId": "delete_detector",
         "responses": {
           "200": {
             "content": {
@@ -7363,6 +7545,7 @@
         ]
       },
       "get": {
+        "operationId": "get_detector",
         "responses": {
           "200": {
             "content": {
@@ -7411,6 +7594,7 @@
         }
       ],
       "put": {
+        "operationId": "set_detector_examples",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7471,6 +7655,7 @@
       ],
       "post": {
         "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold \u2014 all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_labels_into_detector",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7496,6 +7681,7 @@
       ],
       "post": {
         "description": "Reads good_votes/bad_votes from global state and the current medias\nto build a fresh LabelSet, then persists it into the detector's JSON file.",
+        "operationId": "save_detector_labels",
         "responses": {
           "200": {
             "content": {
@@ -7510,6 +7696,9 @@
           "404": {
             "description": "Detector not found."
           },
+          "409": {
+            "description": "Detector vote state is not aligned with the active dataset."
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -7523,6 +7712,7 @@
     "/api/detectors/{name}/labels-detail": {
       "get": {
         "description": "Each element gets a stable ``id`` (derived from its origin/md5 identity)\nplus ``label``, ``media_type``, display ``name``, and \u2014 when the\nelement resolves into the active dataset \u2014 its current ``cid``,\n``time`` (click time), and ``score`` (last learned-sort score).\n\nThis is the right pane's data source in label/train mode.  Unlike\n``/api/votes`` it is *not* gated on the loaded dataset, so detector\nlabels survive across dataset switches.",
+        "operationId": "get_detector_labels_detail",
         "responses": {
           "200": {
             "content": {
@@ -7561,6 +7751,7 @@
     "/api/detectors/{name}/labels/{element_id}/preview": {
       "get": {
         "description": "Resolves the element via its origin (using the importer's\n``resolve_file()`` hook) and serves the raw bytes with a mimetype\nchosen by the detector's ``media_type``.  Returns 404 if the element\nis unknown or its file cannot be located.",
+        "operationId": "preview_detector_label",
         "responses": {
           "404": {
             "description": "Detector, element, or media file not found."
@@ -7598,6 +7789,7 @@
     "/api/detectors/{name}/labels/{element_id}/thumbnail": {
       "get": {
         "description": "Mirrors :func:`vtsearch.routes.media.list.media_image` for the right pane:\naudio elements get a waveform PNG, video elements a mid-frame PNG, image\nelements get the file bytes. When the element resolves into the active\ndataset we serve the cached in-memory ``thumbnail_bytes`` (fast path);\notherwise we resolve the underlying file via the importer and generate\non the fly. Much smaller than ``/preview`` (which serves the full file).",
+        "operationId": "thumbnail_detector_label",
         "responses": {
           "404": {
             "description": "Detector, element, or media file not found."
@@ -7658,6 +7850,7 @@
       ],
       "post": {
         "description": "Body: ``{\"vote\": \"good\"}`` or ``{\"vote\": \"bad\"}``.\n\nToggle semantics mirror :func:`~vtsearch.state.toggle_vote`: the same\nvote on an element with that label removes the element; the opposite\nvote flips it.  When the element resolves into the active dataset, the\ndetector's in-memory ``good_votes`` / ``bad_votes`` are kept in sync so\nMLP retraining and learned-sort see the change.",
+        "operationId": "vote_detector_label",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7708,6 +7901,7 @@
         }
       ],
       "put": {
+        "operationId": "rename_detector",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7751,6 +7945,7 @@
     "/api/diversity-tree/next": {
       "get": {
         "description": "Accepts an optional POST body with ``{\"scores\": {id: score, ...},\n\"threshold\": <float>}`` so the sort mode influences which element is\npicked from the next unseen node.  When a threshold is provided, the\nnode's median score determines direction: above-threshold nodes yield\nthe lowest-scored element (surprise in a \"good\" region), while\nbelow-threshold nodes yield the highest-scored element (surprise in a\n\"bad\" region).  Without scores the first element in the node is returned.\n\nReturns ``{\"id\": <media_id>}`` or ``{\"id\": null}`` when the tree is\nexhausted or not yet built.  Also includes ``diversity_level`` (the\nnumber of consecutive BFS-order seen nodes) so the frontend can display\nprogress, and ``exhausted`` (bool) which is true when the tree exists\nbut every node has already been seen.",
+        "operationId": "diversity_tree_next_get",
         "responses": {
           "200": {
             "content": {
@@ -7776,6 +7971,7 @@
       },
       "post": {
         "description": "Accepts an optional POST body with ``{\"scores\": {id: score, ...},\n\"threshold\": <float>}`` so the sort mode influences which element is\npicked from the next unseen node.  When a threshold is provided, the\nnode's median score determines direction: above-threshold nodes yield\nthe lowest-scored element (surprise in a \"good\" region), while\nbelow-threshold nodes yield the highest-scored element (surprise in a\n\"bad\" region).  Without scores the first element in the node is returned.\n\nReturns ``{\"id\": <media_id>}`` or ``{\"id\": null}`` when the tree is\nexhausted or not yet built.  Also includes ``diversity_level`` (the\nnumber of consecutive BFS-order seen nodes) so the frontend can display\nprogress, and ``exhausted`` (bool) which is true when the tree exists\nbut every node has already been seen.",
+        "operationId": "diversity_tree_next_post",
         "responses": {
           "200": {
             "content": {
@@ -7802,6 +7998,7 @@
     },
     "/api/embed": {
       "post": {
+        "operationId": "embed",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7816,6 +8013,7 @@
     "/api/embedders": {
       "get": {
         "description": "Query parameters:\nmedia_type: A ``type_id`` (e.g. ``\"image\"``) or ``folder_import_name``\n    (e.g. ``\"images\"``).  When provided, only embedders whose\n    ``media_type_id`` matches are returned.",
+        "operationId": "embedders_list",
         "parameters": [
           {
             "description": "Optional ``type_id`` (e.g. ``image``) or ``folder_import_name`` (e.g. ``images``). When provided, only matching entries are returned.",
@@ -7855,6 +8053,7 @@
     "/api/eval/train-and-score": {
       "post": {
         "description": "The work walks the full ``label_history`` retraining a small MLP at\nevery step, which used to block every other request on the gthread\npool.  We now run it on a background daemon thread and return a\n``job_id``; clients poll ``/api/eval/train-and-score/result`` for the\nmetric data; the ``eval`` SSE channel on ``/api/events`` carries\nlive progress.\n\nA signature cache keyed by ``(metric, history, votes, inclusion,\ndataset, detector)`` short-circuits identical re-runs.\n\nTests can pass ``{\"wait\": true}`` to block until the job completes.",
+        "operationId": "eval_train_and_score",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7892,8 +8091,48 @@
         ]
       }
     },
+    "/api/eval/train-and-score/cancel/{job_id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "job_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Sets the cancel flag on the :class:`AsyncJob`; the per-step retrain\nloop polls it cooperatively. Returns 200 even when the job has\nalready finished \u2014 see ``cancel_learned_sort`` for the rationale.",
+        "operationId": "cancel_eval_train_and_score",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalTrainAndScoreCancelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Job not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Cancel an in-flight eval train-and-score job.",
+        "tags": [
+          "eval"
+        ]
+      }
+    },
     "/api/eval/train-and-score/result": {
       "get": {
+        "operationId": "eval_train_and_score_result",
         "parameters": [
           {
             "in": "query",
@@ -7937,6 +8176,7 @@
     "/api/example-sort": {
       "post": {
         "description": "Optional ``crop_params`` form field carries a JSON object with the\nbounds for a user-cropped sub-region (e.g. ``{\"start\": 1.5, \"end\": 3}``\nfor audio or ``{\"box\": [x1, y1, x2, y2]}`` for images).  When present\nthe file is cropped server-side before embedding.",
+        "operationId": "example_sort",
         "responses": {
           "200": {
             "content": {
@@ -7967,6 +8207,7 @@
     "/api/example-sort-by-id": {
       "post": {
         "description": "When ``crop_params`` is absent the existing ``media[\"embedding\"]``\nis reused \u2014 no fetch, no re-embed.  When set, the media's bytes are\nmaterialised, cropped, and re-embedded before sorting.",
+        "operationId": "example_sort_by_id",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8012,7 +8253,8 @@
     },
     "/api/example-sort-origin": {
       "post": {
-        "description": "Accepts a JSON body with ``origin`` (an origin dict as stored on medias)\nand ``key`` (the item key / relative path within the source).  The file\nis fetched via the :class:`~vtsearch.datasets.sources.base.MediaSource`\nabstraction, embedded, and used for cosine-similarity sorting.\n\nExample request::\n\n    {\n        \"origin\": {\"importer\": \"server_folder\", \"params\": {\"path\": \"/data/sounds\"}},\n        \"key\": \"subdir/audio123.wav\"\n    }",
+        "description": "Accepts a JSON body with ``origin`` (an origin dict as stored on medias)\nand ``key`` (the item key / relative path within the source).  The file\nis fetched via the :class:`~vtscore.datasets.sources.base.MediaSource`\nabstraction, embedded, and used for cosine-similarity sorting.\n\nExample request::\n\n    {\n        \"origin\": {\"importer\": \"server_folder\", \"params\": {\"path\": \"/data/sounds\"}},\n        \"key\": \"subdir/audio123.wav\"\n    }",
+        "operationId": "example_sort_origin",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8059,6 +8301,7 @@
     "/api/example-sort-server": {
       "post": {
         "description": "Optional ``crop_params`` body field carries a JSON-compatible dict with\nbounds for a user-cropped sub-region (audio: ``{\"start\", \"end\"}``;\nimage: ``{\"box\": [...]}``).  When set, the file is cropped server-side\nbefore embedding.",
+        "operationId": "example_sort_server",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8104,6 +8347,7 @@
     },
     "/api/exporters": {
       "get": {
+        "operationId": "get_exporters",
         "responses": {
           "200": {
             "content": {
@@ -8130,6 +8374,7 @@
     },
     "/api/exporters/export": {
       "post": {
+        "operationId": "run_export",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8175,6 +8420,7 @@
     },
     "/api/extract": {
       "post": {
+        "operationId": "run_extract",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8215,6 +8461,7 @@
     "/api/find": {
       "post": {
         "description": "For each dataset: loads it from its saved pkl, then for each detector runs\ndetection.  Returns a merged results table.",
+        "operationId": "multi_find",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8261,6 +8508,7 @@
     "/api/find-label": {
       "post": {
         "description": "Resolves the detector from the registry, scores every loaded media, and\napplies Good/Bad labels for ALL elements based on the threshold.  Returns\nthe sort results so the frontend can display the stripe and scroll order.",
+        "operationId": "find_label",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8301,9 +8549,35 @@
         ]
       }
     },
+    "/api/find/cancel": {
+      "post": {
+        "description": "Sets the cancel flag on the shared ``find_progress`` tracker, which\nevery scoring path (``/api/find``, ``/api/find-label``, and\n``/api/auto-detect``) reports progress through. Long-running loops\npoll the flag between iterations and bail out by raising\n:class:`CancelledError`. Always returns 200 \u2014 calling cancel when\nnothing is running is a no-op.",
+        "operationId": "cancel_find",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindCancelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Cancel any in-flight find-style scoring.",
+        "tags": [
+          "detector_find"
+        ]
+      }
+    },
     "/api/find/check-labels": {
       "post": {
         "description": "Takes the same ``detector_ids`` / ``dataset_ids`` payload as ``/api/find``\nand returns per-detector resolution statistics so the frontend can warn\nthe user before starting the (potentially expensive) Find operation.",
+        "operationId": "find_check_labels",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8340,6 +8614,7 @@
     },
     "/api/inclusion": {
       "get": {
+        "operationId": "get_inclusion_route",
         "responses": {
           "200": {
             "content": {
@@ -8361,6 +8636,7 @@
         ]
       },
       "post": {
+        "operationId": "set_inclusion_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8398,6 +8674,7 @@
     "/api/indicator-score-history": {
       "get": {
         "description": "Reads only the per-step cache populated by the labeling-status\npolling \u2014 no models are retrained.",
+        "operationId": "indicator_score_history",
         "parameters": [
           {
             "description": "Which metric history to return: ``smart``, ``stable``, or ``diverse``.",
@@ -8444,6 +8721,7 @@
     "/api/jobs/active": {
       "get": {
         "description": "Used by the top-bar pulldown to render a spinner glyph on rows whose\npair has background work in flight (learned-sort, eval, \u2026). The endpoint\nis intentionally cheap \u2014 it walks the in-memory ``JOB_MANAGERS`` map and\nreads each manager's current/pending slot under the manager's own lock,\nnothing else. Safe to poll on a 2\u20133 second interval.",
+        "operationId": "active_jobs",
         "responses": {
           "200": {
             "content": {
@@ -8467,6 +8745,7 @@
     },
     "/api/label-file-sort": {
       "post": {
+        "operationId": "label_file_sort",
         "responses": {
           "200": {
             "content": {
@@ -8496,6 +8775,7 @@
     },
     "/api/label-importers": {
       "get": {
+        "operationId": "get_label_importers",
         "responses": {
           "200": {
             "content": {
@@ -8534,6 +8814,7 @@
       ],
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "run_label_import",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8547,6 +8828,7 @@
     },
     "/api/label-importers/ingest-missing": {
       "post": {
+        "operationId": "ingest_missing",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8583,6 +8865,7 @@
     },
     "/api/labeling-progress": {
       "post": {
+        "operationId": "labeling_progress",
         "responses": {
           "200": {
             "content": {
@@ -8613,6 +8896,7 @@
     "/api/labeling-status": {
       "get": {
         "description": "Returns ``smart``, ``stable``, and ``span`` sub-objects, each with a\n``status`` field of ``\"red\"``, ``\"yellow\"``, or ``\"green\"``.",
+        "operationId": "labeling_status_indicator",
         "responses": {
           "200": {
             "content": {
@@ -8640,6 +8924,7 @@
     "/api/labels/export": {
       "get": {
         "description": "Each label entry includes the element's ``origin`` and ``origin_name``\nso consumers know exactly where each labeled element came from. The\nformat is a superset of the legacy export format \u2014 old consumers\nthat only read ``md5`` and ``label`` keys continue to work unchanged.",
+        "operationId": "export_labels",
         "parameters": [
           {
             "description": "If true, export only good labels.",
@@ -8697,7 +8982,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Export labels as a :class:`~vtsearch.datasets.labelset.LabelSet`.",
+        "summary": "Export labels as a :class:`~vtscore.datasets.labelset.LabelSet`.",
         "tags": [
           "labels"
         ]
@@ -8706,6 +8991,7 @@
     "/api/labels/fill-from-sort": {
       "post": {
         "description": "Assigns Good/Bad labels to currently-unlabeled medias based on their\nposition relative to the sort threshold. With ``confirm=false`` (the\ndefault), returns counts only; with ``confirm=true``, applies the\nlabels and returns the resulting data as a results dict suitable for\nany exporter.",
+        "operationId": "fill_labels_from_sort",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8742,6 +9028,7 @@
     },
     "/api/labels/import": {
       "post": {
+        "operationId": "import_labels",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8778,6 +9065,7 @@
     },
     "/api/labelset-sources": {
       "get": {
+        "operationId": "list_labelset_sources_route",
         "responses": {
           "200": {
             "content": {
@@ -8805,6 +9093,7 @@
     "/api/learned-sort": {
       "post": {
         "description": "Training is GIL-bound and ran inline used to stall every other request\nserved by the small ``gthread`` pool \u2014 votes polls, thumbnails, even\nmedia bytes.  The endpoint now hands the work off to a background daemon\nthread and returns immediately with a ``job_id``; clients poll\n:func:`learned_sort_result` until ``status == \"done\"``.\n\nA small signature cache short-circuits the no-op case: when the votes,\ndetector, inclusion and thresholding settings are unchanged from the\nmost recent successful run, the previous result is returned directly.\n\nTests can pass ``{\"wait\": true}`` in the body to block until the job\ncompletes and receive the result inline.  The frontend leaves it false.",
+        "operationId": "learned_sort",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8845,9 +9134,49 @@
         ]
       }
     },
+    "/api/learned-sort/cancel/{job_id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "job_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Sets the cancel flag on the :class:`AsyncJob`; the training loop\npolls it cooperatively. Returns 200 even when the job has already\nfinished \u2014 the caller's contract is \"make sure it's no longer\nrunning\", which also holds for done / errored / already-cancelled\njobs.",
+        "operationId": "cancel_learned_sort",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearnedSortCancelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Job not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Cancel an in-flight learned-sort job.",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
     "/api/learned-sort/result": {
       "get": {
         "description": "Returns the same shape as the POST endpoint's ``done`` response when the\njob has finished, or a ``running`` snapshot otherwise.",
+        "operationId": "learned_sort_result",
         "parameters": [
           {
             "in": "query",
@@ -8890,6 +9219,7 @@
     },
     "/api/localize": {
       "post": {
+        "operationId": "run_localize",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8929,6 +9259,7 @@
     },
     "/api/media-types": {
       "get": {
+        "operationId": "media_types_list",
         "responses": {
           "200": {
             "content": {
@@ -8953,6 +9284,7 @@
     "/api/medias/add-to-pile": {
       "post": {
         "description": "If a media with the same MD5 already exists in the dataset, the existing\nmedia is voted accordingly. Otherwise the file is embedded using the\ndataset's embedder, inserted as a new media item, and then voted. The\nrequest body is multipart/form-data with ``file`` (the upload) and\n``label`` (``\"good\"`` or ``\"bad\"``).",
+        "operationId": "add_media_to_pile",
         "responses": {
           "200": {
             "content": {
@@ -8990,6 +9322,7 @@
     "/api/medias/batch": {
       "post": {
         "description": "Callers request only the IDs they need (e.g. the ones currently visible\nin a virtual-scrolling viewport), keeping payload size bounded.  Use\n:func:`list_media_ids` (``GET /api/medias/ids``) to discover which\nmedia IDs exist in the loaded dataset.\n\nReturns a JSON array of media metadata dicts; unknown IDs are silently\nomitted.",
+        "operationId": "batch_medias",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9030,6 +9363,7 @@
     "/api/medias/ids": {
       "get": {
         "description": "Each item contains only the fields the frontend needs to build virtual\nscrollers and to inspect the dataset's media type / embedder *before*\nany item becomes visible: ``id``, ``type``, and ``embedder`` (when set).\nDisplay-worthy metadata (``filename``, ``md5``, ``custom_metadata``,\n``origin_name``, ``description``, ``clip_*``) is fetched on demand for\nthe items currently in the viewport via ``POST /api/medias/batch``.\n\nThis replaces the previous unpaginated ``GET /api/medias`` endpoint,\nwhich serialised the full metadata for every media in the dataset on\nevery call \u2014 a 10-20\u00d7 larger payload that the cache + batch pattern\nmakes unnecessary.",
+        "operationId": "list_media_ids",
         "responses": {
           "200": {
             "content": {
@@ -9057,6 +9391,7 @@
     "/api/medias/{media_id}/audio": {
       "get": {
         "description": "Returns an ``audio/wav`` file response on success (HTTP 200), or a 404\nJSON envelope if the media does not exist or its bytes are unavailable.",
+        "operationId": "media_audio",
         "responses": {
           "404": {
             "description": "Media not found, or media bytes unavailable."
@@ -9085,6 +9420,7 @@
     "/api/medias/{media_id}/image": {
       "get": {
         "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthat declare an ``image_response`` hook (audio waveforms, video frames),\nthe route delegates to that hook.",
+        "operationId": "media_image",
         "responses": {
           "400": {
             "description": "Media is not an image and has no image_response delegate."
@@ -9115,7 +9451,8 @@
     },
     "/api/medias/{media_id}/media": {
       "get": {
-        "description": "Determines the media type from the media item's ``\"type\"`` field and\ndelegates to the registered :class:`~vtsearch.media.base.MediaType`'s\n:meth:`~vtsearch.media.base.MediaType.media_response` method. This\nendpoint works for all current and future media types without\nmodification. Response body is either binary (image/audio/video bytes\nwith the appropriate mimetype) or JSON (text content); the spec leaves\nthe success body undescribed.",
+        "description": "Determines the media type from the media item's ``\"type\"`` field and\ndelegates to the registered :class:`~vtscore.media.base.MediaType`'s\n:meth:`~vtscore.media.base.MediaType.media_response` method. This\nendpoint works for all current and future media types without\nmodification. Response body is either binary (image/audio/video bytes\nwith the appropriate mimetype) or JSON (text content); the spec leaves\nthe success body undescribed.",
+        "operationId": "media_generic",
         "responses": {
           "400": {
             "description": "Media has an unsupported media type."
@@ -9146,6 +9483,7 @@
     },
     "/api/medias/{media_id}/paragraph": {
       "get": {
+        "operationId": "media_paragraph_get_1",
         "responses": {
           "200": {
             "content": {
@@ -9186,6 +9524,7 @@
     },
     "/api/medias/{media_id}/text": {
       "get": {
+        "operationId": "media_paragraph_get_2",
         "responses": {
           "200": {
             "content": {
@@ -9227,6 +9566,7 @@
     "/api/medias/{media_id}/video": {
       "get": {
         "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``video/mp4`` for unrecognised extensions.",
+        "operationId": "media_video",
         "responses": {
           "400": {
             "description": "Media is not a video."
@@ -9271,7 +9611,8 @@
         }
       ],
       "post": {
-        "description": "Voting behaviour (toggle semantics):\n\n- If ``vote == \"good\"`` and the media is already in ``good_votes``, the\n  vote is *removed* (toggled off).\n- If ``vote == \"good\"`` and the media is not yet in ``good_votes``, it is\n  added to ``good_votes`` (removed from ``bad_votes`` if present) and the\n  event is appended to ``label_history``.\n- The same toggle logic applies symmetrically for ``vote == \"bad\"``.\n\nYes-votes may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised image\ncoords in ``[0, 1]``) to designate the good region. No-votes that\ninclude ``region_box`` are rejected \u2014 by design no-votes are\nimage-level always (patch-embedder v2).",
+        "description": "``target`` is one of:\n\n- ``\"good\"`` \u2014 set to good (overrides ``bad`` if present).\n- ``\"bad\"`` \u2014 set to bad (overrides ``good`` if present).\n- ``\"none\"`` \u2014 un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1 \u2014 two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box`` \u2014 by\ndesign no-votes are image-level always (patch-embedder v2).\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
+        "operationId": "vote_media",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9294,7 +9635,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "region_box is malformed, or a bad-vote carries a region_box."
+            "description": "region_box is malformed, or a non-good target carries a region_box."
           },
           "404": {
             "description": "Media not found."
@@ -9306,7 +9647,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Record or toggle a good/bad vote for a single media item.",
+        "summary": "Set a single media's vote to an **absolute target state**.",
         "tags": [
           "medias"
         ]
@@ -9314,6 +9655,7 @@
     },
     "/api/pregen-processors": {
       "get": {
+        "operationId": "list_pregen_processors",
         "responses": {
           "200": {
             "content": {
@@ -9338,6 +9680,7 @@
     "/api/pregen-processors/add": {
       "post": {
         "description": "Registers the OCR extractor, Speech extractor, and Face localizer\ninto the autorun extractors and localizers stores.",
+        "operationId": "add_pregen_processors",
         "responses": {
           "200": {
             "content": {
@@ -9361,6 +9704,7 @@
     },
     "/api/safe-thresholds": {
       "get": {
+        "operationId": "get_safe_thresholds_route",
         "responses": {
           "200": {
             "content": {
@@ -9382,6 +9726,7 @@
         ]
       },
       "post": {
+        "operationId": "set_safe_thresholds_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9418,6 +9763,7 @@
     },
     "/api/server-media-files": {
       "get": {
+        "operationId": "list_server_media_files",
         "responses": {
           "200": {
             "content": {
@@ -9442,6 +9788,7 @@
     "/api/server-media-files/from-media-id": {
       "post": {
         "description": "Used by the right-click ``Use as detector seed`` flow: the loaded\nmedia is materialised to disk so the new-detector form can reference\nit as ``media_example`` (the same field the upload path returns).",
+        "operationId": "server_media_file_from_media_id",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9485,6 +9832,7 @@
     "/api/server-media-files/upload": {
       "post": {
         "description": "Optional form fields:\n\n* ``media_type`` \u2014 required when ``crop_params`` is present (``\"audio\"``\n  or ``\"image\"``); identifies which bounded clipper to apply.\n* ``crop_params`` \u2014 JSON object with the user-cropped bounds.  When set,\n  the file is cropped server-side before being saved, so the persisted\n  example is the cropped sub-region (and downstream code that reads\n  the saved file by name does not need any changes).",
+        "operationId": "upload_server_media_file",
         "responses": {
           "201": {
             "content": {
@@ -9512,6 +9860,7 @@
     "/api/server-media-files/{filename}/thumbnail": {
       "get": {
         "description": "Used by the new-model dialog to show the user which example was selected.\nFor images this serves the file bytes; for audio it returns a waveform PNG;\nfor video it returns the middle-frame PNG.  Other media types return 404.",
+        "operationId": "server_media_file_thumbnail",
         "responses": {
           "400": {
             "description": "Filename escapes the example_media directory."
@@ -9545,6 +9894,7 @@
     "/api/sessions/recent": {
       "get": {
         "description": "Entries whose dataset or detector id is no longer registered are\nfiltered out. Most-recent first.",
+        "operationId": "list_recent_sessions",
         "responses": {
           "200": {
             "content": {
@@ -9567,6 +9917,7 @@
       },
       "post": {
         "description": "Upserts the pair, moves it to the front of the list, and trims\nthe list to :data:`MAX_RECENT_SESSIONS` entries. The response is\nthe same hydrated list as :func:`list_recent_sessions` so callers\ncan update local UI in one round-trip.",
+        "operationId": "bump_recent_session",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9603,6 +9954,7 @@
     },
     "/api/settings": {
       "get": {
+        "operationId": "get_settings",
         "responses": {
           "200": {
             "content": {
@@ -9625,6 +9977,7 @@
       },
       "put": {
         "description": "Only keys present in *body* are applied. Unknown keys are silently\ndropped (per the schema's ``unknown = \"exclude\"`` policy); type\nerrors raise 422 with the standard error envelope; setter-level\nvalidation failures (range / one-of / path traversal) raise 400.",
+        "operationId": "update_settings",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9664,6 +10017,7 @@
     },
     "/api/settings-exporters": {
       "get": {
+        "operationId": "get_settings_exporters",
         "responses": {
           "200": {
             "content": {
@@ -9690,6 +10044,7 @@
     },
     "/api/settings-exporters/export": {
       "post": {
+        "operationId": "run_settings_export",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9735,6 +10090,7 @@
     },
     "/api/settings-importers": {
       "get": {
+        "operationId": "get_settings_importers",
         "responses": {
           "200": {
             "content": {
@@ -9773,6 +10129,7 @@
       ],
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "run_settings_import",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9786,6 +10143,7 @@
     },
     "/api/settings-sources": {
       "get": {
+        "operationId": "list_settings_sources_route",
         "responses": {
           "200": {
             "content": {
@@ -9812,6 +10170,7 @@
     },
     "/api/settings-sources/active": {
       "get": {
+        "operationId": "get_active_settings_source",
         "responses": {
           "200": {
             "content": {
@@ -9834,6 +10193,7 @@
       },
       "put": {
         "description": "A body of ``{}`` or one with empty ``source_name`` clears the active\nsource; otherwise both fields specify the new source.",
+        "operationId": "set_active_settings_source",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9873,6 +10233,7 @@
     },
     "/api/settings-sources/sync": {
       "post": {
+        "operationId": "sync_settings_from_source",
         "responses": {
           "200": {
             "content": {
@@ -9896,6 +10257,7 @@
     },
     "/api/settings/defaults": {
       "get": {
+        "operationId": "get_defaults",
         "responses": {
           "200": {
             "content": {
@@ -9919,6 +10281,7 @@
     },
     "/api/sort": {
       "post": {
+        "operationId": "sort_clips",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9961,6 +10324,7 @@
     },
     "/api/textsort-suggestions": {
       "get": {
+        "operationId": "get_textsort_suggestions_route",
         "responses": {
           "200": {
             "content": {
@@ -9982,6 +10346,7 @@
         ]
       },
       "post": {
+        "operationId": "add_textsort_suggestion_route",
         "requestBody": {
           "content": {
             "application/json": {
@@ -10021,6 +10386,7 @@
     },
     "/api/version": {
       "get": {
+        "operationId": "version",
         "responses": {
           "200": {
             "content": {
@@ -10044,6 +10410,7 @@
     },
     "/api/votes": {
       "get": {
+        "operationId": "get_votes",
         "responses": {
           "200": {
             "content": {
@@ -10068,6 +10435,7 @@
     "/api/votes/clear": {
       "post": {
         "description": "Used by the Label flow to reset votes before importing a model's labelset\nso that labels from a previous session don't contaminate the new model.",
+        "operationId": "clear_votes_route",
         "responses": {
           "200": {
             "content": {
@@ -10092,6 +10460,7 @@
     "/api/votes/seed-from-examples": {
       "post": {
         "description": "For each ``type: \"media\"`` example, reads the file from\n``data/example_media/``, computes its MD5, and either marks the\nmatching loaded media as Good, or \u2014 if the example is new \u2014\nembeds it, inserts it into the ``medias`` dict, and votes it Good.\n\nReturns::\n\n    {\"seeded\": 2, \"skipped\": 1}",
+        "operationId": "seed_votes_from_examples",
         "requestBody": {
           "content": {
             "application/json": {
@@ -10129,6 +10498,7 @@
     "/dashboard": {
       "get": {
         "description": "Angular Router handles these paths on the client side; the server\njust needs to return ``index.html`` for all of them.",
+        "operationId": "angular_routes_get_1",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10142,6 +10512,7 @@
     },
     "/favicon-{variant}.ico": {
       "get": {
+        "operationId": "favicon_variant",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10167,6 +10538,7 @@
     "/favicon.ico": {
       "get": {
         "description": "Returns:\nThe ``favicon.ico`` file from ``static/`` if it exists,\notherwise an empty ``(str, int)`` tuple with HTTP status 204.",
+        "operationId": "favicon",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10181,6 +10553,7 @@
     "/healthz": {
       "get": {
         "description": "Intentionally does no work beyond returning a constant. Anything more\nexpensive risks turning a slow dependency into a restart loop.",
+        "operationId": "healthz",
         "responses": {
           "200": {
             "content": {
@@ -10205,6 +10578,7 @@
     "/label": {
       "get": {
         "description": "Angular Router handles these paths on the client side; the server\njust needs to return ``index.html`` for all of them.",
+        "operationId": "angular_routes_get_2",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10219,6 +10593,7 @@
     "/logo.svg": {
       "get": {
         "description": "Returns:\nThe ``logo.svg`` file from ``static/`` if it exists,\notherwise an empty ``(str, int)`` tuple with HTTP status 204.",
+        "operationId": "logo",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10232,7 +10607,8 @@
     },
     "/readyz": {
       "get": {
-        "description": "Sub-checks:\n\n* ``data_dir`` \u2014 :data:`vtsearch.config.DATA_DIR` exists and is\n  writable (the app needs this for embeddings, model cache, settings).\n* ``models`` \u2014 every embedder implied by the dataset/detector\n  registries is warm (``_model is not None``).",
+        "description": "Sub-checks:\n\n* ``data_dir`` \u2014 :data:`vtscore.config.DATA_DIR` exists and is\n  writable (the app needs this for embeddings, model cache, settings).\n* ``models`` \u2014 every embedder implied by the dataset/detector\n  registries is warm (``_model is not None``).",
+        "operationId": "readyz",
         "responses": {
           "200": {
             "content": {
@@ -10267,6 +10643,7 @@
     "/{path}": {
       "get": {
         "description": "The Angular build output (main.js, polyfills.js, styles.css, etc.) is\nreferenced from index.html with ``<base href=\"/\">``, so the browser\nrequests them at ``/main.js`` rather than ``/static/main.js``.  This\nroute serves those files when they exist, and falls back to\n``index.html`` for any other path so that Angular Router can handle\nclient-side navigation.\n\nPaths under ``/api/`` are excluded \u2014 unmatched API routes should\nreturn 404, not the SPA page.",
+        "operationId": "catch_all",
         "responses": {
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"

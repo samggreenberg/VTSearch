@@ -146,6 +146,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private knownDetectorIds = new Set<string>();
   private completedTaskIds = new Set<string>();
   private completedModelTaskIds = new Set<string>();
+  /** Task IDs we've been told to expect (via an HTTP response) but haven't
+   *  yet observed in the SSE `loading-tasks` stream. Polling refuses to bail
+   *  while this set is non-empty, even if the stream currently shows no
+   *  active tasks — otherwise a fast load (e.g. pre-embedded demo dataset)
+   *  whose HTTP response wins the race against the SSE event would stop
+   *  polling before the task ever shows up, leaving the dashboard stale
+   *  until the user refreshes. */
+  private awaitedTaskIds = new Set<string>();
   private datasetPollingActive = false;
   private detectorPollingActive = false;
   /** Dataset IDs we've already asked the backend to preload an embedder
@@ -561,12 +569,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     try {
       const question =
         targets.length === 1
-          ? `Delete dataset ${names}?`
-          : `Delete ${targets.length} datasets: ${names}?`;
-      const detail =
-        targets.length === 1
-          ? 'This removes the dataset from the registry and deletes its cached pickle file. Detectors trained against it are unaffected.'
-          : 'This removes the datasets from the registry and deletes their cached pickle files. Detectors trained against them are unaffected.';
+          ? `Delete dataset ${names} from your list?`
+          : `Delete ${targets.length} datasets from your list: ${names}?`;
+      const detail = '(Detectors are unaffected.)';
       ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
       this.deletingSelectedDatasetsConfirm = false;
@@ -653,10 +658,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         targets.length === 1
           ? `Delete detector ${names}?`
           : `Delete ${targets.length} detectors: ${names}?`;
-      const detail =
-        targets.length === 1
-          ? 'This removes its labelset and training metadata. The dataset is unaffected.'
-          : 'This removes their labelsets and training metadata. The datasets are unaffected.';
+      const detail = '(This deletes your labels. The underlying media is unaffected.)';
       ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
       this.deletingSelectedDetectorsConfirm = false;
@@ -742,8 +744,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   async deleteDataset(dataset: DatasetRegistryEntry): Promise<void> {
     this.deletingDatasetId = dataset.id;
     const ok = await this.dialog.confirmDestructive(
-      `Delete dataset "${dataset.name}"?`,
-      'This removes the dataset from the registry and deletes its cached pickle file. Detectors trained against it are unaffected.',
+      `Delete dataset "${dataset.name}" from your list?`,
+      '(Detectors are unaffected.)',
     );
     this.deletingDatasetId = '';
     if (!ok) return;
@@ -802,7 +804,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.deletingDetectorId = model.id;
     const ok = await this.dialog.confirmDestructive(
       `Delete detector "${model.name}"?`,
-      'This removes its labelset and training metadata. The dataset is unaffected.',
+      '(This deletes your labels. The underlying media is unaffected.)',
     );
     this.deletingDetectorId = '';
     if (!ok) return;
@@ -819,7 +821,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadDataset(dataset: DatasetRegistryEntry): void {
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
-      next: () => this.startProgressPolling(),
+      next: (response) => this.startProgressPolling(response.task_id),
     });
   }
 
@@ -913,57 +915,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Welcome-banner CTA: open the importer modal with one of the picker
-   *  tabs pre-selected so a fresh user lands on the relevant choices. */
-  openImporterModalOnTab(tabId: string): void {
-    this.importerClosing = false;
-    this.newThingFlows.openImporter({
-      initialTab: tabId,
-      guessedMediaType: this.guessedMediaType,
-      guessedMediaEmbedder: this.guessedMediaEmbedder,
-    });
-  }
-
   onImporterAnimationEnd(): void {
     this.importerClosing = false;
-  }
-
-  // --- First-run welcome banner ---
-
-  /** Visible importers in the Services tab, in registry order. */
-  get servicesImporters(): ImporterInfo[] {
-    return this.visibleImporters.filter((imp) => (imp.category || '') === 'services');
-  }
-
-  /** Pretty name for a Services importer (display_name falls back to name). */
-  private importerLabel(imp: ImporterInfo): string {
-    return imp.display_name || imp.name;
-  }
-
-  /** Body text for the welcome banner. Three branches:
-   *   - no Services importers → push Server Folder
-   *   - exactly one Services importer → name it
-   *   - multiple Services importers → generic Services prompt */
-  get welcomeBannerMessage(): string {
-    const services = this.servicesImporters;
-    if (services.length === 1) {
-      const label = this.importerLabel(services[0]);
-      return `Welcome — load a dataset to get started. You have ${label} registered in the Services tab, which is probably what you want.`;
-    }
-    if (services.length > 1) {
-      return 'Welcome — load a dataset to get started. You have importers registered in the Services tab, which is probably where to start.';
-    }
-    return 'Welcome — load a dataset to get started. Server Folder is the most common starting point: point it at a folder of files already on this machine.';
-  }
-
-  /** CTA label paired with the welcome-banner message. */
-  get welcomeBannerCtaLabel(): string {
-    return this.servicesImporters.length > 0 ? 'Open Services' : 'Open Server';
-  }
-
-  /** Picker tab the welcome-banner CTA pre-selects in the importer modal. */
-  get welcomeBannerCtaTab(): string {
-    return this.servicesImporters.length > 0 ? 'services' : 'server';
   }
 
   /** Open-state of the dataset importer modal (hosted on AppComponent;
@@ -1000,8 +953,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const userName = (extras.dataset_name || '').trim();
     if (userName) params['dataset_name'] = userName;
     this.datasetsApi.loadDemo(demo.name, params).subscribe({
-      next: () => {
-        this.startProgressPolling();
+      next: (response) => {
+        this.startProgressPolling(response.task_id);
       },
     });
   }
@@ -1057,7 +1010,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Progress polling ---
 
-  startProgressPolling(onComplete?: () => void): void {
+  startProgressPolling(awaitTaskId?: string, onComplete?: () => void): void {
+    // Register any task we've been told to expect.  See the
+    // `awaitedTaskIds` field comment for why this is needed.
+    if (awaitTaskId) {
+      this.awaitedTaskIds.add(awaitTaskId);
+    }
     // If polling is already active, don't restart — the existing loop
     // already covers all tasks.  This avoids clearing completedTaskIds
     // and losing track of tasks that just finished.
@@ -1071,6 +1029,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.polling$), takeUntil(this.destroy$))
       .subscribe({
         next: (tasks: LoadingTask[]) => {
+          // Any task we were waiting for has now shown up in the SSE
+          // stream — drop it from the awaited set so the bail-out check
+          // below can fire as soon as the stream goes quiet.
+          for (const t of tasks) {
+            this.awaitedTaskIds.delete(t.task_id);
+          }
+
           // Separate active from finished. Failed tasks are surfaced
           // globally by SseErrorRouterService → ToastService; we just
           // keep them in the inline list so the row still shows the
@@ -1097,8 +1062,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
           this.datasetState.setLoading(active.length > 0);
 
-          if (active.length === 0) {
-            // No more active tasks — stop polling
+          if (active.length === 0 && this.awaitedTaskIds.size === 0) {
+            // No more active tasks and no awaited task pending — stop
+            // polling.
             this.polling$.next();
             this.datasetPollingActive = false;
             // Refresh unless we just did (justFinished already triggered it)

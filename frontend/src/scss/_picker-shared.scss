@@ -60,16 +60,21 @@
   align-items: center;
 }
 
+// Italic, muted, small.  Used as the placeholder/instruction shown below a
+// tab bar before the user has picked a tab ("Select what type of dataset to
+// add.") or as an inline "empty category" notice.  Same visual treatment
+// as `.detection-hint` in the dataset importer so subtle helper text reads
+// consistently across the modal.
 .tab-bar-hint {
   margin: 8px 0 0 0;
   color: var(--text-muted);
-  font-size: .85rem;
+  font-size: var(--font-sm);
   font-style: italic;
 }
 
 .empty-state--inline {
   padding: 6px 10px;
-  font-size: .8rem;
+  font-size: var(--font-sm);
   color: var(--text-muted);
   font-style: italic;
 }

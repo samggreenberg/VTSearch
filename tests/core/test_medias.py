@@ -41,8 +41,8 @@ class TestInitMedias:
 
     def test_deterministic_embeddings(self):
         """CLAP embeddings should be deterministic for the same input audio."""
-        from vtsearch.config import DATA_DIR
-        from vtsearch.embedding import embed_audio_file
+        from vtscore.config import DATA_DIR
+        from vtscore.embedding import embed_audio_file
 
         media = app_module.medias[1]
         # Re-embed the same WAV and verify the result matches
@@ -78,7 +78,7 @@ class TestApplyCustomMetadataMD5:
     """Tests for apply_custom_metadata_md5: use MD5 from custom_metadata when provided."""
 
     def test_replaces_md5_from_custom_metadata(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"md5": "provided_hash", "title": "foo"}},
@@ -91,7 +91,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["custom_metadata"]["title"] == "foo"
 
     def test_skips_when_no_custom_metadata(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash"},
@@ -101,7 +101,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["md5"] == "calculated_hash"
 
     def test_skips_when_custom_metadata_has_no_md5(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"title": "foo"}},
@@ -111,7 +111,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["md5"] == "calculated_hash"
 
     def test_skips_when_custom_metadata_md5_is_empty(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"md5": ""}},
@@ -121,7 +121,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["md5"] == "calculated_hash"
 
     def test_handles_mixed_medias(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calc1", "custom_metadata": {"md5": "provided1"}},
@@ -139,7 +139,7 @@ class TestApplyCustomMetadataMD5:
         assert "md5" not in media_dict[4]["custom_metadata"]
 
     def test_skips_when_custom_metadata_md5_is_none(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"md5": None}},
@@ -149,7 +149,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["md5"] == "calculated_hash"
 
     def test_replaces_md5_from_uppercase_key(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"MD5": "upper_hash", "title": "foo"}},
@@ -161,7 +161,7 @@ class TestApplyCustomMetadataMD5:
         assert media_dict[1]["custom_metadata"]["title"] == "foo"
 
     def test_lowercase_md5_takes_priority_over_uppercase(self):
-        from vtsearch.datasets.loader import apply_custom_metadata_md5
+        from vtscore.datasets.loader import apply_custom_metadata_md5
 
         media_dict = {
             1: {"md5": "calculated_hash", "custom_metadata": {"md5": "lower_hash", "MD5": "upper_hash"}},
@@ -180,8 +180,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_md5_from_custom_metadata_map_used(self, tmp_path):
         """When custom_metadata_map provides md5, the loader uses it."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         # Create a WAV file in tmp_path
         wav_path = tmp_path / "test.wav"
@@ -208,8 +208,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_empty_md5_in_custom_metadata_map_falls_through(self, tmp_path):
         """When custom_metadata_map has empty md5, the loader computes it."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         wav_path = tmp_path / "test.wav"
         wav_bytes = generate_wav(440, 0.5)
@@ -233,8 +233,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_no_custom_metadata_map_computes_md5(self, tmp_path):
         """Without custom_metadata_map, md5 is computed normally."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         wav_path = tmp_path / "test.wav"
         wav_bytes = generate_wav(440, 0.5)
@@ -250,8 +250,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_custom_metadata_map_with_relative_path_key(self, tmp_path):
         """custom_metadata_map keys can be relative paths (subdir/file.wav)."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         subdir = tmp_path / "sub"
         subdir.mkdir()
@@ -274,8 +274,8 @@ class TestCustomMetadataMapInLoader:
 
     def test_uppercase_md5_key_in_custom_metadata_map(self, tmp_path):
         """When custom_metadata_map provides MD5 (uppercase), the loader uses it."""
-        from vtsearch.datasets.loader import load_dataset_from_folder
-        from vtsearch.media.audio.audio_generator import generate_wav
+        from vtscore.datasets.loader import load_dataset_from_folder
+        from vtscore.media.audio.audio_generator import generate_wav
 
         wav_path = tmp_path / "test.wav"
         wav_path.write_bytes(generate_wav(440, 0.5))
@@ -606,3 +606,228 @@ class TestAddToPile:
             assert "No dataset" in resp.get_json()["message"]
         finally:
             app_module.medias.update(saved)
+
+    def test_concurrent_uploads_same_md5_no_duplicate(self):
+        """H32 regression: two concurrent uploads of identical bytes must
+        not produce duplicate medias.
+
+        The first MD5 lookup happens outside ``_state_lock`` and embedding
+        takes the full unlocked window with it. Without a re-check inside
+        the lock, two parallel requests both miss the existing-cid hit and
+        both insert — yielding two medias with identical md5/embedding.
+        The fix re-checks ``md5_lookup`` under ``_state_lock`` immediately
+        before the insert and routes the loser into the existing-cid
+        branch.
+        """
+        import threading
+        from unittest.mock import patch
+
+        from vtscore.media import embedders_for_type
+        from vtscore.state.core import (
+            get_active_context,
+            get_active_detector_context,
+            set_thread_dataset_context,
+            set_thread_detector_context,
+        )
+
+        audio_embedder = embedders_for_type("audio")[0]
+
+        wav_bytes = app_module.generate_wav(77777, 0.25)
+        initial_count = len(app_module.medias)
+
+        # Capture the test thread's contexts so the worker threads resolve
+        # the same DatasetContext/DetectorContext when ``before_request``
+        # falls through to the thread-local (no X-Dataset-Id header in
+        # these requests).
+        ds_ctx = get_active_context()
+        det_ctx = get_active_detector_context()
+
+        # Embedding must block both threads simultaneously inside the
+        # unlocked window so the race is reproduced deterministically.
+        barrier = threading.Barrier(2)
+        original_embed = audio_embedder.embed_media
+
+        def _blocking_embed(media_dict):
+            barrier.wait(timeout=5)
+            return original_embed(media_dict)
+
+        results: list[tuple[int, dict]] = []
+        errors: list[BaseException] = []
+        lock = threading.Lock()
+
+        def _do_post():
+            try:
+                set_thread_dataset_context(ds_ctx)
+                set_thread_detector_context(det_ctx)
+                # Each worker thread uses its own test client. The fixture
+                # ``client`` is opened in the main thread, and Flask's test
+                # client preserves request contexts on its own ExitStack —
+                # invoking it from worker threads pushes contexts onto the
+                # workers' ContextVars and breaks the main-thread teardown.
+                # The conftest ``client`` fixture auto-injects context
+                # headers; freshly-built test clients don't, so we attach
+                # them explicitly here (H34 — vote/pile-add now requires
+                # ``X-Dataset-Id`` / ``X-Detector-Id``).
+                with app_module.app.test_client() as c:
+                    r = c.post(
+                        "/api/medias/add-to-pile",
+                        data={"label": "good", "file": (io.BytesIO(wav_bytes), "race.wav")},
+                        content_type="multipart/form-data",
+                        headers={
+                            "X-Dataset-Id": ds_ctx.dataset_id,
+                            "X-Detector-Id": det_ctx.detector_id,
+                        },
+                    )
+                with lock:
+                    results.append((r.status_code, r.get_json()))
+            except BaseException as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(exc)
+
+        with patch.object(audio_embedder, "embed_media", side_effect=_blocking_embed):
+            t1 = threading.Thread(target=_do_post)
+            t2 = threading.Thread(target=_do_post)
+            t1.start()
+            t2.start()
+            t1.join(timeout=15)
+            t2.join(timeout=15)
+
+        assert not errors, f"worker threads raised: {errors}"
+        assert len(results) == 2
+
+        # Exactly one new media inserted (the regression: was 2 before fix).
+        assert len(app_module.medias) == initial_count + 1, (
+            f"H32: duplicate insert — medias grew by {len(app_module.medias) - initial_count}, expected 1"
+        )
+
+        # Both requests succeed and report the same media id.
+        media_ids = {r[1]["media_id"] for r in results}
+        assert len(media_ids) == 1, f"requests reported different ids: {media_ids}"
+
+        # One winner (201, is_new=True), one loser (200, is_new=False).
+        statuses = sorted(r[0] for r in results)
+        assert statuses == [200, 201]
+        is_new_flags = sorted(r[1]["is_new"] for r in results)
+        assert is_new_flags == [False, True]
+
+        # The single inserted media carries the uploaded bytes' md5.
+        inserted_id = next(iter(media_ids))
+        assert app_module.medias[inserted_id]["md5"] == hashlib.md5(wav_bytes).hexdigest()
+        assert inserted_id in app_module.good_votes
+
+    def _setup_loaded_detector(self, client, name="H33Detector"):
+        """Create a detector, register it, load it, and return its registry id."""
+        from tests import load_detector_and_wait
+
+        client.post(
+            "/api/detectors",
+            json={"name": name, "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": name, "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        load_detector_and_wait(client, mid)
+        return mid, name
+
+    def test_existing_media_label_synced_to_disk(self, client):
+        """H33 regression — MD5-match branch.
+
+        Without :func:`_sync_pile_label_to_storage` the vote applied to the
+        existing media never reaches the detector's JSON file, so the next
+        rehydration (dataset/detector switch, mtime advance) silently drops
+        it.  Assert the labelset on disk contains an entry keyed by the
+        matched media's origin with the right label.
+        """
+        from vtscore.datasets.labelset import LabelSet, element_key, media_element_key
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        media = app_module.medias[1]
+        _, name = self._setup_loaded_detector(client)
+
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "good", "file": (io.BytesIO(media["media_bytes"]), "match.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+
+        data = _read_detector(_detector_path(name))
+        assert data is not None, "detector JSON not written"
+        ls = LabelSet.from_dict(data.get("labelset") or {})
+        target_key = media_element_key(media)
+        match = next((el for el in ls.elements if element_key(el) == target_key), None)
+        assert match is not None, "matched-media label was not persisted to disk"
+        assert match.label == "good"
+
+    def test_new_media_label_synced_to_disk(self, client):
+        """H33 regression — new-media branch.
+
+        Newly inserted media items are session-only (not in the dataset
+        pickle), so the only durable record of an add-to-pile vote on them
+        is the detector's on-disk labelset.  Assert the labelset contains
+        an ``add_to_pile`` origin entry with the right label.
+        """
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        wav_bytes = app_module.generate_wav(33333, 0.2)
+        _, name = self._setup_loaded_detector(client)
+
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "bad", "file": (io.BytesIO(wav_bytes), "fresh.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 201
+
+        data = _read_detector(_detector_path(name))
+        assert data is not None, "detector JSON not written"
+        ls = LabelSet.from_dict(data.get("labelset") or {})
+        match = next(
+            (
+                el
+                for el in ls.elements
+                if (el.origin or {}).get("importer") == "add_to_pile" and el.origin_name == "fresh.wav"
+            ),
+            None,
+        )
+        assert match is not None, "add-to-pile origin entry missing from on-disk labelset"
+        assert match.label == "bad"
+
+    def test_label_survives_rehydration(self, client):
+        """H33 regression — end-to-end symptom.
+
+        ``ensure_votes_match_active_dataset`` rehydrates from the detector
+        file when the (dataset, detector) pair changes or the file's mtime
+        advances.  Before the fix, ``add_media_to_pile`` only mutated
+        in-memory dicts, so a forced rehydrate dropped the just-applied
+        vote.  Force a rehydration by clearing the cached labelset and
+        re-running the hook; the vote must come back from disk.
+        """
+        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.state.core import get_active_detector_context
+
+        media = app_module.medias[2]
+        self._setup_loaded_detector(client)
+
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "good", "file": (io.BytesIO(media["media_bytes"]), "rehydrate.wav")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        assert 2 in app_module.good_votes
+
+        # Invalidate the detector context's caches and drop the in-memory
+        # votes so the rehydrate hook must round-trip through the file.
+        det_ctx = get_active_detector_context()
+        det_ctx.good_votes.clear()
+        det_ctx.bad_votes.clear()
+        det_ctx.cached_labelset = None
+        det_ctx.cached_labelset_mtime = 0.0
+        det_ctx.votes_dataset_id = ""
+
+        ensure_votes_match_active_dataset()
+        assert 2 in app_module.good_votes, "label vanished on rehydration — H33 regressed"

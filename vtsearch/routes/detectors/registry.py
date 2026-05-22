@@ -34,16 +34,16 @@ from flask import jsonify
 from flask_smorest import Blueprint, abort
 
 from vtsearch.auth import get_current_user
-from vtsearch.detectors.store import (
+from vtscore.detectors.store import (
     _detector_path,
     _read_detector,
     _write_detector,
 )
-from vtsearch.detectors.label_restoration import (
+from vtscore.detectors.label_restoration import (
     restore_labels_from_detector as _restore_labels_from_detector,
 )
-from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
-from vtsearch.detectors.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
+from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+from vtscore.detectors.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
 from vtsearch.schemas.detectors import (
     DetectorCancelResponseSchema,
     DetectorLabelsetMoveRequestSchema,
@@ -79,10 +79,10 @@ detectors_registry_bp = Blueprint(
 @detectors_registry_bp.response(200, DetectorRegistryListResponseSchema)
 def list_registered_detectors():
     """Return all registered detectors with their loaded state and autorun flag."""
-    from vtsearch.detectors.registry import get_loaded_detector_ids, list_detectors
+    from vtscore.detectors.registry import get_loaded_detector_ids, list_detectors
     from vtsearch.settings import get_autorun_detectors
 
-    from vtsearch.state.core import get_detector_context
+    from vtscore.state.core import get_detector_context
 
     entries = list_detectors()
     loaded_ids = get_loaded_detector_ids()
@@ -95,13 +95,16 @@ def list_registered_detectors():
         entry["detector_loaded"] = did in loaded_ids
         # Expose the loaded detector's recorded embedder so the frontend
         # can detect a cross-embedder switch and trigger a label re-embed
-        # via /api/detectors/registry/load. Unloaded detectors have no
-        # embedder yet (it's inferred from the dataset on load).
+        # via /api/detectors/registry/load.  Loaded contexts always win
+        # because they reflect the live cache state; for unloaded
+        # detectors fall back to the registry's persisted embedder (which
+        # is stamped the first time training runs against a dataset).
         if entry["detector_loaded"]:
             ctx = get_detector_context(did)
-            entry["embedder"] = ctx.embedder if ctx is not None else ""
+            ctx_emb = ctx.embedder if ctx is not None else ""
+            entry["embedder"] = ctx_emb or entry.get("embedder", "") or ""
         else:
-            entry["embedder"] = ""
+            entry["embedder"] = entry.get("embedder", "") or ""
     return {"detectors": entries}
 
 
@@ -116,7 +119,7 @@ def list_registered_detectors():
 @detectors_registry_bp.alt_response(400, description="Empty name after stripping, or media_type is 'any'.")
 def register_detector_route(body: dict):
     """Register a new detector in the detector registry."""
-    from vtsearch.detectors.registry import register_detector
+    from vtscore.detectors.registry import register_detector
 
     name = body["name"].strip()
     media_type = body["media_type"].strip()
@@ -177,10 +180,10 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
 
     Plugin-dependent body shape: not described in the OpenAPI spec.
     """
-    from vtsearch.datasets.ingest import _media_type_from_origin
-    from vtsearch.datasets.labelset import LabeledElement, LabelSet
-    from vtsearch.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.detectors.registry import register_detector, update_detector
+    from vtscore.datasets.ingest import _media_type_from_origin
+    from vtscore.datasets.labelset import LabeledElement, LabelSet
+    from vtscore.labels.importers import get_label_importer, list_label_importers
+    from vtscore.detectors.registry import register_detector, update_detector
     from vtsearch.routes._shared import (
         get_plugin_or_404,
         run_plugin_or_error,
@@ -310,7 +313,7 @@ def _embedder_display_name(embedder_name: str) -> str:
     """Return a human-friendly name for *embedder_name*, falling back to the id."""
     if not embedder_name:
         return ""
-    from vtsearch.media import get_embedder
+    from vtscore.media import get_embedder
 
     try:
         return get_embedder(embedder_name).display_name or embedder_name
@@ -336,9 +339,9 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
         det_ctx.embedder = new_embedder
         return None
 
-    from vtsearch.concurrency.progress import CancelledError, detector_loading_tasks
+    from vtscore.concurrency.progress import CancelledError, detector_loading_tasks
     from vtsearch.state import get_active_context
-    from vtsearch.state.core import set_thread_dataset_context, set_thread_detector_context
+    from vtscore.state.core import set_thread_dataset_context, set_thread_detector_context
 
     _thread_ds_ctx = get_active_context()
     media_type = det_ctx.cached_labelset_media_type or entry.get("media_type", "") or ""
@@ -356,7 +359,7 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
     tracker.update("loading", base_msg, 0, 0, step=1, total_steps=1)
 
     def reembed_task():
-        from vtsearch.detectors.labelset_training import train_from_labelset
+        from vtscore.detectors.labelset_training import train_from_labelset
 
         set_thread_dataset_context(_thread_ds_ctx)
         set_thread_detector_context(det_ctx)
@@ -409,7 +412,7 @@ def load_detector_route(body: dict):  # noqa: C901
     Pass ``detector_id=null`` (or omit the field) to unload the active
     detector without loading another one.
     """
-    from vtsearch.detectors.registry import (
+    from vtscore.detectors.registry import (
         get_detector,
         is_detector_loaded,
     )
@@ -432,7 +435,7 @@ def load_detector_route(body: dict):  # noqa: C901
         sync_labels_to_loaded_detector()
 
     if detector_id is None:
-        from vtsearch.detectors.registry import remove_loaded_detector_id, set_find_mode
+        from vtscore.detectors.registry import remove_loaded_detector_id, set_find_mode
 
         det_ctx = get_active_detector_context()
         prev_id = det_ctx.detector_id if det_ctx.detector_id else None
@@ -465,7 +468,7 @@ def load_detector_route(body: dict):  # noqa: C901
                 }
         return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
-    from vtsearch.concurrency.progress import CancelledError, detector_loading_tasks
+    from vtscore.concurrency.progress import CancelledError, detector_loading_tasks
 
     det_ctx = DetectorContext(
         detector_id,
@@ -491,8 +494,8 @@ def load_detector_route(body: dict):  # noqa: C901
     _thread_ds_ctx = get_active_context()
 
     def load_task():
-        from vtsearch.detectors.registry import add_loaded_detector_id, remove_loaded_detector_id
-        from vtsearch.state.core import set_thread_dataset_context, set_thread_detector_context
+        from vtscore.detectors.registry import add_loaded_detector_id, remove_loaded_detector_id
+        from vtscore.state.core import set_thread_dataset_context, set_thread_detector_context
 
         set_thread_dataset_context(_thread_ds_ctx)
         set_thread_detector_context(det_ctx)
@@ -533,8 +536,8 @@ def load_detector_route(body: dict):  # noqa: C901
                         total_steps=_LOAD_STEPS,
                     )
 
-                    from vtsearch.datasets.labelset import LabelSet
-                    from vtsearch.detectors.labelset_training import train_from_labelset
+                    from vtscore.datasets.labelset import LabelSet
+                    from vtscore.detectors.labelset_training import train_from_labelset
                     from vtsearch.state import snapshot_medias as _snap_medias
 
                     labelset = LabelSet.from_dict(det_data.get("labelset") or {})
@@ -617,7 +620,7 @@ def load_detector_route(body: dict):  # noqa: C901
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 def unload_detector_route(detector_id: str):
     """Unload a detector from memory (frees its DetectorContext)."""
-    from vtsearch.detectors.registry import get_detector, is_detector_loaded, remove_loaded_detector_id
+    from vtscore.detectors.registry import get_detector, is_detector_loaded, remove_loaded_detector_id
     from vtsearch.state import (
         bad_votes,
         get_active_detector_context,
@@ -651,7 +654,7 @@ def unload_detector_route(detector_id: str):
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 def delete_registered_detector(detector_id: str):
     """Remove a detector from the registry, including its labelset file."""
-    from vtsearch.detectors.registry import get_detector, unregister_detector
+    from vtscore.detectors.registry import get_detector, unregister_detector
 
     entry = get_detector(detector_id)
     if entry is None:
@@ -667,7 +670,7 @@ def delete_registered_detector(detector_id: str):
         logger.exception("Failed to delete detector file for %s", detector_id)
 
     try:
-        from vtsearch.detectors.registry import is_detector_loaded, remove_loaded_detector_id
+        from vtscore.detectors.registry import is_detector_loaded, remove_loaded_detector_id
         from vtsearch.state import unregister_detector_context
 
         if is_detector_loaded(detector_id):
@@ -698,7 +701,7 @@ def delete_registered_detector(detector_id: str):
 @detectors_registry_bp.alt_response(404, description="Task not found.")
 def cancel_detector_loading_task(task_id: str):
     """Cancel a specific detector loading task."""
-    from vtsearch.concurrency.progress import detector_loading_tasks
+    from vtscore.concurrency.progress import detector_loading_tasks
 
     ok = detector_loading_tasks.cancel_task(task_id)
     if not ok:
@@ -718,9 +721,9 @@ def cancel_detector_loading_task(task_id: str):
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 def rename_registered_detector(body: dict, detector_id: str):
     """Rename a registered detector and its on-disk labelset file."""
-    from vtsearch.detectors.labelset_rename import detect_pending_labelset_move
-    from vtsearch.detectors.registry import get_detector, rename_detector
-    from vtsearch.state.core import get_detector_context
+    from vtscore.detectors.labelset_rename import detect_pending_labelset_move
+    from vtscore.detectors.registry import get_detector, rename_detector
+    from vtscore.state.core import get_detector_context
 
     new_name = body["name"].strip()
     if not new_name:
@@ -791,8 +794,8 @@ def move_labelset_source_file(body: dict, detector_id: str):
     labelset file?* prompt that surfaces after a rename leaves the file
     at the OLD template-resolved path on disk.
     """
-    from vtsearch.detectors.labelset_rename import move_labelset_file
-    from vtsearch.detectors.registry import get_detector
+    from vtscore.detectors.labelset_rename import move_labelset_file
+    from vtscore.detectors.registry import get_detector
 
     if get_detector(detector_id) is None:
         abort(404, message="Detector not found")
@@ -831,7 +834,7 @@ def set_detector_autorun(body: dict, detector_id: str):
     CLI's ``--autodetect`` flow and the active-dataset ``/api/auto-detect``
     route both see it.
     """
-    from vtsearch.detectors.registry import get_detector
+    from vtscore.detectors.registry import get_detector
     from vtsearch.settings import (
         add_autorun_detector,
         remove_autorun_detector,

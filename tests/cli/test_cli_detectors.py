@@ -16,7 +16,7 @@ import pytest
 import app as app_module
 from helpers import make_dataset_file as _make_dataset_file
 from vtsearch.settings import get_detectors_dir
-from vtsearch.media.audio.audio_generator import generate_wav
+from vtscore.media.audio.audio_generator import generate_wav
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +31,7 @@ def _clean_tm_dir():
 
 
 def _write_trainable_model(name: str, labelset: dict) -> Path:
-    from vtsearch.detectors.store import _detector_path, _write_detector
+    from vtscore.detectors.store import _detector_path, _write_detector
 
     path = _detector_path(name)
     _write_detector(
@@ -51,7 +51,7 @@ def _stub_resolve(monkeypatch, file_map: dict[str, Path]) -> None:
     """Patch ``resolve_file_context`` to look up *file_map* by origin name."""
     from contextlib import contextmanager
 
-    import vtsearch.detectors.resolver as resolver_mod
+    import vtscore.detectors.resolver as resolver_mod
 
     @contextmanager
     def _fake_ctx(origin, origin_name="", filename=""):
@@ -124,7 +124,7 @@ class TestAutorunDetectorsCLI:
         settings_path = _settings_file_with_detectors(tmp_path, ["ds-a-detector"])
         out_path = tmp_path / "hits.json"
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         autodetect_main(
             str(dataset_path),
@@ -163,7 +163,7 @@ class TestAutorunDetectorsCLI:
         }
 
         # Write the detector by hand so input_spec is present on disk.
-        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtscore.detectors.store import _detector_path, _write_detector
 
         _write_detector(
             _detector_path("spec-mismatch"),
@@ -188,7 +188,7 @@ class TestAutorunDetectorsCLI:
         settings_path = _settings_file_with_detectors(tmp_path, ["spec-mismatch", "ds-a-detector"])
         out_path = tmp_path / "hits.json"
 
-        from vtsearch.cli import autodetect_main
+        from vtscore.cli import autodetect_main
 
         autodetect_main(
             str(dataset_path),
@@ -225,7 +225,7 @@ class TestAutorunDetectorsCLI:
             ]
         }
 
-        from vtsearch.detectors.store import _detector_path, _write_detector
+        from vtscore.detectors.store import _detector_path, _write_detector
 
         _write_detector(
             _detector_path("spec-matched"),
@@ -257,7 +257,7 @@ class TestAutorunDetectorsCLI:
             settings_path = _settings_file_with_detectors(tmp_path, ["spec-matched"])
             out_path = tmp_path / "hits.json"
 
-            from vtsearch.cli import autodetect_main
+            from vtscore.cli import autodetect_main
 
             autodetect_main(
                 str(dataset_path),
@@ -277,7 +277,7 @@ class TestAutorunDetectorsCLI:
         # Stub yields None for everything (simulates labels from local_folder).
         from contextlib import contextmanager
 
-        import vtsearch.detectors.resolver as resolver_mod
+        import vtscore.detectors.resolver as resolver_mod
 
         @contextmanager
         def _fake_ctx(*_a, **_kw):
@@ -306,7 +306,7 @@ class TestAutorunDetectorsCLI:
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["unreachable-tm"])
 
-        from vtsearch.cli import _run_pipeline, _load_pickle_whole
+        from vtscore.cli import _run_pipeline, _load_pickle_whole
 
         with pytest.raises(ValueError) as exc:
             _run_pipeline(_load_pickle_whole(str(dataset_path)), settings_path=str(settings_path))
@@ -350,9 +350,9 @@ class TestImportLabelsIntoDetectorCLI:
         labels_path = tmp_path / "new_labels.json"
         labels_path.write_text(json.dumps(new_labels))
 
-        from vtsearch.cli import import_labels_into_detector_from_file
-        from vtsearch.datasets.labelset import LabelSet
-        from vtsearch.detectors.store import _detector_path, _read_detector
+        from vtscore.cli import import_labels_into_detector_from_file
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.store import _detector_path, _read_detector
 
         applied, skipped = import_labels_into_detector_from_file(
             "import-tm",
@@ -372,7 +372,7 @@ class TestImportLabelsIntoDetectorCLI:
         labels_path = tmp_path / "labels.json"
         labels_path.write_text(json.dumps({"labels": []}))
 
-        from vtsearch.cli import import_labels_into_detector_from_file
+        from vtscore.cli import import_labels_into_detector_from_file
 
         with pytest.raises(ValueError) as exc:
             import_labels_into_detector_from_file("no-such-model", "server_json_file", str(labels_path))

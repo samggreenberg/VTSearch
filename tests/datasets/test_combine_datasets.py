@@ -96,7 +96,7 @@ def _write_pickle_dataset(path, clips_dict):
 
 class TestCombineDatasetsMetadata:
     def _get_importer(self):
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         return IMPORTER
 
@@ -134,7 +134,7 @@ class TestCombineDatasetsMetadata:
 
 class TestCombineDatasetsBuiltinExclusion:
     def test_combine_datasets_has_custom_ui_mode(self):
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         imp = get_importer("combine_datasets")
         assert imp is not None
@@ -169,7 +169,7 @@ class TestCombineDatasetsEnabledFlag:
 
     def test_disabled_with_one_dataset(self, client):
         """combine_datasets is disabled with only one saved dataset."""
-        from vtsearch.datasets import registry
+        from vtscore.datasets import registry
 
         registry.register_dataset(name="solo", media_type="audio", num_items=10, pkl_path="/tmp/solo.pkl")
         try:
@@ -184,7 +184,7 @@ class TestCombineDatasetsEnabledFlag:
 
     def test_disabled_with_two_different_media_types(self, client):
         """combine_datasets is disabled when two datasets have different media types."""
-        from vtsearch.datasets import registry
+        from vtscore.datasets import registry
 
         e1 = registry.register_dataset(name="audio_ds", media_type="audio", num_items=10, pkl_path="/tmp/a.pkl")
         e2 = registry.register_dataset(name="image_ds", media_type="image", num_items=10, pkl_path="/tmp/b.pkl")
@@ -198,7 +198,7 @@ class TestCombineDatasetsEnabledFlag:
 
     def test_enabled_with_two_same_media_type(self, client):
         """combine_datasets is enabled when two datasets share a media type."""
-        from vtsearch.datasets import registry
+        from vtscore.datasets import registry
 
         e1 = registry.register_dataset(name="audio_a", media_type="audio", num_items=10, pkl_path="/tmp/a.pkl")
         e2 = registry.register_dataset(name="audio_b", media_type="audio", num_items=5, pkl_path="/tmp/b.pkl")
@@ -219,7 +219,7 @@ class TestCombineDatasetsEnabledFlag:
 class TestCombineDatasetsRun:
     def test_combine_two_datasets(self, tmp_path):
         """Two datasets with the same media type are merged."""
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1), 2: _make_audio_clip(2)}
         ds2 = {1: _make_audio_clip(3), 2: _make_audio_clip(4)}
@@ -236,7 +236,7 @@ class TestCombineDatasetsRun:
 
     def test_deduplication_by_md5(self, tmp_path):
         """Clips with the same MD5 across datasets are included only once."""
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         # Use the same media_id (same bytes) to produce a genuine MD5 duplicate
         dup_clip_a = _make_audio_clip(1, filename="dup_a.wav")
@@ -254,7 +254,7 @@ class TestCombineDatasetsRun:
 
     def test_media_type_mismatch_raises(self, tmp_path):
         """Combining audio and image datasets raises ValueError."""
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1)}
         ds2 = {1: _make_image_clip(2)}
@@ -268,7 +268,7 @@ class TestCombineDatasetsRun:
 
     def test_fewer_than_two_datasets_raises(self, tmp_path):
         """Providing only one dataset raises ValueError."""
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1)}
         p1 = tmp_path / "ds1.pkl"
@@ -280,7 +280,7 @@ class TestCombineDatasetsRun:
 
     def test_missing_file_raises(self, tmp_path):
         """A non-existent path raises FileNotFoundError."""
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1)}
         p1 = tmp_path / "ds1.pkl"
@@ -292,7 +292,7 @@ class TestCombineDatasetsRun:
 
     def test_comma_separated_string_input(self, tmp_path):
         """The datasets field also accepts a comma-separated string."""
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1)}
         ds2 = {1: _make_audio_clip(2)}
@@ -307,7 +307,7 @@ class TestCombineDatasetsRun:
 
     def test_empty_dataset_skipped(self, tmp_path):
         """An empty pickle file is skipped without error."""
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1)}
         empty = {}
@@ -327,7 +327,7 @@ class TestCombineDatasetsRun:
 
     def test_preserves_media_data_fields(self, tmp_path):
         """Merged medias retain their original data fields."""
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1, filename="song_a.wav")}
         ds2 = {1: _make_audio_clip(2, filename="song_b.wav")}
@@ -344,7 +344,7 @@ class TestCombineDatasetsRun:
 
     def test_three_datasets_combined(self, tmp_path):
         """Three datasets combine correctly."""
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1)}
         ds2 = {1: _make_audio_clip(2)}
@@ -367,7 +367,7 @@ class TestCombineDatasetsRun:
 
 class TestCombineDatasetsCli:
     def test_run_cli_delegates_to_run(self, tmp_path):
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         ds1 = {1: _make_audio_clip(1)}
         ds2 = {1: _make_audio_clip(2)}
@@ -388,7 +388,7 @@ class TestCombineDatasetsCli:
 
 class TestCombineDatasetsOrigin:
     def test_build_origin_with_list(self):
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         origin = IMPORTER.build_origin({"datasets": ["/a.pkl", "/b.pkl"]})
         assert origin["importer"] == "combine_datasets"
@@ -396,7 +396,7 @@ class TestCombineDatasetsOrigin:
         assert "/b.pkl" in origin["params"]["datasets"]
 
     def test_build_origin_with_string(self):
-        from vtsearch.datasets.importers.combine_datasets import IMPORTER
+        from vtscore.datasets.importers.combine_datasets import IMPORTER
 
         origin = IMPORTER.build_origin({"datasets": "/a.pkl,/b.pkl"})
         assert origin["importer"] == "combine_datasets"
@@ -418,7 +418,7 @@ class TestAvailableFilesEndpoint:
 
     def test_lists_pkl_files(self, client, tmp_path):
         """When EMBEDDINGS_DIR contains .pkl files, they appear in the list."""
-        from vtsearch.config import EMBEDDINGS_DIR
+        from vtscore.config import EMBEDDINGS_DIR
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         test_pkl = EMBEDDINGS_DIR / "_test_combine.pkl"
@@ -580,7 +580,7 @@ class TestStageDemoEndpoint:
 
     def test_accepts_valid_demo(self, client):
         """If any demo dataset exists, staging it returns 200."""
-        from vtsearch.datasets import DEMO_DATASETS
+        from vtscore.datasets import DEMO_DATASETS
 
         if not DEMO_DATASETS:
             pytest.skip("No demo datasets configured")
@@ -601,7 +601,7 @@ class TestClearStagingEndpoint:
 
     def test_clear_staging_removes_files(self, client):
         """Staging files are actually removed."""
-        from vtsearch.datasets.load_pipeline import STAGING_DIR
+        from vtscore.datasets.load_pipeline import STAGING_DIR
 
         STAGING_DIR.mkdir(parents=True, exist_ok=True)
         test_file = STAGING_DIR / "stage_test.pkl"
@@ -616,7 +616,7 @@ class TestClearStagingEndpoint:
 class TestProgressStagingResult:
     def test_staging_result_in_progress(self):
         """update_progress stores staging_result and get_progress returns it."""
-        from vtsearch.concurrency.progress import get_progress, update_progress
+        from vtscore.concurrency.progress import get_progress, update_progress
 
         staging = {"path": "/tmp/test.pkl", "name": "test", "count": 5, "media_type": "audio"}
         update_progress("idle", "done", 100, 100, staging_result=staging)

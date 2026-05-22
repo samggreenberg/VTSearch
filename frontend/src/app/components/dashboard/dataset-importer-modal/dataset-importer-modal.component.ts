@@ -1,16 +1,11 @@
 import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { map } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
-import { FileBrowserComponent } from '../../file-browser/file-browser.component';
-import {
-  FolderBrowserBrowseFn,
-  FolderBrowserComponent,
-} from '../../folder-browser/folder-browser.component';
 import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
+import { SourceSpecsPickerComponent } from './source-specs-picker/source-specs-picker.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
@@ -19,7 +14,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, FileBrowserComponent, FolderBrowserComponent, IconComponent, ClipperChooserComponent, DropZoneComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, ClipperChooserComponent, DropZoneComponent, SourceSpecsPickerComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
@@ -123,15 +118,11 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Whether the user has manually edited :prop:`lfDatasetName` (so we stop
    *  auto-overwriting it from the picked folder name). */
   private lfDatasetNameDirty = false;
-  /** Optional .npz file of pre-computed embedding vectors (Local Folder /
-   *  Local Files).  When set, the upload endpoint reuses these vectors
-   *  instead of running the embedding model for matching uploaded files. */
-  lfVectorsFile: File | null = null;
 
-  // Server folder browser state.  The directory listing itself lives
-  // inside the embedded <vt-folder-browser>; the parent only caches the
-  // resolved path so the Import button can submit the right folder and
-  // the dataset-name / detection helpers can use it.
+  // Server folder picker state. The user types an absolute server path; we
+  // split it into ``sfBrowseRootPath`` (always ``/`` here) and ``sfBrowsePath``
+  // (the typed path with the leading slash stripped) so the existing
+  // detection / submit / dataset-name helpers keep working unchanged.
   sfBrowsePath = '';
   sfBrowseRootPath = '';
   sfBrowseError = '';
@@ -154,24 +145,6 @@ export class DatasetImporterModalComponent implements OnInit {
    *  ``(source_type, converter|null, params)`` triple — see
    *  ``docs/plans/multi-media-import.md``. */
   sfSourceSpecs: SourceSpec[] = [];
-  /** Optional server-side path to a ``.npz`` archive of pre-computed
-   *  embedding vectors.  When set, files in the picked folder whose
-   *  name matches a key in the archive reuse the supplied vector
-   *  instead of running the embedding model. */
-  sfVectorsFile = '';
-
-  /** Browse function for the embedded ``<vt-folder-browser>``.  Folder
-   *  importer mode — files are hidden because the user is picking a
-   *  folder to import, not a file inside it. */
-  readonly sfBrowseFn: FolderBrowserBrowseFn = (path: string) =>
-    this.datasetsApi.browseMediaFiles('folder', path).pipe(
-      map((res) => ({
-        directories: res.directories || [],
-        files: [],
-        rootPath: res.root_path,
-        currentPath: path,
-      })),
-    );
 
   /** Auto-detect result for the local-folder / local-files picker.  Set
    *  after the user picks files; ``null`` when no detection has been run
@@ -195,11 +168,11 @@ export class DatasetImporterModalComponent implements OnInit {
   clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
 
-  // Phase 3 of smart-clipper-defaults: the clipper picker is hidden
-  // behind an "Advanced" toggle by default. When the user has picked a
-  // non-default clipper, the picker is always visible regardless of
-  // this flag (so they can see and re-edit their selection).
-  clipperAdvancedOpen = false;
+  // Embedder + clipper pickers live behind a single "Advanced" toggle so
+  // they don't crowd the required fields. When the user has picked a
+  // non-default value for either, that picker stays visible regardless
+  // of this flag (so they can see and re-edit their selection).
+  advancedOpen = false;
 
   constructor(
     private datasetsApi: DatasetsApiService,
@@ -342,10 +315,15 @@ export class DatasetImporterModalComponent implements OnInit {
 
   selectImporterTab(tabId: string): void {
     this.activeImporterTab = tabId;
-    // Clearing the selected importer keeps the inner sub-tab row blank
-    // until the user explicitly clicks one — matching the "no auto-select"
-    // policy that applies at every tab level.
     this.selectedImporter = null;
+    // When the tab has exactly one importer, the inner sub-tab row is
+    // redundant — clicking the outer tab already declared the intent.
+    // Auto-select the lone importer so the user lands directly on its
+    // form instead of having to click a single-option card.
+    const importers = this.importersForActiveTab;
+    if (importers.length === 1 && importers[0]['enabled'] !== false) {
+      this.selectImporter(importers[0]);
+    }
   }
 
   /** Title shown at the top of the modal. */
@@ -463,7 +441,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.formDatasetNameDirty = true;
   }
 
-  /** Called when the user picks a server path via ``vt-file-browser``.
+  /** Called when the user types into a ``server_path`` form field.
    *  Updates the form value and re-derives the dataset name when the
    *  user hasn't typed one yet. */
   formOnServerPathSelected(key: string, path: string): void {
@@ -806,6 +784,22 @@ export class DatasetImporterModalComponent implements OnInit {
     return mediaType;
   }
 
+  /** Cached map of type_id → human label, rebuilt only when
+   *  ``mediaTypes`` is reassigned.  Passed to
+   *  ``<vt-source-specs-picker>`` so its child change-detection sees a
+   *  stable input reference. */
+  private _typeLabelsSource: MediaTypeInfo[] | null = null;
+  private _typeLabelsCache: Record<string, string> = {};
+  get mediaTypeLabels(): Record<string, string> {
+    if (this._typeLabelsSource !== this.mediaTypes) {
+      const out: Record<string, string> = {};
+      for (const mt of this.mediaTypes) out[mt.type_id] = mt.name.trim();
+      this._typeLabelsCache = out;
+      this._typeLabelsSource = this.mediaTypes;
+    }
+    return this._typeLabelsCache;
+  }
+
   getTabIcon(mediaType: string): string {
     const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
     return mt?.icon || '';
@@ -867,20 +861,6 @@ export class DatasetImporterModalComponent implements OnInit {
     return embedder.display_name || embedder.name;
   }
 
-  /**
-   * Raw registry ID for the currently-selected embedder, used as a secondary
-   * ``<small>`` line under the picker so power users can still see it. Returns
-   * an empty string when the display name equals the raw name (no need to
-   * repeat it) or when no embedder is selected.
-   */
-  selectedEmbedderRawId(name: string, list: EmbedderInfo[]): string {
-    if (!name) return '';
-    const found = list.find((e) => e.name === name);
-    if (!found) return '';
-    const label = found.display_name || found.name;
-    return label === found.name ? '' : found.name;
-  }
-
   selectDemo(demo: DemoDataset): void {
     const userName = (this.demoDatasetName || '').trim();
     this.demoSelected.emit({
@@ -918,7 +898,6 @@ export class DatasetImporterModalComponent implements OnInit {
     this.lfPickerKind = resolved?.name === 'local_files' ? 'files' : 'folder';
     this.lfFiles = [];
     this.lfDetection = null;
-    this.lfVectorsFile = null;
     this.lfError = '';
     this.lfSubmitting = false;
     this.lfRecursive = this.readRecursiveDefault(resolved);
@@ -950,6 +929,17 @@ export class DatasetImporterModalComponent implements OnInit {
     if (files.length === 0) {
       this.lfFiles = [];
       this.lfDetection = null;
+      return;
+    }
+    // Local Files uploads a single paths file (not media), so type detection
+    // doesn't apply — the user picks the media type explicitly.
+    if (this.lfPickerKind === 'files') {
+      this.lfFiles = [files[0]];
+      this.lfDetection = null;
+      this.lfError = '';
+      if (!this.lfDatasetNameDirty) {
+        this.lfDatasetName = this.lfDerivedDatasetName();
+      }
       return;
     }
     this.lfFiles = files;
@@ -995,16 +985,6 @@ export class DatasetImporterModalComponent implements OnInit {
     if (sourceSpecs) {
       this.lfSourceSpecs = sourceSpecs;
     }
-  }
-
-  lfOnVectorsFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    this.lfVectorsFile = input.files && input.files.length > 0 ? input.files[0] : null;
-    this.lfError = '';
-  }
-
-  lfClearVectorsFile(): void {
-    this.lfVectorsFile = null;
   }
 
   /** Derive a default dataset name from the currently picked files / folder.
@@ -1087,16 +1067,26 @@ export class DatasetImporterModalComponent implements OnInit {
 
   lfSubmit(): void {
     if (this.lfFiles.length === 0) {
-      this.lfError = 'Please select a folder to upload.';
+      this.lfError = this.lfPickerKind === 'files'
+        ? 'Please select a paths file to upload.'
+        : 'Please select a folder to upload.';
       return;
     }
 
+    if (this.lfPickerKind === 'files') {
+      this.lfSubmitFiles();
+      return;
+    }
+    this.lfSubmitFolder();
+  }
+
+  private lfSubmitFolder(): void {
     // When recursion is disabled in folder mode, drop any files that live
     // inside subdirectories of the picked folder.  ``webkitRelativePath``
     // looks like ``"top/file.wav"`` for top-level entries and
     // ``"top/sub/file.wav"`` for files inside a subdirectory.
     let filesToUpload = this.lfFiles;
-    if (this.lfPickerKind === 'folder' && !this.lfRecursive) {
+    if (!this.lfRecursive) {
       filesToUpload = this.lfFiles.filter((file) => {
         const rel = ((file as any).webkitRelativePath as string | undefined) || '';
         return rel.split('/').length <= 2;
@@ -1113,27 +1103,12 @@ export class DatasetImporterModalComponent implements OnInit {
     const formData = new FormData();
     formData.append('media_type', this.lfMediaType);
     formData.append('recursive', this.lfRecursive ? 'true' : 'false');
-    const lfName = (this.lfDatasetName || '').trim();
-    if (lfName) {
-      formData.append('dataset_name', lfName);
-    }
-    if (this.lfSelectedEmbedder) {
-      formData.append('embedder', this.lfSelectedEmbedder);
-    }
-    if (this.lfSelectedClipper) {
-      formData.append('clipper', this.lfSelectedClipper);
-      if (this.lfClipperParams.length > 0 && Object.keys(this.lfClipperParamValues).length > 0) {
-        formData.append('clipper_params', JSON.stringify(this.lfClipperParamValues));
-      }
-    }
+    this.lfAppendCommonFormFields(formData);
     for (const file of filesToUpload) {
       const rel = (file as any).webkitRelativePath as string | undefined;
       // Browsers only populate webkitRelativePath when the input has the
       // `webkitdirectory` attribute; fall back to the file's own name.
       formData.append('files', file, rel && rel.length > 0 ? rel : file.name);
-    }
-    if (this.lfVectorsFile) {
-      formData.append('vectors_file', this.lfVectorsFile, this.lfVectorsFile.name);
     }
     if (this.lfSourceSpecs.length > 0) {
       // Multipart form fields are flat strings; encode as JSON.
@@ -1152,6 +1127,47 @@ export class DatasetImporterModalComponent implements OnInit {
     });
   }
 
+  private lfSubmitFiles(): void {
+    this.lfSubmitting = true;
+    this.lfError = '';
+
+    const pathsFile = this.lfFiles[0];
+    const formData = new FormData();
+    formData.append('media_type', this.lfMediaType);
+    formData.append('paths_file', pathsFile, pathsFile.name);
+    this.lfAppendCommonFormFields(formData);
+    if (this.lfSourceSpecs.length > 0) {
+      formData.append('source_specs', JSON.stringify(this.lfSourceSpecs));
+    }
+
+    this.datasetsApi.importLocalFiles(formData).subscribe({
+      next: () => {
+        this.lfSubmitting = false;
+        this.importStarted.emit();
+      },
+      error: (err) => {
+        this.lfSubmitting = false;
+        this.lfError = err.error?.error || 'Upload failed';
+      },
+    });
+  }
+
+  private lfAppendCommonFormFields(formData: FormData): void {
+    const lfName = (this.lfDatasetName || '').trim();
+    if (lfName) {
+      formData.append('dataset_name', lfName);
+    }
+    if (this.lfSelectedEmbedder) {
+      formData.append('embedder', this.lfSelectedEmbedder);
+    }
+    if (this.lfSelectedClipper) {
+      formData.append('clipper', this.lfSelectedClipper);
+      if (this.lfClipperParams.length > 0 && Object.keys(this.lfClipperParamValues).length > 0) {
+        formData.append('clipper_params', JSON.stringify(this.lfClipperParamValues));
+      }
+    }
+  }
+
   // --- Server folder browser ---
 
   openServerFolderBrowser(importer?: ImporterInfo): void {
@@ -1164,7 +1180,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfRecursive = this.readRecursiveDefault(this.selectedImporter);
     this.sfDatasetName = '';
     this.sfDatasetNameDirty = false;
-    this.sfVectorsFile = '';
+    this.sfPathInputValue = '';
 
     // Load media type options from the folder importer's fields
     const folderImporter = this.importers.find((imp) => imp.name === 'server_folder');
@@ -1182,16 +1198,34 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfLoadEmbedders(this.sfMediaType);
     this.sfLoadClippers(this.sfMediaType);
     this.sfResetSourceSpecs();
-    // The embedded <vt-folder-browser> loads itself on init.
   }
 
-  /** Path-change handler wired to ``<vt-folder-browser>``.  The browser
-   *  itself owns directory navigation; the parent reacts to each
-   *  successful load by refreshing the auto-detected dataset name and
-   *  re-running media-type detection. */
-  sfOnPathChange(evt: { path: string; rootPath: string }): void {
-    this.sfBrowsePath = evt.path;
-    this.sfBrowseRootPath = evt.rootPath;
+  /** Current value of the editable absolute-path input. Two-way bound to
+   *  the typed path input; ``sfApplyPathInput`` splits it into the
+   *  ``sfBrowseRootPath`` / ``sfBrowsePath`` pair the submit + detection
+   *  helpers already consume. */
+  sfPathInputValue = '';
+
+  /** Apply the value typed into the absolute-path input. The path is not
+   *  verified here — the server validates it on submit. */
+  sfApplyPathInput(): void {
+    const raw = (this.sfPathInputValue || '').trim();
+    if (!raw) {
+      this.sfBrowsePath = '';
+      this.sfBrowseRootPath = '';
+      this.sfBrowseError = '';
+      this.sfDetection = null;
+      if (!this.sfDatasetNameDirty) {
+        this.sfDatasetName = '';
+      }
+      return;
+    }
+    // Treat the typed value as an absolute server path. Anchor the root
+    // at "/" and put the rest into sfBrowsePath so sfAbsolutePath returns
+    // the user-typed value verbatim.
+    const rel = raw.replace(/^\/+/, '').replace(/\/+$/, '');
+    this.sfBrowseRootPath = '/';
+    this.sfBrowsePath = rel;
     this.sfBrowseError = '';
     if (!this.sfDatasetNameDirty) {
       this.sfDatasetName = this.sfDerivedDatasetName();
@@ -1210,7 +1244,7 @@ export class DatasetImporterModalComponent implements OnInit {
    *  and apply it to the sf-* form (output media-type + source specs). */
   private sfRunDetection(): void {
     const token = ++this.sfDetectionToken;
-    this.datasetsApi.detectMediaType('folder', this.sfBrowsePath, this.sfRecursive).subscribe({
+    this.datasetsApi.detectMediaType('server_fs', this.sfBrowsePath, this.sfRecursive).subscribe({
       next: (res) => {
         if (token !== this.sfDetectionToken) return;
         this.sfDetection = res;
@@ -1257,6 +1291,8 @@ export class DatasetImporterModalComponent implements OnInit {
   get sfAbsolutePath(): string {
     if (!this.sfBrowseRootPath) return '';
     if (!this.sfBrowsePath) return this.sfBrowseRootPath;
+    // Avoid "//foo" when the picker is rooted at the filesystem root.
+    if (this.sfBrowseRootPath === '/') return '/' + this.sfBrowsePath;
     return this.sfBrowseRootPath + '/' + this.sfBrowsePath;
   }
 
@@ -1433,180 +1469,40 @@ export class DatasetImporterModalComponent implements OnInit {
       : [];
   }
 
-  /** Compute the params dict pre-filled with a converter's declared
-   *  field defaults — used when adding a new converter row. */
-  private defaultConverterParams(converter: ConverterInfo): Record<string, string> {
-    const params: Record<string, string> = {};
-    for (const f of converter.fields || []) {
-      params[f.key] = String(f.default ?? '');
-    }
-    return params;
-  }
+  // Per-view native-type ids and converter lists fed to
+  // ``<vt-source-specs-picker>``.  Local uploads stream to the
+  // server-side temp dir and re-enter ``server_folder.run()`` — so
+  // ``lf`` uses the same converter list as ``sf``.
 
-  /** Append a converter row to *specs*; returns the new list. */
-  private addConverterRowTo(specs: SourceSpec[], converters: ConverterInfo[]): SourceSpec[] {
-    if (converters.length === 0) return specs;
-    const first = converters[0];
-    return [
-      ...specs,
-      {
-        source_type: first.source_type,
-        converter: first.name,
-        params: this.defaultConverterParams(first),
-      },
-    ];
-  }
-
-  /** Drop the row at *index* from *specs*; returns the new list. */
-  private removeSpecFrom(specs: SourceSpec[], index: number): SourceSpec[] {
-    return specs.filter((_, i) => i !== index);
-  }
-
-  /** Change the converter on row *index*; returns the new list. */
-  private changeConverterIn(
-    specs: SourceSpec[],
-    index: number,
-    converterName: string,
-    converters: ConverterInfo[],
-  ): SourceSpec[] {
-    const converter = converters.find((c) => c.name === converterName);
-    if (!converter) return specs;
-    const next = [...specs];
-    next[index] = {
-      source_type: converter.source_type,
-      converter: converter.name,
-      params: this.defaultConverterParams(converter),
-    };
-    return next;
-  }
-
-  /** Set a single converter param on row *index*; returns the new list. */
-  private setParamOn(specs: SourceSpec[], index: number, key: string, value: string): SourceSpec[] {
-    const row = specs[index];
-    if (!row) return specs;
-    const next = [...specs];
-    next[index] = { ...row, params: { ...row.params, [key]: value } };
-    return next;
-  }
-
-  /** Look up the converter metadata for a spec row. */
-  private converterFor(spec: SourceSpec, converters: ConverterInfo[]): ConverterInfo | null {
-    if (!spec || !spec.converter) return null;
-    return converters.find((c) => c.name === spec.converter) || null;
-  }
-
-  // -- sf-* (server_folder picker) ------------------------------------
-
-  private sfOutputTypeId(): string {
-    return this.toTypeId(this.sfMediaType);
-  }
-
+  get sfOutputTypeId(): string { return this.toTypeId(this.sfMediaType); }
   get sfAvailableConverters(): ConverterInfo[] {
-    return this.availableConvertersFor('server_folder', this.sfOutputTypeId());
+    return this.availableConvertersFor('server_folder', this.sfOutputTypeId);
   }
-
   private sfResetSourceSpecs(): void {
-    this.sfSourceSpecs = this.defaultSpecListFor(this.sfOutputTypeId());
+    this.sfSourceSpecs = this.defaultSpecListFor(this.sfOutputTypeId);
   }
+  onSfSpecsChange(specs: SourceSpec[]): void { this.sfSourceSpecs = specs; }
 
-  sfAddConverterRow(): void {
-    this.sfSourceSpecs = this.addConverterRowTo(this.sfSourceSpecs, this.sfAvailableConverters);
-  }
-
-  sfRemoveSpec(index: number): void {
-    this.sfSourceSpecs = this.removeSpecFrom(this.sfSourceSpecs, index);
-  }
-
-  sfOnConverterChange(index: number, converterName: string): void {
-    this.sfSourceSpecs = this.changeConverterIn(
-      this.sfSourceSpecs, index, converterName, this.sfAvailableConverters,
-    );
-  }
-
-  sfOnConverterParamChange(index: number, key: string, value: string): void {
-    this.sfSourceSpecs = this.setParamOn(this.sfSourceSpecs, index, key, value);
-  }
-
-  sfConverterFor(index: number): ConverterInfo | null {
-    return this.converterFor(this.sfSourceSpecs[index], this.sfAvailableConverters);
-  }
-
-  // -- lf-* (local_folder / local_files picker) -----------------------
-  //
-  // Local uploads stream to the server-side temp dir and re-enter
-  // server_folder.run() — so the converter list is the same one
-  // server_folder advertises in its to_dict().
-
-  private lfOutputTypeId(): string {
-    return this.toTypeId(this.lfMediaType);
-  }
-
+  get lfOutputTypeId(): string { return this.toTypeId(this.lfMediaType); }
   get lfAvailableConverters(): ConverterInfo[] {
-    return this.availableConvertersFor('server_folder', this.lfOutputTypeId());
+    return this.availableConvertersFor('server_folder', this.lfOutputTypeId);
   }
-
   private lfResetSourceSpecs(): void {
-    this.lfSourceSpecs = this.defaultSpecListFor(this.lfOutputTypeId());
+    this.lfSourceSpecs = this.defaultSpecListFor(this.lfOutputTypeId);
   }
+  onLfSpecsChange(specs: SourceSpec[]): void { this.lfSourceSpecs = specs; }
 
-  lfAddConverterRow(): void {
-    this.lfSourceSpecs = this.addConverterRowTo(this.lfSourceSpecs, this.lfAvailableConverters);
-  }
-
-  lfRemoveSpec(index: number): void {
-    this.lfSourceSpecs = this.removeSpecFrom(this.lfSourceSpecs, index);
-  }
-
-  lfOnConverterChange(index: number, converterName: string): void {
-    this.lfSourceSpecs = this.changeConverterIn(
-      this.lfSourceSpecs, index, converterName, this.lfAvailableConverters,
-    );
-  }
-
-  lfOnConverterParamChange(index: number, key: string, value: string): void {
-    this.lfSourceSpecs = this.setParamOn(this.lfSourceSpecs, index, key, value);
-  }
-
-  lfConverterFor(index: number): ConverterInfo | null {
-    return this.converterFor(this.lfSourceSpecs[index], this.lfAvailableConverters);
-  }
-
-  // -- form-* (generic form view, e.g. server_files) ------------------
-
-  private formOutputTypeId(): string {
+  get formOutputTypeId(): string {
     return this.toTypeId(String(this.formValues['media_type'] || ''));
   }
-
   get formAvailableConverters(): ConverterInfo[] {
     if (!this.selectedImporter) return [];
-    return this.availableConvertersFor(this.selectedImporter.name, this.formOutputTypeId());
+    return this.availableConvertersFor(this.selectedImporter.name, this.formOutputTypeId);
   }
-
   resetFormSourceSpecs(): void {
-    this.formSourceSpecs = this.defaultSpecListFor(this.formOutputTypeId());
+    this.formSourceSpecs = this.defaultSpecListFor(this.formOutputTypeId);
   }
-
-  formAddConverterRow(): void {
-    this.formSourceSpecs = this.addConverterRowTo(this.formSourceSpecs, this.formAvailableConverters);
-  }
-
-  formRemoveSpec(index: number): void {
-    this.formSourceSpecs = this.removeSpecFrom(this.formSourceSpecs, index);
-  }
-
-  formOnConverterChange(index: number, converterName: string): void {
-    this.formSourceSpecs = this.changeConverterIn(
-      this.formSourceSpecs, index, converterName, this.formAvailableConverters,
-    );
-  }
-
-  formOnConverterParamChange(index: number, key: string, value: string): void {
-    this.formSourceSpecs = this.setParamOn(this.formSourceSpecs, index, key, value);
-  }
-
-  formConverterFor(index: number): ConverterInfo | null {
-    return this.converterFor(this.formSourceSpecs[index], this.formAvailableConverters);
-  }
+  onFormSpecsChange(specs: SourceSpec[]): void { this.formSourceSpecs = specs; }
 
   private sfLoadEmbedders(mediaType: string): void {
     if (!mediaType) {
@@ -1755,15 +1651,67 @@ export class DatasetImporterModalComponent implements OnInit {
     return clippers.length > 0 && clippers[0].name === selected;
   }
 
+  /** Whether the currently-selected embedder is one the registry flags
+   *  ``is_default`` for the active media type. Used to decide whether the
+   *  Advanced section can stay collapsed — if the user (or saved settings)
+   *  picked a non-default, we keep the picker visible. */
+  isDefaultEmbedderSelected(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    let embedders: EmbedderInfo[];
+    let selected: string;
+    if (context === 'form') {
+      embedders = this.availableEmbedders;
+      selected = this.selectedEmbedder;
+    } else if (context === 'demo') {
+      embedders = this.demoEmbedders;
+      selected = this.selectedDemoEmbedder;
+    } else if (context === 'sf') {
+      embedders = this.sfEmbedders;
+      selected = this.sfSelectedEmbedder;
+    } else {
+      embedders = this.lfEmbedders;
+      selected = this.lfSelectedEmbedder;
+    }
+    if (!selected) return true;
+    const found = embedders.find((e) => e.name === selected);
+    return !!found?.is_default;
+  }
+
   /** Whether the clipper picker should be visible in the given context.
    *  True when the Advanced section is expanded or when a non-default
    *  clipper is selected. */
   showClipperPicker(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
-    return this.clipperAdvancedOpen || !this.isDefaultClipperSelected(context);
+    return this.advancedOpen || !this.isDefaultClipperSelected(context);
   }
 
-  toggleClipperAdvanced(): void {
-    this.clipperAdvancedOpen = !this.clipperAdvancedOpen;
+  /** Whether the embedder picker should be visible in the given context.
+   *  Same semantics as ``showClipperPicker`` but for the embedder. */
+  showEmbedderPicker(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    return this.advancedOpen || !this.isDefaultEmbedderSelected(context);
+  }
+
+  /** Whether the given context's Advanced section also contains an
+   *  "Include media" block. The lf/sf views always have one; the generic
+   *  form has one when the importer is ``multi_media``. The demo picker
+   *  never has one. */
+  private contextHasIncludeMedia(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    if (context === 'form') return !!this.selectedImporter?.multi_media;
+    return context === 'lf' || context === 'sf';
+  }
+
+  /** Whether the "Advanced ▾" toggle button should be rendered in the
+   *  given context. The Include media block lives inside Advanced, so
+   *  whenever the context has one the toggle must stay visible — it's the
+   *  only way to reach Include media. Otherwise we only show the toggle
+   *  when both embedder and clipper are at defaults; if either is
+   *  overridden the pickers are already visible and the button would be
+   *  redundant. */
+  showAdvancedToggle(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    if (this.contextHasIncludeMedia(context)) return true;
+    return this.isDefaultEmbedderSelected(context) && this.isDefaultClipperSelected(context);
+  }
+
+  toggleAdvanced(): void {
+    this.advancedOpen = !this.advancedOpen;
   }
 
   sfSubmit(): void {
@@ -1790,10 +1738,6 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.sfSourceSpecs.length > 0) {
       params['source_specs'] = this.sfSourceSpecs;
-    }
-    const sfVecPath = (this.sfVectorsFile || '').trim();
-    if (sfVecPath) {
-      params['vectors_file'] = sfVecPath;
     }
 
     this.datasetsApi.runImporter('server_folder', params).subscribe({

@@ -4,7 +4,7 @@ VTSearch uses a small MLP (multi-layer perceptron) neural network to learn a bin
 
 ## Architecture
 
-The MLP is defined in `vtsearch/training/mlp.py` via `build_model()`:
+The MLP is defined in `vtscore/training/mlp.py` via `build_model()`:
 
 ```
 Linear(input_dim, hidden_dim) -> ReLU -> Dropout(p) -> Linear(hidden_dim, 1)
@@ -64,7 +64,7 @@ For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 
 |---------|-------|-------|
 | `OMP_NUM_THREADS` | `app.py` | `1` |
 | `MKL_NUM_THREADS` | `app.py` | `1` |
-| `torch.set_num_threads` | `vtsearch/embedding/loader.py` | `1` |
+| `torch.set_num_threads` | `vtscore/embedding/loader.py` | `1` |
 | dtype | `training.py` | `torch.float32` |
 | Device | default | CPU (GPU supported, see tests) |
 
@@ -97,7 +97,7 @@ Embedders carry capability flags consumed by the routes layer and the frontend:
 - `supports_patch_regions: bool` — set on the `_patch` variants. Loaders that see this flag populate `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw `H × W × D` fp16) in addition to `media["embedding"]`.
 - `license_notice: Optional[str]` — non-None for embedders with usage restrictions (e.g. EUPE's FAIR Noncommercial Research Licence). Surfaced as a warning chip on the embedder picker.
 
-The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtsearch/converters/` before embedding.
+The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtscore/converters/` before embedding.
 
 Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embedding"` field (`numpy.ndarray`, used by every legacy code path); patch embedders additionally populate `"patch_regions"` (list of `RegionVector`s, fp16-on-disk / fp32-in-RAM) and `"patch_grid"` (`H × W × D` ndarray, fp16). The MLP trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
 
@@ -109,10 +109,10 @@ Yes-votes may additionally carry an optional `region_box` (4-float normalised re
 
 ## Key Files
 
-- `vtsearch/training/mlp.py` — `build_model`, `train_model`, `build_model_from_weights`
-- `vtsearch/training/thresholds.py` — `calculate_cross_calibration_threshold`, `calculate_safe_threshold`, `calculate_gmm_threshold`, `find_optimal_threshold`
-- `vtsearch/detectors/training.py` — `train_and_score`, `train_and_threshold`, origin-based detector training
-- `vtsearch/detectors/labeling_progress.py` — Cached per-step training and stability analysis
-- `vtsearch/embedding/loader.py` — Model initialization and thread configuration
-- `vtsearch/eval/voting_iterations.py` — Voting simulation evaluation
-- `vtsearch/config.py` — `TRAIN_EPOCHS` and model IDs
+- `vtscore/training/mlp.py` — `build_model`, `train_model`, `build_model_from_weights`
+- `vtscore/training/thresholds.py` — `calculate_cross_calibration_threshold`, `calculate_safe_threshold`, `calculate_gmm_threshold`, `find_optimal_threshold`
+- `vtscore/detectors/training.py` — `train_and_score`, `train_and_threshold`, origin-based detector training
+- `vtscore/detectors/labeling_progress.py` — Cached per-step training and stability analysis
+- `vtscore/embedding/loader.py` — Model initialization and thread configuration
+- `vtscore/eval/voting_iterations.py` — Voting simulation evaluation
+- `vtscore/config.py` — `TRAIN_EPOCHS` and model IDs

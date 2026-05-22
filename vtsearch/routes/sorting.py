@@ -26,18 +26,21 @@ from flask_smorest import Blueprint, abort
 from vtsearch.routes._shared import (
     format_exception_detail,
     get_embedder_for_medias,
+    require_dataset_header,
+    require_detector_header,
 )
 
-from vtsearch.config import DATA_DIR
-import vtsearch.security.path_validation as _paths
-from vtsearch.detectors.labeling_progress import inject_live_model
-from vtsearch.detectors.training import train_and_score
-from vtsearch.embedding import embed_text_query
+from vtscore.config import DATA_DIR
+import vtscore.security.path_validation as _paths
+from vtscore.detectors.labeling_progress import inject_live_model
+from vtscore.detectors.training import train_and_score
+from vtscore.embedding import embed_text_query
 from vtsearch.schemas.sorting import (
     DiversityTreeNextResponseSchema,
     InclusionRequestSchema,
     InclusionResponseSchema,
     LabelFileSortResponseSchema,
+    LearnedSortCancelResponseSchema,
     LearnedSortRequestSchema,
     LearnedSortResponseSchema,
     LearnedSortResultQuerySchema,
@@ -52,7 +55,7 @@ from vtsearch.schemas.sorting import (
     TextsortSuggestionsResponseSchema,
     VotesResponseSchema,
 )
-from vtsearch.training.thresholds import calculate_gmm_threshold
+from vtscore.training.thresholds import calculate_gmm_threshold
 from vtsearch.state import (
     add_textsort_suggestion,
     bad_votes,
@@ -72,7 +75,7 @@ from vtsearch.state import (
     update_learned_scores,
     vote_region_boxes,
 )
-from vtsearch.concurrency.progress import update_sort_progress
+from vtscore.concurrency.progress import update_sort_progress
 
 sorting_bp = Blueprint(
     "sorting",
@@ -94,9 +97,9 @@ def _cosine_sort(query_vec):
     image coordinates ``[x0, y0, x1, y1]``.  Single-vector embedders
     take a fast vectorised numpy path with no per-result box.
 
-    Both paths live in :mod:`vtsearch.training.region_similarity`.
+    Both paths live in :mod:`vtscore.training.region_similarity`.
     """
-    from vtsearch.training.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
+    from vtscore.training.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
 
     snap = snapshot_medias()
     results, sims_list = cosine_sort_with_boxes(snap, query_vec)
@@ -166,7 +169,7 @@ def sort_clips(body: dict):
     # signal to hide its text-search UI.
     if embedder_name:
         try:
-            from vtsearch.media import get_embedder  # noqa: PLC0415
+            from vtscore.media import get_embedder  # noqa: PLC0415
 
             _active_emb = get_embedder(embedder_name)
         except KeyError:
@@ -230,10 +233,10 @@ def _learned_sort_done_payload(job) -> dict:
 
 def _resolve_active_labelset(det_ctx):
     """Resolve the labelset for the active detector → (labelset, media_type)."""
-    from vtsearch.datasets.labelset import LabelSet
-    from vtsearch.detectors.registry import get_detector
-    from vtsearch.detectors.store import _detector_path, _read_detector
-    from vtsearch.state.core import _empty_detector_context
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.registry import get_detector
+    from vtscore.detectors.store import _detector_path, _read_detector
+    from vtscore.state.core import _empty_detector_context
 
     if det_ctx is _empty_detector_context or not det_ctx.detector_id:
         return None, ""
@@ -374,9 +377,9 @@ def learned_sort(body: dict):
     Tests can pass ``{"wait": true}`` in the body to block until the job
     completes and receive the result inline.  The frontend leaves it false.
     """
-    from vtsearch.detectors.labelset_training import labelset_train_and_score
-    from vtsearch.concurrency.async_jobs import learned_sort_jobs
-    from vtsearch.state.core import (
+    from vtscore.detectors.labelset_training import labelset_train_and_score
+    from vtscore.concurrency.async_jobs import learned_sort_jobs
+    from vtscore.state.core import (
         _empty_detector_context,
         get_active_context,
         get_active_detector_context,
@@ -489,7 +492,7 @@ def learned_sort(body: dict):
 
 def _stable_element_id_for_sig(el) -> str:
     """Return a stable identifier for a labelset element for signature use."""
-    from vtsearch.detectors.labelset_elements import stable_element_id
+    from vtscore.detectors.labelset_elements import stable_element_id
 
     return stable_element_id(el)
 
@@ -505,7 +508,7 @@ def learned_sort_result(query: dict):
     Returns the same shape as the POST endpoint's ``done`` response when the
     job has finished, or a ``running`` snapshot otherwise.
     """
-    from vtsearch.concurrency.async_jobs import learned_sort_jobs
+    from vtscore.concurrency.async_jobs import learned_sort_jobs
 
     job_id = query["job_id"]
 
@@ -533,11 +536,33 @@ def learned_sort_result(query: dict):
     return _learned_sort_done_payload(job)
 
 
+@sorting_bp.route("/api/learned-sort/cancel/<job_id>", methods=["POST"])
+@sorting_bp.response(200, LearnedSortCancelResponseSchema)
+@sorting_bp.alt_response(404, description="Job not found.")
+def cancel_learned_sort(job_id: str):
+    """Cancel an in-flight learned-sort job.
+
+    Sets the cancel flag on the :class:`AsyncJob`; the training loop
+    polls it cooperatively. Returns 200 even when the job has already
+    finished — the caller's contract is "make sure it's no longer
+    running", which also holds for done / errored / already-cancelled
+    jobs.
+    """
+    from vtscore.concurrency.async_jobs import learned_sort_jobs
+
+    job = learned_sort_jobs.get(job_id)
+    if job is None:
+        abort(404, message="Job not found")
+    job.cancel()
+    return {"ok": True}
+
+
 @sorting_bp.route("/api/votes", methods=["GET"])
 @sorting_bp.response(200, VotesResponseSchema)
 def get_votes():
     """Return current good/bad votes, click times, and learned scores."""
-    from vtsearch.state.core import _empty_detector_context, get_active_detector_context
+    from vtscore.state.core import _empty_detector_context, get_active_detector_context
+    from vtscore.utils.scores import finite_or  # noqa: PLC0415
 
     click_times = get_vote_click_times()
     learned_scores = get_learned_scores()
@@ -548,11 +573,16 @@ def get_votes():
     else:
         labelset_good_count = len(good_votes)
         labelset_bad_count = len(bad_votes)
+    # Defensive guard against non-finite scores poisoning the response: every
+    # write site is already sanitised via ``sigmoid_to_finite_scores``, but
+    # ``round(NaN, 4)`` returns ``NaN`` and Flask's default JSON provider
+    # emits the literal token ``NaN`` — invalid JSON that breaks every
+    # browser ``JSON.parse``. Belt-and-braces audit M13.
     return {
         "good": sorted(good_votes),
         "bad": sorted(bad_votes),
         "click_times": {str(k): v for k, v in click_times.items()},
-        "learned_scores": {str(k): round(v, 4) for k, v in learned_scores.items()},
+        "learned_scores": {str(k): round(finite_or(v), 4) for k, v in learned_scores.items()},
         "labelset_good_count": labelset_good_count,
         "labelset_bad_count": labelset_bad_count,
     }
@@ -560,6 +590,7 @@ def get_votes():
 
 @sorting_bp.route("/api/votes/clear", methods=["POST"])
 @sorting_bp.response(200, OkResponseSchema)
+@require_detector_header
 def clear_votes_route():
     """Clear all votes without clearing medias.
 
@@ -575,6 +606,8 @@ def clear_votes_route():
 @sorting_bp.route("/api/votes/seed-from-examples", methods=["POST"])
 @sorting_bp.arguments(SeedFromExamplesRequestSchema)
 @sorting_bp.response(200, SeedFromExamplesResponseSchema)
+@require_dataset_header
+@require_detector_header
 def seed_votes_from_examples(body: dict):
     """Seed good votes from a model's media examples.
 
@@ -587,7 +620,7 @@ def seed_votes_from_examples(body: dict):
 
         {"seeded": 2, "skipped": 1}
     """
-    from vtsearch.detectors.media_seeding import seed_good_votes_from_examples
+    from vtscore.detectors.media_seeding import seed_good_votes_from_examples
 
     examples = body["examples"]
 
@@ -595,13 +628,26 @@ def seed_votes_from_examples(body: dict):
     skipped = len(examples) - seeded
 
     if seeded > 0:
-        from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+        # Surface persistence failures explicitly instead of letting them
+        # bubble as an uncaught 500 — same C11/H30 pattern as
+        # ``fill_labels_from_sort`` and ``vote_media``.  Without this, an
+        # ``os.replace`` failure inside ``_write_detector`` would leave the
+        # in-memory good votes committed while the on-disk labelset stayed
+        # untouched, with no signal to the client beyond a generic 500.
+        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
-        sync_labels_to_loaded_detector()
+        try:
+            sync_labels_to_loaded_detector()
+        except Exception as exc:
+            logging.getLogger(__name__).exception("seed_votes_from_examples: detector label sync failed")
+            abort(500, message=f"Failed to persist seeded votes to detector store: {exc}")
 
-        from vtsearch.labels.sync import sync_to_labelset_source
+        from vtscore.labels.sync import sync_to_labelset_source
 
-        sync_to_labelset_source()
+        try:
+            sync_to_labelset_source()
+        except Exception:
+            logging.getLogger(__name__).exception("seed_votes_from_examples: labelset source scheduling failed")
 
     return {"seeded": seeded, "skipped": skipped}
 
@@ -673,7 +719,7 @@ def _example_sort_from_path(file_path: Path) -> tuple:
     emb = _get_embedder_for_loaded_data()
     if emb is None:
         raise ValueError("No embedder available for loaded dataset")
-    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
     example_embedding = emb.embed_media(media_from_path(file_path))
 
@@ -716,7 +762,7 @@ def _apply_crop_or_keep(temp_path: Path, crop_params: dict | None) -> Path:
     first_media = next(iter(snap.values()))
     media_type = first_media.get("type", "")
 
-    from vtsearch.media.cropping import crop_file_bytes
+    from vtscore.media.cropping import crop_file_bytes
 
     cropped = crop_file_bytes(temp_path, media_type, crop_params)
     temp_path.write_bytes(cropped)
@@ -797,7 +843,7 @@ def _embed_external_labels(labels: list[dict], emb) -> tuple[list, list[float], 
     or escapes the allowed directory, the file doesn't exist, or the
     embedder returns None.
     """
-    from vtsearch.media.embedder import media_from_path  # noqa: PLC0415
+    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
     X_list: list = []
     y_list: list[float] = []
@@ -842,8 +888,9 @@ def _train_and_score_dataset(X_list: list, y_list: list[float]) -> tuple[list[di
     """Train an MLP on (X, y), then score every media in the active dataset."""
     import torch  # noqa: PLC0415
 
-    from vtsearch.detectors.training import train_and_threshold
-    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.detectors.training import train_and_threshold
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
 
     snap = snapshot_medias()
     model, threshold = train_and_threshold(X_list, y_list, snap=snap)
@@ -852,9 +899,9 @@ def _train_and_score_dataset(X_list: list, y_list: list[float]) -> tuple[list[di
     X_all = torch.from_numpy(all_embs)
     with torch.no_grad():
         X_all = X_all.to(next(model.parameters()).device)
-        scores = torch.sigmoid(model(X_all)).squeeze(1).cpu().tolist()
+        scores = sigmoid_to_finite_scores(model(X_all))
 
-    paired = sorted(zip(all_ids, scores), key=lambda x: x[1], reverse=True)
+    paired = sorted(zip(all_ids, scores, strict=True), key=lambda x: x[1], reverse=True)
     results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]
     return results, threshold
 
@@ -895,7 +942,7 @@ def label_file_sort():
                 message=f"Need at least 2 valid labeled files (loaded {loaded}, skipped {skipped})",
             )
 
-        from vtsearch.detectors.training import validate_good_bad_split
+        from vtscore.detectors.training import validate_good_bad_split
 
         try:
             validate_good_bad_split(y_list)

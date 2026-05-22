@@ -37,8 +37,8 @@
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg, transparent);
-  color: var(--text, inherit);
+  background: var(--bg-surface);
+  color: var(--text-primary);
   font-size: .95rem;
 
   &:focus {
@@ -101,7 +101,7 @@
     background: rgba(255, 180, 0, .12);
 
     .col-type {
-      color: var(--warn, #c47a00);
+      color: var(--text-warning);
       font-weight: 600;
     }
   }
@@ -118,13 +118,13 @@
   border-radius: 4px;
 
   &:hover {
-    color: var(--danger, #c43a3a);
+    color: var(--color-bad);
     background: var(--bg-subtle);
   }
 }
 
 .mismatch-warning {
-  color: var(--warn, #c47a00);
+  color: var(--text-warning);
   font-style: italic;
 }
 
@@ -136,13 +136,13 @@
 
 .warn-text {
   margin: 0;
-  color: var(--warn, #c47a00);
+  color: var(--text-warning);
   font-size: .85rem;
 }
 
 .error-text {
   margin: 0;
-  color: var(--danger, #c43a3a);
+  color: var(--color-bad);
   font-size: .85rem;
 }
 

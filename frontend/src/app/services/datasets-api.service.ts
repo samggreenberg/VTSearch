@@ -38,37 +38,37 @@ import type {
   ImporterInfo,
   ImporterPickerTab,
 } from '../models/api.models';
-import { apiBrowseMediaFilesGet } from '../generated/api-client/fn/datasets-ui/api-browse-media-files-get';
-import { apiBrowseMediaFilesSelectPost } from '../generated/api-client/fn/datasets-ui/api-browse-media-files-select-post';
-import { apiClippersGet } from '../generated/api-client/fn/datasets-listings/api-clippers-get';
-import { apiConvertersGet } from '../generated/api-client/fn/datasets-listings/api-converters-get';
-import { apiDashboardDiskUsageGet } from '../generated/api-client/fn/datasets-ui/api-dashboard-disk-usage-get';
-import { apiDatasetAllImportersGet } from '../generated/api-client/fn/datasets-listings/api-dataset-all-importers-get';
-import { apiDatasetAvailableFilesGet } from '../generated/api-client/fn/datasets-staging/api-dataset-available-files-get';
-import { apiDatasetCancelPost } from '../generated/api-client/fn/datasets-status/api-dataset-cancel-post';
-import { apiDatasetCancelTaskIdPost } from '../generated/api-client/fn/datasets-status/api-dataset-cancel-task-id-post';
-import { apiDatasetClearPost } from '../generated/api-client/fn/datasets-load/api-dataset-clear-post';
-import { apiDatasetCombinePost } from '../generated/api-client/fn/datasets-staging/api-dataset-combine-post';
-import { apiDatasetDemoCategoriesNameGet } from '../generated/api-client/fn/datasets-ui/api-dataset-demo-categories-name-get';
-import { apiDatasetDemoListGet } from '../generated/api-client/fn/datasets-ui/api-dataset-demo-list-get';
-import { apiDatasetDetectMediaTypeGet } from '../generated/api-client/fn/datasets-ui/api-dataset-detect-media-type-get';
-import { apiDatasetImportImporterNameOptionsPost } from '../generated/api-client/fn/datasets-staging/api-dataset-import-importer-name-options-post';
-import { apiDatasetImportersGet } from '../generated/api-client/fn/datasets-listings/api-dataset-importers-get';
-import { apiDatasetLoadDemoPost } from '../generated/api-client/fn/datasets-load/api-dataset-load-demo-post';
-import { apiDatasetLoadFolderPost } from '../generated/api-client/fn/datasets-load/api-dataset-load-folder-post';
-import { apiDatasetLoadSourcePost } from '../generated/api-client/fn/datasets-load/api-dataset-load-source-post';
-import { apiDatasetStageDemoNamePost } from '../generated/api-client/fn/datasets-staging/api-dataset-stage-demo-name-post';
-import { apiDatasetStagingDelete } from '../generated/api-client/fn/datasets-staging/api-dataset-staging-delete';
-import { apiDatasetStatusGet } from '../generated/api-client/fn/datasets-status/api-dataset-status-get';
-import { apiDatasetsRegistryDatasetIdDelete } from '../generated/api-client/fn/datasets-registry/api-datasets-registry-dataset-id-delete';
-import { apiDatasetsRegistryDatasetIdLoadPost } from '../generated/api-client/fn/datasets-registry/api-datasets-registry-dataset-id-load-post';
-import { apiDatasetsRegistryDatasetIdReadersPut } from '../generated/api-client/fn/datasets-registry/api-datasets-registry-dataset-id-readers-put';
-import { apiDatasetsRegistryDatasetIdRenamePut } from '../generated/api-client/fn/datasets-registry/api-datasets-registry-dataset-id-rename-put';
-import { apiDatasetsRegistryDatasetIdStatsGet } from '../generated/api-client/fn/datasets-registry/api-datasets-registry-dataset-id-stats-get';
-import { apiDatasetsRegistryDatasetIdUnloadPost } from '../generated/api-client/fn/datasets-registry/api-datasets-registry-dataset-id-unload-post';
-import { apiDatasetsRegistryGet } from '../generated/api-client/fn/datasets-registry/api-datasets-registry-get';
-import { apiEmbeddersGet } from '../generated/api-client/fn/datasets-listings/api-embedders-get';
-import { apiMediaTypesGet } from '../generated/api-client/fn/datasets-listings/api-media-types-get';
+import { browseMediaFiles } from '../generated/api-client/fn/datasets-ui/browse-media-files';
+import { selectBrowsedFile } from '../generated/api-client/fn/datasets-ui/select-browsed-file';
+import { clippersList } from '../generated/api-client/fn/datasets-listings/clippers-list';
+import { convertersList } from '../generated/api-client/fn/datasets-listings/converters-list';
+import { dashboardDiskUsage } from '../generated/api-client/fn/datasets-ui/dashboard-disk-usage';
+import { datasetAllImporters } from '../generated/api-client/fn/datasets-listings/dataset-all-importers';
+import { availableDatasetFiles } from '../generated/api-client/fn/datasets-staging/available-dataset-files';
+import { cancelDatasetLoad } from '../generated/api-client/fn/datasets-status/cancel-dataset-load';
+import { cancelDatasetLoadTask } from '../generated/api-client/fn/datasets-status/cancel-dataset-load-task';
+import { clearDatasetRoute } from '../generated/api-client/fn/datasets-load/clear-dataset-route';
+import { combineDatasetsRoute } from '../generated/api-client/fn/datasets-staging/combine-datasets-route';
+import { demoDatasetCategories } from '../generated/api-client/fn/datasets-ui/demo-dataset-categories';
+import { demoDatasetList } from '../generated/api-client/fn/datasets-ui/demo-dataset-list';
+import { detectMediaType } from '../generated/api-client/fn/datasets-ui/detect-media-type';
+import { importerFieldOptions } from '../generated/api-client/fn/datasets-staging/importer-field-options';
+import { datasetImporters } from '../generated/api-client/fn/datasets-listings/dataset-importers';
+import { loadDemoDatasetRoute } from '../generated/api-client/fn/datasets-load/load-demo-dataset-route';
+import { loadDatasetFolder } from '../generated/api-client/fn/datasets-load/load-dataset-folder';
+import { loadDatasetFromSource } from '../generated/api-client/fn/datasets-load/load-dataset-from-source';
+import { stageDemo } from '../generated/api-client/fn/datasets-staging/stage-demo';
+import { clearStaging } from '../generated/api-client/fn/datasets-staging/clear-staging';
+import { datasetStatus } from '../generated/api-client/fn/datasets-status/dataset-status';
+import { deleteRegisteredDataset } from '../generated/api-client/fn/datasets-registry/delete-registered-dataset';
+import { loadRegisteredDataset } from '../generated/api-client/fn/datasets-registry/load-registered-dataset';
+import { updateDatasetReaders } from '../generated/api-client/fn/datasets-registry/update-dataset-readers';
+import { renameRegisteredDataset } from '../generated/api-client/fn/datasets-registry/rename-registered-dataset';
+import { getDatasetStats } from '../generated/api-client/fn/datasets-registry/get-dataset-stats';
+import { unloadRegisteredDataset } from '../generated/api-client/fn/datasets-registry/unload-registered-dataset';
+import { listRegisteredDatasets } from '../generated/api-client/fn/datasets-registry/list-registered-datasets';
+import { embeddersList } from '../generated/api-client/fn/datasets-listings/embedders-list';
+import { mediaTypesList } from '../generated/api-client/fn/datasets-listings/media-types-list';
 
 /** The importer/clipper/embedder/converter listings return plugin
  *  ``to_dict()`` payloads — the generated types describe them as
@@ -86,47 +86,47 @@ export class DatasetsApiService {
   private config = inject(ApiConfiguration);
 
   getStatus(): Observable<DatasetStatusResponse> {
-    return apiDatasetStatusGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return datasetStatus(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   getImporters(): Observable<ImportersResponse> {
-    return apiDatasetImportersGet(this.http, this.config.rootUrl).pipe(
+    return datasetImporters(this.http, this.config.rootUrl).pipe(
       map((r) => r.body as unknown as ImportersResponse),
     );
   }
 
   getAllImporters(): Observable<ImportersResponse> {
-    return apiDatasetAllImportersGet(this.http, this.config.rootUrl).pipe(
+    return datasetAllImporters(this.http, this.config.rootUrl).pipe(
       map((r) => r.body as unknown as ImportersResponse),
     );
   }
 
   getDemoList(embedder?: string, clipper?: string): Observable<DemoDatasetListResponse> {
-    return apiDatasetDemoListGet(this.http, this.config.rootUrl, { embedder, clipper }).pipe(
+    return demoDatasetList(this.http, this.config.rootUrl, { embedder, clipper }).pipe(
       map((r) => r.body),
     );
   }
 
   getDemoCategories(name: string): Observable<DemoCategoriesResponse> {
-    return apiDatasetDemoCategoriesNameGet(this.http, this.config.rootUrl, { name }).pipe(
+    return demoDatasetCategories(this.http, this.config.rootUrl, { name }).pipe(
       map((r) => r.body),
     );
   }
 
   browseMediaFiles(source: string, path: string): Observable<BrowseMediaFilesResponse> {
-    return apiBrowseMediaFilesGet(this.http, this.config.rootUrl, { source, path }).pipe(
+    return browseMediaFiles(this.http, this.config.rootUrl, { source, path }).pipe(
       map((r) => r.body),
     );
   }
 
   selectBrowsedFile(source: string, path: string): Observable<BrowseMediaFilesSelectResponse> {
-    return apiBrowseMediaFilesSelectPost(this.http, this.config.rootUrl, {
+    return selectBrowsedFile(this.http, this.config.rootUrl, {
       body: { source, path },
     }).pipe(map((r) => r.body));
   }
 
   getMediaTypes(): Observable<{ media_types: import('../models/api.models').MediaTypeInfo[] }> {
-    return apiMediaTypesGet(this.http, this.config.rootUrl).pipe(
+    return mediaTypesList(this.http, this.config.rootUrl).pipe(
       map((r) => r.body as unknown as { media_types: import('../models/api.models').MediaTypeInfo[] }),
     );
   }
@@ -137,7 +137,7 @@ export class DatasetsApiService {
     recursive: boolean,
     limit = 50,
   ): Observable<DetectMediaTypeResponse> {
-    return apiDatasetDetectMediaTypeGet(this.http, this.config.rootUrl, {
+    return detectMediaType(this.http, this.config.rootUrl, {
       source,
       path,
       recursive,
@@ -146,25 +146,25 @@ export class DatasetsApiService {
   }
 
   getClippers(mediaType?: string): Observable<ClipperInfo[]> {
-    return apiClippersGet(this.http, this.config.rootUrl, { media_type: mediaType }).pipe(
+    return clippersList(this.http, this.config.rootUrl, { media_type: mediaType }).pipe(
       map((r) => r.body.clippers as unknown as ClipperInfo[]),
     );
   }
 
   getEmbedders(mediaType?: string): Observable<EmbedderInfo[]> {
-    return apiEmbeddersGet(this.http, this.config.rootUrl, { media_type: mediaType }).pipe(
+    return embeddersList(this.http, this.config.rootUrl, { media_type: mediaType }).pipe(
       map((r) => r.body.embedders as unknown as EmbedderInfo[]),
     );
   }
 
   getConverters(target?: string): Observable<ConverterInfo[]> {
-    return apiConvertersGet(this.http, this.config.rootUrl, { target }).pipe(
+    return convertersList(this.http, this.config.rootUrl, { target }).pipe(
       map((r) => r.body.converters as unknown as ConverterInfo[]),
     );
   }
 
   getAvailableFiles(): Observable<DatasetAvailableFilesResponse> {
-    return apiDatasetAvailableFilesGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return availableDatasetFiles(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /** Plugin-field route — body shape is plugin-dependent, not described in
@@ -182,7 +182,7 @@ export class DatasetsApiService {
     fieldKey: string,
     values: Record<string, unknown>,
   ): Observable<ImporterFieldOptionsResponse> {
-    return apiDatasetImportImporterNameOptionsPost(this.http, this.config.rootUrl, {
+    return importerFieldOptions(this.http, this.config.rootUrl, {
       importer_name: importerName,
       body: { field_key: fieldKey, values },
     }).pipe(map((r) => r.body));
@@ -197,9 +197,17 @@ export class DatasetsApiService {
     return this.http.post<DatasetLoadStartedResponse>('/api/dataset/import-local-folder', formData);
   }
 
+  /** Multipart upload — the caller builds the FormData with a single
+   *  ``paths_file`` (txt list or npz archive), ``media_type``, optional
+   *  ``embedder`` / ``clipper`` / ``clipper_params`` / ``source_specs``.
+   *  See {@link importLocalFolder} for why this stays on plain HttpClient. */
+  importLocalFiles(formData: FormData): Observable<DatasetLoadStartedResponse> {
+    return this.http.post<DatasetLoadStartedResponse>('/api/dataset/import-local-files', formData);
+  }
+
   loadDemo(name: string, params?: Record<string, string>): Observable<DatasetLoadStartedResponse> {
     const body: DatasetLoadDemoRequest = { name, ...params };
-    return apiDatasetLoadDemoPost(this.http, this.config.rootUrl, { body }).pipe(map((r) => r.body));
+    return loadDemoDatasetRoute(this.http, this.config.rootUrl, { body }).pipe(map((r) => r.body));
   }
 
   /** Multipart upload — see {@link importLocalFolder}. */
@@ -223,34 +231,34 @@ export class DatasetsApiService {
   }
 
   stageDemo(name: string): Observable<DatasetStagingStartedResponse> {
-    return apiDatasetStageDemoNamePost(this.http, this.config.rootUrl, {
+    return stageDemo(this.http, this.config.rootUrl, {
       name,
       body: {},
     }).pipe(map((r) => r.body));
   }
 
   clearStaging(): Observable<ClearStagingResponse> {
-    return apiDatasetStagingDelete(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return clearStaging(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   combineDatasets(params: DatasetCombineRequest): Observable<DatasetLoadStartedResponse> {
-    return apiDatasetCombinePost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return combineDatasetsRoute(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
 
   cancelIngest(): Observable<CancelDatasetLoadResponse> {
-    return apiDatasetCancelPost(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return cancelDatasetLoad(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   cancelTask(taskId: string): Observable<CancelDatasetLoadResponse> {
-    return apiDatasetCancelTaskIdPost(this.http, this.config.rootUrl, { task_id: taskId }).pipe(
+    return cancelDatasetLoadTask(this.http, this.config.rootUrl, { task_id: taskId }).pipe(
       map((r) => r.body),
     );
   }
 
   clearDataset(): Observable<DatasetClearResponse> {
-    return apiDatasetClearPost(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return clearDatasetRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /** Binary stream — stays on plain ``HttpClient`` so ``responseType: 'blob'``
@@ -261,23 +269,23 @@ export class DatasetsApiService {
   }
 
   getRegistry(): Observable<DatasetsRegistryListResponse> {
-    return apiDatasetsRegistryGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return listRegisteredDatasets(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   loadRegistered(datasetId: string): Observable<DatasetRegistryLoadResponse> {
-    return apiDatasetsRegistryDatasetIdLoadPost(this.http, this.config.rootUrl, {
+    return loadRegisteredDataset(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
     }).pipe(map((r) => r.body));
   }
 
   unloadRegistered(datasetId: string): Observable<DatasetRegistryOkResponse> {
-    return apiDatasetsRegistryDatasetIdUnloadPost(this.http, this.config.rootUrl, {
+    return unloadRegisteredDataset(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
     }).pipe(map((r) => r.body));
   }
 
   deleteRegistered(datasetId: string): Observable<DatasetRegistryOkResponse> {
-    return apiDatasetsRegistryDatasetIdDelete(this.http, this.config.rootUrl, {
+    return deleteRegisteredDataset(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
     }).pipe(map((r) => r.body));
   }
@@ -286,7 +294,7 @@ export class DatasetsApiService {
     datasetId: string,
     newName: string,
   ): Observable<DatasetRegistryRenameResponse> {
-    return apiDatasetsRegistryDatasetIdRenamePut(this.http, this.config.rootUrl, {
+    return renameRegisteredDataset(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
       body: { name: newName },
     }).pipe(map((r) => r.body));
@@ -296,14 +304,14 @@ export class DatasetsApiService {
     datasetId: string,
     readers: string[],
   ): Observable<DatasetRegistryReadersResponse> {
-    return apiDatasetsRegistryDatasetIdReadersPut(this.http, this.config.rootUrl, {
+    return updateDatasetReaders(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
       body: { readers },
     }).pipe(map((r) => r.body));
   }
 
   loadSource(params: DatasetLoadSourceRequest): Observable<DatasetLoadStartedResponse> {
-    return apiDatasetLoadSourcePost(this.http, this.config.rootUrl, { body: params }).pipe(
+    return loadDatasetFromSource(this.http, this.config.rootUrl, { body: params }).pipe(
       map((r) => r.body),
     );
   }
@@ -319,12 +327,12 @@ export class DatasetsApiService {
   }
 
   getDatasetStats(datasetId: string): Observable<DatasetRegistryStatsResponse> {
-    return apiDatasetsRegistryDatasetIdStatsGet(this.http, this.config.rootUrl, {
+    return getDatasetStats(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
     }).pipe(map((r) => r.body));
   }
 
   getDiskUsage(): Observable<DashboardDiskUsageResponse> {
-    return apiDashboardDiskUsageGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return dashboardDiskUsage(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 }

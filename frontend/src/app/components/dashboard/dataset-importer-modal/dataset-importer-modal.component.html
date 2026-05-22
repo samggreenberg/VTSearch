@@ -15,23 +15,26 @@
     }
 
     @if (activeImporterTab) {
-      <div class="importer-subtab-bar">
-        @if (importersForActiveTab.length === 0) {
+      @if (importersForActiveTab.length === 0) {
+        <div class="importer-subtab-bar">
           <span class="empty-state empty-state--inline">No importers in this category.</span>
+        </div>
+      } @else if (importersForActiveTab.length > 1) {
+        <div class="importer-subtab-bar">
+          @for (imp of importersForActiveTab; track imp.name) {
+            <button
+              class="importer-subtab"
+              [class.active]="selectedImporter?.name === imp.name"
+              [class.disabled]="imp['enabled'] === false"
+              [disabled]="imp['enabled'] === false"
+              (click)="selectImporter(imp)"
+              [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : (imp.description || '')"
+            >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
+          }
+        </div>
+        @if (!selectedImporter) {
+          <p class="tab-bar-hint">Select how to add a {{ activeImporterTabLabel }} dataset.</p>
         }
-        @for (imp of importersForActiveTab; track imp.name) {
-          <button
-            class="importer-subtab"
-            [class.active]="selectedImporter?.name === imp.name"
-            [class.disabled]="imp['enabled'] === false"
-            [disabled]="imp['enabled'] === false"
-            (click)="selectImporter(imp)"
-            [title]="imp['enabled'] === false ? 'Requires two or more saved datasets of the same media type' : (imp.description || '')"
-          >@if (imp.icon) {<span class="importer-subtab-icon"><vt-icon [icon]="imp.icon"></vt-icon></span>}{{ imp.display_name || imp.name }}</button>
-        }
-      </div>
-      @if (!selectedImporter && importersForActiveTab.length > 0) {
-        <p class="tab-bar-hint">Select how to add a {{ activeImporterTabLabel }} dataset.</p>
       }
     }
   </div>
@@ -71,12 +74,17 @@
         }
 
         @if (activeTab && (demoEmbedders.length > 1 || demoClippers.length > 1)) {
-          <div class="demo-embedder-row">
-            @if (demoEmbedders.length > 1) {
-              <label class="form-label" for="demo-embedder" title="Embedding model used to compute vector representations of each media item">Embedder:</label>
+          <div class="form-group form-group--section">
+            @if (showAdvancedToggle('demo')) {
+              <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: embedding model and pre-processing clipper">
+                Advanced {{ advancedOpen ? '▴' : '▾' }}
+              </button>
+            }
+            @if (demoEmbedders.length > 1 && showEmbedderPicker('demo')) {
+              <label class="form-label" for="demo-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
               <select
                 id="demo-embedder"
-                class="form-select form-select--inline"
+                class="form-select"
                 [ngModel]="selectedDemoEmbedder"
                 (ngModelChange)="onDemoEmbedderChange($event)"
               >
@@ -95,24 +103,15 @@
                   </optgroup>
                 }
               </select>
-              @if (selectedEmbedderRawId(selectedDemoEmbedder, demoEmbedders); as rawId) {
-                <small class="embedder-raw-id">{{ rawId }}</small>
+              @if (licenseNoticeFor(selectedDemoEmbedder, demoEmbedders); as notice) {
+                <div class="license-warning" role="note">⚠ {{ notice }}</div>
               }
             }
-            @if (licenseNoticeFor(selectedDemoEmbedder, demoEmbedders); as notice) {
-              <div class="license-warning" role="note">⚠ {{ notice }}</div>
-            }
-            @if (demoClippers.length > 1) {
-              @if (isDefaultClipperSelected('demo')) {
-                <button type="button" class="advanced-toggle advanced-toggle--inline" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
-                  Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
-                </button>
-              }
-              @if (showClipperPicker('demo')) {
-                <button class="btn btn--secondary btn--sm clipper-btn" (click)="openClipperChooser('demo')" title="Choose a MediaClipper to segment or trim media before embedding">
-                  Clipper: {{ clipperDisplayName('demo') }}
-                </button>
-              }
+            @if (demoClippers.length > 1 && showClipperPicker('demo')) {
+              <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+              <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('demo')" title="Choose a MediaClipper to segment or trim media before embedding">
+                Use MediaClipper: {{ clipperDisplayName('demo') }}
+              </button>
             }
           </div>
         }
@@ -196,11 +195,13 @@
             </label>
 
             @if (field.field_type === 'server_path') {
-              <vt-file-browser
-                [value]="formValues[field.key] || ''"
+              <input
+                [id]="'field-' + field.key"
+                type="text"
+                class="form-input"
+                [ngModel]="formValues[field.key] || ''"
+                (ngModelChange)="formOnServerPathSelected(field.key, $event)"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
-                [extensions]="field.accept || ''"
-                (pathSelected)="formOnServerPathSelected(field.key, $event)"
               />
             } @else if (field.field_type === 'file') {
               <input
@@ -309,109 +310,50 @@
         <p class="info-text">This importer requires no additional configuration.</p>
       }
 
-      @if (selectedImporter.multi_media) {
-        <div class="form-group sf-source-specs">
-          <label class="form-label" title="Each row declares one source type to pull into the dataset. A row with no converter is included directly; a row with a converter is read in its source type and converted to the output type.">Include media</label>
-          @for (spec of formSourceSpecs; let i = $index; track i) {
-            <div class="sf-spec-row">
-              @if (spec.converter === null) {
-                <span class="sf-spec-direct">Include {{ spec.source_type }} files directly</span>
-              } @else {
-                <span class="sf-spec-label">Also include</span>
-                <select
-                  class="form-select sf-spec-converter"
-                  [ngModel]="spec.converter"
-                  (ngModelChange)="formOnConverterChange(i, $event)"
-                >
-                  @for (c of formAvailableConverters; track c.name) {
-                    <option [value]="c.name">{{ c.display_name || c.name }}</option>
-                  }
-                </select>
-                @if (formConverterFor(i); as converter) {
-                  @for (f of converter.fields || []; track f.key) {
-                    <label class="sf-spec-param">
-                      {{ f.label || f.key }}:
-                      @if (f.field_type === 'select') {
-                        <select
-                          class="form-select sf-spec-param-input"
-                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
-                        >
-                          @for (opt of f.options || []; track opt) {
-                            <option [value]="opt">{{ opt }}</option>
-                          }
-                        </select>
-                      } @else if (f.field_type === 'number') {
-                        <input
-                          type="number"
-                          class="form-input sf-spec-param-input"
-                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                          [attr.min]="f.min || null"
-                          [attr.max]="f.max || null"
-                          [attr.step]="f.step || null"
-                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
-                        />
-                      } @else {
-                        <input
-                          [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
-                          class="form-input sf-spec-param-input"
-                          [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                          (ngModelChange)="formOnConverterParamChange(i, f.key, $event)"
-                        />
-                      }
-                    </label>
-                  }
-                }
-              }
-              <button class="btn btn--secondary sf-spec-remove" (click)="formRemoveSpec(i)" title="Remove this row">×</button>
-            </div>
-          }
-          @if (formAvailableConverters.length > 0) {
-            <button class="btn btn--secondary sf-spec-add" (click)="formAddConverterRow()">+ Add converter</button>
-          }
-        </div>
-      }
-
-      @if (availableEmbedders.length > 1) {
-        <div class="form-group">
-          <label class="form-label" for="field-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
-          <select
-            id="field-embedder"
-            class="form-select"
-            [(ngModel)]="selectedEmbedder"
-          >
-            @if (recommendedEmbedders(availableEmbedders).length > 0) {
-              <optgroup label="Recommended">
-                @for (embedder of recommendedEmbedders(availableEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                }
-              </optgroup>
-            }
-            @if (advancedEmbedders(availableEmbedders).length > 0) {
-              <optgroup label="Advanced ▾">
-                @for (embedder of advancedEmbedders(availableEmbedders); track embedder.name) {
-                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                }
-              </optgroup>
-            }
-          </select>
-          @if (selectedEmbedderRawId(selectedEmbedder, availableEmbedders); as rawId) {
-            <small class="embedder-raw-id">{{ rawId }}</small>
-          }
-          @if (licenseNoticeFor(selectedEmbedder, availableEmbedders); as notice) {
-            <div class="license-warning" role="note">⚠ {{ notice }}</div>
-          }
-        </div>
-      }
-
-      @if (availableClippers.length > 1) {
-        <div class="form-group">
-          @if (isDefaultClipperSelected('form')) {
-            <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
-              Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
+      @if (selectedImporter.multi_media || availableEmbedders.length > 1 || availableClippers.length > 1) {
+        <div class="form-group form-group--section">
+          @if (showAdvancedToggle('form')) {
+            <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: included media types, embedding model, and pre-processing clipper">
+              Advanced {{ advancedOpen ? '▴' : '▾' }}
             </button>
           }
-          @if (showClipperPicker('form')) {
+          @if (advancedOpen && selectedImporter.multi_media) {
+            <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
+            <vt-source-specs-picker
+              [availableConverters]="formAvailableConverters"
+              [nativeType]="formOutputTypeId"
+              [typeLabels]="mediaTypeLabels"
+              [specs]="formSourceSpecs"
+              (specsChange)="onFormSpecsChange($event)"
+            ></vt-source-specs-picker>
+          }
+          @if (availableEmbedders.length > 1 && showEmbedderPicker('form')) {
+            <label class="form-label" for="field-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
+            <select
+              id="field-embedder"
+              class="form-select"
+              [(ngModel)]="selectedEmbedder"
+            >
+              @if (recommendedEmbedders(availableEmbedders).length > 0) {
+                <optgroup label="Recommended">
+                  @for (embedder of recommendedEmbedders(availableEmbedders); track embedder.name) {
+                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                  }
+                </optgroup>
+              }
+              @if (advancedEmbedders(availableEmbedders).length > 0) {
+                <optgroup label="Advanced ▾">
+                  @for (embedder of advancedEmbedders(availableEmbedders); track embedder.name) {
+                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                  }
+                </optgroup>
+              }
+            </select>
+            @if (licenseNoticeFor(selectedEmbedder, availableEmbedders); as notice) {
+              <div class="license-warning" role="note">⚠ {{ notice }}</div>
+            }
+          }
+          @if (availableClippers.length > 1 && showClipperPicker('form')) {
             <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
             <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('form')" title="Choose a MediaClipper to segment or trim media before embedding">
               Use MediaClipper: {{ clipperDisplayName('form') }}
@@ -442,9 +384,13 @@
   @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
     <div class="local-folder-uploader">
       @if (lfPickerKind === 'folder') {
-        <p class="info-text">Pick a folder on <strong>this computer</strong> (the machine your browser is running on). Its contents will be uploaded to the server and embedded into a new dataset. If you have already embedded your media, you can <strong>optionally</strong> attach a <code>.npz</code> archive of pre-computed vectors below to skip re-embedding.</p>
+        <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
       } @else {
-        <p class="info-text">Pick one or more files on <strong>this computer</strong> (the machine your browser is running on). They will be uploaded to the server and embedded into a new dataset. If you have already embedded your media, you can <strong>optionally</strong> attach a <code>.npz</code> archive of pre-computed vectors below to skip re-embedding.</p>
+        <p class="info-text">
+          Upload a single file from <strong>this computer</strong> that lists the media to import
+          (a UTF-8 text file with one server-side path per line, or a <code>.npz</code> archive of
+          paths + pre-computed embedding vectors).
+        </p>
       }
 
       <div class="form-group">
@@ -460,7 +406,7 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="lf-media-type" title="The type of media files the dataset ends up holding. Converters below can pull in other source types and convert them to this output type.">Output Media Type</label>
+        <label class="form-label" for="lf-media-type" title="The native media type of the dataset. Other types listed below can be pulled in and converted to this type.">Dataset MediaType</label>
         <select
           id="lf-media-type"
           class="form-select"
@@ -476,67 +422,6 @@
         }
       </div>
 
-      <div class="form-group sf-source-specs">
-        <label class="form-label" title="Each row declares one source type to pull into the dataset. A row with no converter is included directly; a row with a converter is read in its source type and converted to the output type.">Include media</label>
-        @for (spec of lfSourceSpecs; let i = $index; track i) {
-          <div class="sf-spec-row">
-            @if (spec.converter === null) {
-              <span class="sf-spec-direct">Include {{ spec.source_type }} files directly</span>
-            } @else {
-              <span class="sf-spec-label">Also include</span>
-              <select
-                class="form-select sf-spec-converter"
-                [ngModel]="spec.converter"
-                (ngModelChange)="lfOnConverterChange(i, $event)"
-              >
-                @for (c of lfAvailableConverters; track c.name) {
-                  <option [value]="c.name">{{ c.display_name || c.name }}</option>
-                }
-              </select>
-              @if (lfConverterFor(i); as converter) {
-                @for (f of converter.fields || []; track f.key) {
-                  <label class="sf-spec-param">
-                    {{ f.label || f.key }}:
-                    @if (f.field_type === 'select') {
-                      <select
-                        class="form-select sf-spec-param-input"
-                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
-                      >
-                        @for (opt of f.options || []; track opt) {
-                          <option [value]="opt">{{ opt }}</option>
-                        }
-                      </select>
-                    } @else if (f.field_type === 'number') {
-                      <input
-                        type="number"
-                        class="form-input sf-spec-param-input"
-                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                        [attr.min]="f.min || null"
-                        [attr.max]="f.max || null"
-                        [attr.step]="f.step || null"
-                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
-                      />
-                    } @else {
-                      <input
-                        [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
-                        class="form-input sf-spec-param-input"
-                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                        (ngModelChange)="lfOnConverterParamChange(i, f.key, $event)"
-                      />
-                    }
-                  </label>
-                }
-              }
-            }
-            <button class="btn btn--secondary sf-spec-remove" (click)="lfRemoveSpec(i)" title="Remove this row">×</button>
-          </div>
-        }
-        @if (lfAvailableConverters.length > 0) {
-          <button class="btn btn--secondary sf-spec-add" (click)="lfAddConverterRow()">+ Add converter</button>
-        }
-      </div>
-
       <div class="form-group form-group--section">
         @if (lfPickerKind === 'folder') {
           <label class="form-label" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
@@ -548,48 +433,22 @@
             (filesSelected)="lfOnFilesDropped($event)"
           ></vt-drop-zone>
         } @else {
-          <label class="form-label" title="Choose one or more files on your local machine. Each selected file will be uploaded.">Files<span class="required">*</span></label>
+          <label class="form-label" title="Choose a single file: a .txt/.list of paths, or a .npz archive of paths + pre-computed embedding vectors.">Paths file<span class="required">*</span></label>
           <vt-drop-zone
-            label="Drop files here to import"
+            label="Drop a paths file (.txt, .list, or .npz)"
             sublabel="or click to browse"
-            [multiple]="true"
+            accept=".txt,.list,.npz"
             (filesSelected)="lfOnFilesDropped($event)"
           ></vt-drop-zone>
         }
         @if (lfFiles.length > 0) {
           <p class="info-text">
-            Selected <strong>{{ lfFiles.length | number }}</strong> file{{ lfFiles.length === 1 ? '' : 's' }}
-            @if (lfFolderName && lfPickerKind === 'folder') { from <code>{{ lfFolderName }}</code> }
-          </p>
-        }
-      </div>
-
-      <div class="form-group form-group--section">
-        <label
-          class="form-label"
-          for="lf-vectors-input"
-          title="Optional .npz archive of pre-computed embedding vectors. Each entry's filename must match an uploaded file (by basename or relative path) for its vector to be reused. Skipped files are embedded normally on the server."
-        >
-          Pre-computed embeddings (<code>.npz</code>) — optional
-        </label>
-        <input
-          id="lf-vectors-input"
-          type="file"
-          class="form-input"
-          accept=".npz"
-          (change)="lfOnVectorsFileSelected($event)"
-        />
-        <p class="info-text">
-          Supply a NumPy <code>.npz</code> archive holding either
-          <code>filenames</code> + <code>vectors</code> arrays or one key per
-          filename mapping to its vector.  Filenames must match the uploaded
-          files (basenames and relative paths are matched).  Files without a
-          matching entry are embedded normally on the server.
-        </p>
-        @if (lfVectorsFile) {
-          <p class="info-text">
-            Using vectors from <code>{{ lfVectorsFile.name }}</code>
-            <button type="button" class="btn btn--secondary btn--sm" (click)="lfClearVectorsFile()">Remove</button>
+            @if (lfPickerKind === 'folder') {
+              Selected <strong>{{ lfFiles.length | number }}</strong> file{{ lfFiles.length === 1 ? '' : 's' }}
+              @if (lfFolderName) { from <code>{{ lfFolderName }}</code> }
+            } @else {
+              Using paths from <code>{{ lfFiles[0].name }}</code>
+            }
           </p>
         }
       </div>
@@ -608,8 +467,23 @@
         </div>
       }
 
-      @if (lfEmbedders.length > 1) {
-        <div class="form-group form-group--section">
+      <div class="form-group form-group--section">
+        @if (showAdvancedToggle('lf')) {
+          <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: included media types, embedding model, and pre-processing clipper">
+            Advanced {{ advancedOpen ? '▴' : '▾' }}
+          </button>
+        }
+        @if (advancedOpen) {
+          <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
+          <vt-source-specs-picker
+            [availableConverters]="lfAvailableConverters"
+            [nativeType]="lfOutputTypeId"
+            [typeLabels]="mediaTypeLabels"
+            [specs]="lfSourceSpecs"
+            (specsChange)="onLfSpecsChange($event)"
+          ></vt-source-specs-picker>
+        }
+        @if (lfEmbedders.length > 1 && showEmbedderPicker('lf')) {
           <label class="form-label" for="lf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
           <select
             id="lf-embedder"
@@ -631,30 +505,17 @@
               </optgroup>
             }
           </select>
-          @if (selectedEmbedderRawId(lfSelectedEmbedder, lfEmbedders); as rawId) {
-            <small class="embedder-raw-id">{{ rawId }}</small>
-          }
           @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
             <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
-        </div>
-      }
-
-      @if (lfClippers.length > 1) {
-        <div class="form-group form-group--section">
-          @if (isDefaultClipperSelected('lf')) {
-            <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
-              Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
-            </button>
-          }
-          @if (showClipperPicker('lf')) {
-            <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
-            <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('lf')" title="Choose a MediaClipper to segment or trim media before embedding">
-              Use MediaClipper: {{ clipperDisplayName('lf') }}
-            </button>
-          }
-        </div>
-      }
+        }
+        @if (lfClippers.length > 1 && showClipperPicker('lf')) {
+          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('lf')" title="Choose a MediaClipper to segment or trim media before embedding">
+            Use MediaClipper: {{ clipperDisplayName('lf') }}
+          </button>
+        }
+      </div>
 
       @if (lfError) {
         <p class="error-text">{{ lfError }}</p>
@@ -690,7 +551,7 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="sf-media-type" title="The type of media files the dataset ends up holding. Converters below can pull in other source types and convert them to this output type.">Output Media Type</label>
+        <label class="form-label" for="sf-media-type" title="The native media type of the dataset. Other types listed below can be pulled in and converted to this type.">Dataset MediaType</label>
         <select
           id="sf-media-type"
           class="form-select"
@@ -706,76 +567,17 @@
         }
       </div>
 
-      <div class="form-group sf-source-specs">
-        <label class="form-label" title="Each row declares one source type to pull into the dataset. A row with no converter is included directly; a row with a converter is read in its source type and converted to the output type.">Include media</label>
-        @for (spec of sfSourceSpecs; let i = $index; track i) {
-          <div class="sf-spec-row">
-            @if (spec.converter === null) {
-              <span class="sf-spec-direct">Include {{ spec.source_type }} files directly</span>
-            } @else {
-              <span class="sf-spec-label">Also include</span>
-              <select
-                class="form-select sf-spec-converter"
-                [ngModel]="spec.converter"
-                (ngModelChange)="sfOnConverterChange(i, $event)"
-              >
-                @for (c of sfAvailableConverters; track c.name) {
-                  <option [value]="c.name">{{ c.display_name || c.name }}</option>
-                }
-              </select>
-              @if (sfConverterFor(i); as converter) {
-                @for (f of converter.fields || []; track f.key) {
-                  <label class="sf-spec-param">
-                    {{ f.label || f.key }}:
-                    @if (f.field_type === 'select') {
-                      <select
-                        class="form-select sf-spec-param-input"
-                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
-                      >
-                        @for (opt of f.options || []; track opt) {
-                          <option [value]="opt">{{ opt }}</option>
-                        }
-                      </select>
-                    } @else if (f.field_type === 'number') {
-                      <input
-                        type="number"
-                        class="form-input sf-spec-param-input"
-                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                        [attr.min]="f.min || null"
-                        [attr.max]="f.max || null"
-                        [attr.step]="f.step || null"
-                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
-                      />
-                    } @else {
-                      <input
-                        [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"
-                        class="form-input sf-spec-param-input"
-                        [ngModel]="spec.params[f.key] ?? f.default ?? ''"
-                        (ngModelChange)="sfOnConverterParamChange(i, f.key, $event)"
-                      />
-                    }
-                  </label>
-                }
-              }
-            }
-            <button class="btn btn--secondary sf-spec-remove" (click)="sfRemoveSpec(i)" title="Remove this row">×</button>
-          </div>
-        }
-        @if (sfAvailableConverters.length > 0) {
-          <button class="btn btn--secondary sf-spec-add" (click)="sfAddConverterRow()">+ Add converter</button>
-        }
-      </div>
-
       <div class="sf-browse-section">
-        <label class="form-label">Select Folder</label>
-        <vt-folder-browser
-          [browse]="sfBrowseFn"
-          [showFiles]="false"
-          [showPathFooter]="true"
-          emptyMessage="No subdirectories. This folder will be imported."
-          (pathChange)="sfOnPathChange($event)"
-        ></vt-folder-browser>
+        <label class="form-label" for="sf-path-input">Folder to import</label>
+        <input
+          id="sf-path-input"
+          type="text"
+          class="form-input"
+          placeholder="/absolute/server/path/to/folder"
+          [(ngModel)]="sfPathInputValue"
+          (keydown.enter)="sfApplyPathInput(); $event.preventDefault()"
+          (blur)="sfApplyPathInput()"
+        />
       </div>
 
       <div class="form-group">
@@ -790,32 +592,23 @@
         </label>
       </div>
 
-      <div class="form-group">
-        <label
-          class="form-label"
-          for="sf-vectors-file"
-          title="Optional server path to a .npz archive of pre-computed embedding vectors. Files in the folder whose basename or relative path matches a key reuse the supplied vector instead of running the embedder."
-        >
-          Pre-computed embeddings (<code>.npz</code>) — optional
-        </label>
-        <input
-          id="sf-vectors-file"
-          type="text"
-          class="form-input"
-          placeholder="/absolute/server/path/to/vectors.npz"
-          [(ngModel)]="sfVectorsFile"
-        />
-        <p class="info-text">
-          Absolute server path to a NumPy <code>.npz</code> archive holding
-          either <code>filenames</code> + <code>vectors</code> arrays or one
-          key per filename mapping to its vector.  Files in the folder whose
-          basename or relative path matches a key reuse the supplied vector
-          and skip the embedder.
-        </p>
-      </div>
-
-      @if (sfEmbedders.length > 1) {
-        <div class="form-group">
+      <div class="form-group form-group--section">
+        @if (showAdvancedToggle('sf')) {
+          <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: included media types, embedding model, and pre-processing clipper">
+            Advanced {{ advancedOpen ? '▴' : '▾' }}
+          </button>
+        }
+        @if (advancedOpen) {
+          <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
+          <vt-source-specs-picker
+            [availableConverters]="sfAvailableConverters"
+            [nativeType]="sfOutputTypeId"
+            [typeLabels]="mediaTypeLabels"
+            [specs]="sfSourceSpecs"
+            (specsChange)="onSfSpecsChange($event)"
+          ></vt-source-specs-picker>
+        }
+        @if (sfEmbedders.length > 1 && showEmbedderPicker('sf')) {
           <label class="form-label" for="sf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
           <select
             id="sf-embedder"
@@ -837,30 +630,17 @@
               </optgroup>
             }
           </select>
-          @if (selectedEmbedderRawId(sfSelectedEmbedder, sfEmbedders); as rawId) {
-            <small class="embedder-raw-id">{{ rawId }}</small>
-          }
           @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
             <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
-        </div>
-      }
-
-      @if (sfClippers.length > 1) {
-        <div class="form-group">
-          @if (isDefaultClipperSelected('sf')) {
-            <button type="button" class="advanced-toggle" (click)="toggleClipperAdvanced()" [attr.aria-expanded]="clipperAdvancedOpen" title="Pre-processing clipper that segments or trims media before embedding">
-              Advanced {{ clipperAdvancedOpen ? '▴' : '▾' }}
-            </button>
-          }
-          @if (showClipperPicker('sf')) {
-            <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
-            <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('sf')" title="Choose a MediaClipper to segment or trim media before embedding">
-              Use MediaClipper: {{ clipperDisplayName('sf') }}
-            </button>
-          }
-        </div>
-      }
+        }
+        @if (sfClippers.length > 1 && showClipperPicker('sf')) {
+          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('sf')" title="Choose a MediaClipper to segment or trim media before embedding">
+            Use MediaClipper: {{ clipperDisplayName('sf') }}
+          </button>
+        }
+      </div>
 
       @if (sfBrowseError) {
         <p class="error-text">{{ sfBrowseError }}</p>

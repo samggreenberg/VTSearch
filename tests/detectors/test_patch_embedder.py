@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import torch
 
-from vtsearch.media.patch_embed import (
+from vtscore.media.patch_embed import (
     PatchEmbedOutput,
     RegionVector,
     box_to_vote_vector,
@@ -30,7 +30,7 @@ from vtsearch.media.patch_embed import (
     propose_leaves,
     to_fp16,
 )
-from vtsearch.training.region_similarity import (
+from vtscore.training.region_similarity import (
     cosine_sort_with_boxes,
     score_against_query,
 )
@@ -568,7 +568,7 @@ class TestEupeAdapter:
 
 class TestEmbedderCapabilities:
     def test_dinov2_patch_supports_patch_regions(self):
-        from vtsearch.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
+        from vtscore.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
 
         e = ImageDinov2PatchEmbedder()
         assert e.supports_patch_regions is True
@@ -576,13 +576,13 @@ class TestEmbedderCapabilities:
         assert e.license_notice is None
 
     def test_dinov2_single_does_not_support_patch_regions(self):
-        from vtsearch.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
+        from vtscore.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
 
         e = ImageDinov2SingleEmbedder()
         assert e.supports_patch_regions is False
 
     def test_dinov3_patch_supports_patch_regions(self):
-        from vtsearch.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
+        from vtscore.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
 
         e = ImageDinov3PatchEmbedder()
         assert e.supports_patch_regions is True
@@ -590,13 +590,13 @@ class TestEmbedderCapabilities:
         assert e.license_notice is None
 
     def test_dinov3_single_does_not_support_patch_regions(self):
-        from vtsearch.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+        from vtscore.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
         e = ImageDinov3SingleEmbedder()
         assert e.supports_patch_regions is False
 
     def test_eupe_patch_supports_patch_regions_and_carries_license_notice(self):
-        from vtsearch.media.image.embedder_eupe_patch import ImageEupePatchEmbedder
+        from vtscore.media.image.embedder_eupe_patch import ImageEupePatchEmbedder
 
         e = ImageEupePatchEmbedder()
         assert e.supports_patch_regions is True
@@ -605,7 +605,7 @@ class TestEmbedderCapabilities:
         assert "noncommercial" in e.license_notice.lower()
 
     def test_eupe_single_carries_license_notice(self):
-        from vtsearch.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
+        from vtscore.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
 
         e = ImageEupeSingleEmbedder()
         assert e.supports_patch_regions is False
@@ -613,7 +613,7 @@ class TestEmbedderCapabilities:
         assert "noncommercial" in e.license_notice.lower()
 
     def test_siglip_does_not_support_patch_regions(self):
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         e = ImageSiglipEmbedder()
         assert e.supports_patch_regions is False
@@ -621,7 +621,7 @@ class TestEmbedderCapabilities:
 
     def test_default_patch_forward_returns_none(self):
         """Single-vector embedders inherit the ABC default and return None."""
-        from vtsearch.media.image.embedder_siglip import ImageSiglipEmbedder
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
         e = ImageSiglipEmbedder()
         assert e.patch_forward({"media_path": "/nonexistent.jpg"}) is None
@@ -723,7 +723,7 @@ class TestRegionBoxOnLabeledElement:
     """
 
     def test_region_box_defaults_to_none(self):
-        from vtsearch.datasets.labelset import LabeledElement
+        from vtscore.datasets.labelset import LabeledElement
 
         el = LabeledElement(md5="abc", label="good")
         assert el.region_box is None
@@ -731,13 +731,13 @@ class TestRegionBoxOnLabeledElement:
     def test_region_box_omitted_from_dict_when_none(self):
         """Image-level votes don't emit ``region_box`` so the exported JSON
         stays a strict superset of the v1 format for legacy consumers."""
-        from vtsearch.datasets.labelset import LabeledElement
+        from vtscore.datasets.labelset import LabeledElement
 
         el = LabeledElement(md5="abc", label="good")
         assert "region_box" not in el.to_dict()
 
     def test_region_box_round_trips_through_dict(self):
-        from vtsearch.datasets.labelset import LabeledElement
+        from vtscore.datasets.labelset import LabeledElement
 
         original = LabeledElement(
             md5="abc",
@@ -751,7 +751,7 @@ class TestRegionBoxOnLabeledElement:
         """JSON encoders turn tuples into lists; ``from_dict`` must accept
         a list and coerce back to a 4-tuple of floats so the dataclass
         invariant holds regardless of the dict source."""
-        from vtsearch.datasets.labelset import LabeledElement
+        from vtscore.datasets.labelset import LabeledElement
 
         d = {"md5": "abc", "label": "good", "region_box": [0.0, 0.25, 0.5, 1.0]}
         el = LabeledElement.from_dict(d)
@@ -760,7 +760,7 @@ class TestRegionBoxOnLabeledElement:
         assert all(isinstance(v, float) for v in el.region_box)
 
     def test_region_box_survives_labelset_round_trip(self):
-        from vtsearch.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
 
         ls = LabelSet(
             [
@@ -778,7 +778,7 @@ class TestRegionBoxOnLabeledElement:
         """A region_box on the first occurrence of a key is preserved through
         ``LabelSet.merge`` — the merge already keeps the first entry's
         position, so its region annotation should ride along with it."""
-        from vtsearch.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
 
         a = LabelSet(
             [
@@ -995,7 +995,7 @@ class TestVoteEndpointRegionBox:
 
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         assert resp.status_code == 200
         assert 1 in good_votes
@@ -1007,7 +1007,7 @@ class TestVoteEndpointRegionBox:
             vote_region_boxes,
         )
 
-        resp = client.post("/api/medias/1/vote", json={"vote": "good"})
+        resp = client.post("/api/medias/1/vote", json={"target": "good"})
         assert resp.status_code == 200
         assert 1 in good_votes
         assert 1 not in vote_region_boxes
@@ -1023,7 +1023,7 @@ class TestVoteEndpointRegionBox:
 
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "bad", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "bad", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         assert resp.status_code == 400
         assert 1 not in bad_votes
@@ -1035,7 +1035,7 @@ class TestVoteEndpointRegionBox:
             vote_region_boxes,
         )
 
-        resp = client.post("/api/medias/1/vote", json={"vote": "bad"})
+        resp = client.post("/api/medias/1/vote", json={"target": "bad"})
         assert resp.status_code == 200
         assert 1 in bad_votes
         assert 1 not in vote_region_boxes
@@ -1047,7 +1047,7 @@ class TestVoteEndpointRegionBox:
         # rejected by the handler with a 400 + standard ``message`` envelope.
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7]},
         )
         assert resp.status_code == 400
         assert "region_box" in resp.get_json()["message"]
@@ -1057,7 +1057,7 @@ class TestVoteEndpointRegionBox:
         # handler → 400 + standard ``message`` envelope.
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 1.5]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 1.5]},
         )
         assert resp.status_code == 400
 
@@ -1066,14 +1066,13 @@ class TestVoteEndpointRegionBox:
         # schema-level 422 with the per-field ``errors`` envelope.
         resp = client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": ["a", "b", "c", "d"]},
+            json={"target": "good", "region_box": ["a", "b", "c", "d"]},
         )
         assert resp.status_code == 422
 
-    def test_toggle_good_off_clears_region_box(self, client):
-        """Voting good twice toggles off the vote; the region_box must go
-        with it so a subsequent fresh yes-vote isn't tagged with a stale
-        annotation."""
+    def test_unvote_clears_region_box(self, client):
+        """target=none removes the vote AND any region_box, so a subsequent
+        fresh yes-vote isn't tagged with a stale annotation."""
         from vtsearch.state import (
             good_votes,
             vote_region_boxes,
@@ -1081,12 +1080,27 @@ class TestVoteEndpointRegionBox:
 
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         assert 1 in vote_region_boxes
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
         assert 1 not in good_votes
         assert 1 not in vote_region_boxes
+
+    def test_idempotent_re_vote_preserves_region_box(self, client):
+        """Re-sending target=good without region_box on an already-good media
+        is idempotent — region_box stays unchanged.  This is intentional: an
+        absent ``region_box`` on an idempotent call must not silently wipe a
+        previously-recorded one (H1 idempotency rule)."""
+        from vtsearch.state import vote_region_boxes
+
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+        )
+        assert vote_region_boxes[1] == (0.1, 0.2, 0.7, 0.8)
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        assert vote_region_boxes[1] == (0.1, 0.2, 0.7, 0.8)
 
     def test_switch_good_to_bad_clears_region_box(self, client):
         """A region annotation belongs to a yes-vote; flipping the same
@@ -1099,29 +1113,51 @@ class TestVoteEndpointRegionBox:
 
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         assert 1 in vote_region_boxes
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert 1 not in good_votes
         assert 1 in bad_votes
         assert 1 not in vote_region_boxes
 
-    def test_replacing_region_box_updates_value(self, client):
-        """Re-voting good with a different box after toggling off the
-        previous yes-vote stores the new box, not the previous one."""
+    def test_replacing_region_box_via_unvote_then_revote(self, client):
+        """Un-voting clears the region_box; re-voting good with a new box
+        stores the new value."""
         from vtsearch.state import vote_region_boxes
 
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.4, 0.4]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.4, 0.4]},
         )
-        # Toggle off, then vote good again with a different box.
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.3, 0.3, 0.9, 0.9]},
+            json={"target": "good", "region_box": [0.3, 0.3, 0.9, 0.9]},
         )
+        assert vote_region_boxes[1] == (0.3, 0.3, 0.9, 0.9)
+
+    def test_idempotent_revote_with_new_region_box_replaces_in_place(self, client):
+        """Drawing a new box on an already-good media replaces the previous
+        annotation without going through un-vote, since the user explicitly
+        sent a new ``region_box``.  An idempotent re-vote *without* a
+        region_box leaves the existing one alone (so a stale-view tab can't
+        wipe a region a different tab just set — H1 idempotency)."""
+        from vtsearch.state import vote_region_boxes
+
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.1, 0.2, 0.4, 0.4]},
+        )
+        # New box on an already-good media → replace in place.
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.3, 0.3, 0.9, 0.9]},
+        )
+        assert vote_region_boxes[1] == (0.3, 0.3, 0.9, 0.9)
+
+        # Idempotent re-vote without a region_box → existing box preserved.
+        client.post("/api/medias/1/vote", json={"target": "good"})
         assert vote_region_boxes[1] == (0.3, 0.3, 0.9, 0.9)
 
 
@@ -1134,7 +1170,7 @@ class TestLabelExportRegionBox:
     def test_export_emits_region_box_on_good_vote(self, client):
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
         )
         resp = client.get("/api/labels/export")
         assert resp.status_code == 200
@@ -1144,14 +1180,14 @@ class TestLabelExportRegionBox:
         assert labels[0]["region_box"] == [0.1, 0.2, 0.7, 0.8]
 
     def test_export_omits_region_box_on_plain_good_vote(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "good"})
+        client.post("/api/medias/1/vote", json={"target": "good"})
         resp = client.get("/api/labels/export")
         labels = resp.get_json()["labels"]
         assert len(labels) == 1
         assert "region_box" not in labels[0]
 
     def test_export_never_emits_region_box_on_bad_vote(self, client):
-        client.post("/api/medias/1/vote", json={"vote": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "bad"})
         resp = client.get("/api/labels/export")
         labels = resp.get_json()["labels"]
         assert len(labels) == 1
@@ -1162,10 +1198,10 @@ class TestLabelExportRegionBox:
         """Region-annotated good, plain good, and a bad in the same export."""
         client.post(
             "/api/medias/1/vote",
-            json={"vote": "good", "region_box": [0.1, 0.2, 0.3, 0.4]},
+            json={"target": "good", "region_box": [0.1, 0.2, 0.3, 0.4]},
         )
-        client.post("/api/medias/2/vote", json={"vote": "good"})
-        client.post("/api/medias/3/vote", json={"vote": "bad"})
+        client.post("/api/medias/2/vote", json={"target": "good"})
+        client.post("/api/medias/3/vote", json={"target": "bad"})
         resp = client.get("/api/labels/export")
         labels = resp.get_json()["labels"]
         by_md5 = {e["md5"]: e for e in labels}
@@ -1257,8 +1293,8 @@ class TestRegionAwareTraining:
     def test_train_and_score_uses_box_pooled_vec_when_grid_present(self):
         """A yes-vote with region_box on a media that has a patch_grid feeds
         the MLP with the *pooled* vector, not the CLS embedding."""
-        from vtsearch.media.patch_embed import box_to_vote_vector
-        from vtsearch.detectors.training import _training_vec_for_vote
+        from vtscore.media.patch_embed import box_to_vote_vector
+        from vtscore.detectors.training import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=42)
         box = (0.0, 0.0, 0.5, 0.5)  # top-left quadrant: 4 cells (axes 0,1,4,5)
@@ -1272,7 +1308,7 @@ class TestRegionAwareTraining:
     def test_train_and_score_falls_back_to_cls_without_patch_grid(self):
         """Legacy / single-vector datasets have no ``patch_grid``; even with
         a stashed region_box, training must use the full-image CLS vector."""
-        from vtsearch.detectors.training import _training_vec_for_vote
+        from vtscore.detectors.training import _training_vec_for_vote
 
         media = {
             "id": 1,
@@ -1284,7 +1320,7 @@ class TestRegionAwareTraining:
         np.testing.assert_array_equal(vec, media["embedding"])
 
     def test_train_and_score_falls_back_to_cls_when_no_region_box(self):
-        from vtsearch.detectors.training import _training_vec_for_vote
+        from vtscore.detectors.training import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=1)
         vec = _training_vec_for_vote(media, region_box=None)
@@ -1310,11 +1346,11 @@ class TestRegionAwareTraining:
         whose ``region_box`` is set and whose source media has a
         ``patch_grid``.  The cache value matches ``box_to_vote_vector``
         on the same grid + box."""
-        from vtsearch.datasets.labelset import LabeledElement, LabelSet
-        from vtsearch.detectors.labelset_elements import stable_element_id
-        from vtsearch.detectors.labelset_training import populate_label_embeddings
-        from vtsearch.media.patch_embed import box_to_vote_vector
-        from vtsearch.state.core import DetectorContext
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.media.patch_embed import box_to_vote_vector
+        from vtscore.state.core import DetectorContext
 
         cid = 9001
         media = self._register_synthetic_image(cid)
@@ -1337,11 +1373,11 @@ class TestRegionAwareTraining:
         """Region-voted elements re-pool on every call so region_box edits
         propagate without an explicit cache invalidation.  Image-level
         elements keep their cached vector across calls (fast path)."""
-        from vtsearch.datasets.labelset import LabeledElement, LabelSet
-        from vtsearch.detectors.labelset_elements import stable_element_id
-        from vtsearch.detectors.labelset_training import populate_label_embeddings
-        from vtsearch.media.patch_embed import box_to_vote_vector
-        from vtsearch.state.core import DetectorContext
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.media.patch_embed import box_to_vote_vector
+        from vtscore.state.core import DetectorContext
 
         cid = 9002
         media = self._register_synthetic_image(cid)
@@ -1367,10 +1403,10 @@ class TestRegionAwareTraining:
     def test_populate_label_embeddings_keeps_cached_when_no_region_box(self):
         """Plain image-level elements stay cached across calls — the fast
         path for non-region datasets is preserved."""
-        from vtsearch.datasets.labelset import LabeledElement, LabelSet
-        from vtsearch.detectors.labelset_elements import stable_element_id
-        from vtsearch.detectors.labelset_training import populate_label_embeddings
-        from vtsearch.state.core import DetectorContext
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
 
         cid = 9003
         media = self._register_synthetic_image(cid)
@@ -1386,3 +1422,334 @@ class TestRegionAwareTraining:
         det_ctx.label_embeddings[eid] = sentinel
         populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
         np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
+
+    def test_populate_label_embeddings_invalidates_when_region_box_removed(self):
+        """Logical-bug-audit M4: when a labelset element loses its ``region_box``
+        (e.g. the user flipped good→bad on a previously region-voted media, or
+        un-voted/re-voted without a region), the cache must NOT keep returning
+        the previously-pooled region vector.  The next pass should produce the
+        image-level CLS embedding instead."""
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        cid = 9004
+        media = self._register_synthetic_image(cid)
+        # First pass: element carries a region_box → cached as a pooled vector.
+        elem = LabeledElement(md5=media["md5"], label="good", region_box=(0.0, 0.0, 0.5, 0.5))
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        snap = {cid: media}
+
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
+        eid = stable_element_id(elem)
+        pooled = np.array(det_ctx.label_embeddings[eid], copy=True)
+        # Sanity: the cached vector is the pooled box, not the CLS embedding.
+        assert not np.allclose(pooled, media["embedding"])
+        assert det_ctx.label_embedding_regions[eid] == (0.0, 0.0, 0.5, 0.5)
+
+        # Simulate the bug-triggering edit: same element identity (same eid)
+        # but the user removed the region_box (e.g. flipped to bad, then back
+        # to good without a region; bad votes never carry a region_box).
+        elem.region_box = None
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
+        # The cached vector must now be the image-level CLS embedding, not
+        # the stale top-left pooled vector.
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], media["embedding"])
+        assert det_ctx.label_embedding_regions[eid] is None
+
+    def test_populate_label_embeddings_invalidates_when_region_box_added(self):
+        """Mirror of the M4 fix in the opposite direction: an image-level
+        cached entry must be re-pooled when the element gains a region_box.
+        (This already worked before M4 because the original cache check
+        gated on ``elem.region_box is None``, but the explicit test pins the
+        behaviour now that the cache check also consults the region cache.)"""
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.media.patch_embed import box_to_vote_vector
+        from vtscore.state.core import DetectorContext
+
+        cid = 9005
+        media = self._register_synthetic_image(cid)
+        elem = LabeledElement(md5=media["md5"], label="good")  # no region_box
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        snap = {cid: media}
+
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
+        eid = stable_element_id(elem)
+        assert det_ctx.label_embedding_regions[eid] is None
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], media["embedding"])
+
+        # User adds a region annotation to the element.
+        elem.region_box = (0.5, 0.5, 1.0, 1.0)
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
+        expected = box_to_vote_vector(media["patch_grid"], (0.5, 0.5, 1.0, 1.0))
+        np.testing.assert_allclose(det_ctx.label_embeddings[eid], expected, atol=1e-6)
+        assert det_ctx.label_embedding_regions[eid] == (0.5, 0.5, 1.0, 1.0)
+
+
+class TestRegionAwareTrainingCrossDataset:
+    """Cross-dataset region-vote path: when a labelset element carries a
+    ``region_box`` and its source file is not in the active dataset's snap,
+    ``_embed_one`` should resolve the file, run ``patch_forward`` on it,
+    and pool the box via :func:`box_to_vote_vector` — so the user's region
+    intent isn't silently downgraded to a full-image embedding (bug H2).
+
+    Falls back (with a warning) to the image-level embedding only when the
+    chosen embedder can't produce a patch grid.
+    """
+
+    def _make_grid(self, h: int = 4, w: int = 4, d: int = 16) -> np.ndarray:
+        """Axis-aligned unit-vector grid: cell (r, c) holds e_{r*w + c}.
+
+        Lets the test assert exactly which cells got pooled by inspecting
+        the resulting vector's argmax pattern.
+        """
+        n = h * w
+        flat = np.zeros((n, d), dtype=np.float32)
+        for i in range(n):
+            flat[i, i] = 1.0
+        return flat.reshape(h, w, d)
+
+    def _patch_capable_stub(self, grid: np.ndarray):
+        """A stub embedder whose ``patch_forward`` returns *grid*."""
+        from vtscore.media.patch_embed import PatchEmbedOutput
+
+        cls = np.zeros(grid.shape[-1], dtype=np.float32)
+        cls[-1] = 1.0  # arbitrary unit vector, distinct from any cell
+
+        class _PatchStub:
+            name = "patch-stub"
+            supports_patch_regions = True
+
+            def patch_forward(self, _media):
+                saliency = np.ones(grid.shape[:2], dtype=np.float32)
+                saliency /= saliency.sum()
+                return PatchEmbedOutput(cls_vec=cls, patch_grid=grid, patch_saliency=saliency)
+
+        return _PatchStub(), cls
+
+    def _single_vector_stub(self, dim: int = 16):
+        """Stub embedder that does NOT support patch regions; ``embed_media``
+        returns a sentinel vector so the fallback can be detected."""
+        sentinel = np.zeros(dim, dtype=np.float32)
+        sentinel[0] = 1.0
+
+        class _SingleStub:
+            name = "single-stub"
+            supports_patch_regions = False
+
+            def embed_media(self, _media):
+                return sentinel
+
+        return _SingleStub(), sentinel
+
+    def _wire_resolution(
+        self,
+        monkeypatch,
+        tmp_path,
+        embedder,
+        filename: str = "missing.png",
+    ):
+        """Make ``resolve_file_context`` yield a real-looking path and route
+        ``get_embedder`` / ``embedders_for_type`` / ``embed_file`` to *embedder*.
+
+        Returns the resolved path so the test can assert it was used.
+        """
+        from contextlib import contextmanager
+        from pathlib import Path
+
+        import vtscore.detectors.resolver as resolver_mod
+        import vtscore.media as media_mod
+
+        fake = Path(tmp_path) / filename
+        fake.write_bytes(b"")  # exists on disk so resolvers don't second-guess
+
+        @contextmanager
+        def _fake_ctx(_origin, _origin_name="", _filename=""):
+            yield fake
+
+        monkeypatch.setattr(resolver_mod, "resolve_file_context", _fake_ctx)
+        monkeypatch.setattr(media_mod, "get_embedder", lambda _name: embedder)
+        monkeypatch.setattr(media_mod, "embedders_for_type", lambda _mt: [embedder])
+
+        # Image-level fallback inside ``embed_file`` re-looks-up the
+        # embedder; stub it directly so the fallback path produces the
+        # single-stub sentinel rather than a real model load.
+        def _fake_embed_file(_path, _media_type, _embedder_name=""):
+            return embedder.embed_media({"media_path": str(fake)})
+
+        monkeypatch.setattr(resolver_mod, "embed_file", _fake_embed_file)
+        return fake
+
+    def _cross_dataset_elem(self, *, region_box, md5="ff" * 16, origin_name="missing.png"):
+        """Build an element whose md5 won't match any active media so the
+        in-dataset path skips and we hit ``_embed_one``."""
+        from vtscore.datasets.labelset import LabeledElement
+
+        return LabeledElement(
+            md5=md5,
+            label="good",
+            origin={"importer": "server_folder", "params": {"folder": "/nowhere"}},
+            origin_name=origin_name,
+            filename=origin_name,
+            region_box=region_box,
+        )
+
+    def test_cross_dataset_region_vote_uses_pooled_vector_when_embedder_supports_patches(self, monkeypatch, tmp_path):
+        """An element with ``region_box`` whose file isn't in the active
+        snap pools via ``patch_forward`` + ``box_to_vote_vector`` instead of
+        falling back to the full-image embedding."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.media.patch_embed import box_to_vote_vector
+        from vtscore.state.core import DetectorContext
+
+        grid = self._make_grid()
+        stub, _cls = self._patch_capable_stub(grid)
+        self._wire_resolution(monkeypatch, tmp_path, stub)
+
+        box = (0.0, 0.0, 0.5, 0.5)
+        elem = self._cross_dataset_elem(region_box=box)
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        # Empty snap → in-dataset path skipped; ``_embed_one`` is invoked.
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        eid = stable_element_id(elem)
+        assert eid in det_ctx.label_embeddings
+        expected = box_to_vote_vector(grid, box)
+        np.testing.assert_allclose(det_ctx.label_embeddings[eid], expected, atol=1e-6)
+
+    def test_cross_dataset_region_vote_box_change_reflects_in_pooled_vector(self, monkeypatch, tmp_path):
+        """Two boxes selecting disjoint quadrants of the same patch grid
+        must produce two visibly different cached vectors — proves the
+        region intent really threads through the cross-dataset path."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.media.patch_embed import box_to_vote_vector
+        from vtscore.state.core import DetectorContext
+
+        grid = self._make_grid()
+        stub, _ = self._patch_capable_stub(grid)
+        self._wire_resolution(monkeypatch, tmp_path, stub)
+
+        top_left = (0.0, 0.0, 0.5, 0.5)
+        bot_right = (0.5, 0.5, 1.0, 1.0)
+
+        elem = self._cross_dataset_elem(region_box=top_left)
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+        eid = stable_element_id(elem)
+        first = np.array(det_ctx.label_embeddings[eid], copy=True)
+
+        elem.region_box = bot_right
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+        second = det_ctx.label_embeddings[eid]
+
+        np.testing.assert_allclose(second, box_to_vote_vector(grid, bot_right), atol=1e-6)
+        assert not np.allclose(first, second), "Region edit must repool, not reuse the cached vector"
+
+    def test_cross_dataset_region_vote_falls_back_with_warning_for_single_vector_embedder(
+        self, monkeypatch, tmp_path, caplog
+    ):
+        """Legacy single-vector embedders can't produce a patch grid.  The
+        element still trains (we don't drop the vote), but the cached
+        embedding is the full-image vector and a warning surfaces the
+        silent downgrade."""
+        import logging
+
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        stub, sentinel = self._single_vector_stub()
+        self._wire_resolution(monkeypatch, tmp_path, stub)
+
+        elem = self._cross_dataset_elem(region_box=(0.0, 0.0, 0.5, 0.5))
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+
+        with caplog.at_level(logging.WARNING, logger="vtscore.detectors.labelset_training"):
+            populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        eid = stable_element_id(elem)
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
+        assert any("region_box" in r.message and "patch regions" in r.message for r in caplog.records), (
+            f"Expected a region-downgrade warning; got: {[r.message for r in caplog.records]}"
+        )
+
+    def test_cross_dataset_region_vote_returns_none_when_embedder_patch_forward_fails(self, monkeypatch, tmp_path):
+        """``patch_forward`` returning ``None`` (failed decode, etc.)
+        downgrades to the image-level fallback rather than skipping the
+        element entirely — keeping the vote in the training set."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        sentinel = np.zeros(16, dtype=np.float32)
+        sentinel[5] = 1.0
+
+        class _FlakyPatchStub:
+            name = "flaky-patch-stub"
+            supports_patch_regions = True
+
+            def patch_forward(self, _media):
+                return None  # simulates a failed forward pass
+
+            def embed_media(self, _media):
+                return sentinel
+
+        self._wire_resolution(monkeypatch, tmp_path, _FlakyPatchStub())
+
+        elem = self._cross_dataset_elem(region_box=(0.0, 0.0, 0.5, 0.5))
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        eid = stable_element_id(elem)
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
+
+    def test_cross_dataset_no_region_box_unchanged(self, monkeypatch, tmp_path):
+        """Image-level cross-dataset elements (no ``region_box``) must hit
+        the existing ``embed_file`` path — patch_forward should not even
+        be called.  Guards against the new path firing spuriously."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        sentinel = np.zeros(16, dtype=np.float32)
+        sentinel[7] = 1.0
+        patch_calls = []
+
+        class _ObservingPatchStub:
+            name = "observing-patch-stub"
+            supports_patch_regions = True
+
+            def patch_forward(self, media):
+                patch_calls.append(media)
+                raise AssertionError("patch_forward must not be called for image-level votes")
+
+            def embed_media(self, _media):
+                return sentinel
+
+        self._wire_resolution(monkeypatch, tmp_path, _ObservingPatchStub())
+
+        elem = self._cross_dataset_elem(region_box=None)
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        eid = stable_element_id(elem)
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
+        assert patch_calls == []

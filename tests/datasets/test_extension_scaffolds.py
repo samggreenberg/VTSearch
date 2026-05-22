@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 from unittest.mock import patch
 
-from vtsearch.datasets.labelset import LabelSet, LabeledElement
+from vtscore.datasets.labelset import LabelSet, LabeledElement
 
 
 # ---------------------------------------------------------------------------
@@ -136,31 +136,31 @@ class TestMediaUrlLazyFetch:
     """Test that _resolve_media_bytes/string fall back to media_url."""
 
     def test_resolve_bytes_from_media_url(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         mt = AudioMediaType()
         media = {"media_bytes": None, "media_path": None, "media_url": "http://pw/media/123"}
 
-        with patch("vtsearch.media.base._fetch_media_url", return_value=b"fetched") as mock:
+        with patch("vtscore.media.base._fetch_media_url", return_value=b"fetched") as mock:
             result = mt._resolve_media_bytes(media)
 
         assert result == b"fetched"
         mock.assert_called_once_with("http://pw/media/123")
 
     def test_resolve_bytes_prefers_bytes_over_url(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         mt = AudioMediaType()
         media = {"media_bytes": b"in-memory", "media_path": None, "media_url": "http://pw/123"}
 
-        with patch("vtsearch.media.base._fetch_media_url") as mock:
+        with patch("vtscore.media.base._fetch_media_url") as mock:
             result = mt._resolve_media_bytes(media)
 
         assert result == b"in-memory"
         mock.assert_not_called()
 
     def test_resolve_bytes_prefers_path_over_url(self, tmp_path):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         p = tmp_path / "test.wav"
         p.write_bytes(b"from-disk")
@@ -168,61 +168,61 @@ class TestMediaUrlLazyFetch:
         mt = AudioMediaType()
         media = {"media_bytes": None, "media_path": str(p), "media_url": "http://pw/123"}
 
-        with patch("vtsearch.media.base._fetch_media_url") as mock:
+        with patch("vtscore.media.base._fetch_media_url") as mock:
             result = mt._resolve_media_bytes(media)
 
         assert result == b"from-disk"
         mock.assert_not_called()
 
     def test_resolve_bytes_url_returns_none_on_failure(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         mt = AudioMediaType()
         media = {"media_bytes": None, "media_path": None, "media_url": "http://pw/bad"}
 
-        with patch("vtsearch.media.base._fetch_media_url", return_value=None):
+        with patch("vtscore.media.base._fetch_media_url", return_value=None):
             result = mt._resolve_media_bytes(media)
 
         assert result is None
 
     def test_resolve_bytes_no_url_returns_none(self):
-        from vtsearch.media.audio.media_type import AudioMediaType
+        from vtscore.media.audio.media_type import AudioMediaType
 
         mt = AudioMediaType()
         media = {"media_bytes": None, "media_path": None}
         assert mt._resolve_media_bytes(media) is None
 
     def test_resolve_string_from_media_url(self):
-        from vtsearch.media.text.media_type import TextMediaType
+        from vtscore.media.text.media_type import TextMediaType
 
         mt = TextMediaType()
         media = {"media_string": None, "media_path": None, "media_url": "http://pw/text/1"}
 
-        with patch("vtsearch.media.base._fetch_media_url", return_value=b"hello text") as mock:
+        with patch("vtscore.media.base._fetch_media_url", return_value=b"hello text") as mock:
             result = mt._resolve_media_string(media)
 
         assert result == "hello text"
         mock.assert_called_once_with("http://pw/text/1")
 
     def test_resolve_string_prefers_string_over_url(self):
-        from vtsearch.media.text.media_type import TextMediaType
+        from vtscore.media.text.media_type import TextMediaType
 
         mt = TextMediaType()
         media = {"media_string": "cached", "media_path": None, "media_url": "http://pw/text/1"}
 
-        with patch("vtsearch.media.base._fetch_media_url") as mock:
+        with patch("vtscore.media.base._fetch_media_url") as mock:
             result = mt._resolve_media_string(media)
 
         assert result == "cached"
         mock.assert_not_called()
 
     def test_resolve_string_url_returns_empty_on_failure(self):
-        from vtsearch.media.text.media_type import TextMediaType
+        from vtscore.media.text.media_type import TextMediaType
 
         mt = TextMediaType()
         media = {"media_string": None, "media_path": None, "media_url": "http://pw/bad"}
 
-        with patch("vtsearch.media.base._fetch_media_url", return_value=None):
+        with patch("vtscore.media.base._fetch_media_url", return_value=None):
             result = mt._resolve_media_string(media)
 
         assert result == ""
@@ -237,7 +237,7 @@ class TestPluginDiscovery:
     """Verify that scaffolded plugins are discoverable by their registries."""
 
     def test_recaller_importer_registered(self):
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         imp = get_importer("recaller")
         assert imp is not None
@@ -245,7 +245,7 @@ class TestPluginDiscovery:
         assert imp.display_name == "ReCaller Query"
 
     def test_holder_exporter_registered(self):
-        from vtsearch.exporters import get_exporter
+        from vtscore.exporters import get_exporter
 
         exp = get_exporter("holder")
         assert exp is not None
@@ -253,7 +253,7 @@ class TestPluginDiscovery:
         assert exp.display_name == "Holder Package"
 
     def test_holder_label_importer_registered(self):
-        from vtsearch.labels.importers import get_label_importer
+        from vtscore.labels.importers import get_label_importer
 
         imp = get_label_importer("holder")
         assert imp is not None
@@ -261,7 +261,7 @@ class TestPluginDiscovery:
         assert imp.display_name == "Holder Package"
 
     def test_pullwrest_source_registered(self):
-        from vtsearch.datasets.sources import get_source_for_origin
+        from vtscore.datasets.sources import get_source_for_origin
 
         origin = {
             "importer": "recaller",
@@ -277,7 +277,7 @@ class TestPluginDiscovery:
         assert source.name == "pullwrest"
 
     def test_pullwrest_source_none_without_url(self):
-        from vtsearch.datasets.sources import get_source_for_origin
+        from vtscore.datasets.sources import get_source_for_origin
 
         origin = {"importer": "recaller", "params": {"contentID": "C1"}}
         source = get_source_for_origin(origin)
@@ -293,31 +293,31 @@ class TestHolderExporterHelpers:
     """Test _extract_content_id and _extract_entry_metadata."""
 
     def test_extract_content_id_from_metadata(self):
-        from vtsearch.exporters.holder import _extract_content_id
+        from vtscore.exporters.holder import _extract_content_id
 
         entry = {"metadata": {"contentID": "C1"}, "custom_metadata": {"contentID": "C2"}}
         assert _extract_content_id(entry) == "C1"  # metadata wins
 
     def test_extract_content_id_from_custom_metadata(self):
-        from vtsearch.exporters.holder import _extract_content_id
+        from vtscore.exporters.holder import _extract_content_id
 
         entry = {"custom_metadata": {"contentID": "C2"}}
         assert _extract_content_id(entry) == "C2"
 
     def test_extract_content_id_from_origin(self):
-        from vtsearch.exporters.holder import _extract_content_id
+        from vtscore.exporters.holder import _extract_content_id
 
         entry = {"origin": {"importer": "recaller", "params": {"contentID": "C3"}}}
         assert _extract_content_id(entry) == "C3"
 
     def test_extract_content_id_missing(self):
-        from vtsearch.exporters.holder import _extract_content_id
+        from vtscore.exporters.holder import _extract_content_id
 
         assert _extract_content_id({}) is None
         assert _extract_content_id({"origin": {"importer": "server_folder", "params": {}}}) is None
 
     def test_extract_entry_metadata(self):
-        from vtsearch.exporters.holder import _extract_entry_metadata
+        from vtscore.exporters.holder import _extract_entry_metadata
 
         entry = {
             "md5": "hash1",
@@ -340,7 +340,7 @@ class TestHolderLabelImporterEntry:
     """Test _entry_to_label conversion."""
 
     def test_entry_to_label_good(self):
-        from vtsearch.labels.importers.holder import _entry_to_label
+        from vtscore.labels.importers.holder import _entry_to_label
 
         entry = {
             "contentID": "C1",
@@ -359,7 +359,7 @@ class TestHolderLabelImporterEntry:
         assert label["metadata"]["mediaID"] == "M1"
 
     def test_entry_to_label_bad(self):
-        from vtsearch.labels.importers.holder import _entry_to_label
+        from vtscore.labels.importers.holder import _entry_to_label
 
         entry = {"contentID": "C2", "mediaID": "M2", "md5": "hash2", "media_url": "", "media_type": "image"}
         label = _entry_to_label(entry, "bad")
@@ -376,7 +376,7 @@ class TestReCallerImporterStructure:
     """Test ReCaller importer properties (without calling real APIs)."""
 
     def test_build_origin_is_empty(self):
-        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
         imp = ReCallerDatasetImporter()
         origin = imp.build_origin({"query_id": "Q123", "media_type": "audio"})
@@ -384,21 +384,21 @@ class TestReCallerImporterStructure:
         assert origin["params"] == {}
 
     def test_origin_display(self):
-        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
         imp = ReCallerDatasetImporter()
         origin = {"importer": "recaller", "params": {"contentID": "C42"}}
         assert imp.origin_display(origin) == "recaller:C42"
 
     def test_origin_display_empty(self):
-        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
         imp = ReCallerDatasetImporter()
         origin = {"importer": "recaller", "params": {}}
         assert imp.origin_display(origin) == "recaller"
 
     def test_fields(self):
-        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
         imp = ReCallerDatasetImporter()
         keys = [f.key for f in imp.fields]
@@ -406,7 +406,7 @@ class TestReCallerImporterStructure:
         assert "media_type" in keys
 
     def test_run_raises_without_query_id(self):
-        from vtsearch.datasets.importers.recaller import ReCallerDatasetImporter
+        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
         imp = ReCallerDatasetImporter()
         medias: dict = {}

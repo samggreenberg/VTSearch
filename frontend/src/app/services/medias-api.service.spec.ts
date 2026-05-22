@@ -38,40 +38,11 @@ describe('MediasApiService', () => {
     req.flush(mock);
   });
 
-  it('getAudio should GET blob', () => {
-    service.getAudio(1).subscribe(data => expect(data instanceof Blob).toBeTrue());
-    const req = httpMock.expectOne('/api/medias/1/audio');
-    expect(req.request.method).toBe('GET');
-    expect(req.request.responseType).toBe('blob');
-    req.flush(new Blob());
-  });
-
-  it('getVideo should GET blob', () => {
-    service.getVideo(2).subscribe();
-    const req = httpMock.expectOne('/api/medias/2/video');
-    expect(req.request.method).toBe('GET');
-    req.flush(new Blob());
-  });
-
-  it('getImage should GET blob', () => {
-    service.getImage(3).subscribe();
-    const req = httpMock.expectOne('/api/medias/3/image');
-    expect(req.request.method).toBe('GET');
-    req.flush(new Blob());
-  });
-
   it('getText should GET json', () => {
     service.getText(4).subscribe(data => expect(data.content).toBe('hello'));
     const req = httpMock.expectOne('/api/medias/4/text');
     expect(req.request.method).toBe('GET');
     req.flush({ content: 'hello', word_count: 1, character_count: 5 });
-  });
-
-  it('getMedia should GET blob', () => {
-    service.getMedia(5).subscribe();
-    const req = httpMock.expectOne('/api/medias/5/media');
-    expect(req.request.method).toBe('GET');
-    req.flush(new Blob());
   });
 
   it('vote should POST with label', () => {

@@ -1,8 +1,7 @@
 """Dataset status / cancellation endpoints.
 
 Per-operation progress is streamed via the unified ``/api/events`` SSE
-endpoint — see ``feature-brainstorm.md`` §12.5 and
-``vtsearch/routes/events.py``.
+endpoint — see ``vtsearch/routes/events.py``.
 
 Migrated to ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. Schema-level
@@ -12,7 +11,7 @@ validation is unused (all bodies are empty); handler-level rejects
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.concurrency.progress import (
+from vtscore.concurrency.progress import (
     cancel_dataset_progress,
     loading_tasks as _loading_tasks,
 )

@@ -5,10 +5,12 @@ Phase 1 of the "active" state simplification: the frontend can send
 dataset/model a request operates on, without mutating global "active" state.
 """
 
+import io
+
 import numpy as np
 
 from vtsearch.state import bad_votes, good_votes, medias
-from vtsearch.state.core import (
+from vtscore.state.core import (
     DatasetContext,
     DetectorContext,
     get_active_context,
@@ -83,19 +85,55 @@ class TestRequestScopedDataset:
         ctx_a = get_thread_dataset_context()
         assert ctx_a is not None and ctx_a.dataset_id == "req_ds_a"
 
-    def test_header_with_unloaded_id_falls_back_to_active(self, client):
-        """If X-Dataset-Id refers to a dataset not in memory, fall back to global active."""
+    def test_header_with_unloaded_id_raises_at_proxy_access(self, client):
+        """If X-Dataset-Id names an unloaded dataset, proxy access raises (H16).
+
+        Previously this fell back silently to the thread-local / empty
+        context, returning stale data with HTTP 200. Now the resolver
+        raises ``DatasetNotLoadedError`` (mapped to 409) the moment a
+        handler touches the dataset proxies.
+        """
+        import pytest
+
+        from vtscore.state.core import DatasetNotLoadedError
+
         _make_dataset("req_fallback", [300])
+        # Thread-local set to a *real* dataset — the resolver must still
+        # raise because the request explicitly named an unloaded id.
         set_thread_dataset_context(get_context("req_fallback"))
 
         from app import app
 
         with app.test_request_context(headers={"X-Dataset-Id": "nonexistent"}):
             app.preprocess_request()
-            # Falls back to global active
-            ctx = get_active_context()
-            assert ctx.dataset_id == "req_fallback"
-            assert 300 in medias
+            with pytest.raises(DatasetNotLoadedError) as excinfo:
+                get_active_context()
+            assert excinfo.value.dataset_id == "nonexistent"
+            # Proxy access through the module-level name also raises.
+            with pytest.raises(DatasetNotLoadedError):
+                _ = 300 in medias
+
+    def test_header_with_unloaded_id_returns_409(self, client):
+        """End-to-end: a request with an unloaded X-Dataset-Id gets 409."""
+        _make_dataset("req_e2e_loaded", [400])
+
+        # A route that touches the medias proxy via snapshot_medias().
+        resp = client.get("/api/medias/ids", headers={"X-Dataset-Id": "nope"})
+        assert resp.status_code == 409
+        body = resp.get_json()
+        assert body["code"] == "dataset_not_loaded"
+        assert body["dataset_id"] == "nope"
+
+    def test_unloaded_header_does_not_block_routes_that_skip_proxies(self, client):
+        """Routes that don't touch the dataset proxies still respond 200.
+
+        The registry-listing endpoint operates on the global context store,
+        not on the active ``medias``, so an unloaded ``X-Dataset-Id``
+        header must not break it — clients need this endpoint precisely
+        to discover which datasets *are* loaded.
+        """
+        resp = client.get("/api/datasets/registry", headers={"X-Dataset-Id": "nope"})
+        assert resp.status_code == 200
 
     def test_no_header_uses_global_active(self, client):
         """Without the header, behaviour is identical to before (global active)."""
@@ -127,7 +165,7 @@ class TestRequestScopedModel:
         det_a.good_votes[1] = None
         det_b.good_votes[2] = None
 
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("req_det_a"))
 
@@ -149,18 +187,25 @@ class TestRequestScopedModel:
         det_a = get_thread_detector_context()
         assert det_a is not None and det_a.detector_id == "req_det_a"
 
-    def test_model_header_with_unloaded_id_falls_back(self, client):
-        """If X-Detector-Id refers to a detector not in memory, fall back to global."""
+    def test_model_header_with_unloaded_id_returns_409(self, client):
+        """If X-Detector-Id names an unloaded detector, the route returns 409 (H34).
+
+        Previously this fell back to the thread-local detector and the
+        client saw votes from a different (or stale) detector under HTTP
+        200. Now the resolver raises ``DetectorNotLoadedError`` (mapped to
+        409) at proxy access.
+        """
         det = _make_detector("req_det_fb")
         det.good_votes[5] = None
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("req_det_fb"))
 
         resp = client.get("/api/votes", headers={"X-Detector-Id": "nonexistent"})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert 5 in set(data.get("good", []))
+        assert resp.status_code == 409
+        body = resp.get_json()
+        assert body["code"] == "detector_not_loaded"
+        assert body["detector_id"] == "nonexistent"
 
     def test_header_resolves_correct_detector_in_request(self, client):
         """Verify the proxy objects resolve correctly inside a request context."""
@@ -168,7 +213,7 @@ class TestRequestScopedModel:
         det_b = _make_detector("req_det_ctx_b")
         det_a.good_votes[10] = None
         det_b.bad_votes[20] = None
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("req_det_ctx_a"))
 
@@ -197,7 +242,7 @@ class TestRequestScopedBoth:
         det.good_votes[500] = None
 
         set_thread_dataset_context(get_context("req_both_ds"))
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("req_both_det"))
 
@@ -290,7 +335,7 @@ class TestQueryParamContext:
         det_b = _make_detector("qp_det_b")
         det_a.good_votes[10] = None
         det_b.good_votes[20] = None
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         set_thread_detector_context(get_detector_context("qp_det_a"))
 
@@ -316,3 +361,263 @@ class TestQueryParamContext:
             app.preprocess_request()
             assert get_active_context().dataset_id == "qp_hdr"
             assert 3000 in medias
+
+
+# ---------------------------------------------------------------------------
+# Tests: Request-missing sentinel (audit fix H13)
+# ---------------------------------------------------------------------------
+
+
+class TestRequestMissingSentinel:
+    """When a Flask request can't identify a dataset/detector (header
+    dropped *and* no thread-local pin), the proxy chain returns a frozen
+    sentinel — reads see an empty context but every mutation raises
+    ``RequestMissingContextError``.  This prevents silent-mistarget bugs
+    where a vote (or label, pile-add, …) accumulates on the global empty
+    context because the client dropped the header (H13).
+
+    The unloaded-id case is covered separately by H16 via
+    ``DatasetNotLoadedError`` / ``DetectorNotLoadedError`` raised at proxy
+    access (see ``TestRequestScopedDataset.test_header_with_unloaded_id_*``).
+    """
+
+    def test_no_header_and_no_thread_local_returns_dataset_sentinel(self, client):
+        """Inside a request with no header and no thread-local context,
+        ``get_active_context()`` returns the dataset sentinel."""
+        from vtscore.state.core import is_request_missing_dataset_context, set_thread_dataset_context
+
+        # Drop the test fixture's thread-local default — we want the
+        # "production-like" path where the request thread has nothing
+        # cached.
+        set_thread_dataset_context(None)
+
+        from app import app
+
+        with app.test_request_context():
+            app.preprocess_request()
+            ctx = get_active_context()
+            assert is_request_missing_dataset_context(ctx)
+            # Reads work — empty container, not a crash.
+            assert len(medias) == 0
+
+    def test_no_header_and_no_thread_local_returns_detector_sentinel(self, client):
+        """Symmetric to the dataset case: the detector sentinel is returned
+        when the request didn't identify a detector and nothing is pinned
+        on the thread."""
+        from vtscore.state.core import is_request_missing_detector_context, set_thread_detector_context
+
+        set_thread_detector_context(None)
+
+        from app import app
+
+        with app.test_request_context():
+            app.preprocess_request()
+            ctx = get_active_detector_context()
+            assert is_request_missing_detector_context(ctx)
+            assert len(good_votes) == 0
+            assert len(bad_votes) == 0
+
+    def test_dataset_sentinel_mutation_raises(self, client):
+        """Writing into the sentinel's medias dict raises
+        ``RequestMissingContextError``."""
+        import pytest
+
+        from vtscore.state.core import RequestMissingContextError, set_thread_dataset_context
+
+        set_thread_dataset_context(None)
+
+        from app import app
+
+        with app.test_request_context():
+            app.preprocess_request()
+            ctx = get_active_context()
+            with pytest.raises(RequestMissingContextError):
+                ctx.medias[42] = {"id": 42, "type": "audio"}
+            with pytest.raises(RequestMissingContextError):
+                ctx.diversity_tree = object()
+
+    def test_detector_sentinel_mutation_raises(self, client):
+        """Writing into the sentinel's vote dicts raises
+        ``RequestMissingContextError`` — closes the H14-style empty-detector
+        pollution path where votes accumulated on the global fallback."""
+        import pytest
+
+        from vtscore.state.core import RequestMissingContextError, set_thread_detector_context
+
+        set_thread_detector_context(None)
+
+        from app import app
+
+        with app.test_request_context():
+            app.preprocess_request()
+            ctx = get_active_detector_context()
+            with pytest.raises(RequestMissingContextError):
+                ctx.good_votes[1] = None
+            with pytest.raises(RequestMissingContextError):
+                ctx.bad_votes[1] = None
+            with pytest.raises(RequestMissingContextError):
+                ctx.label_history.append((1, "good", 0.0))
+            with pytest.raises(RequestMissingContextError):
+                ctx.click_counter = 5
+
+    def test_vote_endpoint_returns_4xx_without_dataset_header(self, client):
+        """``POST /api/medias/<id>/vote`` does not silently 200 when the
+        request didn't identify a dataset/detector and nothing's pinned
+        on the thread.
+
+        The route looks up ``get_media(id)`` first — that resolves to the
+        sentinel's empty ``medias`` and returns ``None``, so the route's
+        own ``abort(404, "not found")`` actually fires before any
+        mutation happens.  This test pins the safe-fail contract so a
+        future refactor that bypasses the lookup still fails loudly via
+        the sentinel's frozen vote dicts.
+
+        (The unloaded-id case is covered separately by H16 via
+        ``DatasetNotLoadedError`` → 409.)
+        """
+        from vtscore.state.core import set_thread_dataset_context, set_thread_detector_context
+
+        set_thread_dataset_context(None)
+        set_thread_detector_context(None)
+
+        # Absolute-target vote API (H1) — body is {"target": ...}, not
+        # {"vote": ...}.
+        resp = client.post("/api/medias/42/vote", json={"target": "good"})
+        # Either the get_media-is-None branch (404) or the
+        # RequestMissingContextError errorhandler (400) — both are
+        # acceptable safe-fail behaviour.  What matters is that we did
+        # not silently apply the vote (which would be 200).
+        assert resp.status_code in (400, 404)
+
+
+# ---------------------------------------------------------------------------
+# Tests: H34 — vote-mutating endpoints require explicit context headers
+# ---------------------------------------------------------------------------
+
+
+class TestVoteMutatingEndpointsRequireHeaders:
+    """logical-bug-audit H34: every endpoint that writes vote / pile state
+    rejects with 400 when the ``X-Dataset-Id`` / ``X-Detector-Id`` header
+    (or its ``?dataset_id=`` / ``?detector_id=`` query-param fallback) is
+    absent — even when a thread-local context is pinned. This rules out
+    silent-mistarget bugs on Flask threaded-server workers where a stale
+    thread-local from a previous request could otherwise absorb the
+    write.
+
+    Tests bypass the conftest test-client wrapper (which auto-injects
+    the headers from thread-local to mimic Angular's
+    ``activeContextInterceptor``) by passing an explicit empty-string
+    value for each header — the wrapper only fills in keys that are
+    absent from the request, and an empty string still fails the
+    decorator's ``bool(...)`` check.
+    """
+
+    DROP_HEADERS = {"X-Dataset-Id": "", "X-Detector-Id": ""}
+
+    def test_vote_media_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/medias/42/vote",
+            json={"target": "good"},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+        assert "X-Dataset-Id" in resp.get_data(as_text=True) or "X-Detector-Id" in resp.get_data(as_text=True)
+
+    def test_add_media_to_pile_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/medias/add-to-pile",
+            data={"label": "good", "file": (io.BytesIO(b"x"), "x.wav")},
+            content_type="multipart/form-data",
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_clear_votes_rejects_without_detector_header(self, client):
+        # /api/votes/clear only needs the detector header (it doesn't touch
+        # the dataset). Pass an empty detector header explicitly to suppress
+        # auto-injection while leaving the dataset header free.
+        resp = client.post(
+            "/api/votes/clear",
+            headers={"X-Detector-Id": ""},
+        )
+        assert resp.status_code == 400
+        assert "X-Detector-Id" in resp.get_data(as_text=True)
+
+    def test_seed_votes_from_examples_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": []},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_import_labels_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/labels/import",
+            json={"labels": []},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_fill_from_sort_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/labels/fill-from-sort",
+            json={"sort_results": [{"id": 1, "score": 0.9}], "threshold": 0.5},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_ingest_missing_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/label-importers/ingest-missing",
+            json={"entries": [{"label": "good", "md5": "x" * 32}]},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_find_label_rejects_without_headers(self, client):
+        resp = client.post(
+            "/api/find-label",
+            json={"detector_id": "anything"},
+            headers=self.DROP_HEADERS,
+        )
+        assert resp.status_code == 400
+
+    def test_thread_local_does_not_bypass_header_requirement(self, client):
+        """Even with the test fixture's default thread-local pin, the
+        explicit empty-string headers still cause a 400 — the decorator
+        runs *before* any context resolution, so a leaked thread-local
+        on a Flask worker can never substitute for the absent header.
+        This is the precise H34 surface: the route mustn't trust whatever
+        ``get_active_detector_context()`` happens to resolve to.
+        """
+        # Thread-local is _test_default / _test_default_det at this point
+        # (set by ``reset_state``). Without explicit empty-string headers,
+        # the wrapper would auto-inject and the request would succeed.
+        resp = client.post(
+            "/api/medias/42/vote",
+            json={"target": "good"},
+            headers={"X-Detector-Id": ""},
+        )
+        assert resp.status_code == 400
+        assert "X-Detector-Id" in resp.get_data(as_text=True)
+
+    def test_query_param_fallback_satisfies_the_check(self, client):
+        """``?detector_id=`` / ``?dataset_id=`` query params count as
+        identification for the header-required gate (matches the
+        browser-native fallback path documented for ``<img src>`` etc.).
+        """
+        # Use an empty header to suppress wrapper auto-injection but
+        # supply a query-param value. The route's pre-handler decorator
+        # accepts it; the routing then hits a different failure path
+        # (404 / 409 / etc.), not the 400 the decorator would produce.
+        resp = client.post(
+            "/api/medias/99999/vote?detector_id=any-id-here",
+            json={"target": "good"},
+            headers={"X-Detector-Id": ""},
+        )
+        # The decorator passes (header-or-query satisfied); the route
+        # itself returns 404 because media 99999 isn't loaded. Either
+        # way, the response is NOT the decorator's specific 400 message.
+        body = resp.get_data(as_text=True)
+        assert resp.status_code != 400 or ("X-Detector-Id header" not in body and "X-Dataset-Id header" not in body)

@@ -20,8 +20,8 @@ from unittest.mock import patch
 
 import numpy as np
 
-from vtsearch.datasets.importers.base import DatasetImporter, ImporterField
-from vtsearch.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
+from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
 
 
 # ===========================================================================
@@ -162,7 +162,7 @@ class TestRunImporterChunkedDispatch:
     """
 
     def _invoke(self, importer, field_values: dict | None = None) -> dict[int, dict[str, Any]]:
-        from vtsearch.datasets import load_pipeline
+        from vtscore.datasets import load_pipeline
 
         captured: dict[str, Any] = {}
 
@@ -314,7 +314,7 @@ class TestLocalFolderRouteChunked:
         # Patch the server_folder importer registered globally so we
         # observe whether run_chunked was invoked, without doing any
         # real audio embedding.
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         real_importer = get_importer("server_folder")
         assert real_importer is not None

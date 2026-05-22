@@ -7,7 +7,7 @@ names — its functions resolve the active context explicitly — but the app
 keeps them as a convenience facade so existing code reads naturally.
 
 These proxies live on the app side of the future ``vtscore`` / ``vtsearch``
-split (see Phase 3 of ``docs/plans/extract-library.md``).  ``vtsearch.state``
+split (see Phase 3 of ``../../vtscore/docs/architecture.md``).  ``vtsearch.state``
 re-exports them under their original names so ``from vtsearch.state import
 medias`` keeps working; the library subpackage ``vtsearch.state`` itself
 never imports the proxy classes.
@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from vtsearch.state.core import get_active_context, get_active_detector_context
+from vtscore.state.core import get_active_context, get_active_detector_context
 
 
 class _ProxyDict(dict):

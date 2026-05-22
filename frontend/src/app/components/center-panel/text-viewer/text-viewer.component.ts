@@ -14,11 +14,15 @@ export class TextViewerComponent implements OnChanges, OnDestroy {
 
   text = 'Loading...';
   private sub: Subscription | null = null;
+  // See ImageViewerComponent.lastMediaId — avoid re-fetching the text payload
+  // every time the metadata cache hydrates a new reference for the same id.
+  private lastMediaId: number | null = null;
 
   constructor(private mediasApi: MediasApiService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media'] && this.media) {
+    if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {
+      this.lastMediaId = this.media.id;
       this.loadText();
     }
   }

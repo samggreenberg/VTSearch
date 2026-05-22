@@ -33,9 +33,9 @@ from marshmallow import Schema, fields, validate
 
 
 class LabeledElementSchema(Schema):
-    """A single entry in an exported :class:`~vtsearch.datasets.labelset.LabelSet`.
+    """A single entry in an exported :class:`~vtscore.datasets.labelset.LabelSet`.
 
-    Mirrors :meth:`vtsearch.datasets.labelset.LabeledElement.to_dict`. Only
+    Mirrors :meth:`vtscore.datasets.labelset.LabeledElement.to_dict`. Only
     ``md5`` and ``label`` are guaranteed; the other keys appear when the
     underlying element has them set. ``is_correction`` and
     ``custom_metadata`` are added by the export route (under
@@ -173,8 +173,8 @@ class FillFromSortResponseSchema(Schema):
 class _PluginEntrySchema(Schema):
     """Shared shape for plugin-listing endpoints.
 
-    Mirrors :meth:`vtsearch.plugins.PluginBase.to_dict`; the ``fields``
-    array's inner shape mirrors :meth:`vtsearch.plugins.PluginField.to_dict`
+    Mirrors :meth:`vtscore.plugins.PluginBase.to_dict`; the ``fields``
+    array's inner shape mirrors :meth:`vtscore.plugins.PluginField.to_dict`
     but is declared as ``fields.Dict()`` to avoid duplicating the source
     of truth across schema and dataclass.
     """
@@ -244,10 +244,17 @@ class IngestMissingRequestSchema(Schema):
 
 
 class IngestMissingResponseSchema(Schema):
-    """Response for ``POST /api/label-importers/ingest-missing``."""
+    """Response for ``POST /api/label-importers/ingest-missing``.
+
+    ``failed`` lists per-entry failures from the label-application
+    pass — see logical-bug-audit H31.  A single entry that raises during
+    ``apply_label`` no longer aborts the rest of the batch.
+    """
 
     ingested = fields.Integer(required=True)
     applied = fields.Integer(required=True)
+    failed_count = fields.Integer(required=True)
+    failed = fields.List(fields.Dict(), required=True)
     message = fields.String(required=True)
 
 
@@ -259,6 +266,11 @@ class RunLabelImporterResponseSchema(Schema):
     importer, so we declare it here for cross-reference. Currently
     *not* attached to the route via ``@response`` — kept for the
     eventual unified plugin-field migration.
+
+    ``failed`` carries per-entry application failures (logical-bug-audit
+    H31).  ``missing`` still tracks entries whose media couldn't be
+    located or ingested; ``failed`` is the new field for entries whose
+    ``apply_label`` call raised.
     """
 
     applied = fields.Integer(required=True)
@@ -266,6 +278,8 @@ class RunLabelImporterResponseSchema(Schema):
     missing_count = fields.Integer(required=True)
     missing = fields.List(fields.Dict(), required=True)
     ingested = fields.Integer(required=True)
+    failed_count = fields.Integer(required=True)
+    failed = fields.List(fields.Dict(), required=True)
     message = fields.String(required=True)
 
 

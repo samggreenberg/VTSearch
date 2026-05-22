@@ -252,13 +252,27 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   /**
    * Ask the metadata cache to prefetch items around the currently visible
-   * viewport range.  This is a no-op when all metadata is already cached
-   * (small datasets) or when virtual scrolling is not active.
+   * viewport range.
+   *
+   * When the list is short enough to skip virtual scrolling (or we're in
+   * grid mode), every item is rendered into the DOM, so every item is
+   * "visible" — prefetch the lot. Without this, small datasets keep
+   * showing ``#284`` placeholders forever because the only other hydration
+   * trigger is an explicit click via ``selectMedia()``.
+   *
+   * ``MediaMetadataCacheService.ensureLoaded()`` already de-dupes
+   * already-cached and already-pending ids, so calling it on every
+   * rebuild is cheap.
    */
   private prefetchVisibleMetadata(): void {
-    if (!this.useVirtualScroll || !this.virtualViewport) return;
     const total = this.cachedOrderedItems.length;
     if (total === 0) return;
+
+    if (!this.useVirtualScroll || !this.virtualViewport) {
+      const ids = this.cachedOrderedItems.map((item) => item.media.id);
+      this.metadataCache.ensureLoaded(ids);
+      return;
+    }
 
     const viewportEl = this.virtualViewport.elementRef.nativeElement;
     const viewportHeight = viewportEl.clientHeight || 600;

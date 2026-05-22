@@ -17,9 +17,11 @@ from typing import NoReturn
 import numpy as np
 from flask_smorest import Blueprint, abort
 
-from vtsearch.concurrency.progress import update_find_progress
-from vtsearch.detectors.training import train_and_threshold
+from vtscore.concurrency.progress import find_progress, update_find_progress
+from vtscore.detectors.training import train_and_threshold
+from vtscore.utils.scores import sigmoid_to_finite_scores
 from vtsearch.schemas.detectors import (
+    FindCancelResponseSchema,
     FindCheckLabelsRequestSchema,
     FindCheckLabelsResponseSchema,
     FindRequestSchema,
@@ -45,7 +47,7 @@ def _load_pkl_for_check(pkl_path: str) -> dict | None:
     any read / parse error (the check-labels endpoint silently skips
     unreadable datasets).
     """
-    from vtsearch.datasets.loader import safe_pickle_load  # noqa: PLC0415
+    from vtscore.datasets.loader import safe_pickle_load  # noqa: PLC0415
 
     try:
         with open(pkl_path, "rb") as f:
@@ -73,7 +75,7 @@ def _any_label_resolves_in_pkl(pkl_path: str, labels: list[dict]) -> bool:
 
 def _detector_has_direct_match(labels: list[dict], dataset_ids: list[str]) -> bool:
     """True if any selected dataset can resolve at least one label."""
-    from vtsearch.datasets.registry import get_dataset as reg_get_ds  # noqa: PLC0415
+    from vtscore.datasets.registry import get_dataset as reg_get_ds  # noqa: PLC0415
 
     for ds_id in dataset_ids:
         ds = reg_get_ds(ds_id)
@@ -94,8 +96,8 @@ def _check_detector_warning(d: dict, dataset_ids: list[str]) -> dict | None:
     on-disk labelset, has no labels, or already resolves directly via one
     of the selected datasets.
     """
-    from vtsearch.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
-    from vtsearch.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
 
     name = d.get("name", "")
     if not name:
@@ -131,7 +133,7 @@ def find_check_labels(body: dict):
     and returns per-detector resolution statistics so the frontend can warn
     the user before starting the (potentially expensive) Find operation.
     """
-    from vtsearch.detectors.registry import get_detector as reg_get_detector  # noqa: PLC0415
+    from vtscore.detectors.registry import get_detector as reg_get_detector  # noqa: PLC0415
 
     dataset_ids = body["dataset_ids"]
     detector_ids = body["detector_ids"]
@@ -159,7 +161,7 @@ def _abort_find(code: int, message: str) -> NoReturn:
 
 def _resolve_find_datasets(dataset_ids: list[str]) -> list[dict]:
     """Resolve dataset IDs to registry entries, asserting each pkl file exists."""
-    from vtsearch.datasets.registry import get_dataset as reg_get_ds  # noqa: PLC0415
+    from vtscore.datasets.registry import get_dataset as reg_get_ds  # noqa: PLC0415
 
     datasets: list[dict] = []
     for ds_id in dataset_ids:
@@ -175,7 +177,7 @@ def _resolve_find_datasets(dataset_ids: list[str]) -> list[dict]:
 
 def _resolve_find_detectors(detector_ids: list[str]) -> list[dict]:
     """Resolve detector IDs to registry entries."""
-    from vtsearch.detectors.registry import get_detector as reg_get_detector  # noqa: PLC0415
+    from vtscore.detectors.registry import get_detector as reg_get_detector  # noqa: PLC0415
 
     detectors: list[dict] = []
     for d_id in detector_ids:
@@ -187,31 +189,56 @@ def _resolve_find_detectors(detector_ids: list[str]) -> list[dict]:
 
 
 def _build_detector_config(d: dict) -> dict:
-    """Pick the live-MLP path or the cold-detector path for *d*.
+    """Build a per-detector config carrying both score paths.
+
+    Multi-dataset Find loads each dataset's medias on demand, so the
+    embedder check that decides live vs cold has to happen per (detector,
+    dataset) pair — not once at config-build time.  We therefore carry
+    *both* the live MLP (when one is cached on the detector context) and
+    the on-disk labelset (when present) so the per-dataset dispatcher can
+    pick safely (see :func:`_select_scorer`).
 
     Aborts with 400 when the detector has no usable labels in either form.
     """
-    from vtsearch.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
-    from vtsearch.state.core import get_detector_context  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+    from vtscore.state.core import get_detector_context  # noqa: PLC0415
+
+    config: dict = {"name": d["name"], "detector_id": d["id"]}
 
     det_ctx = get_detector_context(d["id"])
     if det_ctx is not None and det_ctx.model is not None:
-        return {
-            "name": d["name"],
-            "detector_id": d["id"],
-            "live_mlp": det_ctx.model,
-            "threshold": det_ctx.threshold,
-        }
+        config["live_mlp"] = det_ctx.model
+        config["threshold"] = det_ctx.threshold
+        config["live_embedder"] = det_ctx.embedder or ""
 
     det_data = _read_detector(_detector_path(d["name"]))
     if det_data and det_data.get("labelset", {}).get("labels"):
-        return {
-            "name": d["name"],
-            "detector_id": d["id"],
-            "detector_data": det_data,
-        }
+        config["detector_data"] = det_data
 
-    _abort_find(400, f"Detector '{d['name']}' has no labels for detection")
+    if "live_mlp" not in config and "detector_data" not in config:
+        _abort_find(400, f"Detector '{d['name']}' has no labels for detection")
+    return config
+
+
+def _select_scorer(dc: dict, temp_medias: dict[int, dict]) -> str:
+    """Pick ``"live"`` / ``"cold"`` / ``"na"`` for *dc* against *temp_medias*.
+
+    The cached MLP can only be reused when its embedder matches the
+    dataset about to be scored — otherwise the cross-space output is
+    silent garbage at best and a ``nn.Linear`` size-mismatch crash at
+    worst (H5).  When the embedders don't match, fall back to the cold
+    path (which retrains from the labelset using *temp_medias*'s
+    embedder), or ``"na"`` if no cold data is available.
+    """
+    temp_embedder = next(iter(temp_medias.values()), {}).get("embedder", "") or "" if temp_medias else ""
+    live_embedder = dc.get("live_embedder", "") or ""
+    has_live = "live_mlp" in dc
+    has_cold = "detector_data" in dc
+    if has_live and (not live_embedder or not temp_embedder or live_embedder == temp_embedder):
+        return "live"
+    if has_cold:
+        return "cold"
+    return "na"
 
 
 def _build_detector_configs(detectors: list[dict]) -> list[dict]:
@@ -236,7 +263,7 @@ def _load_find_dataset_medias(ds: dict) -> dict[int, dict]:
     Aborts with 500 on any load error.  The snapshot is owned by the
     caller and freed after scoring completes.
     """
-    from vtsearch.datasets.loader import safe_pickle_load  # noqa: PLC0415
+    from vtscore.datasets.loader import safe_pickle_load  # noqa: PLC0415
 
     try:
         with open(ds["pkl_path"], "rb") as f:
@@ -290,7 +317,7 @@ def _record_verdicts(
     ``score=0`` for every id.
     """
     if scores is not None:
-        for cid, score in zip(all_ids, scores):
+        for cid, score in zip(all_ids, scores, strict=True):
             verdict = "Good" if score >= threshold else "Bad"
             media_results[cid]["detector_verdicts"][dc_name] = {
                 "verdict": verdict,
@@ -312,8 +339,7 @@ def _score_with_live_mlp(dc: dict, X_all, all_ids: list[int], media_results: dic
         mlp = dc["live_mlp"]
         with torch.no_grad():
             X_in = X_all.to(next(mlp.parameters()).device)
-            raw_logits = mlp(X_in)
-            scores = torch.sigmoid(raw_logits).squeeze(1).cpu().tolist()
+            scores = sigmoid_to_finite_scores(mlp(X_in))
         _record_verdicts(media_results, dc["name"], all_ids, scores, dc.get("threshold", 0.5), None)
     except Exception:
         _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "Error")
@@ -349,9 +375,18 @@ def _collect_cold_training_data(
         bad_embs = [temp_medias[i]["embedding"] for i in bad_ids if i in temp_medias]
         return good_embs + bad_embs, [1.0] * len(good_embs) + [0.0] * len(bad_embs)
 
-    from vtsearch.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
+    from vtscore.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
 
-    resolved = resolve_label_embeddings(labels, det_data.get("media_type", "audio"))
+    # Resolve+embed using the target dataset's embedder so the resulting
+    # training vectors share one space with the snap embeddings the MLP
+    # will be scored against.  Empty when the dataset is somehow embedder-
+    # less, which falls back to the media type's default embedder.
+    dataset_embedder = next(iter(temp_medias.values()), {}).get("embedder", "") or "" if temp_medias else ""
+    resolved = resolve_label_embeddings(
+        labels,
+        det_data.get("media_type", "audio"),
+        embedder_name=dataset_embedder,
+    )
     if resolved.has_good_and_bad:
         return resolved.embeddings, resolved.labels
     return [], []
@@ -377,7 +412,7 @@ def _score_with_cold_detector(
         mlp, threshold = train_and_threshold(X_list, y_list)
         with torch.no_grad():
             X_in = X_all.to(next(mlp.parameters()).device)
-            scores = torch.sigmoid(mlp(X_in)).squeeze(1).cpu().tolist()
+            scores = sigmoid_to_finite_scores(mlp(X_in))
         _record_verdicts(media_results, dc["name"], all_ids, scores, threshold, None)
     except Exception:
         _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "Error")
@@ -419,7 +454,7 @@ def _score_dataset(
 
     detected_media_type = next(iter(temp_medias.values()), {}).get("type", "")
 
-    from vtsearch.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
     all_ids, all_embs = get_embedding_matrix_for_snap(temp_medias)
     X_all = torch.from_numpy(all_embs)
@@ -442,10 +477,13 @@ def _score_dataset(
             total_steps=_FIND_STEPS,
         )
 
-        if "live_mlp" in dc:
+        choice = _select_scorer(dc, temp_medias)
+        if choice == "live":
             _score_with_live_mlp(dc, X_all, all_ids, media_results)
-        elif "detector_data" in dc:
+        elif choice == "cold":
             _score_with_cold_detector(dc, temp_medias, X_all, all_ids, media_results)
+        else:
+            _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
 
         scored_units += len(all_ids)
         update_find_progress(
@@ -485,6 +523,10 @@ def multi_find(body: dict):
         _abort_find(400, "No datasets selected")
     if not detector_ids:
         _abort_find(400, "No detectors selected")
+
+    # Clear a leftover cancel flag from a previously-cancelled run so
+    # the new operation doesn't trip on it immediately.
+    find_progress.reset_cancel()
 
     update_find_progress(
         "running",
@@ -545,3 +587,19 @@ def multi_find(body: dict):
         "multiple_detectors": len(detector_configs) > 1,
         "total_hits": len(all_results),
     }
+
+
+@detector_find_bp.route("/api/find/cancel", methods=["POST"])
+@detector_find_bp.response(200, FindCancelResponseSchema)
+def cancel_find():
+    """Cancel any in-flight find-style scoring.
+
+    Sets the cancel flag on the shared ``find_progress`` tracker, which
+    every scoring path (``/api/find``, ``/api/find-label``, and
+    ``/api/auto-detect``) reports progress through. Long-running loops
+    poll the flag between iterations and bail out by raising
+    :class:`CancelledError`. Always returns 200 — calling cancel when
+    nothing is running is a no-op.
+    """
+    find_progress.cancel()
+    return {"ok": True}

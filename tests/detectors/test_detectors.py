@@ -203,7 +203,7 @@ class TestRenameDetector:
 
     def test_rename_updates_model_registry(self, client):
         """Renaming a detector should update registry references."""
-        from vtsearch.detectors.registry import find_by_name, get_detector
+        from vtscore.detectors.registry import find_by_name, get_detector
 
         # Create a detector and register it in the model registry
         client.post(
@@ -268,7 +268,7 @@ class TestRenameLabelsetSourceCleanup:
         return res.get_json()["detector"]["id"]
 
     def _attach_labelset_source(self, detector_id, template):
-        from vtsearch.state.core import DetectorContext, register_detector_context
+        from vtscore.state.core import DetectorContext, register_detector_context
 
         ctx = DetectorContext(detector_id, name="Old Name", media_type="audio")
         ctx.labelset_source = {
@@ -301,7 +301,7 @@ class TestRenameLabelsetSourceCleanup:
         assert pending["new_path"].endswith("New Name.labels.json")
 
     def test_rename_updates_ctx_name_for_future_syncs(self, client, tmp_path):
-        from vtsearch.state.core import get_detector_context
+        from vtscore.state.core import get_detector_context
 
         detector_id = self._create_registered_detector(client)
         template = str(tmp_path / "{detector_name}.labels.json")
@@ -466,14 +466,14 @@ class TestSaveLabels:
 
         # Cast a good vote on the first media
         first_id = next(iter(medias))
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
 
         # Cast a bad vote on the second media
         media_ids = list(medias.keys())
         if len(media_ids) < 2:
             pytest.skip("Need at least 2 medias")
         second_id = media_ids[1]
-        client.post(f"/api/medias/{second_id}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{second_id}/vote", json={"target": "bad"})
 
         client.post(
             "/api/detectors",
@@ -499,7 +499,7 @@ class TestSaveLabels:
 
     def test_save_labels_captures_active_clipper_into_input_spec(self, client):
         """When the active dataset has a clipper, save_detector_labels stamps it onto input_spec."""
-        from vtsearch.detectors.store import _detector_path, _read_detector
+        from vtscore.detectors.store import _detector_path, _read_detector
         from vtsearch.state import medias
 
         if not medias:
@@ -543,7 +543,7 @@ class TestSaveLabels:
 
     def test_save_labels_drops_input_spec_when_dataset_has_no_clipper(self, client):
         """Re-saving labels against an unclipped dataset clears any stale input_spec."""
-        from vtsearch.detectors.store import _detector_path, _read_detector, _write_detector
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 
         client.post(
             "/api/detectors",
@@ -598,7 +598,7 @@ class TestSaveLabels:
             ],
         }
         try:
-            client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+            client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
             client.post("/api/detectors", json={"name": "DupeTest", "media_type": "audio", "text_query": "test"})
 
             res = client.post("/api/detectors/DupeTest/labels")
@@ -638,8 +638,8 @@ class TestLabelVoteIsolation:
         client.post("/api/detectors", json={"name": "Model B", "media_type": "audio", "text_query": "b"})
 
         # Simulate labeling with Model A: vote on ids[0] and ids[1]
-        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"target": "bad"})
         client.post("/api/detectors/Model%20A/labels")  # save 2 labels
 
         # Now clear votes (as the Label button should do) and import Model B's labels
@@ -669,13 +669,13 @@ class TestLabelVoteIsolation:
 
         # Create model and label 2 items
         client.post("/api/detectors", json={"name": "Target", "media_type": "audio", "text_query": "t"})
-        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"target": "bad"})
         client.post("/api/detectors/Target/labels")
 
         # Add extra votes that DON'T belong to the model (simulating stale state)
-        client.post(f"/api/medias/{ids[2]}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{ids[3]}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{ids[2]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{ids[3]}/vote", json={"target": "bad"})
         assert len(good_votes) == 2  # ids[0] + ids[2]
         assert len(bad_votes) == 2  # ids[1] + ids[3]
 
@@ -695,7 +695,7 @@ class TestDeleteRegisteredModel:
 
     def test_delete_registered_model(self, client):
         """Deleting a registered model removes it from the registry."""
-        from vtsearch.detectors.registry import get_detector
+        from vtscore.detectors.registry import get_detector
 
         res = client.post(
             "/api/detectors/registry",
@@ -715,7 +715,7 @@ class TestDeleteRegisteredModel:
 
     def test_delete_loaded_model(self, client):
         """Deleting a loaded model should also unload it."""
-        from vtsearch.detectors.registry import get_detector, is_detector_loaded
+        from vtscore.detectors.registry import get_detector, is_detector_loaded
 
         client.post(
             "/api/detectors",
@@ -736,7 +736,7 @@ class TestDeleteRegisteredModel:
 
     def test_delete_removes_autorun_flag(self, client):
         """Deleting a model that is flagged for autorun clears it from settings."""
-        from vtsearch.detectors.registry import get_detector
+        from vtscore.detectors.registry import get_detector
         from vtsearch.settings import add_autorun_detector, get_autorun_detectors
 
         res = client.post(
@@ -756,7 +756,7 @@ class TestLoadModelEndpoint:
     """Tests for POST /api/detectors/registry/load."""
 
     def test_load_model(self, client):
-        from vtsearch.detectors.registry import is_detector_loaded
+        from vtscore.detectors.registry import is_detector_loaded
 
         res = client.post(
             "/api/detectors/registry",
@@ -769,7 +769,7 @@ class TestLoadModelEndpoint:
         assert is_detector_loaded(detector_id)
 
     def test_unload_model(self, client):
-        from vtsearch.detectors.registry import add_loaded_detector_id, is_detector_loaded
+        from vtscore.detectors.registry import add_loaded_detector_id, is_detector_loaded
 
         add_loaded_detector_id("fake")
         assert is_detector_loaded("fake")
@@ -812,8 +812,8 @@ class TestLoadModelEndpoint:
 
         # Load model A and cast some votes.
         _load_detector_and_wait(client, mid_a)
-        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{ids[1]}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{ids[1]}/vote", json={"target": "bad"})
         assert ids[0] in good_votes
         assert ids[1] in bad_votes
 
@@ -845,7 +845,7 @@ class TestLoadModelEndpoint:
         )
         mid = res.get_json()["detector"]["id"]
         _load_detector_and_wait(client, mid)
-        client.post(f"/api/medias/{ids[0]}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
         # Labels auto-sync on vote, so the detector file now has 1 label.
 
         # Unload to clear votes, then reload — label should be restored.
@@ -867,7 +867,7 @@ class TestLoadModelEndpoint:
 
         import numpy as np
 
-        from vtsearch.detectors.dataset_sync import ensure_votes_match_active_dataset
+        from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
         from vtsearch.state import (
             DatasetContext,
             bad_votes,
@@ -900,8 +900,8 @@ class TestLoadModelEndpoint:
 
         # Vote in dataset A.  Persists to good_votes/bad_votes and to the
         # detector's on-disk labelset via sync_labels_to_loaded_detector.
-        client.post(f"/api/medias/{a_good}/vote", json={"vote": "good"})
-        client.post(f"/api/medias/{a_bad}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{a_good}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{a_bad}/vote", json={"target": "bad"})
         assert a_good in good_votes
         assert a_bad in bad_votes
 
@@ -933,12 +933,328 @@ class TestLoadModelEndpoint:
         assert a_bad not in bad_votes, "bad cid from dataset A leaked into dataset B's id-space"
 
 
+class TestEmbedderMismatchInvalidatesStaleModel:
+    """H5: a detector's cached MLP is trained against a specific embedder
+    space (``DetectorContext.embedder``).  When the active dataset uses a
+    different embedder, the cached MLP must be invalidated — otherwise
+    scoring with a cross-space MLP either crashes (different dim) or
+    silently produces garbage labels (same dim).
+    """
+
+    def _make_det_ctx(self, embedder: str):
+        from unittest.mock import MagicMock
+
+        from vtscore.state.core import DetectorContext
+
+        det_ctx = DetectorContext("d-h5", name="d-h5", media_type="audio", embedder=embedder)
+        det_ctx.model = MagicMock(name="trained-mlp")
+        det_ctx.threshold = 0.42
+        det_ctx.label_embeddings["e1"] = "vec"  # type: ignore[assignment]
+        det_ctx.last_learned_scores[1] = 0.7
+        det_ctx.training_medias[1] = {"id": 1}
+        det_ctx.calibration_cache = ("sig", 0.5)
+        return det_ctx
+
+    def test_helper_drops_caches_on_mismatch(self):
+        from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
+
+        det_ctx = self._make_det_ctx("clap")
+        invalidated = invalidate_detector_model_on_embedder_mismatch(det_ctx, "ast")
+
+        assert invalidated is True
+        assert det_ctx.model is None
+        assert det_ctx.threshold == 0.5
+        assert det_ctx.last_learned_scores == {}
+        assert det_ctx.training_medias == {}
+        assert det_ctx.calibration_cache is None
+        # ``label_embeddings`` is reset lazily by
+        # ``populate_label_embeddings._maybe_clear_cache_on_embedder_switch``
+        # (the only consumer), and ``embedder`` is left stamped at the old
+        # value so the load endpoint's progress-tracked re-embed task can
+        # still detect the mismatch.
+        assert det_ctx.label_embeddings == {"e1": "vec"}
+        assert det_ctx.embedder == "clap"
+
+    def test_helper_noop_on_match(self):
+        from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
+
+        det_ctx = self._make_det_ctx("clap")
+        original_model = det_ctx.model
+        invalidated = invalidate_detector_model_on_embedder_mismatch(det_ctx, "clap")
+
+        assert invalidated is False
+        assert det_ctx.model is original_model
+        assert det_ctx.embedder == "clap"
+
+    def test_helper_noop_on_empty_new_embedder(self):
+        """An empty new embedder means we can't prove a mismatch; preserve state."""
+        from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
+
+        det_ctx = self._make_det_ctx("clap")
+        original_model = det_ctx.model
+        invalidated = invalidate_detector_model_on_embedder_mismatch(det_ctx, "")
+
+        assert invalidated is False
+        assert det_ctx.model is original_model
+
+    def test_helper_noop_on_empty_existing_embedder(self):
+        """A fresh detector with no recorded embedder has nothing to invalidate."""
+        from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
+
+        det_ctx = self._make_det_ctx("")
+        original_model = det_ctx.model
+        invalidated = invalidate_detector_model_on_embedder_mismatch(det_ctx, "ast")
+
+        assert invalidated is False
+        assert det_ctx.model is original_model
+
+    def test_before_request_hook_invalidates_active_detector(self, client):
+        """End-to-end: switching the active dataset to one with a different
+        embedder triggers invalidation of the active detector's MLP via
+        ``ensure_detector_model_matches_active_embedder``.
+        """
+        import hashlib
+        from unittest.mock import MagicMock
+
+        import numpy as np
+
+        from vtsearch.state import (
+            DatasetContext,
+            get_active_detector_context,
+            medias,
+            register_context,
+            set_thread_dataset_context,
+        )
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        a_ids = list(medias.keys())
+        if len(a_ids) < 2:
+            pytest.skip("Need at least 2 medias")
+
+        # Create and load a detector against dataset A.
+        client.post(
+            "/api/detectors",
+            json={"name": "H5Det", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "H5Det", "media_type": "audio", "text_query": "test"},
+        )
+        mid = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, mid)
+
+        # Cast a vote so the detector's model gets trained and stamped.
+        client.post(f"/api/medias/{a_ids[0]}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{a_ids[1]}/vote", json={"target": "bad"})
+
+        det_ctx = get_active_detector_context()
+        # Pin a fake MLP + embedder marker to simulate a trained model.
+        det_ctx.model = MagicMock(name="stale-mlp")
+        det_ctx.threshold = 0.42
+        det_ctx.embedder = "ye-olde-embedder"
+        det_ctx.label_embeddings["seed"] = "vec"  # type: ignore[assignment]
+
+        # Switch to dataset B with a DIFFERENT embedder.
+        ctx_b = DatasetContext("ds_b_for_h5")
+        for cid in a_ids[:2]:
+            ctx_b.medias[cid] = {
+                "id": cid,
+                "type": "audio",
+                "embedder": "shiny-new-embedder",
+                "md5": hashlib.md5(f"h5_b_{cid}".encode()).hexdigest(),
+                "embedding": np.zeros(512, dtype=np.float32),
+                "media_bytes": b"fake-b",
+                "filename": f"h5_b_{cid}.wav",
+                "category": "test",
+                "origin": {"importer": "test_b", "params": {"id": cid}},
+                "origin_name": f"h5_b_{cid}.wav",
+            }
+        register_context(ctx_b)
+        set_thread_dataset_context(ctx_b)
+
+        # Fire a no-op request — the before_request hook should run and
+        # invalidate the stale MLP because the embedders no longer match.
+        client.get("/healthz", headers={"X-Dataset-Id": "ds_b_for_h5", "X-Detector-Id": mid})
+
+        assert det_ctx.model is None, "stale MLP must be cleared on embedder mismatch"
+        assert det_ctx.threshold == 0.5
+        # The embedder marker stays at the old value so the load endpoint
+        # can still detect the mismatch and schedule a progress-tracked
+        # re-embed task — the next training pass restamps it.
+        assert det_ctx.embedder == "ye-olde-embedder"
+
+
+class TestValidatedVoteSnapshot:
+    """``validated_vote_snapshot`` must atomically pair medias + votes (H14).
+
+    The H14 audit finding identified that ``good_votes`` / ``bad_votes`` are
+    detector-scoped while ``medias`` is dataset-scoped, and composing them
+    without an atomic snapshot allows a concurrent rehydrate on the same
+    detector against a different dataset to slip in between the
+    ``before_request`` rehydrate and the route body, leaking cross-dataset
+    cids into the export and corrupting on-disk writes.
+
+    The helper :func:`vtscore.detectors.dataset_sync.validated_vote_snapshot`
+    captures both contexts under a single ``_state_lock`` acquisition and
+    refuses to compose (``safe=False``) when ``votes_dataset_id`` doesn't
+    match the active dataset.
+    """
+
+    def _setup_detector_with_votes(self, client):
+        """Create a detector, load it, cast one good + one bad vote.
+
+        Returns ``(detector_id, good_cid, bad_cid)``.
+        """
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+        ids = list(medias.keys())
+        if len(ids) < 2:
+            pytest.skip("Need at least 2 medias")
+        good_cid, bad_cid = ids[0], ids[1]
+
+        client.post(
+            "/api/detectors",
+            json={"name": "SnapshotTest", "media_type": "audio", "text_query": "test"},
+        )
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "SnapshotTest", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+        _load_detector_and_wait(client, detector_id)
+
+        client.post(f"/api/medias/{good_cid}/vote", json={"target": "good"})
+        client.post(f"/api/medias/{bad_cid}/vote", json={"target": "bad"})
+        return detector_id, good_cid, bad_cid
+
+    def test_snapshot_safe_when_aligned(self, client):
+        """Happy path: votes_dataset_id matches active dataset → safe=True with full votes."""
+        from vtscore.detectors.dataset_sync import validated_vote_snapshot
+
+        _, good_cid, bad_cid = self._setup_detector_with_votes(client)
+
+        snap = validated_vote_snapshot()
+        assert snap.safe is True
+        assert good_cid in snap.good_votes
+        assert bad_cid in snap.bad_votes
+        assert good_cid in snap.medias
+        assert bad_cid in snap.medias
+
+    def test_snapshot_unsafe_on_dataset_mismatch(self, client):
+        """votes_dataset_id != active dataset_id → safe=False with empty vote dicts.
+
+        Simulates the H14 race: another thread re-keyed the detector against
+        a different dataset between ``ensure_votes_match_active_dataset()``
+        and the snapshot copy.  Patches the rehydrate to a no-op so the
+        forced mismatch survives the snapshot's own rehydrate call.
+        """
+        from vtscore.detectors import dataset_sync as _ds_sync
+        from vtscore.detectors.dataset_sync import validated_vote_snapshot
+        from vtscore.state.core import get_active_detector_context
+
+        self._setup_detector_with_votes(client)
+
+        det_ctx = get_active_detector_context()
+        original = _ds_sync.ensure_votes_match_active_dataset
+        _ds_sync.ensure_votes_match_active_dataset = lambda: None
+        try:
+            det_ctx.votes_dataset_id = "some_other_dataset_id"
+            snap = validated_vote_snapshot()
+        finally:
+            _ds_sync.ensure_votes_match_active_dataset = original
+
+        assert snap.safe is False
+        assert snap.good_votes == {}
+        assert snap.bad_votes == {}
+        assert snap.vote_region_boxes == {}
+        # ``medias`` is always populated from the live active dataset.
+        assert snap.medias, "medias should still be populated on safe=False"
+
+    def test_export_returns_empty_on_safe_false(self, client):
+        """/api/labels/export must not leak cross-dataset cids when snapshot is unsafe."""
+        from vtscore.state.core import get_active_detector_context
+
+        self._setup_detector_with_votes(client)
+
+        # Sanity: with aligned state we get the labels back.
+        resp = client.get("/api/labels/export")
+        assert resp.status_code == 200
+        assert len(resp.get_json()["labels"]) >= 2
+
+        # Now corrupt votes_dataset_id and re-export.  The route's
+        # ``ensure_votes_match_active_dataset`` will try to rehydrate but the
+        # detector file has been written to disk, so it'll match the active
+        # dataset again — verify by going around the rehydrate's mtime cache.
+        # Simplest: directly corrupt the detector's vote dicts to simulate a
+        # post-rehydrate mismatch (e.g. another thread re-flipped them).
+        det_ctx = get_active_detector_context()
+        # Force a state where votes_dataset_id can't match (the race outcome).
+        # We monkey-patch ensure_votes_match_active_dataset to be a no-op so
+        # the corruption survives the before_request hook.
+        from vtscore.detectors import dataset_sync as _ds_sync
+
+        original = _ds_sync.ensure_votes_match_active_dataset
+        _ds_sync.ensure_votes_match_active_dataset = lambda: None
+        try:
+            det_ctx.votes_dataset_id = "stale_dataset_id"
+            resp = client.get("/api/labels/export")
+            assert resp.status_code == 200
+            # safe=False degrades the vote dicts to empty, so no labels
+            # are composed — no cross-dataset cid leakage.
+            assert resp.get_json()["labels"] == []
+        finally:
+            _ds_sync.ensure_votes_match_active_dataset = original
+
+    def test_sync_labels_to_disk_skips_on_safe_false(self, client):
+        """``sync_labels_to_loaded_detector`` must not erase on-disk labels under race."""
+        from vtscore.detectors import dataset_sync as _ds_sync
+        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+        from vtscore.detectors.store import _detector_path, _read_detector
+        from vtscore.state.core import get_active_detector_context
+
+        _, good_cid, bad_cid = self._setup_detector_with_votes(client)
+
+        # After the votes were cast, the detector JSON on disk has 2 entries.
+        # Find the on-disk path and confirm.
+        det_ctx = get_active_detector_context()
+        path = _detector_path(det_ctx.name)
+        data = _read_detector(path)
+        assert data is not None
+        labels_before = data.get("labelset", {}).get("labels", [])
+        assert len(labels_before) >= 2
+
+        # Simulate the race: votes_dataset_id mismatches active dataset, and
+        # the rehydrate hook is bypassed (so the mismatch survives).  Without
+        # the safe=False guard, ``_merge_labelsets_across_datasets`` would
+        # drop the active dataset's existing entries and replace them with an
+        # empty composition — erasing labels from disk.
+        original = _ds_sync.ensure_votes_match_active_dataset
+        _ds_sync.ensure_votes_match_active_dataset = lambda: None
+        try:
+            det_ctx.votes_dataset_id = "stale_dataset_id"
+            sync_labels_to_loaded_detector()
+        finally:
+            _ds_sync.ensure_votes_match_active_dataset = original
+
+        # The on-disk labelset must be unchanged.
+        data_after = _read_detector(path)
+        assert data_after is not None
+        labels_after = data_after.get("labelset", {}).get("labels", [])
+        assert len(labels_after) == len(labels_before), (
+            "sync should have bailed on safe=False, not erased on-disk labels"
+        )
+
+
 class TestVoteSyncsToLoadedModel:
     """Voting while a detector is loaded should auto-update the model's labelset."""
 
     def test_vote_updates_model_labels(self, client):
         """Casting a vote with a loaded model should persist labels and update registry stats."""
-        from vtsearch.detectors.registry import get_detector
+        from vtscore.detectors.registry import get_detector
         from vtsearch.state import medias
 
         if not medias:
@@ -960,7 +1276,7 @@ class TestVoteSyncsToLoadedModel:
 
         # Cast a vote
         first_id = next(iter(medias))
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
 
         # Check that the model's labelset was updated
         model_data = client.get("/api/detectors/AutoSync").get_json()
@@ -994,12 +1310,12 @@ class TestVoteSyncsToLoadedModel:
 
         first_id = next(iter(medias))
         # Vote good
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
         model_data = client.get("/api/detectors/ToggleSync").get_json()
         assert len(model_data["labelset"]["labels"]) == 1
 
-        # Toggle off (vote good again)
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        # Un-vote (absolute target=none)
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "none"})
         model_data = client.get("/api/detectors/ToggleSync").get_json()
         assert len(model_data["labelset"]["labels"]) == 0
 
@@ -1016,7 +1332,7 @@ class TestVoteSyncsToLoadedModel:
         )
 
         first_id = next(iter(medias))
-        client.post(f"/api/medias/{first_id}/vote", json={"vote": "good"})
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
 
         # Model should still have empty labelset
         model_data = client.get("/api/detectors/NoSync").get_json()
@@ -1024,7 +1340,7 @@ class TestVoteSyncsToLoadedModel:
 
     def test_label_import_syncs_to_loaded_model(self, client):
         """Importing labels with a loaded model should persist to the model."""
-        from vtsearch.detectors.registry import get_detector
+        from vtscore.detectors.registry import get_detector
         from vtsearch.state import medias
 
         if not medias:
@@ -1074,7 +1390,7 @@ class TestSeedVotesFromExamples:
 
     def _create_example_file(self, media_bytes: bytes, filename: str = "ex.wav") -> str:
         """Write *media_bytes* into data/example_media/<filename> and return the filename."""
-        from vtsearch.config import DATA_DIR
+        from vtscore.config import DATA_DIR
 
         example_dir = DATA_DIR / "example_media"
         example_dir.mkdir(parents=True, exist_ok=True)
@@ -1131,6 +1447,38 @@ class TestSeedVotesFromExamples:
         data = res.get_json()
         assert data["seeded"] == 0
         assert data["skipped"] == 1
+
+    def test_seed_disk_sync_failure_surfaces_as_500(self, client, monkeypatch):
+        """H30 regression: ``os.replace`` failures inside the detector store
+        write must surface as a clear 500 instead of bubbling as a generic
+        unhandled exception.  Mirrors the C11 guard in
+        ``fill_labels_from_sort``.
+        """
+        import json as _json
+
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media = medias[first_id]
+        fname = self._create_example_file(media["media_bytes"], "seed_h30.wav")
+
+        from vtscore.detectors import label_sync
+
+        def _boom() -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(label_sync, "sync_labels_to_loaded_detector", _boom)
+
+        res = client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": fname}]},
+        )
+        assert res.status_code == 500
+        body = _json.dumps(res.get_json() or {})
+        assert "disk full" in body or "persist seeded votes" in body
 
     def test_seed_unmatched_inserts_new_media(self, client):
         """A media example not in the dataset should be embedded and inserted as a new media."""
@@ -1255,7 +1603,7 @@ class TestSeedVotesFromExamples:
         # Make sure we don't vote bad on the newly inserted item
         new_id = max(medias.keys())
         target_id = first_id if first_id != new_id else list(medias.keys())[1]
-        client.post(f"/api/medias/{target_id}/vote", json={"vote": "bad"})
+        client.post(f"/api/medias/{target_id}/vote", json={"target": "bad"})
         assert len(bad_votes) >= 1
 
         # Learned sort should work — it accesses the embedding from the inserted media
@@ -1442,8 +1790,8 @@ class TestLoadModelCrossDatasetResolution:
 
         import numpy as np
 
-        from vtsearch.detectors.registry import register_detector, reset_for_tests
-        from vtsearch.detectors.store import _write_detector
+        from vtscore.detectors.registry import register_detector, reset_for_tests
+        from vtscore.detectors.store import _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
             good_votes,
@@ -1557,8 +1905,8 @@ class TestLoadModelCrossDatasetResolution:
         """
         import numpy as np
 
-        from vtsearch.detectors.registry import register_detector, reset_for_tests
-        from vtsearch.detectors.store import _write_detector
+        from vtscore.detectors.registry import register_detector, reset_for_tests
+        from vtscore.detectors.store import _write_detector
         from vtsearch.settings import get_detectors_dir, set_detectors_dir
         from vtsearch.state import (
             good_votes,

@@ -5,7 +5,7 @@
   gap: 0.75rem;
   margin: 0 0 0.75rem;
   padding: 0.6rem 0.9rem;
-  background: var(--surface-alt, rgba(255, 255, 255, 0.04));
+  background: var(--bg-subtle);
   border-radius: 6px;
 }
 
@@ -42,7 +42,7 @@
   align-items: center;
   gap: 1rem;
   padding: 0.75rem;
-  background: var(--surface-alt, rgba(255, 255, 255, 0.04));
+  background: var(--bg-subtle);
   border-radius: 6px;
 }
 
@@ -73,13 +73,14 @@
   letter-spacing: 0.04em;
   padding: 0.05rem 0.4rem;
   border-radius: 3px;
-  background: var(--surface, rgba(255, 255, 255, 0.08));
+  background: var(--bg-hover);
   color: var(--text-muted, #888);
 
   &[data-tier-idx="0"] { color: #cd7f32; }
   &[data-tier-idx="1"] { color: #d9d9d9; }
   &[data-tier-idx="2"] { color: #f0c419; }
   &[data-tier-idx="3"] { color: #f5f6fa; }
+  &[data-tier-idx="-1"] { cursor: help; }
 }
 
 .achievement-desc {
@@ -97,7 +98,7 @@
 .achievement-progress-track {
   flex: 1;
   height: 6px;
-  background: var(--surface, rgba(255, 255, 255, 0.08));
+  background: var(--bg-hover);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -120,20 +121,20 @@
   font-size: 0.75rem;
   padding: 0.1rem 0.5rem;
   border-radius: 3px;
-  background: var(--surface, rgba(255, 255, 255, 0.08));
+  background: var(--bg-hover);
   border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
   color: inherit;
   cursor: pointer;
 
   &:hover {
-    background: var(--surface-hover, rgba(255, 255, 255, 0.12));
+    background: var(--bg-hover);
   }
 }
 
 .docs-panel {
   margin-top: 0.6rem;
   padding: 0.6rem 0.75rem;
-  background: var(--surface, rgba(255, 255, 255, 0.06));
+  background: var(--bg-subtle);
   border-radius: 4px;
 }
 
@@ -195,7 +196,7 @@
   padding: 0.25rem 0.5rem;
   border-radius: 3px;
   border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
-  background: var(--surface-alt, rgba(0, 0, 0, 0.2));
+  background: var(--bg-subtle);
   color: inherit;
 }
 

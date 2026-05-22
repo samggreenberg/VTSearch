@@ -1,0 +1,320 @@
+"""Persistent dataset registry.
+
+Maintains a JSON manifest at ``data/dataset_registry.json`` that tracks every
+dataset the user has loaded.  Each entry stores enough metadata to display the
+dataset in the dashboard grid and to re-load it from its saved ``.pkl`` file.
+
+Multiple datasets may be *loaded* into memory simultaneously (each in its own
+``DatasetContext``).  The registry tracks which datasets are loaded via
+``_loaded_ids``.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import threading
+import time
+from pathlib import Path
+from typing import Any
+
+from vtscore.config import DATA_DIR
+
+logger = logging.getLogger(__name__)
+
+REGISTRY_PATH = DATA_DIR / "dataset_registry.json"
+
+
+def get_saved_datasets_dir() -> Path:
+    """Return the saved-datasets directory.
+
+    Routed through ``CoreConfig.from_settings()`` rather than reading
+    ``vtsearch.settings`` directly so this module stays library-clean
+    (see Phase 2 of ``../docs/architecture.md``).
+    """
+    from vtscore.config import CoreConfig  # noqa: PLC0415
+
+    return CoreConfig.from_settings().saved_datasets_dir
+
+
+# Backward-compat alias — prefer :func:`get_saved_datasets_dir` for live value.
+SAVED_DATASETS_DIR = DATA_DIR / "saved_datasets"
+
+_lock = threading.RLock()
+
+# In-memory cache — loaded once from disk, written back on every mutation.
+_entries: list[dict[str, Any]] | None = None
+
+# The set of dataset IDs that are currently loaded in memory.
+_loaded_ids: set[str] = set()
+
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+
+def _load() -> list[dict[str, Any]]:
+    """Read the registry from disk, returning an empty list on failure."""
+    if REGISTRY_PATH.exists():
+        try:
+            text = REGISTRY_PATH.read_text(encoding="utf-8")
+            data = json.loads(text)
+            if isinstance(data, list):
+                return data
+        except Exception as exc:
+            logger.warning("Failed to read dataset registry: %s", exc)
+    return []
+
+
+def _save(entries: list[dict[str, Any]]) -> None:
+    """Write *entries* to disk atomically."""
+    import os
+
+    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = REGISTRY_PATH.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(entries, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(str(tmp), str(REGISTRY_PATH))
+
+
+def _ensure_loaded() -> list[dict[str, Any]]:
+    """Return the in-memory cache, loading from disk on first call."""
+    global _entries
+    if _entries is None:
+        _entries = _load()
+    return _entries
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def list_datasets() -> list[dict[str, Any]]:
+    """Return summary info for all registered datasets."""
+    with _lock:
+        return list(_ensure_loaded())
+
+
+def get_dataset(dataset_id: str) -> dict[str, Any] | None:
+    """Return a single registry entry by *dataset_id*, or ``None``."""
+    with _lock:
+        for entry in _ensure_loaded():
+            if entry["id"] == dataset_id:
+                return dict(entry)
+    return None
+
+
+def register_dataset(
+    *,
+    name: str,
+    media_type: str,
+    num_items: int,
+    pkl_path: str,
+    origin: str = "unknown",
+    source: dict[str, Any] | None = None,
+    num_dupes: int = 0,
+    clipper: str = "",
+    embedder: str = "",
+    created_by: str = "default",
+    readers: list[str] | None = None,
+    file_type_counts: dict[str, int] | None = None,
+    ingest_started_at: float | None = None,
+) -> dict[str, Any]:
+    """Add a new dataset to the registry and persist.
+
+    Args:
+        created_by: Username of the user who created this dataset.
+        readers: List of usernames granted read access.  An empty list
+            (the default) means only the creator can see the dataset.
+            Include ``"*"`` to make it visible to all users.
+        file_type_counts: Mapping of file extension to count.
+        ingest_started_at: Unix timestamp when ingest began.
+
+    Returns the newly created entry (with a generated ``id``).
+    """
+    import uuid
+
+    now = time.time()
+    entry: dict[str, Any] = {
+        "id": uuid.uuid4().hex,
+        "name": name,
+        "media_type": media_type,
+        "num_items": num_items,
+        "num_dupes": num_dupes,
+        "pkl_path": pkl_path,
+        "origin": origin,
+        "source": source,
+        "clipper": clipper,
+        "embedder": embedder,
+        "created_by": created_by,
+        "created_at": now,
+        "readers": readers or [],
+        "file_type_counts": file_type_counts or {},
+        "ingest_started_at": ingest_started_at,
+        "ingest_finished_at": now,
+    }
+    with _lock:
+        entries = _ensure_loaded()
+        entries.append(entry)
+        _save(entries)
+
+    # New entry expands the predicted-embedder set; warm anything new in the
+    # background so a subsequent load is instant. Idempotent: already-loaded
+    # embedders are skipped inside the worker.
+    try:
+        from vtscore.embedding.loader import smart_preload_in_background
+
+        smart_preload_in_background()
+    except Exception:
+        pass
+
+    return entry
+
+
+def unregister_dataset(dataset_id: str) -> bool:
+    """Remove a dataset from the registry and delete its pkl file.
+
+    Returns ``True`` if the dataset was found and removed.
+    """
+    with _lock:
+        entries = _ensure_loaded()
+        for i, entry in enumerate(entries):
+            if entry["id"] == dataset_id:
+                pkl = Path(entry.get("pkl_path", ""))
+                if pkl.is_file():
+                    pkl.unlink(missing_ok=True)
+                entries.pop(i)
+                _loaded_ids.discard(dataset_id)
+                _save(entries)
+                return True
+    return False
+
+
+def rename_dataset(dataset_id: str, new_name: str) -> bool:
+    """Rename a registered dataset. Returns ``True`` on success."""
+    with _lock:
+        entries = _ensure_loaded()
+        for entry in entries:
+            if entry["id"] == dataset_id:
+                entry["name"] = new_name
+                _save(entries)
+                return True
+    return False
+
+
+def update_dataset(dataset_id: str, **fields: Any) -> bool:
+    """Update arbitrary fields on a registered dataset."""
+    with _lock:
+        entries = _ensure_loaded()
+        for entry in entries:
+            if entry["id"] == dataset_id:
+                entry.update(fields)
+                _save(entries)
+                return True
+    return False
+
+
+def get_loaded_ids() -> set[str]:
+    """Return the set of all currently loaded (in-memory) dataset IDs."""
+    with _lock:
+        return set(_loaded_ids)
+
+
+def add_loaded_id(dataset_id: str) -> None:
+    """Mark *dataset_id* as loaded in memory (without making it active)."""
+    with _lock:
+        _loaded_ids.add(dataset_id)
+
+
+def remove_loaded_id(dataset_id: str) -> None:
+    """Remove *dataset_id* from the set of loaded datasets."""
+    with _lock:
+        _loaded_ids.discard(dataset_id)
+
+
+def is_loaded(dataset_id: str) -> bool:
+    """Return ``True`` if the dataset is currently loaded in memory."""
+    with _lock:
+        return dataset_id in _loaded_ids
+
+
+def find_by_pkl_path(pkl_path: str) -> dict[str, Any] | None:
+    """Return the entry whose ``pkl_path`` matches, or ``None``."""
+    with _lock:
+        for entry in _ensure_loaded():
+            if entry.get("pkl_path") == pkl_path:
+                return dict(entry)
+    return None
+
+
+def can_user_access(dataset_id: str, username: str) -> bool:
+    """Return ``True`` if *username* may view/load the dataset.
+
+    Access is granted when any of the following hold:
+
+    * The user is the dataset creator (``created_by``).
+    * The username appears in the ``readers`` list.
+    * The ``readers`` list contains the wildcard ``"*"``.
+    """
+    with _lock:
+        for entry in _ensure_loaded():
+            if entry["id"] == dataset_id:
+                if entry.get("created_by", "default") == username:
+                    return True
+                readers = entry.get("readers", [])
+                return username in readers or "*" in readers
+    return False
+
+
+def is_owner(dataset_id: str, username: str) -> bool:
+    """Return ``True`` if *username* is the creator of the dataset."""
+    with _lock:
+        for entry in _ensure_loaded():
+            if entry["id"] == dataset_id:
+                return entry.get("created_by", "default") == username
+    return False
+
+
+def list_datasets_for_user(username: str) -> list[dict[str, Any]]:
+    """Return only datasets that *username* is allowed to see.
+
+    A dataset is visible when the user is its creator, is listed in
+    ``readers``, or ``"*"`` is in ``readers``.
+    """
+    with _lock:
+        result = []
+        for entry in _ensure_loaded():
+            creator = entry.get("created_by", "default")
+            readers = entry.get("readers", [])
+            if creator == username or username in readers or "*" in readers:
+                result.append(dict(entry))
+        return result
+
+
+def set_readers(dataset_id: str, readers: list[str], requesting_user: str) -> tuple[bool, str]:
+    """Update the ``readers`` list.  Only the creator may call this.
+
+    Returns ``(success, error_message)``.
+    """
+    with _lock:
+        entries = _ensure_loaded()
+        for entry in entries:
+            if entry["id"] == dataset_id:
+                if entry.get("created_by", "default") != requesting_user:
+                    return False, "Only the dataset creator can modify readers"
+                entry["readers"] = readers
+                _save(entries)
+                return True, ""
+        return False, "Dataset not found"
+
+
+def reset_for_tests() -> None:
+    """Reset the in-memory cache (for test isolation)."""
+    global _entries
+    with _lock:
+        _entries = None
+        _loaded_ids.clear()

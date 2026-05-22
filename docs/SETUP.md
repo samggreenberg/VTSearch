@@ -268,10 +268,12 @@ docker build -f docker/Dockerfile -t vtsearch .
 docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 ```
 
-> **Note:** The Dockerfile does not include a Node.js build stage. You must
-> build the frontend locally (`cd frontend && npm install && npm run build:prod`)
-> before running `docker build`, so the `static/` directory contains the
-> compiled Angular app.
+> **Note:** Every VTSearch Dockerfile (`Dockerfile`, `Dockerfile.gpu`,
+> `Dockerfile.labbench`, `Dockerfile.image-embedders`,
+> `Dockerfile.image-embedders.gpu`) includes a Node.js `frontend` build
+> stage that runs `npm ci` and `npm run build:prod` inside the image, so
+> you do **not** need to build the Angular app on the host first — any
+> stale checked-in `static/` is overwritten with the freshly built bundle.
 
 ### GPU
 

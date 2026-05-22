@@ -42,6 +42,7 @@ Find endpoints (``vtsearch/routes/detectors/find.py``):
                                     :class:`FindCheckLabelsResponseSchema`
 * ``POST /api/find`` — :class:`FindRequestSchema` →
                       :class:`FindResponseSchema`
+* ``POST /api/find/cancel`` — :class:`FindCancelResponseSchema`
 
 Label endpoints (``vtsearch/routes/detectors/labels.py``):
 
@@ -266,8 +267,11 @@ class DetectorRegistryEntrySchema(Schema):
     detector_loaded = fields.Boolean()
     autorun = fields.Boolean()
     last_trained_at = fields.Float(allow_none=True)
-    # Recorded only for loaded detectors. Empty for unloaded entries (the
-    # embedder is inferred from the active dataset at load time).
+    # Stamped the first time a detector trains against a dataset and
+    # persisted on the registry entry, so the smart preload predictor and
+    # the dashboard's cross-embedder check both see it without having to
+    # load the detector.  Loaded contexts override the persisted value
+    # when present.  Empty string for detectors that have never trained.
     embedder = fields.String()
 
     class Meta:
@@ -419,13 +423,15 @@ class _FindLabelResultSchema(Schema):
 class FindLabelRequestSchema(Schema):
     """Body for ``POST /api/find-label``.
 
-    ``dataset_id`` is optional and overrides the request-scoped dataset
-    context when present, so a single Find run can target a dataset that
-    isn't the active one in the frontend.
+    The dataset to score against comes from the request-scoped context
+    set by ``before_request`` from the ``X-Dataset-Id`` header (or the
+    ``dataset_id`` query param for browser-native requests). The body
+    intentionally does not carry a dataset selector — letting the body
+    override the header allowed a confused client to score one dataset
+    while ``replace_all=True`` wiped a different detector's votes.
     """
 
     detector_id = fields.String(required=True, validate=validate.Length(min=1))
-    dataset_id = fields.String(load_default="")
 
 
 class FindLabelResponseSchema(Schema):
@@ -576,6 +582,18 @@ class FindResponseSchema(Schema):
     total_hits = fields.Integer(required=True)
 
 
+class FindCancelResponseSchema(Schema):
+    """Response for ``POST /api/find/cancel``.
+
+    Signals every in-flight scoring path that reads ``find_progress`` —
+    ``/api/find``, ``/api/find-label``, and ``/api/auto-detect`` — to stop
+    cooperatively. The progress tracker holds a single cancel event that
+    long-running loops poll between iterations.
+    """
+
+    ok = fields.Boolean(required=True)
+
+
 # ---------------------------------------------------------------------------
 # Label schemas (vtsearch/routes/detectors/labels.py)
 # ---------------------------------------------------------------------------
@@ -592,7 +610,7 @@ class DetectorSaveLabelsResponseSchema(Schema):
 class _DetectorLabelViewSchema(Schema):
     """One element in a detector's labels-detail response.
 
-    Mirrors :func:`vtsearch.detectors.labelset_elements.build_element_view`.
+    Mirrors :func:`vtscore.detectors.labelset_elements.build_element_view`.
     """
 
     id = fields.String(required=True)
@@ -665,6 +683,7 @@ __all__ = [
     "DetectorRenameResponseSchema",
     "DetectorSaveLabelsResponseSchema",
     "DetectorsListResponseSchema",
+    "FindCancelResponseSchema",
     "FindCheckLabelsRequestSchema",
     "FindCheckLabelsResponseSchema",
     "FindLabelRequestSchema",

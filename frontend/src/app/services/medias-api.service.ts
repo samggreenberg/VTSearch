@@ -10,10 +10,10 @@ import type { MediaParagraphResponse } from '../generated/api-client/models/medi
 import type { MediaVoteRequest } from '../generated/api-client/models/media-vote-request';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import type { MediaAddToPileResponse } from '../generated/api-client/models/media-add-to-pile-response';
-import { apiMediasIdsGet } from '../generated/api-client/fn/medias/api-medias-ids-get';
-import { apiMediasBatchPost } from '../generated/api-client/fn/medias/api-medias-batch-post';
-import { apiMediasMediaIdTextGet } from '../generated/api-client/fn/medias/api-medias-media-id-text-get';
-import { apiMediasMediaIdVotePost } from '../generated/api-client/fn/medias/api-medias-media-id-vote-post';
+import { listMediaIds } from '../generated/api-client/fn/medias/list-media-ids';
+import { batchMedias } from '../generated/api-client/fn/medias/batch-medias';
+import { mediaParagraphGet2 } from '../generated/api-client/fn/medias/media-paragraph-get-2';
+import { voteMedia } from '../generated/api-client/fn/medias/vote-media';
 
 @Injectable({ providedIn: 'root' })
 export class MediasApiService {
@@ -26,48 +26,38 @@ export class MediasApiService {
    * metadata is fetched on demand via {@link getMediasBatch}.
    */
   getMediaIds(): Observable<MediaIdsListResponse[]> {
-    return apiMediasIdsGet(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+    return listMediaIds(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   getMediasBatch(ids: number[]): Observable<MediaBatchResponse[]> {
-    return apiMediasBatchPost(this.http, this.config.rootUrl, { body: { ids } }).pipe(map((r) => r.body));
-  }
-
-  /** Binary stream — stays on plain HttpClient because ng-openapi-gen
-   *  doesn't model binary response bodies usefully (the generated function
-   *  declares the success body as ``Error`` because the spec only carries
-   *  error responses for these routes). */
-  getAudio(id: number): Observable<Blob> {
-    return this.http.get(`/api/medias/${id}/audio`, { responseType: 'blob' });
-  }
-
-  /** Binary stream — see {@link getAudio}. */
-  getVideo(id: number): Observable<Blob> {
-    return this.http.get(`/api/medias/${id}/video`, { responseType: 'blob' });
-  }
-
-  /** Binary stream — see {@link getAudio}. */
-  getImage(id: number): Observable<Blob> {
-    return this.http.get(`/api/medias/${id}/image`, { responseType: 'blob' });
+    return batchMedias(this.http, this.config.rootUrl, { body: { ids } }).pipe(map((r) => r.body));
   }
 
   getText(id: number): Observable<MediaParagraphResponse> {
-    return apiMediasMediaIdTextGet(this.http, this.config.rootUrl, { media_id: id }).pipe(map((r) => r.body));
+    return mediaParagraphGet2(this.http, this.config.rootUrl, { media_id: id }).pipe(map((r) => r.body));
   }
 
-  /** Binary stream — see {@link getAudio}. */
-  getMedia(id: number): Observable<Blob> {
-    return this.http.get(`/api/medias/${id}/media`, { responseType: 'blob' });
-  }
-
+  /**
+   * Set the absolute vote state for a media item.
+   *
+   * ``target`` is the post-call state, not a "click direction" — the server
+   * applies it idempotently (so concurrent stale-view tabs no longer race
+   * the achievement counter, logical-bug-audit H1).  Callers that want the
+   * old "click good toggles good off" behaviour should compute the toggle
+   * locally (e.g. {@link VoteStateService.vote}) before invoking this method.
+   *
+   * Returns the server-confirmed new state and click-time so the optimistic
+   * local view can be reconciled directly from the response without a
+   * follow-up ``GET /api/votes``.
+   */
   vote(
     id: number,
-    label: 'good' | 'bad',
+    target: 'good' | 'bad' | 'none',
     regionBox?: readonly number[] | null,
   ): Observable<MediaVoteResponse> {
-    const body: MediaVoteRequest = { vote: label };
+    const body: MediaVoteRequest = { target };
     if (regionBox && regionBox.length === 4) body.region_box = [...regionBox];
-    return apiMediasMediaIdVotePost(this.http, this.config.rootUrl, { media_id: id, body }).pipe(
+    return voteMedia(this.http, this.config.rootUrl, { media_id: id, body }).pipe(
       map((r) => r.body),
     );
   }

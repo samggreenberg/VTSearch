@@ -27,6 +27,11 @@ from flask_smorest import Blueprint, abort
 
 from vtsearch import settings
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
+from vtsearch.state import (
+    set_calibrate_count as _state_set_calibrate_count,
+    set_calibration_fraction as _state_set_calibration_fraction,
+    set_safe_thresholds as _state_set_safe_thresholds,
+)
 
 settings_bp = Blueprint(
     "settings",
@@ -39,13 +44,21 @@ settings_bp = Blueprint(
 # ``vtsearch.settings`` and enforce range clamping / value validation,
 # so this module's only job is to dispatch — marshmallow already
 # validated the *types*.
+#
+# The training-relevant settings (``safe_thresholds``, ``calibrate_count``,
+# ``calibration_fraction``) route through ``vtsearch.state`` rather than
+# ``vtsearch.settings`` so the state setter's side-effect
+# (``invalidate_loaded_detector_models``) fires and the cached MLP /
+# threshold on every loaded detector context is dropped — otherwise
+# ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` would keep
+# scoring with a threshold computed under the prior setting (M7).
 _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "volume": settings.set_volume,
     "theme": settings.set_theme,
     "enrich_descriptions": settings.set_enrich_descriptions,
-    "safe_thresholds": settings.set_safe_thresholds,
-    "calibrate_count": settings.set_calibrate_count,
-    "calibration_fraction": settings.set_calibration_fraction,
+    "safe_thresholds": _state_set_safe_thresholds,
+    "calibrate_count": _state_set_calibrate_count,
+    "calibration_fraction": _state_set_calibration_fraction,
     "audio_playing": settings.set_audio_playing,
     "swipe_animation": settings.set_swipe_animation,
     "show_metadata": settings.set_show_metadata,
@@ -68,6 +81,24 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
 }
 
 
+def _apply_disable_achievements(value: bool) -> None:
+    """Persist the toggle and wipe stored counters when flipping it on.
+
+    The user-visible promise is that turning the feature off zeroes the
+    achievement counters and keeps them there. Wiping on the False→True
+    transition (rather than every set) makes the off→on→off cycle
+    deterministic: counters reset on opt-out and start fresh if the user
+    ever opts back in.
+    """
+    prev = bool(settings.get_disable_achievements())
+    coerced = bool(value)
+    settings.set_disable_achievements(coerced)
+    if coerced and not prev:
+        from vtsearch import achievements
+
+        achievements.wipe_state()
+
+
 def _apply_inclusion(value) -> None:
     """``inclusion`` is set via :mod:`vtsearch.state`, not :mod:`settings`."""
     from vtsearch.state import set_inclusion
@@ -78,7 +109,7 @@ def _apply_inclusion(value) -> None:
 
 def _apply_dir(key: str, value: str, setter) -> None:
     """Validate and apply a directory-path setting."""
-    import vtsearch.security.path_validation as _paths
+    import vtscore.security.path_validation as _paths
 
     if not value or not value.strip():
         abort(400, message=f"{key} must be a non-empty string")
@@ -122,6 +153,13 @@ def update_settings(body: dict):
         if key in ("saved_datasets_dir", "detectors_dir"):
             setter = settings.set_saved_datasets_dir if key == "saved_datasets_dir" else settings.set_detectors_dir
             _apply_dir(key, value, setter)
+            continue
+
+        if key == "disable_achievements":
+            try:
+                _apply_disable_achievements(value)
+            except (TypeError, ValueError) as exc:
+                abort(400, message=str(exc))
             continue
 
         setter = _SCALAR_SETTERS.get(key)

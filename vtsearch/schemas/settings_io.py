@@ -36,8 +36,8 @@ from marshmallow import Schema, fields, validate
 class _PluginEntrySchema(Schema):
     """Shared shape for plugin-listing endpoints.
 
-    Mirrors :meth:`vtsearch.plugins.PluginBase.to_dict`; the ``fields``
-    array's inner shape mirrors :meth:`vtsearch.plugins.PluginField.to_dict`
+    Mirrors :meth:`vtscore.plugins.PluginBase.to_dict`; the ``fields``
+    array's inner shape mirrors :meth:`vtscore.plugins.PluginField.to_dict`
     but is declared as ``fields.Dict()`` to avoid duplicating the source
     of truth across schema and dataclass.
     """

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from PIL import Image
 
-from vtsearch.media.processors import Extractor
+from vtscore.media.processors import Extractor
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ class TestImageClassExtractor:
         return buf.getvalue()
 
     def test_from_config(self):
-        from vtsearch.media.image.extractor import ImageClassExtractor
+        from vtscore.media.image.extractor import ImageClassExtractor
 
         ext = ImageClassExtractor.from_config("my-ext", {"target_class": "car", "threshold": 0.5})
         assert ext.name == "my-ext"
@@ -89,7 +89,7 @@ class TestImageClassExtractor:
         assert ext.media_type == "image"
 
     def test_to_dict(self):
-        from vtsearch.media.image.extractor import ImageClassExtractor
+        from vtscore.media.image.extractor import ImageClassExtractor
 
         ext = ImageClassExtractor("test", "person", threshold=0.3, model_id="yolo11n.pt")
         d = ext.to_dict()
@@ -118,7 +118,7 @@ class TestImageClassExtractor:
         return mock_model, mock_result
 
     def test_extract_returns_matching_boxes(self):
-        from vtsearch.media.image.extractor import ImageClassExtractor
+        from vtscore.media.image.extractor import ImageClassExtractor
 
         detections = [
             (0, 0.9, [10.0, 20.0, 100.0, 200.0]),
@@ -140,7 +140,7 @@ class TestImageClassExtractor:
         assert len(hits[0]["bbox"]) == 4
 
     def test_extract_filters_below_threshold(self):
-        from vtsearch.media.image.extractor import ImageClassExtractor
+        from vtscore.media.image.extractor import ImageClassExtractor
 
         detections = [(0, 0.2, [10.0, 20.0, 100.0, 200.0])]
         mock_model, mock_result = self._make_mock_yolo_model(detections)
@@ -155,7 +155,7 @@ class TestImageClassExtractor:
         assert len(hits) == 0
 
     def test_extract_filters_wrong_class(self):
-        from vtsearch.media.image.extractor import ImageClassExtractor
+        from vtscore.media.image.extractor import ImageClassExtractor
 
         detections = [(1, 0.9, [10.0, 20.0, 100.0, 200.0])]
         mock_model, mock_result = self._make_mock_yolo_model(detections)
@@ -170,7 +170,7 @@ class TestImageClassExtractor:
         assert len(hits) == 0
 
     def test_extract_missing_media_bytes(self):
-        from vtsearch.media.image.extractor import ImageClassExtractor
+        from vtscore.media.image.extractor import ImageClassExtractor
 
         ext = ImageClassExtractor("test", "person")
         # Provide a real no-op model to avoid import

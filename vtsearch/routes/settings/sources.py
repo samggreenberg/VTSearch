@@ -132,7 +132,7 @@ def sync_settings_from_source():
 @sync_sources_bp.response(200, SyncSourceEntrySchema(many=True))
 def list_labelset_sources_route():
     """Return a list of all registered labelset source plugins."""
-    from vtsearch.labels.sources import list_labelset_sources
+    from vtscore.labels.sources import list_labelset_sources
 
     return [src.to_dict() for src in list_labelset_sources()]
 
@@ -141,7 +141,7 @@ def list_labelset_sources_route():
 @sync_sources_bp.response(200, SyncSourceConfigSchema)
 def get_detector_labelset_source(detector_name: str):
     """Return the labelset source config for a loaded detector, or null."""
-    from vtsearch.state.core import get_detector_context
+    from vtscore.state.core import get_detector_context
 
     ctx = get_detector_context(detector_name)
     # ``jsonify(None)`` short-circuits flask-smorest's schema.dump (see
@@ -160,8 +160,8 @@ def set_detector_labelset_source(body: dict, detector_name: str):
 
     A body of ``{}`` or one with empty ``source_name`` clears the source.
     """
-    from vtsearch.labels.sources import get_labelset_source
-    from vtsearch.state.core import get_detector_context
+    from vtscore.labels.sources import get_labelset_source
+    from vtscore.state.core import get_detector_context
 
     ctx = get_detector_context(detector_name)
     if ctx is None:
@@ -188,8 +188,8 @@ def set_detector_labelset_source(body: dict, detector_name: str):
 @sync_sources_bp.alt_response(404, description="Detector not loaded.")
 def sync_detector_labelset_from_source(detector_name: str):
     """Force a manual import from the detector's labelset source."""
-    from vtsearch.labels.sync import sync_from_labelset_source
-    from vtsearch.state.core import get_detector_context
+    from vtscore.labels.sync import sync_from_labelset_source
+    from vtscore.state.core import get_detector_context
 
     ctx = get_detector_context(detector_name)
     if ctx is None:

@@ -6,7 +6,9 @@ Migrated to ``flask_smorest`` so the routes are described in
 
 from __future__ import annotations
 
-from flask_smorest import Blueprint
+import logging
+
+from flask_smorest import Blueprint, abort
 
 from vtsearch.schemas.labels import (
     FillFromSortRequestSchema,
@@ -16,18 +18,18 @@ from vtsearch.schemas.labels import (
     LabelsImportRequestSchema,
     LabelsImportResponseSchema,
 )
+from vtscore.detectors.dataset_sync import validated_vote_snapshot
+from vtsearch.routes._shared import require_dataset_header, require_detector_header
 from vtsearch.state import (
     apply_label,
     apply_label_with_click_time,
-    bad_votes,
     build_media_lookup,
-    get_media,
-    good_votes,
     resolve_media_ids,
     snapshot_medias,
-    vote_region_boxes,
 )
-from vtsearch.utils.hits import build_media_hit
+from vtscore.utils.hits import build_media_hit
+
+logger = logging.getLogger(__name__)
 
 labels_bp = Blueprint(
     "labels",
@@ -36,12 +38,22 @@ labels_bp = Blueprint(
 )
 
 
-def _select_vote_pools(label_filter: str, goods_only: bool) -> tuple[dict, dict]:
+def _select_vote_pools(
+    label_filter: str,
+    goods_only: bool,
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+) -> tuple[dict, dict]:
     """Pick the (goods, bads) dicts to feed into ``LabelSet.from_clips_and_votes``.
 
     ``label_filter == "corrections"`` returns both pools — the corrections
     filtering step happens after annotation, since "correction" depends on
     the find-initial labels, not on good vs bad.
+
+    Takes the vote dicts as parameters (rather than reading the module-level
+    proxies) so the caller can pass an atomic snapshot from
+    :func:`validated_vote_snapshot`, guaranteed to be keyed in the same
+    dataset's cid space as the medias being composed with.
     """
     if label_filter == "good":
         return good_votes, {}
@@ -84,7 +96,7 @@ def _annotate_corrections(result: dict, all_medias: dict) -> None:
 
 def _build_entry_metadata(media: dict) -> dict:
     """Return the metadata blob for one labelled media — display + origin + custom."""
-    from vtsearch.media import get as get_media_type  # noqa: PLC0415
+    from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     try:
         meta = get_media_type(media.get("type", "audio")).display_metadata(media)
@@ -133,24 +145,29 @@ def _enrich_with_metadata(result: dict, all_medias: dict) -> None:
 @labels_bp.arguments(LabelsExportQuerySchema, location="query")
 @labels_bp.response(200, LabelsExportResponseSchema)
 def export_labels(query: dict):
-    """Export labels as a :class:`~vtsearch.datasets.labelset.LabelSet`.
+    """Export labels as a :class:`~vtscore.datasets.labelset.LabelSet`.
 
     Each label entry includes the element's ``origin`` and ``origin_name``
     so consumers know exactly where each labeled element came from. The
     format is a superset of the legacy export format — old consumers
     that only read ``md5`` and ``label`` keys continue to work unchanged.
     """
-    from vtsearch.datasets.labelset import LabelSet
+    from vtscore.datasets.labelset import LabelSet
 
     label_filter = query["label_filter"]
-    goods, bads = _select_vote_pools(label_filter, query["goods_only"])
+    # Atomic (medias, good_votes, bad_votes, vote_region_boxes) snapshot so
+    # the votes we compose with ``all_medias`` are guaranteed to be keyed in
+    # the same dataset's cid space — even if a concurrent request rehydrates
+    # the detector against a different dataset before this route finishes.
+    snap = validated_vote_snapshot()
+    goods, bads = _select_vote_pools(label_filter, query["goods_only"], snap.good_votes, snap.bad_votes)
 
-    all_medias = snapshot_medias()
+    all_medias = snap.medias
     labelset = LabelSet.from_clips_and_votes(
         all_medias,
         goods,
         bads,
-        vote_region_boxes=dict(vote_region_boxes),
+        vote_region_boxes=snap.vote_region_boxes,
     )
     result: dict = labelset.to_dict()
 
@@ -167,6 +184,8 @@ def export_labels(query: dict):
 @labels_bp.route("/api/labels/import", methods=["POST"])
 @labels_bp.arguments(LabelsImportRequestSchema)
 @labels_bp.response(200, LabelsImportResponseSchema)
+@require_dataset_header
+@require_detector_header
 def import_labels(body: dict):
     """Import labels from JSON, matching medias by origin+origin_name (MD5 fallback)."""
     labels = body["labels"]
@@ -196,11 +215,11 @@ def import_labels(body: dict):
             apply_label(cid, label, region_box=region_box)
         applied += 1
 
-    from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 
     sync_labels_to_loaded_detector()
 
-    from vtsearch.labels.sync import sync_to_labelset_source
+    from vtscore.labels.sync import sync_to_labelset_source
 
     sync_to_labelset_source()
 
@@ -210,6 +229,8 @@ def import_labels(body: dict):
 @labels_bp.route("/api/labels/fill-from-sort", methods=["POST"])
 @labels_bp.arguments(FillFromSortRequestSchema)
 @labels_bp.response(200, FillFromSortResponseSchema)
+@require_dataset_header
+@require_detector_header
 def fill_labels_from_sort(body: dict):  # noqa: C901
     """Fill labels from the current sort results.
 
@@ -224,6 +245,15 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
     sides = body["sides"]
     confirm = body["confirm"]
 
+    # Atomic snapshot so the membership checks below use the same dataset's
+    # cid space as the medias dict — a concurrent rehydrate on the detector
+    # against a different dataset can't make us think an A-cid is "already
+    # voted" when in fact we're scoring against B's medias.
+    vote_snap = validated_vote_snapshot()
+    snap_good = vote_snap.good_votes
+    snap_bad = vote_snap.bad_votes
+    snap_medias = vote_snap.medias
+
     # Find unlabeled medias above/below threshold
     good_candidates = []
     bad_candidates = []
@@ -234,9 +264,9 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
             continue
         if not isinstance(score, (int, float)):
             continue
-        if cid in good_votes or cid in bad_votes:
+        if cid in snap_good or cid in snap_bad:
             continue
-        if get_media(cid) is None:
+        if cid not in snap_medias:
             continue
         if score >= thresh:
             good_candidates.append({"id": cid, "score": float(score)})
@@ -262,13 +292,36 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
     for entry in bad_candidates:
         apply_label_with_click_time(entry["id"], "bad")
 
-    # Build a results dict compatible with exporters
-    snap = snapshot_medias()
-    good_hits = [build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="good") for e in good_candidates]
-    bad_hits = [build_media_hit(e["id"], snap.get(e["id"], {}), e["score"], label="bad") for e in bad_candidates]
+    # Persist labels to disk BEFORE building the response.  Letting a
+    # silent disk-write failure here fall through to ``return {...}`` is
+    # the C11 bug — the UI would treat the labels as committed while
+    # ``detectors/<name>.json`` never received them.  ``sync_to_labelset_source``
+    # is fire-and-forget by design (debounced background timer), so we
+    # only guard against the unlikely synchronous scheduling failure.
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+    from vtscore.labels.sync import sync_to_labelset_source
+
+    try:
+        sync_labels_to_loaded_detector()
+    except Exception as exc:
+        logger.exception("fill_labels_from_sort: detector label sync failed")
+        abort(500, message=f"Failed to persist labels to detector store: {exc}")
+
+    try:
+        sync_to_labelset_source()
+    except Exception:
+        logger.exception("fill_labels_from_sort: labelset source scheduling failed")
+
+    # Build a results dict compatible with exporters.  Reuse the snapshot
+    # taken at the top so the hit dicts reference the same dataset's media
+    # entries we used for membership checks.
+    good_hits = [
+        build_media_hit(e["id"], snap_medias.get(e["id"], {}), e["score"], label="good") for e in good_candidates
+    ]
+    bad_hits = [build_media_hit(e["id"], snap_medias.get(e["id"], {}), e["score"], label="bad") for e in bad_candidates]
 
     media_type = "unknown"
-    for media in snap.values():
+    for media in snap_medias.values():
         media_type = media.get("type", "unknown")
         break
 
@@ -285,14 +338,6 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
             },
         },
     }
-
-    from vtsearch.detectors.label_sync import sync_labels_to_loaded_detector
-
-    sync_labels_to_loaded_detector()
-
-    from vtsearch.labels.sync import sync_to_labelset_source
-
-    sync_to_labelset_source()
 
     return {
         "good_applied": len(good_candidates),

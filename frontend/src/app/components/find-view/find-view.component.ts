@@ -179,10 +179,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Start polling for progress concurrently
     this.startProgressPolling();
 
-    const datasetId = this.activeContext.datasetId;
     const modelName =
       this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
-    this.detectorsApi.findLabel({ detector_id: modelId, ...(datasetId ? { dataset_id: datasetId } : {}) })
+    this.detectorsApi.findLabel({ detector_id: modelId })
       .pipe(
         takeUntil(this.destroy$),
         finalize(() => {
@@ -374,19 +373,28 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.sortState.sortBusy) return;
     const m = this.mediaState.getMedia(event.id);
     const name = m?.filename || m?.origin_name || `#${event.id}`;
-    this.voteState.recordVote(event.id, event.vote, name);
-    this.mediasApi.vote(event.id, event.vote).pipe(takeUntil(this.destroy$)).subscribe({
-      next: () => {
-        this.onMediaVoted(event);
-      },
-    });
+    this.voteState
+      .submitToggleVoteAndRecord(event.id, event.vote, name)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.onMediaVoted(event);
+        },
+      });
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
-    // In find mode: update labels but do NOT re-train or re-sort.
-    // Just update the vote state so the right panel and left panel stripe update.
-    this.voteState.applyOptimisticVote(event.id, event.vote);
+    // In find mode: re-fetch labelset counters but skip a re-sort. The local
+    // vote state has already been reconciled from the POST response inside
+    // submitToggleVote, so a follow-up GET /api/votes only refreshes counts.
     this.voteState.loadVotes();
+  }
+
+  /** Cancel the find-label scoring run; the HTTP request will surface
+   *  a cancelled status via its progress channel and the finalize() in
+   *  runFindLabel() takes care of clearing sortBusy. */
+  onSortCancel(): void {
+    this.detectorsApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
   }
 
   // --- Panel percentage helpers ---

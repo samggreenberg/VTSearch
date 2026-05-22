@@ -7,10 +7,10 @@ staging dir and run through the regular folder loader, but the loader
 skips re-embedding for files whose names appear in the supplied
 ``content_vectors`` map.
 
-The ``/api/dataset/import-local-folder`` endpoint additionally accepts
-an optional ``vectors_file`` multipart form field (a ``.npz`` archive
-keyed by uploaded-file name) so users can attach pre-computed vectors
-to a browser-side multi-file upload.
+The ``/api/dataset/import-local-files`` endpoint is the browser-upload
+equivalent of ``server_files``: the user POSTs a single ``paths_file``
+(a ``.txt`` of paths or a ``.npz`` of paths + vectors) and the server
+runs the regular ``server_files`` importer over the uploaded file.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtsearch.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
-from vtsearch.datasets.importers.server_files import (
+from vtscore.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
+from vtscore.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
     _read_npz_paths_file,
     _read_paths_and_vectors,
@@ -237,33 +237,34 @@ class TestServerFilesNpzRunsEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# /api/dataset/import-local-folder: vectors_file npz alongside media files
+# /api/dataset/import-local-files: paths_file upload delegates to server_files
 # ---------------------------------------------------------------------------
 
 
-class TestLocalUploadVectorsFile:
-    """The /api/dataset/import-local-folder endpoint parses the optional
-    ``vectors_file`` npz and hands the resulting ``{filename: vector}``
-    map to the server_folder importer via its ``content_vectors``
-    attribute.  The background task runner is stubbed so the test can
-    invoke the importer's ``load_fn`` synchronously and inspect the
-    importer's state at the moment it would have been called."""
+class TestImportLocalFilesEndpoint:
+    """The /api/dataset/import-local-files endpoint accepts a single
+    uploaded ``paths_file`` (txt list or npz archive) and runs the
+    ``server_files`` importer over the saved copy on the server.  The
+    background task runner is stubbed so the test can invoke the
+    importer's ``load_fn`` synchronously and inspect the field_values
+    that the importer would have been called with."""
 
     @staticmethod
     def _stub_run_and_observe(observed: dict):
-        """Build a ``_run_origin_load_in_background`` stub that sniffs the
-        server_folder importer's ``content_vectors`` at the moment the
-        load function would call into the importer.  Works for both the
-        chunked and non-chunked dispatch paths."""
-        from vtsearch.datasets.importers import get_importer
+        from vtscore.datasets.importers import get_importer
 
         def _fake_run(load_fn, origin, **kwargs):
-            importer = get_importer("server_folder")
+            importer = get_importer("server_files")
             assert importer is not None
+            observed["origin"] = origin
+            observed["kwargs"] = kwargs
 
             def _sniff(field_values, medias=None, thin=False):
-                observed["content_vectors"] = dict(importer.content_vectors or {})
-                # Return an empty generator for the chunked path.
+                observed["field_values"] = dict(field_values)
+                # Snapshot the uploaded paths_file's bytes before the loader
+                # tears down the temp dir.
+                pf = Path(field_values["paths_file"])
+                observed["paths_file_bytes"] = pf.read_bytes()
                 return iter(())
 
             with (
@@ -271,24 +272,75 @@ class TestLocalUploadVectorsFile:
                 patch.object(importer, "run_chunked", side_effect=_sniff),
             ):
                 load_fn({})
-            return "task-fake-npz"
+            return "task-fake-local-files"
 
         return _fake_run
 
-    def test_upload_with_vectors_file_populates_importer_content_vectors(self, client, tmp_path, monkeypatch):
-        from vtsearch.datasets.importers import get_importer
+    def test_no_paths_file_returns_400(self, client):
+        resp = client.post(
+            "/api/dataset/import-local-files",
+            data={"media_type": "audio"},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "paths file" in resp.get_json()["message"].lower()
 
+    def test_missing_media_type_returns_400(self, client):
+        resp = client.post(
+            "/api/dataset/import-local-files",
+            data={"paths_file": (io.BytesIO(b"/a.wav\n"), "list.txt")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "media_type" in resp.get_json()["message"]
+
+    def test_uploads_txt_paths_file_and_starts_load(self, client, tmp_path, monkeypatch):
         monkeypatch.setattr(
             "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
             tmp_path / "uploads",
         )
 
-        vec = np.full(384, 3.5, dtype=np.float32)
+        observed: dict = {}
+        with patch(
+            "vtsearch.routes.datasets.load._run_origin_load_in_background",
+            side_effect=self._stub_run_and_observe(observed),
+        ):
+            resp = client.post(
+                "/api/dataset/import-local-files",
+                data={
+                    "media_type": "audio",
+                    "paths_file": (io.BytesIO(b"/a.wav\n/b.wav\n"), "list.txt"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        body = resp.get_json()
+        assert body["ok"] is True
+        assert body["task_id"] == "task-fake-local-files"
+
+        # The uploaded paths file was saved with its original suffix
+        # (so the server_files importer dispatches on extension).
+        assert observed["field_values"]["paths_file"].endswith(".txt")
+        assert observed["paths_file_bytes"] == b"/a.wav\n/b.wav\n"
+        # Origin is synthetic (the temp paths_file is about to be deleted)
+        # so reload-from-origin is naturally disabled.
+        assert observed["origin"]["importer"] == "server_files"
+        assert observed["origin"]["params"]["paths_file"] == "<browser_upload>"
+        assert observed["origin"]["params"]["media_type"] == "audio"
+
+    def test_uploads_npz_paths_file_preserves_suffix(self, client, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
+            tmp_path / "uploads",
+        )
+
+        # A real npz so the suffix-based reader dispatch is meaningful.
         npz_bytes_io = io.BytesIO()
         np.savez(
             npz_bytes_io,
-            filenames=np.array(["clip.wav"]),
-            vectors=np.stack([vec]),
+            filenames=np.array(["/a.wav"]),
+            vectors=np.zeros((1, 4), dtype=np.float32),
         )
         npz_bytes_io.seek(0)
 
@@ -298,266 +350,13 @@ class TestLocalUploadVectorsFile:
             side_effect=self._stub_run_and_observe(observed),
         ):
             resp = client.post(
-                "/api/dataset/import-local-folder",
+                "/api/dataset/import-local-files",
                 data={
                     "media_type": "audio",
-                    "files": (io.BytesIO(b"AAA"), "clip.wav"),
-                    "vectors_file": (npz_bytes_io, "vectors.npz"),
+                    "paths_file": (npz_bytes_io, "list.npz"),
                 },
                 content_type="multipart/form-data",
             )
 
         assert resp.status_code == 200, resp.get_data(as_text=True)
-        # The npz was parsed and forwarded to the importer.
-        assert "clip.wav" in observed["content_vectors"]
-        np.testing.assert_array_equal(observed["content_vectors"]["clip.wav"], vec)
-
-        # After the load returns, content_vectors is restored so the
-        # next upload doesn't inherit stale vectors.
-        assert get_importer("server_folder").content_vectors == {}
-
-    def test_upload_without_vectors_file_leaves_importer_unchanged(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
-            tmp_path / "uploads",
-        )
-
-        observed: dict = {}
-        with patch(
-            "vtsearch.routes.datasets.load._run_origin_load_in_background",
-            side_effect=self._stub_run_and_observe(observed),
-        ):
-            resp = client.post(
-                "/api/dataset/import-local-folder",
-                data={
-                    "media_type": "audio",
-                    "files": (io.BytesIO(b"AAA"), "clip.wav"),
-                },
-                content_type="multipart/form-data",
-            )
-
-        assert resp.status_code == 200, resp.get_data(as_text=True)
-        # With no npz attached, the importer's content_vectors stays
-        # empty for the run.
-        assert observed["content_vectors"] == {}
-
-    def test_upload_rejects_invalid_vectors_file(self, client, tmp_path, monkeypatch):
-        """A bogus ``vectors_file`` is rejected up front with a 400."""
-        monkeypatch.setattr(
-            "vtsearch.routes.datasets.load.LOCAL_UPLOADS_DIR",
-            tmp_path / "uploads",
-        )
-        bogus = io.BytesIO(b"not really a npz archive")
-        resp = client.post(
-            "/api/dataset/import-local-folder",
-            data={
-                "media_type": "audio",
-                "files": (io.BytesIO(b"RIFF...."), "clip.wav"),
-                "vectors_file": (bogus, "broken.npz"),
-            },
-            content_type="multipart/form-data",
-        )
-        assert resp.status_code == 400
-        body = resp.get_json()
-        # flask-smorest error envelope: ``message`` (not ``error``).
-        assert "vectors_file" in body["message"].lower()
-
-
-# ---------------------------------------------------------------------------
-# server_folder: top-level vectors_file field
-# ---------------------------------------------------------------------------
-
-
-class TestServerFolderVectorsFileField:
-    """The server_folder importer exposes ``vectors_file`` as a separate
-    top-level PluginField (server_path, accepts .npz), so users can attach
-    pre-computed vectors to a friendly folder import without resorting to
-    the server_files paths-file workaround.
-    """
-
-    def test_field_is_optional_and_advertises_npz(self):
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
-
-        imp = ServerFolderDatasetImporter()
-        field = next((f for f in imp.fields if f.key == "vectors_file"), None)
-        assert field is not None, "server_folder is missing vectors_file"
-        assert field.required is False
-        assert field.field_type == "server_path"
-        accept_exts = {e.strip() for e in (field.accept or "").split(",")}
-        assert ".npz" in accept_exts
-
-    def test_vectors_file_supplies_embeddings(self, tmp_path):
-        """When the .npz keys match files in the picked folder, the
-        importer skips re-embedding and uses the supplied vectors."""
-        from helpers import make_raw_wav_bytes
-
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
-
-        folder = tmp_path / "data"
-        folder.mkdir()
-        clip = folder / "clip.wav"
-        clip.write_bytes(make_raw_wav_bytes())
-
-        vec = np.full(512, 9.0, dtype=np.float32)
-        npz = tmp_path / "precomputed.npz"
-        np.savez(npz, filenames=np.array(["clip.wav"]), vectors=np.stack([vec]))
-
-        imp = ServerFolderDatasetImporter()
-        medias: dict = {}
-        imp.run(
-            {
-                "path": str(folder),
-                "media_type": "audio",
-                "vectors_file": str(npz),
-            },
-            medias,
-        )
-
-        assert len(medias) == 1
-        media = next(iter(medias.values()))
-        np.testing.assert_array_equal(media["embedding"], vec)
-        # content_vectors is restored after the run so the singleton
-        # importer doesn't carry stale state to the next call.
-        assert imp.content_vectors == {}
-
-    def test_vectors_file_blank_is_a_noop(self, tmp_path):
-        """An empty ``vectors_file`` value behaves identically to omitting
-        it — the importer runs the embedder as usual."""
-        from helpers import make_raw_wav_bytes
-
-        from vtsearch.datasets.importers.server_folder import ServerFolderDatasetImporter
-
-        folder = tmp_path / "data"
-        folder.mkdir()
-        (folder / "clip.wav").write_bytes(make_raw_wav_bytes())
-
-        imp = ServerFolderDatasetImporter()
-        medias: dict = {}
-        imp.run(
-            {"path": str(folder), "media_type": "audio", "vectors_file": ""},
-            medias,
-        )
-        assert len(medias) == 1
-
-
-# ---------------------------------------------------------------------------
-# server_files: separate vectors_file field (paths_file stays text)
-# ---------------------------------------------------------------------------
-
-
-class TestServerFilesVectorsFileField:
-    """The server_files importer accepts a separate ``vectors_file`` field
-    so the user can supply a plain-text paths file AND a .npz of
-    pre-computed vectors, instead of having to encode both into a single
-    .npz."""
-
-    def test_field_is_optional_and_advertises_npz(self):
-        imp = ServerFilesDatasetImporter()
-        field = next((f for f in imp.fields if f.key == "vectors_file"), None)
-        assert field is not None
-        assert field.required is False
-        assert field.field_type == "server_path"
-        accept_exts = {e.strip() for e in (field.accept or "").split(",")}
-        assert ".npz" in accept_exts
-
-    def test_separate_vectors_file_supplies_embeddings(self, tmp_path):
-        """A plain .txt paths file + a separate .npz vectors_file supplies
-        embeddings keyed by basename of each listed file."""
-        from helpers import make_raw_wav_bytes
-
-        src_a = tmp_path / "a.wav"
-        src_b = tmp_path / "b.wav"
-        src_a.write_bytes(make_raw_wav_bytes())
-        src_b.write_bytes(make_raw_wav_bytes() + b"\x00\x00")
-
-        paths_file = tmp_path / "list.txt"
-        paths_file.write_text(f"{src_a}\n{src_b}\n")
-
-        rng = np.random.default_rng(7)
-        vec_a = rng.standard_normal(384).astype(np.float32) * 5.0
-        vec_b = rng.standard_normal(384).astype(np.float32) * 5.0
-        npz = tmp_path / "vectors.npz"
-        np.savez(npz, filenames=np.array(["a.wav", "b.wav"]), vectors=np.stack([vec_a, vec_b]))
-
-        imp = ServerFilesDatasetImporter()
-        medias: dict = {}
-        imp.run(
-            {
-                "paths_file": str(paths_file),
-                "media_type": "audio",
-                "vectors_file": str(npz),
-            },
-            medias,
-        )
-
-        assert len(medias) == 2
-        by_source = {m["origin_name"]: m for m in medias.values()}
-        np.testing.assert_array_equal(by_source[str(src_a)]["embedding"], vec_a)
-        np.testing.assert_array_equal(by_source[str(src_b)]["embedding"], vec_b)
-        # vectors_file makes it into the origin so a reload can find the
-        # same vectors next time.
-        for media in medias.values():
-            assert media["origin"]["params"]["vectors_file"] == str(npz)
-
-    def test_vectors_file_matches_absolute_paths(self, tmp_path):
-        """Keys in the separate vectors_file may also be absolute paths of
-        the listed files (mirroring the NPZ-as-paths-file behaviour)."""
-        from helpers import make_raw_wav_bytes
-
-        src = tmp_path / "a.wav"
-        src.write_bytes(make_raw_wav_bytes())
-
-        paths_file = tmp_path / "list.txt"
-        paths_file.write_text(f"{src}\n")
-
-        vec = np.full(256, 4.0, dtype=np.float32)
-        npz = tmp_path / "vectors.npz"
-        np.savez(npz, filenames=np.array([str(src)]), vectors=np.stack([vec]))
-
-        imp = ServerFilesDatasetImporter()
-        medias: dict = {}
-        imp.run(
-            {
-                "paths_file": str(paths_file),
-                "media_type": "audio",
-                "vectors_file": str(npz),
-            },
-            medias,
-        )
-        assert len(medias) == 1
-        media = next(iter(medias.values()))
-        np.testing.assert_array_equal(media["embedding"], vec)
-
-    def test_vectors_file_overrides_paths_file_npz_for_overlap(self, tmp_path):
-        """When the paths_file is itself a .npz with vectors AND a separate
-        vectors_file is supplied, the separate one wins for overlapping
-        filenames — mirroring the docstring of ``_stage_paths``."""
-        from helpers import make_raw_wav_bytes
-
-        src = tmp_path / "a.wav"
-        src.write_bytes(make_raw_wav_bytes())
-
-        # paths_file is itself an NPZ carrying one (already-stale) vector.
-        stale_vec = np.full(384, 1.0, dtype=np.float32)
-        paths_npz = tmp_path / "list.npz"
-        np.savez(paths_npz, filenames=np.array([str(src)]), vectors=np.stack([stale_vec]))
-
-        # Separate vectors_file carries the canonical vector keyed by
-        # basename.  Its value must take precedence.
-        fresh_vec = np.full(384, 2.0, dtype=np.float32)
-        npz = tmp_path / "vectors.npz"
-        np.savez(npz, filenames=np.array(["a.wav"]), vectors=np.stack([fresh_vec]))
-
-        imp = ServerFilesDatasetImporter()
-        medias: dict = {}
-        imp.run(
-            {
-                "paths_file": str(paths_npz),
-                "media_type": "audio",
-                "vectors_file": str(npz),
-            },
-            medias,
-        )
-        assert len(medias) == 1
-        media = next(iter(medias.values()))
-        np.testing.assert_array_equal(media["embedding"], fresh_vec)
+        assert observed["field_values"]["paths_file"].endswith(".npz")

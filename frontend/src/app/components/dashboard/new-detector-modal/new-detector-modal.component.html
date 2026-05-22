@@ -111,10 +111,10 @@
               </div>
             </div>
             <div class="example-col">
-              <label class="col-label">Media Example</label>
-              <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" [disabled]="hasPendingText" title="Browse demos, server folders, or upload a file to pick an example">Browse Media...</button>
+              <label class="col-label">{{ exampleColumnLabel }}</label>
+              <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" [disabled]="hasPendingText" title="Browse demos, server folders, or upload a file to pick an example">{{ browseMediaLabel }}</button>
               <vt-drop-zone
-                label="Drop a media file here"
+                [label]="dropMediaLabel"
                 sublabel="or click to upload from this computer"
                 [disabled]="hasPendingText"
                 (filesSelected)="onLocalFileDropped($event)"
@@ -167,11 +167,12 @@
                   </label>
 
                   @if (field.field_type === 'server_path') {
-                    <vt-file-browser
-                      [value]="labelImporterValues[field.key] || ''"
+                    <input
+                      [id]="'nmm-' + field.key"
+                      type="text"
+                      class="form-input"
+                      [(ngModel)]="labelImporterValues[field.key]"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
-                      [extensions]="field.accept || ''"
-                      (pathSelected)="labelImporterValues[field.key] = $event"
                     />
                   } @else if (field.field_type === 'file') {
                     <input
@@ -410,33 +411,53 @@
         </div>
       }
 
-      <!-- Demo file browser: appears after picking a demo from the table. -->
+      <!-- Demo file picker: appears after picking a demo from the table. -->
       @if (activePickerView === 'demo' && selectedImporter && demoFileBrowsing) {
         <div class="server-folder-browser">
           <button class="btn btn--secondary btn--sm back-btn" (click)="backToDemoTable()" title="Return to the demo list">&larr; Back to demo list</button>
-          <vt-folder-browser
-            [browse]="demoBrowseFn"
-            [rootLabel]="demoFileBrowseLabel"
-            [busy]="demoFileLoading"
-            emptyMessage="No media files found in this directory."
-            (confirm)="selectDemoFile($event)"
-          ></vt-folder-browser>
+          <label class="form-label" for="demo-path-input">Path to a media file in <strong>{{ demoFileBrowseLabel }}</strong></label>
+          <input
+            id="demo-path-input"
+            type="text"
+            class="form-input"
+            placeholder="path/to/file"
+            [(ngModel)]="demoTypedPath"
+            (keydown.enter)="submitDemoTypedPath(); $event.preventDefault()"
+          />
+          <button
+            type="button"
+            class="btn btn--primary"
+            [disabled]="demoFileLoading || !demoTypedPath.trim()"
+            (click)="submitDemoTypedPath()"
+          >
+            @if (demoFileLoading) { Loading… } @else { Load }
+          </button>
+          @if (demoTypedPathError) {
+            <p class="error-text">{{ demoTypedPathError }}</p>
+          }
         </div>
       }
 
-      <!-- Server folder browser: lists files alongside directories so the
-           user can pick one to use as an example. -->
+      <!-- Server folder picker: user types an absolute server path. -->
       @if (activePickerView === 'server_folder' && selectedImporter) {
         <div class="server-folder-browser">
-          <label class="form-label">Browse server folders</label>
-          <vt-folder-browser
-            [browse]="sfBrowseFn"
-            [showPathFooter]="true"
-            [busy]="sfFileSelecting"
-            emptyMessage="No subdirectories or media files in this folder."
-            (confirm)="sfSelectFile($event)"
-          ></vt-folder-browser>
-
+          <label class="form-label" for="sf-example-path-input">Path to a media file on the server</label>
+          <input
+            id="sf-example-path-input"
+            type="text"
+            class="form-input"
+            placeholder="/absolute/server/path/to/file"
+            [(ngModel)]="sfTypedPath"
+            (keydown.enter)="submitSfTypedPath(); $event.preventDefault()"
+          />
+          <button
+            type="button"
+            class="btn btn--primary"
+            [disabled]="sfFileSelecting || !sfTypedPath.trim()"
+            (click)="submitSfTypedPath()"
+          >
+            @if (sfFileSelecting) { Loading… } @else { Load }
+          </button>
           @if (sfBrowseError) {
             <p class="error-text">{{ sfBrowseError }}</p>
           }
@@ -466,7 +487,7 @@
             </p>
           } @else {
             <vt-drop-zone
-              label="Drop a media file here to use as example"
+              [label]="dropMediaLabel + ' to use as example'"
               sublabel="or click to browse"
               (filesSelected)="onLocalFileDropped($event)"
             ></vt-drop-zone>
