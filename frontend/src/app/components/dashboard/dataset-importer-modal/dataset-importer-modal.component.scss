@@ -67,8 +67,8 @@
   color: var(--text-muted, #666);
   cursor: pointer;
 
-  &:hover { color: var(--text, #222); text-decoration: underline; }
-  &:focus-visible { outline: 2px solid var(--focus, #4a90e2); outline-offset: 2px; }
+  &:hover { color: var(--text-primary); text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 
 .server-folder-browser { gap: 12px; }
@@ -94,7 +94,7 @@
   .sf-selected-value {
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
     word-break: break-all;
-    color: var(--text, #222);
+    color: var(--text-primary);
   }
 }
 
