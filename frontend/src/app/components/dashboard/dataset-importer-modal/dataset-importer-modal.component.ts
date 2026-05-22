@@ -66,6 +66,13 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Optional user-supplied dataset name for demo imports.  Empty means
    *  "use the demo entry's label". */
   demoDatasetName = '';
+  /** Whether the user has manually edited :prop:`demoDatasetName` (so we
+   *  stop auto-overwriting it when a different demo row is picked). */
+  private demoDatasetNameDirty = false;
+  /** Currently-selected demo row.  Clicking a row sets this; the Import
+   *  button in the footer then commits the selection.  ``null`` means
+   *  nothing is selected yet, so the Import button is disabled. */
+  selectedDemo: DemoDataset | null = null;
 
   // Demo table column metadata + controller. Mirrors the Dashboard datagrid:
   // percentage widths summing to 100, draggable column reorder, click-to-sort
@@ -580,6 +587,8 @@ export class DatasetImporterModalComponent implements OnInit {
     this.demoTabs = [];
     this.activeTab = '';
     this.demoDatasetName = '';
+    this.demoDatasetNameDirty = false;
+    this.selectedDemo = null;
 
     this.datasetsApi.getMediaTypes().subscribe({
       next: (res) => {
@@ -823,7 +832,42 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.allEmbedders.filter((e) => e.media_type_id === this.activeTab);
   }
 
+  /** Cached map of ``type_id`` → icon string for the demo media-type
+   *  dropdown.  Parallel to :prop:`mediaTypeOptionIcons` (which is keyed
+   *  by ``folder_import_name``); the demo flow uses ``type_id`` so we
+   *  expose a separate map keyed accordingly. */
+  private _demoIconsSource: MediaTypeInfo[] | null = null;
+  private _demoIconsCache: Record<string, string> = {};
+  get demoMediaTypeIcons(): Record<string, string> {
+    if (this._demoIconsSource !== this.mediaTypes) {
+      const out: Record<string, string> = {};
+      for (const mt of this.mediaTypes) {
+        if (mt.icon) out[mt.type_id] = mt.icon;
+      }
+      this._demoIconsCache = out;
+      this._demoIconsSource = this.mediaTypes;
+    }
+    return this._demoIconsCache;
+  }
+
+  /** Click handler for a row in the demo grid.  Records the selection
+   *  and auto-populates the Dataset Name input (unless the user has
+   *  manually edited it).  The actual import is deferred to
+   *  :meth:`submitDemo`, which the Import footer button calls. */
   selectDemo(demo: DemoDataset): void {
+    this.selectedDemo = demo;
+    if (!this.demoDatasetNameDirty) {
+      this.demoDatasetName = demo.label || '';
+    }
+  }
+
+  /** Commit the currently-selected demo: emit ``demoSelected`` so the
+   *  dashboard kicks off the demo load, then close the modal.  Bound to
+   *  the Import footer button; disabled in the template until a row is
+   *  selected. */
+  submitDemo(): void {
+    const demo = this.selectedDemo;
+    if (!demo) return;
     const userName = (this.demoDatasetName || '').trim();
     this.demoSelected.emit({
       ...demo,
@@ -834,8 +878,22 @@ export class DatasetImporterModalComponent implements OnInit {
     this.closed.emit();
   }
 
+  /** Called when the user types into the demo Dataset Name input.  Marks
+   *  it as dirty so subsequent row picks don't overwrite the user's
+   *  value. */
+  onDemoDatasetNameInput(value: string): void {
+    this.demoDatasetName = value;
+    this.demoDatasetNameDirty = true;
+  }
+
   selectDemoTabWithEmbedder(tab: string): void {
     this.selectDemoTab(tab);
+    // Switching media type clears any prior row selection and resets the
+    // auto-populated Dataset Name so the next row pick can fill it in.
+    this.selectedDemo = null;
+    if (!this.demoDatasetNameDirty) {
+      this.demoDatasetName = '';
+    }
     // Reset embedder selection for the new tab
     const embedders = this.allEmbedders.filter((e) => e.media_type_id === tab);
     this.demoEmbedder = embedders.length > 0 ? embedders[0].name : '';

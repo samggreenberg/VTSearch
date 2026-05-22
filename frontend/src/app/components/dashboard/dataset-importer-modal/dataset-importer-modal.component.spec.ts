@@ -506,7 +506,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.demoCols.sortAsc).toBeTrue();
   });
 
-  it('should emit demoSelected and close on demo selection', () => {
+  it('should record the demo selection without submitting on row click', () => {
     flushImporters();
     spyOn(component.demoSelected, 'emit');
     spyOn(component.closed, 'emit');
@@ -514,26 +514,58 @@ describe('DatasetImporterModalComponent', () => {
     openAndFlushDemoPicker();
 
     component.selectDemo(mockDemos[0] as any);
+    expect(component.selectedDemo).toBe(mockDemos[0] as any);
+    // Auto-populates the Dataset Name from the chosen demo's label.
+    expect(component.demoDatasetName).toBe(mockDemos[0].label);
+    // No emit/close until the Import footer button is clicked.
+    expect(component.demoSelected.emit).not.toHaveBeenCalled();
+    expect(component.closed.emit).not.toHaveBeenCalled();
+  });
+
+  it('should emit demoSelected and close when submitDemo is called', () => {
+    flushImporters();
+    spyOn(component.demoSelected, 'emit');
+    spyOn(component.closed, 'emit');
+
+    openAndFlushDemoPicker();
+
+    component.selectDemo(mockDemos[0] as any);
+    component.submitDemo();
     expect(component.demoSelected.emit).toHaveBeenCalled();
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
-  it('should render the demo tab bar but no rows until a media-type tab is clicked', () => {
+  it('should hide the demo tab bar in favor of a dropdown above the grid', () => {
     flushImporters();
     openAndFlushDemoPicker();
 
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    const tabs = el.querySelectorAll('.demo-tab');
-    expect(tabs.length).toBe(2);
+    // The inner media-type tabs are replaced by a <vt-import-config>
+    // dropdown — so no .demo-tab buttons render in this modal anymore.
+    expect(el.querySelectorAll('.demo-tab').length).toBe(0);
 
-    // No tab auto-selected → no rows rendered yet.
+    // No media type picked yet → no rows.
     expect(el.querySelectorAll('.demo-row').length).toBe(0);
 
     selectDemoTabAndFlush('audio', mockEmbedders);
     fixture.detectChanges();
     expect(el.querySelectorAll('.demo-row').length).toBe(1);
+  });
+
+  it('should clear the row selection when the media type changes', () => {
+    flushImporters();
+    openAndFlushDemoPicker();
+    selectDemoTabAndFlush('audio', mockEmbedders);
+
+    component.selectDemo(mockDemos[0] as any);
+    expect(component.selectedDemo).not.toBeNull();
+    expect(component.demoDatasetName).toBe(mockDemos[0].label);
+
+    selectDemoTabAndFlush('image', mockImageEmbedders);
+    expect(component.selectedDemo).toBeNull();
+    expect(component.demoDatasetName).toBe('');
   });
 
   it('should get correct tab label from media types', () => {

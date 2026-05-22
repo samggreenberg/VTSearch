@@ -198,6 +198,11 @@
 
 .demo-row {
   &.ready .col-name { color: var(--color-good); }
+  &.selected {
+    background: var(--bg-selected, var(--bg-hover));
+    box-shadow: inset 3px 0 0 0 var(--accent);
+    &:hover { background: var(--bg-selected, var(--bg-hover)); }
+  }
 }
 
 .badge-ready, .badge-embedding, .badge-download {
