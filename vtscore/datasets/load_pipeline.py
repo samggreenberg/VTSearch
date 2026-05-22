@@ -776,7 +776,7 @@ def _apply_clipper_stage(
     invalidate_embedding_matrix(ctx)
 
 
-def embed_missing(
+def embed_missing(  # noqa: C901
     medias: dict[int, dict[str, Any]],
     embedder_name: str = "",
     on_progress: Callable[[str, str, int, int], None] | None = None,
@@ -824,8 +824,11 @@ def embed_missing(
         return
 
     if on_progress is None:
-        def on_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+
+        def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
             return None
+
+        on_progress = _noop_progress
 
     if getattr(emb, "_model", None) is None:
         on_progress("loading", "Loading embedding model…", 0, 0)
@@ -840,9 +843,7 @@ def embed_missing(
     try:
         vectors = emb.embed_media_bulk(inputs)
     except Exception:
-        logging.getLogger(__name__).exception(
-            "Bulk embed failed for media_type=%s (%d items)", media_type, total
-        )
+        logging.getLogger(__name__).exception("Bulk embed failed for media_type=%s (%d items)", media_type, total)
         return
     finally:
         emb._on_progress = original_cb
