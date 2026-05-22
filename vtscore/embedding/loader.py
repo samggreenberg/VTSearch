@@ -94,6 +94,12 @@ def initialize_models() -> None:
     """
     MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     ensure_torch_configured()
+    try:
+        from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
+
+        install_transformers_logging_bridge()
+    except Exception:
+        pass
     gc.collect()
 
 

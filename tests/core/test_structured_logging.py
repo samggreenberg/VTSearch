@@ -11,6 +11,7 @@ from vtsearch.logging_config import (
     ContextFilter,
     JsonFormatter,
     TextFormatter,
+    install_transformers_logging_bridge,
     new_request_id,
     setup_logging,
 )
@@ -395,6 +396,47 @@ class TestTransformersVocabTokenFilter:
             )
             assert "bos_token_id" in stream.getvalue()
         finally:
+            setup_logging()
+
+
+class TestTransformersLoggingBridge:
+    """The bridge disables transformers' default handler and re-enables
+    propagation so its records flow through our root handler (and our
+    vocab-token filter)."""
+
+    def test_bridge_disables_default_handler_and_enables_propagation(self):
+        import transformers.utils.logging as hf_logging
+
+        hf_logging._reset_library_root_logger()
+        hf_logging._configure_library_root_logger()
+        hf_root = hf_logging._get_library_root_logger()
+        try:
+            assert hf_root.propagate is False
+            assert any(isinstance(h, logging.StreamHandler) for h in hf_root.handlers)
+
+            install_transformers_logging_bridge()
+
+            assert hf_root.propagate is True
+            assert hf_root.handlers == []
+        finally:
+            hf_logging._reset_library_root_logger()
+            hf_logging._configure_library_root_logger()
+
+    def test_bridge_lets_vocab_token_warning_be_filtered(self):
+        import transformers.utils.logging as hf_logging
+
+        stream = io.StringIO()
+        try:
+            setup_logging(level="DEBUG", fmt="text", stream=stream)
+            install_transformers_logging_bridge()
+            logging.getLogger("transformers.configuration_utils").warning(
+                "Model config: bos_token_id must be `None` or an integer within "
+                "the vocabulary (between 0 and 31999), got 49406."
+            )
+            assert stream.getvalue() == ""
+        finally:
+            hf_logging._reset_library_root_logger()
+            hf_logging._configure_library_root_logger()
             setup_logging()
 
 
