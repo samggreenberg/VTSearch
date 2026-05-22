@@ -10,7 +10,7 @@ this library with the HTTP / SPA / settings layer.
 This documentation is **for developers** — people writing scripts on top of
 `vtscore`, embedding it inside other applications, or shipping plugins for it.
 For end users of the VTSearch web app, see the
-[user guide](../../docs/USER_GUIDE.md) instead.
+[user guide](../../docs/user/USER_GUIDE.md) instead.
 
 ## Start here
 
