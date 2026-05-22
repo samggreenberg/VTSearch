@@ -111,10 +111,10 @@
               </div>
             </div>
             <div class="example-col">
-              <label class="col-label">Media Example</label>
-              <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" [disabled]="hasPendingText" title="Browse demos, server folders, or upload a file to pick an example">Browse Media...</button>
+              <label class="col-label">{{ exampleColumnLabel }}</label>
+              <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" [disabled]="hasPendingText" title="Browse demos, server folders, or upload a file to pick an example">{{ browseMediaLabel }}</button>
               <vt-drop-zone
-                label="Drop a media file here"
+                [label]="dropMediaLabel"
                 sublabel="or click to upload from this computer"
                 [disabled]="hasPendingText"
                 (filesSelected)="onLocalFileDropped($event)"
@@ -487,7 +487,7 @@
             </p>
           } @else {
             <vt-drop-zone
-              label="Drop a media file here to use as example"
+              [label]="dropMediaLabel + ' to use as example'"
               sublabel="or click to browse"
               (filesSelected)="onLocalFileDropped($event)"
             ></vt-drop-zone>

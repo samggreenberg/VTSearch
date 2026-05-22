@@ -866,6 +866,30 @@ export class NewDetectorModalComponent implements OnInit {
     return typeId;
   }
 
+  /** "Image Example", "Audio Example", "Media Example" as a fallback. */
+  get exampleColumnLabel(): string {
+    const name = this.mediaType ? this.getMediaTypeLabel(this.mediaType) : '';
+    return `${name || 'Media'} Example`;
+  }
+
+  /** "Browse Images...", "Browse Audio...", "Browse Media..." as a fallback. */
+  get browseMediaLabel(): string {
+    const name = this.mediaType ? this.getMediaTypeLabel(this.mediaType) : '';
+    if (!name) return 'Browse Media...';
+    // audio and text don't take a plural -s in this context.
+    const uncountable = this.mediaType === 'audio' || this.mediaType === 'text';
+    return `Browse ${uncountable ? name : name + 's'}...`;
+  }
+
+  /** "Drop an image file here", "Drop a video file here", etc. */
+  get dropMediaLabel(): string {
+    const name = this.mediaType ? this.getMediaTypeLabel(this.mediaType) : '';
+    if (!name) return 'Drop a media file here';
+    const lower = name.toLowerCase();
+    const article = /^[aeiou]/.test(lower) ? 'an' : 'a';
+    return `Drop ${article} ${lower} file here`;
+  }
+
   getMediaTypeIcon(typeId: string): string {
     const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
     return mt?.icon || '';
