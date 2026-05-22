@@ -1,7 +1,7 @@
 # Frontend bundle organization
 
-Status: **#1 Checkpoints 1, 2, and 3 shipped.** Checkpoints 4 and 5 of
-#1 and items #2–#6 are scoped but not started.
+Status: **#1 Checkpoints 1–4 shipped.** Checkpoint 5 of #1 and items
+#2–#6 are scoped but not started.
 
 ## What shipped
 
@@ -57,6 +57,39 @@ Status: **#1 Checkpoints 1, 2, and 3 shipped.** Checkpoints 4 and 5 of
   loses its special case — media-type lives outside the iteration
   branch that renders the star at all. Initial bundle unchanged at
   526.40 kB.
+- **#1 Checkpoint 4**: extracted `<vt-source-picker>` — the importer
+  category-tab + sub-tab chrome plus the source-side widgets (demo
+  media-type tabs + sortable demo table, server-folder typed-path
+  input, local-folder/local-files dropzone with file-count display).
+  Migrated `dataset-importer-modal` to consume it.
+  The component is presentational: the parent owns all state and
+  passes in precomputed `visibleImporterTabs` /
+  `importersForActiveTab` lists; user actions surface as `@Output`
+  events the parent handles (`(activeTabChange)="selectImporterTab($event)"`
+  for top-level tab clicks, `(importerSelected)="selectImporter($event)"`
+  for sub-tab clicks, `(demoSelected)`, `(sfPathApplied)`,
+  `(lfFilesDropped)`).  Per-flow output config (Dataset Name input,
+  `<vt-import-config>`, Include-subfolders checkbox,
+  `<vt-import-advanced>`) projects through named content slots
+  (`[demoExtras]`, `[sfBefore]`/`[sfAfter]`,
+  `[lfBefore]`/`[lfAfter]`) so the visual order on every flow stays
+  byte-identical to before.
+  Picker chrome SCSS (the `display: flex` rules, the indent for
+  `.local-folder-uploader` / `.server-folder-browser`, the `gap`
+  values) moved out of the parent and into
+  `source-picker.component.scss`.  Dead helpers removed from the
+  parent: `getTabIcon`, `getTabText`, `statusBadgeClass`,
+  `statusBadgeLabel`, `onDemoHeaderClick`.  Dead component imports
+  removed: `IconComponent`, `DropZoneComponent` (both still used —
+  inside the new sub-component).  Parent template dropped from 529 →
+  362 lines; .ts from 1687 → 1648 lines.
+  **Bundle effect.** The Add Dataset modal is `@defer`-loaded, so the
+  initial bundle is unaffected (526.40 kB → 526.40 kB).  The lazy
+  `dataset-importer-modal-component` chunk grew from 77.64 kB → 81.99
+  kB raw (15.76 → 16.73 kB gzip) because the new component adds its
+  own Angular plumbing without yet eliminating cross-modal
+  duplication — Checkpoint 5 (migrating `new-detector-modal` to
+  consume `<vt-source-picker>`) is where the real dedup land.
 
 ## Why
 
@@ -179,11 +212,16 @@ touching the cross-modal picker chrome):
    has no auto-detection. The previously dead-coded "suppress the
    required-star for media_type" condition in the generic-label
    template is gone with the case.
-4. **Checkpoint 4**: Extract `<vt-source-picker>` (the importer-tab /
-   sub-tab chrome + demo table + server-folder typed path + local
-   dropzone). Migrate `dataset-importer-modal` to consume it.
+4. **Checkpoint 4 (shipped)**: Extracted `<vt-source-picker>` (the
+   importer-tab / sub-tab chrome + demo table + server-folder typed
+   path + local dropzone) into a presentational component with named
+   content-projection slots ([demoExtras], [sfBefore]/[sfAfter],
+   [lfBefore]/[lfAfter]) for the parent's per-flow output config.
+   Migrated `dataset-importer-modal` to consume it.
 5. **Checkpoint 5**: Migrate `new-detector-modal` to consume
-   `<vt-source-picker>`.
+   `<vt-source-picker>`.  This is where the real bundle saving lands
+   — both modals currently spell out the same picker chrome and demo
+   table, and the cross-modal dedup eliminates that duplication.
 
 The demo flow inside `dataset-importer-modal` stays a separate path
 (its picker layout is genuinely different from the import flows).
