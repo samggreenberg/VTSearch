@@ -27,23 +27,23 @@
         <span class="ssp-row-label">{{ labelFor(st) }}</span>
       </label>
 
-      @if (hasAdvanced(st)) {
+      @if (hasDetails(st)) {
         <button
           type="button"
-          class="advanced-toggle ssp-advanced-toggle"
-          (click)="toggleAdvanced(st)"
-          [attr.aria-expanded]="isAdvancedOpen(st)"
+          class="advanced-toggle ssp-details-toggle"
+          (click)="toggleDetails(st)"
+          [attr.aria-expanded]="isDetailsOpen(st)"
           [title]="convertersFor(st).length > 1 ? 'Choose a converter and tune its options.' : 'Tune converter options.'"
         >
-          Advanced {{ isAdvancedOpen(st) ? '▾' : '▸' }}
+          Details {{ isDetailsOpen(st) ? '▾' : '▸' }}
         </button>
       }
 
-      @if (isAdvancedOpen(st)) {
-        <div class="ssp-advanced-panel">
+      @if (isDetailsOpen(st)) {
+        <div class="ssp-details-panel">
           @if (convertersFor(st).length > 1) {
-            <label class="ssp-advanced-field">
-              <span class="ssp-advanced-field-label">Converter:</span>
+            <label class="ssp-details-field">
+              <span class="ssp-details-field-label">Converter:</span>
               <select
                 class="form-select ssp-converter-select"
                 [ngModel]="currentConverterName(st)"
@@ -58,8 +58,8 @@
 
           @if (currentConverter(st); as conv) {
             @for (f of conv.fields || []; track f.key) {
-              <label class="ssp-advanced-field">
-                <span class="ssp-advanced-field-label">{{ f.label || f.key }}:</span>
+              <label class="ssp-details-field">
+                <span class="ssp-details-field-label">{{ f.label || f.key }}:</span>
                 @if (f.field_type === 'select') {
                   <select
                     class="form-select"

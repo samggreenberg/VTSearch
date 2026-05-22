@@ -1657,11 +1657,24 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.advancedOpen || !this.isDefaultEmbedderSelected(context);
   }
 
+  /** Whether the given context's Advanced section also contains an
+   *  "Include media" block. The lf/sf views always have one; the generic
+   *  form has one when the importer is ``multi_media``. The demo picker
+   *  never has one. */
+  private contextHasIncludeMedia(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    if (context === 'form') return !!this.selectedImporter?.multi_media;
+    return context === 'lf' || context === 'sf';
+  }
+
   /** Whether the "Advanced ▾" toggle button should be rendered in the
-   *  given context. Only meaningful when both selections are at defaults;
-   *  otherwise the pickers are already visible and the button would be
+   *  given context. The Include media block lives inside Advanced, so
+   *  whenever the context has one the toggle must stay visible — it's the
+   *  only way to reach Include media. Otherwise we only show the toggle
+   *  when both embedder and clipper are at defaults; if either is
+   *  overridden the pickers are already visible and the button would be
    *  redundant. */
   showAdvancedToggle(context: 'form' | 'demo' | 'sf' | 'lf'): boolean {
+    if (this.contextHasIncludeMedia(context)) return true;
     return this.isDefaultEmbedderSelected(context) && this.isDefaultClipperSelected(context);
   }
 

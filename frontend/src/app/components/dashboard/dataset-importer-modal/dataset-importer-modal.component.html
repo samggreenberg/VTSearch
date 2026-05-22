@@ -310,25 +310,22 @@
         <p class="info-text">This importer requires no additional configuration.</p>
       }
 
-      @if (selectedImporter.multi_media) {
-        <div class="form-group">
-          <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
-          <vt-source-specs-picker
-            [availableConverters]="formAvailableConverters"
-            [nativeType]="formOutputTypeId"
-            [typeLabels]="mediaTypeLabels"
-            [specs]="formSourceSpecs"
-            (specsChange)="onFormSpecsChange($event)"
-          ></vt-source-specs-picker>
-        </div>
-      }
-
-      @if (availableEmbedders.length > 1 || availableClippers.length > 1) {
+      @if (selectedImporter.multi_media || availableEmbedders.length > 1 || availableClippers.length > 1) {
         <div class="form-group form-group--section">
           @if (showAdvancedToggle('form')) {
-            <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: embedding model and pre-processing clipper">
+            <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: included media types, embedding model, and pre-processing clipper">
               Advanced {{ advancedOpen ? '▴' : '▾' }}
             </button>
+          }
+          @if (advancedOpen && selectedImporter.multi_media) {
+            <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
+            <vt-source-specs-picker
+              [availableConverters]="formAvailableConverters"
+              [nativeType]="formOutputTypeId"
+              [typeLabels]="mediaTypeLabels"
+              [specs]="formSourceSpecs"
+              (specsChange)="onFormSpecsChange($event)"
+            ></vt-source-specs-picker>
           }
           @if (availableEmbedders.length > 1 && showEmbedderPicker('form')) {
             <label class="form-label" for="field-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
@@ -421,17 +418,6 @@
         }
       </div>
 
-      <div class="form-group">
-        <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
-        <vt-source-specs-picker
-          [availableConverters]="lfAvailableConverters"
-          [nativeType]="lfOutputTypeId"
-          [typeLabels]="mediaTypeLabels"
-          [specs]="lfSourceSpecs"
-          (specsChange)="onLfSpecsChange($event)"
-        ></vt-source-specs-picker>
-      </div>
-
       <div class="form-group form-group--section">
         @if (lfPickerKind === 'folder') {
           <label class="form-label" title="Choose a folder on your local machine. All files inside (including subdirectories) will be uploaded.">Folder<span class="required">*</span></label>
@@ -496,47 +482,55 @@
         </div>
       }
 
-      @if (lfEmbedders.length > 1 || lfClippers.length > 1) {
-        <div class="form-group form-group--section">
-          @if (showAdvancedToggle('lf')) {
-            <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: embedding model and pre-processing clipper">
-              Advanced {{ advancedOpen ? '▴' : '▾' }}
-            </button>
-          }
-          @if (lfEmbedders.length > 1 && showEmbedderPicker('lf')) {
-            <label class="form-label" for="lf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
-            <select
-              id="lf-embedder"
-              class="form-select"
-              [(ngModel)]="lfSelectedEmbedder"
-            >
-              @if (recommendedEmbedders(lfEmbedders).length > 0) {
-                <optgroup label="Recommended">
-                  @for (embedder of recommendedEmbedders(lfEmbedders); track embedder.name) {
-                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                  }
-                </optgroup>
-              }
-              @if (advancedEmbedders(lfEmbedders).length > 0) {
-                <optgroup label="Advanced ▾">
-                  @for (embedder of advancedEmbedders(lfEmbedders); track embedder.name) {
-                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                  }
-                </optgroup>
-              }
-            </select>
-            @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
-              <div class="license-warning" role="note">⚠ {{ notice }}</div>
+      <div class="form-group form-group--section">
+        @if (showAdvancedToggle('lf')) {
+          <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: included media types, embedding model, and pre-processing clipper">
+            Advanced {{ advancedOpen ? '▴' : '▾' }}
+          </button>
+        }
+        @if (advancedOpen) {
+          <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
+          <vt-source-specs-picker
+            [availableConverters]="lfAvailableConverters"
+            [nativeType]="lfOutputTypeId"
+            [typeLabels]="mediaTypeLabels"
+            [specs]="lfSourceSpecs"
+            (specsChange)="onLfSpecsChange($event)"
+          ></vt-source-specs-picker>
+        }
+        @if (lfEmbedders.length > 1 && showEmbedderPicker('lf')) {
+          <label class="form-label" for="lf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
+          <select
+            id="lf-embedder"
+            class="form-select"
+            [(ngModel)]="lfSelectedEmbedder"
+          >
+            @if (recommendedEmbedders(lfEmbedders).length > 0) {
+              <optgroup label="Recommended">
+                @for (embedder of recommendedEmbedders(lfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
             }
+            @if (advancedEmbedders(lfEmbedders).length > 0) {
+              <optgroup label="Advanced ▾">
+                @for (embedder of advancedEmbedders(lfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
+            }
+          </select>
+          @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
+            <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
-          @if (lfClippers.length > 1 && showClipperPicker('lf')) {
-            <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
-            <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('lf')" title="Choose a MediaClipper to segment or trim media before embedding">
-              Use MediaClipper: {{ clipperDisplayName('lf') }}
-            </button>
-          }
-        </div>
-      }
+        }
+        @if (lfClippers.length > 1 && showClipperPicker('lf')) {
+          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('lf')" title="Choose a MediaClipper to segment or trim media before embedding">
+            Use MediaClipper: {{ clipperDisplayName('lf') }}
+          </button>
+        }
+      </div>
 
       @if (lfError) {
         <p class="error-text">{{ lfError }}</p>
@@ -588,17 +582,6 @@
         }
       </div>
 
-      <div class="form-group">
-        <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
-        <vt-source-specs-picker
-          [availableConverters]="sfAvailableConverters"
-          [nativeType]="sfOutputTypeId"
-          [typeLabels]="mediaTypeLabels"
-          [specs]="sfSourceSpecs"
-          (specsChange)="onSfSpecsChange($event)"
-        ></vt-source-specs-picker>
-      </div>
-
       <div class="sf-browse-section">
         <label class="form-label" for="sf-path-input">Folder to import</label>
         <input
@@ -624,47 +607,55 @@
         </label>
       </div>
 
-      @if (sfEmbedders.length > 1 || sfClippers.length > 1) {
-        <div class="form-group form-group--section">
-          @if (showAdvancedToggle('sf')) {
-            <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: embedding model and pre-processing clipper">
-              Advanced {{ advancedOpen ? '▴' : '▾' }}
-            </button>
-          }
-          @if (sfEmbedders.length > 1 && showEmbedderPicker('sf')) {
-            <label class="form-label" for="sf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
-            <select
-              id="sf-embedder"
-              class="form-select"
-              [(ngModel)]="sfSelectedEmbedder"
-            >
-              @if (recommendedEmbedders(sfEmbedders).length > 0) {
-                <optgroup label="Recommended">
-                  @for (embedder of recommendedEmbedders(sfEmbedders); track embedder.name) {
-                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                  }
-                </optgroup>
-              }
-              @if (advancedEmbedders(sfEmbedders).length > 0) {
-                <optgroup label="Advanced ▾">
-                  @for (embedder of advancedEmbedders(sfEmbedders); track embedder.name) {
-                    <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-                  }
-                </optgroup>
-              }
-            </select>
-            @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
-              <div class="license-warning" role="note">⚠ {{ notice }}</div>
+      <div class="form-group form-group--section">
+        @if (showAdvancedToggle('sf')) {
+          <button type="button" class="advanced-toggle" (click)="toggleAdvanced()" [attr.aria-expanded]="advancedOpen" title="Show advanced options: included media types, embedding model, and pre-processing clipper">
+            Advanced {{ advancedOpen ? '▴' : '▾' }}
+          </button>
+        }
+        @if (advancedOpen) {
+          <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
+          <vt-source-specs-picker
+            [availableConverters]="sfAvailableConverters"
+            [nativeType]="sfOutputTypeId"
+            [typeLabels]="mediaTypeLabels"
+            [specs]="sfSourceSpecs"
+            (specsChange)="onSfSpecsChange($event)"
+          ></vt-source-specs-picker>
+        }
+        @if (sfEmbedders.length > 1 && showEmbedderPicker('sf')) {
+          <label class="form-label" for="sf-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
+          <select
+            id="sf-embedder"
+            class="form-select"
+            [(ngModel)]="sfSelectedEmbedder"
+          >
+            @if (recommendedEmbedders(sfEmbedders).length > 0) {
+              <optgroup label="Recommended">
+                @for (embedder of recommendedEmbedders(sfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
             }
+            @if (advancedEmbedders(sfEmbedders).length > 0) {
+              <optgroup label="Advanced ▾">
+                @for (embedder of advancedEmbedders(sfEmbedders); track embedder.name) {
+                  <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+                }
+              </optgroup>
+            }
+          </select>
+          @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
+            <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
-          @if (sfClippers.length > 1 && showClipperPicker('sf')) {
-            <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
-            <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('sf')" title="Choose a MediaClipper to segment or trim media before embedding">
-              Use MediaClipper: {{ clipperDisplayName('sf') }}
-            </button>
-          }
-        </div>
-      }
+        }
+        @if (sfClippers.length > 1 && showClipperPicker('sf')) {
+          <label class="form-label" title="Pre-processing clipper that segments or trims media before embedding">Clipper</label>
+          <button class="btn btn--secondary clipper-btn" (click)="openClipperChooser('sf')" title="Choose a MediaClipper to segment or trim media before embedding">
+            Use MediaClipper: {{ clipperDisplayName('sf') }}
+          </button>
+        }
+      </div>
 
       @if (sfBrowseError) {
         <p class="error-text">{{ sfBrowseError }}</p>

@@ -53,13 +53,13 @@
   line-height: 1.3;
 }
 
-.ssp-advanced-toggle {
+.ssp-details-toggle {
   justify-self: end;
   white-space: nowrap;
   grid-column: 2;
 }
 
-.ssp-advanced-panel {
+.ssp-details-panel {
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
@@ -70,14 +70,14 @@
   margin-bottom: 2px;
 }
 
-.ssp-advanced-field {
+.ssp-details-field {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: .85rem;
 }
 
-.ssp-advanced-field-label {
+.ssp-details-field-label {
   color: var(--text-muted, #555);
 }
 
