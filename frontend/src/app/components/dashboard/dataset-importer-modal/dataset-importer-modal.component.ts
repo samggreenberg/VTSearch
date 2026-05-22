@@ -6,7 +6,6 @@ import { IconComponent } from '../../icon/icon.component';
 import { ClipperChooserComponent, ClipperSelection } from '../clipper-chooser/clipper-chooser.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { ImportAdvancedComponent } from './import-advanced/import-advanced.component';
-import { SourceSpecsPickerComponent } from './source-specs-picker/source-specs-picker.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
@@ -15,7 +14,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 @Component({
   selector: 'vt-dataset-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, ClipperChooserComponent, DropZoneComponent, ImportAdvancedComponent, SourceSpecsPickerComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, ClipperChooserComponent, DropZoneComponent, ImportAdvancedComponent],
   templateUrl: './dataset-importer-modal.component.html',
   styleUrl: './dataset-importer-modal.component.scss',
 })
