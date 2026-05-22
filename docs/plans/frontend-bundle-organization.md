@@ -1,7 +1,7 @@
 # Frontend bundle organization
 
-Status: **#1 shipped (all five checkpoints).** Items #2–#6 are scoped
-but not started.
+Status: **#1 shipped (all five checkpoints). #2 shipped.** Items #3–#6
+are scoped but not started.
 
 ## What shipped
 
@@ -94,6 +94,64 @@ but not started.
   but the structural goal — single source of truth for the picker
   chrome and demo table — is achieved, and any future edits to the
   picker UI now touch one component instead of two.
+- **#2 Split `dashboard.component.ts`**: extracted two focused
+  services from the page-shell god component.  Dashboard dropped
+  1419 → 1175 lines.
+  - **`DashboardModalsService`** consolidates the six row-action /
+    selection-action modal states (combine-datasets, combine-detectors,
+    label-exporter, label-importer, find-results, dataset-stats).  Each
+    modal now has a single source of truth with `openX()` / `closeX()`
+    methods; template `@if` blocks read directly off
+    `modals.x.open` / `modals.x.payload`.  Replaces six parallel
+    `xModalOpen` boolean + `xPayload` field pairs and their open/close
+    glue scattered through the component.  Importer / new-detector
+    flows continue to live on `NewThingFlowsService` because they're
+    also opened from the top-bar context pulldowns — the new service
+    only owns dashboard-local modals.
+  - **`DashboardLoadingTasksService`** owns the per-task loading lists
+    (`loadingTasks` for datasets, `detectorLoadingTasks` for
+    detectors), the polling subscriptions, and the bookkeeping for
+    `awaitedTaskIds` / `completedTaskIds` / `completedModelTaskIds`.
+    Polling auto-resumes on construction whenever the SSE stream
+    shows an active task, replacing the dashboard's bespoke
+    `resumeActivePolling` and two `startProgressPolling` methods.
+    `inlineTaskMap`, `orphanLoadingTasks`, `getInlineTask`,
+    `getInlineDetectorTask`, and the cancel / dismiss helpers move
+    with the state.
+  - **DatasetStateService cleanup**: removed the now-dead
+    `loadingTasksSubject` / `loadingTasks$` / `setLoadingTasks` /
+    `loadingTasks` surface — nobody read it after the polling moved.
+  - **What we did NOT do** (deviation from the original plan, noted
+    here so the next contributor doesn't try and back it out):
+    - **Row actions stay on the dashboard, not on cards.** The plan
+      suggested pushing per-row handlers (rename / delete / load /
+      unload / security / export / addLabels) into
+      `DatasetCardComponent` / `DetectorCardComponent`.  Each handler
+      is 1-15 lines of API + dialog glue, and pushing them in would
+      require the card components to inject `DatasetsApiService`,
+      `DetectorsApiService`, `VtDialogService`, and
+      `DatasetStateService` — coupling presentation to backend +
+      dialog system.  Cards stay presentational; the dashboard keeps
+      the thin glue methods.  Extracting them into yet another service
+      was also rejected: they have a single caller (the dashboard
+      template) so the move would just shuffle names without making
+      the code more reusable.
+    - **Column resize / drag-reorder forwarding stays in the
+      component.** The two `@HostListener('document:mousemove')` /
+      `('document:mouseup')` methods can't move to a service (host
+      listeners need to live on a `@Component` / `@Directive`).  The
+      actual logic already lives in `ManagedColumns` /
+      `DashboardColumnsService`; the dashboard's contribution is two
+      lines of "forward to both managers" — already minimal.
+  **Bundle effect.** Initial bundle essentially unchanged
+  (527.48 kB → 527.25 kB raw, 136.49 kB → 136.47 kB gzip — both
+  modals are `@defer`-loaded so service code is in the dashboard's
+  lazy chunk).  Lazy `dashboard-component` chunk grew from
+  129.71 → 131.61 kB raw (22.57 → 22.82 kB gzip) because the service
+  plumbing adds Angular DI overhead without yet enabling cross-
+  component dedup.  Bundle size was not the goal of this checkpoint —
+  the structural goal (clear ownership of modal state and polling, a
+  smaller dashboard shell) is what shipped.
 - **#1 Checkpoint 4**: extracted `<vt-source-picker>` — the importer
   category-tab + sub-tab chrome plus the source-side widgets (demo
   media-type tabs + sortable demo table, server-folder typed-path
@@ -268,7 +326,7 @@ touching the cross-modal picker chrome):
 The demo flow inside `dataset-importer-modal` stays a separate path
 (its picker layout is genuinely different from the import flows).
 
-### #2 — Split `dashboard.component.ts`
+### #2 — Split `dashboard.component.ts` (shipped — see "What shipped")
 
 Goal: shrink the page-shell god component (1419 lines, ~200 methods).
 Section dividers in the file already document the boundaries:
