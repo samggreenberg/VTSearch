@@ -15,14 +15,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-xs);
   overflow: hidden;
 
   &.empty {
     justify-content: center;
     color: var(--text-placeholder);
-    font-size: 1rem;
+    font-size: var(--font-xl);
   }
 }
 
@@ -67,13 +67,13 @@
 .image-view-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: var(--bg-surface);
   opacity: 0.7;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-base);
   flex-shrink: 0;
 
   &:hover {
@@ -84,11 +84,11 @@
 .ivc-btn {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   cursor: pointer;
-  padding: 2px 8px;
-  font-size: 1rem;
+  padding: var(--space-2xs) var(--space-md);
+  font-size: var(--font-xl);
 
   &:hover {
     background: var(--bg-hover);
@@ -99,7 +99,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 6px;
+  padding: var(--space-2xs) var(--space-sm);
   line-height: 1;
 
   &.active {
@@ -126,7 +126,7 @@
 }
 
 .ivc-zoom-label {
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   color: var(--text-secondary);
   min-width: 3em;
 }
@@ -153,18 +153,18 @@
 .metadata-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-sm);
   width: 100%;
-  padding: 2px 4px;
+  padding: var(--space-2xs) var(--space-xs);
   border: none;
   border-top: 1px solid var(--border);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  transition: color 0.15s;
+  transition: color var(--transition-base);
   outline: none;
 
   &:hover {
@@ -173,45 +173,45 @@
 }
 
 .metadata-toggle-icon {
-  font-size: 0.6rem;
-  transition: transform 0.2s;
+  font-size: var(--font-2xs);
+  transition: transform var(--transition-base);
 }
 
 .metadata-toggle-label {
-  font-size: 0.7rem;
+  font-size: var(--font-2xs);
 }
 
 // Metadata grid
 .metadata-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px;
+  gap: var(--space-md);
   width: 100%;
-  padding: 2px 0;
+  padding: var(--space-2xs) 0;
 }
 
 .metadata-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2xs);
 }
 
 .metadata-label {
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .metadata-value {
-  font-size: 0.85rem;
+  font-size: var(--font-md);
   color: var(--text-primary);
   word-break: break-all;
 }
 
 .metadata-md5 {
   font-family: monospace;
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
 }
 
 // Sticky-armed-state hint banner for the bad-vote-with-box discard flow
@@ -220,24 +220,24 @@
 .bad-confirm-hint {
   flex-shrink: 0;
   width: 100%;
-  padding: 4px 8px;
+  padding: var(--space-xs) var(--space-md);
   border: 1px solid rgba(255, 110, 110, 0.5);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: rgba(255, 110, 110, 0.08);
   color: var(--text-primary);
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   text-align: center;
 }
 
 .undo-toast {
   flex-shrink: 0;
   width: 100%;
-  padding: 4px 8px;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15));
-  border-radius: 4px;
-  background: var(--bg-subtle, rgba(0, 0, 0, 0.4));
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
   color: var(--text-primary);
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   text-align: center;
   animation: undo-toast-fade 2s ease-out;
 }

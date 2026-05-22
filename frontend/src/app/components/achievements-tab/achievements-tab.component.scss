@@ -2,30 +2,30 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin: 0 0 0.75rem;
-  padding: 0.6rem 0.9rem;
+  gap: var(--space-lg);
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
   background: var(--bg-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
 }
 
 .achievements-total-label {
-  font-size: 0.85rem;
+  font-size: var(--font-md);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
 }
 
 .achievements-total-value {
-  font-size: 1.6rem;
-  font-weight: 700;
-  color: var(--accent, #4aa3ff);
+  font-size: var(--font-3xl);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
 }
 
 .achievements-intro {
-  margin: 0 0 1rem;
-  color: var(--text-muted, #888);
-  font-size: 0.9rem;
+  margin: 0 0 var(--space-xl);
+  color: var(--text-muted);
+  font-size: var(--font-lg);
 }
 
 .achievements-list {
@@ -34,16 +34,16 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-lg);
 }
 
 .achievement-row {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0.75rem;
+  gap: var(--space-xl);
+  padding: var(--space-lg);
   background: var(--bg-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
 }
 
 .achievement-row--locked {
@@ -58,71 +58,71 @@
 .achievement-head {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
-  margin-bottom: 0.15rem;
+  gap: var(--space-md);
+  margin-bottom: var(--space-2xs);
 }
 
 .achievement-name {
-  font-weight: 600;
-  font-size: 0.95rem;
+  font-weight: var(--weight-semibold);
+  font-size: var(--font-xl);
 }
 
 .achievement-tier {
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 0.05rem 0.4rem;
-  border-radius: 3px;
+  padding: var(--space-2xs) var(--space-xs);
+  border-radius: var(--radius-sm);
   background: var(--bg-hover);
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
 
-  &[data-tier-idx="0"] { color: #cd7f32; }
-  &[data-tier-idx="1"] { color: #d9d9d9; }
-  &[data-tier-idx="2"] { color: #f0c419; }
-  &[data-tier-idx="3"] { color: #f5f6fa; }
+  &[data-tier-idx="0"] { color: #cd7f32; } // achievement-tier intrinsic color, not theme-aware
+  &[data-tier-idx="1"] { color: #d9d9d9; } // achievement-tier intrinsic color, not theme-aware
+  &[data-tier-idx="2"] { color: #f0c419; } // achievement-tier intrinsic color, not theme-aware
+  &[data-tier-idx="3"] { color: #f5f6fa; } // achievement-tier intrinsic color, not theme-aware
   &[data-tier-idx="-1"] { cursor: help; }
 }
 
 .achievement-desc {
-  margin: 0 0 0.35rem;
-  font-size: 0.83rem;
-  color: var(--text-muted, #888);
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
 .achievement-progress {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-md);
 }
 
 .achievement-progress-track {
   flex: 1;
   height: 6px;
   background: var(--bg-hover);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 
 .achievement-progress-fill {
   height: 100%;
-  background: var(--accent, #4aa3ff);
+  background: var(--accent);
   border-radius: inherit;
-  transition: width 0.3s ease;
+  transition: width var(--transition-slow) ease;
 }
 
 .achievement-progress-label {
-  font-size: 0.78rem;
-  color: var(--text-muted, #888);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
 .docs-expand-toggle {
   margin-left: auto;
-  font-size: 0.75rem;
-  padding: 0.1rem 0.5rem;
-  border-radius: 3px;
+  font-size: var(--font-xs);
+  padding: var(--space-2xs) var(--space-md);
+  border-radius: var(--radius-sm);
   background: var(--bg-hover);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border);
   color: inherit;
   cursor: pointer;
 
@@ -132,36 +132,36 @@
 }
 
 .docs-panel {
-  margin-top: 0.6rem;
-  padding: 0.6rem 0.75rem;
+  margin-top: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
   background: var(--bg-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
 }
 
 .docs-list {
   list-style: none;
-  margin: 0 0 0.6rem;
+  margin: 0 0 var(--space-md);
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-xs);
 }
 
 .docs-list-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
+  gap: var(--space-md);
+  font-size: var(--font-md);
 }
 
 .docs-list-item--read {
-  color: var(--accent, #4aa3ff);
+  color: var(--accent);
 }
 
 .docs-list-status {
   width: 1rem;
   text-align: center;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .docs-list-link {
@@ -174,39 +174,39 @@
 }
 
 .docs-list-path {
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   font-family: var(--font-mono, monospace);
-  font-size: 0.78rem;
+  font-size: var(--font-xs);
 }
 
 .docs-phrase-form {
   display: flex;
-  gap: 0.4rem;
+  gap: var(--space-xs);
   align-items: center;
 }
 
 .docs-phrase-label {
-  font-size: 0.78rem;
-  color: var(--text-muted, #888);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
 }
 
 .docs-phrase-input {
   flex: 1;
-  font-size: 0.85rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 3px;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  font-size: var(--font-md);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
   background: var(--bg-subtle);
   color: inherit;
 }
 
 .docs-phrase-submit {
-  font-size: 0.78rem;
-  padding: 0.25rem 0.7rem;
-  border-radius: 3px;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
-  background: var(--accent, #4aa3ff);
-  color: #fff;
+  font-size: var(--font-xs);
+  padding: var(--space-xs) var(--space-lg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: var(--btn-primary-text);
   cursor: pointer;
 
   &:disabled {
@@ -216,10 +216,10 @@
 }
 
 .docs-phrase-status {
-  margin: 0.4rem 0 0;
-  font-size: 0.8rem;
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-sm);
 
-  &[data-kind="success"] { color: var(--accent, #4aa3ff); }
-  &[data-kind="already"] { color: var(--text-muted, #888); }
-  &[data-kind="wrong"]   { color: #ff7676; }
+  &[data-kind="success"] { color: var(--accent); }
+  &[data-kind="already"] { color: var(--text-muted); }
+  &[data-kind="wrong"]   { color: var(--color-bad); }
 }

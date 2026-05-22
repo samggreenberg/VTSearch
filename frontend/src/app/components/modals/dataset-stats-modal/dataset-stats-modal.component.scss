@@ -10,24 +10,24 @@
 .stats-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-lg);
 
   th,
   td {
-    padding: 6px 10px;
+    padding: var(--space-sm) var(--space-md);
     text-align: left;
     border-bottom: 1px solid var(--border-subtle);
   }
 
   th {
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
     color: var(--text-secondary);
-    font-size: 0.85rem;
+    font-size: var(--font-md);
   }
 }
 
 .stat-label {
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -37,8 +37,8 @@
 }
 
 .section-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin: 16px 0 8px;
+  font-size: var(--font-xl);
+  font-weight: var(--weight-semibold);
+  margin: var(--space-xl) 0 var(--space-md);
   color: var(--text-primary);
 }

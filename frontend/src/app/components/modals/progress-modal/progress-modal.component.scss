@@ -1,50 +1,32 @@
 .analysis-loading {
   text-align: center;
-  padding: 2rem;
+  padding: var(--space-2xl);
 
   p {
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-xl);
   }
 }
 
 .progress-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-md);
 
   vt-progress-bar {
     flex: 1;
   }
-
-  // Match the .btn--cancel.btn--sm pattern shared with dataset / detector
-  // cards and the sort progress bar.
-  .btn--cancel {
-    flex-shrink: 0;
-    cursor: pointer;
-    font-size: 0.7rem;
-    padding: 1px 8px;
-    border-radius: 4px;
-    background: var(--bg-surface);
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-
-    &:hover {
-      color: var(--text-primary);
-      border-color: var(--text-secondary);
-    }
-  }
 }
 
 .progress-text {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
+  margin-top: var(--space-md);
+  font-size: var(--font-md);
   color: var(--text-secondary);
 }
 
 .chart-container {
   display: flex;
   justify-content: center;
-  padding: 1rem 0;
+  padding: var(--space-xl) 0;
 
   canvas {
     max-width: 100%;

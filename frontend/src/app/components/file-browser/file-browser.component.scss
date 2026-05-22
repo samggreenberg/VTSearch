@@ -1,12 +1,12 @@
 .file-browser-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
 .file-browser-input-row {
   display: flex;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .file-browser-input {
@@ -16,17 +16,17 @@
 
 .file-browser-browse-btn {
   white-space: nowrap;
-  padding: 4px 12px;
-  font-size: 0.85rem;
+  padding: var(--space-xs) var(--space-lg);
+  font-size: var(--font-md);
 }
 
 // Outer chrome around the embedded folder-browser panel. The list,
 // breadcrumb, and rows themselves are styled by vt-folder-browser.
 .file-browser-panel {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: var(--bg-subtle);
-  padding: 6px 8px;
+  padding: var(--space-sm) var(--space-md);
   display: flex;
   flex-direction: column;
 }

@@ -3,17 +3,17 @@
 }
 
 .export-section {
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--space-2xl);
 
   h3 {
-    margin: 0 0 0.5rem;
-    font-size: 0.95rem;
+    margin: 0 0 var(--space-md);
+    font-size: var(--font-xl);
   }
 }
 
 .preview-count {
-  font-weight: 400;
-  font-size: 0.8rem;
+  font-weight: var(--weight-regular);
+  font-size: var(--font-sm);
   color: var(--text-muted);
 }
 
@@ -22,14 +22,14 @@
 .column-checkboxes {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .column-toggle {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.85rem;
+  gap: var(--space-xs);
+  font-size: var(--font-md);
   cursor: pointer;
   user-select: none;
 
@@ -43,14 +43,14 @@
 .delimiter-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .delimiter-option {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.85rem;
+  gap: var(--space-xs);
+  font-size: var(--font-md);
   cursor: pointer;
   user-select: none;
 
@@ -74,17 +74,17 @@
   max-height: 280px;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
 }
 
 .export-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
 
   th,
   td {
-    padding: 4px 8px;
+    padding: var(--space-xs) var(--space-md);
     text-align: left;
     white-space: nowrap;
     overflow: hidden;
@@ -97,8 +97,8 @@
     position: sticky;
     top: 0;
     background: var(--bg-subtle);
-    font-weight: 600;
-    font-size: 0.78rem;
+    font-weight: var(--weight-semibold);
+    font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
@@ -110,12 +110,12 @@
 
 .label-good {
   color: var(--color-good);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .label-bad {
   color: var(--color-bad);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .truncated-row td {
@@ -130,7 +130,7 @@
 .export-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-md);
 }
 
 // --- Export tabs ---
@@ -145,17 +145,17 @@
 .export-tab {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
+  gap: var(--space-xs);
+  padding: var(--space-md) var(--space-xl);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
-  font-size: 0.85rem;
+  font-size: var(--font-md);
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--transition-base), border-color var(--transition-base);
 
   &:hover {
     color: var(--text-primary);
@@ -164,12 +164,12 @@
   &.active {
     color: var(--text-primary);
     border-bottom-color: var(--color-accent);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 }
 
 .tab-icon {
-  font-size: 1rem;
+  font-size: var(--font-xl);
 }
 
 .tab-icon-svg {
@@ -181,8 +181,8 @@
 .tab-content {
   border: 1px solid var(--border);
   border-top: none;
-  border-radius: 0 0 6px 6px;
-  padding: 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  padding: var(--space-lg);
   background: var(--bg-subtle);
 }
 
@@ -190,13 +190,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .tab-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
   flex: 1 1 200px;
   min-width: 0;
 }
@@ -206,7 +206,7 @@
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
 .required {
@@ -215,29 +215,29 @@
 
 .info-text {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
 }
 
 .error-text {
   color: var(--color-bad);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
 }
 
 .status-text {
   color: var(--text-muted);
-  font-size: 0.85rem;
-  margin-top: 0.5rem;
+  font-size: var(--font-md);
+  margin-top: var(--space-md);
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
 }
 
 .empty-state {
   color: var(--text-muted);
   text-align: center;
-  padding: 16px;
+  padding: var(--space-xl);
 }

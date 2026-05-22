@@ -1,7 +1,7 @@
 :host {
   display: table-row;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 
   &:hover {
     background: var(--bg-hover);
@@ -23,7 +23,7 @@
 }
 
 td {
-  padding: 6px 10px;
+  padding: var(--space-sm) var(--space-md);
   white-space: nowrap;
   vertical-align: middle;
   border-bottom: 1px solid var(--border-subtle);
@@ -39,14 +39,14 @@ td.actions-col {
 .name-cell {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .actions-cell {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
 .edit-btn {
@@ -54,23 +54,23 @@ td.actions-col {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     background: var(--btn-icon-hover-bg);
   }
 
   .pencil-active {
-    animation: pencil-rotate-open 0.3s ease-in-out forwards;
+    animation: pencil-rotate-open var(--transition-slow) ease-in-out forwards;
   }
 
   .pencil-inactive {
-    animation: pencil-rotate-close 0.3s ease-in-out forwards;
+    animation: pencil-rotate-close var(--transition-slow) ease-in-out forwards;
   }
 }
 
@@ -100,14 +100,14 @@ td.actions-col {
 
 .inline-edit {
   width: 140px;
-  padding: 2px 6px;
-  font-size: 0.83rem;
+  padding: var(--space-2xs) var(--space-sm);
+  font-size: var(--font-md);
 }
 
 .type-cell {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-sm);
 }
 
 .type-icon {
@@ -121,7 +121,7 @@ td.actions-col {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  padding: var(--space-xs);
 }
 
 .load-action,
@@ -130,21 +130,16 @@ td.actions-col {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     background: var(--btn-icon-hover-bg);
   }
-}
-
-.btn--xs {
-  padding: 1px 6px;
-  font-size: 0.75rem;
 }
 
 // Inline loading progress (replaces data columns while loading). Mirrors the
@@ -154,33 +149,33 @@ td.actions-col {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--space-xs);
 
   .progress-context {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: var(--space-2xs);
   }
 
   .progress-header {
-    font-size: 0.85rem;
+    font-size: var(--font-md);
     color: var(--text-primary);
-    font-weight: 500;
+    font-weight: var(--weight-medium);
   }
 
   .progress-subtitle {
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
   }
 
   .progress-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-md);
   }
 
   .progress-msg {
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     white-space: nowrap;
     flex-shrink: 0;
@@ -194,26 +189,10 @@ td.actions-col {
   }
 
   .progress-eta {
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     white-space: nowrap;
     flex-shrink: 0;
-  }
-
-  .btn--cancel {
-    flex-shrink: 0;
-    cursor: pointer;
-    font-size: 0.75rem;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: var(--bg-surface);
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-
-    &:hover {
-      color: var(--text-primary);
-      border-color: var(--text-secondary);
-    }
   }
 
   &.loading-task-failed {
@@ -222,19 +201,8 @@ td.actions-col {
 
     .error-msg {
       flex: 1;
-      font-size: 0.85rem;
+      font-size: var(--font-md);
       color: var(--error-text);
-    }
-
-    .btn--cancel {
-      background: transparent;
-      color: var(--error-text);
-      border: 1px solid var(--error-border);
-
-      &:hover {
-        background: var(--error-border);
-        color: var(--btn-filled-text);
-      }
     }
   }
 }
@@ -244,23 +212,23 @@ td.actions-col {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     background: var(--btn-icon-hover-bg);
   }
 
   .cap-active {
-    animation: icon-rotate-open 0.3s ease-in-out forwards;
+    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
   }
 
   .cap-inactive {
-    animation: icon-rotate-close 0.3s ease-in-out forwards;
+    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
   }
 }
 
@@ -269,12 +237,12 @@ td.actions-col {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     background: var(--btn-icon-hover-bg);
@@ -286,12 +254,12 @@ td.actions-col {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     color: var(--color-bad);
@@ -299,11 +267,11 @@ td.actions-col {
   }
 
   .trash-active {
-    animation: icon-rotate-open 0.3s ease-in-out forwards;
+    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
   }
 
   .trash-inactive {
-    animation: icon-rotate-close 0.3s ease-in-out forwards;
+    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
   }
 }
 
@@ -311,7 +279,7 @@ td.actions-col {
 // the checkbox in each row lines up under the master checkbox.
 td.select-col {
   width: 36px;
-  padding-left: 8px;
+  padding-left: var(--space-md);
   padding-right: 0;
   text-align: center;
   overflow: visible;
@@ -322,12 +290,12 @@ td.select-col {
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     background: var(--btn-icon-hover-bg);

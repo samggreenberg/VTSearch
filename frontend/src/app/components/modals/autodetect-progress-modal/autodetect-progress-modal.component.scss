@@ -1,18 +1,18 @@
 .autodetect-progress {
   text-align: center;
-  padding: 2rem;
+  padding: var(--space-2xl);
 
   p {
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-xl);
   }
 
   .progress-pct {
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
+    margin-top: var(--space-md);
+    font-size: var(--font-md);
     color: var(--text-secondary);
   }
 
   button {
-    margin-top: 1rem;
+    margin-top: var(--space-xl);
   }
 }

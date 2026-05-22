@@ -12,7 +12,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  padding: 2.5rem 2rem;
+  padding: var(--space-2xl) var(--space-2xl);
   width: 340px;
   max-width: 90vw;
   text-align: center;
@@ -27,7 +27,7 @@
 h2 {
   color: var(--text-primary);
   margin: 0 0 var(--space-xs);
-  font-size: 1.5rem;
+  font-size: var(--font-3xl);
 }
 
 .login-subtitle {
@@ -50,7 +50,7 @@ input {
   color: var(--text-primary);
   font-size: var(--font-xl);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--transition-base);
 
   &:focus {
     border-color: var(--accent);
@@ -69,7 +69,7 @@ button {
   color: var(--btn-primary-text);
   font-size: var(--font-xl);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--transition-base);
 
   &:hover:not(:disabled) {
     background: var(--accent-hover);

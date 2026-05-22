@@ -12,11 +12,11 @@
   width: 220px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
 .disk-usage-label {
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -27,20 +27,20 @@
   height: 8px;
   background: var(--bg-elevated, rgba(127, 127, 127, 0.2));
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
 .disk-usage-fill {
   height: 100%;
-  background: var(--accent, #4caf50);
-  transition: width 0.4s ease, background-color 0.3s ease;
+  background: var(--accent);
+  transition: width var(--transition-slow) ease, background-color var(--transition-slow) ease;
 }
 
 .disk-usage-bar.warn .disk-usage-fill {
-  background: #f0a020;
+  background: var(--text-warning);
 }
 
 .disk-usage-bar.critical .disk-usage-fill {
-  background: #d04030;
+  background: var(--color-bad);
 }

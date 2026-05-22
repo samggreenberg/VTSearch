@@ -10,9 +10,9 @@
 .vote-hint {
   flex-shrink: 0;
   width: 100%;
-  padding: 2px 0 4px;
+  padding: var(--space-2xs) 0 var(--space-xs);
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   text-align: center;
   opacity: 0.7;
   pointer-events: none;
@@ -20,26 +20,26 @@
 
 .vote-buttons {
   display: flex;
-  gap: 12px;
+  gap: var(--space-lg);
   justify-content: center;
-  padding: 2px 0;
+  padding: var(--space-2xs) 0;
   flex-shrink: 0;
 }
 
 button {
   min-width: 120px;
-  padding: 8px 24px;
+  padding: var(--space-md) var(--space-2xl);
   border: 2px solid;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  font-weight: 500;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-xl);
+  font-weight: var(--weight-medium);
   cursor: pointer;
   background: transparent;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background var(--transition-base), color var(--transition-base), border-color var(--transition-base);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-sm);
   line-height: 1;
 
   // Remove focus ring from mouse clicks; keep it for keyboard navigation.
@@ -55,7 +55,7 @@ button {
 }
 
 vt-icon.icon-spinning {
-  animation: icon-spin-cw 0.3s ease-in-out;
+  animation: icon-spin-cw var(--transition-slow) ease-in-out;
 }
 
 .btn-good {

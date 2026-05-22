@@ -1,12 +1,12 @@
 .clipper-chooser {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .clipper-tab-bar {
   display: flex;
-  gap: 4px;
+  gap: var(--space-xs);
   width: 100%;
   border-bottom: 2px solid var(--border);
 }
@@ -14,15 +14,15 @@
 .clipper-tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 16px;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-xl);
   border: none;
   border-bottom: 2px solid transparent;
   background: none;
-  color: var(--text-secondary, var(--text-muted));
-  font-size: .85rem;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
   cursor: pointer;
-  transition: all .15s;
+  transition: all var(--transition-base);
   margin-bottom: -2px;
   white-space: nowrap;
 
@@ -34,31 +34,31 @@
   &.active {
     color: var(--accent);
     border-bottom-color: var(--accent);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 }
 
 .clipper-tab-content {
   min-height: 80px;
-  padding: 4px 0;
+  padding: var(--space-xs) 0;
 }
 
 .clipper-description {
-  color: var(--text-secondary, var(--text-muted));
-  font-size: .82rem;
-  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  margin: 0 0 var(--space-md);
 }
 
 .no-settings {
   color: var(--text-muted);
-  font-size: .85rem;
+  font-size: var(--font-md);
   font-style: italic;
-  padding: 8px 0;
+  padding: var(--space-md) 0;
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
 }

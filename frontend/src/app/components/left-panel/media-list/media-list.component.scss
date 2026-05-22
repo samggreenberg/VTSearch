@@ -15,8 +15,8 @@
   &.grid-layout {
     display: grid;
     grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
-    gap: 4px;
-    padding: 4px;
+    gap: var(--space-xs);
+    padding: var(--space-xs);
     align-content: start;
     justify-content: start;
   }
@@ -30,9 +30,9 @@
 .media-threshold-line {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  margin: 2px 0;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-md);
+  margin: var(--space-2xs) 0;
 
   .grid-layout & {
     grid-column: 1 / -1;
@@ -49,7 +49,7 @@
 }
 
 .threshold-label {
-  font-size: 0.65rem;
+  font-size: var(--font-2xs);
   color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -59,9 +59,9 @@
 .empty-list {
   color: var(--text-muted);
   text-align: center;
-  padding: 24px;
+  padding: var(--space-2xl);
   font-style: italic;
-  font-size: 0.85rem;
+  font-size: var(--font-md);
 }
 
 .media-list-skeleton {
@@ -70,14 +70,14 @@
   // real rows doesn't cause a layout shift.
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
 
   &.grid-layout {
     display: grid;
     grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
-    gap: 4px;
-    padding: 4px;
+    gap: var(--space-xs);
+    padding: var(--space-xs);
     align-content: start;
     justify-content: start;
   }

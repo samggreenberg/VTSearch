@@ -6,7 +6,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-xs) 0;
-  box-shadow: 0 8px 24px var(--shadow-dropdown);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
 }
