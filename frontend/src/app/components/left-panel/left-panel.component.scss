@@ -25,9 +25,9 @@
 }
 
 .dataset-name {
-  padding: 6px 8px 4px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  padding: var(--space-sm) var(--space-md) var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -44,13 +44,13 @@
 
 .left-tab {
   flex: 1;
-  padding: 8px 12px;
+  padding: var(--space-md) var(--space-lg);
   border: none;
   background: var(--bg-panel);
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 0.85rem;
-  transition: background 0.15s, color 0.15s;
+  font-size: var(--font-md);
+  transition: background var(--transition-base), color var(--transition-base);
 
   &:focus-visible {
     outline: none;
@@ -91,11 +91,11 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 4px;
-  gap: 4px;
+  padding: var(--space-xs);
+  gap: var(--space-xs);
 
   &.collapsed {
-    padding: 4px 4px;
+    padding: var(--space-xs) var(--space-xs);
     align-items: center;
   }
 }
@@ -108,16 +108,16 @@
 .images-header {
   display: flex;
   align-items: center;
-  padding: 0 4px;
+  padding: 0 var(--space-xs);
   flex-shrink: 0;
 }
 
 .images-header-title {
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   letter-spacing: 0.05em;
   margin: 0;
   color: var(--text-secondary);
-  font-weight: normal;
+  font-weight: var(--weight-regular);
 }
 
 .view-controls-slot {

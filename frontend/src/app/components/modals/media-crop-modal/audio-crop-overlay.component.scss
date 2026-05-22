@@ -1,24 +1,24 @@
 .hint {
-  font-size: 12px;
+  font-size: var(--font-xs);
   color: rgba(0, 0, 0, 0.6);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-md);
 }
 
 .errorMsg {
-  color: #b00020;
-  font-size: 12px;
-  margin-bottom: 8px;
+  color: var(--color-bad);
+  font-size: var(--font-xs);
+  margin-bottom: var(--space-md);
 }
 
 .loading {
-  font-size: 12px;
+  font-size: var(--font-xs);
   color: rgba(0, 0, 0, 0.6);
-  margin: 8px 0;
+  margin: var(--space-md) 0;
 }
 
 audio {
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-md);
 }
 
 canvas {
@@ -27,18 +27,18 @@ canvas {
   height: 120px;
   background: rgba(0, 0, 0, 0.04);
   border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   touch-action: none;
   user-select: none;
 }
 
 .time-readout {
   display: flex;
-  gap: 8px;
+  gap: var(--space-md);
   align-items: center;
-  margin-top: 8px;
+  margin-top: var(--space-md);
   font-family: monospace;
-  font-size: 13px;
+  font-size: var(--font-md);
   color: rgba(0, 0, 0, 0.7);
 
   .separator {
@@ -52,16 +52,16 @@ canvas {
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-md);
   justify-content: flex-end;
-  margin-top: 16px;
+  margin-top: var(--space-xl);
 
   button {
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: var(--space-md) var(--space-xl);
+    border-radius: var(--radius-md);
     border: 1px solid rgba(0, 0, 0, 0.2);
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-lg);
     background: white;
 
     &:disabled {
@@ -70,7 +70,7 @@ canvas {
     }
 
     &.primary {
-      background: var(--accent-color, #2962ff);
+      background: var(--accent);
       color: white;
       border-color: transparent;
     }

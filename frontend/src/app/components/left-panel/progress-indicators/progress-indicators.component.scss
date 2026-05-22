@@ -1,6 +1,6 @@
 .progress-check-bar {
   display: flex;
-  gap: 2px;
+  gap: var(--space-2xs);
   align-items: stretch;
   min-height: 26px;
   flex-wrap: wrap;
@@ -12,10 +12,10 @@
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 3px 6px;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-sm);
   border: 1px solid var(--indicator-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   min-width: 0;
 
@@ -23,28 +23,10 @@
     flex: 1;
     min-width: 0;
   }
-
-  // Match the .btn--cancel.btn--sm pattern used by dataset / detector cards —
-  // small grey pill next to the running progress bar.
-  .btn--cancel {
-    flex-shrink: 0;
-    cursor: pointer;
-    font-size: 0.7rem;
-    padding: 1px 8px;
-    border-radius: 4px;
-    background: var(--bg-surface);
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-
-    &:hover {
-      color: var(--text-primary);
-      border-color: var(--text-secondary);
-    }
-  }
 }
 
 .sort-overlay-status {
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
@@ -56,13 +38,13 @@
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 3px 2px;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-2xs);
   border: 1px solid var(--indicator-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color var(--transition-base);
   min-width: 0;
 
   &:hover {
@@ -115,9 +97,9 @@
 }
 
 .indicator-label {
-  font-size: 0.7rem;
+  font-size: var(--font-2xs);
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   line-height: 1;
   overflow-wrap: break-word;
   word-break: break-all;

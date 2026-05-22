@@ -1,25 +1,25 @@
 .results-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
+  gap: var(--space-xl);
+  margin-bottom: var(--space-xl);
+  font-size: var(--font-md);
 }
 
 .results-table-wrapper {
   max-height: 300px;
   overflow-y: auto;
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-xl);
 }
 
 .results-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
 
   th,
   td {
-    padding: 0.35rem 0.5rem;
+    padding: var(--space-xs) var(--space-md);
     text-align: left;
     border-bottom: 1px solid var(--border-subtle);
   }
@@ -38,24 +38,24 @@
 .col-muted {
   color: var(--text-muted);
   font-family: monospace;
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
 }
 
 .export-controls {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-md);
 }
 
 .export-sides {
   display: flex;
-  gap: 1rem;
-  font-size: 0.85rem;
+  gap: var(--space-xl);
+  font-size: var(--font-md);
 
   label {
     display: flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: var(--space-xs);
     cursor: pointer;
   }
 }
@@ -66,13 +66,13 @@
 
 .copy-row {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-md);
   align-items: center;
   flex-wrap: wrap;
 }
 
 .export-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-md);
   justify-content: flex-end;
 }

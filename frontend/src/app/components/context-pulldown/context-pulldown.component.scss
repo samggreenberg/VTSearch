@@ -11,14 +11,14 @@
   gap: var(--space-xs);
   width: 100%;
   min-width: 0;
-  padding: var(--space-xs) 0.5rem;
+  padding: var(--space-xs) var(--space-md);
   background: var(--header-btn-bg);
   border: 1px solid var(--header-btn-border);
   border-radius: var(--radius-md);
   color: var(--header-text);
   font-size: var(--font-sm);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--transition-base), border-color var(--transition-base);
   white-space: nowrap;
 
   &:hover,
@@ -30,7 +30,7 @@
   .trigger-label {
     flex: 0 0 auto;
     color: var(--header-text-dim);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 
   .trigger-swatch {
@@ -53,20 +53,20 @@
   .trigger-caret {
     flex: 0 0 auto;
     color: var(--header-text-dim);
-    font-size: 0.7rem;
+    font-size: var(--font-2xs);
   }
 }
 
 .pulldown-menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + var(--space-xs));
   left: 0;
   min-width: 100%;
   max-width: 480px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 4px 12px var(--shadow-dropdown);
+  box-shadow: var(--shadow-md);
   z-index: var(--z-burger-menu);
   display: flex;
   flex-direction: column;
@@ -109,7 +109,7 @@
     border: 1px solid var(--color-bad);
     border-radius: var(--radius-sm);
     color: var(--color-bad);
-    padding: 2px 8px;
+    padding: var(--space-2xs) var(--space-md);
     font-size: var(--font-xs);
     cursor: pointer;
 
@@ -142,7 +142,7 @@
 
   &.is-active {
     background: var(--accent-highlight-bg);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
 
     &.is-focused,
     &:hover {

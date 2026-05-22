@@ -4,10 +4,10 @@
   justify-content: center;
   min-height: 120px;
   max-height: 50vh;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-lg);
   background: rgba(0, 0, 0, 0.04);
-  border-radius: 4px;
-  padding: 8px;
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
 }
 
 .preview img {
@@ -24,29 +24,29 @@
 
 .generic-preview {
   font-family: monospace;
-  font-size: 13px;
+  font-size: var(--font-md);
   color: rgba(0, 0, 0, 0.6);
 }
 
 .filename {
-  font-size: 13px;
+  font-size: var(--font-md);
   color: rgba(0, 0, 0, 0.6);
   text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-xl);
   word-break: break-all;
 }
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-md);
   justify-content: flex-end;
 
   button {
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: var(--space-md) var(--space-xl);
+    border-radius: var(--radius-md);
     border: 1px solid rgba(0, 0, 0, 0.2);
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-lg);
     background: white;
 
     &:disabled {
@@ -55,7 +55,7 @@
     }
 
     &.primary {
-      background: var(--accent-color, #2962ff);
+      background: var(--accent);
       color: white;
       border-color: transparent;
     }

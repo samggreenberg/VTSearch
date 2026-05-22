@@ -1,7 +1,7 @@
 :host {
   display: table-row;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 
   &:hover {
     background: var(--bg-hover);
@@ -63,18 +63,18 @@ td.actions-col {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     background: var(--btn-icon-hover-bg);
   }
 
   .pencil-active {
-    animation: pencil-rotate-open 0.3s ease-in-out forwards;
+    animation: pencil-rotate-open var(--transition-slow) ease-in-out forwards;
   }
 
   .pencil-inactive {
-    animation: pencil-rotate-close 0.3s ease-in-out forwards;
+    animation: pencil-rotate-close var(--transition-slow) ease-in-out forwards;
   }
 }
 
@@ -104,14 +104,14 @@ td.actions-col {
 
 .inline-edit {
   width: 140px;
-  padding: 2px var(--space-sm);
+  padding: var(--space-2xs) var(--space-sm);
   font-size: var(--font-md);
 }
 
 .type-cell {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-sm);
 }
 
 .type-icon {
@@ -137,16 +137,11 @@ td.actions-col {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     background: var(--btn-icon-hover-bg);
   }
-}
-
-.btn--xs {
-  padding: 1px var(--space-sm);
-  font-size: var(--font-xs);
 }
 
 .security-btn {
@@ -159,7 +154,7 @@ td.actions-col {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover:not(.disabled) {
     background: var(--btn-icon-hover-bg);
@@ -181,18 +176,18 @@ td.actions-col {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     background: var(--btn-icon-hover-bg);
   }
 
   .pie-active {
-    animation: icon-rotate-open 0.3s ease-in-out forwards;
+    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
   }
 
   .pie-inactive {
-    animation: icon-rotate-close 0.3s ease-in-out forwards;
+    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
   }
 }
 
@@ -206,7 +201,7 @@ td.actions-col {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     color: var(--color-bad);
@@ -214,11 +209,11 @@ td.actions-col {
   }
 
   .trash-active {
-    animation: icon-rotate-open 0.3s ease-in-out forwards;
+    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
   }
 
   .trash-inactive {
-    animation: icon-rotate-close 0.3s ease-in-out forwards;
+    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
   }
 }
 
@@ -226,7 +221,7 @@ td.actions-col {
 // the checkbox in each row lines up under the master checkbox.
 td.select-col {
   width: 36px;
-  padding-left: 8px;
+  padding-left: var(--space-md);
   padding-right: 0;
   text-align: center;
   overflow: visible;
@@ -242,7 +237,7 @@ td.select-col {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover {
     background: var(--btn-icon-hover-bg);
@@ -254,18 +249,18 @@ td.select-col {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--space-xs);
 
   .progress-context {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: var(--space-2xs);
   }
 
   .progress-header {
     font-size: var(--font-sm);
     color: var(--text-primary);
-    font-weight: 500;
+    font-weight: var(--weight-medium);
   }
 
   .progress-subtitle {
@@ -300,22 +295,6 @@ td.select-col {
     flex-shrink: 0;
   }
 
-  .btn--cancel {
-    flex-shrink: 0;
-    cursor: pointer;
-    font-size: var(--font-xs);
-    padding: 2px var(--space-md);
-    border-radius: var(--radius-md);
-    background: var(--bg-surface);
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-
-    &:hover {
-      color: var(--text-primary);
-      border-color: var(--text-secondary);
-    }
-  }
-
   &.inline-loading-failed {
     flex-direction: row;
     align-items: center;
@@ -324,17 +303,6 @@ td.select-col {
       flex: 1;
       font-size: var(--font-sm);
       color: var(--error-text);
-    }
-
-    .btn--cancel {
-      background: transparent;
-      color: var(--error-text);
-      border: 1px solid var(--error-border);
-
-      &:hover {
-        background: var(--error-border);
-        color: var(--btn-filled-text);
-      }
     }
   }
 }

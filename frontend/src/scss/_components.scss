@@ -1,20 +1,77 @@
-// Shared component styles: buttons, forms, modals
+// Shared component styles: typography, buttons, forms, modals.
+//
+// Token usage rules (enforced by stylelint + by the conventions in
+// docs/style-guide.md):
+//   • Spacing → `var(--space-*)` only. No raw `px`/`rem` for padding/margin/gap.
+//   • Font sizes → `var(--font-*)` only.
+//   • Font weights → `var(--weight-*)` only.
+//   • Border radius → `var(--radius-*)` only.
+//   • Transition durations → `var(--transition-*)` only.
+//   • Colors → theme CSS variables only (no hex literals).
+
+// --- Typography baseline ---
+//
+// Three semantic heading roles. Components MUST use the matching tag rather
+// than restyling a smaller tag with a bigger font.
+//   h1 — page header (rarely used; reserved for top-of-app surfaces)
+//   h2 — modal/section title
+//   h3 — sub-section title within a modal/panel
+//   h4 — minor grouping label
+h1, h2, h3, h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+  line-height: 1.3;
+}
+
+h1 { font-size: var(--font-3xl); }
+h2 { font-size: var(--font-2xl); }
+h3 { font-size: var(--font-xl); }
+h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
+
+// Section title rhythm — when a heading divides one section from the next
+// inside a single panel/modal, apply `.section-title`. The asymmetric
+// margins (large top, small bottom) make each title visually adhere to the
+// content BELOW it rather than the content ABOVE it. The first title in
+// the container resets its top margin so it sits flush with the panel edge.
+//
+// Pair this with a flex parent that uses `gap: 0` so the asymmetric margins
+// — not the flex gap — produce the spacing.
+.section-title {
+  margin-top: var(--space-2xl);
+  margin-bottom: var(--space-sm);
+
+  &:first-child { margin-top: 0; }
+}
 
 // --- Buttons ---
+//
+// Anatomy:
+//   .btn              — base; outline-on-surface, default size
+//   .btn--primary     — filled accent (commit action)
+//   .btn--secondary   — filled secondary (neutral action)
+//   .btn--danger      — destructive (red outline → red bg on hover)
+//   .btn--cancel      — subtle, link-weight cancel/close (no fill, small)
+//   .btn--sm          — compact size modifier
+//   .btn--xs          — inline mini size modifier (used inside table rows etc.)
+//   .btn--icon-square — square 28×28 plus/icon button
+//
+// Combine variant + size as needed: `class="btn btn--primary btn--sm"`.
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
-  padding: var(--space-sm) 0.875rem;  // 6px 14px — off-scale horizontal kept exact
+  padding: var(--space-sm) var(--space-lg);  // 6px 12px
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
   color: var(--text-primary);
   font-size: var(--font-md);
+  font-weight: var(--weight-regular);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base);
 
   &:hover {
     background: var(--bg-hover);
@@ -48,6 +105,41 @@
     &:hover {
       background: var(--bad-bg);
     }
+  }
+
+  // Compact, no-frill cancel/close. Used in progress rows, error rows, loading
+  // tasks. Sits comfortably next to a vt-progress-bar without dominating it.
+  &--cancel {
+    flex-shrink: 0;
+    padding: var(--space-2xs) var(--space-md);
+    font-size: var(--font-xs);
+    color: var(--text-secondary);
+
+    &:hover {
+      color: var(--text-primary);
+      border-color: var(--text-secondary);
+    }
+  }
+
+  // Size modifiers — change padding + font, keep border/colors from the variant.
+  &--sm {
+    padding: var(--space-2xs) var(--space-md);
+    font-size: var(--font-sm);
+  }
+
+  &--xs {
+    padding: 0 var(--space-sm);
+    font-size: var(--font-xs);
+    line-height: 1.6;
+  }
+
+  // Square 28×28 icon button (used for "+ add" in dashboard headers).
+  &--icon-square {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: var(--font-xl);
+    line-height: 1;
   }
 }
 
@@ -86,7 +178,7 @@
   margin-bottom: var(--space-xs);
   color: var(--text-primary);
   font-size: var(--font-sm);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 // --- Modal overlay ---
@@ -111,7 +203,7 @@
   max-width: 90vw;
   max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 8px 32px var(--shadow-dropdown);
+  box-shadow: var(--shadow-lg);
 }
 
 .modal-header {
@@ -171,7 +263,7 @@
   background: var(--bg-subtle);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--transition-base), background var(--transition-base);
 
   &:hover {
     border-color: var(--accent);
@@ -187,7 +279,7 @@
 .importer-name,
 .exporter-name {
   font-size: var(--font-lg);
-  font-weight: 500;
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
 }
 
@@ -229,7 +321,7 @@
 .back-btn {
   align-self: flex-start;
   font-size: var(--font-sm);
-  padding: var(--space-xs) 0.625rem;  // 4px 10px — off-scale horizontal kept exact
+  padding: var(--space-xs) var(--space-md);
 }
 
 .info-text {
