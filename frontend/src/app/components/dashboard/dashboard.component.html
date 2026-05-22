@@ -14,7 +14,7 @@
       </div>
     </div>
 
-    @if (!registryLoaded && datasets.length === 0 && orphanLoadingTasks.length === 0) {
+    @if (!registryLoaded && datasets.length === 0 && loadingTasksSvc.orphanLoadingTasks.length === 0) {
       <ul class="dashboard-skeleton-list" aria-busy="true" aria-label="Loading datasets">
         @for (_ of skeletonRows; track $index) {
           <li class="dashboard-skeleton-row">
@@ -25,7 +25,7 @@
           </li>
         }
       </ul>
-    } @else if (datasets.length === 0 && orphanLoadingTasks.length === 0 && !loading) {
+    } @else if (datasets.length === 0 && loadingTasksSvc.orphanLoadingTasks.length === 0 && !loading) {
       <p class="empty-state">No datasets yet. Click + to add one.</p>
     } @else {
       <div class="dashboard-grid">
@@ -77,7 +77,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (task of orphanLoadingTasks; track task.task_id) {
+            @for (task of loadingTasksSvc.orphanLoadingTasks; track task.task_id) {
               <tr class="loading-task-row" [class.loading-task-error]="!!task.error">
                 <td class="select-col"></td>
                 <td>
@@ -87,7 +87,7 @@
                   @if (task.error) {
                     <div class="loading-task-progress loading-task-failed">
                       <span class="error-msg">Failed: {{ task.error }}</span>
-                      <button class="btn btn--cancel btn--sm" (click)="dismissLoadingTask(task.task_id)" title="Dismiss this error">Dismiss</button>
+                      <button class="btn btn--cancel btn--sm" (click)="loadingTasksSvc.dismissLoadingTask(task.task_id)" title="Dismiss this error">Dismiss</button>
                     </div>
                   } @else {
                     @let info = taskProgressInfo(task);
@@ -110,7 +110,7 @@
                         @if (info.eta) {
                           <span class="progress-eta">{{ info.eta }}</span>
                         }
-                        <button class="btn btn--cancel btn--sm" (click)="cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
+                        <button class="btn btn--cancel btn--sm" (click)="loadingTasksSvc.cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
                       </div>
                     </div>
                   }
@@ -125,8 +125,8 @@
                 [columnOrder]="visibleDatasetColumns"
                 [selected]="isDatasetSelected(dataset.id)"
                 [dimmed]="isLoading && !isDatasetSelected(dataset.id)"
-                [loadingTask]="getInlineTask(dataset.id)"
-                [statsOpen]="statsModalOpen && statsDatasetId === dataset.id"
+                [loadingTask]="loadingTasksSvc.getInlineTask(dataset.id)"
+                [statsOpen]="modals.stats.open && modals.stats.datasetId === dataset.id"
                 [deleteConfirmOpen]="deletingDatasetId === dataset.id"
                 (rowClick)="!isLoading && toggleDatasetSelection(dataset.id, $event)"
                 (checkboxToggle)="!isLoading && toggleDatasetCheckbox(dataset.id)"
@@ -135,8 +135,8 @@
                 (delete)="deleteDataset(dataset)"
                 (load)="loadDataset(dataset)"
                 (security)="editDatasetSecurity(dataset)"
-                (cancelTask)="cancelLoadingTask($event)"
-                (dismissTask)="dismissLoadingTask($event)"
+                (cancelTask)="loadingTasksSvc.cancelLoadingTask($event)"
+                (dismissTask)="loadingTasksSvc.dismissLoadingTask($event)"
               />
             }
           </tbody>
@@ -249,9 +249,9 @@
                 [columnOrder]="visibleDetectorColumns"
                 [selected]="isDetectorSelected(detector.id)"
                 [dimmed]="isLoading && !isDetectorSelected(detector.id)"
-                [loadingTask]="getInlineDetectorTask(detector.id)"
+                [loadingTask]="loadingTasksSvc.getInlineDetectorTask(detector.id)"
                 [deleteConfirmOpen]="deletingDetectorId === detector.id"
-                [addLabelsOpen]="addLabelsModalOpen && addLabelsDetectorId === detector.id"
+                [addLabelsOpen]="modals.addLabels.open && modals.addLabels.detectorId === detector.id"
                 (rowClick)="!isLoading && toggleDetectorSelection(detector.id, $event)"
                 (checkboxToggle)="!isLoading && toggleDetectorCheckbox(detector.id)"
                 (rename)="renameDetector(detector, $event)"
@@ -261,8 +261,8 @@
                 (export)="openExportModal(detector)"
                 (addLabels)="openAddLabelsModal(detector)"
                 (autorunToggle)="toggleAutorun(detector, $event)"
-                (cancelTask)="cancelDetectorLoadingTask($event)"
-                (dismissTask)="dismissDetectorLoadingTask($event)"
+                (cancelTask)="loadingTasksSvc.cancelDetectorLoadingTask($event)"
+                (dismissTask)="loadingTasksSvc.dismissDetectorLoadingTask($event)"
               />
             }
           </tbody>
@@ -335,50 +335,50 @@
   </div>
 </div>
 
-@if (combineModalOpen) {
+@if (modals.combineDatasets.open) {
   <vt-combine-datasets-modal
-    [datasets]="combineModalDatasets"
-    (closed)="closeCombineModal()"
+    [datasets]="modals.combineDatasets.datasets"
+    (closed)="modals.closeCombineDatasets()"
     (combineStarted)="onCombineStarted()"
   />
 }
 
-@if (combineDetectorsModalOpen) {
+@if (modals.combineDetectors.open) {
   <vt-combine-detectors-modal
     [sources]="combineSelectedDetectorSources"
     [existingNames]="allDetectorNames"
-    (closed)="closeCombineDetectorsModal()"
+    (closed)="modals.closeCombineDetectors()"
     (created)="onDetectorsCombined($event)"
   />
 }
 
-@if (exportModalOpen) {
+@if (modals.export.open) {
   <vt-label-exporter-modal
-    [customTitle]="'Export Labelset: ' + exportDetectorName"
-    (closed)="closeExportModal()"
-    (exportComplete)="closeExportModal()"
+    [customTitle]="'Export Labelset: ' + modals.export.detectorName"
+    (closed)="modals.closeExport()"
+    (exportComplete)="modals.closeExport()"
   />
 }
 
-@if (addLabelsModalOpen) {
+@if (modals.addLabels.open) {
   <vt-label-importer-modal
-    [targetModelName]="addLabelsDetectorName"
-    (closed)="closeAddLabelsModal()"
+    [targetModelName]="modals.addLabels.detectorName"
+    (closed)="modals.closeAddLabels()"
     (imported)="onAddLabelsImported()"
   />
 }
 
-@if (findResultsOpen) {
+@if (modals.findResults.open) {
   <vt-autodetect-results-modal
-    [data]="findResultsData"
-    (closed)="closeFindResults()"
+    [data]="modals.findResults.data"
+    (closed)="modals.closeFindResults()"
   />
 }
 
-@if (statsModalOpen) {
+@if (modals.stats.open) {
   <vt-dataset-stats-modal
-    [datasetId]="statsDatasetId"
-    [datasetName]="statsDatasetName"
-    (closed)="closeStatsModal()"
+    [datasetId]="modals.stats.datasetId"
+    [datasetName]="modals.stats.datasetName"
+    (closed)="modals.closeStats()"
   />
 }

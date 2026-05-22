@@ -1,7 +1,7 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject, forkJoin, of } from 'rxjs';
 import { catchError, switchMap, takeUntil } from 'rxjs/operators';
-import { DatasetRegistryEntry, LoadingTask, DetectorRegistryEntry } from '../models/api.models';
+import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.models';
 import { DatasetsApiService } from './datasets-api.service';
 import { DetectorsApiService } from './detectors-api.service';
 
@@ -9,7 +9,6 @@ import { DetectorsApiService } from './detectors-api.service';
 export class DatasetStateService implements OnDestroy {
   private readonly datasetsSubject = new BehaviorSubject<DatasetRegistryEntry[]>([]);
   private readonly detectorsSubject = new BehaviorSubject<DetectorRegistryEntry[]>([]);
-  private readonly loadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
   private readonly loadingSubject = new BehaviorSubject<boolean>(false);
   private readonly progressMessageSubject = new BehaviorSubject<string>('');
   /** Last registry-fetch error, or null if the most recent fetch
@@ -28,7 +27,6 @@ export class DatasetStateService implements OnDestroy {
 
   readonly datasets$ = this.datasetsSubject.asObservable();
   readonly detectors$ = this.detectorsSubject.asObservable();
-  readonly loadingTasks$ = this.loadingTasksSubject.asObservable();
   readonly loading$ = this.loadingSubject.asObservable();
   readonly progressMessage$ = this.progressMessageSubject.asObservable();
   readonly error$ = this.errorSubject.asObservable();
@@ -84,14 +82,6 @@ export class DatasetStateService implements OnDestroy {
     return this.detectorsSubject.value;
   }
 
-  get loadingTasks(): LoadingTask[] {
-    return this.loadingTasksSubject.value;
-  }
-
-  setLoadingTasks(tasks: LoadingTask[]): void {
-    this.loadingTasksSubject.next(tasks);
-  }
-
   get loading(): boolean {
     return this.loadingSubject.value;
   }
@@ -123,7 +113,6 @@ export class DatasetStateService implements OnDestroy {
   clear(): void {
     this.datasetsSubject.next([]);
     this.detectorsSubject.next([]);
-    this.loadingTasksSubject.next([]);
     this.loadingSubject.next(false);
     this.progressMessageSubject.next('');
     this.errorSubject.next(null);

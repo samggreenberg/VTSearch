@@ -5,17 +5,17 @@ import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, filter, switchMap, take, takeUntil } from 'rxjs/operators';
 import { DatasetsApiService } from '../../services/datasets-api.service';
 import { DetectorsApiService } from '../../services/detectors-api.service';
-import { ProgressEventsService } from '../../services/progress-events.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
-import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
-import { AchievementsService } from '../../services/achievements.service';
-import { AutoDetectResultsData, DatasetRegistryEntry, DemoDataset, LoadingTask, DetectorRegistryEntry, ImporterInfo, ProgressEvent } from '../../models/api.models';
+import { DashboardModalsService } from '../../services/dashboard-modals.service';
+import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
+import { DatasetRegistryEntry, DemoDataset, DetectorRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
+import { ProgressEventsService } from '../../services/progress-events.service';
 import {
   ProgressHeader,
   formatProgressHeader,
@@ -76,31 +76,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   progressTotal = 0;
   progressIndeterminate = false;
 
-  loadingTasks: LoadingTask[] = [];
-  detectorLoadingTasks: LoadingTask[] = [];
-
   importerClosing = false;
   /** Visible importers (i.e. ``hidden_from_picker !== true``), fetched
    *  once on init so the welcome banner can detect Services-tab
    *  importers without waiting for the modal to open. */
   visibleImporters: ImporterInfo[] = [];
-  combineModalOpen = false;
-  /** Datasets passed into the Combine modal when it opens. */
-  combineModalDatasets: DatasetRegistryEntry[] = [];
   newDetectorClosing = false;
-  combineDetectorsModalOpen = false;
-  exportModalOpen = false;
-  exportDetectorName = '';
-  addLabelsModalOpen = false;
-  addLabelsDetectorName = '';
-  findResultsOpen = false;
-  findResultsData: AutoDetectResultsData = { results: {} };
-  statsModalOpen = false;
-  statsDatasetId = '';
-  statsDatasetName = '';
   deletingDatasetId = '';
   deletingDetectorId = '';
-  addLabelsDetectorId = '';
   trainAfterModelCreation = false;
   /** Mirrors the user's click intent so the Train/Find button icons
    *  can waggle while the `activeContextGuard` waits between click and
@@ -139,23 +122,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private destroy$ = new Subject<void>();
-  private polling$ = new Subject<void>();
-  private detectorPolling$ = new Subject<void>();
   private findPolling$ = new Subject<void>();
   private knownDatasetIds = new Set<string>();
   private knownDetectorIds = new Set<string>();
-  private completedTaskIds = new Set<string>();
-  private completedModelTaskIds = new Set<string>();
-  /** Task IDs we've been told to expect (via an HTTP response) but haven't
-   *  yet observed in the SSE `loading-tasks` stream. Polling refuses to bail
-   *  while this set is non-empty, even if the stream currently shows no
-   *  active tasks — otherwise a fast load (e.g. pre-embedded demo dataset)
-   *  whose HTTP response wins the race against the SSE event would stop
-   *  polling before the task ever shows up, leaving the dashboard stale
-   *  until the user refreshes. */
-  private awaitedTaskIds = new Set<string>();
-  private datasetPollingActive = false;
-  private detectorPollingActive = false;
   /** Dataset IDs we've already asked the backend to preload an embedder
    *  for this session. The backend dedupes against already-loaded
    *  embedders, but tracking here avoids hammering the network as the
@@ -174,12 +143,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
     public datasetState: DatasetStateService,
-    private activeContext: ActiveContextService,
     private contextSwitch: ContextSwitchService,
     private authService: AuthService,
     private topBarState: TopBarStateService,
     private newThingFlows: NewThingFlowsService,
-    private achievements: AchievementsService,
+    public modals: DashboardModalsService,
+    public loadingTasksSvc: DashboardLoadingTasksService,
     private progressEvents: ProgressEventsService,
     columnsService: DashboardColumnsService,
   ) {
@@ -241,7 +210,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.pushTopBarLabels();
       });
     this.refresh();
-    this.resumeActivePolling();
     this.startDiskUsagePolling();
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
@@ -336,18 +304,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
   }
 
-  /** Check for in-progress loading tasks (e.g. after a page reload) and start watching. */
-  private resumeActivePolling(): void {
-    // SSE pushes the initial snapshot the moment we connect, so the first
-    // event on each channel tells us whether there's anything in flight.
-    this.progressEvents.loadingTasks$
-      .pipe(filter((tasks) => tasks.some((t) => t.status !== 'idle')), take(1), takeUntil(this.destroy$))
-      .subscribe(() => this.startProgressPolling());
-    this.progressEvents.detectorLoadingTasks$
-      .pipe(filter((tasks) => tasks.some((t) => t.status !== 'idle')), take(1), takeUntil(this.destroy$))
-      .subscribe(() => this.startDetectorProgressPolling());
-  }
-
   // --- Column resize / drag-reorder ---
   //
   // The actual logic lives in `ManagedColumns`. We just forward document-level
@@ -370,10 +326,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-    this.polling$.next();
-    this.polling$.complete();
-    this.detectorPolling$.next();
-    this.detectorPolling$.complete();
     this.findPolling$.next();
     this.findPolling$.complete();
   }
@@ -401,28 +353,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get progressMessage(): string {
     return this.datasetState.progressMessage;
-  }
-
-  /** Map dataset_id → LoadingTask for tasks that match an existing dataset row. */
-  get inlineTaskMap(): Map<string, LoadingTask> {
-    const map = new Map<string, LoadingTask>();
-    const datasetIds = new Set(this.datasets.map((d) => d.id));
-    for (const task of this.loadingTasks) {
-      if (task.dataset_id && datasetIds.has(task.dataset_id)) {
-        map.set(task.dataset_id, task);
-      }
-    }
-    return map;
-  }
-
-  /** Loading tasks that have no matching dataset row (new imports, etc.). */
-  get orphanLoadingTasks(): LoadingTask[] {
-    const datasetIds = new Set(this.datasets.map((d) => d.id));
-    return this.loadingTasks.filter((t) => !t.dataset_id || !datasetIds.has(t.dataset_id));
-  }
-
-  getInlineTask(datasetId: string): LoadingTask | undefined {
-    return this.inlineTaskMap.get(datasetId);
   }
 
   refresh(): void {
@@ -518,18 +448,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   combineSelectedDatasets(): void {
     const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
     if (targets.length < 2) return;
-    this.combineModalDatasets = targets;
-    this.combineModalOpen = true;
-  }
-
-  closeCombineModal(): void {
-    this.combineModalOpen = false;
-    this.combineModalDatasets = [];
+    this.modals.openCombineDatasets(targets);
   }
 
   onCombineStarted(): void {
-    this.closeCombineModal();
-    this.startProgressPolling();
+    this.modals.closeCombineDatasets();
+    this.loadingTasksSvc.startProgressPolling();
   }
 
   /**
@@ -712,15 +636,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   openCombineDetectorsModal(): void {
     if (!this.combineSelectedDetectorsEnabled) return;
-    this.combineDetectorsModalOpen = true;
-  }
-
-  closeCombineDetectorsModal(): void {
-    this.combineDetectorsModalOpen = false;
+    this.modals.openCombineDetectors();
   }
 
   onDetectorsCombined(newName: string): void {
-    this.combineDetectorsModalOpen = false;
+    this.modals.closeCombineDetectors();
     // The new model will appear via the datasets$/detectors$ subscription's
     // new-id auto-select logic; nothing more to do besides refreshing.
     this.datasetState.refresh();
@@ -774,15 +694,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   showDatasetStats(dataset: DatasetRegistryEntry): void {
-    this.statsDatasetId = dataset.id;
-    this.statsDatasetName = dataset.name;
-    this.statsModalOpen = true;
-  }
-
-  closeStatsModal(): void {
-    this.statsModalOpen = false;
-    this.statsDatasetId = '';
-    this.statsDatasetName = '';
+    this.modals.openStats(dataset.id, dataset.name);
   }
 
   // --- Model actions ---
@@ -821,13 +733,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadDataset(dataset: DatasetRegistryEntry): void {
     this.datasetsApi.loadRegistered(dataset.id).subscribe({
-      next: (response) => this.startProgressPolling(response.task_id),
+      next: (response) => this.loadingTasksSvc.startProgressPolling(response.task_id),
     });
   }
 
   loadDetector(model: DetectorRegistryEntry): void {
     this.detectorsApi.loadDetector(model.id).subscribe({
-      next: () => this.startDetectorProgressPolling(),
+      next: () => this.loadingTasksSvc.startDetectorProgressPolling(),
     });
   }
 
@@ -837,40 +749,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  getInlineDetectorTask(modelId: string): LoadingTask | undefined {
-    return this.detectorLoadingTasks.find((t) => t.detector_id === modelId);
-  }
-
   toggleAutorun(model: DetectorRegistryEntry, autorun: boolean): void {
     this.detectorsApi.setAutorun(model.id, autorun).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
 
-  // --- Export modal ---
+  // --- Export / Add-Labels modal openers (state lives on DashboardModalsService) ---
 
   openExportModal(model: DetectorRegistryEntry): void {
-    this.exportDetectorName = model.name;
-    this.exportModalOpen = true;
+    this.modals.openExport(model.name);
   }
-
-  closeExportModal(): void {
-    this.exportModalOpen = false;
-    this.exportDetectorName = '';
-  }
-
-  // --- Add Labels modal ---
 
   openAddLabelsModal(model: DetectorRegistryEntry): void {
-    this.addLabelsDetectorId = model.id;
-    this.addLabelsDetectorName = model.name;
-    this.addLabelsModalOpen = true;
-  }
-
-  closeAddLabelsModal(): void {
-    this.addLabelsModalOpen = false;
-    this.addLabelsDetectorId = '';
-    this.addLabelsDetectorName = '';
+    this.modals.openAddLabels(model.id, model.name);
   }
 
   onAddLabelsImported(): void {
@@ -888,7 +780,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     for (const m of this.detectors) {
       if (m.media_type) types.add(m.media_type);
     }
-    for (const t of this.loadingTasks) {
+    for (const t of this.loadingTasksSvc.loadingTasks) {
       if (t.media_type && !t.error) types.add(t.media_type);
     }
     return types.size === 1 ? [...types][0] : '';
@@ -901,7 +793,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const emb = d['embedder'] as string;
       if (emb) embedders.add(emb);
     }
-    for (const t of this.loadingTasks) {
+    for (const t of this.loadingTasksSvc.loadingTasks) {
       if (t.embedder && !t.error) embedders.add(t.embedder);
     }
     return embedders.size === 1 ? [...embedders][0] : '';
@@ -933,7 +825,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private handleImportStarted(): void {
     this.importerClosing = true;
-    this.startProgressPolling();
+    this.loadingTasksSvc.startProgressPolling();
   }
 
   private handleDemoSelected(demo: DemoDataset): void {
@@ -954,7 +846,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (userName) params['dataset_name'] = userName;
     this.datasetsApi.loadDemo(demo.name, params).subscribe({
       next: (response) => {
-        this.startProgressPolling(response.task_id);
+        this.loadingTasksSvc.startProgressPolling(response.task_id);
       },
     });
   }
@@ -972,7 +864,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (loaded?.media_type) return loaded.media_type;
     // Fall back to in-progress loading tasks when no dataset is fully loaded yet.
     const loadingTypes = new Set(
-      this.loadingTasks.filter((t) => t.media_type && !t.error).map((t) => t.media_type!),
+      this.loadingTasksSvc.loadingTasks.filter((t) => t.media_type && !t.error).map((t) => t.media_type!),
     );
     return loadingTypes.size === 1 ? [...loadingTypes][0] : '';
   }
@@ -992,134 +884,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetsApi.cancelIngest().subscribe();
   }
 
-  cancelLoadingTask(taskId: string): void {
-    this.datasetsApi.cancelTask(taskId).subscribe();
+  // --- Loading-task helpers (used by the orphan-task row template) ---
+
+  taskProgressInfo(task: LoadingTask): ProgressHeader {
+    return formatProgressHeader(task, 'dataset', task.embedder);
   }
 
-  dismissLoadingTask(taskId: string): void {
-    this.loadingTasks = this.loadingTasks.filter((t) => t.task_id !== taskId);
-  }
-
-  cancelDetectorLoadingTask(taskId: string): void {
-    this.detectorsApi.cancelDetectorLoadingTask(taskId).subscribe();
-  }
-
-  dismissDetectorLoadingTask(taskId: string): void {
-    this.detectorLoadingTasks = this.detectorLoadingTasks.filter((t) => t.task_id !== taskId);
-  }
-
-  // --- Progress polling ---
-
-  startProgressPolling(awaitTaskId?: string, onComplete?: () => void): void {
-    // Register any task we've been told to expect.  See the
-    // `awaitedTaskIds` field comment for why this is needed.
-    if (awaitTaskId) {
-      this.awaitedTaskIds.add(awaitTaskId);
-    }
-    // If polling is already active, don't restart — the existing loop
-    // already covers all tasks.  This avoids clearing completedTaskIds
-    // and losing track of tasks that just finished.
-    if (this.datasetPollingActive) {
-      return;
-    }
-    this.datasetPollingActive = true;
-    this.completedTaskIds.clear();
-
-    this.progressEvents.loadingTasks$
-      .pipe(takeUntil(this.polling$), takeUntil(this.destroy$))
-      .subscribe({
-        next: (tasks: LoadingTask[]) => {
-          // Any task we were waiting for has now shown up in the SSE
-          // stream — drop it from the awaited set so the bail-out check
-          // below can fire as soon as the stream goes quiet.
-          for (const t of tasks) {
-            this.awaitedTaskIds.delete(t.task_id);
-          }
-
-          // Separate active from finished. Failed tasks are surfaced
-          // globally by SseErrorRouterService → ToastService; we just
-          // keep them in the inline list so the row still shows the
-          // dashed loading bar with the error text.
-          const active = tasks.filter((t) => t.status !== 'idle');
-          const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
-          const failed = errored.filter((t) => t.error !== 'Cancelled');
-
-          this.loadingTasks = [...active, ...failed];
-          this.datasetState.setLoadingTasks(active);
-
-          // Detect tasks that just completed successfully so we can
-          // refresh the registry immediately (not only when ALL finish).
-          const justFinished = tasks.filter(
-            (t) => t.status === 'idle' && !t.error && !this.completedTaskIds.has(t.task_id),
-          );
-          for (const t of justFinished) {
-            this.completedTaskIds.add(t.task_id);
-          }
-          if (justFinished.length > 0) {
-            this.datasetState.refresh();
-            this.achievements.refresh();
-          }
-
-          this.datasetState.setLoading(active.length > 0);
-
-          if (active.length === 0 && this.awaitedTaskIds.size === 0) {
-            // No more active tasks and no awaited task pending — stop
-            // polling.
-            this.polling$.next();
-            this.datasetPollingActive = false;
-            // Refresh unless we just did (justFinished already triggered it)
-            if (justFinished.length === 0) {
-              this.datasetState.refresh();
-            }
-            if (onComplete && failed.length === 0) {
-              onComplete();
-            }
-          }
-        },
-      });
-  }
-
-  startDetectorProgressPolling(onComplete?: () => void): void {
-    if (this.detectorPollingActive) {
-      return;
-    }
-    this.detectorPollingActive = true;
-    this.completedModelTaskIds.clear();
-
-    this.progressEvents.detectorLoadingTasks$
-      .pipe(takeUntil(this.detectorPolling$), takeUntil(this.destroy$))
-      .subscribe({
-        next: (tasks: LoadingTask[]) => {
-          const active = tasks.filter((t) => t.status !== 'idle');
-          const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
-          const failed = errored.filter((t) => t.error !== 'Cancelled');
-
-          this.detectorLoadingTasks = [...active, ...failed];
-
-          // Detect tasks that just completed successfully
-          const justFinished = tasks.filter(
-            (t) => t.status === 'idle' && !t.error && !this.completedModelTaskIds.has(t.task_id),
-          );
-          for (const t of justFinished) {
-            this.completedModelTaskIds.add(t.task_id);
-          }
-          if (justFinished.length > 0) {
-            this.datasetState.refresh();
-            this.achievements.refresh();
-          }
-
-          if (active.length === 0) {
-            this.detectorPolling$.next();
-            this.detectorPollingActive = false;
-            if (justFinished.length === 0) {
-              this.datasetState.refresh();
-            }
-            if (onComplete && failed.length === 0) {
-              onComplete();
-            }
-          }
-        },
-      });
+  taskIsIndeterminate(task: LoadingTask): boolean {
+    return isProgressIndeterminate(task);
   }
 
   // --- Sorting ---
@@ -1382,7 +1154,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           }
         }
 
-        this.findResultsData = {
+        this.modals.openFindResults({
           media_type: response.media_type || 'unknown',
           detectors_run: detectorNames.length,
           results: detectorResults,
@@ -1390,9 +1162,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           datasets: response.datasets || [],
           multiple_datasets: response.multiple_datasets || false,
           multiple_detectors: response.multiple_detectors || false,
-        } as AutoDetectResultsData;
-
-        this.findResultsOpen = true;
+        });
       },
       error: () => {
         this.stopFindProgressPolling();
@@ -1401,19 +1171,5 @@ export class DashboardComponent implements OnInit, OnDestroy {
         // Global error interceptor surfaces the failure in the banner.
       },
     });
-  }
-
-  closeFindResults(): void {
-    this.findResultsOpen = false;
-  }
-
-  // --- Loading task helpers ---
-
-  taskProgressInfo(task: LoadingTask): ProgressHeader {
-    return formatProgressHeader(task, 'dataset', task.embedder);
-  }
-
-  taskIsIndeterminate(task: LoadingTask): boolean {
-    return isProgressIndeterminate(task);
   }
 }
