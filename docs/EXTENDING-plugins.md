@@ -266,8 +266,9 @@ IMPORTER = S3Importer()
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
-| `run()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | Populate `medias` in-place with loaded data |
-| `list_records()` + `fetch_record()` | see [Bulk-record hooks](#bulk-record-hooks) | Per-record / bulk-record split that mirrors `MediaEmbedder`. The default `run()` lists records, hands them all to `fetch_records_bulk()`, and assigns IDs |
+| `run()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | Populate `medias` in-place with loaded data. Override for full control (e.g. folder-shaped importers that delegate to `run_converters_on_folder()`) |
+| `fetch_source_media()` | `(spec: SourceSpec, field_values: dict, thin: bool = False) -> Iterator[dict]` | **Recommended for multi-source-type service importers.** Yield raw media dicts of `spec.source_type`. The framework loops `effective_source_specs()` and runs each spec's converter on the yielded media — subclasses never invoke converters themselves. See [Multi-media imports](#multi-media-imports) |
+| `list_records()` + `fetch_record()` | see [Bulk-record hooks](#bulk-record-hooks) | Per-record / bulk-record split for **single-source-type** service importers. The default `fetch_source_media()` delegates to these |
 
 **Optional overrides:**
 
@@ -529,8 +530,7 @@ every import is declared there. They are picked up the next time you run
 
 Importers that want to pull in **multiple source media types** (e.g.
 "images, plus videos converted to images, plus documents converted to
-images") set the class attribute `multi_media = True` and iterate
-`self.effective_source_specs(field_values)` inside `run()`.
+images") set the class attribute `multi_media = True`.
 
 A `SourceSpec` (defined in `vtscore.datasets.importers.base`) is:
 
@@ -545,34 +545,55 @@ SourceSpec(
 `effective_source_specs()` reads the user's `source_specs` form value
 (either a Python list or a JSON-encoded string), validates it against
 the converter registry, and returns the typed list.  Each spec where
-`converter is None` is a "include directly" row — the importer fetches
+`converter is None` is a "include directly" row — the framework ingests
 files of `source_type` straight into the dataset.  Each spec where
-`converter` is set asks the importer to fetch files of `source_type` and
-pass them through that converter (with `spec.params`) to produce media
-of the dataset's output type.
+`converter` is set asks the framework to take files of `source_type`
+from the importer and pass them through that converter (with
+`spec.params`) to produce media of the dataset's output type.
+
+**The framework drives the conversion, not your importer.**  Your job
+is just to **yield raw source-type media** for whatever `SourceSpec`
+the framework hands you — override `fetch_source_media(spec,
+field_values, thin)`.  The default `run()` on `DatasetImporter` loops
+`effective_source_specs()`, calls `fetch_source_media()` once per spec,
+and runs the spec's converter on every yielded media itself.
+Subclasses **never** call `get_converter()` or `converter.convert()`
+directly.
 
 ```python
 class DXImporter(DatasetImporter):
     name = "dx"
     multi_media = True
     fields = [
-        ImporterField(key="media_type", label="Dataset MediaType", field_type="select", ...),
+        ImporterField(key="media_type", label="Output Media Type", field_type="select", ...),
         ImporterField(key="dataset_id", ..., required=True),
     ]
 
-    def run(self, field_values, medias, thin=False):
-        from vtscore.converters import get_converter
+    def fetch_source_media(self, spec, field_values, thin=False):
+        """Yield raw media dicts of spec.source_type — one per upstream record.
 
-        for spec in self.effective_source_specs(field_values):
-            for record in self._dx_list(spec.source_type, field_values):
-                raw = self._dx_fetch(record, spec.source_type, field_values)
-                if spec.converter is None:
-                    self._add(medias, raw)
-                else:
-                    converter = get_converter(spec.converter)
-                    for out in converter.convert(raw, spec.params):
-                        self._add(medias, out)
+        The framework owns the SourceSpec loop and converter invocation.
+        This method is called once per spec; when spec.converter is set
+        the framework runs converter.convert(raw, spec.params) on every
+        yielded dict before storing it.
+        """
+        for record in self._dx_list(spec.source_type, field_values):
+            yield self._dx_fetch(record, spec.source_type, field_values)
 ```
+
+That's the entire integration.  If `DX` ever supports listing across
+multiple types in one call, the importer can override `run()` directly
+(or build records once in a cache and have `fetch_source_media()` slice
+into it by `spec.source_type`).
+
+**`fetch_source_media` vs the per-record hooks.**  For service-style
+importers that pull a **single source type** per import,
+`list_records()` + `fetch_record()` (and optionally
+`_fetch_records_bulk_impl()` for batched fetches) remain the simplest
+hooks — see [Bulk-record hooks](#bulk-record-hooks).  The default
+`fetch_source_media()` delegates to them, so single-spec importers keep
+working without touching the new hook.  Override
+`fetch_source_media()` once you need to dispatch by `spec.source_type`.
 
 **Legacy / shim path.** Importers that have **not** flipped
 `multi_media` still work as before: they declare a single `media_type`
@@ -581,7 +602,7 @@ post-processes the imported folder through
 `run_converters_on_folder()`.  Legacy importers can also call
 `effective_source_specs()` — it synthesises an equivalent list from the
 classic `media_type` + `converters` fields, so a legacy importer can
-migrate its `run()` to iterate specs before changing its form schema.
+migrate to the new iteration style before changing its form schema.
 
 See [`docs/plans/multi-media-import.md`](plans/multi-media-import.md) for
 the full design and migration checklist.

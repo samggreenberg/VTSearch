@@ -386,17 +386,41 @@ class DatasetImporter(PluginBase):
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """Perform the import, populating *medias* in-place.
 
-        Subclasses can override either this method directly (full control over
-        the import flow) **or** the per-record / bulk-record hooks:
-        :meth:`list_records`, :meth:`fetch_record`, and optionally
-        :meth:`_fetch_records_bulk_impl` for batched fetches.  When the hooks
-        are implemented, the default :meth:`run` here lists the records, hands
-        them all to :meth:`fetch_records_bulk` in one call (so subclasses that
-        override the bulk impl can issue concurrent / batched I/O), and stores
-        each returned media dict in *medias* with sequential integer IDs
-        starting at 1.  The default per-media origin is filled in from
-        :meth:`build_origin` when the importer's :meth:`fetch_record` did not
-        set its own.
+        Subclasses pick one of three override points, in order of increasing
+        control:
+
+        1. :meth:`fetch_source_media` — yield raw source-type media one record
+           at a time.  The framework loops over each
+           :class:`SourceSpec` produced by :meth:`effective_source_specs`,
+           runs the spec's converter (when one is set) on every yielded
+           media, and ingests the results.  This is the recommended hook for
+           service-style importers: subclasses never call
+           :func:`~vtscore.converters.get_converter` themselves.
+        2. :meth:`list_records` + :meth:`fetch_record` (and optionally
+           :meth:`_fetch_records_bulk_impl` for batched fetches) — a
+           single-spec convenience for service importers that only pull one
+           source type.  The default :meth:`fetch_source_media` delegates to
+           these hooks, so single-spec importers can keep using the
+           per-record split without thinking about specs.
+        3. :meth:`run` directly — full control.  Folder-shaped importers
+           override this and delegate to
+           :func:`~vtscore.converters.runner.run_converters_on_folder`.
+
+        Default flow:
+
+        - When :meth:`effective_source_specs` resolves to one or more specs,
+          iterate them: for each spec, call :meth:`fetch_source_media` and
+          (when ``spec.converter`` is set) pass each yielded media through
+          ``converter.convert(raw, spec.params)`` before assigning IDs.
+        - When :meth:`effective_source_specs` cannot resolve (no
+          ``media_type`` declared and no legacy ``converters`` field — i.e.
+          a bare service importer), fall back to the
+          :meth:`list_records` + :meth:`fetch_records_bulk` path with no
+          conversion.
+
+        IDs are assigned as sequential integers starting at 1.  The default
+        per-media origin is filled in from :meth:`build_origin` when the
+        media dict did not already set one.
 
         Args:
             field_values: Mapping of :attr:`ImporterField.key` → value.
@@ -410,16 +434,45 @@ class DatasetImporter(PluginBase):
                 saves memory for CLI workflows that only need embeddings.
 
         Raises:
-            NotImplementedError: If neither :meth:`run` nor the
-                :meth:`list_records` + :meth:`fetch_record` hooks are
+            NotImplementedError: If neither :meth:`run`, :meth:`fetch_source_media`,
+                nor the :meth:`list_records` + :meth:`fetch_record` hooks are
                 implemented by the subclass.
             Exception: Any exception propagates to the route handler, which
                 stores it in the progress tracker as an error message.
         """
-        records = self.list_records(field_values)
-        fetched = self.fetch_records_bulk(records, field_values, thin=thin)
+        from vtscore.converters import get_converter  # noqa: PLC0415
+
         default_origin = self.build_origin(field_values)
         next_id = 1
+
+        try:
+            specs = self.effective_source_specs(field_values)
+        except ValueError:
+            specs = []
+
+        if specs:
+            for spec in specs:
+                converter = get_converter(spec.converter) if spec.converter else None
+                for raw in self.fetch_source_media(spec, field_values, thin=thin):
+                    if raw is None:
+                        continue
+                    outs = converter.convert(raw, spec.params) if converter is not None else [raw]
+                    for media in outs:
+                        if media is None:
+                            continue
+                        media["id"] = next_id
+                        media.setdefault("origin", default_origin)
+                        media.setdefault("origin_name", media.get("filename") or str(next_id))
+                        medias[next_id] = media
+                        next_id += 1
+            return
+
+        # Fallback: no spec set could be resolved.  Use the per-record hooks
+        # directly with no conversion.  This path keeps the
+        # list_records/fetch_record API working for importers that don't
+        # declare a media_type / source_specs schema (e.g. tests).
+        records = self.list_records(field_values)
+        fetched = self.fetch_records_bulk(records, field_values, thin=thin)
         for media in fetched:
             if media is None:
                 continue
@@ -430,14 +483,72 @@ class DatasetImporter(PluginBase):
             next_id += 1
 
     # ------------------------------------------------------------------
+    # Multi-media source hook
+    # ------------------------------------------------------------------
+    #
+    # The recommended override point for service-style importers that want
+    # to support multiple source types in one import.  The framework drives
+    # both the spec iteration *and* the converter loop, so subclasses never
+    # call :func:`vtscore.converters.get_converter` themselves — they just
+    # yield raw media of ``spec.source_type`` and let
+    # :meth:`run` apply the converter.
+
+    def fetch_source_media(
+        self,
+        spec: SourceSpec,
+        field_values: dict[str, Any],
+        thin: bool = False,
+    ) -> Iterator[dict[str, Any]]:
+        """Yield raw media dicts of ``spec.source_type``.
+
+        For multi-source-type importers (service-style importers that mix
+        e.g. images + videos in one import), override this method.  The
+        framework calls it once per :class:`SourceSpec` returned by
+        :meth:`effective_source_specs`; if the spec declares a converter,
+        the framework runs ``converter.convert(raw, spec.params)`` on every
+        yielded media before storing it.  Subclasses never invoke
+        converters themselves.
+
+        Each yielded dict should already match the shape expected of media
+        of ``spec.source_type`` (so a video spec yields ``type="video"``
+        dicts with ``media_bytes`` / ``media_path``; the framework hands
+        them to the converter which produces e.g. ``type="image"`` dicts).
+        Yield nothing if the spec resolves to zero records.
+
+        Default implementation: delegates to
+        :meth:`list_records` + :meth:`fetch_records_bulk`, ignoring *spec*.
+        This keeps the legacy single-spec hooks (``list_records`` +
+        ``fetch_record``) working for importers that only pull one source
+        type per import.
+
+        Args:
+            spec: The :class:`SourceSpec` row being fetched.  ``source_type``
+                is the canonical type id (e.g. ``"image"``, ``"video"``).
+            field_values: The same mapping passed to :meth:`run`.
+            thin: When ``True``, skip downloading raw bytes — yield media
+                dicts with ``media_url`` / ``media_path`` instead of
+                ``media_bytes``.
+
+        Yields:
+            Raw source-type media dicts.  ``id`` and ``origin`` may be
+            omitted — :meth:`run` assigns IDs and falls back to
+            :meth:`build_origin` for unset origins.
+        """
+        del spec  # default impl is single-spec
+        records = self.list_records(field_values)
+        fetched = self.fetch_records_bulk(records, field_values, thin=thin)
+        for media in fetched:
+            if media is not None:
+                yield media
+
+    # ------------------------------------------------------------------
     # Per-record / bulk-record hooks
     # ------------------------------------------------------------------
     #
-    # Subclasses implementing a service-style importer (one that fetches
-    # records from a remote source) can override these instead of writing
-    # ``run()`` from scratch.  The split mirrors :class:`MediaEmbedder`:
-    # implement the per-item method and you get a working importer; override
-    # the bulk hook to batch the I/O when the source supports it.
+    # Convenience hooks for service-style importers that pull a single
+    # source type per import.  The default :meth:`fetch_source_media`
+    # delegates here.  Multi-source-type importers should override
+    # :meth:`fetch_source_media` directly instead.
 
     def list_records(self, field_values: dict[str, Any]) -> list[Any]:
         """Return the opaque list of records to import.

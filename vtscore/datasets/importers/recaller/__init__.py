@@ -1,16 +1,35 @@
 """ReCaller dataset importer — import media from a ReCaller query.
 
-Given a ReCaller *queryID* and a *mediaType*, this importer:
+Given a ReCaller *queryID* and an output media type, this importer pulls
+the matching results from ReCaller, downloads their bytes via PullWrest
+(PW), and fetches their pre-computed embeddings via DataWrest (DW).  MD5
+hashes come straight from ReCaller — no local recalculation.
 
-1. Calls ReCaller to fetch all results for the query.
-2. Filters results to the requested media type.
-3. Uses PullWrest (PW) to download media files (skipped in thin mode).
-4. Uses DataWrest (DW) to obtain pre-computed embeddings and embedder name.
-5. Uses the MD5 hashes supplied by ReCaller (no local recalculation).
+Multi-media imports
+-------------------
+ReCaller is a :attr:`~DatasetImporter.multi_media` importer: a single
+import can pull in **multiple source types** in one go and let the
+framework convert each to the dataset's output type.  The user picks
+the output media type plus a list of :class:`SourceSpec` rows in the
+modal, e.g.::
 
-Each media item receives a **per-media origin** keyed by ``contentID``
-(not the ephemeral ``queryID``), so labels can round-trip through Holder
-and back::
+    output_type = "image"
+    source_specs = [
+        {"source_type": "image",    "converter": None,           "params": {}},
+        {"source_type": "video",    "converter": "video2image",  "params": {"n_clips": "30"}},
+        {"source_type": "document", "converter": "document2image", "params": {}},
+    ]
+
+The importer's job is to yield raw source-type media — one dict per
+ReCaller record matching ``spec.source_type`` — from
+:meth:`~ReCallerDatasetImporter.fetch_source_media`.  The framework
+loops the spec list and, when the spec has a converter, runs
+``converter.convert(raw, spec.params)`` on every yielded media before
+storing it.  This importer **never** invokes a converter itself.
+
+Each ingested media receives a **per-media origin** keyed by
+``contentID`` (not the ephemeral ``queryID``), so labels can round-trip
+through Holder and back::
 
     {
         "importer": "recaller",
@@ -36,22 +55,17 @@ downloading the actual media.
 
 Bulk fetch
 ----------
-This importer overrides
-:meth:`~vtscore.datasets.importers.base.DatasetImporter._fetch_records_bulk_impl`
-to issue DataWrest embedding lookups and PullWrest media-byte downloads
-concurrently via a thread pool.  The per-record :meth:`fetch_record` is
-kept as a serial fallback (and as the simplest possible reference
-implementation).  Importers built on top of this base get the same
-per-record / bulk-record split: implement :meth:`fetch_record` for a
-working baseline, override :meth:`_fetch_records_bulk_impl` when the
-backing service can be batched.
+:meth:`~ReCallerDatasetImporter.fetch_source_media` issues all DataWrest
+embedding lookups and PullWrest media-byte downloads for a spec
+concurrently via a thread pool, then yields the assembled media dicts in
+the original ReCaller order.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtscore.media import all_folder_names
 
 
@@ -61,24 +75,26 @@ from vtscore.media import all_folder_names
 # ---------------------------------------------------------------------------
 
 
-def _rc_list_queries(media_type: str) -> list[str]:
-    """Call ReCaller and return the list of query IDs for *media_type*.
+def _rc_list_queries(output_type: str) -> list[str]:
+    """Call ReCaller and return the list of query IDs scoped by *output_type*.
 
     Used to populate the ``query_id`` dropdown dynamically once the user
-    picks a media type.  Each entry is a ReCaller queryID string.
+    picks an output media type.  Each entry is a ReCaller queryID string.
+    A query may contain records of any media type; *output_type* is used
+    to narrow the listing to queries the user is likely to import for.
     """
     raise NotImplementedError("TODO: implement ReCaller list-queries API client")
 
 
 def _rc_fetch_results(query_id: str) -> list[dict[str, Any]]:
-    """Call ReCaller and return the result list for *query_id*.
+    """Call ReCaller and return every result for *query_id*.
 
     Each result dict should have at least::
 
         {
             "contentID": str,
             "mediaID": str,
-            "media_type": str,   # e.g. "audio", "image"
+            "media_type": str,   # e.g. "audio", "image", "video", "document"
             "media_url": str,    # PullWrest-resolvable URL
             "md5": str,          # hex digest from ReCaller
             ...                  # any other RC fields
@@ -106,7 +122,7 @@ def _pw_fetch_media(media_url: str) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Media-dict assembly (shared by per-item and bulk paths)
+# Media-dict assembly
 # ---------------------------------------------------------------------------
 
 
@@ -158,7 +174,7 @@ def _build_media(
 
 
 class ReCallerDatasetImporter(DatasetImporter):
-    """Import a dataset from a ReCaller query."""
+    """Import a dataset from a ReCaller query, with multi-source-type support."""
 
     name = "recaller"
     display_name = "ReCaller Query"
@@ -166,20 +182,15 @@ class ReCallerDatasetImporter(DatasetImporter):
     icon = "\U0001f50d"  # magnifying glass
     hidden_from_picker = True  # flip to False once API clients are implemented
     category = "services"
-    # ReCaller queries return a single ``media_type`` selected by the
-    # user — the import flow does not pull in additional source types
-    # via converters.  Flag set to keep the in-tree importer set
-    # uniformly off the legacy shim; the existing ``list_records``
-    # implementation reads ``field_values["media_type"]`` directly.
     multi_media = True
     fields = [
         ImporterField(
             key="media_type",
-            label="Dataset MediaType",
+            label="Output Media Type",
             field_type="select",
             options=all_folder_names(),
             default="audio",
-            description="Only results matching this media type will be imported.",
+            description="The media type this dataset will hold.  Source-type rows below specify which ReCaller record types to pull in and how to convert them to this output type.",
         ),
         ImporterField(
             key="query_id",
@@ -192,86 +203,66 @@ class ReCallerDatasetImporter(DatasetImporter):
     ]
 
     def get_field_options(self, field_key: str, current_values: dict[str, Any]) -> list[str]:
-        """Populate ``query_id`` from ReCaller, scoped by the picked media type."""
+        """Populate ``query_id`` from ReCaller, scoped by the output type."""
         if field_key == "query_id":
-            media_type = current_values.get("media_type") or "audio"
-            return list(_rc_list_queries(media_type))
+            output_type = current_values.get("media_type") or "audio"
+            return list(_rc_list_queries(output_type))
         return super().get_field_options(field_key, current_values)
 
     # The dataset-level origin (queryID) is NOT useful for provenance —
-    # each media gets its own origin keyed by contentID via fetch_record.
+    # each media gets its own origin keyed by contentID via _build_media.
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         return {"importer": self.name, "params": {}}
 
     # ------------------------------------------------------------------
-    # Bulk import hooks
+    # Multi-media source hook
     # ------------------------------------------------------------------
 
-    def list_records(self, field_values: dict[str, Any]) -> list[dict[str, Any]]:
+    def fetch_source_media(
+        self,
+        spec: SourceSpec,
+        field_values: dict[str, Any],
+        thin: bool = False,
+    ) -> Iterator[dict[str, Any]]:
+        """Yield raw ReCaller records matching ``spec.source_type``.
+
+        Filters :func:`_rc_fetch_results` by ``media_type ==
+        spec.source_type`` and batches DataWrest + PullWrest calls
+        concurrently via a thread pool.  Yields :func:`_build_media`
+        dicts in ReCaller's result order.
+
+        The framework owns conversion: when the caller's :class:`SourceSpec`
+        carries a converter, :meth:`DatasetImporter.run` passes each
+        yielded media through ``converter.convert(raw, spec.params)``
+        before assigning an ID and storing it.
+        """
         query_id = (field_values.get("query_id") or "").strip()
         if not query_id:
             raise ValueError("A query ID is required.")
-        media_type = field_values.get("media_type", "audio")
 
         all_results = _rc_fetch_results(query_id)
-        results = [r for r in all_results if r.get("media_type") == media_type]
+        results = [r for r in all_results if r.get("media_type") == spec.source_type]
         if not results:
-            raise ValueError(f"No results of type '{media_type}' found for query '{query_id}'.")
-        return results
+            return
 
-    def fetch_record(
-        self,
-        record: dict[str, Any],
-        field_values: dict[str, Any],
-        thin: bool = False,
-    ) -> dict[str, Any]:
-        """Fetch a single ReCaller record into a media dict.
+        from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
 
-        Per-item path: one DataWrest call for the embedding plus (in
-        non-thin mode) one PullWrest call for the bytes.  Override
-        :meth:`_fetch_records_bulk_impl` to batch these across many
-        records concurrently.
-        """
-        media_type = field_values.get("media_type", "audio")
-        embedding_info = _dw_get_embedding(record["mediaID"])
-        media_bytes = None if thin else _pw_fetch_media(record["media_url"])
-        return _build_media(record, media_type, embedding_info, media_bytes, self.name)
+        from vtscore.concurrency.progress import update_progress  # noqa: PLC0415
 
-    def _fetch_records_bulk_impl(
-        self,
-        records: list[dict[str, Any]],
-        field_values: dict[str, Any],
-        thin: bool = False,
-    ) -> list[dict[str, Any] | None]:
-        """Concurrent bulk fetch.
-
-        Issues all DataWrest embedding lookups and PullWrest media-byte
-        downloads in parallel via a thread pool, then assembles the media
-        dicts in the original order.  Each record still goes through
-        :func:`_build_media`, so the per-item shape stays identical to
-        :meth:`fetch_record`.
-        """
-        from concurrent.futures import ThreadPoolExecutor
-
-        from vtscore.concurrency.progress import update_progress
-
-        media_type = field_values.get("media_type", "audio")
-        total = len(records)
-        update_progress("loading", f"Fetching {total} ReCaller records…", 0, total)
+        total = len(results)
+        update_progress("loading", f"Fetching {total} {spec.source_type} records…", 0, total)
 
         max_workers = min(16, max(1, total))
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            embed_infos = list(pool.map(lambda r: _dw_get_embedding(r["mediaID"]), records))
+            embed_infos = list(pool.map(lambda r: _dw_get_embedding(r["mediaID"]), results))
             if thin:
                 byte_blobs: list[bytes | None] = [None] * total
             else:
-                byte_blobs = list(pool.map(lambda r: _pw_fetch_media(r["media_url"]), records))
+                byte_blobs = list(pool.map(lambda r: _pw_fetch_media(r["media_url"]), results))
 
-        results: list[dict[str, Any] | None] = []
-        for i, (rec, ei, mb) in enumerate(zip(records, embed_infos, byte_blobs)):
+        for i, (rec, ei, mb) in enumerate(zip(results, embed_infos, byte_blobs)):
             update_progress("loading", f"Importing {i + 1} of {total}…", i + 1, total)
-            results.append(_build_media(rec, media_type, ei, mb, self.name))
-        return results
+            yield _build_media(rec, spec.source_type, ei, mb, self.name)
 
     def origin_display(self, origin: dict[str, Any]) -> str:
         content_id = origin.get("params", {}).get("contentID", "")
