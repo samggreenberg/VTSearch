@@ -76,7 +76,7 @@ The base converter ships; the deferred improvements:
 
 ### 3.2 Image
 - **`image_saliency`** ★★ M — crop to salient region (U²-Net or SAM auto-mask). Improves embedding signal on "find dogs" by focusing on subject.
-- **`image_face`** ★ S — face-cropped clips (RetinaFace).
+- ~~**`image_face`** ★ S — face-cropped clips (RetinaFace).~~ **Shipped** — `ImageFaceClipper` in `vtscore/media/image/clipper.py` (uses MediaPipe Face Detection instead of RetinaFace; same idea).
 - **`image_window`** ★ XS — sliding window with stride, complements existing tiling.
 - **`image_color_palette`** ★ exploratory — clip into colour-region masks.
 - **`image_object` follow-ups** — experiment with SAM2 boxes for the same UI; consider a per-class confidence threshold instead of one global value if users ask for it.
@@ -865,8 +865,8 @@ Diversity tree quality metric: how often do same-label items end up in the same 
 
 ## 24. Collaboration / Multi-user Features
 
-### 24.1 Per-user settings ★★★ M
-Today settings are global even with multi-user auth (HANDOFF.md flags this). Move to per-user settings file under `get_user_data_dir()`.
+### 24.1 ~~Per-user settings~~ ★★★ M — shipped
+Settings now split across a server tier (`data/settings.json`: shared keys like saved_datasets_dir, detectors_dir, concurrency limits, autorun_detectors) and a per-user tier (`<get_user_data_dir(user)>/user_settings.json`: volume, theme, inclusion, autopilot config, achievement_state, settings_source, and everything else). See `vtsearch/settings.py` and the per-user breakdown in CLAUDE.md.
 
 ### 24.2 Shared workspaces ★★ L
 Datasets and detectors can be marked shared with a list of users (the `readers` field already exists in the API). UI for managing shares is missing.
