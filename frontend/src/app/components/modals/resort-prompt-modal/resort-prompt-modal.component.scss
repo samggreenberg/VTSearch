@@ -1,37 +1,37 @@
 .resort-prompt {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .prompt-text {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-lg);
   color: var(--text-primary);
 }
 
 .example-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 4px;
+  gap: var(--space-xl);
+  margin-top: var(--space-xs);
 }
 
 .example-col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .col-label {
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-secondary, var(--text-muted));
+  font-weight: var(--weight-semibold);
+  font-size: var(--font-md);
+  color: var(--text-secondary);
 }
 
 .text-input-row {
   display: flex;
-  gap: 6px;
+  gap: var(--space-sm);
   align-items: center;
 
   .form-input {
@@ -51,7 +51,7 @@
 
 .error-text {
   color: var(--color-bad);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
 }
 
 // Media picker view (reuses styles from new-model-modal)
@@ -60,33 +60,33 @@
 }
 
 .back-btn {
-  margin-bottom: 12px;
+  margin-bottom: var(--space-lg);
 }
 
 .picker-instructions {
-  margin: 0 0 8px;
-  font-size: 0.9rem;
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-lg);
   color: var(--text-primary);
 }
 
 .source-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .importer-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 14px;
+  gap: var(--space-2xs);
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: var(--bg-subtle);
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--transition-base), background var(--transition-base);
 
   &:hover {
     border-color: var(--accent);
@@ -95,23 +95,23 @@
 }
 
 .importer-name {
-  font-weight: 600;
-  font-size: 0.9rem;
+  font-weight: var(--weight-semibold);
+  font-size: var(--font-lg);
 }
 
 .importer-icon {
-  margin-right: 4px;
+  margin-right: var(--space-xs);
 }
 
 .importer-desc {
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   color: var(--text-muted);
 }
 
 .browse-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
   max-height: 300px;
   overflow-y: auto;
 }
@@ -119,15 +119,15 @@
 .browse-item {
   display: block;
   width: 100%;
-  padding: 6px 12px;
+  padding: var(--space-sm) var(--space-lg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: var(--bg-subtle);
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
-  font-size: 0.9rem;
-  transition: border-color 0.15s, background 0.15s;
+  font-size: var(--font-lg);
+  transition: border-color var(--transition-base), background var(--transition-base);
   white-space: normal;
   word-break: break-word;
 
@@ -139,18 +139,18 @@
 
 .empty-state {
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: var(--font-lg);
   text-align: center;
-  padding: 16px 0;
+  padding: var(--space-xl) 0;
 }
 
 .breadcrumbs {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2px;
-  margin-bottom: 8px;
-  font-size: 0.85rem;
+  gap: var(--space-2xs);
+  margin-bottom: var(--space-md);
+  font-size: var(--font-md);
 }
 
 .breadcrumb-link {
@@ -158,9 +158,9 @@
   border: none;
   cursor: pointer;
   color: var(--accent);
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: 0.85rem;
+  padding: var(--space-2xs) var(--space-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-md);
 
   &:hover {
     text-decoration: underline;
@@ -174,18 +174,18 @@
 }
 
 .breadcrumb-current {
-  font-weight: 600;
-  padding: 2px 4px;
+  font-weight: var(--weight-semibold);
+  padding: var(--space-2xs) var(--space-xs);
 }
 
 .browse-dir {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .browse-file {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
 .entry-icon {
@@ -195,15 +195,15 @@
 .entry-date {
   margin-left: auto;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   flex-shrink: 0;
   white-space: nowrap;
 }
 
 .entry-size {
   margin-left: 0;
-  padding-left: 0.5rem;
+  padding-left: var(--space-md);
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
   flex-shrink: 0;
 }

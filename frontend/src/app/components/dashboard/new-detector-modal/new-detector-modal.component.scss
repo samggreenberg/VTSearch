@@ -20,22 +20,22 @@
 
 .tab-bar {
   display: flex;
-  gap: 4px;
+  gap: var(--space-xs);
   border-bottom: 1px solid var(--border);
-  margin-bottom: 12px;
+  margin-bottom: var(--space-lg);
 }
 
 .tab-btn {
   background: none;
   border: none;
-  padding: 8px 16px;
-  font-size: 0.9rem;
-  font-weight: 500;
+  padding: var(--space-md) var(--space-xl);
+  font-size: var(--font-lg);
+  font-weight: var(--weight-medium);
   color: var(--text-muted);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--transition-base), border-color var(--transition-base);
 
   &:hover { color: var(--text-primary); }
 
@@ -48,19 +48,19 @@
 .importer-form-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xs);
 }
 
 .importer-form-title {
-  font-weight: 600;
-  font-size: 0.95rem;
+  font-weight: var(--weight-semibold);
+  font-size: var(--font-xl);
 }
 
 .new-detector-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
   width: 480px;
   max-width: 100%;
 }
@@ -68,44 +68,44 @@
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
 .required { color: var(--color-bad); }
 
 .info-text {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
 }
 
 .error-text {
   color: var(--color-bad);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
 }
 
 // Two-column layout for text vs media example input
 .example-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 4px;
+  gap: var(--space-xl);
+  margin-top: var(--space-xs);
 }
 
 .example-col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .col-label {
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-secondary, var(--text-muted));
+  font-weight: var(--weight-semibold);
+  font-size: var(--font-md);
+  color: var(--text-secondary);
 }
 
 .text-input-row {
   display: flex;
-  gap: 6px;
+  gap: var(--space-sm);
   align-items: center;
 
   .form-input {
@@ -123,7 +123,7 @@
 // so use a more compact padding than the standalone version inside the media
 // picker — the column is short and we don't want it to dwarf the text input.
 .example-col vt-drop-zone ::ng-deep .drop-zone {
-  padding: 14px 12px;
+  padding: var(--space-lg) var(--space-lg);
 }
 .example-col vt-drop-zone ::ng-deep .drop-zone-icon {
   width: 22px;
@@ -131,17 +131,17 @@
 }
 
 // Single example display
-.example-display { margin-top: 4px; }
+.example-display { margin-top: var(--space-xs); }
 
 .example-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: var(--bg-subtle);
-  margin-top: 4px;
+  margin-top: var(--space-xs);
 }
 
 .example-icon {
@@ -155,7 +155,7 @@
   width: 40px;
   height: 40px;
   object-fit: cover;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
   background: var(--bg-subtle);
 }
@@ -166,7 +166,7 @@
   white-space: nowrap;
   flex: 1;
   min-width: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-lg);
 }
 
 // Media picker view container
@@ -175,15 +175,10 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .back-btn { align-self: flex-start; }
-
-.btn--sm {
-  padding: 2px 10px;
-  font-size: .85rem;
-}
 
 .importer-picker {
   display: flex;
@@ -194,27 +189,27 @@
 .demo-picker {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .server-folder-browser {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-left: 20px;
+  gap: var(--space-lg);
+  padding-left: var(--space-2xl);
 }
 
 .sf-browse-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .local-folder-uploader {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-left: 20px;
+  gap: var(--space-md);
+  padding-left: var(--space-2xl);
 }
 
 // --- Trained-tab importer cards (label-importer picker) ---
@@ -222,21 +217,21 @@
 .source-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .importer-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 14px;
+  gap: var(--space-2xs);
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: var(--bg-subtle);
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--transition-base), background var(--transition-base);
 
   &:hover {
     border-color: var(--accent);
@@ -245,29 +240,29 @@
 }
 
 .importer-name {
-  font-weight: 600;
-  font-size: 0.9rem;
+  font-weight: var(--weight-semibold);
+  font-size: var(--font-lg);
 }
 
-.importer-icon { margin-right: 4px; }
+.importer-icon { margin-right: var(--space-xs); }
 
 .importer-desc {
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   color: var(--text-muted);
 }
 
 .empty-state {
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: var(--font-lg);
   text-align: center;
-  padding: 16px 0;
+  padding: var(--space-xl) 0;
 }
 
 // Media-type field row: dropdown + optional unlock button.
 .media-type-row {
   display: flex;
   align-items: stretch;
-  gap: 6px;
+  gap: var(--space-sm);
 
   .custom-select { flex: 1; min-width: 0; }
 }
@@ -276,13 +271,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 10px;
+  padding: 0 var(--space-md);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg, 6px);
+  border-radius: var(--radius-lg);
   background: var(--bg-subtle);
   color: var(--text-muted);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color var(--transition-base), border-color var(--transition-base), background var(--transition-base);
 
   &:hover {
     color: var(--text-primary);
@@ -314,13 +309,13 @@
 .select-option-content {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .select-arrow {
   flex-shrink: 0;
   opacity: 0.6;
-  transition: transform 0.15s;
+  transition: transform var(--transition-base);
 
   .custom-select.open & { transform: rotate(180deg); }
 }
@@ -331,32 +326,32 @@
   left: 0;
   right: 0;
   z-index: var(--z-elevated);
-  margin-top: 2px;
+  margin-top: var(--space-2xs);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-primary, var(--bg-subtle));
-  box-shadow: 0 4px 12px var(--shadow-dropdown);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
 }
 
 .custom-select-option {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-sm);
   width: 100%;
-  padding: 8px 12px;
+  padding: var(--space-md) var(--space-lg);
   border: none;
   background: none;
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
   font-size: inherit;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 
   &:hover { background: var(--bg-hover); }
 
   &.selected {
     background: var(--bg-active, var(--bg-hover));
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 }

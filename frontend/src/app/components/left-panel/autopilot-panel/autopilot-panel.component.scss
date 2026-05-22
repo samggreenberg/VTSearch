@@ -1,11 +1,11 @@
 .autopilot-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
 
   &.collapsed {
     align-items: center;
-    padding: 4px 0;
+    padding: var(--space-xs) 0;
     gap: 0;
   }
 }
@@ -13,7 +13,7 @@
 .autopilot-active {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .autopilot-header {
@@ -24,13 +24,13 @@
 .collapse-toggle {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.7rem;
-  padding: 2px 5px;
+  font-size: var(--font-2xs);
+  padding: var(--space-2xs) var(--space-sm);
   line-height: 1;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--transition-base), border-color var(--transition-base);
 
   &:hover {
     color: var(--text-primary);
@@ -41,15 +41,15 @@
 .autopilot-steps {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
 .ap-step {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
 
   &.active {
     background: var(--accent-highlight-bg);
@@ -85,8 +85,8 @@
 
 .ap-check {
   color: var(--color-good);
-  font-size: 0.85rem;
-  font-weight: bold;
+  font-size: var(--font-md);
+  font-weight: var(--weight-semibold);
 }
 
 .ap-dot {
@@ -104,22 +104,22 @@
 .ap-step-content {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2xs);
 }
 
 .ap-step-label {
-  font-size: 0.82rem;
+  font-size: var(--font-sm);
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   cursor: help;
 }
 
 .ap-step-detail {
-  font-size: 0.72rem;
+  font-size: var(--font-2xs);
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-xs);
   white-space: nowrap;
 }
 
@@ -145,8 +145,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: var(--space-sm);
+  padding: var(--space-xs) 0;
 }
 
 .collapsed-step {
@@ -166,8 +166,8 @@
   &.active {
     background: var(--accent-highlight-bg);
     border: 1px solid var(--accent-highlight-border);
-    border-radius: 3px;
-    padding: 4px 2px;
+    border-radius: var(--radius-sm);
+    padding: var(--space-xs) var(--space-2xs);
   }
 
   &.future {
@@ -176,9 +176,9 @@
 }
 
 .collapsed-step-number {
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 
   &.struck {
     text-decoration: line-through;
@@ -189,9 +189,9 @@
 .collapsed-step-label {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  font-size: 0.72rem;
+  font-size: var(--font-2xs);
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   letter-spacing: 0.5px;
   white-space: nowrap;
 }

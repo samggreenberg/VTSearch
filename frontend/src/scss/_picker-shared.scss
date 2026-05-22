@@ -12,7 +12,7 @@
 .importer-tab-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-xs);
   width: 100%;
   border-bottom: 2px solid var(--border);
 }
@@ -20,15 +20,15 @@
 .importer-tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 16px;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-xl);
   border: none;
   border-bottom: 2px solid transparent;
   background: none;
-  color: var(--text-secondary, var(--text-muted));
-  font-size: .85rem;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
   cursor: pointer;
-  transition: all .15s;
+  transition: all var(--transition-base);
   margin-bottom: -2px;
   white-space: nowrap;
 
@@ -40,7 +40,7 @@
   &.active {
     color: var(--accent);
     border-bottom-color: var(--accent);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 }
 
@@ -66,14 +66,14 @@
 // as `.detection-hint` in the dataset importer so subtle helper text reads
 // consistently across the modal.
 .tab-bar-hint {
-  margin: 8px 0 0 0;
+  margin: var(--space-md) 0 0;
   color: var(--text-muted);
   font-size: var(--font-sm);
   font-style: italic;
 }
 
 .empty-state--inline {
-  padding: 6px 10px;
+  padding: var(--space-sm) var(--space-md);
   font-size: var(--font-sm);
   color: var(--text-muted);
   font-style: italic;
@@ -98,17 +98,17 @@
 .demo-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.83rem;
+  font-size: var(--font-md);
 
   th, td {
-    padding: 6px 10px;
+    padding: var(--space-sm) var(--space-md);
     text-align: left;
     border-bottom: 1px solid var(--border-subtle);
     white-space: nowrap;
   }
 
   td {
-    padding: 6px 12px;
+    padding: var(--space-sm) var(--space-lg);
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -120,8 +120,8 @@
     background: var(--bg-surface);
     z-index: 1;
     color: var(--text-secondary);
-    font-weight: 500;
-    font-size: 0.78rem;
+    font-weight: var(--weight-medium);
+    font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 0.03em;
     user-select: none;
@@ -164,7 +164,7 @@
         width: 2px;
         background: var(--accent);
         opacity: 0.35;
-        transition: opacity 0.15s;
+        transition: opacity var(--transition-base);
       }
 
       &:hover::after { opacity: 0.7; }
@@ -173,7 +173,7 @@
 
   tbody tr {
     cursor: pointer;
-    transition: background 0.1s;
+    transition: background var(--transition-fast);
 
     &:hover { background: var(--bg-hover); }
 
@@ -185,7 +185,7 @@
   }
 }
 
-.col-num { text-align: right; padding-right: 12px; }
+.col-num { text-align: right; padding-right: var(--space-lg); }
 
 .col-desc, .col-name, .col-status {
   overflow: hidden;
@@ -193,8 +193,8 @@
   white-space: nowrap;
 }
 
-.col-desc { color: var(--text-muted); font-size: 0.78rem; }
-.col-name { font-weight: 600; color: var(--text-primary); }
+.col-desc { color: var(--text-muted); font-size: var(--font-xs); }
+.col-name { font-weight: var(--weight-semibold); color: var(--text-primary); }
 
 .demo-row {
   &.ready .col-name { color: var(--color-good); }
@@ -202,10 +202,10 @@
 
 .badge-ready, .badge-embedding, .badge-download {
   display: inline-block;
-  padding: 1px 7px;
+  padding: var(--space-2xs) var(--space-sm);
   color: var(--btn-filled-text);
-  font-size: .7rem;
-  border-radius: 3px;
+  font-size: var(--font-2xs);
+  border-radius: var(--radius-sm);
 }
 
 .badge-ready { background: var(--color-good); }

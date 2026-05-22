@@ -1,5 +1,5 @@
 .train-context-bar {
-  padding: 6px 10px;
+  padding: var(--space-sm) var(--space-md);
   border-bottom: 1px solid var(--border);
   background: var(--detector-accent-bg);
   flex-shrink: 0;
@@ -10,22 +10,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: var(--space-sm);
 }
 
 .train-context-label {
-  font-size: 0.65rem;
+  font-size: var(--font-2xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
   display: block;
   line-height: 1;
-  margin-bottom: 2px;
+  margin-bottom: var(--space-2xs);
 }
 
 .train-context-name {
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: var(--font-sm);
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
   display: inline;
   white-space: nowrap;
@@ -35,14 +35,14 @@
 
 .train-rename-btn {
   vertical-align: middle;
-  margin-left: 4px;
-  font-size: 0.68rem;
+  margin-left: var(--space-xs);
+  font-size: var(--font-2xs);
   background: none;
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  padding: 2px 4px;
-  border-radius: 3px;
+  padding: var(--space-2xs) var(--space-xs);
+  border-radius: var(--radius-sm);
 
   &:hover {
     color: var(--text-primary);
@@ -51,13 +51,13 @@
 }
 
 .train-rename-input {
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: var(--font-sm);
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-xs);
   width: 100%;
   max-width: 160px;
 }

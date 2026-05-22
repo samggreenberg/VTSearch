@@ -1,7 +1,7 @@
 .hint {
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.6);
-  margin-bottom: 8px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-md);
   text-align: center;
 }
 
@@ -46,7 +46,7 @@
 
 .crop-box {
   position: absolute;
-  border: 2px solid #2962ff;
+  border: 2px solid var(--accent);
   box-sizing: border-box;
   cursor: move;
 }
@@ -55,7 +55,7 @@
   position: absolute;
   width: 12px;
   height: 12px;
-  background: #2962ff;
+  background: var(--accent);
   border: 2px solid white;
   border-radius: 50%;
   box-sizing: border-box;
@@ -72,21 +72,21 @@
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-md);
   justify-content: flex-end;
-  margin-top: 16px;
+  margin-top: var(--space-xl);
 
   button {
-    padding: 8px 16px;
-    border-radius: 4px;
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    padding: var(--space-md) var(--space-xl);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
     cursor: pointer;
-    font-size: 14px;
-    background: white;
+    font-size: var(--font-lg);
+    background: var(--bg-surface);
 
     &.primary {
-      background: var(--accent-color, #2962ff);
-      color: white;
+      background: var(--accent);
+      color: var(--btn-filled-text);
       border-color: transparent;
     }
     &.cancel {

@@ -1,7 +1,7 @@
 .importer-picker {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-md);
   width: 480px;
   max-width: 100%;
 }
@@ -10,14 +10,14 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  padding: 12px 16px;
+  gap: var(--space-xs);
+  padding: var(--space-lg) var(--space-xl);
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--transition-base), border-color var(--transition-base);
   color: var(--text-primary);
 
   &:hover {
@@ -27,41 +27,36 @@
 }
 
 .importer-name {
-  font-weight: 500;
-  font-size: 0.95rem;
+  font-weight: var(--weight-medium);
+  font-size: var(--font-xl);
 }
 
 .importer-icon {
-  margin-right: 4px;
+  margin-right: var(--space-xs);
 }
 
 .importer-desc {
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   color: var(--text-muted);
 }
 
 .importer-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
   width: 480px;
   max-width: 100%;
 }
 
 .back-btn {
   align-self: flex-start;
-  margin-bottom: 4px;
-}
-
-.btn--sm {
-  padding: 2px 10px;
-  font-size: 0.85rem;
+  margin-bottom: var(--space-xs);
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 
 .required {
@@ -70,45 +65,45 @@
 
 .info-text {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
 }
 
 .error-text {
   color: var(--color-bad);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
 }
 
 .empty-state {
   color: var(--text-muted);
   text-align: center;
-  padding: 16px;
+  padding: var(--space-xl);
 }
 
 .add-media-section {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: var(--space-xl);
+  padding-top: var(--space-xl);
   border-top: 1px solid var(--border);
   width: 480px;
   max-width: 100%;
 }
 
 .add-media-heading {
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-size: var(--font-md);
+  font-weight: var(--weight-medium);
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-md);
 }
 
 .add-media-buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--space-md);
 }
 
 .hidden-file-input {
@@ -117,14 +112,14 @@
 
 .btn-add-good {
   flex: 1;
-  padding: 8px 12px;
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--color-good);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--color-good);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--transition-base), color var(--transition-base);
 
   &:hover:not(:disabled) {
     background: var(--color-good);
@@ -140,25 +135,25 @@
 .missing-view {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .missing-info {
-  font-size: 0.9rem;
+  font-size: var(--font-lg);
   color: var(--text-primary);
   line-height: 1.5;
 }
 
 .btn-add-bad {
   flex: 1;
-  padding: 8px 12px;
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--color-bad);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--color-bad);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--transition-base), color var(--transition-base);
 
   &:hover:not(:disabled) {
     background: var(--color-bad);

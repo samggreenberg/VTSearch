@@ -1,14 +1,14 @@
 .label-sort-bar {
-  padding: 8px 16px;
+  padding: var(--space-md) var(--space-xl);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-sm);
   flex-shrink: 0;
 }
 
 .sort-label {
-  font-size: 0.7rem;
+  font-size: var(--font-2xs);
   color: var(--text-dim);
 }
 
@@ -25,10 +25,10 @@
 }
 
 .label-sort-select {
-  padding: 3px 6px;
-  font-size: 0.75rem;
+  padding: var(--space-2xs) var(--space-sm);
+  font-size: var(--font-xs);
   background: var(--bg-surface);
   color: var(--text-primary);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
 }

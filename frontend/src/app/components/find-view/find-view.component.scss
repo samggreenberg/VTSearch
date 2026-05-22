@@ -28,7 +28,7 @@
     left: 2px;
     width: 4px;
     background: var(--border);
-    transition: background 0.15s;
+    transition: background var(--transition-base);
   }
 
   &:hover::after,
@@ -63,7 +63,7 @@
     left: 2px;
     width: 4px;
     background: var(--border);
-    transition: background 0.15s;
+    transition: background var(--transition-base);
   }
 
   &:hover::after,

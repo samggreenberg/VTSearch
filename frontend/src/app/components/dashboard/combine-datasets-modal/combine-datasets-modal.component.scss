@@ -8,67 +8,67 @@
 .combine-modal-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-lg);
 }
 
 .combine-intro {
   margin: 0;
-  color: var(--text-secondary, var(--text-muted));
-  font-size: .9rem;
+  color: var(--text-secondary);
+  font-size: var(--font-lg);
   line-height: 1.4;
 }
 
 .name-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: .9rem;
+  gap: var(--space-xs);
+  font-size: var(--font-lg);
 }
 
 .name-label {
-  color: var(--text-secondary, var(--text-muted));
-  font-size: .8rem;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
   text-transform: uppercase;
   letter-spacing: .04em;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .name-input {
-  padding: 6px 10px;
+  padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: var(--bg-surface);
   color: var(--text-primary);
-  font-size: .95rem;
+  font-size: var(--font-xl);
 
   &:focus {
     outline: none;
-    border-color: var(--accent, #4a8edb);
+    border-color: var(--accent);
   }
 }
 
 .combine-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: .9rem;
+  font-size: var(--font-lg);
 
   th, td {
-    padding: 8px 10px;
+    padding: var(--space-md) var(--space-md);
     border-bottom: 1px solid var(--border);
     text-align: left;
     vertical-align: middle;
   }
 
   thead th {
-    font-weight: 600;
-    color: var(--text-secondary, var(--text-muted));
-    font-size: .8rem;
+    font-weight: var(--weight-semibold);
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
     text-transform: uppercase;
     letter-spacing: .04em;
   }
 
   tfoot td {
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
     border-top: 2px solid var(--border);
     border-bottom: none;
     background: var(--bg-subtle);
@@ -84,7 +84,7 @@
 
     vt-icon {
       vertical-align: middle;
-      margin-right: 4px;
+      margin-right: var(--space-xs);
     }
   }
 
@@ -94,7 +94,7 @@
   }
 
   .dataset-name {
-    font-weight: 500;
+    font-weight: var(--weight-medium);
   }
 
   tbody tr.row-mismatch {
@@ -102,7 +102,7 @@
 
     .col-type {
       color: var(--text-warning);
-      font-weight: 600;
+      font-weight: var(--weight-semibold);
     }
   }
 }
@@ -110,12 +110,12 @@
 .row-remove-btn {
   background: none;
   border: none;
-  font-size: 1.1rem;
+  font-size: var(--font-2xl);
   line-height: 1;
-  color: var(--text-secondary, var(--text-muted));
+  color: var(--text-secondary);
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: var(--space-2xs) var(--space-sm);
+  border-radius: var(--radius-md);
 
   &:hover {
     color: var(--color-bad);
@@ -130,24 +130,24 @@
 
 .info-text {
   margin: 0;
-  color: var(--text-secondary, var(--text-muted));
-  font-size: .85rem;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
 }
 
 .warn-text {
   margin: 0;
   color: var(--text-warning);
-  font-size: .85rem;
+  font-size: var(--font-md);
 }
 
 .error-text {
   margin: 0;
   color: var(--color-bad);
-  font-size: .85rem;
+  font-size: var(--font-md);
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-md);
 }

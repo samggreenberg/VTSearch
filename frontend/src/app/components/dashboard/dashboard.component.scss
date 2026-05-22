@@ -1,8 +1,8 @@
 .dashboard-view {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 24px;
+  gap: var(--space-2xl);
+  padding: var(--space-2xl);
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
@@ -16,7 +16,7 @@
   min-height: 0;
   display: flex;
   flex-direction: row;
-  gap: 8px;
+  gap: var(--space-md);
   align-items: stretch;
 }
 
@@ -28,8 +28,8 @@
   flex-direction: column;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl);
 }
 
 .dashboard-side-actions {
@@ -37,8 +37,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 4px 0;
+  gap: var(--space-xs);
+  padding: var(--space-xs) 0;
 }
 
 .side-action-btn {
@@ -47,12 +47,12 @@
   // Dimmer than --text-primary; hover snaps back to full brightness.
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 6px;
-  border-radius: 4px;
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover:not(:disabled) {
     color: var(--text-primary);
@@ -76,12 +76,12 @@
   border: none;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover:not(:disabled) {
     background: var(--btn-icon-hover-bg);
@@ -111,53 +111,33 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
 }
 
 .dashboard-section-title {
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: var(--font-xl);
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-}
-
-// Shared .btn--cancel base (used in progress, error, and loading-task rows)
-.btn--cancel {
-  flex-shrink: 0;
-  cursor: pointer;
-  font-size: 0.75rem;
-  padding: 2px 8px;
-  border-radius: 4px;
+  gap: var(--space-sm);
 }
 
 .dashboard-progress,
 .loading-task-progress {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-md);
 
   .progress-msg {
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     white-space: nowrap;
   }
 
   vt-progress-bar {
     flex: 1;
-  }
-
-  .btn--cancel {
-    background: var(--bg-surface);
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-
-    &:hover {
-      color: var(--text-primary);
-      border-color: var(--text-secondary);
-    }
   }
 }
 
@@ -166,40 +146,40 @@
 .loading-task-progress:has(.progress-context) {
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--space-xs);
 
   .progress-context {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: var(--space-2xs);
   }
 
   .progress-header {
-    font-size: 0.85rem;
+    font-size: var(--font-md);
     color: var(--text-primary);
-    font-weight: 500;
+    font-weight: var(--weight-medium);
   }
 
   .progress-subtitle {
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
   }
 
   .progress-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-md);
   }
 
   .progress-msg {
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     max-width: 240px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .progress-eta {
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     white-space: nowrap;
     flex-shrink: 0;
@@ -212,35 +192,6 @@
 
 .dashboard-section-actions {
   margin-left: auto;
-}
-
-.btn--sm {
-  padding: 2px 10px;
-  font-size: 1rem;
-  min-width: 28px;
-  min-height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  .plus-icon {
-    display: inline-block;
-    line-height: 1;
-
-    &.plus-open {
-      animation: plus-spin-open 0.3s ease-in-out forwards;
-    }
-
-    &.plus-close {
-      animation: plus-spin-open 0.3s ease-in-out reverse forwards;
-    }
-  }
-}
-
-@keyframes plus-spin-open {
-  0% { transform: rotate(0deg); }
-  50% { transform: rotate(22.5deg); }
-  100% { transform: rotate(45deg); }
 }
 
 .dashboard-grid {
@@ -256,7 +207,7 @@
 // Loading task rows — per-dataset progress bars inline in the table
 .loading-task-row {
   .loading-task-name {
-    font-weight: 500;
+    font-weight: var(--weight-medium);
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -264,7 +215,7 @@
   }
 
   .loading-task-progress .progress-msg {
-    font-size: 0.78rem;
+    font-size: var(--font-xs);
     flex-shrink: 0;
     max-width: 300px;
     overflow: hidden;
@@ -278,7 +229,7 @@
   .loading-task-failed {
     .error-msg {
       flex: 1;
-      font-size: 0.8rem;
+      font-size: var(--font-sm);
       color: var(--error-text);
     }
   }
@@ -289,7 +240,7 @@
   min-height: 0;
   color: var(--text-muted);
   text-align: center;
-  padding: 24px;
+  padding: var(--space-2xl);
   font-style: italic;
 }
 
@@ -298,34 +249,34 @@
   min-height: 0;
   list-style: none;
   margin: 0;
-  padding: 4px 12px;
+  padding: var(--space-xs) var(--space-lg);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-md);
 }
 
 .dashboard-skeleton-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 4px;
+  gap: var(--space-lg);
+  padding: var(--space-sm) var(--space-xs);
 }
 
 .dashboard-actions {
   flex-shrink: 0;
   display: flex;
-  gap: 12px;
+  gap: var(--space-lg);
   justify-content: center;
   position: relative;
 
   .btn {
     min-width: 120px;
-    padding: 10px 24px;
-    font-size: 1rem;
+    padding: var(--space-md) var(--space-2xl);
+    font-size: var(--font-xl);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--space-sm);
 
     // Keep full opacity on the active loading button (waggling icon)
     // even though it's disabled to block new clicks.
@@ -351,12 +302,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-xs);
   width: 220px;
 }
 
 .btn-disabled-reason {
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   color: var(--text-muted);
   font-style: italic;
   height: 1.2em;

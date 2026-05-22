@@ -6,7 +6,7 @@
 .vfb {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-sm);
   min-width: 0;
 }
 
@@ -17,8 +17,8 @@
 .vfb-breadcrumbs {
   display: flex;
   align-items: center;
-  gap: 2px;
-  font-size: .8rem;
+  gap: var(--space-2xs);
+  font-size: var(--font-sm);
   flex-wrap: wrap;
 }
 
@@ -27,15 +27,15 @@
   border: none;
   color: var(--accent);
   cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: .8rem;
+  padding: var(--space-2xs) var(--space-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
 
   &:hover { background: var(--bg-subtle); }
 
   &.active {
     color: var(--text-primary);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
     cursor: default;
     &:hover { background: none; }
   }
@@ -43,7 +43,7 @@
 
 .vfb-crumb-sep {
   color: var(--text-muted);
-  font-size: .75rem;
+  font-size: var(--font-xs);
 }
 
 // ---------------------------------------------------------------------
@@ -52,7 +52,7 @@
 
 .vfb-list {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   max-height: 320px;
   overflow-y: auto;
   outline: none;
@@ -72,17 +72,17 @@
 .vfb-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  z-index: 1;
-  font-size: .72rem;
+  z-index: var(--z-base);
+  font-size: var(--font-2xs);
   text-transform: uppercase;
   letter-spacing: .03em;
-  color: var(--text-secondary, var(--text-muted));
+  color: var(--text-secondary);
   user-select: none;
 }
 
@@ -107,24 +107,24 @@
 .vfb-sort-ind {
   display: inline-block;
   width: 1em;
-  font-size: .7rem;
+  font-size: var(--font-2xs);
 }
 
 // Rows are buttons so they're keyboard-and-screen-reader-friendly.
 .vfb-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-md);
   width: 100%;
-  padding: 6px 12px;
+  padding: var(--space-sm) var(--space-lg);
   background: none;
   border: none;
-  border-bottom: 1px solid var(--border-subtle, var(--border));
+  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
   text-align: left;
   color: var(--text-primary);
-  font-size: .85rem;
-  transition: background .12s;
+  font-size: var(--font-md);
+  transition: background var(--transition-fast);
 
   &:last-child { border-bottom: none; }
   &:hover:not(:disabled) { background: var(--bg-subtle); }
@@ -137,7 +137,7 @@
   &:hover { background: var(--bg-hover); }
 }
 
-.vfb-row--dir .vfb-name { font-weight: 500; }
+.vfb-row--dir .vfb-name { font-weight: var(--weight-medium); }
 .vfb-row--up { color: var(--text-muted); }
 
 .vfb-icon {
@@ -160,7 +160,7 @@
   width: 110px;
   flex-shrink: 0;
   color: var(--text-muted);
-  font-size: .75rem;
+  font-size: var(--font-xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -170,24 +170,24 @@
   width: 70px;
   flex-shrink: 0;
   color: var(--text-muted);
-  font-size: .75rem;
+  font-size: var(--font-xs);
   text-align: right;
   white-space: nowrap;
 }
 
 .vfb-empty {
   margin: 0;
-  padding: 16px;
+  padding: var(--space-xl);
   text-align: center;
-  font-size: .85rem;
+  font-size: var(--font-md);
   color: var(--text-muted);
 }
 
 .vfb-error {
   margin: 0;
-  padding: 12px;
+  padding: var(--space-lg);
   color: var(--color-bad);
-  font-size: .85rem;
+  font-size: var(--font-md);
 }
 
 // ---------------------------------------------------------------------
@@ -197,22 +197,22 @@
 .vfb-path-footer {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 2px;
+  gap: var(--space-sm);
+  margin-top: var(--space-2xs);
 }
 
 .vfb-path-label {
-  font-size: .8rem;
+  font-size: var(--font-sm);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .vfb-path-value {
-  font-size: .8rem;
-  color: var(--text-secondary, var(--text-muted));
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
   background: var(--bg-subtle);
-  padding: 3px 8px;
-  border-radius: 3px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -3,7 +3,7 @@
   flex-direction: column;
   align-items: center;
   width: 100%;
-  gap: 10px;
+  gap: var(--space-md);
 }
 
 .waveform-swipe-wrapper {
@@ -37,7 +37,7 @@
 .waveform-canvas {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-xl);
   background: var(--bg-surface);
 }
 
