@@ -4,16 +4,42 @@
     [for]="mediaTypeFieldId"
     title="The native media type of the dataset. Other types listed below can be pulled in and converted to this type."
   >Dataset MediaType</label>
-  <select
-    [id]="mediaTypeFieldId"
-    class="form-select"
-    [ngModel]="mediaType"
-    (ngModelChange)="mediaTypeChange.emit($event)"
-  >
-    @for (opt of mediaTypeOptions; track opt) {
-      <option [value]="opt">{{ optionLabel(opt) }}</option>
+  <div class="media-type-dropdown" [class.open]="open">
+    <button
+      type="button"
+      [id]="mediaTypeFieldId"
+      class="form-select media-type-trigger"
+      [attr.aria-haspopup]="'listbox'"
+      [attr.aria-expanded]="open"
+      (click)="toggle()"
+    >
+      <span class="media-type-trigger-content">
+        @if (iconFor(mediaType)) {
+          <vt-icon [icon]="iconFor(mediaType)" [size]="16"></vt-icon>
+        }
+        <span class="media-type-trigger-label">{{ optionLabel(mediaType) }}</span>
+      </span>
+      <span class="media-type-chevron" aria-hidden="true">▾</span>
+    </button>
+    @if (open) {
+      <ul class="media-type-options" role="listbox">
+        @for (opt of mediaTypeOptions; track opt) {
+          <li
+            class="media-type-option"
+            role="option"
+            [class.selected]="opt === mediaType"
+            [attr.aria-selected]="opt === mediaType"
+            (click)="select(opt)"
+          >
+            @if (iconFor(opt)) {
+              <vt-icon [icon]="iconFor(opt)" [size]="16"></vt-icon>
+            }
+            <span class="media-type-option-label">{{ optionLabel(opt) }}</span>
+          </li>
+        }
+      </ul>
     }
-  </select>
+  </div>
   @if (detectionHint) {
     <p class="detection-hint">{{ detectionHint }}</p>
   }

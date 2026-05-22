@@ -168,6 +168,7 @@
               (mediaTypeChange)="onMediaTypeChange($event)"
               [mediaTypeOptions]="field.options || []"
               [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+              [mediaTypeOptionIcons]="mediaTypeOptionIcons"
             ></vt-import-config>
             @if (field.hint) {
               <p class="form-hint">{{ field.hint }}</p>
@@ -337,24 +338,13 @@
         </p>
       }
 
-      <div class="form-group">
-        <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>
-        <input
-          id="lf-dataset-name"
-          type="text"
-          class="form-input"
-          [ngModel]="lfDatasetName"
-          (ngModelChange)="lfOnDatasetNameInput($event)"
-          placeholder="Leave blank to use a default name"
-        />
-      </div>
-
       <vt-import-config
         mediaTypeFieldId="lf-media-type"
         [mediaType]="lfMediaType"
         (mediaTypeChange)="lfOnMediaTypeChange($event)"
         [mediaTypeOptions]="lfMediaTypeOptions"
         [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+        [mediaTypeOptionIcons]="mediaTypeOptionIcons"
         [detectionHint]="detectionHint(lfDetection)"
       ></vt-import-config>
 
@@ -403,6 +393,18 @@
         </div>
       }
 
+      <div class="form-group">
+        <label class="form-label" for="lf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder/file name.">Dataset Name</label>
+        <input
+          id="lf-dataset-name"
+          type="text"
+          class="form-input"
+          [ngModel]="lfDatasetName"
+          (ngModelChange)="lfOnDatasetNameInput($event)"
+          placeholder="Leave blank to use a default name"
+        />
+      </div>
+
       <div class="form-group form-group--section">
         <vt-import-advanced
           [availableConverters]="lfAvailableConverters"
@@ -441,24 +443,13 @@
 
   @if (activePickerView === 'server_folder' && selectedImporter) {
     <div class="server-folder-browser">
-      <div class="form-group">
-        <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset Name</label>
-        <input
-          id="sf-dataset-name"
-          type="text"
-          class="form-input"
-          [ngModel]="sfDatasetName"
-          (ngModelChange)="sfOnDatasetNameInput($event)"
-          placeholder="Leave blank to use a default name"
-        />
-      </div>
-
       <vt-import-config
         mediaTypeFieldId="sf-media-type"
         [mediaType]="sfMediaType"
         (mediaTypeChange)="sfOnMediaTypeChange($event)"
         [mediaTypeOptions]="sfMediaTypeOptions"
         [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+        [mediaTypeOptionIcons]="mediaTypeOptionIcons"
         [detectionHint]="detectionHint(sfDetection)"
       ></vt-import-config>
 
@@ -485,6 +476,18 @@
           />
           Include subfolders
         </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset Name</label>
+        <input
+          id="sf-dataset-name"
+          type="text"
+          class="form-input"
+          [ngModel]="sfDatasetName"
+          (ngModelChange)="sfOnDatasetNameInput($event)"
+          placeholder="Leave blank to use a default name"
+        />
       </div>
 
       <div class="form-group form-group--section">
