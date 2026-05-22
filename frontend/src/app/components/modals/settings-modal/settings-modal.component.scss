@@ -23,16 +23,16 @@
   background: none;
   border: none;
   border-left: 3px solid transparent;
-  padding: 0.6rem 0.85rem;
+  padding: var(--space-sm) var(--space-md);
   font-size: var(--font-md);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  transition: color var(--transition-base), background var(--transition-base), border-color var(--transition-base);
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: var(--space-xs);
 
   &:hover {
     color: var(--text-primary);
@@ -48,16 +48,23 @@
 
 .settings-panel {
   flex: 1;
-  padding: var(--space-lg) 1.25rem;
+  padding: var(--space-lg) var(--space-xl);
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
 
+  // Section title rhythm: each h3 marks the start of a new sub-section. We
+  // want the gap from the previous section's content to be LARGER than the
+  // gap from the h3 to its own content, so the title visually belongs to
+  // what's below it. Asymmetric margins handle this; flex-gap still
+  // provides the rest of the in-section rhythm.
   h3 {
-    margin: 0;
-    font-size: 0.95rem;
+    margin: var(--space-xl) 0 0;
+    font-size: var(--font-xl);
     color: var(--text-primary);
+
+    &:first-child { margin-top: 0; }
   }
 
   h4 {
@@ -91,12 +98,12 @@
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
-  padding: 0.45rem 0.85rem;
+  padding: var(--space-sm) var(--space-md);
   font-size: var(--font-sm);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color var(--transition-base), border-color var(--transition-base), background var(--transition-base);
 
   &:hover {
     color: var(--text-primary);
@@ -131,7 +138,7 @@
     font-size: var(--font-md);
     color: var(--text-secondary);
     border-bottom: 1px solid var(--border-color);
-    padding-bottom: 0.35rem;
+    padding-bottom: var(--space-xs);
   }
 }
 
@@ -143,17 +150,17 @@
 .toggle-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--space-xs);
   flex: 1;
   justify-content: center;
-  padding: 0.3rem 0.6rem;
+  padding: var(--space-xs) var(--space-sm);
   font-size: var(--font-sm);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   color: var(--text-secondary);
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  transition: background var(--transition-base), color var(--transition-base), box-shadow var(--transition-base);
 
   &:first-child {
     border-radius: var(--radius-md) 0 0 var(--radius-md);
@@ -183,7 +190,7 @@
 
 
 .settings-tab-icon {
-  transition: transform 0.4s ease;
+  transition: transform var(--transition-slow) ease;
   transform: rotate(0deg);
 
   &--active {
@@ -211,7 +218,7 @@
   font-size: var(--font-xs);
   color: var(--text-secondary);
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity var(--transition-slow) ease;
   pointer-events: none;
   user-select: none;
 

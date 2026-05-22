@@ -258,6 +258,42 @@ The 3-panel grid lives in `_layout.scss`. Panels have `padding: var(--space-xl)`
 
 ## 3. Patterns and conventions
 
+### 3.0 Vertical rhythm — titles belong to the content BELOW them
+
+When a panel or modal stacks multiple labelled sections, the gap between a section's title and its content must be **smaller** than the gap between that content and the next section's title. Equal-spaced gaps make titles look like they belong to the section above:
+
+```
+WRONG                            RIGHT
+Section A                        Section A
+[24px gap — equal]               [8px gap — small]
+content A content A              content A content A
+[24px gap — equal]               [24px gap — LARGER]
+Section B                        Section B
+[24px gap — equal]               [8px gap — small]
+content B content B              content B content B
+```
+
+How to achieve the right rhythm:
+
+- **Asymmetric heading margins.** Inside a section container, give the section title (h3/h4 or a `.section-title` element) `margin-top: var(--space-2xl)` and `margin-bottom: var(--space-sm)`, with `:first-child { margin-top: 0 }`. The shared `.section-title` utility class in `_components.scss` does exactly this — use it when you have a panel that stacks sections (no extra flex gap needed).
+- **Or use container padding + flex gap.** If each section lives in its own bordered panel (like the dashboard sections or `.vote-section` in the label list), the panel padding plus container `gap` already produces the right rhythm; no heading margin needed.
+- **Do not** use a flex container's `gap` to do all the spacing and leave headings with `margin: 0`. That produces equal gaps everywhere and breaks the hierarchy.
+
+If you're authoring a settings-style modal with several h3 sub-sections inside one panel, the canonical pattern is:
+
+```scss
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);          // in-section rhythm
+
+  h3 {
+    margin: var(--space-xl) 0 0; // larger top, no bottom (flex gap handles below)
+    &:first-child { margin-top: 0; }
+  }
+}
+```
+
 ### 3.1 Flex gaps
 
 Pick the gap from the spacing scale that matches the visual density:

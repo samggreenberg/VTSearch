@@ -1,18 +1,18 @@
 .load-sort-sections {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
+  gap: var(--space-2xl);
 }
 
 .sort-section {
   h3 {
-    margin: 0 0 0.75rem;
-    font-size: 0.95rem;
+    margin: 0 0 var(--space-lg);
+    font-size: var(--font-xl);
   }
 
   h4 {
-    margin: 0.75rem 0 0.5rem;
-    font-size: 0.85rem;
+    margin: var(--space-lg) 0 var(--space-md);
+    font-size: var(--font-md);
     color: var(--text-secondary);
   }
 }
@@ -20,27 +20,27 @@
 .file-btn {
   display: inline-block;
   cursor: pointer;
-  margin-right: 0.5rem;
-  margin-bottom: 0.25rem;
+  margin-right: var(--space-md);
+  margin-bottom: var(--space-xs);
 }
 
 .file-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-xs);
   max-height: 200px;
   overflow-y: auto;
 }
 
 .file-item {
   text-align: left;
-  padding: 0.35rem 0.5rem;
+  padding: var(--space-xs) var(--space-md);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--font-sm);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -53,7 +53,7 @@
 .file-item-name {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-sm);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -61,9 +61,9 @@
 }
 
 .item-meta {
-  font-size: 0.7rem;
+  font-size: var(--font-2xs);
   color: var(--text-secondary);
-  margin-left: 0.5rem;
+  margin-left: var(--space-md);
 }
 
 // --- Media picker ---
@@ -73,28 +73,28 @@
 }
 
 .back-btn {
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-lg);
 }
 
 .picker-instructions {
-  margin: 0 0 0.75rem;
-  font-size: 0.85rem;
+  margin: 0 0 var(--space-lg);
+  font-size: var(--font-md);
   color: var(--text-secondary);
 }
 
 .source-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-md);
 }
 
 .importer-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 0.5rem 0.75rem;
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;
@@ -106,37 +106,37 @@
 }
 
 .importer-name {
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-size: var(--font-md);
+  font-weight: var(--weight-medium);
 }
 
 .importer-icon {
-  margin-right: 0.35rem;
+  margin-right: var(--space-xs);
 }
 
 .importer-desc {
-  font-size: 0.75rem;
+  font-size: var(--font-xs);
   color: var(--text-secondary);
-  margin-top: 0.15rem;
+  margin-top: var(--space-2xs);
 }
 
 .browse-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-xs);
   max-height: 300px;
   overflow-y: auto;
 }
 
 .browse-item {
   text-align: left;
-  padding: 0.35rem 0.5rem;
+  padding: var(--space-xs) var(--space-md);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: var(--font-lg);
   white-space: normal;
   word-break: break-word;
 
@@ -152,12 +152,12 @@
 .file-browser-step {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-md);
 }
 
 .empty-state {
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: var(--font-md);
   text-align: center;
-  padding: 1rem 0;
+  padding: var(--space-xl) 0;
 }

@@ -32,7 +32,7 @@
   font-size: var(--font-lg);
 
   .error-icon {
-    font-size: 2em;
+    font-size: var(--font-3xl);
     color: var(--text-warning);
   }
 }

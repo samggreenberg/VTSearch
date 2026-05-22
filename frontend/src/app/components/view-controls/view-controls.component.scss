@@ -5,7 +5,7 @@
 .view-controls {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-md);
 }
 
 .vc-group {
@@ -24,18 +24,18 @@
   border: 1px solid var(--border);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
+  transition: background var(--transition-base), color var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
 
   &:not(:first-child) {
     margin-left: -1px;
   }
 
   &:first-child {
-    border-radius: 3px 0 0 3px;
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   }
 
   &:last-child {
-    border-radius: 0 3px 3px 0;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   }
 
   &:hover:not(:disabled):not(.vc-btn--active) {

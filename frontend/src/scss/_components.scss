@@ -29,6 +29,21 @@ h2 { font-size: var(--font-2xl); }
 h3 { font-size: var(--font-xl); }
 h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
+// Section title rhythm — when a heading divides one section from the next
+// inside a single panel/modal, apply `.section-title`. The asymmetric
+// margins (large top, small bottom) make each title visually adhere to the
+// content BELOW it rather than the content ABOVE it. The first title in
+// the container resets its top margin so it sits flush with the panel edge.
+//
+// Pair this with a flex parent that uses `gap: 0` so the asymmetric margins
+// — not the flex gap — produce the spacing.
+.section-title {
+  margin-top: var(--space-2xl);
+  margin-bottom: var(--space-sm);
+
+  &:first-child { margin-top: 0; }
+}
+
 // --- Buttons ---
 //
 // Anatomy:
