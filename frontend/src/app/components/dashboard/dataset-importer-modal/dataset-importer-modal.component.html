@@ -103,9 +103,6 @@
                   </optgroup>
                 }
               </select>
-              @if (selectedEmbedderRawId(selectedDemoEmbedder, demoEmbedders); as rawId) {
-                <small class="embedder-raw-id">{{ rawId }}</small>
-              }
               @if (licenseNoticeFor(selectedDemoEmbedder, demoEmbedders); as notice) {
                 <div class="license-warning" role="note">⚠ {{ notice }}</div>
               }
@@ -355,9 +352,6 @@
                 </optgroup>
               }
             </select>
-            @if (selectedEmbedderRawId(selectedEmbedder, availableEmbedders); as rawId) {
-              <small class="embedder-raw-id">{{ rawId }}</small>
-            }
             @if (licenseNoticeFor(selectedEmbedder, availableEmbedders); as notice) {
               <div class="license-warning" role="note">⚠ {{ notice }}</div>
             }
@@ -393,9 +387,9 @@
   @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
     <div class="local-folder-uploader">
       @if (lfPickerKind === 'folder') {
-        <p class="info-text">Pick a folder on <strong>this computer</strong> (the machine your browser is running on). Its contents will be uploaded to the server and embedded into a new dataset. If you have already embedded your media, you can <strong>optionally</strong> attach a <code>.npz</code> archive of pre-computed vectors below to skip re-embedding.</p>
+        <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
       } @else {
-        <p class="info-text">Pick one or more files on <strong>this computer</strong> (the machine your browser is running on). They will be uploaded to the server and embedded into a new dataset. If you have already embedded your media, you can <strong>optionally</strong> attach a <code>.npz</code> archive of pre-computed vectors below to skip re-embedding.</p>
+        <p class="info-text">Pick one or more files on <strong>this computer</strong> (running your browser).</p>
       }
 
       <div class="form-group">
@@ -531,9 +525,6 @@
                 </optgroup>
               }
             </select>
-            @if (selectedEmbedderRawId(lfSelectedEmbedder, lfEmbedders); as rawId) {
-              <small class="embedder-raw-id">{{ rawId }}</small>
-            }
             @if (licenseNoticeFor(lfSelectedEmbedder, lfEmbedders); as notice) {
               <div class="license-warning" role="note">⚠ {{ notice }}</div>
             }
@@ -619,9 +610,6 @@
           (keydown.enter)="sfApplyPathInput(); $event.preventDefault()"
           (blur)="sfApplyPathInput()"
         />
-        <p class="info-text">
-          Type or paste any folder path on the server. The path is verified when you submit.
-        </p>
       </div>
 
       <div class="form-group">
@@ -665,9 +653,6 @@
                 </optgroup>
               }
             </select>
-            @if (selectedEmbedderRawId(sfSelectedEmbedder, sfEmbedders); as rawId) {
-              <small class="embedder-raw-id">{{ rawId }}</small>
-            }
             @if (licenseNoticeFor(sfSelectedEmbedder, sfEmbedders); as notice) {
               <div class="license-warning" role="note">⚠ {{ notice }}</div>
             }
