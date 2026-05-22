@@ -151,7 +151,7 @@ export class DatasetCardComponent implements OnChanges {
 
   get taskProgressInfo(): ProgressHeader {
     const task = this.loadingTask;
-    if (!task) return { header: '', subtitle: '', detail: '' };
+    if (!task) return { header: '', subtitle: '', detail: '', eta: '' };
     return formatProgressHeader(task, 'dataset', task.embedder);
   }
 

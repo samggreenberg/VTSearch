@@ -193,6 +193,13 @@ td.actions-col {
     flex: 1;
   }
 
+  .progress-eta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
   .btn--cancel {
     flex-shrink: 0;
     cursor: pointer;
