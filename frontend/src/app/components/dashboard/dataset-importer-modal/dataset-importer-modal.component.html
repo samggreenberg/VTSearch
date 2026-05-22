@@ -161,10 +161,22 @@
     <div class="importer-form">
       @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
         @for (field of selectedImporter.fields; track field.key) {
+          @if (field.field_type === 'select' && field.key === 'media_type') {
+            <vt-import-config
+              [mediaTypeFieldId]="'field-' + field.key"
+              [mediaType]="formValues[field.key] || ''"
+              (mediaTypeChange)="onMediaTypeChange($event)"
+              [mediaTypeOptions]="field.options || []"
+              [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+            ></vt-import-config>
+            @if (field.hint) {
+              <p class="form-hint">{{ field.hint }}</p>
+            }
+          } @else {
           <div class="form-group">
             <label class="form-label" [for]="'field-' + field.key">
               {{ field.label || field.key }}
-              @if (field.required && !(field.field_type === 'select' && field.key === 'media_type')) {
+              @if (field.required) {
                 <span class="required">*</span>
               }
             </label>
@@ -186,17 +198,6 @@
                 [accept]="field.accept || ''"
                 (change)="onFileSelected($event, field.key)"
               />
-            } @else if (field.field_type === 'select' && field.key === 'media_type') {
-              <select
-                [id]="'field-' + field.key"
-                class="form-select"
-                [ngModel]="formValues[field.key]"
-                (ngModelChange)="onMediaTypeChange($event)"
-              >
-                @for (opt of field.options || []; track opt) {
-                  <option [value]="opt">{{ getMediaTypeOptionLabel(opt) }}</option>
-                }
-              </select>
             } @else if (field.field_type === 'select') {
               <select
                 [id]="'field-' + field.key"
@@ -280,6 +281,7 @@
               <p class="form-hint">{{ field.hint }}</p>
             }
           </div>
+          }
         }
       } @else {
         <p class="info-text">This importer requires no additional configuration.</p>
