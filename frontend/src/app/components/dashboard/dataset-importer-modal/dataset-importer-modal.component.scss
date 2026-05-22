@@ -63,8 +63,8 @@
   background: transparent;
   border: none;
   padding: 2px 0;
-  font-size: .82rem;
-  color: var(--text-muted, #666);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
   cursor: pointer;
 
   &:hover { color: var(--text-primary); text-decoration: underline; }
@@ -73,30 +73,6 @@
 
 .server-folder-browser { gap: 12px; }
 .sf-browse-section { gap: 6px; }
-
-.sf-selected-banner {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 6px;
-  padding: 8px 10px;
-  background: var(--bg-subtle, #f3f6fa);
-  border: 1px solid var(--border, #d8e0ea);
-  border-radius: 6px;
-  font-size: .9rem;
-  flex-wrap: wrap;
-
-  .sf-selected-label {
-    color: var(--text-muted, #555);
-    font-weight: 600;
-  }
-
-  .sf-selected-value {
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-    word-break: break-all;
-    color: var(--text-primary);
-  }
-}
 
 // Embedder licence warning shown under the picker when the chosen
 // embedder reports a license_notice (today: real-EUPE under FAIR
@@ -107,20 +83,20 @@
 // without distracting from the form.
 .detection-hint {
   margin: 6px 0 0;
-  font-size: .82rem;
+  font-size: var(--font-sm);
   line-height: 1.35;
-  color: var(--text-muted, #666);
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .license-warning {
   margin-top: 6px;
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: rgba(255, 196, 0, 0.12);
   border: 1px solid rgba(255, 196, 0, 0.4);
-  color: #b87b00;
-  font-size: .82rem;
+  color: var(--text-warning);
+  font-size: var(--font-sm);
   line-height: 1.35;
 }
 
