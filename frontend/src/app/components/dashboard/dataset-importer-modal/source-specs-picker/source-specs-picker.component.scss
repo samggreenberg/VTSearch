@@ -13,21 +13,12 @@
   display: contents;
 }
 
-.ssp-row--native {
-  // Native row spans both columns (no Advanced opener on the right).
-  grid-column: 1 / -1;
-}
-
-.ssp-row-main,
-.ssp-row--native {
+.ssp-row-main {
   display: inline-flex;
   align-items: center;
   gap: var(--space-md);
   cursor: pointer;
   padding: var(--space-2xs) 0;
-}
-
-.ssp-row-main {
   grid-column: 1;
 }
 
