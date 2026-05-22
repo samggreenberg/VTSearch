@@ -77,11 +77,16 @@
   cursor: pointer;
 }
 
+// Field header label.  Made visually distinct from `.info-text` (instruction
+// body copy) by using the primary text color and a heavier weight, so a
+// label like "Dataset Name" reads as a header above its input rather than
+// blending into surrounding paragraph text.
 .form-label {
   display: block;
   margin-bottom: var(--space-xs);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: var(--font-sm);
+  font-weight: 500;
 }
 
 // --- Modal overlay ---
@@ -210,9 +215,9 @@
 // accepted extensions, expected column schemas, JSON/CSV sample snippets.
 .form-hint {
   margin: 2px 0 0;
-  font-size: 0.82rem;
+  font-size: var(--font-sm);
   line-height: 1.4;
-  color: var(--text-muted, #666);
+  color: var(--text-muted);
   white-space: pre-wrap;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
