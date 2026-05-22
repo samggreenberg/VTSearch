@@ -172,9 +172,7 @@ class TestEmbedMissingRoutesToBulk:
         mt = _make_media_type_for_audio()
         emb = _make_bulk_embedder()
 
-        medias = {
-            i: {"media_type": "audio", "embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)
-        }
+        medias = {i: {"media_type": "audio", "embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
 
         with (
             mock.patch("vtscore.media.get_by_folder_name", return_value=mt),

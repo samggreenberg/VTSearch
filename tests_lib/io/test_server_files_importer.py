@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
-
 from vtscore.datasets.importers import get_importer
 from vtscore.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
@@ -191,11 +189,8 @@ class TestImporterMetadata:
 
 class TestRunEndToEnd:
     """Verify run() produces medias whose origin/origin_name point at the
-    real source paths.
-
-    The folder importer's audio loader runs the embedder, which on the
-    test container is the lightweight raw-WAV embedder; that's fine for
-    our purposes as long as we use real WAV bytes."""
+    real source paths.  The importer does not embed — items leave with
+    ``embedding=None`` for the framework ``embed_missing`` stage."""
 
     def test_run_imports_listed_files_and_rewrites_origin(self, tmp_path):
         from helpers import make_raw_wav_bytes
@@ -226,7 +221,8 @@ class TestRunEndToEnd:
             # is cleaned up.
             assert media["origin_name"] in {str(src_a), str(src_b)}
             assert Path(media["origin_name"]).is_file()
-            assert isinstance(media["embedding"], np.ndarray)
+            # The loader leaves embedding=None; framework embed_missing fills it.
+            assert media["embedding"] is None
 
 
 class TestRunWithSymlinkEntries:

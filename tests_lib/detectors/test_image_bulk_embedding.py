@@ -514,14 +514,13 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
         patch_outputs = [mock.MagicMock(patch_grid=np.zeros((4, 4, 768), dtype=np.float32)) for _ in range(3)]
         emb.patch_forward_bulk.return_value = patch_outputs
 
-        medias = {
-            i: {"media_type": "image", "embedding": None, "media_path": f"/tmp/img_{i}.png"}
-            for i in range(1, 4)
-        }
+        medias = {i: {"media_type": "image", "embedding": None, "media_path": f"/tmp/img_{i}.png"} for i in range(1, 4)}
 
         with (
             mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
-            mock.patch("vtscore.media.patch_embed.build_region_tree", return_value=np.zeros((23, 768), dtype=np.float32)),
+            mock.patch(
+                "vtscore.media.patch_embed.build_region_tree", return_value=np.zeros((23, 768), dtype=np.float32)
+            ),
             mock.patch("vtscore.media.patch_embed.to_fp16", side_effect=lambda x: x.astype(np.float16)),
         ):
             embed_missing(medias)

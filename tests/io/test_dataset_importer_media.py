@@ -140,15 +140,15 @@ class TestImporterProvidedVectors:
         np.testing.assert_array_equal(embs["b.wav"], vec_b)
         emb.embed_media.assert_not_called()
 
-    def test_mixed_importer_and_model_vectors(self, tmp_path):
+    def test_mixed_importer_vectors_and_no_vector(self, tmp_path):
+        """Importer-supplied vectors land on the matching files; the rest leave
+        with ``embedding=None`` for the framework embed stage to fill in."""
         rng = np.random.default_rng(7)
         pre_vec = rng.standard_normal(8).astype(np.float32)
-        model_vec = np.ones(8, dtype=np.float32) * 0.5
 
         _write_wav(tmp_path / "pre.wav")
         _write_wav(tmp_path / "model.wav")
         mt, emb = _make_mock_media_type()
-        emb.embed_media.return_value = model_vec
         imp = _VectorAndMD5Importer.create(
             tmp_path,
             vectors={"pre.wav": pre_vec},
@@ -162,7 +162,7 @@ class TestImporterProvidedVectors:
         assert len(medias) == 2
         embs = {m["filename"]: m["embedding"] for m in medias.values()}
         np.testing.assert_array_equal(embs["pre.wav"], pre_vec)
-        np.testing.assert_array_equal(embs["model.wav"], model_vec)
+        assert embs["model.wav"] is None
 
     def test_importer_vector_in_thin_mode(self, tmp_path):
         rng = np.random.default_rng(99)
@@ -547,18 +547,17 @@ class TestImporterCustomMetadataEmbedding:
         assert medias[1]["md5"] == cm_md5
         emb.embed_media.assert_not_called()
 
-    def test_custom_metadata_embedding_mixed_with_model(self, tmp_path):
-        """Files with custom_metadata embedding skip the model; others use the model."""
+    def test_custom_metadata_embedding_mixed_with_no_override(self, tmp_path):
+        """Files with custom_metadata embedding get that vector; files without
+        leave with ``embedding=None`` for the framework embed stage."""
         from vtscore.datasets.loader import load_dataset_from_folder
 
         rng = np.random.default_rng(33)
         cm_vec = rng.standard_normal(8).astype(np.float32)
-        model_vec = np.ones(8, dtype=np.float32) * 0.5
 
         _write_wav(tmp_path / "meta.wav")
         _write_wav(tmp_path / "model.wav")
         mt, emb = _make_mock_media_type()
-        emb.embed_media.return_value = model_vec
 
         medias: dict = {}
         with _patch_media_registry(mt, emb):
@@ -572,7 +571,7 @@ class TestImporterCustomMetadataEmbedding:
 
         embs = {m["filename"]: m["embedding"] for m in medias.values()}
         np.testing.assert_array_equal(embs["meta.wav"], cm_vec)
-        np.testing.assert_array_equal(embs["model.wav"], model_vec)
+        assert embs["model.wav"] is None
 
     def test_custom_metadata_embedding_chunked(self, tmp_path):
         """custom_metadata_map embedding should work with the chunked loader."""
