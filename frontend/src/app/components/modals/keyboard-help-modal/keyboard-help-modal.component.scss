@@ -6,6 +6,19 @@
   max-width: 560px;
 }
 
+.kbd-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.kbd-section-header {
+  margin: 0;
+  font-size: var(--font-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .kbd-group-title {
   margin: 0 0 var(--space-sm);
   font-size: var(--font-lg);

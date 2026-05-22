@@ -187,6 +187,11 @@ export class AppComponent {
     this.showKeyboardHelp = false;
   }
 
+  onHelp(): void {
+    this.menuOpen = false;
+    this.showKeyboardHelp = true;
+  }
+
   onMenuKeydown(event: KeyboardEvent): void {
     const menu = event.currentTarget as HTMLElement;
     const items = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
