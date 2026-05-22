@@ -16,3 +16,83 @@
   color: var(--text-muted);
   font-style: italic;
 }
+
+// Custom button + listbox dropdown for the media-type "select".  We
+// don't use a native ``<select>`` because ``<option>`` elements cannot
+// host markup, and we want each row to show the media type's SVG icon
+// alongside its label.  The trigger inherits ``.form-select`` so it
+// matches the visual weight of the rest of the form's inputs.
+.media-type-dropdown {
+  position: relative;
+}
+
+.media-type-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  text-align: left;
+  font: inherit;
+  // ``.form-select`` already supplies padding/border/radius/background.
+}
+
+.media-type-trigger-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.media-type-trigger-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-type-chevron {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  transition: transform 0.15s ease;
+}
+
+.media-type-dropdown.open .media-type-chevron {
+  transform: rotate(180deg);
+}
+
+.media-type-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: var(--space-xs) 0;
+  list-style: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: var(--z-dropdown, 50);
+}
+
+.media-type-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+
+  &:hover {
+    background: var(--bg-subtle);
+  }
+
+  &.selected {
+    background: var(--bg-subtle);
+    font-weight: var(--weight-medium);
+  }
+}

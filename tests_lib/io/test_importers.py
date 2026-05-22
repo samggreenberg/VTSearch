@@ -355,7 +355,7 @@ class TestImporterDatasetName:
 
         return Imp()
 
-    def test_to_dict_prepends_dataset_name_field(self):
+    def test_to_dict_appends_dataset_name_field(self):
         from vtscore.datasets.importers.base import (
             DATASET_NAME_FIELD_KEY,
             DatasetImporter,
@@ -372,13 +372,13 @@ class TestImporterDatasetName:
                 pass
 
         d = Imp().to_dict()
-        assert d["fields"][0]["key"] == DATASET_NAME_FIELD_KEY
-        assert d["fields"][0]["required"] is False
-        assert d["fields"][0]["field_type"] == "text"
-        assert d["fields"][1]["key"] == "path"
+        assert d["fields"][0]["key"] == "path"
+        assert d["fields"][-1]["key"] == DATASET_NAME_FIELD_KEY
+        assert d["fields"][-1]["required"] is False
+        assert d["fields"][-1]["field_type"] == "text"
 
     def test_class_fields_attribute_unchanged_by_to_dict(self):
-        """to_dict() prepends dataset_name only on the serialised payload —
+        """to_dict() appends dataset_name only on the serialised payload —
         the class-level ``fields`` attribute remains as the developer wrote it."""
         from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
