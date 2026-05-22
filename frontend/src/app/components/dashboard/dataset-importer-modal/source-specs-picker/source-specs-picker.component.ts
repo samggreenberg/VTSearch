@@ -7,9 +7,11 @@ import { ConverterInfo, SourceSpec } from '../../../../models/api.models';
 /** Checkbox column for choosing which source media types feed a
  *  multi-media import.  The native type sits at the top (always
  *  included by default, no converter); each other source type with at
- *  least one converter to the native type appears as a checkbox with an
- *  "Advanced ▸" opener for picking among converters (when there are
- *  multiple) and editing their params. */
+ *  least one converter to the native type appears as a checkbox with a
+ *  "Details ▸" opener for picking among converters (when there are
+ *  multiple) and editing their params.  The picker itself lives inside
+ *  the outer importer's "Advanced" section, so a nested "Advanced"
+ *  label here would read as "Advanced inside Advanced". */
 @Component({
   selector: 'vt-source-specs-picker',
   standalone: true,
@@ -33,15 +35,15 @@ export class SourceSpecsPickerComponent implements OnChanges {
   @Output() specsChange = new EventEmitter<SourceSpec[]>();
 
   /** Per-source-type draft so the user can configure a converter via
-   *  the Advanced panel *before* checking the box.  Edits made while
+   *  the Details panel *before* checking the box.  Edits made while
    *  unchecked are preserved here and applied on check. */
   private drafts = new Map<string, SourceSpec>();
-  private advancedOpenSet = new Set<string>();
+  private detailsOpenSet = new Set<string>();
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['nativeType'] && !changes['nativeType'].firstChange) {
       this.drafts.clear();
-      this.advancedOpenSet.clear();
+      this.detailsOpenSet.clear();
     }
     for (const s of this.specs) {
       if (s.converter !== null) this.drafts.set(s.source_type, s);
@@ -72,22 +74,22 @@ export class SourceSpecsPickerComponent implements OnChanges {
     return this.availableConverters.filter((c) => c.source_type === sourceType);
   }
 
-  /** True iff the Advanced opener should be rendered for *sourceType*:
+  /** True iff the Details opener should be rendered for *sourceType*:
    *  either multiple converters to pick between, or at least one
    *  user-editable field on the (single) converter. */
-  hasAdvanced(sourceType: string): boolean {
+  hasDetails(sourceType: string): boolean {
     const cs = this.convertersFor(sourceType);
     if (cs.length > 1) return true;
     return !!(cs[0]?.fields?.length);
   }
 
-  isAdvancedOpen(sourceType: string): boolean {
-    return this.advancedOpenSet.has(sourceType);
+  isDetailsOpen(sourceType: string): boolean {
+    return this.detailsOpenSet.has(sourceType);
   }
 
-  toggleAdvanced(sourceType: string): void {
-    if (this.advancedOpenSet.has(sourceType)) this.advancedOpenSet.delete(sourceType);
-    else this.advancedOpenSet.add(sourceType);
+  toggleDetails(sourceType: string): void {
+    if (this.detailsOpenSet.has(sourceType)) this.detailsOpenSet.delete(sourceType);
+    else this.detailsOpenSet.add(sourceType);
   }
 
   currentConverterName(sourceType: string): string {
