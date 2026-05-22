@@ -227,23 +227,6 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 f.options = all_folder_names()
                 break
 
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        from vtscore.converters import list_converters_for_target
-        from vtscore.media import all_types_dict
-
-        # For each media type the user can select, list N→M converters
-        # that produce that type — so the UI can show a datagrid of
-        # available converters dynamically.
-        converters_by_target: dict[str, list[dict]] = {}
-        for mt_info in all_types_dict():
-            type_id = mt_info["type_id"]
-            convs = list_converters_for_target(type_id)
-            if convs:
-                converters_by_target[type_id] = [c.to_dict() for c in convs]
-        d["available_converters_by_media_type"] = converters_by_target
-        return d
-
     def _load_direct(
         self,
         folder: Path,
