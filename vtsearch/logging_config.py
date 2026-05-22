@@ -291,6 +291,35 @@ def setup_logging(
     logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
 
 
+def install_transformers_logging_bridge() -> None:
+    """Route the ``transformers`` library's logs through our root handler.
+
+    transformers configures its own stderr handler with a ``[transformers]``
+    prefix formatter and sets ``propagate=False`` on its library root logger,
+    so records from ``transformers.*`` never reach the handler installed by
+    :func:`setup_logging`. That makes our context tags and our
+    :class:`_TransformersVocabTokenFilter` ineffective for transformers' own
+    output. This bridge disables their default handler and re-enables
+    propagation so transformers records flow through our formatter and
+    filters like every other library's.
+
+    Deferred from ``setup_logging`` because importing ``transformers.utils.logging``
+    pulls in the full ``transformers`` package (~0.7s), which we don't want
+    to pay for in unit tests that stub embedders. Call once during app
+    startup before any model load — :func:`vtscore.embedding.loader.initialize_models`
+    is the canonical site.
+    """
+    try:
+        import transformers.utils.logging as hf_logging  # noqa: PLC0415
+    except Exception:
+        return
+    try:
+        hf_logging.disable_default_handler()
+        hf_logging.enable_propagation()
+    except Exception:
+        pass
+
+
 def new_request_id() -> str:
     """Generate a short request id (12 hex chars from a uuid4)."""
     return uuid.uuid4().hex[:12]
