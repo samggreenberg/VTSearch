@@ -451,8 +451,6 @@ class DatasetImporter(PluginBase):
             Exception: Any exception propagates to the route handler, which
                 stores it in the progress tracker as an error message.
         """
-        from vtscore.converters import get_converter  # noqa: PLC0415
-
         default_origin = self.build_origin(field_values)
         next_id = 1
 
@@ -462,26 +460,12 @@ class DatasetImporter(PluginBase):
             specs = []
 
         if specs:
-            converter_cache: dict[str, Any] = {}
-            for spec, raw in self.fetch_all_source_media(specs, field_values, thin=thin):
-                if raw is None:
-                    continue
-                if spec.converter is None:
-                    outs = [raw]
-                else:
-                    converter = converter_cache.get(spec.converter)
-                    if converter is None:
-                        converter = get_converter(spec.converter)
-                        converter_cache[spec.converter] = converter
-                    outs = converter.convert(raw, spec.params)
-                for media in outs:
-                    if media is None:
-                        continue
-                    media["id"] = next_id
-                    media.setdefault("origin", default_origin)
-                    media.setdefault("origin_name", media.get("filename") or str(next_id))
-                    medias[next_id] = media
-                    next_id += 1
+            next_id = self._ingest_spec_stream(
+                self.fetch_all_source_media(specs, field_values, thin=thin),
+                medias,
+                default_origin,
+                next_id,
+            )
             return
 
         # Fallback: no spec set could be resolved.  Use the per-record hooks
@@ -498,6 +482,46 @@ class DatasetImporter(PluginBase):
             media.setdefault("origin_name", media.get("filename") or str(next_id))
             medias[next_id] = media
             next_id += 1
+
+    def _ingest_spec_stream(
+        self,
+        stream: Iterator[tuple[SourceSpec, dict[str, Any]]],
+        medias: dict,
+        default_origin: dict[str, Any],
+        next_id: int,
+    ) -> int:
+        """Convert+ingest each ``(spec, raw)`` pair from *stream* into *medias*.
+
+        Resolves each spec's converter once and caches it across pairs so
+        a bulk importer that interleaves specs doesn't re-resolve on
+        every yield.  Returns the next available media id.
+        """
+        from vtscore.converters import get_converter  # noqa: PLC0415
+
+        converter_cache: dict[str, Any] = {}
+        for spec, raw in stream:
+            if raw is None:
+                continue
+            if spec.converter is None:
+                outs = [raw]
+            else:
+                converter = converter_cache.get(spec.converter)
+                if converter is None:
+                    resolved = get_converter(spec.converter)
+                    if resolved is None:
+                        raise ValueError(f"Unknown converter: {spec.converter!r}")
+                    converter = resolved
+                    converter_cache[spec.converter] = converter
+                outs = converter.convert(raw, spec.params)
+            for media in outs:
+                if media is None:
+                    continue
+                media["id"] = next_id
+                media.setdefault("origin", default_origin)
+                media.setdefault("origin_name", media.get("filename") or str(next_id))
+                medias[next_id] = media
+                next_id += 1
+        return next_id
 
     # ------------------------------------------------------------------
     # Multi-media source hooks
