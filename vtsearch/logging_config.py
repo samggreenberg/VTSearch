@@ -291,7 +291,6 @@ def setup_logging(
     logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
 
 
-
 def install_transformers_logging_bridge() -> None:
     """Route the ``transformers`` library's logs through our root handler.
 
