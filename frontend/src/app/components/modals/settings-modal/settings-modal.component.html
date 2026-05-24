@@ -73,7 +73,7 @@
           </label>
 
           @if (mediaTypes.length > 0) {
-            <h4 title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>
+            <h4 class="subhead" title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>
             <div class="view-tabs">
               @for (mt of mediaTypes; track mt.type_id) {
                 <button
@@ -86,7 +86,7 @@
             </div>
             <div class="view-tab-content">
               <div class="view-side-section">
-                <h4 title="Display settings for the left panel (unlabeled media list)">Left Side</h4>
+                <h4 class="subhead" title="Display settings for the left panel (unlabeled media list)">Left Side</h4>
                 <div class="form-group">
                   <label class="form-label" title="Display media as a vertical list or a thumbnail grid">View Mode:</label>
                   <div class="toggle-group">
@@ -121,7 +121,7 @@
                 </div>
               </div>
               <div class="view-side-section">
-                <h4 title="Display settings for the right panel (labeled goods and bads)">Right Side</h4>
+                <h4 class="subhead" title="Display settings for the right panel (labeled goods and bads)">Right Side</h4>
                 <div class="form-group">
                   <label class="form-label" title="Display labeled items as a vertical list or a thumbnail grid">View Mode:</label>
                   <div class="toggle-group">

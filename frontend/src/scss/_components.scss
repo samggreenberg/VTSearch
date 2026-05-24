@@ -367,6 +367,16 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   padding: var(--space-xl) 0;
 }
 
+// `.subhead` styles a heading tag (typically `<h4>`) as a small muted
+// sub-section label inside a larger panel — e.g. "Server Example
+// Media" inside the load-sort-modal's `<h3>` panel. Vertical rhythm
+// (margins) stays scoped per-component since it depends on what's
+// above/below; identity (font-size, color) lives here.
+.subhead {
+  font-size: var(--font-md);
+  color: var(--text-secondary);
+}
+
 // --- Scrollbars ---
 
 * {

@@ -105,7 +105,7 @@
         </label>
         <button class="btn btn--secondary file-btn" (click)="openMediaPicker()" title="Browse server media sources to pick an example file">Browse media sources...</button>
         @if (serverMediaFiles.length > 0) {
-          <h4 title="Example media files available on the server">Server Example Media</h4>
+          <h4 class="subhead" title="Example media files available on the server">Server Example Media</h4>
           <div class="file-list">
             @for (file of serverMediaFiles; track file.name) {
               <button class="file-item" (click)="loadServerMedia(file.filename || file.name)" [title]="'Sort by example: ' + (file.filename || file.name)">{{ file.filename || file.name }}</button>

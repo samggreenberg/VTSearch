@@ -67,14 +67,10 @@
     &:first-child { margin-top: 0; }
   }
 
-  // `<h4>` here labels a small subsection inside an h3 panel and is
-  // styled as a muted subhead. See the load-sort-modal comment about
-  // promoting a `.subhead` class once this pattern is touched again.
-  h4 {
-    margin: var(--space-md) 0 0;
-    font-size: var(--font-md);
-    color: var(--text-secondary);
-  }
+  // `<h4 class="subhead">` labels a small subsection inside an h3
+  // panel; identity comes from the global `.subhead`, only the
+  // contextual margin is scoped here.
+  h4 { margin: var(--space-md) 0 0; }
 }
 
 .checkbox-row {
@@ -136,12 +132,11 @@
   flex-direction: column;
   gap: var(--space-md);
 
-  // Sub-section divider — see settings-modal h4 comment above re. the
-  // pending `.subhead` consolidation.
+  // `<h4 class="subhead">` divider — global `.subhead` handles font
+  // identity; the border-bottom + padding-bottom are this site's
+  // contextual divider styling.
   h4 {
     margin: 0;
-    font-size: var(--font-md);
-    color: var(--text-secondary);
     border-bottom: 1px solid var(--border-color);
     padding-bottom: var(--space-xs);
   }
