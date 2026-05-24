@@ -191,7 +191,7 @@ def _run_converter_step(media: dict[str, Any], step: ChainStep) -> tuple[list[di
     conv = get_converter(step["name"])
     if conv is None:
         raise ValueError(f"unknown converter {step['name']!r}")
-    outputs = conv.convert(media, step.get("params") or {})
+    outputs = conv.convert_normalized(media, step.get("params") or {})
     target = conv.target_type
     n_out = len(outputs)
     trail_entries: list[ChainStep] = []
@@ -563,7 +563,7 @@ def replay_chain_on_file(  # noqa: C901
             conv = get_converter(entry["name"])
             if conv is None:
                 return None
-            outputs = conv.convert(media, entry.get("params") or {})
+            outputs = conv.convert_normalized(media, entry.get("params") or {})
             current_type = conv.target_type
         picked = _select_chain_output(outputs, entry)
         if picked is None:

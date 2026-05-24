@@ -8,10 +8,15 @@ discover it automatically.
 Each importer also supports CLI usage via :meth:`~DatasetImporter.add_cli_arguments`
 and :meth:`~DatasetImporter.run_cli`.  The base class provides default
 implementations that derive CLI arguments from the :attr:`fields` list, so most
-importers work on the command line without any extra code.  Importers whose
-:meth:`run` expects non-string values (e.g. Werkzeug ``FileStorage`` objects)
-should override :meth:`run_cli` to handle the CLI-appropriate types (file paths
-as strings).
+importers work on the command line without any extra code.  ``field_type="file"``
+values arrive at :meth:`run` as a
+:class:`~vtscore.plugins.uploads.UploadedFile` regardless of whether the
+import came in via the Flask request path (a Werkzeug ``FileStorage``,
+which already satisfies the protocol) or the CLI path (a
+:class:`~vtscore.plugins.uploads.CliUploadedFile` wrapping the
+``--<field>`` path argument).  Plugin bodies should rely only on
+``.filename`` / ``.read()`` / ``.save(dst)`` / ``.stream`` and never
+mention Werkzeug.
 
 Example – a minimal SFTP importer skeleton::
 
@@ -323,10 +328,15 @@ class DatasetImporter(PluginBase):
     Every importer is automatically usable from the command line via
     ``python app.py --autodetect --importer <name> [importer args] --settings <file>``.
 
-    The default :meth:`add_cli_arguments` derives ``argparse`` arguments from
-    :attr:`fields` and :meth:`run_cli` delegates to :meth:`run`.  Override
-    either method when the defaults are not sufficient (e.g. when :meth:`run`
-    expects a Werkzeug ``FileStorage`` rather than a plain file path).
+    The default :meth:`add_cli_arguments` derives ``argparse`` arguments
+    from :attr:`fields` and :meth:`run_cli` wraps any
+    ``field_type="file"`` CLI argument in
+    :class:`~vtscore.plugins.uploads.CliUploadedFile` before delegating
+    to :meth:`run`, so plugin bodies written against the
+    :class:`~vtscore.plugins.uploads.UploadedFile` surface work
+    identically in both code paths.  Subclasses only need to override
+    :meth:`run_cli` when their CLI-specific behaviour genuinely diverges
+    from the request-time flow (e.g. the chunked-pickle fast path).
     """
 
     #: Emoji or icon string shown next to the display name in the UI.
@@ -439,14 +449,16 @@ class DatasetImporter(PluginBase):
     def __init__(self) -> None:
         #: Mapping of filename to pre-computed embedding vector.  Importers
         #: that supply content vectors alongside media should populate this
-        #: dict during :meth:`run` (keyed by the basename of each file).
+        #: dict during :meth:`run` (keyed by the basename of each file) —
+        #: or, preferably, call :meth:`yield_precomputed` once per file
+        #: which writes to all three precomputed dicts atomically.
         #: :func:`~vtscore.datasets.loader.load_dataset_from_folder` will
         #: skip the embedding model for any file whose name appears here.
         self.content_vectors: dict[str, Any] = {}
 
         #: Mapping of filename to pre-computed MD5 hex digest string.
         #: Importers that already know the hash of each file should populate
-        #: this dict during :meth:`run`.
+        #: this dict during :meth:`run` (or call :meth:`yield_precomputed`).
         #: :func:`~vtscore.datasets.loader.load_dataset_from_folder` will
         #: skip its own MD5 calculation for any file whose name appears here.
         self.content_md5s: dict[str, str] = {}
@@ -461,6 +473,50 @@ class DatasetImporter(PluginBase):
         #: order as :attr:`content_vectors` (relative path first, then
         #: basename).
         self.custom_metadata_map: dict[str, dict[str, Any]] = {}
+
+    def yield_precomputed(
+        self,
+        filename: str,
+        *,
+        embedding: Any = None,
+        md5: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Register pre-computed embedding / MD5 / metadata for *filename*.
+
+        Single entry point for the three legacy precomputed dicts
+        (:attr:`content_vectors`, :attr:`content_md5s`,
+        :attr:`custom_metadata_map`).  Importers that already know any of
+        these values up-front — e.g. when reading an NPZ sidecar or a
+        manifest that ships hashes — should call this once per file
+        instead of writing to the three dicts directly, so a single
+        misspelled key (or one entry landing in only two of the three)
+        cannot silently produce a mismatched-per-file precomputed state.
+
+        Any combination of arguments may be omitted; only the supplied
+        ones land in the matching dict.  The three legacy dicts remain
+        public for back-compat — third-party importers that write to
+        them directly continue to work — but new code should prefer this
+        helper.
+
+        Args:
+            filename: The basename (or dataset-relative path) the
+                framework uses to key precomputed lookups against the
+                file the loader discovers on disk.  Must match the key
+                that ``load_dataset_from_folder`` will see.
+            embedding: Pre-computed embedding vector.  Goes into
+                :attr:`content_vectors`.
+            md5: Pre-computed MD5 hex digest string.  Goes into
+                :attr:`content_md5s`.
+            metadata: Per-file custom metadata dict.  Goes into
+                :attr:`custom_metadata_map`.
+        """
+        if embedding is not None:
+            self.content_vectors[filename] = embedding
+        if md5 is not None:
+            self.content_md5s[filename] = md5
+        if metadata is not None:
+            self.custom_metadata_map[filename] = metadata
 
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """Perform the import, populating *medias* in-place.
@@ -527,9 +583,12 @@ class DatasetImporter(PluginBase):
 
         Args:
             field_values: Mapping of :attr:`ImporterField.key` → value.
-                Fields with ``field_type="file"`` receive a Werkzeug
-                :class:`~werkzeug.datastructures.FileStorage` object; all
-                other fields receive plain strings.
+                Fields with ``field_type="file"`` receive an
+                :class:`~vtscore.plugins.uploads.UploadedFile` (Flask
+                requests pass a Werkzeug ``FileStorage`` straight
+                through; CLI invocations wrap the path argument in
+                :class:`~vtscore.plugins.uploads.CliUploadedFile`).
+                All other fields receive plain strings.
             medias: The global medias dict to populate.  Modify it in-place;
                 do not replace the reference.
             thin: When ``True``, store a ``media_path`` file reference
@@ -605,7 +664,7 @@ class DatasetImporter(PluginBase):
                         raise ValueError(f"Unknown converter: {spec.converter!r}")
                     converter = resolved
                     converter_cache[spec.converter] = converter
-                outs = converter.convert(raw, spec.params)
+                outs = converter.convert_normalized(raw, spec.params)
             for media in outs:
                 if media is None:
                     continue
@@ -931,10 +990,13 @@ class DatasetImporter(PluginBase):
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """Load a dataset from CLI-provided *field_values* into *medias*.
 
-        The default implementation simply delegates to :meth:`run`, which
-        works for importers whose ``run()`` only expects plain string values.
-        Importers that expect non-string objects (e.g. ``FileStorage``) must
-        override this method to handle file-path strings appropriately.
+        The default implementation wraps any ``field_type="file"`` CLI
+        path argument in :class:`~vtscore.plugins.uploads.CliUploadedFile`
+        so :meth:`run` sees the same
+        :class:`~vtscore.plugins.uploads.UploadedFile` shape it does for
+        a Flask request, then delegates.  Subclasses only need to
+        override this method when the CLI path needs genuinely different
+        behaviour from the request-time flow (e.g. a chunked fast path).
 
         Args:
             field_values: Mapping of importer field keys to their CLI values.
@@ -942,7 +1004,9 @@ class DatasetImporter(PluginBase):
             thin: When ``True``, store file path references instead of
                 loading media bytes.  Passed through to :meth:`run`.
         """
-        self.run(field_values, medias, thin=thin)
+        from vtscore.plugins.uploads import wrap_cli_file_fields  # noqa: PLC0415
+
+        self.run(wrap_cli_file_fields(self.fields, field_values), medias, thin=thin)
 
     def build_cli_args(self, field_values: dict[str, Any]) -> str:
         """Build a CLI argument string that would recreate this import.

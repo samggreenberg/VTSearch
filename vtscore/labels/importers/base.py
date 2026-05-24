@@ -8,10 +8,13 @@ will discover it automatically.
 Each importer also supports CLI usage via :meth:`~LabelImporter.add_cli_arguments`
 and :meth:`~LabelImporter.run_cli`.  The base class provides default
 implementations that derive CLI arguments from the :attr:`fields` list, so most
-importers work on the command line without any extra code.  Importers whose
-:meth:`run` expects non-string values (e.g. Werkzeug ``FileStorage`` objects)
-should override :meth:`run_cli` to handle the CLI-appropriate types (file paths
-as strings).
+importers work on the command line without any extra code.  ``field_type="file"``
+values arrive at :meth:`run` as a
+:class:`~vtscore.plugins.uploads.UploadedFile` regardless of the
+ingress path (Flask requests pass a Werkzeug ``FileStorage`` straight
+through; CLI invocations wrap the path argument in
+:class:`~vtscore.plugins.uploads.CliUploadedFile`), so plugin bodies
+never mention Werkzeug.
 
 The label format used throughout is a list of dicts::
 
@@ -86,10 +89,13 @@ class LabelImporter(PluginBase):
     From the CLI, labels can be applied indirectly by using the ``label_file``
     processor importer in a settings file for the autodetect workflow.
 
-    The default :meth:`add_cli_arguments` derives ``argparse`` arguments from
-    :attr:`fields` and :meth:`run_cli` delegates to :meth:`run`.  Override
-    either when the defaults are insufficient (e.g. when :meth:`run` expects a
-    Werkzeug ``FileStorage`` rather than a plain file path).
+    The default :meth:`add_cli_arguments` derives ``argparse`` arguments
+    from :attr:`fields` and :meth:`run_cli` wraps any
+    ``field_type="file"`` CLI argument in
+    :class:`~vtscore.plugins.uploads.CliUploadedFile` before delegating
+    to :meth:`run`, so plugin bodies written against the
+    :class:`~vtscore.plugins.uploads.UploadedFile` surface work
+    identically in both code paths.
     """
 
     #: Emoji or icon string shown next to the display name in the UI.
@@ -102,9 +108,12 @@ class LabelImporter(PluginBase):
 
         Args:
             field_values: Mapping of :attr:`LabelImporterField.key` → value.
-                Fields with ``field_type="file"`` receive a Werkzeug
-                :class:`~werkzeug.datastructures.FileStorage` object; all
-                other fields receive plain strings.
+                Fields with ``field_type="file"`` receive an
+                :class:`~vtscore.plugins.uploads.UploadedFile` (Flask
+                requests pass a Werkzeug ``FileStorage`` straight
+                through; CLI invocations wrap the path argument in
+                :class:`~vtscore.plugins.uploads.CliUploadedFile`).
+                All other fields receive plain strings.
 
         Returns:
             A list of dicts, each with ``"md5"`` and ``"label"`` keys.
@@ -125,9 +134,12 @@ class LabelImporter(PluginBase):
     def run_cli(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Import labels from CLI-provided *field_values*.
 
-        The default implementation simply delegates to :meth:`run`, which
-        works for importers whose ``run()`` only expects plain string values.
-        Importers that expect non-string objects (e.g. ``FileStorage``) must
-        override this method to handle file-path strings appropriately.
+        The default implementation wraps any ``field_type="file"`` CLI
+        path argument in :class:`~vtscore.plugins.uploads.CliUploadedFile`
+        so :meth:`run` sees the same
+        :class:`~vtscore.plugins.uploads.UploadedFile` shape it does for
+        a Flask request, then delegates.
         """
-        return self.run(field_values)
+        from vtscore.plugins.uploads import wrap_cli_file_fields  # noqa: PLC0415
+
+        return self.run(wrap_cli_file_fields(self.fields, field_values))

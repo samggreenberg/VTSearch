@@ -192,15 +192,17 @@ def validate_plugin_args(
     plugin:
         Any plugin instance with a :attr:`fields` declaration.
     file_mode:
-        How to surface file uploads.  ``"filestorage"`` (default) keeps
-        :class:`werkzeug.datastructures.FileStorage` objects — used by
+        How to surface file uploads.  Both modes satisfy the
+        :class:`~vtscore.plugins.uploads.UploadedFile` protocol.
+        ``"filestorage"`` (default) keeps the Werkzeug
+        :class:`~werkzeug.datastructures.FileStorage` object — used by
         label-importer routes where the file is consumed synchronously.
-        ``"bytesio"`` reads each upload into an in-memory
-        :class:`io.BytesIO` carrying the original filename on its
-        ``.name`` attribute — used by dataset-importer routes that hand
-        the file off to a background thread (the request context, and
-        the underlying ``FileStorage``, are torn down before the thread
-        reads).
+        ``"bytesio"`` wraps the upload bytes in a
+        :class:`~vtscore.plugins.uploads.BytesIOUploadedFile` carrying
+        the original filename — used by dataset-importer routes that
+        hand the file off to a background thread (the request context,
+        and the underlying ``FileStorage``, are torn down before the
+        thread reads).
     extra_keys:
         Pass-through keys whose values should ride along on the
         returned dict if present in the request body.  Each is copied
@@ -260,7 +262,7 @@ def _populate_file_fields(
     envelope (matching schema-level rejects); optional missing fields
     land in *validated* as ``None``.
     """
-    import io  # noqa: PLC0415 — defer to avoid import cost when unused
+    from vtscore.plugins.uploads import BytesIOUploadedFile  # noqa: PLC0415
 
     missing_files: list[str] = []
     for f in plugin.fields:
@@ -274,9 +276,7 @@ def _populate_file_fields(
                 validated[f.key] = None
             continue
         if file_mode == "bytesio":
-            buf = io.BytesIO(storage.read())
-            buf.name = storage.filename  # type: ignore[attr-defined]
-            validated[f.key] = buf
+            validated[f.key] = BytesIOUploadedFile(storage.read(), storage.filename or "")
         else:
             validated[f.key] = storage
 

@@ -940,8 +940,11 @@ class TestReCallerMultiMedia:
         types = sorted(m["media_type"] for m in medias.values())
         assert types == ["image", "image", "image", "image"]
         # The framework, not the importer, called video2image.convert with
-        # the spec's params.
-        assert observed_params == [{"n_clips": "2"}]
+        # the spec's params.  The framework's ``convert_normalized`` pass
+        # (Phase C #9) validates params through the converter's declared
+        # schema, so ``n_clips`` arrives at ``convert`` as the coerced
+        # ``int`` rather than the raw string the spec carried.
+        assert observed_params == [{"n_clips": 2}]
 
 
 # ---------------------------------------------------------------------------
