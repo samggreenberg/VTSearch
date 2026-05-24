@@ -55,6 +55,7 @@ class SyntheticDatasetImporter(DatasetImporter):
             description="What kind of media to generate.",
             options=_SUPPORTED_MEDIA_TYPES,
             default="image",
+            required=False,
         ),
         ImporterField(
             key="size",
@@ -65,6 +66,7 @@ class SyntheticDatasetImporter(DatasetImporter):
             placeholder="100",
             min="1",
             step="1",
+            required=False,
         ),
     ]
 

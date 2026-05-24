@@ -14,20 +14,6 @@
     </div>
 
     <form class="new-detector-form" (ngSubmit)="submit()">
-      <div class="form-group">
-        <label class="col-label" for="detector-name" title="A short name to identify this detector">Detector Name <span class="required">*</span></label>
-        <input
-          id="detector-name"
-          class="form-input"
-          [ngModel]="name"
-          (ngModelChange)="onNameInput($event)"
-          name="name"
-          placeholder="e.g. Dog Barks"
-          title="A short name to identify this detector"
-          autofocus
-        />
-      </div>
-
       @if (tab === 'blank' && !effectiveSoloMediaType) {
         <div class="form-group">
           <label class="col-label" title="The type of media this detector will process">Media Type</label>
@@ -260,6 +246,19 @@
           </div>
         }
       }
+
+      <div class="form-group">
+        <label class="col-label" for="detector-name" title="A short name to identify this detector">Detector Name</label>
+        <input
+          id="detector-name"
+          class="form-input"
+          [ngModel]="name"
+          (ngModelChange)="onNameInput($event)"
+          name="name"
+          placeholder="e.g. Dog Barks"
+          title="A short name to identify this detector"
+        />
+      </div>
 
       @if (error) {
         <p class="error-text">{{ error }}</p>

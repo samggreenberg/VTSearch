@@ -208,6 +208,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 "row with a matching converter pulls them in too."
             ),
             default="audio",
+            required=False,
         ),
         ImporterField(
             key="paths_file",

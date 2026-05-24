@@ -169,6 +169,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
             field_type="select",
             description="Type of media files the dataset ends up holding.",
             default="audio",
+            required=False,
         ),
         ImporterField(
             key="path",
