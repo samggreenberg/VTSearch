@@ -168,6 +168,13 @@
           "disable_achievements": {
             "type": "boolean"
           },
+          "effective_solo_embedder_per_media_type": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "readOnly": true,
+            "type": "object"
+          },
           "effective_solo_media_type": {
             "nullable": true,
             "readOnly": true,
@@ -245,6 +252,12 @@
           },
           "show_metadata": {
             "type": "boolean"
+          },
+          "solo_embedder_per_media_type": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
           },
           "solo_media_type": {
             "nullable": true,
@@ -3854,6 +3867,9 @@
           },
           "show_metadata": {
             "type": "boolean"
+          },
+          "solo_embedder_per_media_type": {
+            "nullable": true
           },
           "solo_media_type": {
             "nullable": true,

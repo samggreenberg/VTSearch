@@ -1296,8 +1296,12 @@ def get_effective_solo_embedders() -> dict[str, str]:
     Combines the per-user :func:`get_solo_embedder_per_media_type` map
     (user explicit) with the process-level
     :data:`_cli_solo_embedders` (CLI fallback). User entries win per-key;
-    missing keys fall through to the CLI value. Empty-string values are
-    treated as absent so a stale entry on disk can't lock a type to "".
+    missing user keys fall through to the CLI value. An **empty-string
+    value** in the user map is a per-type opt-out sentinel — it removes
+    that type from the merged map even if the CLI fallback has a
+    value for it. This is the analog of setting ``solo_media_type=null``
+    with ``solo_media_type_explicit=True`` to override
+    ``--solo-media-type``.
 
     Validity (does the embedder still exist for this type?) is *not*
     checked here — the frontend resolves it against the live embedder
@@ -1317,9 +1321,8 @@ def get_effective_solo_embedders() -> dict[str, str]:
             if isinstance(emb, str) and emb.strip():
                 merged[mt] = emb.strip()
             else:
-                # An empty string in the user map means "unset this
-                # type's lock" — drop it so the CLI fallback doesn't
-                # silently reapply.
+                # Empty-string sentinel — user explicitly opted out for
+                # this type, so drop the CLI fallback too.
                 merged.pop(mt, None)
     return merged
 
@@ -1334,11 +1337,13 @@ def get_effective_solo_embedder(media_type: str) -> str | None:
 def apply_user_solo_embedder_per_media_type(value: dict[str, str] | None) -> None:
     """Replace the per-user ``solo_embedder_per_media_type`` map.
 
-    Used by the settings PUT route. Values are stripped; entries with an
-    empty value are dropped (so PUT ``{"image": ""}`` clears the image
-    lock rather than persisting an empty string). The route layer is
-    responsible for validating each ``(media_type, embedder)`` pair
-    against the live registries before calling this.
+    Used by the settings PUT route. ``None`` clears every entry. Keys
+    are stripped and skipped if empty. Values are stripped; an
+    empty-string value is preserved as a **per-type opt-out sentinel**
+    (overrides the CLI fallback for that type — see
+    :func:`get_effective_solo_embedders`). The route layer is
+    responsible for validating non-empty ``(media_type, embedder)``
+    pairs against the live registries before calling this.
     """
     if value is None:
         set_solo_embedder_per_media_type({})  # type: ignore[name-defined]  # autogen'd accessor
@@ -1349,6 +1354,9 @@ def apply_user_solo_embedder_per_media_type(value: dict[str, str] | None) -> Non
             continue
         if isinstance(emb, str) and emb.strip():
             cleaned[mt.strip()] = emb.strip()
+        elif isinstance(emb, str):
+            # Empty-string sentinel — preserve as opt-out marker.
+            cleaned[mt.strip()] = ""
     set_solo_embedder_per_media_type(cleaned)  # type: ignore[name-defined]  # autogen'd accessor
 
 

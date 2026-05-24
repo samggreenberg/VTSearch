@@ -201,13 +201,6 @@ def predict_embedders_to_preload(
     from vtscore.media import all_embedders, embedders_for_type
 
     valid = {e.name for e in all_embedders()}
-    predictions: list[str] = []
-    seen: set[str] = set()
-
-    def _add(name: str) -> None:
-        if name and name in valid and name not in seen:
-            seen.add(name)
-            predictions.append(name)
 
     def _default_for(media_type: str) -> str:
         if not media_type:
@@ -221,18 +214,18 @@ def predict_embedders_to_preload(
             return emb
         return _default_for(entry.get("media_type", "") or "")
 
-    for emb_name in extra_embedders or ():
-        _add(emb_name)
+    candidates: list[str] = []
+    candidates.extend(extra_embedders or ())
+    candidates.extend(_default_for(mt) for mt in (extra_media_types or ()))
+    candidates.extend(_resolve(entry) for entry in list_datasets())
+    candidates.extend(_resolve(entry) for entry in list_detectors())
 
-    for mt in extra_media_types or ():
-        _add(_default_for(mt))
-
-    for entry in list_datasets():
-        _add(_resolve(entry))
-
-    for entry in list_detectors():
-        _add(_resolve(entry))
-
+    predictions: list[str] = []
+    seen: set[str] = set()
+    for name in candidates:
+        if name and name in valid and name not in seen:
+            seen.add(name)
+            predictions.append(name)
     return predictions
 
 

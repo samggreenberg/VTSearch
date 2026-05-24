@@ -193,13 +193,11 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   onSoloEmbedderChange(typeId: string, value: string): void {
     const userMap = { ...(this.settings.solo_embedder_per_media_type || {}) };
-    if (value) {
-      userMap[typeId] = value;
-    } else {
-      // Empty string from the dropdown = "Ask each time" — clear this
-      // type's lock. Other types' entries are preserved.
-      delete userMap[typeId];
-    }
+    // Empty value = "Ask each time". Persist it as the opt-out sentinel
+    // (an empty-string entry) so it overrides any ``--solo-embedder``
+    // CLI fallback for this type — same pattern as solo_media_type's
+    // explicit-null override of --solo-media-type.
+    userMap[typeId] = value || '';
     (this.settings as Record<string, unknown>)['solo_embedder_per_media_type'] = userMap;
     // Optimistically update the effective map so the dropdown reflects
     // the new choice immediately; the PUT response will replace it with
