@@ -162,7 +162,7 @@ def _make_console_progress(original_callback):
     return _callback
 
 
-def predict_embedders_to_preload() -> list[str]:
+def predict_embedders_to_preload(extra_media_types: list[str] | None = None) -> list[str]:
     """Predict which embedders are likely to be needed next, from active metadata.
 
     Walks the dataset registry and detector registry and returns the unique
@@ -175,13 +175,19 @@ def predict_embedders_to_preload() -> list[str]:
       type's default rather than being silently dropped — losing the
       optimisation entirely on a typo is worse than warming the wrong
       embedder, which the user can still override.
+    - For every media type in *extra_media_types*: the default embedder
+      for that type. Used by the solo-mediaType streamlined mode (see
+      :func:`vtsearch.settings.get_effective_solo_media_type`) so the
+      user's chosen type has its default embedder warm at startup even
+      when no datasets or detectors are registered yet.
 
     Detector entries written before the ``embedder`` field existed have
     ``entry["embedder"] == ""``, so they fall through to the media type's
     default — matching the previous behaviour for unmigrated state.
 
-    Order reflects discovery order (datasets first, then detectors), so the
-    output is stable across runs.
+    Order reflects discovery order (extras first so a solo-mode user
+    isn't stuck behind unrelated dataset warmups, then datasets, then
+    detectors), and is stable across runs.
     """
     from vtscore.datasets.registry import list_datasets
     from vtscore.detectors.registry import list_detectors
@@ -208,6 +214,9 @@ def predict_embedders_to_preload() -> list[str]:
             return emb
         return _default_for(entry.get("media_type", "") or "")
 
+    for mt in extra_media_types or ():
+        _add(_default_for(mt))
+
     for entry in list_datasets():
         _add(_resolve(entry))
 
@@ -217,7 +226,7 @@ def predict_embedders_to_preload() -> list[str]:
     return predictions
 
 
-def preload_predicted_embedders() -> list[str]:
+def preload_predicted_embedders(extra_media_types: list[str] | None = None) -> list[str]:
     """Eagerly load embedding models predicted by :func:`predict_embedders_to_preload`.
 
     Calls :meth:`~vtscore.media.base.MediaEmbedder.load_models` on each
@@ -225,11 +234,16 @@ def preload_predicted_embedders() -> list[str]:
     Prints intermediate status messages and download progress bars to
     the console while models load.
 
+    *extra_media_types* is forwarded to :func:`predict_embedders_to_preload`
+    so the caller (e.g. ``initialize_server`` honoring the
+    ``--solo-media-type`` CLI fallback) can ensure a specific mediaType's
+    default embedder is warm even with empty registries.
+
     Returns the list of embedder names that were preloaded.
     """
     from vtscore.media import get_embedder
 
-    targets = predict_embedders_to_preload()
+    targets = predict_embedders_to_preload(extra_media_types=extra_media_types)
     if not targets:
         return []
 

@@ -82,6 +82,16 @@ class AppSettingsSchema(Schema):
     # same hint via ``guessedMediaEmbedder``.
     last_embedder_per_media_type = _PerMediaTypeStringDict()
 
+    # Solo mediaType streamlining. ``solo_media_type`` is the user's raw
+    # value (None or a media-type id); ``solo_media_type_explicit`` is True
+    # once the user has changed it from settings (so the CLI fallback no
+    # longer applies). ``effective_solo_media_type`` is the resolver's
+    # output the frontend should read to decide whether to hide mediaType
+    # pickers — it accounts for the CLI fallback and the explicit flag.
+    solo_media_type = fields.String(allow_none=True)
+    solo_media_type_explicit = fields.Boolean()
+    effective_solo_media_type = fields.String(allow_none=True, dump_only=True)
+
     class Meta:
         # Allow extra keys on dump so transitional fields (e.g.
         # ``settings_source`` config blobs, ``achievement_state``) flow
@@ -133,6 +143,12 @@ class SettingsUpdateSchema(Schema):
     detectors_dir = fields.String()
 
     last_embedder_per_media_type = fields.Raw()
+
+    # The route layer validates ``solo_media_type`` against the media-type
+    # registry and applies it via ``apply_user_solo_media_type`` so the
+    # ``solo_media_type_explicit`` flag flips automatically. Accept either
+    # a string id or ``null`` for "show everything".
+    solo_media_type = fields.String(allow_none=True)
 
     class Meta:
         # Reject keys we don't know — the frontend should never send
