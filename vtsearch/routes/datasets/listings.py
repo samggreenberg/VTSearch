@@ -14,6 +14,7 @@ from flask_smorest import Blueprint
 from vtscore.datasets import list_importers
 from vtscore.datasets.registry import list_datasets as _reg_list_all
 from vtsearch.routes.datasets._helpers import _normalize_media_type_param
+from vtsearch.settings import filter_visible_plugin_dicts, filter_visible_plugins
 from vtsearch.schemas.datasets import (
     ClippersListQuerySchema,
     ClippersListResponseSchema,
@@ -39,7 +40,7 @@ def media_types_list():
     """Return all registered media types with their metadata."""
     from vtscore.media import all_types_dict
 
-    return {"media_types": all_types_dict()}
+    return {"media_types": filter_visible_plugin_dicts("media_types", all_types_dict(), id_key="type_id")}
 
 
 @datasets_listings_bp.route("/api/embedders")
@@ -57,9 +58,9 @@ def embedders_list(query: dict):
 
     media_type = _normalize_media_type_param(query.get("media_type", ""))
     if media_type:
-        embedders = [e.to_dict() for e in embedders_for_type(media_type)]
+        embedders = [e.to_dict() for e in filter_visible_plugins("embedders", embedders_for_type(media_type))]
     else:
-        embedders = all_embedders_dict()
+        embedders = filter_visible_plugin_dicts("embedders", all_embedders_dict())
 
     return {"embedders": embedders}
 
@@ -79,9 +80,9 @@ def clippers_list(query: dict):
 
     media_type = _normalize_media_type_param(query.get("media_type", ""))
     if media_type:
-        clippers = [c.to_dict() for c in clippers_for_type(media_type)]
+        clippers = [c.to_dict() for c in filter_visible_plugins("clippers", clippers_for_type(media_type))]
     else:
-        clippers = all_clippers_dict()
+        clippers = filter_visible_plugin_dicts("clippers", all_clippers_dict())
 
     return {"clippers": clippers}
 
@@ -112,14 +113,16 @@ def converters_list(query: dict):
     else:
         converters = list_converters()
 
-    return {"converters": [c.to_dict() for c in converters]}
+    return {"converters": [c.to_dict() for c in filter_visible_plugins("converters", converters)]}
 
 
 @datasets_listings_bp.route("/api/dataset/importers")
 @datasets_listings_bp.response(200, DatasetImportersListResponseSchema)
 def dataset_importers():
     """List all registered importers (excluding those with non-form UI)."""
-    extended = [imp.to_dict() for imp in list_importers() if imp.ui_mode == "form"]
+    extended = [
+        imp.to_dict() for imp in filter_visible_plugins("importers", list_importers()) if imp.ui_mode == "form"
+    ]
     return {"importers": extended}
 
 
@@ -129,7 +132,7 @@ def dataset_all_importers():
     """List all registered importers (including built-in ones)."""
     from vtscore.datasets.importers.tabs import list_picker_tabs
 
-    all_importers = [imp.to_dict() for imp in list_importers()]
+    all_importers = [imp.to_dict() for imp in filter_visible_plugins("importers", list_importers())]
 
     # Annotate combine_datasets with an enabled flag: requires 2+ saved
     # datasets sharing the same media type.

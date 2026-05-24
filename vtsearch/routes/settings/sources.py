@@ -53,9 +53,10 @@ sync_sources_bp = Blueprint(
 @sync_sources_bp.response(200, SyncSourceEntrySchema(many=True))
 def list_settings_sources_route():
     """Return a list of all registered settings source plugins."""
+    from vtsearch.settings import filter_visible_plugins
     from vtsearch.settings_io.sources import list_settings_sources
 
-    return [src.to_dict() for src in list_settings_sources()]
+    return [src.to_dict() for src in filter_visible_plugins("settings_sources", list_settings_sources())]
 
 
 @sync_sources_bp.route("/api/settings-sources/active", methods=["GET"])
@@ -133,8 +134,9 @@ def sync_settings_from_source():
 def list_labelset_sources_route():
     """Return a list of all registered labelset source plugins."""
     from vtscore.labels.sources import list_labelset_sources
+    from vtsearch.settings import filter_visible_plugins
 
-    return [src.to_dict() for src in list_labelset_sources()]
+    return [src.to_dict() for src in filter_visible_plugins("labelset_sources", list_labelset_sources())]
 
 
 @sync_sources_bp.route("/api/detectors/<detector_name>/labelset-source", methods=["GET"])

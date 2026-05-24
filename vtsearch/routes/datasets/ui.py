@@ -137,6 +137,7 @@ def demo_dataset_list(query: dict):
     """
     from vtscore.converters import list_converters_for_source
     from vtscore.media import get as media_get
+    from vtsearch.settings import filter_visible_plugins
 
     requested_embedder = query.get("embedder", "").strip()
     requested_clipper = query.get("clipper", "").strip()
@@ -174,7 +175,9 @@ def demo_dataset_list(query: dict):
                 "description": dataset_info.get("description", ""),
                 "media_type": media_type,
                 "num_categories": len(dataset_info["categories"]),
-                "available_converters": [c.to_dict() for c in list_converters_for_source(media_type)],
+                "available_converters": [
+                    c.to_dict() for c in filter_visible_plugins("converters", list_converters_for_source(media_type))
+                ],
                 "pkl_embedder": pkl_embedder or "",
                 "pkl_clipper": pkl_clipper or "",
             }
