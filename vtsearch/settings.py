@@ -158,16 +158,49 @@ _USER_DATA_DIR_OVERRIDE: Path | None = None
 # Defaults, partitioned by tier
 # ---------------------------------------------------------------------------
 
-#: Server-tier defaults derived from the :class:`ServerSettings` model.
-_SERVER_DEFAULTS: dict[str, Any] = ServerSettings().model_dump()
+#: Lazy caches for the model-derived defaults dicts.  Instantiating
+#: :class:`ServerSettings` fires its pydantic ``default_factory`` callbacks
+#: (notably the GPU-aware default for ``max_concurrent_dataset_embeddings``),
+#: and that probe imports torch — ~870ms at startup just to pick an int.
+#: Defer the instantiation to first read so ``import vtsearch.settings``
+#: stays torch-free.
+_SERVER_DEFAULTS_CACHE: dict[str, Any] | None = None
+_USER_DEFAULTS_CACHE: dict[str, Any] | None = None
 
-#: Per-user defaults derived from the :class:`UserSettings` model.
-_USER_DEFAULTS: dict[str, Any] = UserSettings().model_dump()
 
-#: Combined defaults for callers that want a flat view of every key.
-_DEFAULTS: dict[str, Any] = {**_SERVER_DEFAULTS, **_USER_DEFAULTS}
+def _server_defaults() -> dict[str, Any]:
+    global _SERVER_DEFAULTS_CACHE
+    if _SERVER_DEFAULTS_CACHE is None:
+        _SERVER_DEFAULTS_CACHE = ServerSettings().model_dump()
+    return _SERVER_DEFAULTS_CACHE
+
+
+def _user_defaults() -> dict[str, Any]:
+    global _USER_DEFAULTS_CACHE
+    if _USER_DEFAULTS_CACHE is None:
+        _USER_DEFAULTS_CACHE = UserSettings().model_dump()
+    return _USER_DEFAULTS_CACHE
+
+
+def _all_defaults() -> dict[str, Any]:
+    return {**_server_defaults(), **_user_defaults()}
+
+
+def __getattr__(name: str) -> Any:
+    # PEP 562 — expose ``_SERVER_DEFAULTS`` / ``_USER_DEFAULTS`` / ``_DEFAULTS``
+    # as attributes for external readers (tests, future callers) without
+    # forcing the eager pydantic instantiation at module load.
+    if name == "_SERVER_DEFAULTS":
+        return _server_defaults()
+    if name == "_USER_DEFAULTS":
+        return _user_defaults()
+    if name == "_DEFAULTS":
+        return _all_defaults()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 #: Set of keys that belong to the server tier (everything else is per-user).
+#: Reading ``model_fields`` doesn't instantiate the model, so this stays eager.
 _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
@@ -757,11 +790,11 @@ def _read_value(key: str) -> Any:
     The caller is responsible for casting/coercion.
     """
     if key in _SERVER_KEYS:
-        return _ensure_server_loaded().get(key, _SERVER_DEFAULTS[key])
+        return _ensure_server_loaded().get(key, _server_defaults()[key])
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    return _ensure_user_loaded(username).get(key, _USER_DEFAULTS.get(key))
+    return _ensure_user_loaded(username).get(key, _user_defaults().get(key))
 
 
 def _write_value(key: str, value: Any) -> None:
@@ -808,7 +841,7 @@ def _mark_user_keys_dirty(username: str, keys) -> None:
 
 def get_defaults() -> dict[str, Any]:
     """Return a copy of the default settings (excluding infrastructure keys)."""
-    result = {k: v for k, v in _DEFAULTS.items() if k not in _EXCLUDE_FROM_DEFAULTS}
+    result = {k: v for k, v in _all_defaults().items() if k not in _EXCLUDE_FROM_DEFAULTS}
     valid_types = _valid_media_types()
     result["view_mode_left"] = {tid: _VIEW_MODE_DEFAULTS["left"] for tid in valid_types}
     result["view_mode_right"] = {tid: _VIEW_MODE_DEFAULTS["right"] for tid in valid_types}
@@ -840,7 +873,7 @@ def get_user_settings() -> dict[str, Any]:
     _ensure_user_loaded(username)
     with _settings_lock:
         user_copy = dict(_user_caches.get(username, {}))
-    result = dict(_USER_DEFAULTS)
+    result = dict(_user_defaults())
     result.update(user_copy)
     result["view_mode_left"] = get_view_mode_left()
     result["view_mode_right"] = get_view_mode_right()
@@ -868,7 +901,7 @@ def get_all() -> dict[str, Any]:
     with _settings_lock:
         server_copy = dict(_server_cache or {})
         user_copy = dict(_user_caches.get(username, {}))
-    result = dict(_DEFAULTS)
+    result = dict(_all_defaults())
     result.update(server_copy)
     result.update(user_copy)
     # Always return expanded per-media-type view/focus/panel dicts.
@@ -1276,7 +1309,7 @@ def is_autorun_detector(name: str) -> bool:
 def _get_dir(key: str) -> Path:
     """Return a server-tier directory path setting as a :class:`~pathlib.Path`."""
     with _settings_lock:
-        raw = _ensure_server_loaded().get(key, _SERVER_DEFAULTS[key])
+        raw = _ensure_server_loaded().get(key, _server_defaults()[key])
     return Path(raw)
 
 
