@@ -49,18 +49,17 @@
   display: none;
 }
 
-.error-text {
-  color: var(--color-bad);
-  font-size: var(--font-md);
-}
+// `.error-text` and `.back-btn` come from `_components.scss`.
+// The back-btn needs a bottom margin to space it from the picker
+// instructions below — scoped via `:host` so it's a contextual override.
 
 // Media picker view (reuses styles from new-model-modal)
 .media-picker {
   min-height: 200px;
 }
 
-.back-btn {
-  margin-bottom: var(--space-lg);
+:host {
+  .back-btn { margin-bottom: var(--space-lg); }
 }
 
 .picker-instructions {

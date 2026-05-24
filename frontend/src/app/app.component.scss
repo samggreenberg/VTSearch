@@ -9,7 +9,7 @@ header {
   display: flex;
   align-items: center;
   gap: var(--space-lg);
-  padding: 3px var(--space-md);
+  padding: var(--space-xs) var(--space-md);
   background: var(--header-bg);
   border-bottom: 1px solid var(--header-border);
 
@@ -37,7 +37,7 @@ header {
   justify-content: center;
   gap: var(--space-xs);
   padding: 0;
-  transition: all 0.2s;
+  transition: background var(--transition-base), border-color var(--transition-base);
 
   &:hover {
     background: var(--header-btn-hover-bg);
@@ -49,7 +49,7 @@ header {
     width: 18px;
     height: 2px;
     background: var(--header-text-dim);
-    transition: all 0.2s;
+    transition: background var(--transition-base);
   }
 
   &:hover span {
@@ -86,10 +86,10 @@ header {
   cursor: pointer;
   font-size: var(--font-md);
   color: var(--text-secondary);
-  transition: all 0.15s;
+  transition: background var(--transition-base), color var(--transition-base);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-sm);
 
   &:hover {
     background: var(--bg-hover);
@@ -144,7 +144,7 @@ header {
 
   .recent-sep {
     color: var(--text-dim);
-    padding: 0 2px;
+    padding: 0 var(--space-2xs);
   }
 
   .recent-time {
@@ -161,7 +161,7 @@ header {
   font-size: var(--font-sm);
   padding: var(--space-xs) 0.625rem;  // 4px 10px — off-scale horizontal kept exact
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background var(--transition-base), border-color var(--transition-base);
   white-space: nowrap;
 
   &:hover:not(:disabled) {
@@ -190,7 +190,7 @@ header {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background var(--transition-base), border-color var(--transition-base);
   flex-shrink: 0;
 
   svg {
@@ -218,7 +218,7 @@ header {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background var(--transition-base), border-color var(--transition-base);
   flex-shrink: 0;
 
   svg {

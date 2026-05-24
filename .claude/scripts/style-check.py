@@ -152,18 +152,46 @@ HEADING_RULE_RE = re.compile(r"^\s*h[1-6]\s*\{")
 
 def check_heading_restyling(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§4.7 Heading tags restyled in component SCSS",
+        rule="§4.7 Heading tags visually restyled in component SCSS",
         description=(
-            "Use the right tag; let the global rule style it. Per-component "
-            "h1/h2/h3 restyling defeats the typography baseline."
+            "Use the right tag; let the global rule style it. Margin-only "
+            "scoping (`h3 { margin: 0 0 var(--space-md); }`) is fine — it "
+            "positions the heading without changing its identity. This flags "
+            "blocks that override `font-size` or `font-weight`, which is the "
+            "actual 'make a smaller tag look like a bigger one' anti-pattern."
         ),
     )
     for path in files:
         if path in SHARED_UTILITY_FILES:
             continue
-        for lineno, line in enumerate(path.read_text().splitlines(), 1):
-            if HEADING_RULE_RE.match(line):
-                f.hits.append((path, lineno, line.rstrip()))
+        text = path.read_text()
+        lines = text.splitlines()
+        i = 0
+        while i < len(lines):
+            if HEADING_RULE_RE.match(lines[i]):
+                # Walk the block until the opening `{` is matched, then
+                # inspect the body for visual restyling.
+                rule_line = i + 1
+                start = i
+                stripped = re.sub(r"//.*$", "", lines[i])
+                opens = stripped.count("{")
+                closes = stripped.count("}")
+                depth = opens - closes
+                j = i + 1
+                while j < len(lines) and depth > 0:
+                    stripped = re.sub(r"//.*$", "", lines[j])
+                    depth += stripped.count("{") - stripped.count("}")
+                    j += 1
+                # `body` includes the opening line so single-line rules
+                # (`h1 { margin: 0; }`) are inspected correctly.
+                body = "\n".join(lines[start:j])
+                if re.search(r"\bfont-size\b", body) or re.search(
+                    r"\bfont-weight\b", body
+                ):
+                    f.hits.append((path, rule_line, lines[i].rstrip()))
+                i = j
+            else:
+                i += 1
     return f
 
 
@@ -296,16 +324,26 @@ def check_redeclared_utility(files: list[Path]) -> Finding:
             "tweak is genuinely needed."
         ),
     )
+    # End of the class name must be a non-class-character — not `-` or
+    # `\w` — so `.btn-good` and `.form-group--section` (which are new
+    # classes, not redeclarations of `.btn` or `.form-group`) don't match.
     pattern = re.compile(
-        r"^\s*\.(" + "|".join(re.escape(c) for c in SHARED_CLASSES) + r")\s*\{"
+        r"^\.(" + "|".join(re.escape(c) for c in SHARED_CLASSES) + r")(?![-\w])[^{]*\{"
     )
     for path in files:
         if path in SHARED_UTILITY_FILES:
             continue
-        for lineno, line in enumerate(path.read_text().splitlines(), 1):
-            m = pattern.match(line)
-            if m:
+        text = path.read_text()
+        depth = 0
+        for lineno, line in enumerate(text.splitlines(), 1):
+            stripped = re.sub(r"//.*$", "", line)
+            # Only flag declarations at top level (depth 0). Nested
+            # `.parent { .form-input { ... } }` is a scoped override,
+            # not a redeclaration.
+            if depth == 0 and pattern.match(line):
                 f.hits.append((path, lineno, line.rstrip()))
+            depth += stripped.count("{") - stripped.count("}")
+            depth = max(depth, 0)
     return f
 
 
