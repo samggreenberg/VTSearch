@@ -911,9 +911,7 @@ if __name__ == "__main__":
         valid_embedder_names = {e.name for e in all_embedders()}
         for raw in raw_solo_embedders:
             if "=" not in raw:
-                parser.error(
-                    f"Invalid --solo-embedder value: {raw!r}. Expected TYPE=EMBEDDER (e.g. image=siglip)."
-                )
+                parser.error(f"Invalid --solo-embedder value: {raw!r}. Expected TYPE=EMBEDDER (e.g. image=siglip).")
             mt, _, emb = raw.partition("=")
             mt = mt.strip()
             emb = emb.strip()
