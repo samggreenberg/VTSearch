@@ -381,17 +381,6 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 return leaf
         return self.display_name
 
-    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-        origin = super().build_origin(field_values)
-        specs = field_values.get("source_specs")
-        if specs:
-            import json as _json  # noqa: PLC0415
-
-            if not isinstance(specs, str):
-                specs = _json.dumps(specs)
-            origin["params"]["source_specs"] = specs
-        return origin
-
     def origin_display(self, origin: dict[str, Any]) -> str:
         params = origin.get("params", {})
         return f"server_folder:{params.get('path', '')}"

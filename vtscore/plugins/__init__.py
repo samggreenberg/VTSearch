@@ -146,6 +146,24 @@ class PluginField:
     #: CLI parser to use :class:`float`; an integer step uses :class:`int`.
     step: str = ""
 
+    #: Whether this field's value should be copied into the importer's
+    #: persisted origin dict (see :meth:`DatasetImporter.build_origin`).
+    #: ``None`` means "use the field-type default": ``False`` for
+    #: ``"file"`` and ``"password"`` fields (don't persist file uploads or
+    #: secrets), ``True`` for every other type.  Set explicitly to
+    #: override the default — e.g. ``include_in_origin=False`` on a noisy
+    #: text field that doesn't belong in the persisted origin.
+    include_in_origin: bool | None = None
+
+    #: Optional callable that converts the field's value to the string
+    #: form persisted in the origin dict.  Receives the raw value (as
+    #: provided by the request or CLI) and must return a ``str``.  Use
+    #: this for list/dict-typed values whose default ``str(...)``
+    #: representation isn't round-trip safe (e.g. a list field that should
+    #: be serialised as a comma-joined string).  Ignored when
+    #: :attr:`include_in_origin` resolves to ``False``.
+    origin_serializer: Callable[[Any], str] | None = None
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "key": self.key,

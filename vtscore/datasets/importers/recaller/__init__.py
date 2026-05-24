@@ -183,6 +183,9 @@ class ReCallerDatasetImporter(DatasetImporter):
     hidden_from_picker = True  # flip to False once API clients are implemented
     category = "services"
     multi_media = True
+    # Useful per-media origins are built in ``_build_media`` (keyed by
+    # contentID); the dataset-level origin carries no actionable identity.
+    origin_suppressed = True
     fields = [
         ImporterField(
             key="media_type",
@@ -208,11 +211,6 @@ class ReCallerDatasetImporter(DatasetImporter):
             output_type = current_values.get("media_type") or "audio"
             return list(_rc_list_queries(output_type))
         return super().get_field_options(field_key, current_values)
-
-    # The dataset-level origin (queryID) is NOT useful for provenance —
-    # each media gets its own origin keyed by contentID via _build_media.
-    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-        return {"importer": self.name, "params": {}}
 
     # ------------------------------------------------------------------
     # Multi-media source hook

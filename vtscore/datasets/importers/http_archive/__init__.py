@@ -369,15 +369,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
                 return tail
         return self.display_name
 
-    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-        origin = super().build_origin(field_values)
-        specs = field_values.get("source_specs")
-        if specs:
-            if not isinstance(specs, str):
-                specs = json.dumps(specs)
-            origin["params"]["source_specs"] = specs
-        return origin
-
     def resolve_file(
         self,
         origin: dict[str, Any],

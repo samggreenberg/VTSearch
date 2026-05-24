@@ -215,6 +215,39 @@ PickerView = str  # one of: "form", "demo", "server_folder", "local"
 DATASET_NAME_FIELD_KEY = "dataset_name"
 
 
+_ORIGIN_EXCLUDED_FIELD_TYPES = frozenset({"file", "password"})
+
+
+def _field_in_origin(field: PluginField) -> bool:
+    """Resolve whether *field*'s value should land in the persisted origin.
+
+    Honors an explicit :attr:`PluginField.include_in_origin`; otherwise
+    falls back to the field-type default (file and password fields are
+    excluded).
+    """
+    if field.include_in_origin is not None:
+        return field.include_in_origin
+    return field.field_type not in _ORIGIN_EXCLUDED_FIELD_TYPES
+
+
+def _serialise_origin_value(value: Any, serializer: Any) -> str:
+    """Serialise *value* for inclusion in an origin ``params`` dict.
+
+    Returns the empty string when *value* is falsy (mirroring the
+    pre-refactor ``if val: params[key] = str(val)`` shape).  When
+    *serializer* is set it runs first; otherwise list/dict values are
+    JSON-encoded so an importer's structured ``field_values`` round-trip
+    through the string-only origin contract.
+    """
+    if not value:
+        return ""
+    if serializer is not None:
+        return str(serializer(value))
+    if isinstance(value, (list, dict)):
+        return json.dumps(value)
+    return str(value)
+
+
 def _dataset_name_field() -> PluginField:
     return PluginField(
         key=DATASET_NAME_FIELD_KEY,
@@ -337,6 +370,25 @@ class DatasetImporter(PluginBase):
     #: See :doc:`/docs/plans/multi-media-import` for the migration
     #: checklist.
     multi_media: bool = False
+
+    #: Extra keys to copy from ``field_values`` into the origin ``params``
+    #: dict, in addition to the importer's declared :attr:`fields`.  Use
+    #: this for transient request-time values that aren't first-class
+    #: :class:`PluginField`\s (e.g. ``"source_specs"`` for multi-media
+    #: importers).  List/dict values are JSON-encoded; everything else is
+    #: stringified via ``str(...)``.  Empty values are skipped.  When
+    #: :attr:`multi_media` is ``True``, the framework automatically adds
+    #: ``"source_specs"`` to this tuple, so multi-media importers usually
+    #: leave this empty.
+    extra_origin_keys: tuple[str, ...] = ()
+
+    #: When ``True``, :meth:`build_origin` returns
+    #: ``{"importer": self.name, "params": {}}`` regardless of
+    #: ``field_values``.  Use this for importers whose dataset-level origin
+    #: is intentionally empty (e.g. the recaller importer, which builds a
+    #: useful per-media origin on each yielded record and has no useful
+    #: dataset-wide identifier).
+    origin_suppressed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         d = super().to_dict()
@@ -982,6 +1034,24 @@ class DatasetImporter(PluginBase):
         identify the data source (importer name + string-serialisable
         field values).
 
+        Behaviour is driven declaratively by:
+
+        - :attr:`origin_suppressed` — short-circuits to empty params.
+        - :attr:`PluginField.include_in_origin` — per-field opt-out.  The
+          default is ``False`` for ``"file"`` and ``"password"`` fields
+          (don't persist uploads or secrets) and ``True`` for every
+          other type.
+        - :attr:`PluginField.origin_serializer` — per-field custom
+          string conversion (e.g. comma-joining a list).
+        - :attr:`extra_origin_keys` — non-``PluginField`` keys to copy
+          from ``field_values``.  ``multi_media`` importers
+          automatically include ``"source_specs"``.
+
+        Subclasses may still override this method, in which case the
+        override wins — every declarative knob above is ignored.  Prefer
+        the declarative form unless you need something the framework
+        can't express.
+
         Args:
             field_values: The field values used for the import.
 
@@ -989,19 +1059,37 @@ class DatasetImporter(PluginBase):
             A dict with ``"importer"`` (str) and ``"params"`` (dict of str)
             keys.
         """
+        if self.origin_suppressed:
+            return {"importer": self.name, "params": {}}
+
         params: dict[str, str] = {}
         for f in self.fields:
-            if f.field_type == "file":
+            if not _field_in_origin(f):
                 continue
             if f.field_type == "checkbox":
                 val = field_values.get(f.key, str(f.default).lower() == "true")
                 truthy = val if isinstance(val, bool) else str(val).lower() == "true"
                 params[f.key] = "true" if truthy else "false"
                 continue
-            val = field_values.get(f.key, "")
-            if val:
-                params[f.key] = str(val)
+            raw = field_values.get(f.key, "")
+            serialised = _serialise_origin_value(raw, f.origin_serializer)
+            if serialised:
+                params[f.key] = serialised
+
+        for key in self._effective_extra_origin_keys():
+            raw = field_values.get(key, "")
+            serialised = _serialise_origin_value(raw, None)
+            if serialised:
+                params[key] = serialised
+
         return {"importer": self.name, "params": params}
+
+    def _effective_extra_origin_keys(self) -> tuple[str, ...]:
+        """Return :attr:`extra_origin_keys`, auto-adding ``"source_specs"``
+        for multi-media importers."""
+        if self.multi_media and "source_specs" not in self.extra_origin_keys:
+            return self.extra_origin_keys + ("source_specs",)
+        return self.extra_origin_keys
 
     # ------------------------------------------------------------------
     # Origin display and reload
