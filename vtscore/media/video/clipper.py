@@ -369,10 +369,7 @@ class VideoSceneClipper(MediaClipper):
 
     @property
     def summary_template(self) -> str:
-        return (
-            "Split each video at scene changes (histogram threshold {threshold}, "
-            "min scene {min_scene_duration}s)."
-        )
+        return "Split each video at scene changes (histogram threshold {threshold}, min scene {min_scene_duration}s)."
 
     @property
     def threshold(self) -> float:

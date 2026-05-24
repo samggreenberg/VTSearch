@@ -495,8 +495,7 @@ class ImageFaceClipper(MediaClipper):
     @property
     def summary_template(self) -> str:
         return (
-            "Detect faces with MediaPipe (confidence ≥ {threshold}, min size {min_size}px) "
-            "and crop one clip per face."
+            "Detect faces with MediaPipe (confidence ≥ {threshold}, min size {min_size}px) and crop one clip per face."
         )
 
     @property

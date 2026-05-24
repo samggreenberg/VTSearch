@@ -352,8 +352,7 @@ class SoundSilenceClipper(MediaClipper):
     @property
     def summary_template(self) -> str:
         return (
-            "Split each audio file at silences quieter than {top_db}dB; "
-            "drop clips shorter than {min_clip_duration}s."
+            "Split each audio file at silences quieter than {top_db}dB; drop clips shorter than {min_clip_duration}s."
         )
 
     @property
@@ -657,8 +656,7 @@ class SoundSpeechActivityClipper(MediaClipper):
     @property
     def summary_template(self) -> str:
         return (
-            "Split each audio file at detected speech turns (VAD threshold {threshold}, "
-            "min clip {min_clip_duration}s)."
+            "Split each audio file at detected speech turns (VAD threshold {threshold}, min clip {min_clip_duration}s)."
         )
 
     @property
