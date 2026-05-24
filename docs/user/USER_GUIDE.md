@@ -290,6 +290,22 @@ Pick **Show everything** to opt back out. Operators can also pass
 fallback for new users — anyone who explicitly changes the setting
 overrides the CLI value for themselves.
 
+### Locking the embedder for a media type
+
+The dataset importer normally shows an **Advanced** dropdown so you
+can pick which embedding model is used (SigLIP for images, LAION-CLAP
+for audio, etc.). If you always pick the same one for a given type,
+lock it under **Appearance → Solo media embedder** in the Settings
+modal: pick one row per media type and the importer hides the
+dropdown for that type the next time you open it. Other media types
+keep the normal dropdown.
+
+Pick **Ask each time** for any type to opt back out. Operators can
+also pass `--solo-embedder image=siglip --solo-embedder audio=clap`
+on the command line as a fallback — anyone who picks their own value
+(or "Ask each time") in Settings overrides the CLI value for
+themselves, per media type.
+
 ---
 
 ## Region voting on images
