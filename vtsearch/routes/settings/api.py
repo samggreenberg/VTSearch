@@ -128,6 +128,51 @@ def _apply_solo_media_type(value) -> None:
     settings.apply_user_solo_media_type(value)
 
 
+def _apply_solo_embedder_per_media_type(value) -> None:
+    """Validate the ``{media_type: embedder}`` map and persist it.
+
+    ``None`` clears every per-type lock. Otherwise *value* must be a dict
+    mapping registered media-type ids to embedder names that exist for
+    that type (per :func:`vtscore.media.embedders_for_type`). An empty
+    string value is preserved as a **per-type opt-out sentinel** — it
+    overrides the ``--solo-embedder`` CLI fallback for that type
+    (analog of setting ``solo_media_type=null`` to override
+    ``--solo-media-type``). Any other invalid pairing raises 400.
+    """
+    if value is None:
+        settings.apply_user_solo_embedder_per_media_type(None)
+        return
+    if not isinstance(value, dict):
+        abort(400, message="solo_embedder_per_media_type must be a dict or null")
+
+    from vtscore.media import all_type_ids, embedders_for_type
+
+    valid_types = set(all_type_ids())
+    cleaned: dict[str, str] = {}
+    for raw_type, raw_emb in value.items():
+        if not isinstance(raw_type, str) or not raw_type.strip():
+            abort(400, message="solo_embedder_per_media_type keys must be non-empty media-type ids")
+        mt = raw_type.strip()
+        if mt not in valid_types:
+            abort(400, message=f"Unknown media type: {mt!r}. Valid: {sorted(valid_types)}")
+        if raw_emb is None or (isinstance(raw_emb, str) and not raw_emb.strip()):
+            # Per-type opt-out sentinel — preserve so it overrides the
+            # CLI fallback. ``None`` is normalised to "" here.
+            cleaned[mt] = ""
+            continue
+        if not isinstance(raw_emb, str):
+            abort(400, message=f"solo_embedder_per_media_type[{mt!r}] must be a string")
+        emb_name = raw_emb.strip()
+        valid_embedders = {e.name for e in embedders_for_type(mt)}
+        if emb_name not in valid_embedders:
+            abort(
+                400,
+                message=(f"Unknown embedder {emb_name!r} for media type {mt!r}. Valid: {sorted(valid_embedders)}"),
+            )
+        cleaned[mt] = emb_name
+    settings.apply_user_solo_embedder_per_media_type(cleaned)
+
+
 def _apply_dir(key: str, value: str, setter) -> None:
     """Validate and apply a directory-path setting."""
     import vtscore.security.path_validation as _paths
@@ -157,7 +202,54 @@ def get_settings():
     """
     data = settings.get_all()
     data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
+    data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
     return data
+
+
+#: Keys whose value is computed on read and silently ignored on write
+#: (the raw fields they're derived from go through their own dispatch
+#: entry below).
+_READ_ONLY_KEYS = frozenset(
+    {
+        "effective_solo_media_type",
+        "effective_solo_embedder_per_media_type",
+    }
+)
+
+
+def _apply_inclusion_guarded(value) -> None:
+    try:
+        _apply_inclusion(value)
+    except (TypeError, ValueError) as exc:
+        abort(400, message=str(exc))
+
+
+def _apply_disable_achievements_guarded(value) -> None:
+    try:
+        _apply_disable_achievements(value)
+    except (TypeError, ValueError) as exc:
+        abort(400, message=str(exc))
+
+
+def _apply_saved_datasets_dir(value) -> None:
+    _apply_dir("saved_datasets_dir", value, settings.set_saved_datasets_dir)
+
+
+def _apply_detectors_dir(value) -> None:
+    _apply_dir("detectors_dir", value, settings.set_detectors_dir)
+
+
+#: Keys with bespoke side-effects (validation against a registry, path
+#: traversal checks, counter wipes, etc.). Each handler raises 400 on
+#: invalid input itself, so the dispatcher just calls and returns.
+_CUSTOM_SETTERS: dict[str, Callable[[Any], None]] = {
+    "inclusion": _apply_inclusion_guarded,
+    "saved_datasets_dir": _apply_saved_datasets_dir,
+    "detectors_dir": _apply_detectors_dir,
+    "disable_achievements": _apply_disable_achievements_guarded,
+    "solo_media_type": _apply_solo_media_type,
+    "solo_embedder_per_media_type": _apply_solo_embedder_per_media_type,
+}
 
 
 def _apply_one_key(key: str, value) -> None:
@@ -167,28 +259,11 @@ def _apply_one_key(key: str, value) -> None:
     branching here. Side effects (path validation, achievement wipe,
     state-tier setter) are isolated to their helper functions.
     """
-    if key == "effective_solo_media_type":
-        # Read-only computed field — the route exposes it on GET but
-        # writes go through ``solo_media_type``.
+    if key in _READ_ONLY_KEYS:
         return
-    if key == "inclusion":
-        try:
-            _apply_inclusion(value)
-        except (TypeError, ValueError) as exc:
-            abort(400, message=str(exc))
-        return
-    if key in ("saved_datasets_dir", "detectors_dir"):
-        setter = settings.set_saved_datasets_dir if key == "saved_datasets_dir" else settings.set_detectors_dir
-        _apply_dir(key, value, setter)
-        return
-    if key == "disable_achievements":
-        try:
-            _apply_disable_achievements(value)
-        except (TypeError, ValueError) as exc:
-            abort(400, message=str(exc))
-        return
-    if key == "solo_media_type":
-        _apply_solo_media_type(value)
+    custom = _CUSTOM_SETTERS.get(key)
+    if custom is not None:
+        custom(value)
         return
     setter = _SCALAR_SETTERS.get(key)
     if setter is None:
@@ -216,6 +291,7 @@ def update_settings(body: dict):
 
     data = settings.get_all()
     data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
+    data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
     return data
 
 

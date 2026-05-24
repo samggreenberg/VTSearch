@@ -444,9 +444,14 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   /** Pick the initial embedder for a picker view.  Priority:
-   *  1. ``guessedMediaEmbedder`` (computed from currently loaded datasets)
-   *  2. the user's last pick for this media type (per-user setting)
-   *  3. first option, or empty when the list is empty.
+   *  1. Solo mediaEmbedder lock for this mediaType (per-user setting or
+   *     ``--solo-embedder`` CLI fallback). When set and present in the
+   *     embedder list it wins over every other source — the picker is
+   *     also hidden in that case (see :prop:`lockedEmbedderFor`), so the
+   *     selected value is the only one the user can see.
+   *  2. ``guessedMediaEmbedder`` (computed from currently loaded datasets)
+   *  3. the user's last pick for this media type (per-user setting)
+   *  4. first option, or empty when the list is empty.
    *
    *  ``mediaTypeFolderOrTypeId`` accepts either form — the importer form
    *  values use the folder name (e.g. ``"images"``) while the settings
@@ -454,6 +459,8 @@ export class DatasetImporterModalComponent implements OnInit {
    *  type_id before looking up the saved setting. */
   private pickInitialEmbedder(embedders: EmbedderInfo[], mediaTypeFolderOrTypeId: string): string {
     if (embedders.length === 0) return '';
+    const locked = this.lockedEmbedderFor(mediaTypeFolderOrTypeId, embedders);
+    if (locked) return locked;
     const guessedMatch = this.guessedMediaEmbedder
       ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
       : null;
@@ -466,6 +473,23 @@ export class DatasetImporterModalComponent implements OnInit {
       if (savedMatch) return savedMatch.name;
     }
     return embedders[0].name;
+  }
+
+  /** Resolve the Solo mediaEmbedder lock for a mediaType. Returns the
+   *  embedder name when a lock is set AND that embedder is currently
+   *  registered for the type (verified against *embedders*, or the live
+   *  ``allEmbedders`` list when no per-tab list is supplied). A stale
+   *  entry — embedder renamed, removed, or now belongs to a different
+   *  mediaType — returns ``''`` so the normal picker reappears. */
+  lockedEmbedderFor(mediaTypeFolderOrTypeId: string, embedders?: EmbedderInfo[]): string {
+    if (!mediaTypeFolderOrTypeId) return '';
+    const typeId = this.toTypeId(mediaTypeFolderOrTypeId) || mediaTypeFolderOrTypeId;
+    const effectiveMap =
+      this.settingsState.settings?.effective_solo_embedder_per_media_type || {};
+    const locked = effectiveMap[typeId];
+    if (!locked) return '';
+    const list = embedders ?? this.allEmbedders.filter((e) => e.media_type_id === typeId);
+    return list.find((e) => e.name === locked) ? locked : '';
   }
 
   /** Front-of-list order for the picker within each tab.  Importers not

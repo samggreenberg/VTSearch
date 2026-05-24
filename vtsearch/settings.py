@@ -127,6 +127,9 @@ if TYPE_CHECKING:
     def get_solo_media_type_explicit() -> bool: ...
     def set_solo_media_type_explicit(value: bool) -> None: ...
 
+    def get_solo_embedder_per_media_type() -> dict[str, str]: ...
+    def set_solo_embedder_per_media_type(value: dict[str, str]) -> None: ...
+
     def get_recent_sessions() -> list[dict[str, Any]]: ...
     def set_recent_sessions(value: list[dict[str, Any]]) -> None: ...
 
@@ -156,6 +159,15 @@ _cli_solo_media_type: str | None = None
 #: the persisted ``hidden_plugins`` server setting at read time — see
 #: :func:`get_effective_hidden_plugins`. Empty dict means "no CLI hides".
 _cli_hidden_plugins: dict[str, set[str]] = {}
+
+#: Process-level fallback for the per-user
+#: ``solo_embedder_per_media_type`` setting, set by
+#: :func:`set_cli_solo_embedder` from the (repeatable) ``--solo-embedder``
+#: flag in :mod:`app`. Maps ``media_type_id`` → embedder name. Empty means
+#: "no CLI default". The resolver :func:`get_effective_solo_embedders`
+#: layers per-user entries over this dict (per-key), so a user can override
+#: individual mediaTypes without losing the others.
+_cli_solo_embedders: dict[str, str] = {}
 
 #: Filename used for the per-user settings file inside
 #: ``get_user_data_dir(user)``.
@@ -1253,6 +1265,99 @@ def apply_user_solo_media_type(value: str | None) -> None:
         value = None
     set_solo_media_type(value)  # type: ignore[name-defined]  # autogen'd accessor
     set_solo_media_type_explicit(True)  # type: ignore[name-defined]  # autogen'd accessor
+
+
+def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:
+    """Set or clear a process-level solo-embedder fallback for *media_type*.
+
+    Called from ``app.py`` startup for each ``--solo-embedder TYPE=EMB``
+    pair on the command line. Pass ``embedder=None`` (or an empty
+    string) to clear an entry. Both arguments are stripped; an empty
+    *media_type* is silently ignored (the CLI parser already validates).
+    """
+    mt = (media_type or "").strip()
+    if not mt:
+        return
+    emb = (embedder or "").strip() if embedder else ""
+    if not emb:
+        _cli_solo_embedders.pop(mt, None)
+        return
+    _cli_solo_embedders[mt] = emb
+
+
+def get_cli_solo_embedders() -> dict[str, str]:
+    """Return a copy of the process-level solo-embedder CLI fallbacks."""
+    return dict(_cli_solo_embedders)
+
+
+def get_effective_solo_embedders() -> dict[str, str]:
+    """Return the merged ``{media_type: embedder}`` dict for the current user.
+
+    Combines the per-user :func:`get_solo_embedder_per_media_type` map
+    (user explicit) with the process-level
+    :data:`_cli_solo_embedders` (CLI fallback). User entries win per-key;
+    missing user keys fall through to the CLI value. An **empty-string
+    value** in the user map is a per-type opt-out sentinel — it removes
+    that type from the merged map even if the CLI fallback has a
+    value for it. This is the analog of setting ``solo_media_type=null``
+    with ``solo_media_type_explicit=True`` to override
+    ``--solo-media-type``.
+
+    Validity (does the embedder still exist for this type?) is *not*
+    checked here — the frontend resolves it against the live embedder
+    registry on its end and falls back to the normal picker for any
+    entry that no longer matches. Keeping validation client-side means a
+    rename or removal never blocks the settings UI from rendering.
+    """
+    merged: dict[str, str] = {}
+    for mt, emb in _cli_solo_embedders.items():
+        if mt and isinstance(emb, str) and emb.strip():
+            merged[mt] = emb.strip()
+    user_map = get_solo_embedder_per_media_type()  # type: ignore[name-defined]  # autogen'd accessor
+    if isinstance(user_map, dict):
+        for mt, emb in user_map.items():
+            if not isinstance(mt, str) or not mt:
+                continue
+            if isinstance(emb, str) and emb.strip():
+                merged[mt] = emb.strip()
+            else:
+                # Empty-string sentinel — user explicitly opted out for
+                # this type, so drop the CLI fallback too.
+                merged.pop(mt, None)
+    return merged
+
+
+def get_effective_solo_embedder(media_type: str) -> str | None:
+    """Return the effective solo embedder for *media_type*, or ``None``."""
+    if not media_type:
+        return None
+    return get_effective_solo_embedders().get(media_type)
+
+
+def apply_user_solo_embedder_per_media_type(value: dict[str, str] | None) -> None:
+    """Replace the per-user ``solo_embedder_per_media_type`` map.
+
+    Used by the settings PUT route. ``None`` clears every entry. Keys
+    are stripped and skipped if empty. Values are stripped; an
+    empty-string value is preserved as a **per-type opt-out sentinel**
+    (overrides the CLI fallback for that type — see
+    :func:`get_effective_solo_embedders`). The route layer is
+    responsible for validating non-empty ``(media_type, embedder)``
+    pairs against the live registries before calling this.
+    """
+    if value is None:
+        set_solo_embedder_per_media_type({})  # type: ignore[name-defined]  # autogen'd accessor
+        return
+    cleaned: dict[str, str] = {}
+    for mt, emb in value.items():
+        if not isinstance(mt, str) or not mt.strip():
+            continue
+        if isinstance(emb, str) and emb.strip():
+            cleaned[mt.strip()] = emb.strip()
+        elif isinstance(emb, str):
+            # Empty-string sentinel — preserve as opt-out marker.
+            cleaned[mt.strip()] = ""
+    set_solo_embedder_per_media_type(cleaned)  # type: ignore[name-defined]  # autogen'd accessor
 
 
 def get_autorun_detectors() -> list[str]:

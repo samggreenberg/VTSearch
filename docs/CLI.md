@@ -225,6 +225,22 @@ opts back into "show everything") via the Settings dialog overrides
 the CLI value for themselves, and the choice persists across restarts.
 A user who has never touched the setting sees the CLI value.
 
+**Solo mediaEmbedder** (`--solo-embedder`) — lock the embedding model
+for one or more mediaTypes so the dataset-importer modal hides its
+embedder picker for those types and silently uses the named embedder.
+Repeatable, one `--solo-embedder` per mediaType; the format is
+`TYPE=EMBEDDER`:
+
+```bash
+python app.py --solo-embedder image=siglip --solo-embedder audio=clap
+```
+
+Other mediaTypes still show the normal embedder picker. The flag warms
+each locked embedder at startup even when no datasets or detectors are
+registered yet. Same fallback semantics as `--solo-media-type`: any
+user can override per-mediaType via the Settings dialog ("Ask each
+time" is the opt-out), and their choice persists across restarts.
+
 **Hidden plugins** (`--hide-plugin family:name`, repeatable) — drop a
 plugin from picker / listing API responses for this deployment without
 editing plugin code. The format is `family:name` where `family` is one
