@@ -470,10 +470,10 @@ class VideoMediaType(MediaType):
         kth_cats = self._KTH_CATEGORIES
         kth_folder = VIDEO_DIR / "kth"
 
-        desc = "YouTube action videos covering sports and everyday activities."
-        hmdb_desc = "Human motion clips spanning 51 diverse action categories."
-        ucf_full_desc = "Full UCF-101 with 101 action classes across activities."
-        kth_desc = "Simple human actions — a classic recognition benchmark."
+        desc = "YouTube action videos"
+        hmdb_desc = "Human motion clips"
+        ucf_full_desc = "Action videos, 101 classes"
+        kth_desc = "Simple human actions"
         return [
             # UCF-101 subset (10 classes, 171 MB download)
             DemoDataset(

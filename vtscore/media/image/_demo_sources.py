@@ -47,15 +47,15 @@ def build_demo_datasets() -> list[DemoDataset]:
 
     cats101 = DEMO_CATEGORIES_CALTECH101
     cats256 = DEMO_CATEGORIES_CALTECH256
-    ct101_desc = "Centered object photos — a classic vision benchmark."
+    ct101_desc = "Centered object photos"
     ct101_folder = DATA_DIR / "caltech-101" / "101_ObjectCategories"
-    food_desc = "Crowd-sourced food photos — a deliberately noisy benchmark."
+    food_desc = "Crowd-sourced food photos"
     food_folder = DATA_DIR / "food-101" / "images"
-    euro_desc = "Sentinel-2 satellite imagery classified by land use type."
+    euro_desc = "Satellite imagery by land use"
     euro_folder = DATA_DIR / "EuroSAT_RGB"
-    dogs_desc = "Fine-grained dog breeds with many visually similar classes."
+    dogs_desc = "Dog breeds"
     dogs_folder = DATA_DIR / "stanford_dogs" / "Images"
-    places_desc = "Scene photos across indoor, natural, and man-made settings."
+    places_desc = "Indoor & outdoor scenes"
     places_folder = DATA_DIR / "places365" / "val_256"
     return [
         DemoDataset(
@@ -109,7 +109,7 @@ def build_demo_datasets() -> list[DemoDataset]:
         DemoDataset(
             id="caltech256_a",
             label="Caltech-256 (A)",
-            description="Harder object photos with cluttered backgrounds than Caltech-101.",
+            description="Cluttered object photos",
             categories=cats256,
             source="caltech256",
             required_folder=DATA_DIR / "caltech-256" / "256_ObjectCategories",
@@ -121,7 +121,7 @@ def build_demo_datasets() -> list[DemoDataset]:
         DemoDataset(
             id="oxford_flowers_102_a",
             label="Oxford Flowers 102 (A)",
-            description="Close-up flower photography with fine-grained species variation.",
+            description="Close-up flower photos",
             categories=OXFORD_FLOWERS_CATEGORIES,
             source="oxford_flowers_102",
             required_folder=DATA_DIR / "oxford_flowers",
@@ -325,7 +325,7 @@ def build_demo_datasets() -> list[DemoDataset]:
         DemoDataset(
             id="ucsf_documents_a",
             label="UCSF Documents (A)",
-            description="Scanned pages from the UCSF Industry Documents Library.",
+            description="Scanned document pages",
             categories=UCSF_DOCUMENTS_CATEGORIES,
             source="ucsf_documents",
             required_folder=DATA_DIR / "ucsf_documents",

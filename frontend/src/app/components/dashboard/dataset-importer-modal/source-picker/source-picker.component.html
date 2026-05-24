@@ -73,7 +73,7 @@
                     [class.sortable]="demoCols.meta(col).sortable"
                     [class.col-drop-target]="demoCols.isDropTarget(col)"
                     [class.col-dragging]="demoCols.isDragging(col)"
-                    [class.col-num]="col === 'num_files' || col === 'num_categories'"
+                    [class.col-num]="col === 'num_files'"
                     [attr.data-col]="col"
                     [title]="demoCols.meta(col).title"
                     [style.width.%]="demoCols.tableFixed ? demoCols.colWidths[col] : null"
@@ -110,9 +110,6 @@
                       }
                       @case ('num_files') {
                         <td class="col-num">{{ demo.num_files | number }}</td>
-                      }
-                      @case ('num_categories') {
-                        <td class="col-num">{{ demo.num_categories | number }}</td>
                       }
                       @case ('description') {
                         <td class="col-desc" [title]="demo.description">{{ demo.description }}</td>

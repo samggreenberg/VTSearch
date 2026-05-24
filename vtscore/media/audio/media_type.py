@@ -293,9 +293,9 @@ class AudioMediaType(MediaType):
 
         cats = self._DEMO_CATEGORIES
         folder = DATA_DIR / "ESC-50-master" / "audio"
-        esc_desc = "Environmental recordings of animals, nature, cities, and homes."
-        sc_desc = "One-second keyword utterances from crowd-sourced speakers."
-        us_desc = "Real urban field recordings, pre-segmented into labeled sounds."
+        esc_desc = "Animals, nature, cities, & homes"
+        sc_desc = "Spoken keyword utterances"
+        us_desc = "Urban recordings"
         return [
             DemoDataset(
                 id="esc50_s",
@@ -348,7 +348,7 @@ class AudioMediaType(MediaType):
             DemoDataset(
                 id="gtzan_a",
                 label="GTZAN Music Genre (A)",
-                description="30-second music excerpts, one per genre.",
+                description="30sec music excerpts",
                 categories=self._GTZAN_CATEGORIES,
                 source="gtzan",
                 slice_frac_start=0.0,
