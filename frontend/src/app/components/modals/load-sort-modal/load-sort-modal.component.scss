@@ -8,16 +8,10 @@
   // `<h3>` inherits its font-size from `_components.scss`.
   h3 { margin: 0 0 var(--space-lg); }
 
-  // `<h4>` here labels a sub-section ("Server Example Media") within
-  // the h3 panel and is styled as a muted subhead rather than a full
-  // heading — same pattern as settings-modal. If this is touched
-  // again, promote a shared `.subhead` class to `_components.scss`
-  // and convert these to `<h4 class="subhead">`.
-  h4 {
-    margin: var(--space-lg) 0 var(--space-md);
-    font-size: var(--font-md);
-    color: var(--text-secondary);
-  }
+  // `<h4 class="subhead">` ("Server Example Media") inherits its
+  // font-size/color from the global `.subhead`; we only scope its
+  // contextual margins here.
+  h4 { margin: var(--space-lg) 0 var(--space-md); }
 }
 
 .file-btn {

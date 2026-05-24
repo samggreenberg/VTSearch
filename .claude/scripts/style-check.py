@@ -310,6 +310,7 @@ SHARED_CLASSES = [
     "modal-close",
     "modal-backdrop",
     "back-btn",
+    "subhead",
 ]
 
 
