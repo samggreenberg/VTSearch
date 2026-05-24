@@ -112,6 +112,14 @@
   --btn-icon-hover-bg: rgba(255, 255, 255, 0.08);
   --text-warning: #e6a700;
 
+  // Achievement tiers — deliberately theme-agnostic (bronze should
+  // look bronze in every theme). Defined once at `:root` and NOT
+  // overridden in `[data-theme="light"]`/`[data-theme="highviz"]`.
+  --tier-bronze: #cd7f32;
+  --tier-silver: #d9d9d9;
+  --tier-gold: #f0c419;
+  --tier-platinum: #f5f6fa;
+
   // Aliases used by component SCSS files
   --border-color: var(--border);
   --bg-secondary: var(--bg-subtle);

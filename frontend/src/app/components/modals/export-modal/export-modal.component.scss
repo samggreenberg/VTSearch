@@ -5,10 +5,8 @@
 .export-section {
   margin-bottom: var(--space-2xl);
 
-  h3 {
-    margin: 0 0 var(--space-md);
-    font-size: var(--font-xl);
-  }
+  // `<h3>` inherits its font-size from `_components.scss`.
+  h3 { margin: 0 0 var(--space-md); }
 }
 
 .preview-count {
@@ -202,31 +200,19 @@
 }
 
 // --- Form elements ---
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+//
+// `.form-group`, `.info-text`, `.error-text`, `.status-text` come from
+// `_components.scss`. The two trailing rows below need a small top
+// margin to sit clear of the form section above — scoped via `:host`
+// so it's a contextual override, not a redeclaration of the base.
+:host {
+  .status-text, .error-text {
+    margin-top: var(--space-md);
+  }
 }
 
 .required {
   color: var(--color-bad);
-}
-
-.info-text {
-  color: var(--text-muted);
-  font-size: var(--font-md);
-}
-
-.error-text {
-  color: var(--color-bad);
-  font-size: var(--font-md);
-}
-
-.status-text {
-  color: var(--text-muted);
-  font-size: var(--font-md);
-  margin-top: var(--space-md);
 }
 
 .form-actions {

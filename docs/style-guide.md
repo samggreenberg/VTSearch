@@ -352,6 +352,14 @@ Avoid them. The right answer is almost always "use a theme variable." If a compo
 10. **`transition: all <duration>` with a custom duration.** Use `var(--transition-base)`.
 11. **Cancel as a Back button (or vice versa).** See §2.4.
 12. **Designing for mobile.** Desktop only.
+13. **`font: inherit` on a class that combines with `.form-input` / `.form-select`** (or any shared element class whose font-size is set globally). Angular's view-encapsulated component selectors get an attribute-selector specificity bump that beats the global `.form-input` rule, so a component-scoped `font: inherit` silently drops `var(--font-md)` and renders the page-root `1rem` instead — which is why a custom dropdown trigger can render its content larger than the `.form-label` above it. If you need the button to inherit something from the parent, be explicit: `font-family: inherit; font-size: var(--font-md);`. The same trap applies to any shorthand that sets `font-size` (raw `font: 14px ...`, `font: bold 1rem`, etc.) under a component-scoped selector.
+14. **`flex-direction: column` without an explicit `gap`** (and no per-child margins). A stacked-column container has to own its inter-row spacing — either set `gap: var(--space-*)` on the parent, or commit to a child class (`.form-group`, `.section-title`) that carries its own margins. Mixing the two ad-hoc produces uneven rhythms like "no space between drop zone and the input below it, but huge space between the section header and its description." Pick one mechanism per container.
+15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file — even with the same property values — causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing — UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
+
+> A static scan for items 1-3, 6-7, 10, 13-15 lives at
+> `.claude/scripts/style-check.py` (invoked via the `/style-check`
+> skill). Run it before a styling-heavy PR, or whenever a layout
+> regression shows up that you can't explain by reading one file.
 
 ---
 
@@ -374,3 +382,4 @@ When you add a new token:
 - `frontend/src/scss/_data-table.scss` — dashboard table.
 - `frontend/src/scss/_layout.scss` — 3-panel grid.
 - `CLAUDE.md` — Back vs Cancel rules, desktop-only scope.
+- `.claude/scripts/style-check.py` — static SCSS audit (invoked via the `/style-check` skill).

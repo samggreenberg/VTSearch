@@ -5,10 +5,9 @@
 }
 
 .examples-section {
-  h3 {
-    margin: 0 0 var(--space-lg);
-    font-size: var(--font-xl);
-  }
+  // `<h3>` inherits its `font-size` from `_components.scss`; only the
+  // section's specific bottom-margin needs scoping.
+  h3 { margin: 0 0 var(--space-lg); }
 }
 
 .examples-grid {

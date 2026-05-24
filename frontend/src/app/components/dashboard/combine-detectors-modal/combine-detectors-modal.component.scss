@@ -6,12 +6,7 @@
   max-width: 100%;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
+// `.form-group`, `.info-text`, `.error-text` come from `_components.scss`.
 .col-label {
   font-weight: var(--weight-semibold);
   font-size: var(--font-md);
@@ -20,18 +15,6 @@
 
 .required {
   color: var(--color-bad);
-}
-
-.info-text {
-  margin: var(--space-xs) 0 0;
-  color: var(--text-muted);
-  font-size: var(--font-md);
-}
-
-.error-text {
-  margin: var(--space-xs) 0 0;
-  color: var(--color-bad);
-  font-size: var(--font-md);
 }
 
 .source-list {

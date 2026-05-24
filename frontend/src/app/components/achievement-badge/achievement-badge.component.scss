@@ -21,20 +21,14 @@
 }
 
 // Color themes — currentColor is consumed by both the ring SVG and the inner icon.
-.tier-bronze {
-  color: #cd7f32; // achievement-tier intrinsic color, not theme-aware
-}
-
-.tier-silver {
-  color: #d9d9d9; // achievement-tier intrinsic color, not theme-aware
-}
-
-.tier-gold {
-  color: #f0c419; // achievement-tier intrinsic color, not theme-aware
-}
-
+// Tier colors are intrinsic (bronze/silver/gold/platinum); the tokens
+// live at `:root` in `_variables.scss` and are intentionally NOT
+// overridden per theme.
+.tier-bronze   { color: var(--tier-bronze); }
+.tier-silver   { color: var(--tier-silver); }
+.tier-gold     { color: var(--tier-gold); }
 .tier-platinum {
-  color: #f5f6fa; // achievement-tier intrinsic color, not theme-aware
+  color: var(--tier-platinum);
   filter: drop-shadow(0 0 4px rgba(245, 246, 250, 0.45));
 }
 

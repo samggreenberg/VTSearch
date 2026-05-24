@@ -128,21 +128,11 @@
   font-style: italic;
 }
 
-.info-text {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--font-md);
-}
-
+// `.info-text` / `.error-text` come from `_components.scss`; only
+// `.warn-text` is local (no shared `--text-warning` utility class yet).
 .warn-text {
   margin: 0;
   color: var(--text-warning);
-  font-size: var(--font-md);
-}
-
-.error-text {
-  margin: 0;
-  color: var(--color-bad);
   font-size: var(--font-md);
 }
 

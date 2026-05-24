@@ -308,7 +308,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // the placeholder).  Stays visible after the user starts typing — used for
 // accepted extensions, expected column schemas, JSON/CSV sample snippets.
 .form-hint {
-  margin: 2px 0 0;
+  margin: var(--space-2xs) 0 0;
   font-size: var(--font-sm);
   line-height: 1.4;
   color: var(--text-muted);
@@ -331,10 +331,15 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // rely on the parent's flex `gap` to space stacked elements, and default
 // browser `<p>` margins (~1em) inject inconsistent extra space that
 // breaks the vertical rhythm (see style-guide §3.0).
+// `.info-text` is body helper text — the kind of muted explanatory
+// copy ("Pick a folder on this computer…") that sits below or
+// alongside form controls. Uses `--text-muted` per §1.5 ("hints"),
+// which matches the de-facto pattern that ~5 modals had been
+// reimplementing locally before this consolidation.
 .info-text {
   margin: 0;
   font-size: var(--font-md);
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .error-text {

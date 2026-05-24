@@ -59,14 +59,17 @@
   // gap from the h3 to its own content, so the title visually belongs to
   // what's below it. Asymmetric margins handle this; flex-gap still
   // provides the rest of the in-section rhythm.
+  // `<h3>` inherits its font-size and color from `_components.scss`;
+  // we only need to scope the asymmetric section-title margins.
   h3 {
     margin: var(--space-xl) 0 0;
-    font-size: var(--font-xl);
-    color: var(--text-primary);
 
     &:first-child { margin-top: 0; }
   }
 
+  // `<h4>` here labels a small subsection inside an h3 panel and is
+  // styled as a muted subhead. See the load-sort-modal comment about
+  // promoting a `.subhead` class once this pattern is touched again.
   h4 {
     margin: var(--space-md) 0 0;
     font-size: var(--font-md);
@@ -133,6 +136,8 @@
   flex-direction: column;
   gap: var(--space-md);
 
+  // Sub-section divider — see settings-modal h4 comment above re. the
+  // pending `.subhead` consolidation.
   h4 {
     margin: 0;
     font-size: var(--font-md);
