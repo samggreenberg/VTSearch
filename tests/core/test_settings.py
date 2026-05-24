@@ -670,6 +670,38 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
 
+    def test_import_defaults_by_media_type_default(self):
+        # Empty per-user dict — nothing saved means the importer falls
+        # back to its own natural defaults.
+        assert settings_mod.get_import_defaults_by_media_type() == {}
+
+    def test_import_defaults_by_media_type_roundtrip(self, isolated_settings):
+        value = {
+            "image": {
+                "embedder": "siglip",
+                "clipper": "image_grid_clipper",
+                "clipper_params": {"rows": 2, "cols": 2},
+                "source_specs": [
+                    {
+                        "source_type": "video",
+                        "converter": "video_to_image",
+                        "params": {"n_clips": "3"},
+                    },
+                ],
+            },
+        }
+        settings_mod.set_import_defaults_by_media_type(value)
+        assert settings_mod.get_import_defaults_by_media_type() == value
+
+        raw = json.loads(isolated_settings.read_text())
+        assert raw["import_defaults_by_media_type"] == value
+
+    def test_import_defaults_by_media_type_persists_across_reset(self, isolated_settings):
+        value = {"audio": {"embedder": "clap"}}
+        settings_mod.set_import_defaults_by_media_type(value)
+        settings_mod.reset()
+        assert settings_mod.get_import_defaults_by_media_type() == value
+
 
 class TestConcurrentWrites:
     """Cross-process safety for per-user settings writes.
