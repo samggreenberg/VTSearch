@@ -324,10 +324,6 @@ class TestServerJsonLabelImporter:
         with pytest.raises(ValueError, match="not found"):
             self._get_importer().run({"filepath": "/nonexistent/path.json"})
 
-    def test_run_raises_on_empty_filepath(self):
-        with pytest.raises(ValueError, match="file path"):
-            self._get_importer().run({"filepath": ""})
-
     def test_run_raises_on_invalid_json(self, tmp_path):
         p = tmp_path / "bad.json"
         p.write_text("not json at all")
@@ -397,10 +393,6 @@ class TestServerCsvLabelImporter:
     def test_run_raises_on_missing_file(self):
         with pytest.raises(ValueError, match="not found"):
             self._get_importer().run({"filepath": "/nonexistent/path.csv"})
-
-    def test_run_raises_on_empty_filepath(self):
-        with pytest.raises(ValueError, match="file path"):
-            self._get_importer().run({"filepath": ""})
 
     def test_run_raises_on_missing_columns(self, tmp_path):
         p = tmp_path / "bad.csv"

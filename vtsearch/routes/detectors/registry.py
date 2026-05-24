@@ -187,7 +187,6 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     from vtsearch.routes._shared import (
         get_plugin_or_404,
         run_plugin_or_error,
-        validate_filepath_field,
         validate_plugin_args,
     )
 
@@ -209,10 +208,6 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     det_path = _detector_path(name)
     if det_path.exists():
         abort(409, message=f"A detector named '{name}' already exists")
-
-    err = validate_filepath_field(field_values)
-    if err:
-        return err
 
     label_entries, err = run_plugin_or_error(importer, "run", field_values)
     if err:

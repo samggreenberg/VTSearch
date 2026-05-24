@@ -343,13 +343,6 @@ class TestServerJsonLabelsetExporter:
             exp.export(SAMPLE_RESULTS, {"filepath": str(fpath)})
             assert fpath.exists()
 
-    def test_export_raises_on_empty_filepath(self):
-        from vtscore.exporters import get_exporter
-
-        exp = get_exporter("server_json_file")
-        with pytest.raises(ValueError, match="file path"):
-            exp.export(SAMPLE_RESULTS, {"filepath": ""})
-
     def test_export_message_contains_hit_count(self):
         from vtscore.exporters import get_exporter
 
@@ -540,7 +533,10 @@ class TestExportEndpoint:
             written = json.loads(fpath.read_text())
             assert written["detectors_run"] == 2
 
-    def test_server_json_exporter_missing_filepath_returns_400(self, client):
+    def test_server_json_exporter_missing_filepath_returns_422(self, client):
+        # Phase B: empty required fields are rejected by the per-plugin
+        # marshmallow schema (422 with the standard ``errors`` envelope)
+        # before ``.export()`` is called.
         res = client.post(
             "/api/exporters/export",
             json={
@@ -549,23 +545,25 @@ class TestExportEndpoint:
                 "results": SAMPLE_RESULTS,
             },
         )
-        assert res.status_code == 400
+        assert res.status_code == 422
 
-    def test_server_json_exporter_missing_field_returns_400(self, client):
-        """The route should reject the request before calling export()."""
+    def test_server_json_exporter_missing_field_uses_default(self, client):
+        """Phase B: the route falls back to the field's declared default.
+
+        ``server_json_file`` declares a ``{YYYYMMDD-HHMMSS}``-stamped
+        default for ``filepath``, so an export with no ``filepath`` at
+        all proceeds with that default — same behaviour as if the
+        frontend had submitted the pre-filled default verbatim.
+        """
         res = client.post(
             "/api/exporters/export",
             json={
                 "exporter_name": "server_json_file",
-                "field_values": {},  # 'filepath' is required but absent
+                "field_values": {},  # 'filepath' omitted; load_default kicks in
                 "results": SAMPLE_RESULTS,
             },
         )
-        assert res.status_code == 400
-        data = res.get_json()
-        # flask-smorest's ``abort()`` strips extra kwargs; the missing
-        # field names are interpolated into ``message`` instead.
-        assert "filepath" in data["message"]
+        assert res.status_code == 200
 
     def test_email_exporter_sends_via_mx(self, client):
         mock_server = MagicMock()

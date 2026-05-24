@@ -34,12 +34,13 @@ class ServerFileLabelsetSource(LabelsetSource):
             description="The JSON file on the server to sync this detector's labels with.",
             hint=("Absolute or relative server path.  Template variables: {detector_id}, {detector_name}."),
             placeholder=f"{DATA_DIR}/labels/{{detector_name}}.labels.json",
+            template_vars=("detector_id", "detector_name"),
         ),
     ]
 
-    def load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
+    def _do_load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Read labels from a JSON file on the server."""
-        path = Path(_resolve_filepath(field_values))
+        path = Path(field_values["filepath"])
         if not path.exists():
             return []
         if not path.is_file():
@@ -56,11 +57,11 @@ class ServerFileLabelsetSource(LabelsetSource):
             raise ValueError("JSON must contain a top-level 'labels' list.")
         return [entry for entry in labels if isinstance(entry, dict)]
 
-    def load_full(self, field_values: dict[str, Any]) -> LabelSet:
+    def _do_load_full(self, field_values: dict[str, Any]) -> LabelSet:
         """Read labels *and* any ``detector_meta`` block into a :class:`LabelSet`."""
         from vtscore.datasets.labelset import LabelSet as _LabelSet
 
-        path = Path(_resolve_filepath(field_values))
+        path = Path(field_values["filepath"])
         if not path.exists():
             return _LabelSet()
         if not path.is_file():
@@ -77,9 +78,9 @@ class ServerFileLabelsetSource(LabelsetSource):
             raise ValueError("JSON must contain a top-level 'labels' list.")
         return _LabelSet.from_dict(data)
 
-    def save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
+    def _do_save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
         """Write labels to a JSON file on the server."""
-        filepath = Path(_resolve_filepath(field_values))
+        filepath = Path(field_values["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
         tmp = filepath.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
@@ -100,6 +101,9 @@ def resolve_filepath_for(
     Used by flows that need to resolve a path for a detector other than the
     currently-active one — notably the rename endpoint, which needs to
     resolve both the OLD and NEW paths to detect an orphaned labelset file.
+    The framework's per-field normalize pass can't help here because the
+    detector identity isn't the active context; this helper does the
+    substitution + validation by hand using the same primitives.
     """
     from vtscore.security.path_validation import (
         get_file_access_base_dir,
@@ -116,35 +120,6 @@ def resolve_filepath_for(
     # The template itself may contain ``../`` even though the substituted
     # values are sanitised, so re-validate the resolved path before any
     # caller opens it.
-    return str(validate_server_filepath(filepath, base_dir=get_file_access_base_dir()))
-
-
-def _resolve_filepath(field_values: dict[str, Any]) -> str:
-    """Resolve the filepath, expanding template variables.
-
-    Substituted values are sanitized so that an attacker-controlled detector
-    name like ``../../etc/passwd`` cannot escape the directory implied by the
-    admin-configured template.  The fully-resolved path is then run through
-    :func:`validate_server_filepath` so that a template containing ``../``
-    cannot escape either.
-    """
-    from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
-
-    filepath = (field_values.get("filepath") or "").strip()
-    if not filepath:
-        raise ValueError("A file path is required.")
-
-    if "{detector_id}" in filepath or "{detector_name}" in filepath:
-        from vtscore.state.core import get_active_detector_context
-
-        ctx = get_active_detector_context()
-        if ctx is not None:
-            return resolve_filepath_for(
-                field_values,
-                detector_id=ctx.detector_id,
-                detector_name=ctx.name,
-            )
-
     return str(validate_server_filepath(filepath, base_dir=get_file_access_base_dir()))
 
 

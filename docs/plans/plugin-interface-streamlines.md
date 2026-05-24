@@ -654,6 +654,110 @@ hypothesis before Phase B raises the stakes.
   declarative-`server_path`-validation slice forward into Phase A. Park
   this until Phase A is in flight.
 
+### Phase B — Candidates #3 + #4 + #7: declarative validation & templates
+
+**Status:** **shipped.** One central
+`normalize_field_values(plugin, field_values)` pass runs after
+schema/CLI validation and before `run()` / `export()`, applying
+whitespace strip, framework-enforced `required`, declarative
+`template_vars` substitution (via `sanitize_template_value`), and
+field-type-driven security validators (`validate_url` for
+`field_type="url"`, `validate_server_filepath` for
+`field_type="server_path"`). In-tree plugins (webhook, the two
+`server_json_file` exporters, the two `server_json_file` importers,
+the labelset + settings `server_json_file` sources, `server_csv_file`
+exporter, `server_csv_file` label importer, `email_smtp`, `http_archive`)
+shed their manual strip+`raise ValueError` checks and their hand-rolled
+template + validator calls. The hard-coded `validate_filepath_field` in
+`vtsearch/routes/_shared.py` is gone — `server_path` fields validate
+themselves regardless of key name. 4227 tests pass.
+
+#### What changed
+
+Two new public surfaces in `vtscore/plugins`:
+
+- `PluginField.template_vars: tuple[str, ...] = ()` — opt-in list of
+  variable names the framework should substitute before the plugin
+  receives the value. Currently recognised vars: `YYYYMMDD-HHMMSS`,
+  `detector_name`, `detector_id`, `username`. Unknown names raise at
+  normalize-time, so a typo in a plugin schema fails fast.
+- `vtscore.plugins.normalize.normalize_field_values(plugin, field_values)`
+  — the central pass. For each field, strips text-like values,
+  substitutes any declared template vars (sanitised through
+  `sanitize_template_value`), then runs the field-type-driven security
+  validator if the value is non-empty. Returns the mutated dict;
+  re-raises `validate_url` / `validate_server_filepath`'s `ValueError`.
+
+Wired in two places — these are the only ingress points for plugin
+field values:
+
+- `vtsearch/routes/_shared.py:validate_plugin_args` — after marshmallow
+  loads and file uploads are populated, the normalize pass runs. A
+  validation `ValueError` becomes a 400 with the standard envelope.
+- `vtscore/plugins/__init__.py:PluginBase.validate_cli_field_values` —
+  the CLI presence check now also runs the normalize pass, so CLI
+  invocations get the same validation guarantees the HTTP path does.
+
+The exporter routes (`vtsearch/routes/labels/exporters.py`,
+`vtsearch/routes/settings/io.py:run_settings_export`) receive
+`field_values` via a different shape (nested inside a marshmallow
+schema) and now route through a small helper
+`validate_exporter_field_values(plugin, field_values)` that runs the
+plugin-arg schema + normalize on the dict and aborts 422/400 as
+appropriate. Their hand-written "missing required" loops and inline
+`validate_server_filepath` calls are deleted.
+
+#### In-tree plugin migrations
+
+| Plugin | Removed |
+|---|---|
+| `vtscore/exporters/webhook` | `url.strip()`, `if not url: raise ValueError`, `validate_url(url)`, the now-unused `validate_url` import |
+| `vtscore/exporters/server_json_file` | `filepath_str.strip()`, `if not filepath_str: raise ValueError`, `resolve_export_filepath(filepath_str)` and its import; field declares `template_vars=("YYYYMMDD-HHMMSS", "detector_name", "username")` |
+| `vtscore/exporters/server_csv_file` | Same shape as `server_json_file` |
+| `vtscore/exporters/email_smtp` | `from_addr.strip()`, `to_addr.strip()`, and the two "X is required" branches; the `@` invariant remains as plugin-specific validation |
+| `vtscore/labels/sources/server_json_file` | The `_resolve_filepath()` helper; field declares `template_vars=("detector_id", "detector_name")`. The plugin renames `load`/`load_full`/`save` → `_do_load`/`_do_load_full`/`_do_save` template methods; the `SyncSource` base class's public wrappers run `normalize_field_values` on a copy of `field_values` before dispatching. `resolve_filepath_for()` retained for the rename code path that resolves a path for a *different* detector than the active context. |
+| `vtsearch/settings_io/sources/server_json_file` | Same template-method migration as the labelset source; field declares `template_vars=("username",)`. `peek_version` renamed to `_do_peek_version` |
+| `vtscore/labels/importers/server_json_file` | `filepath.strip()` and the `if not filepath: raise ValueError` |
+| `vtscore/labels/importers/server_csv_file` | Same |
+| `vtsearch/settings_io/importers/server_json_file` | Same |
+| `vtsearch/settings_io/exporters/server_json_file` | Same |
+| `vtscore/datasets/importers/http_archive` | `validate_url(url)` in both `run()` and `_download_and_extract()`; the `run_cli` URL-prefix check (subsumed by `validate_url`); the now-unused `validate_url` import |
+| `vtscore/datasets/importers/server_folder` | No body changes (display-name strip kept — still needed for the UI label); already accessed values directly |
+| `vtscore/datasets/importers/server_files` | No body changes (already accessed values directly) |
+
+The `resolve_export_filepath` helper in
+`vtscore/exporters/_template.py` is kept as a no-op compatibility
+shim — any third-party exporter that still imports it sees its
+templates resolved twice (once by the framework, once by this helper),
+which is idempotent.
+
+#### Migration impact — external plugins
+
+| Family | Cost |
+|---|---|
+| `DatasetImporter` (e.g. `recaller`) | None required. Plugins that hand-call `validate_url` / `validate_server_filepath` keep working — the framework validates first, the plugin's call is an idempotent no-op. To clean up: declare `template_vars=[...]` on templated fields and delete the manual call. |
+| `MediaSource` (e.g. `pullwrest`) | None. Sources don't participate in field-driven invocation. |
+| `LabelImporter` (e.g. `holder`) | None required. Plugins that strip+check `field_values["filepath"]` keep working; the framework rejects empty values earlier with a 422. |
+| `LabelsetExporter` (e.g. `holder`) | None required. Same shim as label importers. |
+
+#### Open follow-ups
+
+- The CLI `--filepath` flag short-form in
+  `vtscore/labels/importers/server_json_file/__init__.py:add_cli_arguments`
+  is now somewhat redundant with the field-driven `add_cli_arguments`
+  default; consider deleting the override in a future cleanup.
+- `vtscore/exporters/_template.py:resolve_export_filepath` is a shim
+  for now. Once a soak period confirms no third-party imports remain,
+  delete it (the in-tree migration removes all the in-tree call sites).
+- ~~Sync sources still call `_normalized(source, field_values)` at the
+  top of each method body~~ — **shipped as part of Phase B**.
+  `SyncSource` now wraps `load` / `save` / `load_full` / `peek_version`
+  to normalize *field_values* before dispatching to the new
+  underscored template methods (`_do_load` / `_do_save` /
+  `_do_load_full` / `_do_peek_version`). This is a breaking change
+  for any third-party `SyncSource` subclass: rename your overrides to
+  the `_do_*` form.
+
 ## What shipped
 
 - **Phase A — Candidate #1 (declarative origin construction).** Six
@@ -664,14 +768,28 @@ hypothesis before Phase B raises the stakes.
   leak). External `DatasetImporter` plugins keep working unchanged
   (override-wins shim); other plugin families (`MediaSource`,
   `LabelImporter`, `LabelsetExporter`) untouched.
+- **Phase B — Candidates #3 + #4 + #7 (declarative validation &
+  templates).** New `vtscore.plugins.normalize.normalize_field_values`
+  pass; `PluginField.template_vars` opt-in; `field_type="url"` /
+  `"server_path"` fields auto-validated; in-tree plugins shed their
+  manual strip / `raise ValueError` / `validate_*` / template calls;
+  `validate_filepath_field` and its hardcoded `"filepath"` key deleted.
+  `SyncSource` (settings + labelset) now wraps its public methods
+  around new underscored template hooks (`_do_load` / `_do_save` /
+  `_do_load_full` / `_do_peek_version`) — breaking change for
+  third-party sync source subclasses, which must rename their
+  overrides to the `_do_*` form. Other external plugin families
+  (`DatasetImporter`, `LabelImporter`, `LabelsetExporter`,
+  `MediaSource`, settings importers/exporters) keep working unchanged
+  (re-validation is idempotent on already-validated values;
+  `sanitize_template_value` is idempotent on already-sanitised
+  strings).
 
 ## Open follow-ups
 
-- Phase B (P0 collapse: #3 + finish #4 + #7) is next up. Open question
-  carried forward: extend the marshmallow schema to be the single
-  ingress for both HTTP and CLI calls, so `validate_filepath_field`'s
-  hardcoded `"filepath"` key can die and `run_cli` plugins stop
-  hand-checking required strings.
+- Phase C (P1 shape — #1 already done; remaining: #2 RawMedia, #9
+  converter param normalization, #13 drop Werkzeug from library tier).
+  No work scheduled yet.
 - #13 has a subtle attr-name choice (`.filename` vs `.name`) the
   current Shim note doesn't flag — the in-tree `_shared.py` adapter
   uses `.name`, but Werkzeug exposes `.filename`. Settle on one before

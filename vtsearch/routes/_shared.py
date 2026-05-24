@@ -13,8 +13,6 @@ from marshmallow import ValidationError
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase
 
-import vtscore.security.path_validation as _paths
-
 logger = logging.getLogger(__name__)
 
 
@@ -232,6 +230,16 @@ def validate_plugin_args(
 
     _populate_file_fields(plugin, validated, has_file_fields=has_file_fields, file_mode=file_mode)
 
+    # Field-type-driven normalization: strip text, substitute declared
+    # template vars, run validate_url / validate_server_filepath on
+    # url / server_path fields.  See vtscore/plugins/normalize.py.
+    from vtscore.plugins.normalize import normalize_field_values  # noqa: PLC0415
+
+    try:
+        normalize_field_values(plugin, validated)
+    except ValueError as exc:
+        abort(400, message=str(exc))
+
     for key in extra_keys:
         if key in body:
             validated[key] = body[key]
@@ -280,18 +288,38 @@ def _populate_file_fields(
         )
 
 
-def validate_filepath_field(field_values: dict) -> tuple | None:
-    """Validate the ``filepath`` field against path traversal attacks.
+def validate_exporter_field_values(plugin: PluginBase, field_values: dict) -> dict:
+    """Validate a nested ``field_values`` dict against *plugin*'s schema.
 
-    Returns a ``(response, 400)`` tuple on failure, or ``None`` if the
-    path is valid or absent.
+    Used by exporter routes whose request body is shaped as
+    ``{"exporter_name": ..., "field_values": {...}}`` rather than the
+    flat plugin-arg shape that :func:`validate_plugin_args` handles.
+    Runs the plugin's per-field marshmallow schema for presence /
+    type checks, then the shared
+    :func:`~vtscore.plugins.normalize.normalize_field_values` pass for
+    strip, template substitution, and URL / server-path validation.
+
+    Schema-level rejects (missing required field, invalid select value)
+    abort 422 with the standard ``errors`` envelope; URL / path
+    validation failures abort 400.  Returns the validated + normalized
+    dict on success.
     """
-    if "filepath" in field_values and str(field_values["filepath"]).strip():
-        try:
-            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
-        except ValueError as exc:
-            return error_response(str(exc), 400)
-    return None
+    from vtscore.plugins.normalize import normalize_field_values  # noqa: PLC0415
+    from vtscore.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415
+
+    schema = get_plugin_arg_schema(plugin)
+    try:
+        loaded = schema.load(field_values)
+    except ValidationError as exc:
+        abort(422, message="Validation error", errors={"json": exc.messages})
+    validated: dict = loaded if isinstance(loaded, dict) else {}
+
+    try:
+        normalize_field_values(plugin, validated)
+    except ValueError as exc:
+        abort(400, message=str(exc))
+
+    return validated
 
 
 def run_plugin_or_error(plugin: PluginBase, method: str, *args):

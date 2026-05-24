@@ -56,7 +56,6 @@ from vtsearch.routes._shared import (
     require_dataset_header,
     require_detector_header,
     run_plugin_or_error,
-    validate_filepath_field,
     validate_plugin_args,
 )
 from vtsearch.schemas.labels import (
@@ -160,10 +159,6 @@ def run_label_import(importer_name: str):  # noqa: C901
     assert importer is not None  # narrowed by err check
 
     field_values = validate_plugin_args(importer)
-
-    err = validate_filepath_field(field_values)
-    if err:
-        return err
 
     label_entries, err = run_plugin_or_error(importer, "run", field_values)
     if err:

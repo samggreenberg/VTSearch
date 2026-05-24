@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters._template import resolve_export_filepath
 from vtscore.exporters.base import ExporterField, LabelsetExporter
 
 _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
@@ -60,15 +59,12 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
             ),
             placeholder=_DEFAULT_JSON_PATH,
             default=_DEFAULT_JSON_PATH,
+            template_vars=("YYYYMMDD-HHMMSS", "detector_name", "username"),
         ),
     ]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        filepath_str = field_values.get("filepath", "").strip()
-        if not filepath_str:
-            raise ValueError("A file path is required.")
-
-        filepath = Path(resolve_export_filepath(filepath_str))
+        filepath = Path(field_values["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
         # Labels format (from the export modal UI) — filter to selected columns

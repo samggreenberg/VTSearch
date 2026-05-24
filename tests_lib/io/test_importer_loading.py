@@ -520,9 +520,6 @@ class TestHttpArchiveExtractDirIsolation:
 
         with (
             mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
-            mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
@@ -552,9 +549,6 @@ class TestHttpArchiveExtractDirIsolation:
 
         with (
             mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
-            mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
@@ -580,9 +574,6 @@ class TestHttpArchiveExtractDirIsolation:
         imp = HttpArchiveDatasetImporter()
 
         with (
-            mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
             mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
@@ -611,9 +602,6 @@ class TestHttpArchiveExtractDirIsolation:
 
         with (
             mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
-            mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
@@ -641,9 +629,6 @@ class TestHttpArchiveExtractDirIsolation:
         imp = HttpArchiveDatasetImporter()
 
         with (
-            mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
             mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),

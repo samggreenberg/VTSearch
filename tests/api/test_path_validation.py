@@ -210,7 +210,9 @@ class TestMultiUserFileRestriction:
                 json={"filepath": "/etc/shadow"},
             )
             assert resp.status_code == 400
-            assert "must be within" in resp.get_json()["error"]
+            # Phase B: path traversal raised from the framework's normalize
+            # pass via flask-smorest abort() → message key, not error.
+            assert "must be within" in resp.get_json()["message"]
         finally:
             from vtsearch.auth import set_login_provider
 
