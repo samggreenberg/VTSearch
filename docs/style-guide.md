@@ -180,7 +180,7 @@ Rules:
 ```
 
 - `.form-input` and `.form-select` share padding, border, focus state. They sit on `--bg-subtle` so they read as "input wells."
-- `.form-label` is `--font-sm`, `--weight-medium`, `--text-primary` — visually heavier than helper text so it reads as a header above its input.
+- `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` — sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
 - `.form-hint` (used for plugin-field `hint` strings) is muted monospace.
 - `.required` marks required fields with `--color-bad`.
 
