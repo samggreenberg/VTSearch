@@ -26,7 +26,7 @@ class TestMediaClipperABC:
         d = c.to_dict()
         assert d == {
             "name": "sound_default",
-            "display_name": "Default",
+            "display_name": "None",
             "description": "Import each audio file as-is, without splitting.",
             "media_type": "audio",
         }
@@ -35,7 +35,7 @@ class TestMediaClipperABC:
         from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
-        assert c.display_name == "Default"
+        assert c.display_name == "None"
 
     def test_display_name_tiling(self):
         from vtscore.media.audio.clipper import SoundTilingClipper
