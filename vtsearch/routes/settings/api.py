@@ -107,6 +107,26 @@ def _apply_inclusion(value) -> None:
     set_inclusion(clamped)
 
 
+def _apply_solo_media_type(value) -> None:
+    """Validate *value* against the registry and apply via the combined setter.
+
+    ``None`` / ``""`` clears solo mode (still marks the choice explicit so
+    the user's "show everything" opt-out is preserved against the CLI
+    fallback). Any other string must match a registered media-type id.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        settings.apply_user_solo_media_type(None)
+        return
+    if not isinstance(value, str):
+        abort(400, message="solo_media_type must be a string or null")
+    from vtscore.media import all_type_ids
+
+    valid = set(all_type_ids())
+    if value not in valid:
+        abort(400, message=f"Unknown media type: {value!r}. Valid: {sorted(valid)}")
+    settings.apply_user_solo_media_type(value)
+
+
 def _apply_dir(key: str, value: str, setter) -> None:
     """Validate and apply a directory-path setting."""
     import vtscore.security.path_validation as _paths
@@ -126,8 +146,56 @@ def _apply_dir(key: str, value: str, setter) -> None:
 @settings_bp.route("/api/settings", methods=["GET"])
 @settings_bp.response(200, AppSettingsSchema)
 def get_settings():
-    """Return the merged server + per-user settings dict."""
-    return settings.get_all()
+    """Return the merged server + per-user settings dict.
+
+    Augments the persisted dict with ``effective_solo_media_type`` — the
+    resolver's view of the per-user value plus the CLI fallback. The
+    frontend reads only this key when deciding whether to hide mediaType
+    pickers; the raw ``solo_media_type`` / ``solo_media_type_explicit``
+    pair is still exposed for the settings UI to render the current state.
+    """
+    data = settings.get_all()
+    data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
+    return data
+
+
+def _apply_one_key(key: str, value) -> None:
+    """Dispatch a single settings update body entry to the right setter.
+
+    Keeps :func:`update_settings` simple by hosting the per-key
+    branching here. Side effects (path validation, achievement wipe,
+    state-tier setter) are isolated to their helper functions.
+    """
+    if key == "effective_solo_media_type":
+        # Read-only computed field — the route exposes it on GET but
+        # writes go through ``solo_media_type``.
+        return
+    if key == "inclusion":
+        try:
+            _apply_inclusion(value)
+        except (TypeError, ValueError) as exc:
+            abort(400, message=str(exc))
+        return
+    if key in ("saved_datasets_dir", "detectors_dir"):
+        setter = settings.set_saved_datasets_dir if key == "saved_datasets_dir" else settings.set_detectors_dir
+        _apply_dir(key, value, setter)
+        return
+    if key == "disable_achievements":
+        try:
+            _apply_disable_achievements(value)
+        except (TypeError, ValueError) as exc:
+            abort(400, message=str(exc))
+        return
+    if key == "solo_media_type":
+        _apply_solo_media_type(value)
+        return
+    setter = _SCALAR_SETTERS.get(key)
+    if setter is None:
+        return
+    try:
+        setter(value)
+    except (TypeError, ValueError) as exc:
+        abort(400, message=str(exc))
 
 
 @settings_bp.route("/api/settings", methods=["PUT"])
@@ -143,34 +211,11 @@ def update_settings(body: dict):
     validation failures (range / one-of / path traversal) raise 400.
     """
     for key, value in body.items():
-        if key == "inclusion":
-            try:
-                _apply_inclusion(value)
-            except (TypeError, ValueError) as exc:
-                abort(400, message=str(exc))
-            continue
+        _apply_one_key(key, value)
 
-        if key in ("saved_datasets_dir", "detectors_dir"):
-            setter = settings.set_saved_datasets_dir if key == "saved_datasets_dir" else settings.set_detectors_dir
-            _apply_dir(key, value, setter)
-            continue
-
-        if key == "disable_achievements":
-            try:
-                _apply_disable_achievements(value)
-            except (TypeError, ValueError) as exc:
-                abort(400, message=str(exc))
-            continue
-
-        setter = _SCALAR_SETTERS.get(key)
-        if setter is None:
-            continue
-        try:
-            setter(value)
-        except (TypeError, ValueError) as exc:
-            abort(400, message=str(exc))
-
-    return settings.get_all()
+    data = settings.get_all()
+    data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
+    return data
 
 
 @settings_bp.route("/api/settings/defaults", methods=["GET"])

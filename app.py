@@ -537,7 +537,17 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
     initialize_models()
-    preloaded = preload_predicted_embedders()
+    # ``--solo-media-type`` (process-level CLI fallback) tells us which
+    # mediaType's default embedder to warm even if no datasets or detectors
+    # are registered yet. Per-user explicit values are not consulted here
+    # because there is no current user at startup.
+    from vtsearch.settings import get_cli_solo_media_type
+
+    cli_solo = get_cli_solo_media_type()
+    extra_types = [cli_solo] if cli_solo else None
+    if cli_solo:
+        print(f"\U0001f3af Solo mediaType: {cli_solo} (from --solo-media-type)", flush=True)
+    preloaded = preload_predicted_embedders(extra_media_types=extra_types)
     if preloaded:
         print(f"✅ Preloaded embedders: {', '.join(preloaded)}", flush=True)
 
@@ -691,6 +701,23 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--solo-media-type",
+        type=str,
+        default=None,
+        dest="solo_media_type",
+        help=(
+            "Streamline the UI for a single mediaType. Hides mediaType pickers "
+            "in the dataset-importer and new-detector flows, locks them to the "
+            "given type, filters converter offerings to converters whose output "
+            "is this type, and preloads that type's default embedder at startup. "
+            "Acts as a per-process fallback only — any user who explicitly sets "
+            "their own solo mediaType (including 'show everything') via the "
+            "settings UI overrides this flag for themselves. Valid values are "
+            "the registered media-type ids (e.g. audio, image, video, text, "
+            "document)."
+        ),
+    )
+    parser.add_argument(
         "--progress-format",
         type=str,
         default="text",
@@ -788,6 +815,17 @@ if __name__ == "__main__":
         # No importer/exporter specified but there are unknown args; let
         # argparse report the error.
         parser.parse_args()
+
+    # --solo-media-type applies to both the autodetect CLI path and the
+    # server path: validate and stash before any code reads the resolver.
+    if getattr(args, "solo_media_type", None) is not None:
+        from vtscore.media import all_type_ids
+        from vtsearch.settings import set_cli_solo_media_type
+
+        valid = set(all_type_ids())
+        if args.solo_media_type not in valid:
+            parser.error(f"Unknown --solo-media-type: {args.solo_media_type!r}. Valid values: {sorted(valid)}")
+        set_cli_solo_media_type(args.solo_media_type)
 
     if args.autodetect:
         # Wire the CLI progress format (text/json) before any pipeline call

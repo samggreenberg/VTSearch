@@ -92,6 +92,44 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /** Value shown in the "Solo media type" select. Empty string means
+   *  "Show everything"; otherwise it's the type_id. We display the
+   *  user's explicit choice when set, falling back to the CLI's
+   *  effective value so a fresh user sees what the streamlined mode is
+   *  currently locking them to (rather than a misleading empty state). */
+  get soloMediaTypeSelectValue(): string {
+    const explicit = this.settings.solo_media_type_explicit;
+    if (explicit) {
+      return this.settings.solo_media_type || '';
+    }
+    return this.settings.effective_solo_media_type || '';
+  }
+
+  /** Hint text under the solo-mediaType select. Surfaces "from
+   *  ``--solo-media-type``" when the value comes from the CLI fallback
+   *  so the user understands why the picker is non-empty without ever
+   *  having touched it. */
+  get soloMediaTypeNote(): string {
+    const explicit = this.settings.solo_media_type_explicit;
+    const effective = this.settings.effective_solo_media_type || '';
+    if (!explicit && effective) {
+      return `Currently set to ${effective} by the --solo-media-type CLI flag. ` +
+        'Choose any value here to override it.';
+    }
+    return '';
+  }
+
+  onSoloMediaTypeChange(value: string): void {
+    // Empty string = "Show everything"; the backend stores it as null
+    // and still flips the explicit flag so the choice survives a CLI
+    // fallback on the next launch.
+    const next = value || null;
+    (this.settings as Record<string, unknown>)['solo_media_type'] = next;
+    (this.settings as Record<string, unknown>)['solo_media_type_explicit'] = true;
+    (this.settings as Record<string, unknown>)['effective_solo_media_type'] = next;
+    this.save();
+  }
+
   onToggle(key: string, value: boolean): void {
     (this.settings as Record<string, unknown>)[key] = value;
     this.save();

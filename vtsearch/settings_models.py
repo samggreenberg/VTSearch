@@ -173,6 +173,21 @@ class UserSettings(BaseModel):
     # Keys are canonical media-type ids (e.g. ``"image"``, ``"audio"``).
     last_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
 
+    # Solo-mediaType streamlining. When set, the importer and new-detector
+    # flows hide their mediaType pickers and lock to this type, the converter
+    # picker filters to converters whose output is this type, and the
+    # mediaType-picking step in tabbed UIs is skipped. ``None`` means "show
+    # everything" (the default, non-streamlined experience).
+    #
+    # Resolution at read time is ``solo_media_type`` if
+    # ``solo_media_type_explicit`` is True, else the process-level CLI
+    # fallback (``settings.set_cli_solo_media_type``), else None. The
+    # ``explicit`` flag is set to True whenever the user changes the value
+    # through the settings UI — so once a user opts out (sets it to None),
+    # the CLI flag no longer reapplies on future launches for that user.
+    solo_media_type: str | None = None
+    solo_media_type_explicit: bool = False
+
     # Rolling list of recent (dataset_id, detector_id, last_activity)
     # entries, capped at MAX_RECENT_SESSIONS by the route handler. Most
     # recent first. last_activity is epoch seconds (float). The

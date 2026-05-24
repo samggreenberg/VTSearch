@@ -270,6 +270,26 @@ modal. All preferences are remembered per media type.
 There's a separate view modal for the right panel (vote piles),
 with the same controls.
 
+### Solo media type — streamline for one media type
+
+If you only ever work with one kind of media (e.g. you exclusively
+search images, optionally pulled in from videos and documents via
+the built-in converters), pick that type under **Appearance → Solo
+media type** in the Settings modal. Once set:
+
+- The dataset importer and new-detector dialogs stop asking which
+  media type you want — they lock to your chosen type.
+- Converter offerings filter to those that produce your type
+  (so picking "image" still lets you import videos-as-frames and
+  documents-as-pages, just not raw audio).
+- Your chosen type's default embedder is warmed at startup so the
+  first detector run is fast.
+
+Pick **Show everything** to opt back out. Operators can also pass
+`--solo-media-type image` (or any type id) on the command line as a
+fallback for new users — anyone who explicitly changes the setting
+overrides the CLI value for themselves.
+
 ---
 
 ## Region voting on images
