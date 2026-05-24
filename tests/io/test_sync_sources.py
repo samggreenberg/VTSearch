@@ -30,19 +30,22 @@ import pytest
 
 
 class TestSettingsSourceBase:
-    def test_load_raises_not_implemented(self):
+    def test_do_load_raises_not_implemented(self):
+        # Phase B: subclasses override ``_do_load`` / ``_do_save``; the
+        # public ``load`` / ``save`` are framework wrappers that
+        # normalize *field_values* before dispatching.
         from vtsearch.settings_io.sources.base import SettingsSource
 
         src = SettingsSource()
         with pytest.raises(NotImplementedError):
-            src.load({})
+            src._do_load({})
 
-    def test_save_raises_not_implemented(self):
+    def test_do_save_raises_not_implemented(self):
         from vtsearch.settings_io.sources.base import SettingsSource
 
         src = SettingsSource()
         with pytest.raises(NotImplementedError):
-            src.save({}, {})
+            src._do_save({}, {})
 
     def test_to_dict_contains_standard_keys(self):
         from vtsearch.settings_io.sources.base import SettingsSource
@@ -53,10 +56,10 @@ class TestSettingsSourceBase:
             description = "Minimal source."
             fields = []
 
-            def load(self, _fv):
+            def _do_load(self, _fv):
                 return {}
 
-            def save(self, _data, _fv):
+            def _do_save(self, _data, _fv):
                 pass
 
         d = Minimal().to_dict()
@@ -77,19 +80,22 @@ class TestSettingsSourceBase:
 
 
 class TestLabelsetSourceBase:
-    def test_load_raises_not_implemented(self):
+    def test_do_load_raises_not_implemented(self):
+        # Phase B: subclasses override ``_do_load`` / ``_do_save``; the
+        # public ``load`` / ``save`` are framework wrappers that
+        # normalize *field_values* before dispatching.
         from vtscore.labels.sources.base import LabelsetSource
 
         src = LabelsetSource()
         with pytest.raises(NotImplementedError):
-            src.load({})
+            src._do_load({})
 
-    def test_save_raises_not_implemented(self):
+    def test_do_save_raises_not_implemented(self):
         from vtscore.labels.sources.base import LabelsetSource
 
         src = LabelsetSource()
         with pytest.raises(NotImplementedError):
-            src.save(None, {})  # pyright: ignore[reportArgumentType]
+            src._do_save(None, {})  # pyright: ignore[reportArgumentType]
 
     def test_to_dict_contains_standard_keys(self):
         from vtscore.labels.sources.base import LabelsetSource
@@ -100,10 +106,10 @@ class TestLabelsetSourceBase:
             description = "Minimal source."
             fields = []
 
-            def load(self, _fv):
+            def _do_load(self, _fv):
                 return []
 
-            def save(self, _labelset, _fv):
+            def _do_save(self, _labelset, _fv):
                 pass
 
         d = Minimal().to_dict()

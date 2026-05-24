@@ -715,8 +715,8 @@ appropriate. Their hand-written "missing required" loops and inline
 | `vtscore/exporters/server_json_file` | `filepath_str.strip()`, `if not filepath_str: raise ValueError`, `resolve_export_filepath(filepath_str)` and its import; field declares `template_vars=("YYYYMMDD-HHMMSS", "detector_name", "username")` |
 | `vtscore/exporters/server_csv_file` | Same shape as `server_json_file` |
 | `vtscore/exporters/email_smtp` | `from_addr.strip()`, `to_addr.strip()`, and the two "X is required" branches; the `@` invariant remains as plugin-specific validation |
-| `vtscore/labels/sources/server_json_file` | The `_resolve_filepath()` helper; field declares `template_vars=("detector_id", "detector_name")`. The plugin's `load`/`load_full`/`save` route through a new `_normalized(source, field_values)` helper that calls `normalize_field_values` — sync sources bypass the route-level normalize hook and need to apply it themselves. `resolve_filepath_for()` retained for the rename code path that resolves a path for a *different* detector than the active context. |
-| `vtsearch/settings_io/sources/server_json_file` | Same `_resolve_filepath` → `_normalized` migration as the labelset source; field declares `template_vars=("username",)` |
+| `vtscore/labels/sources/server_json_file` | The `_resolve_filepath()` helper; field declares `template_vars=("detector_id", "detector_name")`. The plugin renames `load`/`load_full`/`save` → `_do_load`/`_do_load_full`/`_do_save` template methods; the `SyncSource` base class's public wrappers run `normalize_field_values` on a copy of `field_values` before dispatching. `resolve_filepath_for()` retained for the rename code path that resolves a path for a *different* detector than the active context. |
+| `vtsearch/settings_io/sources/server_json_file` | Same template-method migration as the labelset source; field declares `template_vars=("username",)`. `peek_version` renamed to `_do_peek_version` |
 | `vtscore/labels/importers/server_json_file` | `filepath.strip()` and the `if not filepath: raise ValueError` |
 | `vtscore/labels/importers/server_csv_file` | Same |
 | `vtsearch/settings_io/importers/server_json_file` | Same |
@@ -749,13 +749,14 @@ which is idempotent.
 - `vtscore/exporters/_template.py:resolve_export_filepath` is a shim
   for now. Once a soak period confirms no third-party imports remain,
   delete it (the in-tree migration removes all the in-tree call sites).
-- Sync sources still call `_normalized(source, field_values)` at the
-  top of each method body because their callers bypass the route's
-  normalize hook. A cleaner alternative would be to wrap
-  `load`/`save`/`load_full` in the `SyncSource` base class so the
-  normalize call disappears from plugin bodies entirely; deferred to a
-  future cleanup because it would force every external `SyncSource`
-  plugin to rename its overrides to `_do_load` / `_do_save`.
+- ~~Sync sources still call `_normalized(source, field_values)` at the
+  top of each method body~~ — **shipped as part of Phase B**.
+  `SyncSource` now wraps `load` / `save` / `load_full` / `peek_version`
+  to normalize *field_values* before dispatching to the new
+  underscored template methods (`_do_load` / `_do_save` /
+  `_do_load_full` / `_do_peek_version`). This is a breaking change
+  for any third-party `SyncSource` subclass: rename your overrides to
+  the `_do_*` form.
 
 ## What shipped
 
@@ -773,11 +774,16 @@ which is idempotent.
   `"server_path"` fields auto-validated; in-tree plugins shed their
   manual strip / `raise ValueError` / `validate_*` / template calls;
   `validate_filepath_field` and its hardcoded `"filepath"` key deleted.
-  Sync sources adopt a small `_normalized(source, field_values)`
-  wrapper since their callers bypass the route layer. External plugins
-  keep working unchanged (re-validation is idempotent on
-  already-validated values; `sanitize_template_value` is idempotent on
-  already-sanitised strings).
+  `SyncSource` (settings + labelset) now wraps its public methods
+  around new underscored template hooks (`_do_load` / `_do_save` /
+  `_do_load_full` / `_do_peek_version`) — breaking change for
+  third-party sync source subclasses, which must rename their
+  overrides to the `_do_*` form. Other external plugin families
+  (`DatasetImporter`, `LabelImporter`, `LabelsetExporter`,
+  `MediaSource`, settings importers/exporters) keep working unchanged
+  (re-validation is idempotent on already-validated values;
+  `sanitize_template_value` is idempotent on already-sanitised
+  strings).
 
 ## Open follow-ups
 
