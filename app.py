@@ -874,7 +874,6 @@ if __name__ == "__main__":
             parser.error(f"Unknown --solo-media-type: {args.solo_media_type!r}. Valid values: {sorted(valid)}")
         set_cli_solo_media_type(args.solo_media_type)
 
-<<<<<<< HEAD
     # --hide-plugin family:name (repeatable) — stash before any listing
     # endpoint is served so hidden plugins are filtered from API responses.
     # ``register_app_plugin_families`` ran at module load (top of app.py),
@@ -936,43 +935,6 @@ if __name__ == "__main__":
                     f"Valid embedders for {mt}: {sorted(valid_for_type)}"
                 )
             set_cli_solo_embedder(mt, emb)
-=======
-    # --solo-embedder is repeatable; each value is TYPE=EMBEDDER. Validate
-    # both halves against the live registry before stashing — a typo here
-    # would silently no-op the lock and the user would only notice when
-    # the picker reappeared.
-    raw_solo_embedders = getattr(args, "solo_embedders", None) or []
-    if raw_solo_embedders:
-        from vtscore.media import all_embedders, all_type_ids, embedders_for_type
-        from vtsearch.settings import set_cli_solo_embedder
-
-        valid_types = set(all_type_ids())
-        valid_embedder_names = {e.name for e in all_embedders()}
-        for raw in raw_solo_embedders:
-            if "=" not in raw:
-                parser.error(f"Invalid --solo-embedder value: {raw!r}. Expected TYPE=EMBEDDER (e.g. image=siglip).")
-            mt, _, emb = raw.partition("=")
-            mt = mt.strip()
-            emb = emb.strip()
-            if not mt or not emb:
-                parser.error(f"Invalid --solo-embedder value: {raw!r}. Both TYPE and EMBEDDER must be non-empty.")
-            if mt not in valid_types:
-                parser.error(
-                    f"Unknown mediaType in --solo-embedder {raw!r}: {mt!r}. Valid values: {sorted(valid_types)}"
-                )
-            if emb not in valid_embedder_names:
-                parser.error(
-                    f"Unknown embedder in --solo-embedder {raw!r}: {emb!r}. "
-                    f"Valid embedder names: {sorted(valid_embedder_names)}"
-                )
-            valid_for_type = {e.name for e in embedders_for_type(mt)}
-            if emb not in valid_for_type:
-                parser.error(
-                    f"Embedder {emb!r} is not registered for media type {mt!r}. "
-                    f"Valid embedders for {mt}: {sorted(valid_for_type)}"
-                )
-            set_cli_solo_embedder(mt, emb)
->>>>>>> be605bd5 (WIP: solo media embedder per mediaType - pre-test checkpoint)
 
     if args.autodetect:
         # Wire the CLI progress format (text/json) before any pipeline call
