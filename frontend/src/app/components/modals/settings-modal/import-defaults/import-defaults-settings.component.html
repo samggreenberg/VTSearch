@@ -1,8 +1,8 @@
 @if (visibleTypes.length === 0) {
   <p class="empty-state">No media types registered.</p>
 } @else {
-  <p class="form-hint" title="These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type.">
-    Pick the embedder, clipper, and converters you want pre-selected each time you import a dataset.
+  <p class="info-text import-defaults-intro" title="These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type.">
+    Default import settings per media type.
   </p>
 
   <div class="view-tabs">
@@ -43,9 +43,8 @@
         <select
           [id]="'import-default-embedder-' + activeType"
           class="form-select"
-          [ngModel]="currentEmbedder"
+          [ngModel]="displayedEmbedder"
           (ngModelChange)="onEmbedderChange($event)">
-          <option value="">Use importer default</option>
           @if (recommendedEmbedders.length > 0) {
             <optgroup label="Recommended">
               @for (embedder of recommendedEmbedders; track embedder.name) {
@@ -78,17 +77,18 @@
         </button>
       }
 
-      @if (hasOverridesForActiveType) {
-        <div class="import-defaults-footer">
-          <button
-            type="button"
-            class="btn btn--ghost btn--sm"
-            (click)="resetActiveType()"
-            title="Clear your saved {{ activeTypeLabel }} import defaults and fall back to the importer's own defaults">
-            Reset {{ activeTypeLabel }} defaults
-          </button>
-        </div>
-      }
+      <div class="import-defaults-footer">
+        <button
+          type="button"
+          class="btn btn--ghost btn--sm"
+          [disabled]="!hasOverridesForActiveType"
+          (click)="resetActiveType()"
+          [title]="hasOverridesForActiveType
+            ? 'Clear your saved ' + activeTypeLabel + ' import defaults and restore the built-in defaults'
+            : activeTypeLabel + ' defaults are already at the built-in values — nothing to reset'">
+          Reset {{ activeTypeLabel }} defaults
+        </button>
+      </div>
     }
   </div>
 }

@@ -385,6 +385,57 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   color: var(--text-secondary);
 }
 
+// `.view-tabs` / `.view-tab` / `.view-tab-content` — a paneled tab strip
+// where the active tab visually flows into the inset content region
+// below. The active tab's background matches `.view-tab-content` so the
+// border between them disappears, leaving only the accent underline.
+// Lives here (not in a component SCSS) so child components can reuse the
+// pattern without copying the rules — Angular's emulated encapsulation
+// otherwise blocks parent classes from styling child template content.
+// `.view-tab-content` intentionally omits `display`; consumers pick
+// `flex` or `grid` to suit their inner layout.
+.view-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  padding: var(--space-xs) var(--space-xs) 0;
+}
+
+.view-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-base), border-color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  &--active {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border-bottom-color: var(--accent-color);
+  }
+}
+
+.view-tab-content {
+  padding: var(--space-lg);
+  border: 1px solid var(--border-color);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--bg-primary);
+}
+
 // --- Scrollbars ---
 
 * {

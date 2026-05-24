@@ -218,6 +218,23 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
     return this.activeEmbedders.filter((e) => !e.is_default);
   }
 
+  /** Built-in default embedder for the active mediaType — the first
+   *  ``is_default`` option, falling back to the first available embedder.
+   *  Used to seed the dropdown when the user has no saved override. */
+  get defaultEmbedderName(): string {
+    const recommended = this.recommendedEmbedders[0];
+    if (recommended) return recommended.name;
+    const first = this.activeEmbedders[0];
+    return first ? first.name : '';
+  }
+
+  /** What the dropdown actually shows as selected: the user's override if
+   *  set, otherwise the built-in default.  Picking this value back from
+   *  the dropdown clears the override (see ``onEmbedderChange``). */
+  get displayedEmbedder(): string {
+    return this.currentEmbedder || this.defaultEmbedderName;
+  }
+
   embedderLabel(embedder: EmbedderInfo): string {
     return embedder.display_name || embedder.name;
   }
@@ -280,7 +297,11 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
   }
 
   onEmbedderChange(name: string): void {
-    this.updateActive({ embedder: name });
+    // Re-picking the built-in default clears the override so the saved
+    // settings stay compact and the Reset button doesn't activate for a
+    // no-op change.
+    const next = name === this.defaultEmbedderName ? '' : name;
+    this.updateActive({ embedder: next });
   }
 
   onSourceSpecsChange(specs: SourceSpec[]): void {
