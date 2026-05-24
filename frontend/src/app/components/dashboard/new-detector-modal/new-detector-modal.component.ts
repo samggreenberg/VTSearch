@@ -124,11 +124,10 @@ export class NewDetectorModalComponent implements OnInit {
   static readonly DEMO_COL_META: Record<string, ColMeta> = {
     label: { label: 'Name', title: 'Demo dataset name (click to sort)', sortable: true },
     num_files: { label: '# Media', title: 'Number of media files in the demo dataset (click to sort)', sortable: true },
-    num_categories: { label: '# Cat.', title: 'Number of distinct categories or classes in the dataset (click to sort)', sortable: true },
     description: { label: 'Description', title: 'Short description of the demo dataset contents (click to sort)', sortable: true },
     status: { label: 'Readiness', title: 'Whether the dataset is pre-downloaded and ready to browse, or still needs to be fetched (click to sort)', sortable: true },
   };
-  static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'num_categories', 'description', 'status'];
+  static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'description', 'status'];
   private static readonly DEMO_COL_ORDER_KEY = 'vtsearch.dashboard.demoColumnOrder';
 
   demoCols = new ManagedColumns(

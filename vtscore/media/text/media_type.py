@@ -167,12 +167,12 @@ class TextMediaType(MediaType):
     @property
     def demo_datasets(self) -> list:
         cats = self._DEMO_CATEGORIES
-        ng_desc = "Early-1990s Usenet posts across technical and political topics."
-        ag_desc = "Short news summaries across world, sports, business, tech."
-        imdb_desc = "Long-form movie reviews with positive/negative sentiment labels."
-        wiki_desc = "Wikipedia abstracts across 14 DBpedia ontology topics."
-        arxiv_desc = "arXiv titles + abstracts across CS, math, and the sciences."
-        reuters_desc = "Reuters-21578 financial newswire — a classic text benchmark."
+        ng_desc = "Early-90s Usenet posts"
+        ag_desc = "Short news summaries"
+        imdb_desc = "Long-form movie reviews"
+        wiki_desc = "Wikipedia abstracts"
+        arxiv_desc = "arXiv titles & abstracts"
+        reuters_desc = "Financial newswire"
         return [
             DemoDataset(
                 id="20newsgroups_s",
@@ -265,7 +265,7 @@ class TextMediaType(MediaType):
             DemoDataset(
                 id="bbc_news_a",
                 label="BBC News (A)",
-                description="BBC news articles — professionally written and cleanly labeled.",
+                description="BBC news articles",
                 categories=self._BBC_NEWS_CATEGORIES,
                 source="bbc_news",
                 slice_frac_start=0.0,
