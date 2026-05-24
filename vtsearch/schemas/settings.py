@@ -100,6 +100,15 @@ class AppSettingsSchema(Schema):
     solo_media_type_explicit = fields.Boolean()
     effective_solo_media_type = fields.String(allow_none=True, dump_only=True)
 
+    # Solo mediaEmbedder per mediaType. ``solo_embedder_per_media_type`` is
+    # the user's raw map (``{media_type_id: embedder_name}``);
+    # ``effective_solo_embedder_per_media_type`` is the resolver's view
+    # (user map layered over the ``--solo-embedder`` CLI fallback), and is
+    # what the frontend reads to decide whether to hide the embedder
+    # picker for a given type.
+    solo_embedder_per_media_type = _PerMediaTypeStringDict()
+    effective_solo_embedder_per_media_type = _PerMediaTypeStringDict(dump_only=True)
+
     class Meta:
         # Allow extra keys on dump so transitional fields (e.g.
         # ``settings_source`` config blobs, ``achievement_state``) flow
@@ -158,6 +167,13 @@ class SettingsUpdateSchema(Schema):
     # ``solo_media_type_explicit`` flag flips automatically. Accept either
     # a string id or ``null`` for "show everything".
     solo_media_type = fields.String(allow_none=True)
+
+    # ``{media_type_id: embedder_name}`` map. The route layer validates
+    # each entry against the embedder registry and rejects unknown
+    # type/embedder pairs with a 400. Sending ``null`` or an empty dict
+    # clears every per-type lock. Sending ``{"image": ""}`` clears just
+    # the image lock while leaving the rest in place.
+    solo_embedder_per_media_type = fields.Raw(allow_none=True)
 
     class Meta:
         # Reject keys we don't know — the frontend should never send

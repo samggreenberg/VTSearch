@@ -216,6 +216,23 @@ class UserSettings(BaseModel):
     solo_media_type: str | None = None
     solo_media_type_explicit: bool = False
 
+    # Solo mediaEmbedder streamlining (per mediaType). When a media-type id
+    # appears as a key here, the dataset-importer modal hides its embedder
+    # picker for that type and locks it to the named embedder. Types not
+    # present in the dict keep the normal embedder dropdown. ``None`` /
+    # empty-string values are treated as "not set" (no lock).
+    #
+    # Resolution at read time layers ``solo_embedder_per_media_type``
+    # (user explicit) over the process-level CLI fallback set by
+    # :func:`vtsearch.settings.set_cli_solo_embedder` — user entries win
+    # per-key, missing keys fall through to the CLI value. The full merged
+    # view is exposed at ``/api/settings`` as
+    # ``effective_solo_embedder_per_media_type``. A stored embedder id
+    # that no longer matches the registry is treated as absent by the
+    # frontend (it falls back to the normal picker), so renaming or
+    # removing an embedder never strands the user.
+    solo_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
+
     # Rolling list of recent (dataset_id, detector_id, last_activity)
     # entries, capped at MAX_RECENT_SESSIONS by the route handler. Most
     # recent first. last_activity is epoch seconds (float). The

@@ -67,6 +67,32 @@
               <p class="form-hint">{{ soloMediaTypeNote }}</p>
             }
           </div>
+
+          @if (mediaTypes.length > 0) {
+            <div class="form-group" title="Lock the embedder for a media type so the dataset-importer modal hides its embedder picker for that type. Other media types keep the normal embedder dropdown.">
+              <label class="form-label">Solo media embedder</label>
+              <div class="solo-embedder-grid">
+                @for (mt of mediaTypes; track mt.type_id) {
+                  <div class="solo-embedder-row">
+                    <span class="solo-embedder-label">{{ mt.name }}</span>
+                    <select
+                      class="form-select"
+                      [ngModel]="soloEmbedderSelectValue(mt.type_id)"
+                      (ngModelChange)="onSoloEmbedderChange(mt.type_id, $event)"
+                      [attr.aria-label]="'Solo embedder for ' + mt.name">
+                      <option value="">Ask each time</option>
+                      @for (emb of embeddersForType(mt.type_id); track emb.name) {
+                        <option [value]="emb.name">{{ emb.display_name || emb.name }}</option>
+                      }
+                    </select>
+                    @if (soloEmbedderNote(mt.type_id); as note) {
+                      <p class="form-hint">{{ note }}</p>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
           <label class="checkbox-row" title="Animate media transitions when voting (swipe left/right effect)">
             <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
             Swipe animation

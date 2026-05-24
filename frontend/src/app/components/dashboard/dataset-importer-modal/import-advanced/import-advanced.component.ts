@@ -60,6 +60,14 @@ export class ImportAdvancedComponent {
   @Input() selectedEmbedder = '';
   @Output() selectedEmbedderChange = new EventEmitter<string>();
 
+  /** When non-empty, the embedder picker is hidden because the user has
+   *  set a Solo mediaEmbedder for the current mediaType in settings (or
+   *  via ``--solo-embedder``). The parent is responsible for resolving
+   *  the lock against the live embedder list and only passing a value
+   *  here when the locked embedder actually exists for the type — a
+   *  stale or removed embedder falls back to the normal picker. */
+  @Input() lockedEmbedder = '';
+
   /** Current clipper selection (one-way).  Changes flow through the
    *  parent's clipper chooser modal — clicking either the native row's
    *  Details button or the standalone fallback Details button emits
@@ -112,8 +120,11 @@ export class ImportAdvancedComponent {
   }
 
   /** Embedder picker is visible when Advanced is open OR when the user
-   *  has picked a non-default embedder. */
+   *  has picked a non-default embedder — and never when a Solo
+   *  mediaEmbedder is locked for the current mediaType (then the user
+   *  has explicitly opted out of seeing the picker for this type). */
   get showEmbedderPicker(): boolean {
+    if (this.lockedEmbedder) return false;
     return this.advancedOpen || !this.isDefaultEmbedderSelected;
   }
 
