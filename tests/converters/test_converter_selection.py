@@ -127,6 +127,27 @@ class TestConverterBase:
         assert d["target_type"] == "audio"
         assert "display_name" in d
         assert "description" in d
+        # summary_template surfaces the configurable ffmpeg_timeout so the
+        # frontend can preview the active setting next to the import row.
+        assert d["summary_template"] == "Pull the audio track from each video. Timeout {ffmpeg_timeout}s."
+
+    def test_to_dict_omits_summary_template_when_unset(self):
+        from vtscore.converters.base import MediaConverter
+
+        class Dummy(MediaConverter):
+            @property
+            def source_type(self):
+                return "foo"
+
+            @property
+            def target_type(self):
+                return "bar"
+
+            def convert(self, media, params=None):
+                return []
+
+        d = Dummy().to_dict()
+        assert "summary_template" not in d
 
     def test_to_dict_fallback_display_name(self):
         """If display_name is empty, to_dict derives one from type IDs."""

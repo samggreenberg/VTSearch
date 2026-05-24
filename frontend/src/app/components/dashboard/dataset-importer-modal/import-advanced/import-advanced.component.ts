@@ -67,6 +67,12 @@ export class ImportAdvancedComponent {
    *  after the chooser settles. */
   @Input() selectedClipper = '';
 
+  /** Current parameter values for the selected clipper, keyed by the
+   *  clipper's parameter ``key``.  Forwarded to the source-specs
+   *  picker so the native row can render a live preview of the active
+   *  settings. */
+  @Input() selectedClipperParams: Record<string, string | number> = {};
+
   /** Fired when the user clicks either the native row's Details
    *  button (inside the source-specs column) or the standalone
    *  Details fallback below the Advanced block — parent opens its

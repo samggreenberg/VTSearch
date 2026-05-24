@@ -43,6 +43,15 @@ class MediaConverter(PluginBase, ABC):
     #: Short description of what this converter does.
     description: str = ""
 
+    #: One-line preview with ``{key}`` placeholders for the converter's
+    #: parameter values.  The frontend substitutes each ``{key}`` with the
+    #: current value of the field named ``key`` (see :attr:`fields`) when
+    #: rendering the import row preview.  Subclasses with configurable
+    #: parameters should override to surface the active values — e.g.
+    #: ``"Pull the audio track from video. Timeout {ffmpeg_timeout}sec."``.
+    #: Defaults to empty (falls back to :attr:`description`).
+    summary_template: str = ""
+
     #: User-configurable parameters.  Same :class:`PluginField` system
     #: every plugin family uses.  Empty by default — converters with no
     #: tunables don't have to declare anything.
@@ -134,7 +143,7 @@ class MediaConverter(PluginBase, ABC):
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise converter metadata for API endpoints."""
-        return {
+        d: dict[str, Any] = {
             "name": self.name,
             "source_type": self.source_type,
             "target_type": self.target_type,
@@ -142,3 +151,6 @@ class MediaConverter(PluginBase, ABC):
             "description": self.description,
             "fields": [f.to_dict() for f in self.fields],
         }
+        if self.summary_template:
+            d["summary_template"] = self.summary_template
+        return d

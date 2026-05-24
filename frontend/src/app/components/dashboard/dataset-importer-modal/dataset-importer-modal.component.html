@@ -67,6 +67,7 @@
               [selectedEmbedder]="selectedDemoEmbedder"
               (selectedEmbedderChange)="onDemoEmbedderChange($event)"
               [selectedClipper]="selectedDemoClipper"
+              [selectedClipperParams]="{}"
               (clipperChooserRequested)="openClipperChooser('demo')"
             ></vt-import-advanced>
           </div>
@@ -126,6 +127,7 @@
           [selectedEmbedder]="sfSelectedEmbedder"
           (selectedEmbedderChange)="sfSelectedEmbedder = $event"
           [selectedClipper]="sfSelectedClipper"
+          [selectedClipperParams]="sfClipperParamValues"
           (clipperChooserRequested)="openClipperChooser('sf')"
         ></vt-import-advanced>
       </div>
@@ -199,6 +201,7 @@
           [selectedEmbedder]="lfSelectedEmbedder"
           (selectedEmbedderChange)="lfSelectedEmbedder = $event"
           [selectedClipper]="lfSelectedClipper"
+          [selectedClipperParams]="lfClipperParamValues"
           (clipperChooserRequested)="openClipperChooser('lf')"
         ></vt-import-advanced>
       </div>
@@ -356,6 +359,7 @@
             [selectedEmbedder]="selectedEmbedder"
             (selectedEmbedderChange)="selectedEmbedder = $event"
             [selectedClipper]="selectedClipper"
+            [selectedClipperParams]="clipperParamValues"
             (clipperChooserRequested)="openClipperChooser('form')"
           ></vt-import-advanced>
         </div>

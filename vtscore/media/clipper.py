@@ -69,6 +69,19 @@ class MediaClipper(ABC):
         """
         return ""
 
+    @property
+    def summary_template(self) -> str:
+        """One-line preview of this clipper with ``{key}`` placeholders.
+
+        The frontend substitutes each ``{key}`` with the current value of
+        the parameter named ``key`` (see :attr:`parameters`) when rendering
+        the import row preview.  Subclasses with configurable parameters
+        should override to surface the active values — e.g.
+        ``"Cut each audio file into {duration}s tiles."``.  Defaults to
+        :attr:`description` so static clippers don't have to override.
+        """
+        return self.description
+
     # ------------------------------------------------------------------
     # Parameters
     # ------------------------------------------------------------------
@@ -183,6 +196,9 @@ class MediaClipper(ABC):
         desc = self.description
         if desc:
             d["description"] = desc
+        template = self.summary_template
+        if template and template != desc:
+            d["summary_template"] = template
         params = self.parameters
         if params:
             d["parameters"] = params
