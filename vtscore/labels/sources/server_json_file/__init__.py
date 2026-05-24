@@ -38,9 +38,9 @@ class ServerFileLabelsetSource(LabelsetSource):
         ),
     ]
 
-    def load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
+    def _do_load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Read labels from a JSON file on the server."""
-        path = Path(_normalized(self, field_values)["filepath"])
+        path = Path(field_values["filepath"])
         if not path.exists():
             return []
         if not path.is_file():
@@ -57,11 +57,11 @@ class ServerFileLabelsetSource(LabelsetSource):
             raise ValueError("JSON must contain a top-level 'labels' list.")
         return [entry for entry in labels if isinstance(entry, dict)]
 
-    def load_full(self, field_values: dict[str, Any]) -> LabelSet:
+    def _do_load_full(self, field_values: dict[str, Any]) -> LabelSet:
         """Read labels *and* any ``detector_meta`` block into a :class:`LabelSet`."""
         from vtscore.datasets.labelset import LabelSet as _LabelSet
 
-        path = Path(_normalized(self, field_values)["filepath"])
+        path = Path(field_values["filepath"])
         if not path.exists():
             return _LabelSet()
         if not path.is_file():
@@ -78,9 +78,9 @@ class ServerFileLabelsetSource(LabelsetSource):
             raise ValueError("JSON must contain a top-level 'labels' list.")
         return _LabelSet.from_dict(data)
 
-    def save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
+    def _do_save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
         """Write labels to a JSON file on the server."""
-        filepath = Path(_normalized(self, field_values)["filepath"])
+        filepath = Path(field_values["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
         tmp = filepath.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
@@ -121,20 +121,6 @@ def resolve_filepath_for(
     # values are sanitised, so re-validate the resolved path before any
     # caller opens it.
     return str(validate_server_filepath(filepath, base_dir=get_file_access_base_dir()))
-
-
-def _normalized(source: ServerFileLabelsetSource, field_values: dict[str, Any]) -> dict[str, Any]:
-    """Return *field_values* with the source's declarative knobs applied.
-
-    Sync-source callers (vtscore/labels/sync.py, the route layer when it
-    loads the configured source) pass field_values straight from the
-    detector config; that bypasses the route-level normalize hook, so we
-    apply it here.  Idempotent: callers that already normalized get the
-    same dict back.
-    """
-    from vtscore.plugins.normalize import normalize_field_values
-
-    return normalize_field_values(source, dict(field_values))
 
 
 LABELSET_SOURCE = ServerFileLabelsetSource()

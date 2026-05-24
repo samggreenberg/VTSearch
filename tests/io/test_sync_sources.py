@@ -234,14 +234,12 @@ class TestServerFileSettingsSource:
             src.load({"filepath": ""})
 
     def test_username_template_resolution(self, tmp_path, monkeypatch):
-        from vtsearch.settings_io.sources.server_json_file import _normalized
+        from vtsearch.settings_io.sources import get_settings_source
 
         monkeypatch.setattr("vtsearch.auth.get_current_user", lambda: "alice")
 
-        from vtsearch.settings_io.sources import get_settings_source
-
         src = get_settings_source("server_json_file")
-        result = _normalized(src, {"filepath": str(tmp_path / "{username}.settings.json")})["filepath"]
+        result = src._normalize({"filepath": str(tmp_path / "{username}.settings.json")})["filepath"]
         assert "alice.settings.json" in result
         assert "{username}" not in result
 
@@ -254,7 +252,6 @@ class TestServerFileSettingsSource:
         operation runs.
         """
         from vtsearch.settings_io.sources import get_settings_source
-        from vtsearch.settings_io.sources.server_json_file import _normalized
 
         monkeypatch.setattr("vtsearch.auth.get_current_user", lambda: "alice")
 
@@ -262,7 +259,7 @@ class TestServerFileSettingsSource:
 
         src = get_settings_source("server_json_file")
         with pytest.raises(ValueError, match="outside the allowed directory"):
-            _normalized(src, {"filepath": traversal_template})
+            src._normalize({"filepath": traversal_template})
 
         src = get_settings_source("server_json_file")
         with pytest.raises(ValueError, match="outside the allowed directory"):
@@ -366,7 +363,7 @@ class TestServerFileLabelsetSource:
         """
         from vtscore.datasets.labelset import LabelSet
         from vtscore.labels.sources import get_labelset_source
-        from vtscore.labels.sources.server_json_file import _normalized, resolve_filepath_for
+        from vtscore.labels.sources.server_json_file import resolve_filepath_for
 
         traversal_template = "../../../../etc/{detector_name}.labels.json"
 
@@ -379,10 +376,10 @@ class TestServerFileLabelsetSource:
 
         src = get_labelset_source("server_json_file")
 
-        # _normalized also validates when no template variable is
-        # present (so a bare "../" template is rejected too).
+        # The base-class normalize also validates when no template
+        # variable is present (so a bare "../" template is rejected too).
         with pytest.raises(ValueError, match="outside the allowed directory"):
-            _normalized(src, {"filepath": "../../../../etc/passwd"})
+            src._normalize({"filepath": "../../../../etc/passwd"})
 
         with pytest.raises(ValueError, match="outside the allowed directory"):
             src.load({"filepath": "../../../../etc/passwd"})
