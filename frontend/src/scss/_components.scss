@@ -204,8 +204,13 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   min-width: 320px;
   max-width: 90vw;
   max-height: 85vh;
-  overflow-y: auto;
   box-shadow: var(--shadow-lg);
+  // Flex column so the body is the only scrollable area; the header
+  // and footer stay pinned even when the body overflows, so primary
+  // actions (Cancel / Import / etc.) remain visible.
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .modal-header {
@@ -237,6 +242,9 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 .modal-body {
   margin-bottom: var(--space-xl);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .modal-footer {

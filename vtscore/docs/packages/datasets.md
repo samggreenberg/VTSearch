@@ -267,7 +267,7 @@ entry-point group; built-ins win on name clashes. See
 | `local`            | Local                  | `multi_media=True`. Browser-upload placeholder; re-enters `server_folder`.        |
 | `pickle`           | Upload Saved Dataset   | `multi_media=True`, hidden. `.pkl` round-trip path.                               |
 | `http_archive`     | Import from URL        | `multi_media=True`, hidden. Downloads + extracts an archive.                      |
-| `demo`             | Downloaded Demo Media  | `multi_media=True`. Wraps `load_demo_dataset`.                                    |
+| `demo`             | Downloaded Media       | `multi_media=True`. Wraps `load_demo_dataset`.                                    |
 | `synthetic`        | Synthetic Media        | `multi_media=True`. Generates deterministic media via `vtscore.utils.synthetic`.  |
 | `combine_datasets` | Combined Datasets      | `multi_media=True`, hidden. Internal: merges two loaded datasets.                 |
 | `recaller`         | ReCaller Query         | `multi_media=True`, hidden. Scaffold for the ReCaller external API.               |
