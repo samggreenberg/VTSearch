@@ -1,0 +1,8 @@
+@if (usage) {
+  <div class="usage-bar" [title]="title">
+    <div class="usage-bar-label">{{ label }}: {{ freeText }}</div>
+    <div class="usage-bar-track" [class.warn]="usedPct >= 80" [class.critical]="usedPct >= 95">
+      <div class="usage-bar-fill" [style.width.%]="usedPct"></div>
+    </div>
+  </div>
+}

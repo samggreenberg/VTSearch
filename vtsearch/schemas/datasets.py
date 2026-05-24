@@ -319,6 +319,14 @@ class DashboardDiskUsageResponseSchema(Schema):
     path = fields.String(required=True)
 
 
+class DashboardRamUsageResponseSchema(Schema):
+    """Response for ``GET /api/dashboard/ram-usage``."""
+
+    total = fields.Integer(required=True)
+    used = fields.Integer(required=True)
+    free = fields.Integer(required=True)
+
+
 # ---------------------------------------------------------------------------
 # /api/dataset/load-* and /api/dataset/clear (vtsearch/routes/datasets/load.py)
 # ---------------------------------------------------------------------------
@@ -583,6 +591,7 @@ __all__ = [
     "DashboardDatasetRenameRequestSchema",
     "DashboardDatasetRenameResponseSchema",
     "DashboardDiskUsageResponseSchema",
+    "DashboardRamUsageResponseSchema",
     "DatasetAllImportersListResponseSchema",
     "DatasetAvailableFilesResponseSchema",
     "DatasetClearResponseSchema",

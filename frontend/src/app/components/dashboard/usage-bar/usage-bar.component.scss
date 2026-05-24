@@ -1,21 +1,29 @@
 // Host is layout-transparent: the parent's centred flex row must not shift
-// when the disk-usage indicator appears or disappears.
+// when the usage indicator appears or disappears.
 :host {
   display: contents;
 }
 
-.disk-usage {
+.usage-bar {
   position: absolute;
-  right: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 220px;
+  // ~3/4 of the original 220px disk-bar width.
+  width: 165px;
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
 }
 
-.disk-usage-label {
+:host(.side-right) .usage-bar {
+  right: 0;
+}
+
+:host(.side-left) .usage-bar {
+  left: 0;
+}
+
+.usage-bar-label {
   font-size: var(--font-xs);
   color: var(--text-muted);
   white-space: nowrap;
@@ -23,7 +31,7 @@
   text-overflow: ellipsis;
 }
 
-.disk-usage-bar {
+.usage-bar-track {
   height: 8px;
   background: var(--bg-elevated, rgba(127, 127, 127, 0.2));
   border: 1px solid var(--border);
@@ -31,16 +39,16 @@
   overflow: hidden;
 }
 
-.disk-usage-fill {
+.usage-bar-fill {
   height: 100%;
   background: var(--accent);
   transition: width var(--transition-slow) ease, background-color var(--transition-slow) ease;
 }
 
-.disk-usage-bar.warn .disk-usage-fill {
+.usage-bar-track.warn .usage-bar-fill {
   background: var(--text-warning);
 }
 
-.disk-usage-bar.critical .disk-usage-fill {
+.usage-bar-track.critical .usage-bar-fill {
   background: var(--color-bad);
 }

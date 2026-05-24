@@ -868,6 +868,26 @@
         ],
         "type": "object"
       },
+      "DashboardRamUsageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "free": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "used": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "free",
+          "total",
+          "used"
+        ],
+        "type": "object"
+      },
       "DatasetAllImportersListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -5715,6 +5735,31 @@
           }
         },
         "summary": "Return free / used / total bytes for the partition holding ``DATA_DIR``.",
+        "tags": [
+          "datasets_ui"
+        ]
+      }
+    },
+    "/api/dashboard/ram-usage": {
+      "get": {
+        "description": "Reads ``MemTotal`` and ``MemAvailable`` from ``/proc/meminfo`` (Linux).\n``free`` is reported as ``MemAvailable`` (memory reclaimable without\nswapping, which is what an application can actually use), and ``used``\nis derived as ``total - free`` to match.",
+        "operationId": "dashboard_ram_usage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardRamUsageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return free / used / total bytes of system RAM.",
         "tags": [
           "datasets_ui"
         ]

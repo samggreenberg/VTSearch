@@ -38,7 +38,7 @@ import { LabelExporterModalComponent } from '../modals/label-exporter-modal/labe
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
-import { DiskUsageComponent, DiskUsageBytes } from './disk-usage/disk-usage.component';
+import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
 @Component({
   selector: 'vt-dashboard',
@@ -55,7 +55,7 @@ import { DiskUsageComponent, DiskUsageBytes } from './disk-usage/disk-usage.comp
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
     IconComponent,
-    DiskUsageComponent,
+    UsageBarComponent,
     SkeletonComponent,
   ],
   templateUrl: './dashboard.component.html',
@@ -134,7 +134,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   currentUser = '';
   isDefaultLogin = true;
 
-  diskUsage: DiskUsageBytes | null = null;
+  diskUsage: UsageBytes | null = null;
+  ramUsage: UsageBytes | null = null;
 
   constructor(
     private router: Router,
@@ -211,6 +212,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
     this.refresh();
     this.startDiskUsagePolling();
+    this.startRamUsagePolling();
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
         this.visibleImporters = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
@@ -301,6 +303,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
       )
       .subscribe((usage) => {
         this.diskUsage = { total: usage.total, used: usage.used, free: usage.free };
+      });
+  }
+
+  private startRamUsagePolling(): void {
+    timer(0, 10000)
+      .pipe(
+        takeUntil(this.destroy$),
+        switchMap(() => this.datasetsApi.getRamUsage().pipe(catchError(() => EMPTY))),
+      )
+      .subscribe((usage) => {
+        this.ramUsage = { total: usage.total, used: usage.used, free: usage.free };
       });
   }
 

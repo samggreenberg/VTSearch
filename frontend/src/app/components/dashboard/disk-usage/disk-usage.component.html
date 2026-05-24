@@ -1,8 +1,0 @@
-@if (usage) {
-  <div class="disk-usage" [title]="'Server disk: ' + freeText">
-    <div class="disk-usage-label">Disk: {{ freeText }}</div>
-    <div class="disk-usage-bar" [class.warn]="usedPct >= 80" [class.critical]="usedPct >= 95">
-      <div class="disk-usage-fill" [style.width.%]="usedPct"></div>
-    </div>
-  </div>
-}

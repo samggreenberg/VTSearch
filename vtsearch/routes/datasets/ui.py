@@ -28,6 +28,7 @@ from vtsearch.schemas.datasets import (
     DashboardDatasetRenameRequestSchema,
     DashboardDatasetRenameResponseSchema,
     DashboardDiskUsageResponseSchema,
+    DashboardRamUsageResponseSchema,
     DemoCategoriesResponseSchema,
     DemoDatasetListQuerySchema,
     DemoDatasetListResponseSchema,
@@ -526,3 +527,30 @@ def dashboard_disk_usage():
         "free": usage.free,
         "path": str(probe),
     }
+
+
+@datasets_ui_bp.route("/api/dashboard/ram-usage")
+@datasets_ui_bp.response(200, DashboardRamUsageResponseSchema)
+def dashboard_ram_usage():
+    """Return free / used / total bytes of system RAM.
+
+    Reads ``MemTotal`` and ``MemAvailable`` from ``/proc/meminfo`` (Linux).
+    ``free`` is reported as ``MemAvailable`` (memory reclaimable without
+    swapping, which is what an application can actually use), and ``used``
+    is derived as ``total - free`` to match.
+    """
+    total = 0
+    available = 0
+    try:
+        with open("/proc/meminfo", encoding="ascii") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    total = int(line.split()[1]) * 1024
+                elif line.startswith("MemAvailable:"):
+                    available = int(line.split()[1]) * 1024
+                if total and available:
+                    break
+    except OSError:
+        pass
+    used = max(0, total - available)
+    return {"total": total, "used": used, "free": available}
