@@ -225,6 +225,30 @@ opts back into "show everything") via the Settings dialog overrides
 the CLI value for themselves, and the choice persists across restarts.
 A user who has never touched the setting sees the CLI value.
 
+**Hidden plugins** (`--hide-plugin family:name`, repeatable) — drop a
+plugin from picker / listing API responses for this deployment without
+editing plugin code. The format is `family:name` where `family` is one
+of the keys printed by `--list-plugins` (`importers`, `exporters`,
+`label_importers`, `labelset_sources`, `converters`, `media_sources`,
+`media_types`, `embedders`, `clippers`, `settings_importers`,
+`settings_exporters`, `settings_sources`) and `name` is the plugin's
+registered name:
+
+```bash
+python app.py --hide-plugin converters:audio2image \
+              --hide-plugin embedders:e5 \
+              --hide-plugin importers:synthetic
+```
+
+Hidden plugins remain importable and callable by name via execution
+endpoints (autodetect, label import, etc.) — this is a UI declutter,
+not a security boundary. The CLI flag merges with the persisted
+`hidden_plugins` key in the server settings file (`data/settings.json`
+or whatever path `--settings` points at), where a deployment can set
+`{"hidden_plugins": {"converters": ["audio2image"]}}` and pick it up on
+every restart. Use `--list-plugins --format names` to discover the
+available `family:name` pairs.
+
 ## Inspecting plugins and the API schema
 
 `python app.py --list-plugins` enumerates every auto-discovered plugin —

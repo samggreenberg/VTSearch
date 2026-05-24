@@ -861,8 +861,7 @@ if __name__ == "__main__":
         for spec in hide_specs:
             if ":" not in spec:
                 parser.error(
-                    f"--hide-plugin expects FAMILY:NAME, got {spec!r}. "
-                    f"Valid families: {sorted(valid_families)}"
+                    f"--hide-plugin expects FAMILY:NAME, got {spec!r}. Valid families: {sorted(valid_families)}"
                 )
             family, _, plugin_name = spec.partition(":")
             family = family.strip()

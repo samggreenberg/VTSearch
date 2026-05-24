@@ -120,9 +120,7 @@ def converters_list(query: dict):
 @datasets_listings_bp.response(200, DatasetImportersListResponseSchema)
 def dataset_importers():
     """List all registered importers (excluding those with non-form UI)."""
-    extended = [
-        imp.to_dict() for imp in filter_visible_plugins("importers", list_importers()) if imp.ui_mode == "form"
-    ]
+    extended = [imp.to_dict() for imp in filter_visible_plugins("importers", list_importers()) if imp.ui_mode == "form"]
     return {"importers": extended}
 
 
