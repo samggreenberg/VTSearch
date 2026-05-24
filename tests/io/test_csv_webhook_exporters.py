@@ -209,13 +209,6 @@ class TestCsvExporterExport:
         exp.export(results, {"filepath": str(filepath)})
         assert filepath.exists()
 
-    def test_csv_empty_filepath_raises(self):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
-
-        exp = ServerCsvLabelsetExporter()
-        with pytest.raises(ValueError, match="file path is required"):
-            exp.export({}, {"filepath": ""})
-
     def test_csv_multiple_detectors(self, tmp_path):
         from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
@@ -677,9 +670,14 @@ class TestWebhookExporterCLI:
 
 
 class TestWebhookExporterExport:
-    """Tests for the Webhook export() method using mocked HTTP."""
+    """Tests for the Webhook export() method using mocked HTTP.
 
-    _PATCH_VALIDATE = mock.patch("vtscore.exporters.webhook.validate_url")
+    Phase B moved ``validate_url`` out of the plugin body and into the
+    framework's ``normalize_field_values`` pass that fires before
+    ``.export()`` is invoked.  These tests call ``.export()`` directly
+    with already-normalized field values, so no URL validator runs and
+    no patch is needed.
+    """
 
     def test_posts_json_to_url(self):
         from vtscore.exporters.webhook import WebhookLabelsetExporter
@@ -692,7 +690,6 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            self._PATCH_VALIDATE,
             mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
         ):
             result = exp.export(results, {"url": "https://example.com/hook"})
@@ -714,7 +711,6 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            self._PATCH_VALIDATE,
             mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
@@ -733,20 +729,12 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            self._PATCH_VALIDATE,
             mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": ""})
 
         call_kwargs = mock_post.call_args
         assert "Authorization" not in call_kwargs.kwargs["headers"]
-
-    def test_empty_url_raises(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
-
-        exp = WebhookLabelsetExporter()
-        with pytest.raises(ValueError, match="webhook URL is required"):
-            exp.export({}, {"url": ""})
 
     def test_http_error_propagates(self):
         from vtscore.exporters.webhook import WebhookLabelsetExporter
@@ -757,7 +745,7 @@ class TestWebhookExporterExport:
         mock_resp = mock.MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("500 Server Error")
 
-        with self._PATCH_VALIDATE, mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
             with pytest.raises(Exception, match="500 Server Error"):
                 exp.export(results, {"url": "https://example.com/hook"})
 
@@ -771,7 +759,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert "3 hit(s)" in result["message"]
@@ -787,7 +775,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 201
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert result["status_code"] == 201
@@ -804,7 +792,7 @@ class TestWebhookExporterIntegration:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            mock.patch("vtscore.exporters.webhook.validate_url"),
+            mock.patch("vtscore.security.url_validation.validate_url"),
             mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp),
         ):
             _run_exporter("webhook", {"url": "https://example.com/hook"}, results)

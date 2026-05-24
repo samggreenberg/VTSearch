@@ -230,7 +230,7 @@ class TestServerFileSettingsSource:
         from vtsearch.settings_io.sources import get_settings_source
 
         src = get_settings_source("server_json_file")
-        with pytest.raises(ValueError, match="file path is required"):
+        with pytest.raises(ValueError, match="is required"):
             src.load({"filepath": ""})
 
     def test_username_template_resolution(self, tmp_path, monkeypatch):
@@ -259,8 +259,6 @@ class TestServerFileSettingsSource:
         monkeypatch.setattr("vtsearch.auth.get_current_user", lambda: "alice")
 
         traversal_template = "../../../../etc/{username}.settings.json"
-
-        from vtsearch.settings_io.sources import get_settings_source
 
         src = get_settings_source("server_json_file")
         with pytest.raises(ValueError, match="outside the allowed directory"):

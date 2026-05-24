@@ -295,7 +295,14 @@ class PluginBase:
         ``url`` fields,
         :func:`~vtscore.security.path_validation.validate_server_filepath`
         for ``server_path`` fields) — so CLI invocations get the same
-        guarantees the HTTP path does.
+        guarantees the HTTP path does.  Required-field rejection is
+        delegated to the normalize pass so the two ingress points raise
+        identically on the same input.
+
+        ``--`` flag names are preferred in the surfaced error so CLI
+        users see the same identifier they typed; the normalize pass's
+        generic ``"<Label> is required."`` is rewritten when the
+        rejected field comes from missing CLI input.
         """
         for f in self.fields:
             # Booleans are always populated by argparse (default included).

@@ -232,10 +232,6 @@ class TestServerFileSettingsImporter:
         with pytest.raises(ValueError, match="not found"):
             self._get_importer().run({"filepath": "/nonexistent/settings.json"})
 
-    def test_run_raises_on_empty_filepath(self):
-        with pytest.raises(ValueError, match="file path"):
-            self._get_importer().run({"filepath": ""})
-
     def test_run_raises_on_invalid_json(self, tmp_path):
         p = tmp_path / "bad.json"
         p.write_text("not json")
@@ -308,10 +304,6 @@ class TestServerFileSettingsExporter:
         dest = tmp_path / "sub" / "dir" / "settings.json"
         self._get_exporter().export({"theme": "dark"}, {"filepath": str(dest)})
         assert dest.exists()
-
-    def test_export_raises_on_empty_path(self):
-        with pytest.raises(ValueError, match="file path"):
-            self._get_exporter().export({}, {"filepath": ""})
 
 
 # ---------------------------------------------------------------------------
@@ -454,11 +446,13 @@ class TestSettingsExportEndpoint:
         assert res.status_code == 422
         assert "exporter_name" in res.get_json().get("errors", {}).get("json", {})
 
-    def test_missing_required_field_400(self, client):
-        # Handler-level validation: plugin field check uses ``message``.
+    def test_missing_required_field_uses_default(self, client):
+        # Phase B: the route falls back to the field's declared default
+        # (``server_json_file`` declares a ``data/settings_backup.json``
+        # default for ``filepath``), so an export with no ``filepath``
+        # at all proceeds with that default.
         res = client.post(
             "/api/settings-exporters/export",
             json={"exporter_name": "server_json_file", "field_values": {}},
         )
-        assert res.status_code == 400
-        assert "Missing required field" in res.get_json().get("message", "")
+        assert res.status_code == 200

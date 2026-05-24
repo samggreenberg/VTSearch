@@ -45,13 +45,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase
 
-_TEXT_LIKE_TYPES = frozenset(
-    {"text", "url", "email", "password", "folder", "server_path", "select"}
-)
+_TEXT_LIKE_TYPES = frozenset({"text", "url", "email", "password", "folder", "server_path", "select"})
 
-_KNOWN_TEMPLATE_VARS = frozenset(
-    {"YYYYMMDD-HHMMSS", "detector_name", "detector_id", "username"}
-)
+_KNOWN_TEMPLATE_VARS = frozenset({"YYYYMMDD-HHMMSS", "detector_name", "detector_id", "username"})
 
 
 def _resolve_template_var(name: str) -> str:
@@ -121,9 +117,10 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
     """Normalize *field_values* against *plugin*'s declared fields.
 
     Mutates *field_values* in place and returns it.  Skips file uploads
-    (those don't carry strings), non-string values (numbers, booleans),
-    and missing keys.  Raises :class:`ValueError` for an invalid URL,
-    a path-traversal attempt, or an unknown template variable.
+    (those don't carry strings) and non-string values (numbers,
+    booleans).  Raises :class:`ValueError` for an empty / missing
+    required field, an invalid URL, a path-traversal attempt, or an
+    unknown template variable.
 
     Idempotent: running the pass twice on the same dict produces the
     same result and never raises differently the second time.
@@ -135,10 +132,18 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
             continue
 
         raw = field_values.get(f.key)
-        if not isinstance(raw, str):
+        if raw is None:
+            value = ""
+        elif isinstance(raw, str):
+            value = raw.strip()
+        else:
+            # Non-string value already present (e.g. tests passing an int)
+            # — leave it alone and let the plugin handle it.
             continue
 
-        value = raw.strip()
+        if not value and f.required:
+            raise ValueError(f"{f.label} is required.")
+
         if value:
             value = _apply_templates(value, tuple(f.template_vars))
             _validate_field_value(f.field_type, value)
