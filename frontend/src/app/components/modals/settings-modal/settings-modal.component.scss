@@ -81,50 +81,14 @@
   cursor: pointer;
 }
 
-.view-tabs {
-  display: flex;
-  gap: 0;
-  margin-bottom: 0;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  border: 1px solid var(--border-color);
-  border-bottom: none;
-  padding: var(--space-xs) var(--space-xs) 0;
-}
-
-.view-tab {
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-  padding: var(--space-sm) var(--space-md);
-  font-size: var(--font-sm);
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: color var(--transition-base), border-color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
-  }
-
-  &--active {
-    color: var(--text-primary);
-    background: var(--bg-primary);
-    border-bottom-color: var(--accent-color);
-  }
-}
-
+// Scroll Style's two-side layout sits inside the shared `.view-tab-content`
+// panel (base styling in `_components.scss`). Encapsulation scopes this
+// grid override to ScrollStyle's tab content only — other consumers
+// (e.g. Data Imports) keep their own inner layout.
 .view-tab-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-xl);
-  padding: var(--space-lg);
-  border: 1px solid var(--border-color);
-  border-top: 1px solid var(--border-color);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  background: var(--bg-primary);
 }
 
 .view-side-section {
