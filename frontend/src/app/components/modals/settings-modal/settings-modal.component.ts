@@ -7,6 +7,8 @@ import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SettingsImporterModalComponent } from '../settings-importer-modal/settings-importer-modal.component';
 import { SettingsExporterModalComponent } from '../settings-exporter-modal/settings-exporter-modal.component';
+import { ImportDefaultsSettingsComponent } from './import-defaults/import-defaults-settings.component';
+import { ImportDefaultsByMediaType } from '../../../models/api.models';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
@@ -19,7 +21,7 @@ import { VtDialogService } from '../../../services/dialog.service';
 @Component({
   selector: 'vt-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, ImportDefaultsSettingsComponent],
   templateUrl: './settings-modal.component.html',
   styleUrl: './settings-modal.component.scss',
 })
@@ -199,6 +201,29 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   onStringChange(key: string, value: string): void {
     (this.settings as Record<string, unknown>)[key] = value;
     this.save();
+  }
+
+  /** Current per-mediaType import-defaults map, normalised to a plain
+   *  object so the child component never has to defend against ``null``. */
+  get importDefaults(): ImportDefaultsByMediaType {
+    const raw = (this.settings as Record<string, unknown>)['import_defaults_by_media_type'];
+    return (raw as ImportDefaultsByMediaType | undefined) || {};
+  }
+
+  onImportDefaultsChange(value: ImportDefaultsByMediaType): void {
+    (this.settings as Record<string, unknown>)['import_defaults_by_media_type'] = value;
+    this.save();
+  }
+
+  /** Effective solo-mediaType for the import-defaults tab — collapses
+   *  the per-mediaType picker to a single tab when the user is in solo
+   *  mode (so they only configure what they'll actually import). */
+  get effectiveSoloMediaType(): string | null {
+    const explicit = this.settings.solo_media_type_explicit;
+    if (explicit) {
+      return this.settings.solo_media_type || null;
+    }
+    return this.settings.effective_solo_media_type || null;
   }
 
   async resetDefaults(): Promise<void> {

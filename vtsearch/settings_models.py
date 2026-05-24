@@ -173,6 +173,23 @@ class UserSettings(BaseModel):
     # Keys are canonical media-type ids (e.g. ``"image"``, ``"audio"``).
     last_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
 
+    # Per-media-type default settings for the Add Dataset advanced panel —
+    # the embedder, clipper (+ params), and source-spec converter rows the
+    # user wants applied automatically every time they import a dataset of
+    # that output mediaType. Set from the Settings > Data Imports tab and
+    # silently auto-filled into the importer form when an importer is
+    # selected. Keys are canonical media-type ids; each value is a
+    # free-form dict shaped like:
+    #     {
+    #       "embedder": "<embedder name>" | "",
+    #       "clipper": "<clipper name>" | "",
+    #       "clipper_params": {"<key>": <value>, ...},
+    #       "source_specs": [{"source_type": "...", "converter": "..."|null,
+    #                         "params": {...}}, ...],
+    #     }
+    # Any missing sub-key falls back to the importer's existing default.
+    import_defaults_by_media_type: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
     # Solo-mediaType streamlining. When set, the importer and new-detector
     # flows hide their mediaType pickers and lock to this type, the converter
     # picker filters to converters whose output is this type, and the

@@ -9,7 +9,8 @@ import { SourcePickerComponent } from './source-picker/source-picker.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
-import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
+import { ToastService } from '../../../services/toast.service';
+import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec, ImportDefaultsForMediaType } from '../../../models/api.models';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 @Component({
@@ -178,7 +179,222 @@ export class DatasetImporterModalComponent implements OnInit {
   constructor(
     private datasetsApi: DatasetsApiService,
     private settingsState: SettingsStateService,
+    private toastService: ToastService,
   ) {}
+
+  /** Saved import defaults for the active user, keyed by canonical
+   *  type_id. Used to silently pre-fill the embedder/clipper/source-spec
+   *  pickers on importer selection and to suppress the post-import
+   *  "Save as default" toast when the current config already matches. */
+  private importDefaultsForFolderOrTypeId(folderOrTypeId: string): ImportDefaultsForMediaType | null {
+    if (!folderOrTypeId) return null;
+    const typeId = this.toTypeId(folderOrTypeId) || folderOrTypeId;
+    const map = ((this.settingsState.settings as Record<string, unknown> | undefined)?.[
+      'import_defaults_by_media_type'
+    ] || {}) as Record<string, ImportDefaultsForMediaType>;
+    return map[typeId] || null;
+  }
+
+  /** Apply saved embedder default for *mediaType* if one is set and is
+   *  still in the *embedders* list; otherwise fall back to the usual
+   *  pickInitialEmbedder priority. Returns the chosen name. */
+  private chooseEmbedderForType(embedders: EmbedderInfo[], mediaType: string): string {
+    const saved = this.importDefaultsForFolderOrTypeId(mediaType)?.embedder;
+    if (saved && embedders.some((e) => e.name === saved)) return saved;
+    return this.pickInitialEmbedder(embedders, mediaType);
+  }
+
+  /** Apply saved clipper default for *mediaType*. Returns
+   *  ``{ name, params }`` so the caller can update both selection and
+   *  parameter values together. Falls back to the registry's default
+   *  (first entry) when no saved default exists or it's no longer in
+   *  the clipper list. */
+  private chooseClipperForType(
+    clippers: ClipperInfo[],
+    mediaType: string,
+  ): { name: string; params: Record<string, number | string> | null } {
+    const saved = this.importDefaultsForFolderOrTypeId(mediaType);
+    if (saved?.clipper && clippers.some((c) => c.name === saved.clipper)) {
+      return {
+        name: saved.clipper,
+        params: { ...(saved.clipper_params || {}) },
+      };
+    }
+    return {
+      name: clippers.length > 0 ? clippers[0].name : '',
+      params: null, // signals "use the clipper's own param defaults"
+    };
+  }
+
+  /** Snapshot of the per-view import-config (embedder/clipper/specs)
+   *  the user submitted, normalised to the same shape as the persisted
+   *  defaults. Used both to diff against the saved defaults and to
+   *  build the new defaults dict when the user accepts the toast. */
+  private snapshotImportConfig(
+    typeId: string,
+    embedder: string,
+    clipper: string,
+    clipperParams: Record<string, number | string>,
+    sourceSpecs: SourceSpec[],
+    availableEmbedders: EmbedderInfo[],
+    availableClippers: ClipperInfo[],
+  ): ImportDefaultsForMediaType {
+    const out: ImportDefaultsForMediaType = {};
+    // Treat the registry's default embedder as "no override worth saving".
+    const isDefaultEmbedder =
+      !embedder || !!availableEmbedders.find((e) => e.name === embedder)?.is_default;
+    if (embedder && !isDefaultEmbedder) {
+      out.embedder = embedder;
+    }
+    const isDefaultClipper =
+      !clipper ||
+      clipper.endsWith('_default') ||
+      (availableClippers.length > 0 && availableClippers[0].name === clipper);
+    if (clipper && !isDefaultClipper) {
+      out.clipper = clipper;
+      if (clipperParams && Object.keys(clipperParams).length > 0) {
+        out.clipper_params = { ...clipperParams };
+      }
+    }
+    // Strip the implicit native row from source_specs so the persisted
+    // value is just the user's converter additions. The importer
+    // re-adds the native row implicitly on load.
+    const nonNative = (sourceSpecs || []).filter(
+      (s) => !(s.source_type === typeId && s.converter === null),
+    );
+    if (nonNative.length > 0) {
+      out.source_specs = nonNative.map((s) => ({ ...s, params: { ...s.params } }));
+    }
+    return out;
+  }
+
+  /** True when *a* and *b* describe equivalent persisted defaults. Used
+   *  to suppress the post-import "save as default" toast when the user
+   *  already saved this exact config. */
+  private importDefaultsEqual(
+    a: ImportDefaultsForMediaType,
+    b: ImportDefaultsForMediaType,
+  ): boolean {
+    if ((a.embedder || '') !== (b.embedder || '')) return false;
+    if ((a.clipper || '') !== (b.clipper || '')) return false;
+    if (!shallowParamsEqual(a.clipper_params, b.clipper_params)) return false;
+    if (!shallowSpecsEqual(a.source_specs, b.source_specs)) return false;
+    return true;
+  }
+
+  /** True when *cfg* has at least one persisted override worth saving. */
+  private hasMeaningfulOverrides(cfg: ImportDefaultsForMediaType): boolean {
+    return !!(
+      cfg.embedder ||
+      cfg.clipper ||
+      (cfg.source_specs && cfg.source_specs.length > 0)
+    );
+  }
+
+  /** After a successful import, offer to save the user's advanced
+   *  settings as the default for this output mediaType. Skipped silently
+   *  when the user accepted the importer's natural defaults or already
+   *  has the same config saved. */
+  private maybeOfferSaveImportDefaults(view: 'form' | 'sf' | 'lf'): void {
+    let typeId = '';
+    let cfg: ImportDefaultsForMediaType = {};
+    if (view === 'form') {
+      typeId = this.formOutputTypeId;
+      cfg = this.snapshotImportConfig(
+        typeId,
+        this.selectedEmbedder,
+        this.selectedClipper,
+        this.clipperParamValues,
+        this.formSourceSpecs,
+        this.availableEmbedders,
+        this.availableClippers,
+      );
+    } else if (view === 'sf') {
+      typeId = this.sfOutputTypeId;
+      cfg = this.snapshotImportConfig(
+        typeId,
+        this.sfSelectedEmbedder,
+        this.sfSelectedClipper,
+        this.sfClipperParamValues,
+        this.sfSourceSpecs,
+        this.sfEmbedders,
+        this.sfClippers,
+      );
+    } else {
+      typeId = this.lfOutputTypeId;
+      cfg = this.snapshotImportConfig(
+        typeId,
+        this.lfSelectedEmbedder,
+        this.lfSelectedClipper,
+        this.lfClipperParamValues,
+        this.lfSourceSpecs,
+        this.lfEmbedders,
+        this.lfClippers,
+      );
+    }
+    if (!typeId) return;
+    if (!this.hasMeaningfulOverrides(cfg)) return;
+    const saved = this.importDefaultsForFolderOrTypeId(typeId) || {};
+    if (this.importDefaultsEqual(saved, cfg)) return;
+    const typeLabel = this.getTabLabel(typeId) || typeId;
+    this.toastService.success({
+      message: `Save these as default for ${typeLabel} imports?`,
+      detail: 'Your embedder, clipper, and converter picks will be auto-filled next time.',
+      action: {
+        label: 'Save as default',
+        onClick: () => this.persistImportDefaults(typeId, cfg),
+      },
+      dedupKey: `import-defaults-offer:${typeId}`,
+    });
+  }
+
+  /** Merge a new per-mediaType entry into the persisted import-defaults
+   *  map and push it through ``SettingsStateService`` so the next
+   *  importer open picks it up. */
+  private persistImportDefaults(typeId: string, cfg: ImportDefaultsForMediaType): void {
+    const current = (this.settingsState.settings as Record<string, unknown> | undefined)?.[
+      'import_defaults_by_media_type'
+    ] as Record<string, ImportDefaultsForMediaType> | undefined;
+    const next: Record<string, ImportDefaultsForMediaType> = { ...(current || {}) };
+    next[typeId] = cfg;
+    this.settingsState
+      .update({ import_defaults_by_media_type: next } as Record<string, unknown>)
+      .subscribe({
+        next: () => {
+          this.toastService.success({
+            message: 'Saved as default',
+            detail: `Future ${this.getTabLabel(typeId) || typeId} imports will pre-fill these settings.`,
+            dedupKey: `import-defaults-saved:${typeId}`,
+          });
+        },
+      });
+  }
+
+  /** Build a source-specs list for a freshly-opened picker, preferring
+   *  the user's saved defaults (filtered to converters that the active
+   *  importer actually supports) and falling back to the importer's
+   *  bare "include directly" row. */
+  private specsListWithDefaultsFor(
+    outputTypeId: string,
+    availableConverters: ConverterInfo[],
+  ): SourceSpec[] {
+    const fallback = this.defaultSpecListFor(outputTypeId);
+    if (!outputTypeId) return fallback;
+    const saved = this.importDefaultsForFolderOrTypeId(outputTypeId)?.source_specs;
+    if (!saved || saved.length === 0) return fallback;
+    const validConverterNames = new Set(availableConverters.map((c) => c.name));
+    const filtered = saved.filter(
+      (s) => s.converter === null || validConverterNames.has(s.converter),
+    );
+    if (filtered.length === 0) return fallback;
+    const hasNative = filtered.some(
+      (s) => s.source_type === outputTypeId && s.converter === null,
+    );
+    if (!hasNative) {
+      return [{ source_type: outputTypeId, converter: null, params: {} }, ...filtered];
+    }
+    return filtered;
+  }
 
   /** Type_id (e.g. ``"image"``) of the solo-mediaType streamlining, or
    *  ``null`` when not active. Reads from the live settings snapshot so
@@ -581,9 +797,13 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.availableClippers = clippers;
-        // Default to the first clipper (the default/null clipper)
-        this.selectedClipper = clippers.length > 0 ? clippers[0].name : '';
-        this.resetClipperParams();
+        const chosen = this.chooseClipperForType(clippers, mediaType);
+        this.selectedClipper = chosen.name;
+        if (chosen.params !== null) {
+          this.clipperParamValues = chosen.params;
+        } else {
+          this.resetClipperParams();
+        }
       },
     });
   }
@@ -614,7 +834,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.availableEmbedders = embedders;
-        this.selectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
+        this.selectedEmbedder = this.chooseEmbedderForType(embedders, mediaType);
       },
     });
   }
@@ -1101,7 +1321,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.lfEmbedders = embedders;
-        this.lfSelectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
+        this.lfSelectedEmbedder = this.chooseEmbedderForType(embedders, mediaType);
       },
     });
   }
@@ -1115,8 +1335,15 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.lfClippers = clippers;
-        this.lfSelectedClipper = clippers.length > 0 ? clippers[0].name : '';
-        this.lfResetClipperParams();
+        const chosen = this.chooseClipperForType(clippers, mediaType);
+        this.lfSelectedClipper = chosen.name;
+        if (chosen.params !== null) {
+          this.lfClipperParams =
+            clippers.find((c) => c.name === chosen.name)?.parameters || [];
+          this.lfClipperParamValues = chosen.params;
+        } else {
+          this.lfResetClipperParams();
+        }
       },
     });
   }
@@ -1197,6 +1424,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.importLocalFolder(formData).subscribe({
       next: () => {
         this.lfSubmitting = false;
+        this.maybeOfferSaveImportDefaults('lf');
         this.importStarted.emit();
       },
       error: (err) => {
@@ -1222,6 +1450,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.importLocalFiles(formData).subscribe({
       next: () => {
         this.lfSubmitting = false;
+        this.maybeOfferSaveImportDefaults('lf');
         this.importStarted.emit();
       },
       error: (err) => {
@@ -1562,7 +1791,7 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.availableConvertersFor('server_folder', this.sfOutputTypeId);
   }
   private sfResetSourceSpecs(): void {
-    this.sfSourceSpecs = this.defaultSpecListFor(this.sfOutputTypeId);
+    this.sfSourceSpecs = this.specsListWithDefaultsFor(this.sfOutputTypeId, this.sfAvailableConverters);
   }
   onSfSpecsChange(specs: SourceSpec[]): void { this.sfSourceSpecs = specs; }
 
@@ -1571,7 +1800,7 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.availableConvertersFor('server_folder', this.lfOutputTypeId);
   }
   private lfResetSourceSpecs(): void {
-    this.lfSourceSpecs = this.defaultSpecListFor(this.lfOutputTypeId);
+    this.lfSourceSpecs = this.specsListWithDefaultsFor(this.lfOutputTypeId, this.lfAvailableConverters);
   }
   onLfSpecsChange(specs: SourceSpec[]): void { this.lfSourceSpecs = specs; }
 
@@ -1583,7 +1812,7 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.availableConvertersFor(this.selectedImporter.name, this.formOutputTypeId);
   }
   resetFormSourceSpecs(): void {
-    this.formSourceSpecs = this.defaultSpecListFor(this.formOutputTypeId);
+    this.formSourceSpecs = this.specsListWithDefaultsFor(this.formOutputTypeId, this.formAvailableConverters);
   }
   onFormSpecsChange(specs: SourceSpec[]): void { this.formSourceSpecs = specs; }
 
@@ -1596,7 +1825,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.sfEmbedders = embedders;
-        this.sfSelectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
+        this.sfSelectedEmbedder = this.chooseEmbedderForType(embedders, mediaType);
       },
     });
   }
@@ -1610,8 +1839,15 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.sfClippers = clippers;
-        this.sfSelectedClipper = clippers.length > 0 ? clippers[0].name : '';
-        this.sfResetClipperParams();
+        const chosen = this.chooseClipperForType(clippers, mediaType);
+        this.sfSelectedClipper = chosen.name;
+        if (chosen.params !== null) {
+          this.sfClipperParams =
+            clippers.find((c) => c.name === chosen.name)?.parameters || [];
+          this.sfClipperParamValues = chosen.params;
+        } else {
+          this.sfResetClipperParams();
+        }
       },
     });
   }
@@ -1717,6 +1953,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.datasetsApi.runImporter('server_folder', params).subscribe({
       next: () => {
         this.sfSubmitting = false;
+        this.maybeOfferSaveImportDefaults('sf');
         this.importStarted.emit();
       },
       error: (err) => {
@@ -1761,6 +1998,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.datasetsApi.loadFile(this.selectedFile).subscribe({
         next: () => {
           this.submitting = false;
+          this.maybeOfferSaveImportDefaults('form');
           this.importStarted.emit();
         },
         error: (err) => {
@@ -1772,6 +2010,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.datasetsApi.runImporter(this.selectedImporter.name, submitValues).subscribe({
         next: () => {
           this.submitting = false;
+          this.maybeOfferSaveImportDefaults('form');
           this.importStarted.emit();
         },
         error: (err) => {
@@ -1785,4 +2024,48 @@ export class DatasetImporterModalComponent implements OnInit {
   close(): void {
     this.closed.emit();
   }
+}
+
+/** Shallow-equality check for clipper-param dicts — both are flat
+ *  ``{string: string|number}`` maps. */
+function shallowParamsEqual(
+  a: Record<string, string | number> | undefined,
+  b: Record<string, string | number> | undefined,
+): boolean {
+  const ka = Object.keys(a || {});
+  const kb = Object.keys(b || {});
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    if ((a as Record<string, unknown>)[k] !== (b as Record<string, unknown>)[k]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Order-insensitive deep-ish equality for source-spec lists — compares
+ *  each row by ``source_type`` + ``converter`` + params. Used to suppress
+ *  the post-import "save as default" toast when the user's submitted
+ *  config already matches what they saved. */
+function shallowSpecsEqual(
+  a: SourceSpec[] | undefined,
+  b: SourceSpec[] | undefined,
+): boolean {
+  const la = a || [];
+  const lb = b || [];
+  if (la.length !== lb.length) return false;
+  const key = (s: SourceSpec) => `${s.source_type}|${s.converter ?? ''}`;
+  const sortedA = [...la].sort((x, y) => key(x).localeCompare(key(y)));
+  const sortedB = [...lb].sort((x, y) => key(x).localeCompare(key(y)));
+  for (let i = 0; i < sortedA.length; i++) {
+    if (sortedA[i].source_type !== sortedB[i].source_type) return false;
+    if ((sortedA[i].converter ?? null) !== (sortedB[i].converter ?? null)) return false;
+    if (!shallowParamsEqual(
+      sortedA[i].params as Record<string, string | number>,
+      sortedB[i].params as Record<string, string | number>,
+    )) {
+      return false;
+    }
+  }
+  return true;
 }

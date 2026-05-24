@@ -147,6 +147,22 @@ export interface SourceSpec {
   params: Record<string, string | number | null>;
 }
 
+/** Saved per-mediaType defaults for the Add Dataset advanced panel —
+ *  the embedder, clipper (+ params), and converter rows the user wants
+ *  applied automatically every time they import a dataset whose output
+ *  is the matching mediaType. Edited from Settings > Data Imports;
+ *  silently auto-filled into the importer form on importer selection. */
+export interface ImportDefaultsForMediaType {
+  embedder?: string;
+  clipper?: string;
+  clipper_params?: Record<string, string | number>;
+  /** Source-spec rows to seed into the importer's "Include media" picker.
+   *  May omit the native "include directly" row — the importer adds it
+   *  implicitly so the form is never empty. */
+  source_specs?: SourceSpec[];
+}
+export type ImportDefaultsByMediaType = Record<string, ImportDefaultsForMediaType>;
+
 export interface ImporterField {
   key: string;
   field_type: string;

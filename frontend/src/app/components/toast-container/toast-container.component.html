@@ -20,6 +20,11 @@
           }
         </div>
         <div class="toast__actions">
+          @if (t.action) {
+            <button type="button" class="toast__btn toast__btn--primary" (click)="runAction(t)" [title]="t.action.title || t.action.label">
+              {{ t.action.label }}
+            </button>
+          }
           @if (t.errorContext) {
             <button type="button" class="toast__btn" (click)="toggleDetails(t)" [attr.aria-expanded]="expandedId === t.id" title="Show full error details">
               {{ expandedId === t.id ? 'Hide details' : 'Details' }}
