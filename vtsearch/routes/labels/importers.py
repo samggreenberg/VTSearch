@@ -129,7 +129,9 @@ def _apply_labels(
 @label_importers_bp.response(200, LabelImporterEntrySchema(many=True))
 def get_label_importers():
     """Return a list of all registered label importers."""
-    return [imp.to_dict() for imp in list_label_importers()]
+    from vtsearch.settings import filter_visible_plugins
+
+    return [imp.to_dict() for imp in filter_visible_plugins("label_importers", list_label_importers())]
 
 
 # ---------------------------------------------------------------------------

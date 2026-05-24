@@ -119,6 +119,17 @@ class ServerSettings(BaseModel):
     )
     autorun_detectors: list[str] = Field(default_factory=list)
 
+    # Admin-side plugin hiding. Maps a plugin-family id (e.g.
+    # ``"converters"``, ``"embedders"``, ``"importers"`` — the keys used by
+    # :mod:`vtscore.plugins.inventory`) to a list of plugin ``name``s that
+    # should be omitted from picker / listing API responses for this
+    # deployment. Hidden plugins remain importable and callable by name
+    # via execution endpoints; this is a UI-declutter setting, not a
+    # security boundary. Merged at read time with any
+    # ``--hide-plugin family:name`` flags passed on the CLI — see
+    # :func:`vtsearch.settings.get_effective_hidden_plugins`.
+    hidden_plugins: dict[str, list[str]] = Field(default_factory=dict)
+
 
 class UserSettings(BaseModel):
     """Per-user settings persisted in ``<user_data_dir>/user_settings.json``."""

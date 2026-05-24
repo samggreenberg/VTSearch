@@ -29,6 +29,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
@@ -129,6 +130,9 @@ if TYPE_CHECKING:
     def get_recent_sessions() -> list[dict[str, Any]]: ...
     def set_recent_sessions(value: list[dict[str, Any]]) -> None: ...
 
+    def get_hidden_plugins() -> dict[str, list[str]]: ...
+    def set_hidden_plugins(value: dict[str, list[str]]) -> None: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +148,14 @@ SETTINGS_PATH: Path = DATA_DIR / "settings.json"
 #: value (including explicitly ``None`` for "show everything") overrides
 #: this fallback — see :func:`get_effective_solo_media_type`.
 _cli_solo_media_type: str | None = None
+
+#: Process-level fallback for the ``hidden_plugins`` server setting, set
+#: by :func:`set_cli_hidden_plugins` / :func:`add_cli_hidden_plugin` from
+#: the repeatable ``--hide-plugin family:name`` flag in :mod:`app`. Maps
+#: a plugin-family id to the set of plugin ``name``s to hide. Merged with
+#: the persisted ``hidden_plugins`` server setting at read time — see
+#: :func:`get_effective_hidden_plugins`. Empty dict means "no CLI hides".
+_cli_hidden_plugins: dict[str, set[str]] = {}
 
 #: Filename used for the per-user settings file inside
 #: ``get_user_data_dir(user)``.
@@ -1302,6 +1314,126 @@ def remove_autorun_detector(name: str) -> bool:
 def is_autorun_detector(name: str) -> bool:
     """Check whether a detector name is in the autorun list."""
     return name in get_autorun_detectors()
+
+
+# -------------------------------------------------------------------
+# Plugin hiding (admin-side picker declutter)
+# -------------------------------------------------------------------
+
+
+def _normalize_hidden_plugins(value: Any) -> dict[str, set[str]]:
+    """Coerce arbitrary input to ``{family: {name, ...}}`` form.
+
+    Accepts ``dict[str, Iterable[str]]`` shapes and drops empty entries.
+    Non-string keys / names and ``None`` values are silently skipped so a
+    corrupt settings file doesn't crash plugin listings.
+    """
+    out: dict[str, set[str]] = {}
+    if not isinstance(value, dict):
+        return out
+    for family, names in value.items():
+        if not isinstance(family, str) or not family:
+            continue
+        if isinstance(names, (str, bytes)):
+            continue
+        try:
+            members = {n for n in names if isinstance(n, str) and n}
+        except TypeError:
+            continue
+        if members:
+            out[family] = members
+    return out
+
+
+def set_cli_hidden_plugins(value: dict[str, Any] | None) -> None:
+    """Replace the process-level ``--hide-plugin`` fallback in one shot.
+
+    Called by ``app.py`` after parsing ``--hide-plugin family:name`` flags
+    (or by tests that want to seed a known CLI hide list). ``None`` or an
+    empty dict clears the fallback.
+    """
+    global _cli_hidden_plugins
+    _cli_hidden_plugins = _normalize_hidden_plugins(value or {})
+
+
+def add_cli_hidden_plugin(family: str, name: str) -> None:
+    """Append ``(family, name)`` to the CLI hide list (idempotent).
+
+    Used by the ``--hide-plugin`` argparse hook to accumulate one entry
+    per flag occurrence.
+    """
+    if not family or not name:
+        return
+    _cli_hidden_plugins.setdefault(family, set()).add(name)
+
+
+def get_cli_hidden_plugins() -> dict[str, set[str]]:
+    """Return a defensive copy of the CLI-only hide map."""
+    return {family: set(names) for family, names in _cli_hidden_plugins.items()}
+
+
+def get_effective_hidden_plugins() -> dict[str, set[str]]:
+    """Return the merged ``{family: {name, ...}}`` hide map.
+
+    Combines the persisted ``hidden_plugins`` server setting with the
+    process-level ``--hide-plugin`` fallback. The union semantics matter:
+    a plugin is hidden if either source asks for it, so the CLI flag can
+    only add hides (never un-hide something the settings file marks
+    hidden).
+    """
+    persisted = _normalize_hidden_plugins(get_hidden_plugins())  # type: ignore[name-defined]
+    merged: dict[str, set[str]] = {family: set(names) for family, names in persisted.items()}
+    for family, names in _cli_hidden_plugins.items():
+        merged.setdefault(family, set()).update(names)
+    return merged
+
+
+def is_plugin_hidden(family: str, name: str) -> bool:
+    """Return True if *name* is hidden in *family* by the effective hide map.
+
+    Static ``hidden_from_picker=True`` on a plugin class is **not**
+    consulted here — that flag is already serialised on the plugin's
+    ``to_dict()`` and filtered client-side. This function only answers
+    "is the admin hiding this in this deployment?"
+    """
+    hidden = _cli_hidden_plugins.get(family)
+    if hidden and name in hidden:
+        return True
+    persisted = get_hidden_plugins()  # type: ignore[name-defined]
+    if not isinstance(persisted, dict):
+        return False
+    family_names = persisted.get(family)
+    if not isinstance(family_names, (list, set, tuple)):
+        return False
+    return name in family_names
+
+
+def filter_visible_plugins(family: str, plugins: Iterable[Any], *, id_attr: str = "name") -> list[Any]:
+    """Drop plugins whose id-attribute is hidden in *family*.
+
+    The single chokepoint for the listing routes. *id_attr* names the
+    attribute that carries the plugin's registry id — ``"name"`` for the
+    PluginBase families, ``"type_id"`` for :class:`MediaType` (whose
+    registry key is the type id, not its human-readable name).
+    """
+    hidden = get_effective_hidden_plugins().get(family)
+    if not hidden:
+        return list(plugins)
+    return [p for p in plugins if getattr(p, id_attr, None) not in hidden]
+
+
+def filter_visible_plugin_dicts(
+    family: str, plugin_dicts: Iterable[dict[str, Any]], *, id_key: str = "name"
+) -> list[dict[str, Any]]:
+    """Same as :func:`filter_visible_plugins` but for pre-serialised dicts.
+
+    Reads ``dict[id_key]`` to compare against the hide set. Entries
+    without that key are kept.
+    """
+    hidden = get_effective_hidden_plugins().get(family)
+    if not hidden:
+        return list(plugin_dicts)
+    return [d for d in plugin_dicts if d.get(id_key) not in hidden]
 
 
 # -------------------------------------------------------------------

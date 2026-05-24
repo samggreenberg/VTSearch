@@ -46,7 +46,9 @@ exporters_bp = Blueprint(
 @exporters_bp.response(200, ExporterEntrySchema(many=True))
 def get_exporters():
     """Return a list of all registered labelset exporters."""
-    return [exp.to_dict() for exp in list_exporters()]
+    from vtsearch.settings import filter_visible_plugins
+
+    return [exp.to_dict() for exp in filter_visible_plugins("exporters", list_exporters())]
 
 
 @exporters_bp.route("/api/exporters/export", methods=["POST"])

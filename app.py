@@ -701,6 +701,27 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--hide-plugin",
+        action="append",
+        default=[],
+        dest="hide_plugin",
+        metavar="FAMILY:NAME",
+        help=(
+            "Hide a plugin from picker / listing API responses for this "
+            "process (declutter the UI without editing the codebase). "
+            "Repeatable. FAMILY is a plugin-family id (importers, exporters, "
+            "label_importers, labelset_sources, converters, media_sources, "
+            "media_types, embedders, clippers, settings_importers, "
+            "settings_exporters, settings_sources); NAME is the plugin's "
+            "registered name. Hidden plugins remain importable and callable "
+            "by name via execution endpoints (e.g. autodetect, label "
+            "import) — this is a UI flag, not a security boundary. Merges "
+            "with the persisted ``hidden_plugins`` key in the server "
+            "settings file. Use ``--list-plugins --format names`` to see "
+            "the available family:name pairs."
+        ),
+    )
+    parser.add_argument(
         "--solo-media-type",
         type=str,
         default=None,
@@ -826,6 +847,30 @@ if __name__ == "__main__":
         if args.solo_media_type not in valid:
             parser.error(f"Unknown --solo-media-type: {args.solo_media_type!r}. Valid values: {sorted(valid)}")
         set_cli_solo_media_type(args.solo_media_type)
+
+    # --hide-plugin family:name (repeatable) — stash before any listing
+    # endpoint is served so hidden plugins are filtered from API responses.
+    # ``register_app_plugin_families`` ran at module load (top of app.py),
+    # so the settings_io families are already in ``FAMILIES``.
+    hide_specs = getattr(args, "hide_plugin", None) or []
+    if hide_specs:
+        from vtscore.plugins.inventory import FAMILIES
+        from vtsearch.settings import add_cli_hidden_plugin
+
+        valid_families = set(FAMILIES)
+        for spec in hide_specs:
+            if ":" not in spec:
+                parser.error(
+                    f"--hide-plugin expects FAMILY:NAME, got {spec!r}. Valid families: {sorted(valid_families)}"
+                )
+            family, _, plugin_name = spec.partition(":")
+            family = family.strip()
+            plugin_name = plugin_name.strip()
+            if not family or not plugin_name:
+                parser.error(f"--hide-plugin {spec!r} has an empty family or name")
+            if family not in valid_families:
+                parser.error(f"Unknown --hide-plugin family {family!r}. Valid: {sorted(valid_families)}")
+            add_cli_hidden_plugin(family, plugin_name)
 
     if args.autodetect:
         # Wire the CLI progress format (text/json) before any pipeline call

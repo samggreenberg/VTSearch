@@ -70,7 +70,9 @@ settings_io_bp = Blueprint(
 @settings_io_bp.response(200, SettingsImporterEntrySchema(many=True))
 def get_settings_importers():
     """Return a list of all registered settings importers."""
-    return [imp.to_dict() for imp in list_settings_importers()]
+    from vtsearch.settings import filter_visible_plugins
+
+    return [imp.to_dict() for imp in filter_visible_plugins("settings_importers", list_settings_importers())]
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +130,9 @@ def run_settings_import(importer_name: str):
 @settings_io_bp.response(200, SettingsExporterEntrySchema(many=True))
 def get_settings_exporters():
     """Return a list of all registered settings exporters."""
-    return [exp.to_dict() for exp in list_settings_exporters()]
+    from vtsearch.settings import filter_visible_plugins
+
+    return [exp.to_dict() for exp in filter_visible_plugins("settings_exporters", list_settings_exporters())]
 
 
 # ---------------------------------------------------------------------------
