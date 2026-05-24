@@ -32,11 +32,7 @@ class ServerFileSettingsImporter(SettingsImporter):
 
     def run(self, field_values: dict[str, Any]) -> dict[str, Any]:
         """Read and parse the JSON settings file from the server filesystem."""
-        filepath = (field_values.get("filepath") or "").strip()
-        if not filepath:
-            raise ValueError("A file path is required.")
-
-        path = Path(filepath)
+        path = Path(field_values["filepath"])
         if not path.exists():
             raise ValueError(f"File not found: {path}")
         if not path.is_file():

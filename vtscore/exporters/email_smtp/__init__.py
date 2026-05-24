@@ -113,16 +113,11 @@ class EmailLabelsetExporter(LabelsetExporter):
     ]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        from_addr = field_values.get("from", "").strip()
-        to_addr = field_values.get("to", "").strip()
+        from_addr = field_values["from"]
+        to_addr = field_values["to"]
 
-        if not from_addr:
-            raise ValueError("Sender email address is required.")
         if "@" not in from_addr:
             raise ValueError("Sender email address is invalid.")
-
-        if not to_addr:
-            raise ValueError("Recipient email address is required.")
         if "@" not in to_addr:
             raise ValueError("Recipient email address is invalid.")
 

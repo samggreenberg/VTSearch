@@ -39,7 +39,7 @@ from vtsearch import settings
 from vtsearch.routes._shared import (
     get_plugin_or_404,
     run_plugin_or_error,
-    validate_filepath_field,
+    validate_exporter_field_values,
     validate_plugin_args,
 )
 from vtsearch.schemas.settings_io import (
@@ -100,10 +100,6 @@ def run_settings_import(importer_name: str):
 
     field_values = validate_plugin_args(importer)
 
-    err = validate_filepath_field(field_values)
-    if err:
-        return err
-
     imported_settings, err = run_plugin_or_error(importer, "run", field_values)
     if err:
         return err
@@ -157,23 +153,7 @@ def run_settings_export(body: dict):
         known = [p.name for p in list_settings_exporters()]
         abort(404, message=f"Unknown settings exporter '{exporter_name}'. Available: {known}")
 
-    field_values: dict = dict(body.get("field_values") or {})
-
-    missing = [
-        f.key
-        for f in exporter.fields
-        if f.required and (field_values.get(f.key) is None or not str(field_values.get(f.key, "")).strip())
-    ]
-    if missing:
-        abort(400, message=f"Missing required field(s): {missing}", missing_fields=missing)
-
-    if "filepath" in field_values and str(field_values["filepath"]).strip():
-        import vtscore.security.path_validation as _paths
-
-        try:
-            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
-        except ValueError as exc:
-            abort(400, message=str(exc))
+    field_values = validate_exporter_field_values(exporter, dict(body.get("field_values") or {}))
 
     # Export only the current user's per-user settings, not the merged
     # view (which would also carry shared server-tier infra keys).

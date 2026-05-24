@@ -30,12 +30,13 @@ class ServerFileSettingsSource(SettingsSource):
             description="The JSON file on the server to sync your settings with.",
             hint="Absolute or relative server path.  Template variable: {username}.",
             placeholder="data/{username}.settings.json",
+            template_vars=("username",),
         ),
     ]
 
     def load(self, field_values: dict[str, Any]) -> dict[str, Any]:
         """Read settings from a JSON file on the server."""
-        path = Path(_resolve_filepath(field_values))
+        path = Path(_normalized(self, field_values)["filepath"])
         if not path.exists():
             return {}
         if not path.is_file():
@@ -53,7 +54,7 @@ class ServerFileSettingsSource(SettingsSource):
 
     def save(self, settings_data: dict[str, Any], field_values: dict[str, Any]) -> None:
         """Write settings to a JSON file on the server."""
-        filepath = Path(_resolve_filepath(field_values))
+        filepath = Path(_normalized(self, field_values)["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
         tmp = filepath.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
@@ -72,7 +73,7 @@ class ServerFileSettingsSource(SettingsSource):
         the file appears."
         """
         try:
-            path = Path(_resolve_filepath(field_values))
+            path = Path(_normalized(self, field_values)["filepath"])
         except Exception:
             return None
         try:
@@ -81,29 +82,17 @@ class ServerFileSettingsSource(SettingsSource):
             return None
 
 
-def _resolve_filepath(field_values: dict[str, Any]) -> str:
-    """Resolve the filepath, expanding the ``{username}`` template.
+def _normalized(source: ServerFileSettingsSource, field_values: dict[str, Any]) -> dict[str, Any]:
+    """Return *field_values* with the source's declarative knobs applied.
 
-    The substituted username is sanitized so that a name containing path
-    separators or ``..`` cannot escape the directory implied by the
-    admin-configured template.  The fully-resolved path is then run
-    through :func:`validate_server_filepath` so that a template
-    containing ``../`` cannot escape either.
+    Settings-source callers (vtsearch/settings.py auto-sync hooks) pass
+    field_values straight from `data/settings.json`, bypassing the route
+    layer's normalize hook, so we apply it here.  Idempotent: callers
+    that already normalized get the same dict back.
     """
-    from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
+    from vtscore.plugins.normalize import normalize_field_values
 
-    filepath = (field_values.get("filepath") or "").strip()
-    if not filepath:
-        raise ValueError("A file path is required.")
-
-    if "{username}" in filepath:
-        from vtsearch.auth import get_current_user
-        from vtscore.security.path_validation import sanitize_template_value
-
-        username = get_current_user() or "default"
-        filepath = filepath.replace("{username}", sanitize_template_value(username))
-
-    return str(validate_server_filepath(filepath, base_dir=get_file_access_base_dir()))
+    return normalize_field_values(source, dict(field_values))
 
 
 SETTINGS_SOURCE = ServerFileSettingsSource()

@@ -35,11 +35,7 @@ class ServerFileSettingsExporter(SettingsExporter):
 
     def export(self, settings_data: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         """Write settings to a JSON file on the server."""
-        filepath_str = field_values.get("filepath", "").strip()
-        if not filepath_str:
-            raise ValueError("A file path is required.")
-
-        filepath = Path(filepath_str)
+        filepath = Path(field_values["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
         # Atomic write: tmp + rename. A direct write_text leaves the file

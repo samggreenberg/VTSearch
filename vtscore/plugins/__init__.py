@@ -164,6 +164,19 @@ class PluginField:
     #: :attr:`include_in_origin` resolves to ``False``.
     origin_serializer: Callable[[Any], str] | None = None
 
+    #: Template variables the framework should substitute into this
+    #: field's value before the plugin's ``run`` / ``export`` receives
+    #: it.  Each name (e.g. ``"detector_name"``) is replaced everywhere
+    #: it appears as ``{name}``; the substituted value is run through
+    #: :func:`vtscore.security.path_validation.sanitize_template_value`
+    #: so attacker-controlled values cannot escape the directory implied
+    #: by an admin-configured template.  Supported names:
+    #: ``"YYYYMMDD-HHMMSS"``, ``"detector_name"``, ``"detector_id"``,
+    #: ``"username"``.  Empty tuple (the default) means the framework
+    #: performs no substitution and the value reaches the plugin
+    #: verbatim.
+    template_vars: tuple[str, ...] = ()
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "key": self.key,
@@ -181,6 +194,7 @@ class PluginField:
             "min": self.min,
             "max": self.max,
             "step": self.step,
+            "template_vars": list(self.template_vars),
         }
 
     def is_integer_number(self) -> bool:
@@ -271,14 +285,30 @@ class PluginBase:
             parser.add_argument(arg_name, **kwargs)
 
     def validate_cli_field_values(self, field_values: dict[str, Any]) -> None:
-        """Raise ``ValueError`` if any required field is missing or empty."""
+        """Raise ``ValueError`` if any required field is missing or empty.
+
+        Also runs the shared
+        :func:`vtscore.plugins.normalize.normalize_field_values` pass —
+        whitespace strip, template variable substitution, and
+        field-type-driven security validation
+        (:func:`~vtscore.security.url_validation.validate_url` for
+        ``url`` fields,
+        :func:`~vtscore.security.path_validation.validate_server_filepath`
+        for ``server_path`` fields) — so CLI invocations get the same
+        guarantees the HTTP path does.
+        """
         for f in self.fields:
             # Booleans are always populated by argparse (default included).
             if f.field_type == "checkbox":
                 continue
-            if f.required and not field_values.get(f.key):
+            value = field_values.get(f.key)
+            if f.required and (value is None or (isinstance(value, str) and not value.strip())):
                 cli_flag = f"--{f.key.replace('_', '-')}"
                 raise ValueError(f"Missing required argument: {cli_flag}")
+
+        from vtscore.plugins.normalize import normalize_field_values  # noqa: PLC0415
+
+        normalize_field_values(self, field_values)
 
     # -- Serialisation ------------------------------------------------------
 

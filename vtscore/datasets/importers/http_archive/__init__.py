@@ -33,7 +33,6 @@ from vtscore.config import DATA_DIR
 from vtscore.datasets.downloader import download_file_with_progress
 from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder
-from vtscore.security.url_validation import validate_url
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -222,7 +221,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
-        validate_url(url)
         media_type = field_values.get("media_type", "audio")
         specs = self.effective_source_specs(field_values)
 
@@ -261,9 +259,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             shutil.rmtree(extract_dir, ignore_errors=True)
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
-        url = field_values.get("url", "")
-        if not url.startswith(("http://", "https://")):
-            raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
         self.run(field_values, medias, thin=thin)
 
     @property
@@ -278,7 +273,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         up the returned directory when they are done with it.
         """
         url = field_values["url"]
-        validate_url(url)
 
         DATA_DIR.mkdir(exist_ok=True)
         progress = _default_progress()
