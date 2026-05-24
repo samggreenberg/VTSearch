@@ -123,6 +123,10 @@ class Audio2ImageMediaConverter(MediaConverter):
 
     display_name = "Audio → Image (spectrogram)"
     description = "Render audio as a mel-spectrogram or CQT image"
+    summary_template = (
+        "Render each audio file as a {spectrogram_type} spectrogram "
+        "(first {time_window_s}s, {colormap})."
+    )
     fields = [
         PluginField(
             key="spectrogram_type",

@@ -94,6 +94,7 @@ class Image2TextMediaConverter(MediaConverter):
 
     display_name = "Image → Text (OCR)"
     description = "Extract text from images via OCR"
+    summary_template = "Run PaddleOCR ({language}) on each image; drop regions below confidence {threshold}."
     fields = [
         PluginField(
             key="language",

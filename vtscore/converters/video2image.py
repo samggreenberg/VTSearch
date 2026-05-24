@@ -26,6 +26,7 @@ class Video2ImageMediaConverter(MediaConverter):
 
     display_name = "Video → Images"
     description = "Extract frames from video files"
+    summary_template = "Cut each video into {n_clips} evenly-spaced frames."
     fields = [
         PluginField(
             key="n_clips",

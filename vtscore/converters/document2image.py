@@ -32,6 +32,7 @@ class Document2ImageMediaConverter(MediaConverter):
 
     display_name = "Document \u2192 Images"
     description = "Render document pages as images"
+    summary_template = "Render each page of each document as a PNG image."
 
     @property
     def source_type(self) -> str:

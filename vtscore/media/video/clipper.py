@@ -71,6 +71,10 @@ class VideoTilingClipper(MediaClipper):
         return "Split each video into fixed-length overlapping segments."
 
     @property
+    def summary_template(self) -> str:
+        return "Cut each video into {duration}s clips (min overlap {min_overlap}s)."
+
+    @property
     def duration(self) -> float:
         return self._duration
 
@@ -180,6 +184,10 @@ class VideoAutoClipper(MediaClipper):
             f"Pass short videos through unchanged; tile videos longer than "
             f"{self._threshold:g}s into {self._tile_duration:g}s segments."
         )
+
+    @property
+    def summary_template(self) -> str:
+        return "Cut into {tile_duration}s tiles when video is over {threshold}s."
 
     @property
     def threshold(self) -> float:
@@ -358,6 +366,13 @@ class VideoSceneClipper(MediaClipper):
     @property
     def description(self) -> str:
         return "Automatically split each video at detected scene changes."
+
+    @property
+    def summary_template(self) -> str:
+        return (
+            "Split each video at scene changes (histogram threshold {threshold}, "
+            "min scene {min_scene_duration}s)."
+        )
 
     @property
     def threshold(self) -> float:

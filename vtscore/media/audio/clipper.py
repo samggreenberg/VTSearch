@@ -101,6 +101,10 @@ class SoundTilingClipper(MediaClipper):
         return "Split each audio file into fixed-length overlapping segments."
 
     @property
+    def summary_template(self) -> str:
+        return "Cut each audio file into {duration}s tiles (min overlap {min_overlap}s)."
+
+    @property
     def duration(self) -> float:
         return self._duration
 
@@ -219,6 +223,10 @@ class SoundAutoClipper(MediaClipper):
             f"Pass short audio through unchanged; tile audio longer than "
             f"{self._threshold:g}s into {self._tile_duration:g}s segments."
         )
+
+    @property
+    def summary_template(self) -> str:
+        return "Cut into {tile_duration}s tiles when audio is over {threshold}s."
 
     @property
     def threshold(self) -> float:
@@ -340,6 +348,13 @@ class SoundSilenceClipper(MediaClipper):
     @property
     def description(self) -> str:
         return "Split each audio file into non-silent segments. Drops intro/outro silence."
+
+    @property
+    def summary_template(self) -> str:
+        return (
+            "Split each audio file at silences quieter than {top_db}dB; "
+            "drop clips shorter than {min_clip_duration}s."
+        )
 
     @property
     def top_db(self) -> float:
@@ -509,6 +524,10 @@ class SoundClipClipper(MediaClipper):
         return "Extract a single user-specified [start, end) range from the audio."
 
     @property
+    def summary_template(self) -> str:
+        return "Extract audio from {start}s to {end}s."
+
+    @property
     def start(self) -> float:
         return self._start
 
@@ -634,6 +653,13 @@ class SoundSpeechActivityClipper(MediaClipper):
     @property
     def description(self) -> str:
         return "Split each audio file into one clip per speech turn using Silero VAD. Good for podcasts."
+
+    @property
+    def summary_template(self) -> str:
+        return (
+            "Split each audio file at detected speech turns (VAD threshold {threshold}, "
+            "min clip {min_clip_duration}s)."
+        )
 
     @property
     def threshold(self) -> float:

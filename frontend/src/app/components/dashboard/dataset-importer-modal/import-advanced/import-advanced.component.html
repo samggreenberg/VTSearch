@@ -18,6 +18,8 @@
     [typeLabels]="typeLabels"
     [specs]="sourceSpecs"
     [clippers]="clippers"
+    [selectedClipperName]="selectedClipper"
+    [selectedClipperParams]="selectedClipperParams"
     (specsChange)="onSourceSpecsChange($event)"
     (clipperChooserRequested)="onClipperClick()"
   ></vt-source-specs-picker>

@@ -38,6 +38,7 @@ class Audio2TextMediaConverter(MediaConverter):
 
     display_name = "Audio → Text (Whisper ASR)"
     description = "Transcribe speech in audio to text via Whisper"
+    summary_template = "Transcribe speech with Whisper ({model_size}, language: {language})."
     fields = [
         PluginField(
             key="model_size",

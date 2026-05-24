@@ -130,6 +130,11 @@ export interface ConverterInfo {
   target_type: string;
   display_name?: string;
   description?: string;
+  /** One-line preview with ``{key}`` placeholders for each field.  The
+   *  importer modal renders it next to the source-spec row, substituting
+   *  the current field values, so the user sees a live summary of what
+   *  the converter will do.  Falls back to ``description`` when empty. */
+  summary_template?: string;
   fields?: ImporterField[];
 }
 
@@ -262,6 +267,11 @@ export interface ClipperInfo {
   name: string;
   display_name?: string;
   description?: string;
+  /** One-line preview with ``{key}`` placeholders for each parameter.  The
+   *  native row of the importer source-specs picker substitutes the current
+   *  parameter values, so the user sees a live summary of what the clipper
+   *  will do.  Falls back to ``description`` when empty. */
+  summary_template?: string;
   media_type: string;
   parameters?: ClipperParameter[];
   creation_questions?: ClipperParameter[];
