@@ -245,6 +245,13 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  // Flex column so a designated inner region (e.g. the demo table in the
+  // Add Dataset modal) can claim remaining space via `flex: 1` instead of
+  // capping itself with a hard-coded max-height that produces a second
+  // scrollbar nested inside the body's scrollbar. Normal block stacking
+  // is preserved for modals whose children all use natural height.
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-footer {
