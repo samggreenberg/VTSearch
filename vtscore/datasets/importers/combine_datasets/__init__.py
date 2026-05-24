@@ -245,4 +245,5 @@ class CombineDatasetsImporter(DatasetImporter):
     ) -> Iterator[dict[int, dict[str, Any]]]:
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
+
 IMPORTER = CombineDatasetsImporter()

@@ -479,9 +479,13 @@ that's already ready to use.**
 
 ### Phase A — Candidate #1: declarative origin construction
 
-**Status:** scheduled, no code yet.
+**Status:** **shipped.** All six in-tree `build_origin` overrides
+deleted; new declarative knobs (`include_in_origin`, `origin_serializer`,
+`extra_origin_keys`, `origin_suppressed`) live on `PluginField` /
+`DatasetImporter`. Coverage in `tests_lib/datasets/test_build_origin.py`;
+all 4232 tests pass.
 **Sequence:** first PR in the streamline series. Phase B (P0 field-schema
-collapse: #3 + finish #4 + #7) follows once this lands.
+collapse: #3 + finish #4 + #7) follows next.
 **Why first:** smallest blast radius (one base class + 6 in-tree
 importers, ~30-50 LOC deleted), zero required edits for external
 plugins, no CLI / HTTP-schema surface touched. It validates the
@@ -650,13 +654,24 @@ hypothesis before Phase B raises the stakes.
   declarative-`server_path`-validation slice forward into Phase A. Park
   this until Phase A is in flight.
 
+## What shipped
+
+- **Phase A — Candidate #1 (declarative origin construction).** Six
+  in-tree `build_origin` overrides deleted; framework default driven by
+  `PluginField.include_in_origin` / `origin_serializer` and
+  `DatasetImporter.extra_origin_keys` / `origin_suppressed`. Password
+  and file fields now default-excluded from origin (closes the latent
+  leak). External `DatasetImporter` plugins keep working unchanged
+  (override-wins shim); other plugin families (`MediaSource`,
+  `LabelImporter`, `LabelsetExporter`) untouched.
+
 ## Open follow-ups
 
-- Phase B (P0 collapse: #3 + finish #4 + #7) to be scheduled after
-  Phase A lands. Open question carried forward: extend the marshmallow
-  schema to be the single ingress for both HTTP and CLI calls, so
-  `validate_filepath_field`'s hardcoded `"filepath"` key can die and
-  `run_cli` plugins stop hand-checking required strings.
+- Phase B (P0 collapse: #3 + finish #4 + #7) is next up. Open question
+  carried forward: extend the marshmallow schema to be the single
+  ingress for both HTTP and CLI calls, so `validate_filepath_field`'s
+  hardcoded `"filepath"` key can die and `run_cli` plugins stop
+  hand-checking required strings.
 - #13 has a subtle attr-name choice (`.filename` vs `.name`) the
   current Shim note doesn't flag — the in-tree `_shared.py` adapter
   uses `.name`, but Werkzeug exposes `.filename`. Settle on one before
