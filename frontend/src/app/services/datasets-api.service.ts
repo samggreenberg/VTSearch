@@ -9,6 +9,7 @@ import type { BrowseMediaFilesSelectResponse } from '../generated/api-client/mod
 import type { CancelDatasetLoadResponse } from '../generated/api-client/models/cancel-dataset-load-response';
 import type { ClearStagingResponse } from '../generated/api-client/models/clear-staging-response';
 import type { DashboardDiskUsageResponse } from '../generated/api-client/models/dashboard-disk-usage-response';
+import type { DashboardRamUsageResponse } from '../generated/api-client/models/dashboard-ram-usage-response';
 import type { DatasetAllImportersListResponse } from '../generated/api-client/models/dataset-all-importers-list-response';
 import type { DatasetAvailableFilesResponse } from '../generated/api-client/models/dataset-available-files-response';
 import type { DatasetClearResponse } from '../generated/api-client/models/dataset-clear-response';
@@ -43,6 +44,7 @@ import { selectBrowsedFile } from '../generated/api-client/fn/datasets-ui/select
 import { clippersList } from '../generated/api-client/fn/datasets-listings/clippers-list';
 import { convertersList } from '../generated/api-client/fn/datasets-listings/converters-list';
 import { dashboardDiskUsage } from '../generated/api-client/fn/datasets-ui/dashboard-disk-usage';
+import { dashboardRamUsage } from '../generated/api-client/fn/datasets-ui/dashboard-ram-usage';
 import { datasetAllImporters } from '../generated/api-client/fn/datasets-listings/dataset-all-importers';
 import { availableDatasetFiles } from '../generated/api-client/fn/datasets-staging/available-dataset-files';
 import { cancelDatasetLoad } from '../generated/api-client/fn/datasets-status/cancel-dataset-load';
@@ -334,5 +336,9 @@ export class DatasetsApiService {
 
   getDiskUsage(): Observable<DashboardDiskUsageResponse> {
     return dashboardDiskUsage(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  getRamUsage(): Observable<DashboardRamUsageResponse> {
+    return dashboardRamUsage(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 }
