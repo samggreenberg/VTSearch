@@ -203,6 +203,10 @@
           "hide_autopilot": {
             "type": "boolean"
           },
+          "import_defaults_by_media_type": {
+            "additionalProperties": {},
+            "type": "object"
+          },
           "inclusion": {
             "type": "integer"
           },
@@ -3812,6 +3816,7 @@
           "hide_autopilot": {
             "type": "boolean"
           },
+          "import_defaults_by_media_type": {},
           "inclusion": {
             "type": "integer"
           },

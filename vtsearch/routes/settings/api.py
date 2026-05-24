@@ -78,6 +78,7 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "autopilot_resort_interval": settings.set_autopilot_resort_interval,
     "autopilot_goal_diversity": settings.set_autopilot_goal_diversity,
     "autorun_detectors": settings.set_autorun_detectors,
+    "import_defaults_by_media_type": settings.set_import_defaults_by_media_type,
 }
 
 

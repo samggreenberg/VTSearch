@@ -28,6 +28,14 @@
           <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'sorting'"></vt-icon>
           Sorting
         </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'imports'"
+          (click)="activeSettingsTab = 'imports'"
+          title="Default embedder, clipper, and converters to apply when importing each kind of dataset">
+          <vt-icon type="upload" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'imports'"></vt-icon>
+          Data Imports
+        </button>
       </nav>
 
       <div class="settings-panel">
@@ -178,6 +186,17 @@
             <label class="form-label" title="Fraction of labeled items to hold out for calibration (0 = none, 1 = all)">Calibration fraction</label>
             <input type="number" class="form-input" [ngModel]="settings.calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" title="Hold-out fraction for threshold calibration (0.0 to 1.0)" />
           </div>
+        }
+
+        <!-- Data Imports -->
+        @if (activeSettingsTab === 'imports') {
+          <h3>Data Imports</h3>
+          <vt-import-defaults-settings
+            [mediaTypes]="mediaTypes"
+            [defaults]="importDefaults"
+            [effectiveSoloMediaType]="effectiveSoloMediaType"
+            (defaultsChange)="onImportDefaultsChange($event)"
+          ></vt-import-defaults-settings>
         }
 
         <!-- Autopilot & Actions -->

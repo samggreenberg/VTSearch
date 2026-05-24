@@ -25,6 +25,18 @@ export interface ErrorContext {
 
 export type ToastLevel = 'error' | 'success';
 
+/**
+ * Optional action button rendered next to the toast's dismiss. Used by
+ * non-error toasts to offer a one-click follow-up ("Save as default",
+ * "Undo", etc). Clicking the button auto-dismisses the toast.
+ */
+export interface ToastAction {
+  label: string;
+  /** Tooltip / aria-label for the button. */
+  title?: string;
+  onClick: () => void;
+}
+
 export interface Toast {
   id: number;
   level: ToastLevel;
@@ -32,6 +44,8 @@ export interface Toast {
   detail?: string;
   /** Optional rich HTTP error context — enables the Details / Copy debug info actions. */
   errorContext?: ErrorContext;
+  /** Optional follow-up action button (see :class:`ToastAction`). */
+  action?: ToastAction;
   /**
    * Optional dedup key. Pushing a new toast with the same key replaces
    * the existing one (resetting its auto-dismiss timer). Used to avoid
@@ -45,6 +59,7 @@ interface ShowOptions {
   message: string;
   detail?: string;
   errorContext?: ErrorContext;
+  action?: ToastAction;
   dedupKey?: string;
 }
 
@@ -116,6 +131,7 @@ export class ToastService {
       message: opts.message,
       detail: opts.detail,
       errorContext: opts.errorContext,
+      action: opts.action,
       dedupKey: opts.dedupKey,
       timestamp: new Date().toISOString(),
     };

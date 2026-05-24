@@ -100,6 +100,18 @@
   }
 }
 
+.toast__btn--primary {
+  background: var(--accent, var(--text-primary));
+  color: var(--accent-text, var(--bg));
+  border-color: transparent;
+
+  &:hover {
+    background: var(--accent-hover, var(--accent, var(--text-primary)));
+    border-color: transparent;
+    filter: brightness(1.05);
+  }
+}
+
 .toast__close {
   background: transparent;
   border: none;
