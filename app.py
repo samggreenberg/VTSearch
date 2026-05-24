@@ -824,10 +824,7 @@ if __name__ == "__main__":
 
         valid = set(all_type_ids())
         if args.solo_media_type not in valid:
-            parser.error(
-                f"Unknown --solo-media-type: {args.solo_media_type!r}. "
-                f"Valid values: {sorted(valid)}"
-            )
+            parser.error(f"Unknown --solo-media-type: {args.solo_media_type!r}. Valid values: {sorted(valid)}")
         set_cli_solo_media_type(args.solo_media_type)
 
     if args.autodetect:

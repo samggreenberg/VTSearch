@@ -159,6 +159,45 @@ def get_settings():
     return data
 
 
+def _apply_one_key(key: str, value) -> None:
+    """Dispatch a single settings update body entry to the right setter.
+
+    Keeps :func:`update_settings` simple by hosting the per-key
+    branching here. Side effects (path validation, achievement wipe,
+    state-tier setter) are isolated to their helper functions.
+    """
+    if key == "effective_solo_media_type":
+        # Read-only computed field — the route exposes it on GET but
+        # writes go through ``solo_media_type``.
+        return
+    if key == "inclusion":
+        try:
+            _apply_inclusion(value)
+        except (TypeError, ValueError) as exc:
+            abort(400, message=str(exc))
+        return
+    if key in ("saved_datasets_dir", "detectors_dir"):
+        setter = settings.set_saved_datasets_dir if key == "saved_datasets_dir" else settings.set_detectors_dir
+        _apply_dir(key, value, setter)
+        return
+    if key == "disable_achievements":
+        try:
+            _apply_disable_achievements(value)
+        except (TypeError, ValueError) as exc:
+            abort(400, message=str(exc))
+        return
+    if key == "solo_media_type":
+        _apply_solo_media_type(value)
+        return
+    setter = _SCALAR_SETTERS.get(key)
+    if setter is None:
+        return
+    try:
+        setter(value)
+    except (TypeError, ValueError) as exc:
+        abort(400, message=str(exc))
+
+
 @settings_bp.route("/api/settings", methods=["PUT"])
 @settings_bp.arguments(SettingsUpdateSchema)
 @settings_bp.response(200, AppSettingsSchema)
@@ -172,40 +211,7 @@ def update_settings(body: dict):
     validation failures (range / one-of / path traversal) raise 400.
     """
     for key, value in body.items():
-        if key == "effective_solo_media_type":
-            # Read-only computed field — the route exposes it on GET but
-            # writes go through ``solo_media_type``.
-            continue
-        if key == "inclusion":
-            try:
-                _apply_inclusion(value)
-            except (TypeError, ValueError) as exc:
-                abort(400, message=str(exc))
-            continue
-
-        if key in ("saved_datasets_dir", "detectors_dir"):
-            setter = settings.set_saved_datasets_dir if key == "saved_datasets_dir" else settings.set_detectors_dir
-            _apply_dir(key, value, setter)
-            continue
-
-        if key == "disable_achievements":
-            try:
-                _apply_disable_achievements(value)
-            except (TypeError, ValueError) as exc:
-                abort(400, message=str(exc))
-            continue
-
-        if key == "solo_media_type":
-            _apply_solo_media_type(value)
-            continue
-
-        setter = _SCALAR_SETTERS.get(key)
-        if setter is None:
-            continue
-        try:
-            setter(value)
-        except (TypeError, ValueError) as exc:
-            abort(400, message=str(exc))
+        _apply_one_key(key, value)
 
     data = settings.get_all()
     data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
