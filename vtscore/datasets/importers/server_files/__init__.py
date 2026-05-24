@@ -460,16 +460,6 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 return stem
         return self.display_name
 
-    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-        params: dict[str, str] = {}
-        paths_file = field_values.get("paths_file", "")
-        if paths_file:
-            params["paths_file"] = str(paths_file)
-        media_type = field_values.get("media_type", "")
-        if media_type:
-            params["media_type"] = media_type
-        return {"importer": self.name, "params": params}
-
     def origin_display(self, origin: dict[str, Any]) -> str:
         params = origin.get("params", {})
         return f"server_files:{params.get('paths_file', '')}"

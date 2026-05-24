@@ -136,12 +136,19 @@ class CombineDatasetsImporter(DatasetImporter):
             field_type="text",
             description="The existing datasets to merge into one new dataset.",
             hint="Comma-separated paths to .pkl files exported from VTSearch.",
+            # The ``datasets`` field is list-or-string at request time but the
+            # origin contract is string-only, so collapse lists to the same
+            # comma-joined form ``_parse_dataset_paths`` already accepts.
+            origin_serializer=lambda v: ",".join(v) if isinstance(v, list) else str(v),
         ),
         ImporterField(
             key="name",
             label="Name",
             field_type="text",
             description="Display name for the new combined dataset.",
+            # Display-only — not part of the dataset's identity, so leave it
+            # out of the persisted origin to keep reloads deterministic.
+            include_in_origin=False,
         ),
     ]
 
@@ -237,15 +244,6 @@ class CombineDatasetsImporter(DatasetImporter):
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
-
-    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-        """Build an origin dict listing the source dataset paths."""
-        raw = field_values.get("datasets", "")
-        if isinstance(raw, list):
-            datasets_str = ",".join(raw)
-        else:
-            datasets_str = raw
-        return {"importer": self.name, "params": {"datasets": datasets_str}}
 
 
 IMPORTER = CombineDatasetsImporter()

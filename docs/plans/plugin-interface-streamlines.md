@@ -475,8 +475,204 @@ that's already ready to use.**
   (`run` vs `export` vs `convert`). The unification proposed here is
   *behind* the bases, in the framework that calls them.
 
+## Next: scheduled work
+
+### Phase A — Candidate #1: declarative origin construction
+
+**Status:** **shipped.** All six in-tree `build_origin` overrides
+deleted; new declarative knobs (`include_in_origin`, `origin_serializer`,
+`extra_origin_keys`, `origin_suppressed`) live on `PluginField` /
+`DatasetImporter`. Coverage in `tests_lib/datasets/test_build_origin.py`;
+all 4232 tests pass.
+**Sequence:** first PR in the streamline series. Phase B (P0 field-schema
+collapse: #3 + finish #4 + #7) follows next.
+**Why first:** smallest blast radius (one base class + 6 in-tree
+importers, ~30-50 LOC deleted), zero required edits for external
+plugins, no CLI / HTTP-schema surface touched. It validates the
+"declarative replaces imperative override" pattern end-to-end before
+the more invasive validation work.
+
+#### What the existing overrides actually do
+
+A grep + read of every override exposes four distinct patterns, not
+just one. The Shim note in §1 above understated this — `_RENAMES` alone
+doesn't cover any of them. The patterns are:
+
+| Importer | Override pattern | Phase A handles via |
+|---|---|---|
+| `server_folder` | Add the non-`PluginField` key `source_specs` to params, JSON-encoding it if it arrived as a list | New `extra_origin_keys` class attr + framework-side list→JSON coercion |
+| `http_archive` | Same as `server_folder` | Same |
+| `server_files` | Include only `paths_file` and `media_type`; nothing else from `fields` | `include_in_origin=False` on the unwanted fields |
+| `demo` | Include only `name` and `converter`; emit `name` even when empty (the default skips empties) | `include_in_origin=False` on the unwanted fields; accept losing the empty-`name` edge case |
+| `combine_datasets` | Custom serializer for the `datasets` field (list-or-string → comma-joined string) | `origin_serializer` callable on `PluginField` |
+| `recaller` | Return empty params — dataset-level origin is meaningless; per-media origins are built in `_build_media` | `origin_suppressed = True` class attr |
+
+A latent footgun the override-by-override approach is hiding: **the
+current default `build_origin` does not exclude `field_type="password"`
+fields.** An importer like the SFTP skeleton in the base-class docstring
+(which declares a `password` field) would silently land that password
+in the persisted origin dict. Phase A fixes this by defaulting
+`include_in_origin=False` for `password` and `file` field types.
+
+#### Design
+
+Two additions to `PluginField` (in `vtscore/plugins/__init__.py`) and
+two to `DatasetImporter` (in `vtscore/datasets/importers/base.py`):
+
+```python
+# PluginField
+include_in_origin: bool | None = None    # None → field_type-driven default
+origin_serializer: Callable[[Any], str] | None = None
+
+# DatasetImporter
+extra_origin_keys: tuple[str, ...] = ()  # non-PluginField keys to copy
+origin_suppressed: bool = False          # short-circuit to {importer, params={}}
+```
+
+Default for `include_in_origin` resolves at runtime:
+- `field_type in ("file", "password")` → `False`
+- everything else → `True`
+
+The framework's new `build_origin` body becomes:
+
+1. If `origin_suppressed`, return `{"importer": self.name, "params": {}}`.
+2. For each `PluginField` where `include_in_origin` resolves true: pull
+   the value, run `origin_serializer` if set, fall back to the existing
+   checkbox / `str(val) if val else skip` rules.
+3. For each key in `extra_origin_keys`: copy from `field_values`,
+   JSON-encoding lists/dicts on the way out.
+4. Return `{"importer": self.name, "params": params}`.
+
+The list→JSON coercion for `source_specs` moves from the importer to
+the framework because every multi-media importer needs it. New
+multi-media importers (third-party `recaller`-style) get this for free
+by declaring `extra_origin_keys = ("source_specs",)` — or, even better,
+the framework auto-adds `"source_specs"` to `extra_origin_keys` when
+`multi_media = True` on the class.
+
+#### Migration impact — in-tree
+
+All six overrides get deleted. Concrete diffs:
+
+- `server_folder`: delete override (auto-added via `multi_media=True`).
+- `http_archive`: delete override (auto-added via `multi_media=True`).
+- `server_files`: delete override; add `include_in_origin=False` to any
+  field other than `paths_file` / `media_type` (today the field list is
+  already just those two plus `source_specs` for multi-media, so the
+  override is largely vestigial — deleting it is a near-no-op).
+- `demo`: delete override; add `include_in_origin=False` to whatever
+  fields aren't `name`/`converter`. Loses the "emit empty `name`" edge
+  case; verify no test asserts on the empty-name behavior.
+- `combine_datasets`: delete override; declare
+  `origin_serializer=lambda v: ",".join(v) if isinstance(v, list) else v`
+  on the `datasets` field.
+- `recaller`: delete override; set `origin_suppressed = True` on the
+  class.
+
+LOC delta: roughly -50 (six overrides averaging ~8 lines) +12 (new
+class attrs and PluginField args).
+
+#### Migration impact — external plugins (the four families you named)
+
+**`DatasetImporter` (external; the in-repo `recaller` scaffold is the
+template).** Migration cost: **zero required edits.** External
+importers that override `build_origin` keep working unchanged — the
+new framework default only fires when the subclass doesn't override.
+Optional cleanup: delete the override after declaring the equivalent
+class attrs. Concretely for a recaller-style importer, the migration
+is a one-line diff:
+
+```python
+# Before
+def build_origin(self, field_values):
+    return {"importer": self.name, "params": {}}
+
+# After
+origin_suppressed = True
+```
+
+**`MediaSource` (external; `pullwrest`).** Migration cost: **none.**
+`MediaSource` doesn't participate in field-schema-driven origin
+construction at all — sources are factoried from an existing origin
+dict via `create_from_origin(origin)`, they don't build origins.
+Phase A doesn't touch sources.
+
+**`LabelImporter` (external; `holder`).** Migration cost: **none.**
+Label importers don't have a `build_origin` concept — they return label
+dicts keyed by md5 / origin. Phase A doesn't touch label importers.
+
+**`LabelsetExporter` (external; `holder`).** Migration cost: **none.**
+Exporters consume labelsets, they don't produce origins. Phase A
+doesn't touch exporters.
+
+In summary: Phase A only affects DatasetImporters, and even there the
+override-still-wins shim means zero required edits for external code.
+This is the gentlest possible first move and is a clean test of the
+"declarative knobs on PluginField replace plugin-side overrides"
+hypothesis before Phase B raises the stakes.
+
+#### Implementation steps
+
+1. Add `include_in_origin` and `origin_serializer` to `PluginField` in
+   `vtscore/plugins/__init__.py`; thread them through `to_dict()` /
+   `from_dict()` so the registry's JSON snapshot stays round-trip safe.
+2. Add `extra_origin_keys` and `origin_suppressed` to `DatasetImporter`.
+3. Rewrite `DatasetImporter.build_origin` per the design above; add a
+   `_resolve_include_in_origin(field)` helper that applies the
+   field-type defaults.
+4. Auto-add `"source_specs"` to `extra_origin_keys` when
+   `multi_media = True`.
+5. Delete the six in-tree overrides; add the equivalent declarative
+   attrs.
+6. Tests: extend `tests_lib/datasets/` with cases for each pattern
+   (suppressed origin, omitted password field, list-typed field via
+   `origin_serializer`, `extra_origin_keys` JSON-encoded). Verify the
+   "override still wins" shim with a fake third-party-style importer
+   that overrides `build_origin` and asserts the override's return
+   value reaches `media["origin"]`.
+7. Run `./run-tests.sh datasets io detectors` first (origin info is
+   read by labelset resolution and label export, so the blast radius
+   touches those groups), then the full `./run-tests.sh`.
+
+#### Open questions
+
+- **`origin_suppressed` vs an empty `params` dict by default for
+  recaller.** Suppression is more explicit and is the only pattern that
+  emits the literal `{"importer": name, "params": {}}` short-circuit.
+  Alternative: declare all fields `include_in_origin=False` and let the
+  loop produce empty params. Cleaner per-field, but loses the "I have
+  no useful dataset-level origin" intent. Recommend keeping the
+  explicit class attr.
+- **Should `origin_serializer` get the full `field_values` dict** in
+  addition to the field's value, so a serializer can reach across to
+  another field? Only `combine_datasets` would care, and it doesn't
+  need cross-field access. Keep the API single-value to start; widen
+  later if a real use case appears.
+- **Phase A or Phase B owns the `validate_filepath_field` deletion.**
+  Phase A doesn't strictly need it — it's a separate route-layer
+  concern — but if Phase B drags, it might be worth pulling the
+  declarative-`server_path`-validation slice forward into Phase A. Park
+  this until Phase A is in flight.
+
+## What shipped
+
+- **Phase A — Candidate #1 (declarative origin construction).** Six
+  in-tree `build_origin` overrides deleted; framework default driven by
+  `PluginField.include_in_origin` / `origin_serializer` and
+  `DatasetImporter.extra_origin_keys` / `origin_suppressed`. Password
+  and file fields now default-excluded from origin (closes the latent
+  leak). External `DatasetImporter` plugins keep working unchanged
+  (override-wins shim); other plugin families (`MediaSource`,
+  `LabelImporter`, `LabelsetExporter`) untouched.
+
 ## Open follow-ups
 
-- None yet. This is a discovery doc; pick which candidates to schedule
-  and crack them open in separate plan files (or fold them inline into
-  EXTENDING.md once they ship).
+- Phase B (P0 collapse: #3 + finish #4 + #7) is next up. Open question
+  carried forward: extend the marshmallow schema to be the single
+  ingress for both HTTP and CLI calls, so `validate_filepath_field`'s
+  hardcoded `"filepath"` key can die and `run_cli` plugins stop
+  hand-checking required strings.
+- #13 has a subtle attr-name choice (`.filename` vs `.name`) the
+  current Shim note doesn't flag — the in-tree `_shared.py` adapter
+  uses `.name`, but Werkzeug exposes `.filename`. Settle on one before
+  scheduling.

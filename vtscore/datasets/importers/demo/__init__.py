@@ -54,6 +54,7 @@ class DemoDatasetImporter(DatasetImporter):
             field_type="text",
             description="Override the default embedder (optional).",
             required=False,
+            include_in_origin=False,
         ),
         ImporterField(
             key="converter",
@@ -102,13 +103,6 @@ class DemoDatasetImporter(DatasetImporter):
             converter_name=converter_name,
             clipper_name=clipper_name,
         )
-
-    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-        params: dict[str, str] = {"name": field_values.get("name", "")}
-        converter = field_values.get("converter", "")
-        if converter:
-            params["converter"] = converter
-        return {"importer": self.name, "params": params}
 
     def origin_display(self, origin: dict[str, Any]) -> str:
         params = origin.get("params", {})
