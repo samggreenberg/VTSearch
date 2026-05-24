@@ -71,8 +71,7 @@ def check_raw_lengths(files: list[Path]) -> Finding:
     f = Finding(
         rule="§4.1-2 Hardcoded px/rem in spacing/font-size",
         description=(
-            "Use --space-* / --font-* tokens. Raw values in padding | margin | "
-            "gap | font-size bypass the token system."
+            "Use --space-* / --font-* tokens. Raw values in padding | margin | gap | font-size bypass the token system."
         ),
     )
     for path in files:
@@ -83,9 +82,7 @@ def check_raw_lengths(files: list[Path]) -> Finding:
             for m in SPACING_PROP.finditer(line):
                 value = m.group(2)
                 # Skip if the value is fully a token: `var(--space-md)` etc.
-                if "var(--" in value and not RAW_LENGTH.search(
-                    re.sub(r"var\([^)]+\)", "", value)
-                ):
+                if "var(--" in value and not RAW_LENGTH.search(re.sub(r"var\([^)]+\)", "", value)):
                     continue
                 for length_match in RAW_LENGTH.finditer(value):
                     raw = length_match.group(0)
@@ -185,9 +182,7 @@ def check_heading_restyling(files: list[Path]) -> Finding:
                 # `body` includes the opening line so single-line rules
                 # (`h1 { margin: 0; }`) are inspected correctly.
                 body = "\n".join(lines[start:j])
-                if re.search(r"\bfont-size\b", body) or re.search(
-                    r"\bfont-weight\b", body
-                ):
+                if re.search(r"\bfont-size\b", body) or re.search(r"\bfont-weight\b", body):
                     f.hits.append((path, rule_line, lines[i].rstrip()))
                 i = j
             else:
@@ -270,9 +265,7 @@ def check_flex_column_no_gap(files: list[Path]) -> Finding:
                         frame = stack.pop()
                         if frame["has_col"] and not frame["has_gap"]:
                             # Only flag rules that look like display:flex containers.
-                            f.hits.append(
-                                (path, frame["col_line"], _read_line(text, frame["col_line"]))
-                            )
+                            f.hits.append((path, frame["col_line"], _read_line(text, frame["col_line"])))
                     depth = max(0, depth - 1)
             if "flex-direction" in stripped and "column" in stripped and stack:
                 stack[-1]["has_col"] = True
@@ -327,9 +320,7 @@ def check_redeclared_utility(files: list[Path]) -> Finding:
     # End of the class name must be a non-class-character — not `-` or
     # `\w` — so `.btn-good` and `.form-group--section` (which are new
     # classes, not redeclarations of `.btn` or `.form-group`) don't match.
-    pattern = re.compile(
-        r"^\.(" + "|".join(re.escape(c) for c in SHARED_CLASSES) + r")(?![-\w])[^{]*\{"
-    )
+    pattern = re.compile(r"^\.(" + "|".join(re.escape(c) for c in SHARED_CLASSES) + r")(?![-\w])[^{]*\{")
     for path in files:
         if path in SHARED_UTILITY_FILES:
             continue
