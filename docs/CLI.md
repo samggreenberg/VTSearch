@@ -207,6 +207,24 @@ python app.py --login trivial    # multi-user mode with simple username auth
 
 Without `--login`, the app uses `DefaultLoginProvider` (single-user, always authenticated).
 
+**Solo mediaType** (`--solo-media-type`) — streamline the UI for users
+who only ever look at one media type (e.g. images, optionally pulled
+in via converters from videos/documents). When set, the dataset
+importer and new-detector flows hide their mediaType pickers and lock
+to this type, the converter list filters to converters whose output is
+this type, and the type's default embedder is warmed at startup:
+
+```bash
+python app.py --solo-media-type image
+```
+
+Valid values are the registered media-type ids (`audio`, `image`,
+`video`, `text`, `document`). The flag is a per-process **fallback**:
+any user who explicitly sets their own solo mediaType (or explicitly
+opts back into "show everything") via the Settings dialog overrides
+the CLI value for themselves, and the choice persists across restarts.
+A user who has never touched the setting sees the CLI value.
+
 ## Inspecting plugins and the API schema
 
 `python app.py --list-plugins` enumerates every auto-discovered plugin —
