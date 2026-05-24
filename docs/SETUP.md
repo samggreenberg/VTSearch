@@ -30,17 +30,29 @@ python3 --version
 
 If you see something like `Python 3.11.4`, you're good. If the command isn't found, install Python from [python.org/downloads](https://www.python.org/downloads/) or with your system package manager.
 
-Ubuntu / Debian:
+<details><summary>Ubuntu / Debian</summary>
 
 ```bash
 sudo apt update && sudo apt install python3 python3-pip python3-venv
 ```
 
-macOS (with Homebrew):
+</details>
+
+<details><summary>RHEL / Fedora / Rocky / Alma</summary>
+
+```bash
+sudo dnf install python3 python3-pip
+```
+
+</details>
+
+<details><summary>macOS (Homebrew)</summary>
 
 ```bash
 brew install python
 ```
+
+</details>
 
 You also need **Git** to download the code:
 
@@ -50,17 +62,29 @@ git --version
 
 If it's not installed:
 
-Ubuntu / Debian:
+<details><summary>Ubuntu / Debian</summary>
 
 ```bash
 sudo apt install git
 ```
 
-macOS (with Homebrew):
+</details>
+
+<details><summary>RHEL / Fedora / Rocky / Alma</summary>
+
+```bash
+sudo dnf install git
+```
+
+</details>
+
+<details><summary>macOS (Homebrew)</summary>
 
 ```bash
 brew install git
 ```
+
+</details>
 
 ## Getting the code
 
@@ -189,18 +213,31 @@ npm --version
 
 If not installed:
 
-Ubuntu / Debian:
+<details><summary>Ubuntu / Debian</summary>
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
-macOS (with Homebrew):
+</details>
+
+<details><summary>RHEL / Fedora / Rocky / Alma</summary>
+
+```bash
+curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo -E bash -
+sudo dnf install -y nodejs
+```
+
+</details>
+
+<details><summary>macOS (Homebrew)</summary>
 
 ```bash
 brew install node
 ```
+
+</details>
 
 Then install dependencies and build:
 
