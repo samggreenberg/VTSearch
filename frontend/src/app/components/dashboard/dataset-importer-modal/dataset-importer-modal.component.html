@@ -28,14 +28,16 @@
     (lfFilesDropped)="lfOnFilesDropped($event)"
   >
     <ng-container demoBefore>
-      <vt-import-config
-        mediaTypeFieldId="demo-media-type"
-        [mediaType]="activeTab"
-        (mediaTypeChange)="selectDemoTabWithEmbedder($event)"
-        [mediaTypeOptions]="demoTabs"
-        [mediaTypeOptionLabels]="mediaTypeLabels"
-        [mediaTypeOptionIcons]="demoMediaTypeIcons"
-      ></vt-import-config>
+      @if (!effectiveSoloMediaType) {
+        <vt-import-config
+          mediaTypeFieldId="demo-media-type"
+          [mediaType]="activeTab"
+          (mediaTypeChange)="selectDemoTabWithEmbedder($event)"
+          [mediaTypeOptions]="demoTabs"
+          [mediaTypeOptionLabels]="mediaTypeLabels"
+          [mediaTypeOptionIcons]="demoMediaTypeIcons"
+        ></vt-import-config>
+      }
     </ng-container>
 
     <ng-container demoAfter>
@@ -73,15 +75,17 @@
     </ng-container>
 
     <ng-container sfBefore>
-      <vt-import-config
-        mediaTypeFieldId="sf-media-type"
-        [mediaType]="sfMediaType"
-        (mediaTypeChange)="sfOnMediaTypeChange($event)"
-        [mediaTypeOptions]="sfMediaTypeOptions"
-        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-        [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-        [detectionHint]="detectionHint(sfDetection)"
-      ></vt-import-config>
+      @if (!effectiveSoloMediaType) {
+        <vt-import-config
+          mediaTypeFieldId="sf-media-type"
+          [mediaType]="sfMediaType"
+          (mediaTypeChange)="sfOnMediaTypeChange($event)"
+          [mediaTypeOptions]="sfMediaTypeOptions"
+          [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+          [mediaTypeOptionIcons]="mediaTypeOptionIcons"
+          [detectionHint]="detectionHint(sfDetection)"
+        ></vt-import-config>
+      }
     </ng-container>
 
     <ng-container sfAfter>
@@ -144,15 +148,17 @@
     </ng-container>
 
     <ng-container lfBefore>
-      <vt-import-config
-        mediaTypeFieldId="lf-media-type"
-        [mediaType]="lfMediaType"
-        (mediaTypeChange)="lfOnMediaTypeChange($event)"
-        [mediaTypeOptions]="lfMediaTypeOptions"
-        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-        [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-        [detectionHint]="detectionHint(lfDetection)"
-      ></vt-import-config>
+      @if (!effectiveSoloMediaType) {
+        <vt-import-config
+          mediaTypeFieldId="lf-media-type"
+          [mediaType]="lfMediaType"
+          (mediaTypeChange)="lfOnMediaTypeChange($event)"
+          [mediaTypeOptions]="lfMediaTypeOptions"
+          [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+          [mediaTypeOptionIcons]="mediaTypeOptionIcons"
+          [detectionHint]="detectionHint(lfDetection)"
+        ></vt-import-config>
+      }
     </ng-container>
 
     <ng-container lfAfter>
@@ -210,16 +216,18 @@
       @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
         @for (field of selectedImporter.fields; track field.key) {
           @if (field.field_type === 'select' && field.key === 'media_type') {
-            <vt-import-config
-              [mediaTypeFieldId]="'field-' + field.key"
-              [mediaType]="formValues[field.key] || ''"
-              (mediaTypeChange)="onMediaTypeChange($event)"
-              [mediaTypeOptions]="field.options || []"
-              [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-              [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-            ></vt-import-config>
-            @if (field.hint) {
-              <p class="form-hint">{{ field.hint }}</p>
+            @if (!effectiveSoloMediaType) {
+              <vt-import-config
+                [mediaTypeFieldId]="'field-' + field.key"
+                [mediaType]="formValues[field.key] || ''"
+                (mediaTypeChange)="onMediaTypeChange($event)"
+                [mediaTypeOptions]="field.options || []"
+                [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+                [mediaTypeOptionIcons]="mediaTypeOptionIcons"
+              ></vt-import-config>
+              @if (field.hint) {
+                <p class="form-hint">{{ field.hint }}</p>
+              }
             }
           } @else {
           <div class="form-group">

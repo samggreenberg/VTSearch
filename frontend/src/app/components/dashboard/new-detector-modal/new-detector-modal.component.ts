@@ -8,6 +8,7 @@ import { DetectorsApiService } from '../../../services/detectors-api.service';
 import { DatasetsApiService } from '../../../services/datasets-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import {
   DemoDataset,
   ImporterField,
@@ -167,7 +168,16 @@ export class NewDetectorModalComponent implements OnInit {
     private datasetsApi: DatasetsApiService,
     private sortingApi: SortingApiService,
     private labelImportersApi: LabelImportersApiService,
+    private settingsState: SettingsStateService,
   ) {}
+
+  /** Type_id of the active solo-mediaType streamlining, or ``null`` when
+   *  off. When non-null, the mediaType form-group is hidden in the
+   *  template and ``mediaType`` is locked to this value on init. */
+  get effectiveSoloMediaType(): string | null {
+    const v = this.settingsState.settings?.effective_solo_media_type;
+    return v ? v : null;
+  }
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
@@ -194,11 +204,20 @@ export class NewDetectorModalComponent implements OnInit {
         this.mediaTypes = this.mediaTypeInfos.map((t) => t.type_id || t.name);
       },
     });
+    // Settings power the solo-mediaType lockdown — load them so the
+    // template's @if guards see the resolved value on first render.
+    this.settingsState.load();
 
-    // Prefer the explicit default (active dataset's type) over the all-datasets guess.
-    // When the active dataset dictates the type, lock the field so the user
-    // can't change it without an explicit unlock click.
-    if (this.defaultMediaType) {
+    // Solo-mediaType mode forces the field to the chosen type and the
+    // template hides the picker entirely (no unlock button rendered).
+    const solo = this.effectiveSoloMediaType;
+    if (solo) {
+      this.mediaType = solo;
+      this.mediaTypeLocked = true;
+    } else if (this.defaultMediaType) {
+      // Prefer the explicit default (active dataset's type) over the all-datasets guess.
+      // When the active dataset dictates the type, lock the field so the user
+      // can't change it without an explicit unlock click.
       this.mediaType = this.defaultMediaType;
       this.mediaTypeLocked = true;
     } else {

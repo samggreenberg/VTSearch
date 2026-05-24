@@ -28,7 +28,7 @@
         />
       </div>
 
-      @if (tab === 'blank') {
+      @if (tab === 'blank' && !effectiveSoloMediaType) {
         <div class="form-group">
           <label class="col-label" title="The type of media this detector will process">Media Type</label>
           <div class="media-type-row">

@@ -181,6 +181,27 @@ export class DatasetImporterModalComponent implements OnInit {
     private settingsState: SettingsStateService,
   ) {}
 
+  /** Type_id (e.g. ``"image"``) of the solo-mediaType streamlining, or
+   *  ``null`` when not active. Reads from the live settings snapshot so
+   *  it picks up the per-user explicit choice and the CLI fallback.
+   *  When non-null, the importer hides every mediaType picker and forces
+   *  each flow's media_type field to this value. */
+  get effectiveSoloMediaType(): string | null {
+    const v = this.settingsState.settings?.effective_solo_media_type;
+    return v ? v : null;
+  }
+
+  /** Folder name (e.g. ``"images"``) of the solo mediaType, or ``""``
+   *  if not active. The sf/lf/form flows store media_type as folder
+   *  names rather than type_ids, so this is the value those flows
+   *  should snap to when solo mode is on. Returns the type_id as a
+   *  fallback when the media-type registry hasn't loaded yet. */
+  get effectiveSoloFolderName(): string {
+    const tid = this.effectiveSoloMediaType;
+    if (!tid) return '';
+    return this.toFolderName(tid) || tid;
+  }
+
   ngOnInit(): void {
     this.datasetsApi.getAllImporters().subscribe({
       next: (res) => {
@@ -395,6 +416,15 @@ export class DatasetImporterModalComponent implements OnInit {
       const folderName = this.toFolderName(this.guessedMediaType);
       if (folderName && mediaTypeField.options?.includes(folderName)) {
         this.formValues['media_type'] = folderName;
+      }
+    }
+
+    // Solo-mediaType mode wins over both the default and the guess. The
+    // picker is hidden in the template so the user has no way to change
+    // this without leaving the modal and turning solo mode off.
+    if (mediaTypeField && this.effectiveSoloFolderName) {
+      if (mediaTypeField.options?.includes(this.effectiveSoloFolderName)) {
+        this.formValues['media_type'] = this.effectiveSoloFolderName;
       }
     }
 
@@ -635,12 +665,24 @@ export class DatasetImporterModalComponent implements OnInit {
         this.demoTabs.push(mt);
       }
     }
+    // Solo-mediaType mode: only surface the chosen type. Falls back to
+    // the unfiltered list when the solo type has no demos so the user
+    // isn't left with an empty picker.
+    const solo = this.effectiveSoloMediaType;
+    if (solo && this.demoTabs.includes(solo)) {
+      this.demoTabs = [solo];
+    }
     // Pre-select a media-type tab so the demo table shows results instead
-    // of sitting empty.  Prefer "audio" when present (matches the default
-    // for most file-list importers), otherwise pick the first tab.
-    if (!this.activeTab && this.demoTabs.length > 0) {
-      const preferred = this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0];
-      this.selectDemoTabWithEmbedder(preferred);
+    // of sitting empty.  Prefer the solo type, then ``"audio"``, then
+    // the first tab.
+    if (this.demoTabs.length > 0) {
+      const needsSelect = !this.activeTab || (solo && this.activeTab !== solo);
+      if (needsSelect) {
+        const preferred = solo && this.demoTabs.includes(solo)
+          ? solo
+          : (this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0]);
+        this.selectDemoTabWithEmbedder(preferred);
+      }
     }
   }
 
@@ -950,6 +992,10 @@ export class DatasetImporterModalComponent implements OnInit {
       this.lfMediaType = mtField?.default || this.lfMediaTypeOptions[0] || 'audio';
     }
 
+    if (this.effectiveSoloFolderName && this.lfMediaTypeOptions.includes(this.effectiveSoloFolderName)) {
+      this.lfMediaType = this.effectiveSoloFolderName;
+    }
+
     this.lfLoadEmbedders(this.lfMediaType);
     this.lfLoadClippers(this.lfMediaType);
     this.lfResetSourceSpecs();
@@ -1227,6 +1273,10 @@ export class DatasetImporterModalComponent implements OnInit {
       this.sfMediaType = guessedFolder;
     } else {
       this.sfMediaType = mtField?.default || this.sfMediaTypeOptions[0] || 'audio';
+    }
+
+    if (this.effectiveSoloFolderName && this.sfMediaTypeOptions.includes(this.effectiveSoloFolderName)) {
+      this.sfMediaType = this.effectiveSoloFolderName;
     }
 
     this.sfLoadEmbedders(this.sfMediaType);

@@ -43,6 +43,22 @@
               <option value="highviz">High Visibility</option>
             </select>
           </div>
+          <div class="form-group" title="Streamline the UI for a single media type. Importer and detector flows will hide their media-type pickers and lock to this type; converters that produce other types are filtered out.">
+            <label class="form-label">Solo media type</label>
+            <select
+              class="form-select"
+              [ngModel]="soloMediaTypeSelectValue"
+              (ngModelChange)="onSoloMediaTypeChange($event)"
+              aria-label="Solo media type">
+              <option value="">Show everything</option>
+              @for (mt of mediaTypes; track mt.type_id) {
+                <option [value]="mt.type_id">{{ mt.name }}</option>
+              }
+            </select>
+            @if (soloMediaTypeNote) {
+              <p class="form-hint">{{ soloMediaTypeNote }}</p>
+            }
+          </div>
           <label class="checkbox-row" title="Animate media transitions when voting (swipe left/right effect)">
             <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
             Swipe animation

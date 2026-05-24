@@ -168,6 +168,11 @@
           "disable_achievements": {
             "type": "boolean"
           },
+          "effective_solo_media_type": {
+            "nullable": true,
+            "readOnly": true,
+            "type": "string"
+          },
           "enrich_descriptions": {
             "type": "boolean"
           },
@@ -235,6 +240,13 @@
             "type": "string"
           },
           "show_metadata": {
+            "type": "boolean"
+          },
+          "solo_media_type": {
+            "nullable": true,
+            "type": "string"
+          },
+          "solo_media_type_explicit": {
             "type": "boolean"
           },
           "swipe_animation": {
@@ -3817,6 +3829,10 @@
           },
           "show_metadata": {
             "type": "boolean"
+          },
+          "solo_media_type": {
+            "nullable": true,
+            "type": "string"
           },
           "swipe_animation": {
             "type": "boolean"
@@ -9954,6 +9970,7 @@
     },
     "/api/settings": {
       "get": {
+        "description": "Augments the persisted dict with ``effective_solo_media_type`` \u2014 the\nresolver's view of the per-user value plus the CLI fallback. The\nfrontend reads only this key when deciding whether to hide mediaType\npickers; the raw ``solo_media_type`` / ``solo_media_type_explicit``\npair is still exposed for the settings UI to render the current state.",
         "operationId": "get_settings",
         "responses": {
           "200": {
