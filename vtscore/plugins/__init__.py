@@ -74,8 +74,11 @@ class PluginField:
 
     The ``field_type`` value drives how the frontend renders it:
 
-    - ``"file"``     – OS file-picker; value arrives as a Werkzeug
-      :class:`~werkzeug.datastructures.FileStorage` object.
+    - ``"file"``     – OS file-picker; value arrives as an
+      :class:`~vtscore.plugins.uploads.UploadedFile` (Werkzeug
+      ``FileStorage`` from a Flask request, a ``CliUploadedFile``
+      wrapping a path argument from the CLI, or a ``BytesIOUploadedFile``
+      for background-thread reads).
     - ``"folder"``   – Path text-input or OS folder-picker.
     - ``"url"``      – Text input pre-validated as a URL.
     - ``"text"``     – Generic single-line text input.

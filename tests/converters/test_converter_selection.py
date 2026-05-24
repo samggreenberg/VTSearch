@@ -343,18 +343,21 @@ class TestRunConvertersOnFolder:
         c.source_type = "video"
         c.target_type = "image"
         c.display_name = "Video \u2192 Images"
-        c.convert.return_value = overrides.pop(
-            "convert_return",
-            [
-                {
-                    "filename": "clip_clip_1.png",
-                    "media_bytes": _make_png_bytes(),
-                    "duration": 0,
-                    "width": 4,
-                    "height": 4,
-                },
-            ],
-        )
+        default_return = [
+            {
+                "filename": "clip_clip_1.png",
+                "media_bytes": _make_png_bytes(),
+                "duration": 0,
+                "width": 4,
+                "height": 4,
+            },
+        ]
+        convert_return = overrides.pop("convert_return", default_return)
+        c.convert.return_value = convert_return
+        # Framework call sites route through ``convert_normalized``
+        # (Phase C #9); mirror the return value so tests that mock the
+        # raw ``convert`` still pass.
+        c.convert_normalized.return_value = convert_return
         for k, v in overrides.items():
             setattr(c, k, v)
         return c
@@ -519,6 +522,7 @@ class TestRunConvertersOnFolder:
 
         mock_converter = self._mock_video2image_converter()
         mock_converter.convert.side_effect = _side_effect
+        mock_converter.convert_normalized.side_effect = _side_effect
 
         medias: dict = {}
         with (

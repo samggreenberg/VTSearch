@@ -1301,6 +1301,14 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
 
     Returns the task_id for progress tracking.
     """
+    from vtscore.plugins.uploads import wrap_cli_file_fields  # noqa: PLC0415
+
+    # Normalize ``field_type="file"`` values to UploadedFile.  The
+    # request path supplies a FileStorage / BytesIOUploadedFile already;
+    # the reload-from-origin path supplies a server path string that
+    # needs CliUploadedFile wrapping so ``run()`` doesn't have to
+    # branch on the input shape.
+    field_values = wrap_cli_file_fields(importer.fields, field_values)
     created_by = get_current_user()
     origin = importer.build_origin(field_values)
     clipper_name = field_values.pop("clipper", "") or ""
@@ -1352,7 +1360,9 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     :data:`STAGING_DIR` and sets the ``staging_result`` field on the progress
     tracker when finished.
     """
+    from vtscore.plugins.uploads import wrap_cli_file_fields  # noqa: PLC0415
 
+    field_values = wrap_cli_file_fields(importer.fields, field_values)
     _request_user = get_current_user()
 
     def stage_task():

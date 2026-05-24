@@ -162,7 +162,7 @@ def _run_converter_on_source(
         except Exception:
             return None
     try:
-        return converter.convert(source_media, conv_params)
+        return converter.convert_normalized(source_media, conv_params)
     except Exception as exc:
         print(f"Converter {converter.name} failed on {source_rel}: {exc}")
         return None
@@ -364,7 +364,7 @@ def apply_converter_to_demo(
         )
 
         try:
-            outputs = converter.convert(src_media, {})
+            outputs = converter.convert_normalized(src_media, {})
         except Exception:
             continue
         if not outputs:

@@ -654,6 +654,95 @@ hypothesis before Phase B raises the stakes.
   declarative-`server_path`-validation slice forward into Phase A. Park
   this until Phase A is in flight.
 
+### Phase C — Candidates #2 + #9 + #13: shape unification (P1)
+
+**Status:** **shipped.** Three independent surfaces landed in one PR:
+
+- **#9 — converter param normalization.**
+  :meth:`MediaConverter.convert_normalized` is the new framework entry
+  point.  It pre-strips empty-string values whose field declares a
+  default, runs the per-converter marshmallow schema (validating
+  declared :attr:`~PluginField.min` / :attr:`max` / :attr:`options`
+  constraints), fills missing or empty-string keys with the field's
+  declared default, then dispatches to the subclass's
+  :meth:`~MediaConverter.convert`.  Every in-tree call site
+  (:meth:`DatasetImporter._ingest_spec_stream`,
+  :func:`vtscore.converters.runner._run_converter_on_source`,
+  :func:`vtscore.converters.runner.run_converters_on_folder`,
+  :func:`vtscore.datasets.clipper_chain._run_converter_step`, the
+  clipper-chain replay loop) routes through it.  Validation failures
+  raise :class:`ValueError` (matching the rest of the plugin-arg error
+  contract) rather than :class:`marshmallow.ValidationError`.
+  :meth:`~MediaConverter.get_param` stays as a back-compat shim for
+  third-party converters whose call sites bypass the framework
+  wrapper.
+- **#13 — drop Werkzeug from library tier.**  New module
+  :mod:`vtscore.plugins.uploads` defines :class:`UploadedFile` (a
+  ``runtime_checkable`` :class:`typing.Protocol` with ``filename`` /
+  ``read`` / ``save``), :class:`CliUploadedFile` (adapter wrapping a
+  filesystem path string), and :class:`BytesIOUploadedFile` (adapter
+  holding upload bytes in memory for background-thread reads).
+  Werkzeug's :class:`~werkzeug.datastructures.FileStorage` satisfies
+  the protocol natively and is passed through unchanged on the Flask
+  request path.  The default :meth:`DatasetImporter.run_cli` and
+  :meth:`LabelImporter.run_cli` now wrap any ``field_type="file"``
+  path-string argument in :class:`CliUploadedFile` before delegating
+  to :meth:`run`, so plugin bodies see one shape regardless of
+  ingress.  :func:`vtscore.datasets.load_pipeline._run_importer_in_background`
+  and :func:`_stage_importer_in_background` apply the same wrapping,
+  so the reload-from-origin path (which supplies a server-path string)
+  reaches :meth:`run` as an :class:`UploadedFile` too.  The bytesio
+  branch of :func:`vtsearch.routes._shared.validate_plugin_args` now
+  produces a :class:`BytesIOUploadedFile` instead of a bare
+  :class:`io.BytesIO` with ``.name`` taped on (``.name`` still exposed
+  as a back-compat shim).  Settled on ``.filename`` as the canonical
+  attr per the open follow-up.  The pickle importer's ``run_cli``
+  override was deleted (its custom logic collapsed into the now-shared
+  base path via :meth:`UploadedFile.save`).  Library-tier base-class
+  docstrings (:mod:`vtscore.datasets.importers.base`,
+  :mod:`vtscore.labels.importers.base`, :class:`PluginField`'s
+  ``"file"`` description) stopped referencing
+  :class:`~werkzeug.datastructures.FileStorage` and point at
+  :class:`UploadedFile`.
+- **#2 — yield_precomputed helper.**  New method
+  :meth:`DatasetImporter.yield_precomputed(filename, *, embedding,
+  md5, metadata)` routes to the three legacy precomputed dicts
+  (:attr:`content_vectors`, :attr:`content_md5s`,
+  :attr:`custom_metadata_map`).  Plugin authors that previously wrote
+  to all three dicts in parallel can now collapse to a single helper
+  call so a misspelled key can't land in only one or two of the
+  parallel maps.  The three dicts stay public and continue to work for
+  third-party importers that write to them directly.  The full
+  generator-based :class:`RawMedia` shape proposed in the original
+  candidate is deferred — it isn't separable from #12 (implicit
+  between-yield cancellation), which has no scheduled work yet.
+
+Coverage in :file:`tests_lib/datasets/test_phase_c.py` (22 tests).
+4277 in-suite tests pass.
+
+#### Migration impact — external plugins
+
+| Family | Cost |
+|---|---|
+| `DatasetImporter` (e.g. `recaller`) | None required.  CLI invocations of plugins with ``file`` fields now receive an :class:`UploadedFile` instead of a raw path string — plugin bodies that read ``.filename`` / ``.read()`` / ``.save(dst)`` continue to work, and the pre-existing ``isinstance(value, str)`` fallback in :meth:`PickleDatasetImporter.default_display_name` is no longer needed.  Multi-source-type importers can call :meth:`yield_precomputed` per file instead of writing to the three dicts. |
+| `MediaSource` (e.g. `pullwrest`) | None.  Sources do not participate in this candidate. |
+| `LabelImporter` (e.g. `holder`) | None required.  Same UploadedFile change as DatasetImporter: ``run`` now receives a wrapped path on the CLI path. |
+| `LabelsetExporter` (e.g. `holder`) | None.  Exporters do not participate. |
+| Third-party converters | None required.  Plugins called via the framework path now receive validated + default-filled ``params``; subclasses that route reads through :meth:`get_param` keep working; subclasses that index ``params[key]`` directly start working for the cases that previously crashed on missing keys.  Third-party call sites that invoke ``convert()`` directly (rather than ``convert_normalized()``) keep getting raw, un-validated params — the shim is intentional. |
+
+#### Open follow-ups
+
+- The full generator-based :class:`RawMedia` flow (candidate #2's
+  ambitious form) plus implicit cancellation (#12) remain unscheduled.
+  Worth revisiting only when a concrete importer wants both — the
+  cancellation win doesn't materialise without it.
+- :meth:`PickleDatasetImporter.run_chunked_cli` still expects a bare
+  path string (its own override, untouched by Phase C); consolidating
+  it with the wrapping default is a minor cleanup worth folding into
+  any future chunked-load refactor.
+- The :meth:`MediaConverter.get_param` shim can be removed once a
+  soak period confirms no third-party converters rely on it.
+
 ### Phase B — Candidates #3 + #4 + #7: declarative validation & templates
 
 **Status:** **shipped.** One central
@@ -760,6 +849,23 @@ which is idempotent.
 
 ## What shipped
 
+- **Phase C — Candidates #2 + #9 + #13 (shape unification).**
+  :meth:`MediaConverter.convert_normalized` is the new framework
+  entry-point: validation + default-fill runs once before
+  :meth:`convert` is reached, so subclass bodies (and clipper-chain /
+  importer call sites) can trust ``params`` is non-``None`` and
+  fully-populated.  :mod:`vtscore.plugins.uploads` ships the
+  :class:`UploadedFile` protocol plus :class:`CliUploadedFile` /
+  :class:`BytesIOUploadedFile` adapters; the default ``run_cli`` on
+  every file-accepting plugin family wraps path strings before
+  dispatching so library-tier plugin bases stop mentioning Werkzeug.
+  :meth:`DatasetImporter.yield_precomputed` collapses
+  ``content_vectors`` / ``content_md5s`` / ``custom_metadata_map``
+  writes into one call.  External plugins keep working unchanged
+  (Werkzeug `FileStorage` satisfies the new protocol; ``get_param``
+  remains as a shim; the three precomputed dicts still accept direct
+  writes).  Generator-based `RawMedia` (#2's ambitious form) and
+  implicit cancellation (#12) are explicitly deferred.
 - **Phase A — Candidate #1 (declarative origin construction).** Six
   in-tree `build_origin` overrides deleted; framework default driven by
   `PluginField.include_in_origin` / `origin_serializer` and
@@ -787,10 +893,15 @@ which is idempotent.
 
 ## Open follow-ups
 
-- Phase C (P1 shape — #1 already done; remaining: #2 RawMedia, #9
-  converter param normalization, #13 drop Werkzeug from library tier).
-  No work scheduled yet.
-- #13 has a subtle attr-name choice (`.filename` vs `.name`) the
-  current Shim note doesn't flag — the in-tree `_shared.py` adapter
-  uses `.name`, but Werkzeug exposes `.filename`. Settle on one before
-  scheduling.
+- The full generator-based `RawMedia` shape (candidate #2's ambitious
+  form, paired with #12 implicit between-yield cancellation) remains
+  unscheduled. The minimal `yield_precomputed` helper shipped in
+  Phase C handles the parallel-dict footgun without restructuring
+  `run()`; revisit the generator form when a concrete importer wants
+  the cancellation win as well.
+- `MediaConverter.get_param` is retained as a back-compat shim. After
+  a soak period confirms no third-party converter call sites rely on
+  it, delete the helper.
+- `PickleDatasetImporter.run_chunked_cli` still takes a bare path
+  string (its own override, untouched by Phase C). Consolidate with
+  the wrapping default in any future chunked-load refactor.

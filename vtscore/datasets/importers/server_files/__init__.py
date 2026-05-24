@@ -246,7 +246,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
         - ``content_vectors`` maps each staged symlink basename to a
           pre-computed embedding vector.  Populated when the paths file
           is itself a ``.npz`` archive that holds vectors alongside the
-          paths.
+          paths.  Returned as a local dict (not threaded through
+          :meth:`~DatasetImporter.yield_precomputed`) so the singleton
+          importer instance does not accumulate per-import state.
         """
         paths_file = Path(field_values["paths_file"])
         paths, path_to_vector = _read_paths_and_vectors(paths_file)
