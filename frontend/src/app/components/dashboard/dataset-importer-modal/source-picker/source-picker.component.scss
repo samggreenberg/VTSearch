@@ -20,6 +20,13 @@
 .server-folder-browser { gap: var(--space-lg); }
 .sf-browse-section { gap: var(--space-sm); }
 
+// Stacked form sections inside the local-files / local-folder uploader
+// (lfInfo description, lfBefore media-type picker, drop zone, lfAfter
+// fields) need consistent inter-row spacing. Matches `.importer-form`'s
+// `gap: var(--space-lg)` (see _components.scss) so the two parallel
+// importer flows have identical vertical rhythm.
+.local-folder-uploader { gap: var(--space-lg); }
+
 // Indent the per-importer source widgets inward from the tabs above
 // (matches the parent modal's `.importer-form` indent so the hierarchy
 // reads top-down: category tabs → importer tabs → controls).

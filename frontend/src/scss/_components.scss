@@ -326,22 +326,31 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   padding: var(--space-xs) var(--space-md);
 }
 
+// Body-text utility classes used on `<p>`/`<span>` elements inside modals
+// and panels. We explicitly zero the UA `<p>` margin: surrounding layouts
+// rely on the parent's flex `gap` to space stacked elements, and default
+// browser `<p>` margins (~1em) inject inconsistent extra space that
+// breaks the vertical rhythm (see style-guide §3.0).
 .info-text {
+  margin: 0;
   font-size: var(--font-md);
   color: var(--text-secondary);
 }
 
 .error-text {
+  margin: 0;
   font-size: var(--font-md);
   color: var(--color-bad);
 }
 
 .success-text {
+  margin: 0;
   font-size: var(--font-md);
   color: var(--color-good);
 }
 
 .status-text {
+  margin: 0;
   font-size: var(--font-md);
   color: var(--text-secondary);
 }
