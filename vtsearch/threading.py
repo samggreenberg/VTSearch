@@ -71,19 +71,29 @@ def spawn(
 
 
 def _snapshot_user() -> str | None:
-    """Capture the current user, falling back to the thread-local when
-    no Flask request context is active."""
-    from vtsearch.auth import get_current_user, get_thread_user  # noqa: PLC0415
+    """Capture the user to propagate to the spawned thread.
 
+    Resolution: an explicit thread-local user wins (the spawn lineage,
+    set by a parent ``spawn`` call or by ``set_thread_user``); otherwise
+    the current Flask request's ``g.user`` if there is one; otherwise
+    ``None``.  We deliberately do *not* fall back to
+    :func:`vtsearch.auth.get_current_user`'s ``"default"`` sentinel —
+    that would clobber the spawned thread's thread-local with
+    ``"default"`` even when no user was ever explicitly set, masking
+    the "no user" state.
+    """
+    from vtsearch.auth import get_thread_user  # noqa: PLC0415
+
+    tl = get_thread_user()
+    if tl:
+        return tl
     try:
-        # Inside a Flask request: ``g.user`` is set by the before_request
-        # middleware.  Use ``get_current_user()`` so the resolution rules
-        # stay in one place.
-        return get_current_user()
-    except Exception:
-        # No request context (CLI / background): fall back to whatever
-        # the calling thread had set, which may be None.
-        return get_thread_user()
+        from flask import g  # noqa: PLC0415
+
+        return getattr(g, "user", None)
+    except RuntimeError:
+        # No Flask request context (CLI / background).
+        return None
 
 
 def _install_user(user: str | None) -> None:

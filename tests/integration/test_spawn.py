@@ -5,14 +5,7 @@ from __future__ import annotations
 
 import threading
 
-from vtsearch.auth import (
-    DefaultLoginProvider,
-    LoginProvider,
-    get_current_user,
-    get_thread_user,
-    set_login_provider,
-    set_thread_user,
-)
+from vtsearch.auth import get_current_user, get_thread_user, set_thread_user
 from vtsearch.state import (
     DatasetContext,
     DetectorContext,
@@ -30,40 +23,19 @@ from vtscore.state.core import (
 )
 
 
-class _MultiUserProvider(LoginProvider):
-    """Login provider whose ``get_current_user`` always returns the
-    thread-local user — used so the spawn snapshot has something
-    interesting to replay even outside a Flask request context.
-    """
-
-    name = "multi-user"
-
-    def get_current_user(self):  # pragma: no cover - exercised indirectly
-        return get_thread_user() or "default"
-
-    def list_users(self):
-        return ["default"]
-
-    def supports_auth(self):
-        return True
-
-    def get_user_data_dir(self, username, base_data_dir):
-        return base_data_dir / username
-
-
 def _wait(event: threading.Event) -> None:
     assert event.wait(timeout=5), "spawn body never ran"
 
 
 class TestSpawnUserContext:
-    def setup_method(self):
-        set_login_provider(_MultiUserProvider())
-
     def teardown_method(self):
-        set_login_provider(DefaultLoginProvider())
         set_thread_user(None)
 
     def test_replays_thread_user(self):
+        # ``set_thread_user`` writes the thread-local that
+        # ``get_current_user`` falls back to outside a Flask request
+        # context — perfect for verifying spawn's snapshot/replay
+        # without standing up a multi-user login provider.
         set_thread_user("alice")
         captured: list[str] = []
         done = threading.Event()
@@ -80,7 +52,6 @@ class TestSpawnUserContext:
     def test_clears_user_in_thread_on_exit(self):
         set_thread_user("bob")
         observed_during: list[str | None] = []
-        observed_after: list[str | None] = []
         ran = threading.Event()
 
         def body():
@@ -90,21 +61,25 @@ class TestSpawnUserContext:
         thread = spawn(body, name="test-spawn-cleanup")
         _wait(ran)
         thread.join(timeout=5)
-        # The cleanup happens inside the spawn-managed thread, not the
-        # caller's thread.  Verify by spawning a second target on a
-        # *fresh* thread (Python's threading module reuses Thread objects
-        # but not the underlying OS thread for a one-shot daemon).
-        observed_after_evt = threading.Event()
+        assert observed_during == ["bob"]
+
+        # Spawn a second job from a thread where no user is set; the
+        # cleanup in the first spawn's ``finally`` ran on its own
+        # daemon thread (already dead), so this just verifies the
+        # snapshot captured from *this* thread is None — proving the
+        # caller-side ``set_thread_user(None)`` below propagates
+        # correctly.
+        set_thread_user(None)
+        observed_after: list[str | None] = []
+        ran2 = threading.Event()
 
         def body2():
             observed_after.append(get_thread_user())
-            observed_after_evt.set()
+            ran2.set()
 
-        set_thread_user(None)
         thread2 = spawn(body2, name="test-spawn-cleanup-2")
-        _wait(observed_after_evt)
+        _wait(ran2)
         thread2.join(timeout=5)
-        assert observed_during == ["bob"]
         assert observed_after == [None]
 
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -77,7 +78,11 @@ def atomic_write_text(path: Path | str, text: str) -> None:
     """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")
+    # Per-writer unique tmp suffix so two threads (or two processes)
+    # racing to overwrite the same destination can't truncate each
+    # other's in-flight tmp file or chase one that was already renamed
+    # away.  Mirrors the pattern in ``vtsearch.settings._atomic_write``.
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
     try:
         with open(tmp, "w", encoding="utf-8", newline="") as f:
             f.write(text)
