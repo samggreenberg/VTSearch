@@ -4,6 +4,20 @@
 // modal that consumes <vt-source-picker>.  Layout-only styles unique to
 // this widget remain below.
 
+// Default host: flex column so child regions can opt into `flex: 1`.
+// Stays at natural height by default; only grows when the demo view is
+// active (see `:host:has(.demo-picker)` below) so the demo table can
+// claim the modal body's remaining height instead of capping itself.
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+:host:has(.demo-picker) {
+  flex: 1 1 auto;
+}
+
 .importer-picker,
 .demo-picker,
 .server-folder-browser,
@@ -15,7 +29,15 @@
 
 .importer-picker { gap: 0; margin-bottom: var(--space-lg); }
 
-.demo-picker { gap: var(--space-lg); }
+.demo-picker {
+  gap: var(--space-lg);
+  // Fill the host so the demo table inside can be the only scrollable
+  // region; min-height: 0 lets the flex algorithm actually shrink it
+  // (otherwise the implicit `min-height: auto` would force it to the
+  // table's full content height and re-introduce the body scrollbar).
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 .server-folder-browser { gap: var(--space-lg); }
 .sf-browse-section { gap: var(--space-sm); }
