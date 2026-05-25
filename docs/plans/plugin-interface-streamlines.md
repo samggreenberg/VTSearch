@@ -1,9 +1,11 @@
 # Plugin author interface streamlines
 
-Status: **Discovery / brainstorm.** No code changes yet. This file
-enumerates simplifications to the plugin-author interfaces across every
-plugin family — the same shape of change as the recent
-"importers no longer own embedding or converting" refactor.
+Status: **All five phases shipped (A → E).** P0/P1/P2/P3 candidates
+landed; the only deferred items are the generator-based `RawMedia`
+flow (#2's ambitious form, paired with #12) and a library-tier
+`vtscore.threading.spawn` for the remaining non-app-tier background
+spawn sites. See **What shipped** at the bottom for the per-phase
+summary and **Open follow-ups** for what's parked.
 
 ## Background
 
@@ -847,8 +849,152 @@ which is idempotent.
   for any third-party `SyncSource` subclass: rename your overrides to
   the `_do_*` form.
 
+### Phase D — Candidates #5 + #6 + #8 (P2 quality of life)
+
+**Status:** **shipped.** Three small but recurring footguns closed:
+
+- **#5 — shared JSON read helper.** New :func:`vtscore.io.read_server_json`
+  collapses the
+  ``Path.exists()`` / ``is_file()`` / ``read_bytes()`` / ``json.loads()``
+  dance into one call.  ``missing_ok=True`` lets sync sources opt into
+  "no file yet → return None" without sprinkling their own
+  ``if not path.exists(): return []`` shim.  Migrated:
+  :class:`~vtscore.labels.importers.server_json_file.ServerJsonLabelImporter`,
+  :class:`~vtsearch.settings_io.importers.server_json_file.ServerFileSettingsImporter`,
+  the labelset source
+  :class:`~vtscore.labels.sources.server_json_file.ServerFileLabelsetSource`,
+  and the settings source
+  :class:`~vtsearch.settings_io.sources.server_json_file.ServerFileSettingsSource`.
+- **#6 — shared atomic-write helpers.** New
+  :func:`vtscore.io.atomic_write_text` and
+  :func:`vtscore.io.atomic_write_json` hoist the tmp + ``fsync`` +
+  :func:`os.replace` ritual into one place.  Per-writer unique tmp
+  filenames (``<dest>.<pid>.<uuid>.tmp``) keep concurrent writers from
+  fighting over the same in-flight tmp.  ``newline=""`` on the writer
+  preserves already-formatted CRLF (so the CSV exporter doesn't double
+  its line endings on Windows after routing through the helper).
+  Migrated:
+  :mod:`vtscore.exporters.server_json_file`,
+  :mod:`vtscore.exporters.server_csv_file` (via its
+  ``_atomic_write_csv`` wrapper),
+  :mod:`vtsearch.settings_io.exporters.server_json_file`, plus the two
+  ``_do_save`` paths on the sync sources.  The historical
+  ``vtscore.exporters.server_json_file._atomic_write_text`` private
+  name is re-exported as a shim so any third-party exporter that
+  imported it directly keeps working.
+- **#8 — :func:`vtsearch.threading.spawn`.** New helper that
+  snapshots the caller's ``(user, dataset_ctx, detector_ctx)`` at spawn
+  time and re-installs them inside the new daemon thread.  Snapshot
+  rules: an explicit ``set_thread_user`` wins, else Flask ``g.user``,
+  else ``None`` (so the spawn does not clobber the spawned thread's
+  thread-local with the ``"default"`` fallback when nothing was ever
+  set explicitly).  Migrated in-tree call sites:
+  :func:`vtsearch.routes.datasets.registry.load_registered_dataset` and
+  the two thread-launch sites in
+  :mod:`vtsearch.routes.detectors.registry`
+  (``_maybe_reembed_for_active_dataset`` /
+  ``load_detector_route``).  Each call site lost ~5 lines of boilerplate
+  per task.  :class:`~vtscore.concurrency.async_jobs.JobManager` keeps
+  its own context replay path — it already handles a richer job/cancel
+  surface and isn't a 1:1 fit for ``spawn``.
+
+Coverage in :file:`tests_lib/io/test_io_helpers.py` (concurrent-write
+race tests included) and :file:`tests/integration/test_spawn.py`.
+4334 in-suite tests pass.
+
+#### Migration impact — external plugins
+
+| Family | Cost |
+|---|---|
+| `DatasetImporter` / `LabelImporter` / `LabelsetExporter` / `LabelsetSource` / `SettingsImporter` / `SettingsExporter` / `SettingsSource` | None required. The helpers are additive; existing inline JSON reads and atomic-write loops keep working unchanged. To clean up: switch the body to :func:`vtscore.io.read_server_json` / :func:`vtscore.io.atomic_write_json`. |
+| Third-party background-thread call sites | None required. ``threading.Thread(target=..., daemon=True).start()`` still works; the recommendation for new code is :func:`vtsearch.threading.spawn` instead, so the user/dataset/detector context plumbing disappears from the body. |
+
+#### Open follow-ups
+
+- ``vtscore.exporters.server_json_file._atomic_write_text`` is a
+  shim re-export.  After a soak period confirms no third-party
+  exporter imports it directly, delete the alias.
+
+### Phase E — Candidates #10 + #11 (P3 boilerplate trim)
+
+**Status:** **shipped (#11 only; #10 was already done).**
+
+- **#10 — converter metadata naming.** No work needed.  A pre-existing
+  rename had already collapsed ``converter_description`` →
+  ``description`` on :class:`~vtscore.converters.base.MediaConverter`;
+  every in-tree converter and the docs reference the unified name.
+  This entry stays in the plan as a record that the candidate was
+  closed, not because anything shipped in Phase E.
+- **#11 — plugin metadata defaults.** :meth:`PluginBase.__init_subclass__`
+  now auto-derives :attr:`name` / :attr:`display_name` /
+  :attr:`description` for any concrete subclass that doesn't declare
+  them.  Derivation rules:
+  - ``name`` strips a family suffix (``DatasetImporter`` /
+    ``LabelsetExporter`` / ``LabelImporter`` / ``LabelsetSource`` /
+    ``SettingsImporter`` / ``SettingsExporter`` / ``SettingsSource`` /
+    ``MediaConverter`` / ``MediaSource`` / or the bare nouns
+    ``Importer`` / ``Exporter`` / ``Source`` / ``Converter``) from the
+    class name and snake-cases the remainder.  ``MyShinyDatasetImporter``
+    → ``"my_shiny"``.
+  - ``display_name`` title-cases the resulting ``name``
+    (``"my_shiny"`` → ``"My Shiny"``).
+  - ``description`` is the first line of the class docstring (or
+    empty when the docstring is missing).
+  Explicit declarations always win.  The framework-level abstract
+  bases listed in
+  :data:`vtscore.plugins._PLUGIN_FAMILY_BASE_NAMES`
+  (``LabelImporter`` / ``DatasetImporter`` / etc.) skip
+  auto-derivation entirely so a derived ``name`` doesn't pollute every
+  concrete subclass via MRO inheritance; third-party intermediates
+  that should behave the same way opt out via
+  ``_is_plugin_family_base = True`` in their own ``__dict__``.
+  :class:`~vtscore.converters.base.MediaConverter.name` (a
+  :func:`property`) is also untouched — the MRO-descriptor check in
+  ``_autoderive_plugin_metadata`` skips any attr already provided by
+  an ancestor as a descriptor or non-empty string.
+
+Coverage in :file:`tests_lib/core/test_plugin_metadata_defaults.py`.
+No in-tree plugins were migrated to rely on the defaults — every
+in-tree plugin already declares ``name``, ``display_name``, and
+``description`` explicitly, and rewriting that to use derivation would
+make the source less self-documenting.  The helper is for
+third-party plugins that don't want to type the boilerplate.
+
+#### Migration impact — external plugins
+
+| Family | Cost |
+|---|---|
+| All plugin families | None required. Explicit declarations still win.  Plugins that didn't declare these attrs but were getting away with it through some other mechanism (typically via an :class:`AttributeError`-tolerant inventory route) now get a sensible auto-default instead. |
+
 ## What shipped
 
+- **Phase E — Candidate #11 (plugin metadata defaults).**
+  :meth:`PluginBase.__init_subclass__` auto-derives :attr:`name`,
+  :attr:`display_name`, and :attr:`description` from the class name +
+  docstring for any concrete subclass that doesn't declare them.
+  Explicit declarations win; framework-level abstract bases and
+  third-party intermediates that set ``_is_plugin_family_base = True``
+  skip derivation so a derived ``name`` doesn't pollute downstream via
+  MRO inheritance.  Candidate #10
+  (``converter_description`` → ``description``) was already done by
+  an earlier rename; no Phase E work was needed there.
+- **Phase D — Candidates #5 + #6 + #8 (quality-of-life helpers).**
+  :func:`vtscore.io.read_server_json` collapses the
+  exists/is_file/read/parse/dict-check ritual into one call;
+  :func:`vtscore.io.atomic_write_text` /
+  :func:`vtscore.io.atomic_write_json` provide a single shared
+  tmp+``fsync``+``os.replace`` writer (with per-writer unique tmp
+  suffixes so concurrent writers don't fight over the same in-flight
+  file).  :func:`vtsearch.threading.spawn` snapshots the caller's
+  ``(user, dataset_ctx, detector_ctx)`` and replays them in a new
+  daemon thread — closing the recurring "background thread forgot to
+  call ``set_thread_user``" footgun for new code.  Migrated in-tree:
+  the two ``server_json_file`` exporters, the ``server_csv_file``
+  exporter, the two ``server_json_file`` importers, the labelset and
+  settings JSON sources, and three ad-hoc thread spawn sites under
+  :mod:`vtsearch.routes`.  External plugins keep working unchanged
+  (helpers are additive; raw ``threading.Thread`` and inline JSON
+  reads still work).
 - **Phase C — Candidates #2 + #9 + #13 (shape unification).**
   :meth:`MediaConverter.convert_normalized` is the new framework
   entry-point: validation + default-fill runs once before
@@ -905,3 +1051,17 @@ which is idempotent.
 - `PickleDatasetImporter.run_chunked_cli` still takes a bare path
   string (its own override, untouched by Phase C). Consolidate with
   the wrapping default in any future chunked-load refactor.
+- `vtscore.exporters.server_json_file._atomic_write_text` is now a
+  shim re-export of :func:`vtscore.io.atomic_write_text`. After a soak
+  period confirms no third-party importer imports it directly, delete
+  the alias.
+- Library-tier background-thread spawn sites
+  (:mod:`vtscore.datasets.load_pipeline`,
+  :mod:`vtscore.embedding.loader`,
+  :mod:`vtscore.media.embedder`) still call
+  ``threading.Thread(target=..., daemon=True).start()`` directly.
+  They aren't candidates for :func:`vtsearch.threading.spawn` as-is
+  (the helper imports from ``vtsearch.*`` and would create a layering
+  inversion); a library-tier ``vtscore.threading.spawn`` that handles
+  only the dataset/detector context would fit the remaining sites.
+  Park until a concrete bug surfaces.
