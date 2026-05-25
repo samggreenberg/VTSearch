@@ -1,7 +1,8 @@
 # Frontend bundle organization
 
-Status: **#1 shipped (all five checkpoints). #2 shipped. #3 shipped.**
-Items #4–#6 are scoped but not started.
+Status: **#1 shipped (all five checkpoints). #2 shipped. #3 shipped.
+#4 shipped. #5 investigation shipped (per-domain split deferred as a
+follow-up).** Item #6 is scoped but not started.
 
 ## What shipped
 
@@ -215,6 +216,45 @@ Items #4–#6 are scoped but not started.
   smaller delegations.  Structural goal — three focused files
   (directive, service, pure factory) instead of one 1200-line
   coordinator — is what shipped.
+- **#4 Lazy-load icon SVGs**: split `IconComponent`'s 42 inline SVGs
+  out of the eager bundle.  Shell now ships only the 5 icons the
+  `DialogHostComponent` needs (`warning`, `x-circle`, `check`,
+  `info`, plus the `file` fallback) plus the dynamic letter glyph;
+  the other 37 SVGs live in `icon-svgs-extended.ts` which the
+  component lazy-loads via dynamic `import()` the first time a
+  non-shell icon is requested.  Each loaded SVG is sanitised and
+  cached on a static `Map` shared across every `IconComponent`
+  instance — sanitisation per icon happens once per process.
+  Rendering switched from a giant `@switch` template with one
+  `<svg>` branch per icon name to `[innerHTML]="svgHtml"` on a
+  wrapper span sized via CSS variables; the inner SVG (with `viewBox
+  0 0 24 24`) scales to the wrapper's `width` / `height`, replacing
+  the previous per-SVG `[attr.width]` / `[attr.height]` bindings.
+  No call-site changes — `<vt-icon [icon]>` / `[type]` / `[size]`
+  inputs are byte-identical.
+  **Bundle effect.** Initial bundle dropped from 537.45 kB → 525.73
+  kB raw (139.53 → 137.54 kB gzip); a new `icon-svgs-extended` lazy
+  chunk weighs 12.09 kB raw / 1.81 kB gzip and is referenced by
+  every lazy chunk that uses non-shell icons (dashboard,
+  label-view, all of the deferred modals).  First render of an
+  extended icon waits one microtask for the dynamic import to
+  resolve — visually invisible in practice because the lazy chunk
+  the icon ships inside already gates on its own download.
+- **#5 API services audit** (investigation only): documented that
+  the four big hand-written API services (`detectors-api`,
+  `datasets-api`, `sorting-api`, `medias-api`) already delegate
+  almost every call to the `ng-openapi-gen` generated `fn/`
+  modules — the "fold-into-generated-client" half of the original
+  plan is effectively done. The remaining direct `this.http.*`
+  calls are all justified (FormData uploads for plugin endpoints
+  whose body shape isn't in the OpenAPI spec, plus one blob
+  download). The real eager-bundle cost identified by the audit is
+  that `activeContextGuard` → `ContextSwitchService` statically
+  imports the full `DetectorsApiService` and `DatasetsApiService`
+  even though `ContextSwitchService` only calls 4 endpoints across
+  the two. A per-domain split of both services is the next move,
+  but is left as a follow-up (see Open follow-ups) — the
+  investigation is what shipped here, not the refactor.
 - **#1 Checkpoint 4**: extracted `<vt-source-picker>` — the importer
   category-tab + sub-tab chrome plus the source-side widgets (demo
   media-type tabs + sortable demo table, server-folder typed-path
@@ -444,48 +484,107 @@ After: `LabelViewComponent` is route-level wiring (data loading +
 inclusion + autopilot coordination), with layout / interaction
 concerns owned by directives and services.
 
-### #4 — Lazy-load icon SVGs
-
-`IconComponent` (663 lines / 20 KB) ships every one of its 42 inline
-SVGs into `main.js` because `DialogHostComponent` imports it. Most
-icons are only used inside deferred modals.
-
-Concrete moves:
-
-- Split the SVG table out into a separate data module
-  `icon-svgs.ts` that exports `{ name: string }`.
-- Partition into "shell icons" (the 5-10 the shell actually needs)
-  vs "modal icons" (the rest). The shell tier imports its set
-  statically; modal icons are looked up via a dynamic import on
-  first use, or partitioned into a separate `IconComponent` variant
-  that the modals import.
-
-After: ~15 KB of SVG markup moves out of the initial bundle into
-the deferred chunks that actually use it.
+### #4 — Lazy-load icon SVGs (shipped — see "What shipped")
 
 ### #5 — Audit API services vs auto-generated client
 
 `detectors-api.service.ts` (435 lines / 21 KB),
-`datasets-api.service.ts` (338 lines / 17 KB),
+`datasets-api.service.ts` (344 lines / 17 KB),
 `vote-state.service.ts` (401 lines / 15 KB),
 `sorting-api.service.ts` (278 lines / 14 KB) are each flat method
 bags directly mirroring REST endpoints. `ng-openapi-gen` runs on
 `prebuild` and ships its own copy of the request/response models and
 operation wrappers under `src/app/generated/api-client/`.
 
-Investigation:
+#### Investigation findings
 
-- Survey overlap: how many endpoints in the four hand-written
-  services already exist in the generated client?
-- For the overlapping ones, can the hand-written wrappers delegate to
-  the generated functions, removing the duplicate model imports?
-- If `detectors-api` is irreducibly big, split per-concern
-  (`detectors-crud`, `detectors-train`, `detectors-find`,
-  `detectors-labels`) so consumers only drag in the slice they need.
+**Overlap with the generated client: already high.** Each hand-written
+API service is already delegating almost every call to the generated
+`fn/` modules:
 
-Outcome: investigation report inline below before any refactor; then
-follow-up either as a fold-into-generated-client task or a per-domain
-split task.
+| Service                         | Generated imports | Direct `this.http.*` calls |
+|---------------------------------|-------------------|----------------------------|
+| `detectors-api.service.ts`      | 87                | 2 (plugin upload only)     |
+| `datasets-api.service.ts`       | 61                | 8 (FormData / blob only)   |
+| `sorting-api.service.ts`        | 49                | 6 (FormData uploads)       |
+| `medias-api.service.ts`         | 11                | 1 (FormData upload)        |
+| `label-importers-api.service.ts`| 5                 | 4 (FormData uploads)       |
+
+The remaining direct `http.*` calls are all justified — they hit
+plugin endpoints whose body shape is plugin-defined (not in the
+OpenAPI spec) or stream a blob download. So the "fold-into-generated-
+client" half of the original plan is **already done**; there is no
+meaningful overlap left to remove. The wrapper services still add
+value: cleaner names (`list()` vs `listDetectors()`), `r.body`
+unwrapping so callers don't see `StrictHttpResponse`, and type
+narrowing where the generated types are loose (e.g. the
+`ImporterInfo` cast on the importer-listing return).
+
+**`vote-state.service.ts` is not in scope.** Despite its size it is
+not an API service — it owns vote state with optimistic updates and
+undo/redo bookkeeping, using `MediasApiService` and
+`SortingApiService` for HTTP. Folding it into the generated client
+isn't applicable.
+
+**The real eager-bundle cost: per-domain splitting is justified.**
+The eager bundle pulls in the full `DetectorsApiService` (435 lines)
+and `DatasetsApiService` (344 lines) via this static chain:
+
+```
+app.routes.ts  →  activeContextGuard  →  ContextSwitchService
+                                          →  DatasetsApiService
+                                          →  DetectorsApiService
+```
+
+But `ContextSwitchService` only calls **4 endpoints** across both
+services:
+
+- `datasetsApi.loadRegistered(id)`
+- `datasetsApi.cancelTask(id)`
+- `detectorsApi.loadDetector(id)`
+- `detectorsApi.cancelDetectorLoadingTask(id)`
+
+The other ~80 methods (find, scoring, CRUD, registry, extractors,
+localizers, pregen processors, labels, …) are only called from lazy
+chunks (dashboard, label-view, find-view, the deferred modals), but
+they all ship in the eager bundle today because Angular cannot
+tree-shake methods off an injectable class.
+
+#### Follow-up: per-domain split (not started, scope-only)
+
+Split `DetectorsApiService` and `DatasetsApiService` along the
+section boundaries already documented in the source:
+
+- `DetectorsApiService` → `DetectorsCrudApiService` (list/create/
+  get/delete/rename/labels/combine/examples) +
+  `DetectorsRegistryApiService` (registry list/load/unload/rename/
+  cancel/autorun/labelset-move/from-labelset) +
+  `DetectorScoringApiService` (auto-detect, extract/auto-extract,
+  localize/auto-localize) + `DetectorFindApiService` (find,
+  find-label, find-check-labels, cancelFind) +
+  `ProcessorsApiService` (autorun-extractors, autorun-localizers,
+  pregen-processors).
+- `DatasetsApiService` → `DatasetsCrudApiService` (importers
+  listings, import, stage, clear, export, detect-media-type) +
+  `DatasetsRegistryApiService` (registry list/load/unload/rename/
+  stats/readers + cancel) + `DatasetsListingsApiService` (clippers,
+  embedders, converters, media-types, demo categories/list) +
+  `DatasetsUiApiService` (dashboard disk/RAM usage, browse-media-
+  files, select-browsed-file).
+
+`ContextSwitchService` then imports only the two registry slices,
+keeping CRUD/scoring/find/listings/UI out of the eager bundle.
+
+The split is mostly mechanical (no logic change, no API change to
+the generated client) but touches **all consumers** of the two
+services — ~10 components and a handful of other services for
+detectors-api, similar fan-out for datasets-api. Defer until after
+#6 lands so the gzip-budget reading isn't disturbed by an unrelated
+refactor.
+
+Outcome: investigation report shipped (this section). No refactor
+required for the "fold-into-generated-client" angle. The per-domain
+split is a scoped follow-up.
 
 ### #6 — Switch budget metric to compressed size
 
@@ -517,12 +616,19 @@ functionality is added.
 
 ## Open follow-ups
 
-- **Roll the warning budget back to 525 kB** (or lower) once a few
-  more checkpoints land. Current initial total is 526.40 kB against a
-  540 kB warning threshold; the previous 525 kB threshold was bumped
-  on `4bd4cc40` and the headroom restored by Checkpoint 1 means the
-  bump is no longer needed. Hold off on the budget edit until #1's
-  remaining checkpoints and #4 are in so we don't ping-pong the
-  threshold across PRs. Requires user approval (CLAUDE.md says budget
-  bumps — including reductions that could break future PRs — are
-  user-decisions).
+- **#5 follow-up: per-domain split of `DetectorsApiService` /
+  `DatasetsApiService`** to keep CRUD / scoring / find / listings /
+  UI out of the eager bundle. Mechanical refactor — no logic change —
+  but touches every consumer (~10 components per service). Defer
+  until #6 lands so a gzip-budget reading isn't disturbed by an
+  unrelated refactor. Scope and rationale documented inline under
+  "#5 — Audit API services vs auto-generated client".
+
+- **Roll the warning budget back to 525 kB** (or lower) now that
+  #1–#4 are in. Current initial total is 525.73 kB raw / 137.54 kB
+  gzip against the 540 kB warning threshold; the previous 525 kB
+  threshold was bumped on `4bd4cc40` and the gains from #1
+  (Checkpoints 1-5) plus #4 mean the bump is no longer needed.
+  Requires user approval (CLAUDE.md says budget bumps — including
+  reductions that could break future PRs — are user-decisions).
+  Combine with #6 (flip to gzip metric) if that lands first.
