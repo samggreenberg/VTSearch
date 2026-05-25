@@ -828,8 +828,21 @@ Cross-section interaction agents:
 - **M22.** `set_thread_user()` cleanup relies on every caller's `finally`; a
   future `ThreadPoolExecutor` reuse would leak user identity across
   requests.
-- **M23.** `setup_logging` re-running can leave duplicate handlers on
-  non-root loggers.
+- ~~**M23.** `setup_logging` re-running can leave duplicate handlers on
+  non-root loggers.~~ — closed as not-a-bug.
+  `vtsearch/logging_config.py:setup_logging` only attaches a
+  `StreamHandler` to the root logger, and clears `root.handlers`
+  before re-attaching, so root cannot accumulate duplicates. For the
+  named libraries (`werkzeug`, `huggingface_hub`,
+  `huggingface_hub.utils._http`) it only calls `.setLevel(...)`; it
+  never calls `.addHandler(...)` on them, so repeated calls cannot
+  leave duplicates on non-root loggers either. Records from those
+  libraries propagate to root and are emitted by the single root
+  handler. `tests/core/test_structured_logging.py::TestSetupLogging::test_idempotent_no_duplicate_handlers`
+  covers the root case. A speculative "defensive" fix that wiped
+  handlers from a hard-coded list of non-root loggers would stomp any
+  handler a test or future feature legitimately attached there, and
+  encode a closed list that would drift from reality silently.
 - **M24.** `CoreConfig.from_settings()` raises if a blueprint's module-level
   code runs before `vtsearch/shim/__init__.py` registers the
   builder.
