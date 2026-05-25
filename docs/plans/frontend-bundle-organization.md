@@ -1,8 +1,9 @@
 # Frontend bundle organization
 
 Status: **#1 shipped (all five checkpoints). #2 shipped. #3 shipped.
-#4 shipped. #5 investigation shipped (per-domain split deferred as a
-follow-up).** Item #6 is scoped but not started.
+#4 shipped. #5 investigation shipped. #5 follow-up (per-domain split)
+shipped. #6 investigated — no native upstream support in Angular 19,
+documented as "wait for upstream" below.**
 
 ## What shipped
 
@@ -255,6 +256,65 @@ follow-up).** Item #6 is scoped but not started.
   the two. A per-domain split of both services is the next move,
   but is left as a follow-up (see Open follow-ups) — the
   investigation is what shipped here, not the refactor.
+- **#5 follow-up — per-domain split of `DetectorsApiService` /
+  `DatasetsApiService`**: replaced the two flat 435 / 344 line services
+  with nine focused slices so the eager bundle no longer drags in
+  CRUD / scoring / find / listings / UI / processors when all
+  `activeContextGuard` → `ContextSwitchService` actually wants is the
+  registry slice. New services:
+  - `DetectorsCrudApiService` — list/create/get/delete/rename/labels/
+    combine/examples/labelPreviewUrl/labelThumbnailUrl.
+  - `DetectorsRegistryApiService` — getRegistry / registerDetector /
+    registerDetectorFromLabelset / deleteFromRegistry / renameInRegistry
+    / moveLabelsetSourceFile / promptMoveOrphanedLabelsetFile /
+    loadDetector / unloadDetector / cancelDetectorLoadingTask /
+    setAutorun.
+  - `DetectorsScoringApiService` — autoDetect / extract / autoExtract /
+    localize / autoLocalize.
+  - `DetectorsFindApiService` — find / findLabel / findCheckLabels /
+    cancelFind.
+  - `ProcessorsApiService` — autorun extractor / localizer CRUD plus
+    pregen-processors list/add.
+  - `DatasetsCrudApiService` — importer listings, import, stage, clear,
+    export, detectMediaType, loadDemo, loadSource, importLocalFolder /
+    importLocalFiles / loadFile / stageFile / runImporter /
+    stageImport / combineDatasets / clearStaging / getAvailableFiles /
+    getImporterFieldOptions.
+  - `DatasetsRegistryApiService` — getStatus / cancelIngest /
+    cancelTask / getRegistry / loadRegistered / unloadRegistered /
+    deleteRegistered / renameRegistered / updateReaders /
+    preloadEmbedder / getDatasetStats.
+  - `DatasetsListingsApiService` — clippers / embedders / converters /
+    media-types / demo categories+list.
+  - `DatasetsUiApiService` — browseMediaFiles / selectBrowsedFile /
+    getDiskUsage / getRamUsage.
+  No backwards-compat shims (per CLAUDE.md): the old combined services
+  and their spec files were deleted, and every consumer
+  (~20 components + 5 state services) was updated to inject only the
+  slices it actually calls. Spec coverage rebuilt as per-slice files
+  matching the original test cases. The structural goal — `activeContextGuard`
+  no longer drags CRUD/Scoring/Find/Processors/Listings/UI into the
+  eager bundle — is what shipped.
+  **Bundle effect.** Initial bundle dropped from **525.73 kB → 508.40
+  kB raw** (137.54 → 135.37 kB gzip), well below the 525 kB threshold
+  that was bumped to 540 kB on `4bd4cc40`. Lazy chunks rebalance
+  accordingly (the bulk of the methods now live in whichever lazy
+  chunk references them), and `dataset-state.service` /
+  `context-switch.service` / `dashboard-loading-tasks.service` (the
+  three eagerly-imported state services) only carry registry slice
+  dependencies now.
+- **#6 — Switch budget metric to compressed size (investigated, no
+  upstream support):** `@angular-devkit/build-angular` 19.x exposes only
+  raw-byte budget types (`initial`, `bundle`, `any`, `anyScript`,
+  `anyComponentStyle`, `anyLazyLoadedScript`). No `*-gzip` /
+  `*-compressed` variant exists in the schema, and the open Angular
+  CLI issue tracking gzipped budgets (issue #13393, "Proposal: Asset
+  Budgets potentially w/ subtypes") has not landed. Without bespoke
+  tooling (a post-build script that gzips the chunks and asserts a
+  ceiling), there is no clean way to express the budget in compressed
+  bytes today. Filing this as **"wait for upstream"** — revisit when
+  Angular adds the schema option, or when the team decides to write a
+  small post-build script. No `angular.json` change in this commit.
 - **#1 Checkpoint 4**: extracted `<vt-source-picker>` — the importer
   category-tab + sub-tab chrome plus the source-side widgets (demo
   media-type tabs + sortable demo table, server-folder typed-path
@@ -550,7 +610,7 @@ chunks (dashboard, label-view, find-view, the deferred modals), but
 they all ship in the eager bundle today because Angular cannot
 tree-shake methods off an injectable class.
 
-#### Follow-up: per-domain split (not started, scope-only)
+#### Follow-up: per-domain split (shipped — see "What shipped")
 
 Split `DetectorsApiService` and `DatasetsApiService` along the
 section boundaries already documented in the source:
@@ -575,60 +635,67 @@ section boundaries already documented in the source:
 `ContextSwitchService` then imports only the two registry slices,
 keeping CRUD/scoring/find/listings/UI out of the eager bundle.
 
-The split is mostly mechanical (no logic change, no API change to
-the generated client) but touches **all consumers** of the two
-services — ~10 components and a handful of other services for
-detectors-api, similar fan-out for datasets-api. Defer until after
-#6 lands so the gzip-budget reading isn't disturbed by an unrelated
-refactor.
+The split was mostly mechanical (no logic change, no API change to
+the generated client) but touched **all consumers** of the two
+services — ~20 components and 5 state services. Old combined
+services + their spec files were deleted (no shims, per CLAUDE.md);
+spec coverage was rebuilt as per-slice files matching the original
+test cases. Bundle effect is documented in the matching "What
+shipped" entry.
 
-Outcome: investigation report shipped (this section). No refactor
-required for the "fold-into-generated-client" angle. The per-domain
-split is a scoped follow-up.
+Outcome: both halves of #5 are now done — the investigation report
+(this section) plus the per-domain split (see "What shipped").
 
-### #6 — Switch budget metric to compressed size
+### #6 — Switch budget metric to compressed size (investigated — wait for upstream)
 
 The current Angular budget (`maximumWarning: 540kB`) is raw,
 uncompressed bytes. This actively punishes readable code: the design
 token sweep replaced literals like `8px` with `var(--space-md)` —
-gzipped size unchanged, raw bytes up. Combined with #1–#4, the budget
+gzipped size unchanged, raw bytes up. Combined with #1–#5, the budget
 metric should be flipped to a compressed size so cleanup work isn't
 fighting the tooling.
 
-Concrete moves:
+**Investigation outcome.** `@angular-devkit/build-angular` 19.x
+supports only raw-byte budget types in the
+`projects.<name>.architect.build.configurations.production.budgets[]`
+schema (`initial`, `bundle`, `any`, `anyScript`, `anyComponentStyle`,
+`anyLazyLoadedScript`). There is no `*-gzip` / `*-compressed` variant.
+The upstream Angular CLI issue tracking gzipped-asset budgets (issue
+#13393, "Proposal: Asset Budgets potentially w/ subtypes") has not
+landed in any released version. So the originally-scoped one-line
+`angular.json` change is **not currently possible** without writing a
+bespoke post-build script that gzips the chunks and asserts a
+ceiling.
 
-- Confirm whether `@angular-devkit/build-angular` exposes a budget
-  type for compressed size in the installed version (Angular 19.x).
-  If not, document this as a "wait for upstream" item.
-- If yes, switch the `maximumWarning` / `maximumError` budget type,
-  re-baseline against the current gzipped initial bundle (~136 kB as
-  noted in `4bd4cc40`), and add comfortable headroom.
-- This is a one-line `angular.json` change once the upstream support
-  is confirmed.
+Filing as **"wait for upstream"** — revisit when Angular adds the
+schema option, or when the team decides bespoke tooling is worth
+maintaining. See the matching "What shipped" entry.
 
 ## What success looks like
 
-After #1–#4 land, the initial bundle should drop comfortably back
-under 500 kB on the same gzip metric we're using now, with the
-biggest god-classes broken into focused sub-components and shared
-widgets. After #6, future bumps will only happen when real new
-functionality is added.
+After #1–#5 land, the initial bundle should drop comfortably back
+under the older 525 kB threshold on the same raw-byte metric the
+budget is using today, with the biggest god-classes broken into
+focused sub-components and shared widgets. Achieved: **508.40 kB
+raw / 135.37 kB gzip** as of the #5 follow-up. The 540 kB budget
+can now be rolled back (pending user approval — see Open
+follow-ups). #6 (gzip budget metric) stays a "wait for upstream"
+item.
 
 ## Open follow-ups
 
-- **#5 follow-up: per-domain split of `DetectorsApiService` /
-  `DatasetsApiService`** to keep CRUD / scoring / find / listings /
-  UI out of the eager bundle. Mechanical refactor — no logic change —
-  but touches every consumer (~10 components per service). Defer
-  until #6 lands so a gzip-budget reading isn't disturbed by an
-  unrelated refactor. Scope and rationale documented inline under
-  "#5 — Audit API services vs auto-generated client".
-
 - **Roll the warning budget back to 525 kB** (or lower) now that
-  #1–#4 are in. Current initial total is 525.73 kB raw / 137.54 kB
-  gzip against the 540 kB warning threshold; the previous 525 kB
+  #1–#5 are in. Current initial total is **508.40 kB raw / 135.37 kB
+  gzip** against the 540 kB warning threshold; the previous 525 kB
   threshold was bumped on `4bd4cc40` and the gains from #1
-  (Checkpoints 1-5) plus #4 mean the bump is no longer needed.
-  Requires user approval (CLAUDE.md says budget bumps — including
-  reductions that could break future PRs — are user-decisions).
-  Combine with #6 (flip to gzip metric) if that lands first.
+  (Checkpoints 1-5), #4, and the #5 follow-up split mean there's
+  comfortable headroom under the older 525 kB threshold — and even
+  some room under a tighter 510 kB threshold. Requires user
+  approval (CLAUDE.md says budget bumps — including reductions
+  that could break future PRs — are user-decisions).
+
+- **#6 — Compressed-size budget (waiting on upstream):** revisit
+  if/when `@angular-devkit/build-angular` adds a gzipped budget type
+  (see angular/angular-cli#13393), or if the team wants to add a
+  small post-build script that gzips chunks and asserts a ceiling.
+  Today the budget metric stays raw bytes.
