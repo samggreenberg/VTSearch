@@ -6,10 +6,9 @@ The file must be a JSON object whose keys are valid settings names.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
+from vtscore.io import read_server_json
 from vtsearch.settings_io.importers.base import SettingsImporter, SettingsImporterField
 
 
@@ -32,18 +31,7 @@ class ServerFileSettingsImporter(SettingsImporter):
 
     def run(self, field_values: dict[str, Any]) -> dict[str, Any]:
         """Read and parse the JSON settings file from the server filesystem."""
-        path = Path(field_values["filepath"])
-        if not path.exists():
-            raise ValueError(f"File not found: {path}")
-        if not path.is_file():
-            raise ValueError(f"Not a file: {path}")
-
-        raw = path.read_bytes()
-        try:
-            data = json.loads(raw.decode("utf-8"))
-        except Exception as exc:
-            raise ValueError(f"Invalid JSON: {exc}") from exc
-
+        data = read_server_json(field_values["filepath"])
         if not isinstance(data, dict):
             raise ValueError("Settings JSON must be a JSON object (dict).")
         return data

@@ -10,29 +10,21 @@ No additional pip packages are required; uses only Python's ``json`` and
 
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import ExporterField, LabelsetExporter
+from vtscore.io import atomic_write_json
 
 _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
 
 
-def _atomic_write_text(path: Path, text: str) -> None:
-    """Write *text* to *path* atomically (tmp file + rename).
-
-    A direct ``write_text`` call leaves the destination truncated if the
-    process is killed mid-write.
-    """
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(text)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+# Re-export under the historical private name so any third-party exporter
+# that imported it directly keeps working.  New code should call
+# :func:`vtscore.io.atomic_write_text` or
+# :func:`vtscore.io.atomic_write_json` instead.
+from vtscore.io import atomic_write_text as _atomic_write_text  # noqa: E402, F401
 
 
 class ServerJsonLabelsetExporter(LabelsetExporter):
@@ -65,14 +57,13 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         filepath = Path(field_values["filepath"])
-        filepath.parent.mkdir(parents=True, exist_ok=True)
 
         # Labels format (from the export modal UI) — filter to selected columns
         if "labels" in results:
             return self._export_labels(results, filepath)
 
         # Autodetect results format (from CLI / fill-from-sort)
-        _atomic_write_text(filepath, json.dumps(results, indent=2))
+        atomic_write_json(filepath, results)
 
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
         return {
@@ -104,7 +95,7 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
         else:
             output = {"labels": labels}
 
-        _atomic_write_text(filepath, json.dumps(output, indent=2))
+        atomic_write_json(filepath, output)
         return {
             "message": f"Saved {len(labels)} label(s) to {filepath.resolve()}.",
             "filepath": str(filepath.resolve()),

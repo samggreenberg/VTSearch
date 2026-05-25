@@ -27,7 +27,6 @@ takes plugin-dependent fields and stays on plain Flask (see
 from __future__ import annotations
 
 import logging
-import threading
 import time
 
 from flask import jsonify
@@ -335,10 +334,8 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
         return None
 
     from vtscore.concurrency.progress import CancelledError, detector_loading_tasks
-    from vtsearch.state import get_active_context
-    from vtscore.state.core import set_thread_dataset_context, set_thread_detector_context
+    from vtscore.state.core import set_thread_detector_context
 
-    _thread_ds_ctx = get_active_context()
     media_type = det_ctx.cached_labelset_media_type or entry.get("media_type", "") or ""
     display = _embedder_display_name(new_embedder)
     base_msg = f"Re-resolving labels for {display}…" if display else "Re-resolving labels…"
@@ -356,7 +353,10 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
     def reembed_task():
         from vtscore.detectors.labelset_training import train_from_labelset
 
-        set_thread_dataset_context(_thread_ds_ctx)
+        # ``spawn`` already replayed the calling thread's active dataset
+        # context; override the detector context to the one we're
+        # re-embedding for (it isn't necessarily the user's active
+        # detector).
         set_thread_detector_context(det_ctx)
         try:
 
@@ -389,11 +389,10 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
             tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
         finally:
             detector_loading_tasks.mark_finished(task_id)
-            set_thread_dataset_context(None)
-            set_thread_detector_context(None)
 
-    thread = threading.Thread(target=reembed_task, daemon=True)
-    thread.start()
+    from vtsearch.threading import spawn
+
+    spawn(reembed_task, name=f"det-reembed-{det_ctx.detector_id[:8]}")
     return task_id
 
 
@@ -490,9 +489,12 @@ def load_detector_route(body: dict):  # noqa: C901
 
     def load_task():
         from vtscore.detectors.registry import add_loaded_detector_id, remove_loaded_detector_id
-        from vtscore.state.core import set_thread_dataset_context, set_thread_detector_context
+        from vtscore.state.core import set_thread_detector_context
 
-        set_thread_dataset_context(_thread_ds_ctx)
+        # ``spawn`` already installed the calling thread's active dataset
+        # context; override the detector context to the one being loaded
+        # (it isn't yet the "active" detector — that happens after this
+        # task succeeds).
         set_thread_detector_context(det_ctx)
 
         try:
@@ -595,8 +597,9 @@ def load_detector_route(body: dict):  # noqa: C901
         finally:
             detector_loading_tasks.mark_finished(task_id)
 
-    thread = threading.Thread(target=load_task, daemon=True)
-    thread.start()
+    from vtsearch.threading import spawn
+
+    spawn(load_task, name=f"det-load-{detector_id[:8]}")
     return {
         "ok": True,
         "message": "Loading started",

@@ -6,11 +6,10 @@ filesystem.  The user supplies a destination path via the file browser.
 
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 from typing import Any
 
+from vtscore.io import atomic_write_json
 from vtsearch.settings_io.exporters.base import SettingsExporter, SettingsExporterField
 
 
@@ -36,17 +35,7 @@ class ServerFileSettingsExporter(SettingsExporter):
     def export(self, settings_data: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         """Write settings to a JSON file on the server."""
         filepath = Path(field_values["filepath"])
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-
-        # Atomic write: tmp + rename. A direct write_text leaves the file
-        # truncated if the process is killed mid-write.
-        tmp = filepath.with_name(filepath.name + ".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(settings_data, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, filepath)
-
+        atomic_write_json(filepath, settings_data)
         return {
             "message": f"Settings saved to {filepath.resolve()}.",
             "filepath": str(filepath.resolve()),

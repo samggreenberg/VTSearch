@@ -7,12 +7,10 @@ filesystem.  The ``filepath`` field supports ``{detector_id}`` and
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from vtscore.config import DATA_DIR
+from vtscore.io import atomic_write_json, read_server_json
 from vtscore.labels.sources.base import LabelsetSource, LabelsetSourceField
 
 if TYPE_CHECKING:
@@ -40,19 +38,10 @@ class ServerFileLabelsetSource(LabelsetSource):
 
     def _do_load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Read labels from a JSON file on the server."""
-        path = Path(field_values["filepath"])
-        if not path.exists():
+        data = read_server_json(field_values["filepath"], missing_ok=True)
+        if data is None:
             return []
-        if not path.is_file():
-            raise ValueError(f"Not a file: {path}")
-
-        raw = path.read_bytes()
-        try:
-            data = json.loads(raw.decode("utf-8"))
-        except Exception as exc:
-            raise ValueError(f"Invalid JSON: {exc}") from exc
-
-        labels = data.get("labels")
+        labels = data.get("labels") if isinstance(data, dict) else None
         if not isinstance(labels, list):
             raise ValueError("JSON must contain a top-level 'labels' list.")
         return [entry for entry in labels if isinstance(entry, dict)]
@@ -61,17 +50,9 @@ class ServerFileLabelsetSource(LabelsetSource):
         """Read labels *and* any ``detector_meta`` block into a :class:`LabelSet`."""
         from vtscore.datasets.labelset import LabelSet as _LabelSet
 
-        path = Path(field_values["filepath"])
-        if not path.exists():
+        data = read_server_json(field_values["filepath"], missing_ok=True)
+        if data is None:
             return _LabelSet()
-        if not path.is_file():
-            raise ValueError(f"Not a file: {path}")
-
-        raw = path.read_bytes()
-        try:
-            data = json.loads(raw.decode("utf-8"))
-        except Exception as exc:
-            raise ValueError(f"Invalid JSON: {exc}") from exc
         if not isinstance(data, dict):
             raise ValueError("JSON must contain an object at the top level.")
         if not isinstance(data.get("labels"), list):
@@ -80,14 +61,7 @@ class ServerFileLabelsetSource(LabelsetSource):
 
     def _do_save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
         """Write labels to a JSON file on the server."""
-        filepath = Path(field_values["filepath"])
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        tmp = filepath.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(json.dumps(labelset.to_dict(), indent=2) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, filepath)
+        atomic_write_json(field_values["filepath"], labelset.to_dict())
 
 
 def resolve_filepath_for(
