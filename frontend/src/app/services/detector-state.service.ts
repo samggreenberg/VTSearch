@@ -1,12 +1,12 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { DetectorsApiService } from './detectors-api.service';
+import { ProcessorsApiService } from './processors-api.service';
 
 /**
  * Shared cache for autorun extractors / localizers loaded from the backend.
  * The DetectorContext (loaded detector state) lives in the detector registry
- * (see DetectorsApiService); this service only caches the autorun
+ * (see DetectorsRegistryApiService); this service only caches the autorun
  * extractor / localizer lists.
  */
 @Injectable({ providedIn: 'root' })
@@ -18,7 +18,7 @@ export class DetectorStateService implements OnDestroy {
   readonly extractors$ = this.extractorsSubject.asObservable();
   readonly localizers$ = this.localizersSubject.asObservable();
 
-  constructor(private detectorsApi: DetectorsApiService) {}
+  constructor(private processorsApi: ProcessorsApiService) {}
 
   ngOnDestroy(): void {
     this.destroy$.next();
@@ -34,14 +34,14 @@ export class DetectorStateService implements OnDestroy {
   }
 
   loadExtractors(): void {
-    this.detectorsApi
+    this.processorsApi
       .getAutorunExtractors()
       .pipe(takeUntil(this.destroy$))
       .subscribe((resp) => this.extractorsSubject.next(resp.extractors));
   }
 
   loadLocalizers(): void {
-    this.detectorsApi
+    this.processorsApi
       .getAutorunLocalizers()
       .pipe(takeUntil(this.destroy$))
       .subscribe((resp) => this.localizersSubject.next(resp.localizers));

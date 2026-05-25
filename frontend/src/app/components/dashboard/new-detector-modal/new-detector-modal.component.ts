@@ -4,8 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
-import { DetectorsApiService } from '../../../services/detectors-api.service';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
+import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
+import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
+import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
+import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
@@ -163,8 +166,11 @@ export class NewDetectorModalComponent implements OnInit {
   labelImporterFileFieldKey: string | null = null;
 
   constructor(
-    private detectorsApi: DetectorsApiService,
-    private datasetsApi: DatasetsApiService,
+    private detectorsRegistryApi: DetectorsRegistryApiService,
+    private datasetsCrudApi: DatasetsCrudApiService,
+    private datasetsListingsApi: DatasetsListingsApiService,
+    private datasetsRegistryApi: DatasetsRegistryApiService,
+    private datasetsUiApi: DatasetsUiApiService,
     private sortingApi: SortingApiService,
     private labelImportersApi: LabelImportersApiService,
     private settingsState: SettingsStateService,
@@ -197,7 +203,7 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.datasetsApi.getMediaTypes().subscribe({
+    this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypeInfos = res.media_types || [];
         this.mediaTypes = this.mediaTypeInfos.map((t) => t.type_id || t.name);
@@ -220,7 +226,7 @@ export class NewDetectorModalComponent implements OnInit {
       this.mediaType = this.defaultMediaType;
       this.mediaTypeLocked = true;
     } else {
-      this.datasetsApi.getRegistry().subscribe({
+      this.datasetsRegistryApi.getRegistry().subscribe({
         next: (res) => {
           const types = new Set(
             (res.datasets || []).map((d) => d['media_type'] as string).filter(Boolean),
@@ -341,7 +347,7 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   private loadMediaImporters(): void {
-    this.datasetsApi.getAllImporters().subscribe({
+    this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
         this.mediaImporters = (res.importers || []).filter(
           (imp) =>
@@ -459,7 +465,7 @@ export class NewDetectorModalComponent implements OnInit {
   private openDemoPicker(): void {
     this.resetDemoPickerState();
     this.demoLoading = true;
-    this.datasetsApi.getDemoList().subscribe({
+    this.datasetsListingsApi.getDemoList().subscribe({
       next: (res) => {
         this.demos = res.datasets || [];
         this.buildDemoTabs();
@@ -547,7 +553,7 @@ export class NewDetectorModalComponent implements OnInit {
     if (!raw) return;
     this.demoFileLoading = true;
     this.demoTypedPathError = '';
-    this.datasetsApi.selectBrowsedFile(this.demoFileBrowseSource, raw).subscribe({
+    this.datasetsUiApi.selectBrowsedFile(this.demoFileBrowseSource, raw).subscribe({
       next: (res) => {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
@@ -593,7 +599,7 @@ export class NewDetectorModalComponent implements OnInit {
     if (!raw) return;
     this.sfFileSelecting = true;
     this.sfBrowseError = '';
-    this.datasetsApi.selectBrowsedFile('server_fs', raw).subscribe({
+    this.datasetsUiApi.selectBrowsedFile('server_fs', raw).subscribe({
       next: (res) => {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
@@ -787,7 +793,7 @@ export class NewDetectorModalComponent implements OnInit {
       ...this.labelImporterValues,
     };
 
-    this.detectorsApi
+    this.detectorsRegistryApi
       .registerDetectorFromLabelset(
         this.selectedLabelImporter.name,
         params,
@@ -802,7 +808,7 @@ export class NewDetectorModalComponent implements OnInit {
             this.error = 'Server did not return a detector id';
             return;
           }
-          this.detectorsApi.loadDetector(newId).subscribe({
+          this.detectorsRegistryApi.loadDetector(newId).subscribe({
             next: () => {
               this.submitting = false;
               this.created.emit(newId);
@@ -855,7 +861,7 @@ export class NewDetectorModalComponent implements OnInit {
     const mediaExample = this.exampleType === 'media' ? this.exampleValue : '';
     const examplesPayload = [{ type: this.exampleType!, value: this.exampleValue }];
 
-    this.detectorsApi
+    this.detectorsRegistryApi
       .registerDetector({
         name: trimmedName,
         media_type: this.mediaType,

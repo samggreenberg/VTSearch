@@ -7,8 +7,8 @@ import { BehaviorSubject, Subject } from 'rxjs';
 import { ActiveContextService } from './active-context.service';
 import { ContextSwitchService } from './context-switch.service';
 import { DatasetStateService } from './dataset-state.service';
-import { DatasetsApiService } from './datasets-api.service';
-import { DetectorsApiService } from './detectors-api.service';
+import { DatasetsRegistryApiService } from './datasets-registry-api.service';
+import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 import { ProgressEventsService } from './progress-events.service';
 import {
   DatasetRegistryEntry,
@@ -99,7 +99,7 @@ describe('ContextSwitchService — H25 active/intent layering', () => {
       },
     };
 
-    const datasetsApiStub = {
+    const datasetsRegistryApiStub = {
       loadRegistered: (id: string): Subject<unknown> => {
         const s = new Subject<unknown>();
         loadRegisteredSubjects.set(id, s);
@@ -108,7 +108,7 @@ describe('ContextSwitchService — H25 active/intent layering', () => {
       cancelTask: (_taskId: string): Subject<unknown> => new Subject<unknown>(),
     };
 
-    const detectorsApiStub = {
+    const detectorsRegistryApiStub = {
       loadDetector: (id: string): Subject<unknown> => {
         const s = new Subject<unknown>();
         loadDetectorSubjects.set(id, s);
@@ -135,8 +135,8 @@ describe('ContextSwitchService — H25 active/intent layering', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: DatasetStateService, useValue: datasetStateStub },
-        { provide: DatasetsApiService, useValue: datasetsApiStub },
-        { provide: DetectorsApiService, useValue: detectorsApiStub },
+        { provide: DatasetsRegistryApiService, useValue: datasetsRegistryApiStub },
+        { provide: DetectorsRegistryApiService, useValue: detectorsRegistryApiStub },
         { provide: ProgressEventsService, useValue: progressEventsStub },
       ],
     });

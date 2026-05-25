@@ -3,8 +3,11 @@ import { CommonModule } from '@angular/common';
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, filter, switchMap, take, takeUntil } from 'rxjs/operators';
-import { DatasetsApiService } from '../../services/datasets-api.service';
-import { DetectorsApiService } from '../../services/detectors-api.service';
+import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
+import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
+import { DatasetsUiApiService } from '../../services/datasets-ui-api.service';
+import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
+import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
@@ -139,8 +142,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   constructor(
     private router: Router,
-    private datasetsApi: DatasetsApiService,
-    private detectorsApi: DetectorsApiService,
+    private datasetsCrudApi: DatasetsCrudApiService,
+    private datasetsRegistryApi: DatasetsRegistryApiService,
+    private datasetsUiApi: DatasetsUiApiService,
+    private detectorsFindApi: DetectorsFindApiService,
+    private detectorsRegistryApi: DetectorsRegistryApiService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
     public datasetState: DatasetStateService,
@@ -213,7 +219,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.refresh();
     this.startDiskUsagePolling();
     this.startRamUsagePolling();
-    this.datasetsApi.getAllImporters().subscribe({
+    this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
         this.visibleImporters = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
       },
@@ -299,7 +305,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     timer(0, 10000)
       .pipe(
         takeUntil(this.destroy$),
-        switchMap(() => this.datasetsApi.getDiskUsage().pipe(catchError(() => EMPTY))),
+        switchMap(() => this.datasetsUiApi.getDiskUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
         this.diskUsage = { total: usage.total, used: usage.used, free: usage.free };
@@ -310,7 +316,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     timer(0, 10000)
       .pipe(
         takeUntil(this.destroy$),
-        switchMap(() => this.datasetsApi.getRamUsage().pipe(catchError(() => EMPTY))),
+        switchMap(() => this.datasetsUiApi.getRamUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
         this.ramUsage = { total: usage.total, used: usage.used, free: usage.free };
@@ -427,7 +433,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     for (const id of this.selectedDatasetIds) {
       if (this.preloadedDatasetIds.has(id)) continue;
       this.preloadedDatasetIds.add(id);
-      this.datasetsApi
+      this.datasetsRegistryApi
         .preloadEmbedder(id)
         .pipe(catchError(() => EMPTY))
         .subscribe();
@@ -516,7 +522,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     if (!ok) return;
     for (const dataset of targets) {
-      this.datasetsApi.deleteRegistered(dataset.id).subscribe({
+      this.datasetsRegistryApi.deleteRegistered(dataset.id).subscribe({
         next: () => {
           this.selectedDatasetIds.delete(dataset.id);
           this.datasetState.refresh();
@@ -603,7 +609,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     if (!ok) return;
     for (const model of targets) {
-      this.detectorsApi.deleteFromRegistry(model.id).subscribe({
+      this.detectorsRegistryApi.deleteFromRegistry(model.id).subscribe({
         next: () => {
           this.selectedDetectorIds.delete(model.id);
           this.datasetState.refresh();
@@ -669,7 +675,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Dataset actions ---
 
   renameDataset(dataset: DatasetRegistryEntry, newName: string): void {
-    this.datasetsApi.renameRegistered(dataset.id, newName).subscribe({
+    this.datasetsRegistryApi.renameRegistered(dataset.id, newName).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
@@ -682,7 +688,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     );
     this.deletingDatasetId = '';
     if (!ok) return;
-    this.datasetsApi.deleteRegistered(dataset.id).subscribe({
+    this.datasetsRegistryApi.deleteRegistered(dataset.id).subscribe({
       next: () => {
         this.selectedDatasetIds.delete(dataset.id);
         this.datasetState.refresh();
@@ -701,7 +707,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .split(',')
       .map((s: string) => s.trim())
       .filter((s: string) => s.length > 0);
-    this.datasetsApi.updateReaders(dataset.id, readers).subscribe({
+    this.datasetsRegistryApi.updateReaders(dataset.id, readers).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
@@ -713,10 +719,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Model actions ---
 
   renameDetector(model: DetectorRegistryEntry, newName: string): void {
-    this.detectorsApi.renameInRegistry(model.id, newName).subscribe({
+    this.detectorsRegistryApi.renameInRegistry(model.id, newName).subscribe({
       next: response => {
         this.datasetState.refresh();
-        this.detectorsApi.promptMoveOrphanedLabelsetFile(
+        this.detectorsRegistryApi.promptMoveOrphanedLabelsetFile(
           this.dialog,
           model.id,
           response.pending_labelset_move,
@@ -733,7 +739,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     );
     this.deletingDetectorId = '';
     if (!ok) return;
-    this.detectorsApi.deleteFromRegistry(model.id).subscribe({
+    this.detectorsRegistryApi.deleteFromRegistry(model.id).subscribe({
       next: () => {
         this.selectedDetectorIds.delete(model.id);
         this.datasetState.refresh();
@@ -745,25 +751,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   loadDataset(dataset: DatasetRegistryEntry): void {
-    this.datasetsApi.loadRegistered(dataset.id).subscribe({
+    this.datasetsRegistryApi.loadRegistered(dataset.id).subscribe({
       next: (response) => this.loadingTasksSvc.startProgressPolling(response.task_id),
     });
   }
 
   loadDetector(model: DetectorRegistryEntry): void {
-    this.detectorsApi.loadDetector(model.id).subscribe({
+    this.detectorsRegistryApi.loadDetector(model.id).subscribe({
       next: () => this.loadingTasksSvc.startDetectorProgressPolling(),
     });
   }
 
   unloadDetector(model: DetectorRegistryEntry): void {
-    this.detectorsApi.unloadDetector(model.id).subscribe({
+    this.detectorsRegistryApi.unloadDetector(model.id).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
 
   toggleAutorun(model: DetectorRegistryEntry, autorun: boolean): void {
-    this.detectorsApi.setAutorun(model.id, autorun).subscribe({
+    this.detectorsRegistryApi.setAutorun(model.id, autorun).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }
@@ -857,7 +863,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (extras.clipper) params['clipper'] = extras.clipper;
     const userName = (extras.dataset_name || '').trim();
     if (userName) params['dataset_name'] = userName;
-    this.datasetsApi.loadDemo(demo.name, params).subscribe({
+    this.datasetsCrudApi.loadDemo(demo.name, params).subscribe({
       next: (response) => {
         this.loadingTasksSvc.startProgressPolling(response.task_id);
       },
@@ -894,7 +900,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Cancel ---
 
   onCancelIngest(): void {
-    this.datasetsApi.cancelIngest().subscribe();
+    this.datasetsRegistryApi.cancelIngest().subscribe();
   }
 
   // --- Loading-task helpers (used by the orphan-task row template) ---
@@ -1062,7 +1068,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.progressIndeterminate = true;
 
     // Pre-flight: check if any labels fail to resolve
-    this.detectorsApi.findCheckLabels(findParams).subscribe({
+    this.detectorsFindApi.findCheckLabels(findParams).subscribe({
       next: async (checkResult) => {
         const warnings = checkResult.warnings || [];
         if (warnings.length > 0) {
@@ -1118,7 +1124,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetState.setProgressMessage('Running Find...');
     this.startFindProgressPolling();
 
-    this.detectorsApi.find(findParams).subscribe({
+    this.detectorsFindApi.find(findParams).subscribe({
       next: (response: any) => {
         this.stopFindProgressPolling();
         this.datasetState.setLoading(false);

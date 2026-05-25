@@ -2,7 +2,7 @@ import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, S
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { DetectorsApiService } from '../../services/detectors-api.service';
+import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import type { DetectorLabelView } from '../../generated/api-client/models/detector-label-view';
 import { Media } from '../../models/api.models';
 import { VoteStateService } from '../../services/vote-state.service';
@@ -75,7 +75,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   private destroy$ = new Subject<void>();
 
   constructor(
-    private detectorsApi: DetectorsApiService,
+    private detectorsRegistryApi: DetectorsRegistryApiService,
     public voteState: VoteStateService,
     public labelsetState: LabelsetStateService,
     private settingsState: SettingsStateService,
@@ -163,12 +163,12 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   onDetectorRenamed(newName: string): void {
     if (!this.trainMode?.model?.registry_id) return;
     const registryId = this.trainMode.model.registry_id;
-    this.detectorsApi.renameInRegistry(registryId, newName).subscribe({
+    this.detectorsRegistryApi.renameInRegistry(registryId, newName).subscribe({
       next: response => {
         if (this.trainMode?.model) {
           this.trainMode.model.name = newName;
         }
-        this.detectorsApi.promptMoveOrphanedLabelsetFile(
+        this.detectorsRegistryApi.promptMoveOrphanedLabelsetFile(
           this.dialog,
           registryId,
           response.pending_labelset_move,

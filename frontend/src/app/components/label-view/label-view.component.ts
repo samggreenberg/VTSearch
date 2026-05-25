@@ -16,9 +16,10 @@ import {
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ToastService } from '../../services/toast.service';
 import { SortingApiService } from '../../services/sorting-api.service';
-import { DetectorsApiService } from '../../services/detectors-api.service';
+import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
+import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
-import { DatasetsApiService } from '../../services/datasets-api.service';
+import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
@@ -116,9 +117,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private sortingApi: SortingApiService,
-    private detectorsApi: DetectorsApiService,
+    private detectorsFindApi: DetectorsFindApiService,
+    private detectorsRegistryApi: DetectorsRegistryApiService,
     private mediasApi: MediasApiService,
-    private datasetsApi: DatasetsApiService,
+    private datasetsRegistryApi: DatasetsRegistryApiService,
     private labelSession: LabelSessionService,
     public mediaState: MediaStateService,
     public voteState: VoteStateService,
@@ -141,7 +143,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.loadVotes();
     this.loadSettings();
     this.startStatusPolling();
-    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
 
@@ -235,7 +237,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.clear();
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
-    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
 
@@ -479,7 +481,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
     if (this.sortState.sortMode === 'load') {
-      this.detectorsApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
+      this.detectorsFindApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
     }
   }
 
@@ -515,7 +517,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.startScoringProgressPoll();
 
-    this.detectorsApi.findLabel({ detector_id: modelId }).pipe(takeUntil(this.destroy$)).subscribe({
+    this.detectorsFindApi.findLabel({ detector_id: modelId }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (raw) => {
         const response = raw as {
           results: { id: number; score: number; best_region?: number[] }[];
@@ -743,7 +745,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.trainableModelName = null;
       return;
     }
-    this.detectorsApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
+    this.detectorsRegistryApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
       next: (resp) => {
         const entry = resp.detectors.find((m: DetectorRegistryEntry) => m.id === modelId);
         this.trainableModelName = entry?.name || null;

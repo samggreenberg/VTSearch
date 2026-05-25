@@ -19,7 +19,7 @@ import {
   MediaTypeInfo,
   SourceSpec,
 } from '../../../../models/api.models';
-import { DatasetsApiService } from '../../../../services/datasets-api.service';
+import { DatasetsListingsApiService } from '../../../../services/datasets-listings-api.service';
 import { SourceSpecsPickerComponent } from '../../../dashboard/dataset-importer-modal/source-specs-picker/source-specs-picker.component';
 import {
   ClipperChooserComponent,
@@ -67,7 +67,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
   convertersByType: Record<string, ConverterInfo[]> = {};
   loadingByType: Record<string, boolean> = {};
 
-  constructor(private datasetsApi: DatasetsApiService) {}
+  constructor(private datasetsListingsApi: DatasetsListingsApiService) {}
 
   ngOnInit(): void {
     this.pickInitialTab();
@@ -123,7 +123,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
       if (--pending === 0) this.loadingByType[typeId] = false;
     };
     if (this.embeddersByType[typeId] === undefined) {
-      this.datasetsApi.getEmbedders(typeId).subscribe({
+      this.datasetsListingsApi.getEmbedders(typeId).subscribe({
         next: (e) => {
           this.embeddersByType[typeId] = e;
           done();
@@ -137,7 +137,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
       done();
     }
     if (this.clippersByType[typeId] === undefined) {
-      this.datasetsApi.getClippers(typeId).subscribe({
+      this.datasetsListingsApi.getClippers(typeId).subscribe({
         next: (c) => {
           this.clippersByType[typeId] = c;
           done();
@@ -151,7 +151,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
       done();
     }
     if (this.convertersByType[typeId] === undefined) {
-      this.datasetsApi.getConverters(typeId).subscribe({
+      this.datasetsListingsApi.getConverters(typeId).subscribe({
         next: (c) => {
           this.convertersByType[typeId] = c;
           done();

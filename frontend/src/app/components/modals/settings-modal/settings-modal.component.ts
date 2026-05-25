@@ -11,7 +11,7 @@ import { ImportDefaultsSettingsComponent } from './import-defaults/import-defaul
 import { ImportDefaultsByMediaType } from '../../../models/api.models';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import type { AppSettings } from '../../../generated/api-client/models/app-settings';
 import { EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
@@ -49,7 +49,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   constructor(
     private settingsApi: SettingsApiService,
     private settingsState: SettingsStateService,
-    private datasetsApi: DatasetsApiService,
+    private datasetsListingsApi: DatasetsListingsApiService,
     private themeService: ThemeService,
     private dialog: VtDialogService,
   ) {}
@@ -63,8 +63,8 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     forkJoin({
       settings: this.settingsApi.getSettings(),
-      mediaTypes: this.datasetsApi.getMediaTypes(),
-      embedders: this.datasetsApi.getEmbedders(),
+      mediaTypes: this.datasetsListingsApi.getMediaTypes(),
+      embedders: this.datasetsListingsApi.getEmbedders(),
       version: this.settingsApi.getVersion(),
     })
       .pipe(takeUntil(this.destroy$))

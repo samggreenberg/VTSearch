@@ -4,8 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
-import { DetectorsApiService } from '../../../services/detectors-api.service';
+import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
+import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
+import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
+import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
 import { DetectorRegistryEntry, ImporterInfo } from '../../../models/api.models';
 import type { ServerMediaFileEntry } from '../../../generated/api-client/models/server-media-file-entry';
 import {
@@ -64,8 +66,10 @@ export class LoadSortModalComponent implements OnInit {
 
   constructor(
     private sortingApi: SortingApiService,
-    private datasetsApi: DatasetsApiService,
-    private detectorsApi: DetectorsApiService,
+    private datasetsCrudApi: DatasetsCrudApiService,
+    private datasetsListingsApi: DatasetsListingsApiService,
+    private datasetsUiApi: DatasetsUiApiService,
+    private detectorsRegistryApi: DetectorsRegistryApiService,
   ) {}
 
   ngOnInit(): void {
@@ -74,7 +78,7 @@ export class LoadSortModalComponent implements OnInit {
         this.serverMediaFiles = res.files || [];
       },
     });
-    this.detectorsApi.getRegistry().subscribe({
+    this.detectorsRegistryApi.getRegistry().subscribe({
       next: (res) => {
         // Show detectors that have at least one training label.
         this.registryModels = (res.detectors || []).filter(
@@ -170,7 +174,7 @@ export class LoadSortModalComponent implements OnInit {
 
   private loadMediaSources(): void {
     this.browseLoading = true;
-    this.datasetsApi.getAllImporters().subscribe({
+    this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
         this.mediaSources = (res.importers || []).filter(
           (imp) =>
@@ -192,7 +196,7 @@ export class LoadSortModalComponent implements OnInit {
     this.browseItems = [];
 
     if (source.name === 'demo') {
-      this.datasetsApi.getDemoList().subscribe({
+      this.datasetsListingsApi.getDemoList().subscribe({
         next: (res) => {
           this.browseItems = (res.datasets || []).map((d) => ({
             key: d.name,
@@ -261,7 +265,7 @@ export class LoadSortModalComponent implements OnInit {
     if (!raw) return;
     this.typedPathError = '';
     this.fileLoading = true;
-    this.datasetsApi.selectBrowsedFile(this.browseSource, raw).subscribe({
+    this.datasetsUiApi.selectBrowsedFile(this.browseSource, raw).subscribe({
       next: (res) => {
         this.fileLoading = false;
         this.showMediaPicker = false;

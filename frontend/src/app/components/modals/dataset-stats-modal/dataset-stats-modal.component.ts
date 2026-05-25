@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
 import type { DatasetRegistryStatsResponse } from '../../../generated/api-client/models/dataset-registry-stats-response';
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
 
@@ -21,10 +21,10 @@ export class DatasetStatsModalComponent implements OnInit {
   error = '';
   stats: DatasetRegistryStatsResponse | null = null;
 
-  constructor(private datasetsApi: DatasetsApiService) {}
+  constructor(private datasetsRegistryApi: DatasetsRegistryApiService) {}
 
   ngOnInit(): void {
-    this.datasetsApi.getDatasetStats(this.datasetId).subscribe({
+    this.datasetsRegistryApi.getDatasetStats(this.datasetId).subscribe({
       next: (data) => {
         this.stats = data;
         this.loading = false;
