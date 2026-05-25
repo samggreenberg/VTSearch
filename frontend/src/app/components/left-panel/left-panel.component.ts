@@ -10,7 +10,7 @@ import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.compo
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { Media, MediaTypeInfo, EmbedderInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
-import { DatasetsApiService } from '../../services/datasets-api.service';
+import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 
 export type { SortMode, SelectMode, SortedItem };
@@ -100,16 +100,16 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   private currentTypeId = '';
   private embedderInfos: EmbedderInfo[] = [];
 
-  constructor(private datasetsApi: DatasetsApiService) {}
+  constructor(private datasetsListingsApi: DatasetsListingsApiService) {}
 
   ngOnInit(): void {
-    this.datasetsApi.getMediaTypes().subscribe({
+    this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (resp) => {
         this.mediaTypeInfos = resp.media_types;
         this.updateMediaTypeName();
       },
     });
-    this.datasetsApi.getEmbedders().subscribe({
+    this.datasetsListingsApi.getEmbedders().subscribe({
       next: (embedders) => {
         this.embedderInfos = embedders;
         this.updateTextSortAvailable();

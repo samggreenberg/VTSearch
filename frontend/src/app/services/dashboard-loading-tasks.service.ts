@@ -4,8 +4,8 @@ import { filter, takeUntil } from 'rxjs/operators';
 import { LoadingTask } from '../models/api.models';
 import { AchievementsService } from './achievements.service';
 import { DatasetStateService } from './dataset-state.service';
-import { DatasetsApiService } from './datasets-api.service';
-import { DetectorsApiService } from './detectors-api.service';
+import { DatasetsRegistryApiService } from './datasets-registry-api.service';
+import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 import { ProgressEventsService } from './progress-events.service';
 
 /**
@@ -48,8 +48,8 @@ export class DashboardLoadingTasksService {
 
   constructor(
     private progressEvents: ProgressEventsService,
-    private datasetsApi: DatasetsApiService,
-    private detectorsApi: DetectorsApiService,
+    private datasetsRegistryApi: DatasetsRegistryApiService,
+    private detectorsRegistryApi: DetectorsRegistryApiService,
     private datasetState: DatasetStateService,
     private achievements: AchievementsService,
   ) {
@@ -210,7 +210,7 @@ export class DashboardLoadingTasksService {
   }
 
   cancelLoadingTask(taskId: string): void {
-    this.datasetsApi.cancelTask(taskId).subscribe();
+    this.datasetsRegistryApi.cancelTask(taskId).subscribe();
   }
 
   dismissLoadingTask(taskId: string): void {
@@ -218,7 +218,7 @@ export class DashboardLoadingTasksService {
   }
 
   cancelDetectorLoadingTask(taskId: string): void {
-    this.detectorsApi.cancelDetectorLoadingTask(taskId).subscribe();
+    this.detectorsRegistryApi.cancelDetectorLoadingTask(taskId).subscribe();
   }
 
   dismissDetectorLoadingTask(taskId: string): void {

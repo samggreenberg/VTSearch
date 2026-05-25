@@ -7,7 +7,8 @@ import { ImportAdvancedComponent } from './import-advanced/import-advanced.compo
 import { ImportConfigComponent } from './import-config/import-config.component';
 import { SourcePickerComponent } from './source-picker/source-picker.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
+import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { ToastService } from '../../../services/toast.service';
 import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec, ImportDefaultsForMediaType } from '../../../models/api.models';
@@ -177,7 +178,8 @@ export class DatasetImporterModalComponent implements OnInit {
   clipperChooserClippers: ClipperInfo[] = [];
 
   constructor(
-    private datasetsApi: DatasetsApiService,
+    private datasetsCrudApi: DatasetsCrudApiService,
+    private datasetsListingsApi: DatasetsListingsApiService,
     private settingsState: SettingsStateService,
     private toastService: ToastService,
   ) {}
@@ -418,7 +420,7 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.datasetsApi.getAllImporters().subscribe({
+    this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
         this.importers = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
         this.declaredTabs = res.tabs || [];
@@ -427,12 +429,12 @@ export class DatasetImporterModalComponent implements OnInit {
         }
       },
     });
-    this.datasetsApi.getEmbedders().subscribe({
+    this.datasetsListingsApi.getEmbedders().subscribe({
       next: (embedders) => {
         this.allEmbedders = embedders || [];
       },
     });
-    this.datasetsApi.getMediaTypes().subscribe({
+    this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypes = res.media_types || [];
       },
@@ -778,7 +780,7 @@ export class DatasetImporterModalComponent implements OnInit {
     const key = field.key;
     this.dynamicFieldLoading[key] = true;
     this.dynamicFieldError[key] = '';
-    this.datasetsApi
+    this.datasetsCrudApi
       .getImporterFieldOptions(importer.name, key, { ...this.formValues })
       .subscribe({
         next: (res) => {
@@ -818,7 +820,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedClipper = '';
       return;
     }
-    this.datasetsApi.getClippers(mediaType).subscribe({
+    this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.availableClippers = clippers;
         const chosen = this.chooseClipperForType(clippers, mediaType);
@@ -855,7 +857,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedEmbedder = '';
       return;
     }
-    this.datasetsApi.getEmbedders(mediaType).subscribe({
+    this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.availableEmbedders = embedders;
         this.selectedEmbedder = this.chooseEmbedderForType(embedders, mediaType);
@@ -873,7 +875,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.demoDatasetNameDirty = false;
     this.selectedDemo = null;
 
-    this.datasetsApi.getMediaTypes().subscribe({
+    this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypes = res.media_types || [];
         this.fetchDemos();
@@ -885,7 +887,7 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   private fetchDemos(embedder?: string): void {
-    this.datasetsApi.getDemoList(embedder).subscribe({
+    this.datasetsListingsApi.getDemoList(embedder).subscribe({
       next: (demoRes) => {
         this.demos = demoRes.datasets || [];
         this.buildDemoTabs();
@@ -937,7 +939,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedDemoClipper = '';
       return;
     }
-    this.datasetsApi.getEmbedders(mediaType).subscribe({
+    this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.demoEmbedders = embedders;
         this.selectedDemoEmbedder = this.pickInitialEmbedder(embedders, mediaType);
@@ -950,7 +952,7 @@ export class DatasetImporterModalComponent implements OnInit {
         }
       },
     });
-    this.datasetsApi.getClippers(mediaType).subscribe({
+    this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.demoClippers = clippers;
         this.selectedDemoClipper = clippers.length > 0 ? clippers[0].name : '';
@@ -1013,7 +1015,7 @@ export class DatasetImporterModalComponent implements OnInit {
    * so the backend can authoritatively determine each demo's status.
    */
   private refetchDemoStatuses(embedder: string, clipper?: string): void {
-    this.datasetsApi.getDemoList(embedder, clipper).subscribe({
+    this.datasetsListingsApi.getDemoList(embedder, clipper).subscribe({
       next: (demoRes) => {
         this.demos = demoRes.datasets || [];
       },
@@ -1342,7 +1344,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.lfSelectedEmbedder = '';
       return;
     }
-    this.datasetsApi.getEmbedders(mediaType).subscribe({
+    this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.lfEmbedders = embedders;
         this.lfSelectedEmbedder = this.chooseEmbedderForType(embedders, mediaType);
@@ -1356,7 +1358,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.lfSelectedClipper = '';
       return;
     }
-    this.datasetsApi.getClippers(mediaType).subscribe({
+    this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.lfClippers = clippers;
         const chosen = this.chooseClipperForType(clippers, mediaType);
@@ -1445,7 +1447,7 @@ export class DatasetImporterModalComponent implements OnInit {
       formData.append('source_specs', JSON.stringify(this.lfSourceSpecs));
     }
 
-    this.datasetsApi.importLocalFolder(formData).subscribe({
+    this.datasetsCrudApi.importLocalFolder(formData).subscribe({
       next: () => {
         this.lfSubmitting = false;
         this.maybeOfferSaveImportDefaults('lf');
@@ -1471,7 +1473,7 @@ export class DatasetImporterModalComponent implements OnInit {
       formData.append('source_specs', JSON.stringify(this.lfSourceSpecs));
     }
 
-    this.datasetsApi.importLocalFiles(formData).subscribe({
+    this.datasetsCrudApi.importLocalFiles(formData).subscribe({
       next: () => {
         this.lfSubmitting = false;
         this.maybeOfferSaveImportDefaults('lf');
@@ -1580,7 +1582,7 @@ export class DatasetImporterModalComponent implements OnInit {
    *  and apply it to the sf-* form (output media-type + source specs). */
   private sfRunDetection(): void {
     const token = ++this.sfDetectionToken;
-    this.datasetsApi.detectMediaType('server_fs', this.sfBrowsePath, this.sfRecursive).subscribe({
+    this.datasetsCrudApi.detectMediaType('server_fs', this.sfBrowsePath, this.sfRecursive).subscribe({
       next: (res) => {
         if (token !== this.sfDetectionToken) return;
         this.sfDetection = res;
@@ -1846,7 +1848,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.sfSelectedEmbedder = '';
       return;
     }
-    this.datasetsApi.getEmbedders(mediaType).subscribe({
+    this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.sfEmbedders = embedders;
         this.sfSelectedEmbedder = this.chooseEmbedderForType(embedders, mediaType);
@@ -1860,7 +1862,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.sfSelectedClipper = '';
       return;
     }
-    this.datasetsApi.getClippers(mediaType).subscribe({
+    this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.sfClippers = clippers;
         const chosen = this.chooseClipperForType(clippers, mediaType);
@@ -1974,7 +1976,7 @@ export class DatasetImporterModalComponent implements OnInit {
       params['source_specs'] = this.sfSourceSpecs;
     }
 
-    this.datasetsApi.runImporter('server_folder', params).subscribe({
+    this.datasetsCrudApi.runImporter('server_folder', params).subscribe({
       next: () => {
         this.sfSubmitting = false;
         this.maybeOfferSaveImportDefaults('sf');
@@ -2019,7 +2021,7 @@ export class DatasetImporterModalComponent implements OnInit {
     // If there's a file field, use loadFile; otherwise runImporter
     const fileField = this.selectedImporter.fields?.find((f) => f.field_type === 'file');
     if (fileField && this.selectedFile) {
-      this.datasetsApi.loadFile(this.selectedFile).subscribe({
+      this.datasetsCrudApi.loadFile(this.selectedFile).subscribe({
         next: () => {
           this.submitting = false;
           this.maybeOfferSaveImportDefaults('form');
@@ -2031,7 +2033,7 @@ export class DatasetImporterModalComponent implements OnInit {
         },
       });
     } else {
-      this.datasetsApi.runImporter(this.selectedImporter.name, submitValues).subscribe({
+      this.datasetsCrudApi.runImporter(this.selectedImporter.name, submitValues).subscribe({
         next: () => {
           this.submitting = false;
           this.maybeOfferSaveImportDefaults('form');

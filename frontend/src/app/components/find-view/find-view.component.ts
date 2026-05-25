@@ -6,8 +6,8 @@ import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { MediasApiService } from '../../services/medias-api.service';
-import { DetectorsApiService } from '../../services/detectors-api.service';
-import { DatasetsApiService } from '../../services/datasets-api.service';
+import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
+import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { MediaStateService } from '../../services/media-state.service';
@@ -59,8 +59,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     private mediasApi: MediasApiService,
-    private detectorsApi: DetectorsApiService,
-    private datasetsApi: DatasetsApiService,
+    private detectorsFindApi: DetectorsFindApiService,
+    private datasetsRegistryApi: DatasetsRegistryApiService,
     private ngZone: NgZone,
     private activeContext: ActiveContextService,
     private datasetState: DatasetStateService,
@@ -77,7 +77,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     this.loadSettings();
-    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
 
@@ -124,7 +124,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.clear();
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
-    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
     this.runFindLabel();
@@ -181,7 +181,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const modelName =
       this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
-    this.detectorsApi.findLabel({ detector_id: modelId })
+    this.detectorsFindApi.findLabel({ detector_id: modelId })
       .pipe(
         takeUntil(this.destroy$),
         finalize(() => {
@@ -394,7 +394,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  a cancelled status via its progress channel and the finalize() in
    *  runFindLabel() takes care of clearing sortBusy. */
   onSortCancel(): void {
-    this.detectorsApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
+    this.detectorsFindApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
   }
 
   // --- Panel percentage helpers ---

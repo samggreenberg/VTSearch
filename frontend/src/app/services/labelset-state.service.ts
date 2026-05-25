@@ -3,7 +3,7 @@ import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
 import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
 import type { DetectorLabelView } from '../generated/api-client/models/detector-label-view';
 import type { DetectorLabelsDetailResponse } from '../generated/api-client/models/detector-labels-detail-response';
-import { DetectorsApiService } from './detectors-api.service';
+import { DetectorsCrudApiService } from './detectors-crud-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class LabelsetStateService implements OnDestroy {
@@ -19,7 +19,7 @@ export class LabelsetStateService implements OnDestroy {
   readonly bad$ = this.badSubject.asObservable();
   readonly mediaType$ = this.mediaTypeSubject.asObservable();
 
-  constructor(private api: DetectorsApiService) {}
+  constructor(private api: DetectorsCrudApiService) {}
 
   ngOnDestroy(): void {
     this.stopPolling();

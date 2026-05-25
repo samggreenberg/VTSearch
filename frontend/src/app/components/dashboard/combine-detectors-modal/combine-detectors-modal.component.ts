@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorSwatchComponent } from '../../detector-swatch/detector-swatch.component';
-import { DetectorsApiService } from '../../../services/detectors-api.service';
+import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 import type { DetectorCombineResponse } from '../../../generated/api-client/models/detector-combine-response';
 import { DetectorRegistryEntry } from '../../../models/api.models';
 
@@ -38,7 +38,7 @@ export class CombineDetectorsModalComponent implements OnInit {
   totalLabels = 0;
   mediaType = '';
 
-  constructor(private detectorsApi: DetectorsApiService) {}
+  constructor(private detectorsCrudApi: DetectorsCrudApiService) {}
 
   ngOnInit(): void {
     this.rows = this.sources.map((m) => ({
@@ -84,7 +84,7 @@ export class CombineDetectorsModalComponent implements OnInit {
     this.submitting = true;
     this.error = '';
 
-    this.detectorsApi.combine(names, trimmed, this.conflictPolicy).subscribe({
+    this.detectorsCrudApi.combine(names, trimmed, this.conflictPolicy).subscribe({
       next: (resp: DetectorCombineResponse) => {
         this.submitting = false;
         this.created.emit(resp?.name || trimmed);
