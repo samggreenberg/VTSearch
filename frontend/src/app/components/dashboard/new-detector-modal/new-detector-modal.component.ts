@@ -261,6 +261,7 @@ export class NewDetectorModalComponent implements OnInit {
           this.exampleMediaType = this.mediaType;
           this.exampleThumbFailed = false;
           this.pendingText = '';
+          this.autoFillNameFromExample();
           this.submitting = false;
         },
         error: (err) => {
@@ -278,6 +279,26 @@ export class NewDetectorModalComponent implements OnInit {
    *  becomes a single-line name. */
   private sanitizeName(text: string): string {
     return text.trim().replace(/\s+/g, ' ');
+  }
+
+  /** Strip a trailing extension and the leading path so a filename like
+   *  ``/foo/bar/My Sound.wav`` becomes ``My Sound``. */
+  private nameFromFilename(text: string): string {
+    const base = text.split(/[\\/]/).pop() || text;
+    const dot = base.lastIndexOf('.');
+    return dot > 0 ? base.slice(0, dot) : base;
+  }
+
+  /** Auto-derive the detector name from the picked example while the user
+   *  hasn't typed into the name field. Lets the user fill the form
+   *  top-down and leave Name blank. */
+  private autoFillNameFromExample(): void {
+    if (this.nameTouched) return;
+    if (this.exampleType === 'media' && this.exampleDisplay) {
+      this.name = this.sanitizeName(this.nameFromFilename(this.exampleDisplay));
+    } else if (this.pendingText) {
+      this.name = this.sanitizeName(this.pendingText);
+    }
   }
 
   onPendingTextInput(value: string): void {
@@ -561,6 +582,7 @@ export class NewDetectorModalComponent implements OnInit {
         this.exampleMediaType = this.activeDemoTab || this.mediaType;
         this.exampleThumbFailed = false;
         this.pendingText = '';
+        this.autoFillNameFromExample();
         this.demoFileLoading = false;
         this.view = 'main';
       },
@@ -607,6 +629,7 @@ export class NewDetectorModalComponent implements OnInit {
         this.exampleMediaType = this.mediaType || this.mediaTypeFromFilename(raw);
         this.exampleThumbFailed = false;
         this.pendingText = '';
+        this.autoFillNameFromExample();
         this.sfFileSelecting = false;
         this.view = 'main';
       },
@@ -652,6 +675,7 @@ export class NewDetectorModalComponent implements OnInit {
           this.exampleMediaType = mediaType || this.mediaType;
           this.exampleThumbFailed = false;
           this.pendingText = '';
+          this.autoFillNameFromExample();
           // Close the picker if it was open so the user lands back on the form.
           if (this.view === 'media-picker') this.view = 'main';
         },

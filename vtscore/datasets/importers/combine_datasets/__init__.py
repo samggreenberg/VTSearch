@@ -149,6 +149,7 @@ class CombineDatasetsImporter(DatasetImporter):
             # Display-only — not part of the dataset's identity, so leave it
             # out of the persisted origin to keep reloads deterministic.
             include_in_origin=False,
+            required=False,
         ),
     ]
 

@@ -194,6 +194,7 @@ class ReCallerDatasetImporter(DatasetImporter):
             options=all_folder_names(),
             default="audio",
             description="The media type this dataset will hold.  Source-type rows below specify which ReCaller record types to pull in and how to convert them to this output type.",
+            required=False,
         ),
         ImporterField(
             key="query_id",
