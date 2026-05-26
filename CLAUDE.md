@@ -1,20 +1,20 @@
 # VTSearch
 
-Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector** - a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a small MLP learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
+Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector** (a small trained ranker that scores each item by how well it matches). Two ways to search: **train a new detector** (vote good/bad on a handful of items; a small MLP learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
 
-## Ask Questions via `AskUserQuestion` - NOT prose (CRITICAL, READ FIRST)
+## Ask Questions via `AskUserQuestion`: NOT prose (CRITICAL, READ FIRST)
 
 This is the **#1 rule** in this repo. Read it on every turn. If you only read one section of CLAUDE.md, read this one.
 
-When you have a question for the user - to disambiguate requirements, choose between approaches, confirm scope, or surface a non-obvious tradeoff - **ask it via the `AskUserQuestion` tool**. Do not guess silently. Do not bury the question in prose at the end of a response. A 10-second clarification beats a 10-minute wrong-direction implementation, and a one-click answer beats a typed answer every time.
+When you have a question for the user (to disambiguate requirements, choose between approaches, confirm scope, or surface a non-obvious tradeoff), **ask it via the `AskUserQuestion` tool**. Do not guess silently. Do not bury the question in prose at the end of a response. A 10-second clarification beats a 10-minute wrong-direction implementation, and a one-click answer beats a typed answer every time.
 
-**Always ask via the `AskUserQuestion` tool when the question fits its shape** (a discrete choice with a small number of options). Do not leave dangling questions like "Want me to go with approach A or approach B?" at the end of a prose response - those are easy to miss and force the user to type out an answer that could have been a single click. The tool also captures the choice cleanly in the transcript.
+**Always ask via the `AskUserQuestion` tool when the question fits its shape** (a discrete choice with a small number of options). Do not leave dangling questions like "Want me to go with approach A or approach B?" at the end of a prose response; those are easy to miss and force the user to type out an answer that could have been a single click. The tool also captures the choice cleanly in the transcript.
 
 This applies *especially* to end-of-investigation "what scope should I take next?" prompts: when a research/investigation turn ends by offering Phase 1 / Phase 2 / smaller scope, the scope choice goes through `AskUserQuestion`, **not** into the prose summary. The investigation findings stay in prose; the "what next?" question is a tool call.
 
 Use plain prose questions only when the answer is genuinely open-ended (e.g. "What should this field be named?") and a multiple-choice list would be artificial.
 
-### Trip-wire - scan your turn before sending
+### Trip-wire: scan your turn before sending
 
 Before sending a turn, scan its last paragraph for any of these phrases:
 
@@ -25,13 +25,13 @@ Before sending a turn, scan its last paragraph for any of these phrases:
 - "(a) … and/or (b) …?"
 - "Recommend I …?"
 
-If you see one, **stop**: that sentence is an `AskUserQuestion` call you almost emitted as prose. Convert it into the tool call before sending - even if you're confident the user will say yes, even if the options feel obvious, even if you've already invested effort in the prose summary. The cost of the extra tool call is zero; the cost of a missed or typed-out answer is a wasted round-trip.
+If you see one, **stop**: that sentence is an `AskUserQuestion` call you almost emitted as prose. Convert it into the tool call before sending, even if you're confident the user will say yes, even if the options feel obvious, even if you've already invested effort in the prose summary. The cost of the extra tool call is zero; the cost of a missed or typed-out answer is a wasted round-trip.
 
-This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers belong in the tool too (with `["Yes", "No"]` options) - they are exactly the case where a one-click reply beats a typed reply. A pure progress update with no question at the end is fine; an update that ends in an offer is not.
+This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers belong in the tool too (with `["Yes", "No"]` options); they are exactly the case where a one-click reply beats a typed reply. A pure progress update with no question at the end is fine; an update that ends in an offer is not.
 
 ## Branch Policy (CRITICAL)
 
-- **Always base work on `dev`.** The `.claude/hooks/session-start.sh` SessionStart hook runs `git fetch origin --prune && git rebase origin/dev` automatically in remote sessions, so a fresh container lands rebased onto `dev`. If the hook reports "skipping" (dirty tree, detached HEAD) or "rebase failed", run the fetch+rebase yourself before making any changes. The harness cuts the working branch off `main` (the GitHub default), so this rebase is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch - `dev` is Claude's starting point, not the public default.
+- **Always base work on `dev`.** The `.claude/hooks/session-start.sh` SessionStart hook runs `git fetch origin --prune && git rebase origin/dev` automatically in remote sessions, so a fresh container lands rebased onto `dev`. If the hook reports "skipping" (dirty tree, detached HEAD) or "rebase failed", run the fetch+rebase yourself before making any changes. The harness cuts the working branch off `main` (the GitHub default), so this rebase is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch. `dev` is Claude's starting point, not the public default.
 - **All pull requests MUST target `dev`**, never `main`.
 - **Claude must NEVER open a PR that merges into `main`.** The `main` branch is protected and only updated by human maintainers.
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
@@ -39,19 +39,19 @@ This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers bel
 
 ## Git Fetch Hygiene
 
-Before comparing branches (`git log a..b`, `git diff a...b`, etc.), always run `git fetch origin --prune` first. Do **not** trust `origin/<branch>` refs after a partial fetch like `git fetch origin main` - that only updates the branch you named, leaving other remote-tracking refs stale and producing misleading diffs.
+Before comparing branches (`git log a..b`, `git diff a...b`, etc.), always run `git fetch origin --prune` first. Do **not** trust `origin/<branch>` refs after a partial fetch like `git fetch origin main`; that only updates the branch you named, leaving other remote-tracking refs stale and producing misleading diffs.
 
 ## Auto-PR
 
-When you're done with your changes, open a PR targeting `dev`. Do not ask - just create it. Always pass `base=dev` explicitly (the GitHub PR-creation URL printed by `git push` defaults to `main`).
+When you're done with your changes, open a PR targeting `dev`. Do not ask; just create it. Always pass `base=dev` explicitly (the GitHub PR-creation URL printed by `git push` defaults to `main`).
 
 ## Follow-ups belong in the plan file, not the PR body
 
-When you finish a feature and identify follow-up work (deferred scope, known limitations, "Phase 2" items), record it in the relevant plan or design doc - typically the file under `docs/plans/` or `docs/design/` that scoped the work in the first place. Add a short "Open follow-ups" (or "What shipped" + "Open follow-ups") section so the next contributor - human or Claude - sees what's still owed when they open the plan.
+When you finish a feature and identify follow-up work (deferred scope, known limitations, "Phase 2" items), record it in the relevant plan or design doc, typically the file under `docs/plans/` or `docs/design/` that scoped the work in the first place. Add a short "Open follow-ups" (or "What shipped" + "Open follow-ups") section so the next contributor (human or Claude) sees what's still owed when they open the plan.
 
 Do **not** stash follow-ups in the PR description as the only record. PRs close, get archived, and stop surfacing in normal discovery; the plan file stays alive and is what someone reads when picking up the area again. The PR body should describe what landed, not maintain a backlog.
 
-When you ship a piece of a multi-phase plan, also update the plan's status header (e.g. "Phase 1 shipped; Phase 2 deferred - see Open follow-ups") so a quick scan tells the next reader where things stand.
+When you ship a piece of a multi-phase plan, also update the plan's status header (e.g. "Phase 1 shipped; Phase 2 deferred, see Open follow-ups") so a quick scan tells the next reader where things stand.
 
 ## PR Activity Subscription (do not ask)
 
@@ -59,7 +59,7 @@ Never ask the user whether to subscribe to PR activity, and never call `subscrib
 
 ## Versioning (do NOT bump by hand)
 
-`vtsearch.__version__` is the UTC timestamp of `HEAD`'s commit (ISO 8601, Z-terminated), computed from git at import time in `vtsearch/__init__.py`. There is no tracked version constant to bump - every commit on `dev` automatically becomes the new version, and parallel branches cannot collide on a hand-edited version line. Do not add a `VERSION` file, do not write a hand-bumped string into `vtsearch/__init__.py`, and do not include version bumps in feature PRs. For Docker images (where `.git` is excluded from the build context), the host passes `--build-arg VTSEARCH_VERSION=$(TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ HEAD)` and the Dockerfile bakes it into `vtsearch/_version.txt` (gitignored). If git is unavailable and the baked file is missing, the version falls back to `0.0.0-unknown`.
+`vtsearch.__version__` is the UTC timestamp of `HEAD`'s commit (ISO 8601, Z-terminated), computed from git at import time in `vtsearch/__init__.py`. There is no tracked version constant to bump; every commit on `dev` automatically becomes the new version, and parallel branches cannot collide on a hand-edited version line. Do not add a `VERSION` file, do not write a hand-bumped string into `vtsearch/__init__.py`, and do not include version bumps in feature PRs. For Docker images (where `.git` is excluded from the build context), the host passes `--build-arg VTSEARCH_VERSION=$(TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ HEAD)` and the Dockerfile bakes it into `vtsearch/_version.txt` (gitignored). If git is unavailable and the baked file is missing, the version falls back to `0.0.0-unknown`.
 
 **`vtscore.__version__` is different.** The library uses independent semver, tracked as a hand-edited constant in `vtscore/__init__.py` (currently `0.1.0`). Bump it only when cutting an actual `vtscore` release, and add a matching entry to `vtscore/CHANGELOG.md`. Do *not* include `vtscore` version bumps in unrelated feature PRs. The two packages version independently because `vtsearch` is a continuously-deployed app (every commit = new version) while `vtscore` is meant for external consumers who expect stable, semver-tagged releases.
 

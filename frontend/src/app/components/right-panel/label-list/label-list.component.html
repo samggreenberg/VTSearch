@@ -8,7 +8,7 @@
         class="vote-entry"
         [class.vote-entry-grid]="isGrid"
         [class.vote-entry-missing]="isMissing(entry.id)"
-        [attr.title]="isMissing(entry.id) ? entry.name + ' - not in the current dataset' : null"
+        [attr.title]="isMissing(entry.id) ? entry.name + ' (not in the current dataset)' : null"
         role="button"
         tabindex="0"
         [attr.aria-label]="(label === 'good' ? 'Good' : 'Bad') + ': ' + entry.name + (isMissing(entry.id) ? ' (not in current dataset)' : '')"

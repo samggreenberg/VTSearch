@@ -1,6 +1,6 @@
 # Command-line interface
 
-VTSearch provides a CLI workflow for running detectors on datasets and exporting results - all without starting the web server.
+VTSearch provides a CLI workflow for running detectors on datasets and exporting results, all without starting the web server.
 
 ## Auto-detect (run detectors on a dataset)
 
@@ -26,9 +26,9 @@ python app.py --autodetect --importer folder --path /data/sounds --media-type au
 python app.py --autodetect --importer http_archive --url https://example.com/data.zip --settings settings.json
 ```
 
-Available importers: `folder`, `pickle`, `http_archive`, `combine_datasets`, `demo`. Each importer adds its own flags - run `python app.py --autodetect --importer <name> --help` to see them.
+Available importers: `folder`, `pickle`, `http_archive`, `combine_datasets`, `demo`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them.
 
-**Chunked loading** - for large datasets, use `--chunk-size N` to process in batches to limit memory:
+**Chunked loading:** for large datasets, use `--chunk-size N` to process in batches to limit memory:
 
 ```bash
 python app.py --autodetect --dataset data.pkl --settings settings.json --chunk-size 1000

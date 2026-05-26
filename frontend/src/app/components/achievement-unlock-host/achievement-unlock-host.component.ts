@@ -9,7 +9,7 @@ import type { PendingAnnouncement } from '../../generated/api-client/models/pend
 
 /**
  * Global host that listens to `AchievementsService.unlocks` and pops a
- * VtModal for each one - same shell as the "Are you sure?" dialog, but
+ * VtModal for each one (same shell as the "Are you sure?" dialog), but
  * branded with the tier-decorated badge for the unlocked tier.  Multiple
  * unlocks queue and play back one at a time.
  */

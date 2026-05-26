@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Version is the UTC timestamp of HEAD's commit (ISO 8601, Z-terminated).
-# Derived from git at import time - never stored in a tracked file - so
+# Derived from git at import time and never stored in a tracked file, so
 # parallel branches can't collide on a hand-bumped version constant.
 # At deploy time (Docker, sdist) where .git is absent, we fall back to a
 # baked `_version.txt` written by the build step.

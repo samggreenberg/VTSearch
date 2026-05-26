@@ -159,7 +159,7 @@ header {
   border-radius: var(--radius-md);
   color: var(--header-text);
   font-size: var(--font-sm);
-  padding: var(--space-xs) 0.625rem;  // 4px 10px - off-scale horizontal kept exact
+  padding: var(--space-xs) 0.625rem;  // 4px 10px (off-scale horizontal, kept exact)
   cursor: pointer;
   transition: background var(--transition-base), border-color var(--transition-base);
   white-space: nowrap;

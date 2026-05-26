@@ -29,7 +29,7 @@
         role="menuitem"
         tabindex="-1"
         (click)="onDashboard()"
-        [title]="isOnLabelView ? 'Return to the Dashboard to manage datasets and detectors' : 'Return to the Dashboard to manage datasets and detectors - already at Dashboard'"
+        [title]="isOnLabelView ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
       ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <rect x="1" y="1" width="14" height="11" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
           <rect x="3.5" y="3" width="9" height="3" rx="0.5" stroke="currentColor" stroke-width="1.0"/>
@@ -54,7 +54,7 @@
           role="menuitem"
           tabindex="-1"
           (click)="onAchievements()"
-          title="Achievements - your usage milestones and tier progress"
+          title="Achievements: usage milestones and tier progress"
         ><svg class="menu-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 4h12v4a6 6 0 0 1-12 0z"/>
@@ -102,7 +102,7 @@
     [class.disabled]="!isOnLabelView"
     [disabled]="!isOnLabelView"
     (click)="onDashboard()"
-    [title]="isOnLabelView ? 'Return to the Dashboard to manage datasets and detectors' : 'Return to the Dashboard to manage datasets and detectors - already at Dashboard'"
+    [title]="isOnLabelView ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
   >Dashboard</button>
   <vt-context-pulldown kind="dataset" />
   <vt-context-pulldown kind="detector" />
@@ -111,7 +111,7 @@
     *ngIf="!achievementsDisabled"
     class="achievements-btn"
     aria-label="Achievements"
-    title="Achievements - your usage milestones and tier progress"
+    title="Achievements: usage milestones and tier progress"
     (click)="onAchievements()"
   ><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

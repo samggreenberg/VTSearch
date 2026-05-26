@@ -23,22 +23,22 @@ which pieces you need and how to pull them out.
 
 VTSearch is a trainable media search tool. The thing the user searches
 *with* is a **detector**: a small ranker that scores every item in a
-dataset by how well it matches. Detectors come from two places -
+dataset by how well it matches. Detectors come from two places:
 either trained in the UI from good/bad votes in a labeling pass, or
 imported/loaded from disk and applied as-is. The architecture combines:
 
-- **Detectors (learned search)** - a small MLP trained on user votes
+- **Detectors (learned search):** a small MLP trained on user votes
   to predict good/bad labels. This is the primary search mechanism.
-  Detectors are persisted as **labelsets** (origin info + labels - never
-  weights; weights are an in-memory artifact, re-derived on demand from
+  Detectors are persisted as **labelsets** (origin info + labels; never
+  weights - weights are an in-memory artifact, re-derived on demand from
   origins and the active embedder).
-- **Semantic sort (text-similarity search)** - LAION-CLAP (audio),
+- **Semantic sort (text-similarity search):** LAION-CLAP (audio),
   SigLIP (images), X-CLIP (video), E5-base-v2 (text) for
   embedding-based similarity search, with alternative embedders
   available (CLAP Music, BGE). Used to seed a detector during the
   training loop, or as a quick stand-alone search.
-- **Flask web UI** - Angular SPA frontend with a REST API.
-- **Plugin systems** - auto-discovered dataset importers, results
+- **Flask web UI:** Angular SPA frontend with a REST API.
+- **Plugin systems:** auto-discovered dataset importers, results
   exporters, label importers, and processor importers.
 
 ---
@@ -147,7 +147,7 @@ VTSearch/
 │   │   │   ├── base.py             MediaSource ABC (list_items, fetch_item, resolve_path)
 │   │   │   ├── local_folder.py     LocalFolderSource implementation
 │   │   │   ├── http_archive.py     HTTP archive source implementation
-│   │   │   └── pullwrest.py        PullWrestSource - fetch media via PullWrest (scaffold)
+│   │   │   └── pullwrest.py        PullWrestSource (scaffold: fetch media via PullWrest)
 │   │   └── importers/              Plugin system for data sources
 │   │       ├── base.py             DatasetImporter ABC + ImporterField
 │   │       ├── folder/             Local directory importer
@@ -155,7 +155,7 @@ VTSearch/
 │   │       ├── http_archive/       HTTP archive importer
 │   │       ├── combine_datasets/   Merge multiple pickle datasets
 │   │       ├── demo/               Demo dataset importer (pre-configured catalogues)
-│   │       └── recaller/           ReCaller importer (scaffold - hidden from picker)
+│   │       └── recaller/           ReCaller importer (scaffold, hidden from picker)
 │   │
 │   ├── exporters/                  Plugin system for output destinations
 │   │   ├── base.py                 LabelsetExporter ABC + ExporterField
@@ -164,7 +164,7 @@ VTSearch/
 │   │   ├── email_smtp/             SMTP email sender
 │   │   ├── webhook/                HTTP POST webhook
 │   │   ├── gui/                    In-browser / console display
-│   │   └── holder/                 Holder labelset exporter (scaffold - hidden from picker)
+│   │   └── holder/                 Holder labelset exporter (scaffold, hidden from picker)
 │   │
 │   ├── settings_io/                Settings import/export/sync plugins
 │   │   ├── importers/              One-shot settings importers
@@ -184,7 +184,7 @@ VTSearch/
 │   │   │   ├── base.py             LabelImporter ABC + LabelImporterField
 │   │   │   ├── server_json_file/   JSON label file on server
 │   │   │   ├── server_csv_file/    CSV label file on server
-│   │   │   └── holder/             Holder label importer (scaffold - hidden from picker)
+│   │   │   └── holder/             Holder label importer (scaffold, hidden from picker)
 │   │   ├── sources/                Bidirectional label sync sources
 │   │   │   ├── base.py             LabelsetSource ABC + LabelsetSourceField
 │   │   │   └── server_json_file/   Sync labels with server JSON file
@@ -324,8 +324,8 @@ modules on the right.
 
 - **media types do NOT import Flask.**  They return a `MediaResponse`
   dataclass; the route layer converts it to a Flask response.
-- **Most of training/ and embedding/ do NOT import Flask or global state**
-  - core functions in `training/mlp.py`, `training/thresholds.py`,
+- **Most of training/ and embedding/ do NOT import Flask or global state.**
+  Core functions in `training/mlp.py`, `training/thresholds.py`,
   `embedding/helpers.py` accept parameters only.  The exception is
   `detectors/workflow.py`, which imports `flask.g` for request-scoped
   context resolution.
@@ -350,28 +350,28 @@ modules on the right.
 
 | Module | Flask? | Global state? | Can extract standalone? |
 |--------|--------|---------------|-------------------------|
-| `training/mlp.py` + `training/thresholds.py` | No | No (params) | **Yes** - pure PyTorch/sklearn |
-| `detectors/labeling_progress.py` | No | No (params) | **Yes** - pure torch/numpy |
-| `exporters/base.py` + all exporters | No | No | **Yes** - pure data processing |
-| `labels/importers/base.py` + all importers | No | No | **Yes** - pure data processing |
-| `processors/importers/base.py` + all importers | No | No | **Yes** - pure data processing |
-| `settings_io/sources/base.py` + all sources | No | No | **Yes** - pure file I/O |
-| `labels/sources/base.py` + all sources | No | No | **Yes** - pure file I/O |
-| `labels/sync.py` | No | Yes (reads votes) | Partially - needs state for vote export |
-| `datasets/downloader/` | No | No (callback) | **Yes** - requests only |
-| `datasets/loader.py` | No | No (callback + params) | **Yes** - needs media registry |
-| `datasets/importers/base.py` + all importers | No | No (callback) | **Yes** - each self-contained |
-| `eval/*` | No | No | **Yes** - needs media + datasets |
-| `settings.py` | No | No | **Yes** - JSON file I/O |
-| `media/base.py` | No | No | **Yes** - abstract only |
-| `media/audio,image,text,video,document` | No | No | **Yes** - torch + HF models |
-| `converters/*` | No | No | **Yes** - pure media conversion |
-| `utils/progress.py` | No | No | **Yes** - threading only |
-| `utils/state.py` | No | N/A (IS the state) | **Yes** - plain Python dicts |
-| `config.py` | No | No | **Yes** - just constants |
-| `auth/` | No | No | **Yes** - ABC + default provider |
-| `routes/*` | **Yes** | **Yes** | No - Flask-specific |
-| `app.py` | **Yes** | **Yes** | No - application entry point |
+| `training/mlp.py` + `training/thresholds.py` | No | No (params) | **Yes** (pure PyTorch/sklearn) |
+| `detectors/labeling_progress.py` | No | No (params) | **Yes** (pure torch/numpy) |
+| `exporters/base.py` + all exporters | No | No | **Yes** (pure data processing) |
+| `labels/importers/base.py` + all importers | No | No | **Yes** (pure data processing) |
+| `processors/importers/base.py` + all importers | No | No | **Yes** (pure data processing) |
+| `settings_io/sources/base.py` + all sources | No | No | **Yes** (pure file I/O) |
+| `labels/sources/base.py` + all sources | No | No | **Yes** (pure file I/O) |
+| `labels/sync.py` | No | Yes (reads votes) | Partially (needs state for vote export) |
+| `datasets/downloader/` | No | No (callback) | **Yes** (requests only) |
+| `datasets/loader.py` | No | No (callback + params) | **Yes** (needs media registry) |
+| `datasets/importers/base.py` + all importers | No | No (callback) | **Yes** (each self-contained) |
+| `eval/*` | No | No | **Yes** (needs media + datasets) |
+| `settings.py` | No | No | **Yes** (JSON file I/O) |
+| `media/base.py` | No | No | **Yes** (abstract only) |
+| `media/audio,image,text,video,document` | No | No | **Yes** (torch + HF models) |
+| `converters/*` | No | No | **Yes** (pure media conversion) |
+| `utils/progress.py` | No | No | **Yes** (threading only) |
+| `utils/state.py` | No | N/A (IS the state) | **Yes** (plain Python dicts) |
+| `config.py` | No | No | **Yes** (just constants) |
+| `auth/` | No | No | **Yes** (ABC + default provider) |
+| `routes/*` | **Yes** | **Yes** | No (Flask-specific) |
+| `app.py` | **Yes** | **Yes** | No (application entry point) |
 
 ---
 
@@ -422,8 +422,8 @@ text_vec  = embedder.embed_text("birdsong")                       # same space
 
 Because the embedder sees the whole media dict (not just a `Path`), a
 service-based embedder can resolve content via `media["origin"]` /
-`media.get("custom_metadata")` without touching local disk - e.g. a
-remote lookup by `origin["params"]["content_id"]`.  The loader always
+`media.get("custom_metadata")` without touching local disk (e.g. a
+remote lookup by `origin["params"]["content_id"]`).  The loader always
 routes every pending file through `embed_media_bulk(medias)`; the ABC's
 default implementation loops per item (with progress).  Services that
 natively accept many items per request override `_embed_media_bulk_impl`
@@ -509,7 +509,7 @@ sources, media converters, and media sources) share a common
    on first access.
 4. **CLI support** auto-generates `argparse` flags from field
    definitions.  Override `add_cli_arguments()` for custom handling.
-5. **Graceful degradation** - if a plugin's optional dependency is
+5. **Graceful degradation:** if a plugin's optional dependency is
    missing, a warning is emitted but the app continues.
 
 ### Explicitly registered plugins (media types / embedders / clippers)
@@ -543,8 +543,8 @@ register function.  See `EXTENDING.md` (in this directory) for full examples.
 Application state is exposed through `vtsearch/state/__init__.py` (a
 re-export facade over the `state_*.py` submodules). The module-level
 names below are **proxy objects** that delegate to a per-request
-`DatasetContext` or `DetectorContext` - see
-[Multi-dataset support](#multi-dataset-support). All mutable access is
+`DatasetContext` or `DetectorContext` (see
+[Multi-dataset support](#multi-dataset-support)). All mutable access is
 protected by `_state_lock` (a `threading.RLock`):
 
 | Variable | Type | Purpose |
@@ -587,7 +587,7 @@ via the `detectors_crud_bp` / `detectors_labels_bp` route blueprints.
 Each stores a name, text query, media type, examples list, and labelset.
 
 **Primarily Flask routes mutate this state.**  Most ML and dataset
-functions accept state as parameters - so you can use the ML code in a
+functions accept state as parameters, so you can use the ML code in a
 script or notebook by passing your own dicts. A few modules (notably
 `training_workflow.py` and `labels/sync.py`) import specific helpers
 and resolve the active context via Flask's `g` or thread-local storage,
@@ -623,10 +623,10 @@ The module-level names (`medias`, `good_votes`, etc.) are **proxy
 objects** (`_ProxyDict` / `_ProxyList`) that delegate to the context
 resolved per-request:
 
-1. **Inside a Flask request** - the `before_request` handler reads
+1. **Inside a Flask request:** the `before_request` handler reads
    `X-Dataset-Id` and `X-Detector-Id` headers, resolves the matching
    contexts, and stashes them on Flask's `g`. Proxies check `g` first.
-2. **Outside a request** (background threads, CLI, tests) - proxies
+2. **Outside a request** (background threads, CLI, tests): proxies
    fall back to a thread-local context set via
    `set_thread_dataset_context()` / `set_thread_detector_context()`.
 

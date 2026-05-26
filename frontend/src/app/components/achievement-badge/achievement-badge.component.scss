@@ -20,7 +20,7 @@
   justify-content: center;
 }
 
-// Color themes - currentColor is consumed by both the ring SVG and the inner icon.
+// Color themes: currentColor is consumed by both the ring SVG and the inner icon.
 // Tier colors are intrinsic (bronze/silver/gold/platinum); the tokens
 // live at `:root` in `_variables.scss` and are intentionally NOT
 // overridden per theme.
