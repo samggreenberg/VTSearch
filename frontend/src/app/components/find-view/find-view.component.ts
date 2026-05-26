@@ -5,6 +5,7 @@ import { finalize, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
+import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
@@ -22,7 +23,7 @@ import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/gr
 @Component({
   selector: 'vt-find-view',
   standalone: true,
-  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent],
+  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent, ProgressBarComponent],
   templateUrl: './find-view.component.html',
   styleUrl: './find-view.component.scss',
 })
