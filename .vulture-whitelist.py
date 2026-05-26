@@ -165,11 +165,20 @@ make_wav_file  # noqa: F821
 # ---------------------------------------------------------------------------
 _load_models_impl  # noqa: F821
 _embed_media_impl  # noqa: F821
+_do_peek_version  # noqa: F821 — SyncSource subclass hook called by base class
 PaddleOCR  # noqa: F821
 ocr  # noqa: F821
 transcribe  # noqa: F821
 _detect_speech_intervals  # noqa: F821
 _processor  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# PEP 562 module-level ``__getattr__`` in ``vtsearch/settings.py`` exposes
+# ``_SERVER_DEFAULTS`` / ``_USER_DEFAULTS`` / ``_DEFAULTS`` lazily without
+# eagerly instantiating the pydantic defaults. Python calls it via the
+# attribute-lookup protocol; vulture sees the def but no caller.
+# ---------------------------------------------------------------------------
+__getattr__  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # Mock attributes that mimic the shape of third-party return values:
