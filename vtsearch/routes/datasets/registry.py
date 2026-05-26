@@ -160,93 +160,92 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     _request_user = get_current_user()
 
     def load_task():
-        from vtsearch.auth import set_thread_user
+        from vtsearch.auth import thread_user
 
-        set_thread_user(_request_user)
-        try:
-            tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
-            # Create a fresh context for this dataset (don't activate yet).
-            ctx = DatasetContext(dataset_id)
-            register_context(ctx)
-            gc.collect()
-
-            # Set thread-local progress for the pickle loader.
-            set_thread_progress(
-                lambda status, msg="", cur=0, tot=0: tracker.update(
-                    status, msg, cur, tot, step=1, total_steps=_LOAD_STEPS
-                )
-            )
+        with thread_user(_request_user):
             try:
-                load_dataset_from_pickle(Path(pkl_path), ctx.medias, on_progress=_pickle_progress)
+                tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
+                # Create a fresh context for this dataset (don't activate yet).
+                ctx = DatasetContext(dataset_id)
+                register_context(ctx)
+                gc.collect()
+
+                # Set thread-local progress for the pickle loader.
+                set_thread_progress(
+                    lambda status, msg="", cur=0, tot=0: tracker.update(
+                        status, msg, cur, tot, step=1, total_steps=_LOAD_STEPS
+                    )
+                )
+                try:
+                    load_dataset_from_pickle(Path(pkl_path), ctx.medias, on_progress=_pickle_progress)
+                finally:
+                    clear_thread_progress()
+
+                tracker.check_cancelled()
+
+                def _dedup_progress(current: int, total: int) -> None:
+                    tracker.check_cancelled()
+                    tracker.update(
+                        "loading",
+                        "Removing duplicates…",
+                        current=current,
+                        total=total,
+                        step=2,
+                        total_steps=_LOAD_STEPS,
+                    )
+
+                _dedup_progress(0, 0)
+                collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
+                invalidate_embedding_matrix(ctx)
+
+                def _diversity_progress(current: int, total: int) -> None:
+                    tracker.check_cancelled()
+                    tracker.update(
+                        "loading",
+                        "Building diversity index…",
+                        current=current,
+                        total=total,
+                        step=2,
+                        total_steps=_LOAD_STEPS,
+                    )
+
+                _diversity_progress(0, 0)
+                build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
+                _reg_add_loaded(dataset_id)
+                # Update item count and dupe count in case they changed
+                num_dupes = sum(
+                    1
+                    for m in ctx.medias.values()
+                    if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
+                )
+                _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
+                ctx.dataset_display_name = entry.get("name", "")
+
+                # Embedder warm-up runs fire-and-forget so the dashboard row
+                # goes green immediately; text sort waits behind its own
+                # progress bar on first use if the model isn't ready yet.
+                _warmup_embedder_async(ctx.medias)
+            except CancelledError:
+                unregister_context(dataset_id)
+                _reg_remove_loaded(dataset_id)
+                gc.collect()
+                tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+            except MemoryError:
+                unregister_context(dataset_id)
+                _reg_remove_loaded(dataset_id)
+                gc.collect()
+                tracker.update("idle", "", 0, 0, error="Out of memory — dataset too large.", step=None, total_steps=None)
+            except Exception as e:
+                import traceback as _tb
+
+                _tb.print_exc()
+                unregister_context(dataset_id)
+                _reg_remove_loaded(dataset_id)
+                error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
+                tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
             finally:
                 clear_thread_progress()
-
-            tracker.check_cancelled()
-
-            def _dedup_progress(current: int, total: int) -> None:
-                tracker.check_cancelled()
-                tracker.update(
-                    "loading",
-                    "Removing duplicates…",
-                    current=current,
-                    total=total,
-                    step=2,
-                    total_steps=_LOAD_STEPS,
-                )
-
-            _dedup_progress(0, 0)
-            collapse_duplicates(ctx.medias, on_progress=_dedup_progress)
-            invalidate_embedding_matrix(ctx)
-
-            def _diversity_progress(current: int, total: int) -> None:
-                tracker.check_cancelled()
-                tracker.update(
-                    "loading",
-                    "Building diversity index…",
-                    current=current,
-                    total=total,
-                    step=2,
-                    total_steps=_LOAD_STEPS,
-                )
-
-            _diversity_progress(0, 0)
-            build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
-            _reg_add_loaded(dataset_id)
-            # Update item count and dupe count in case they changed
-            num_dupes = sum(
-                1
-                for m in ctx.medias.values()
-                if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
-            )
-            _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
-            ctx.dataset_display_name = entry.get("name", "")
-
-            # Embedder warm-up runs fire-and-forget so the dashboard row
-            # goes green immediately; text sort waits behind its own
-            # progress bar on first use if the model isn't ready yet.
-            _warmup_embedder_async(ctx.medias)
-        except CancelledError:
-            unregister_context(dataset_id)
-            _reg_remove_loaded(dataset_id)
-            gc.collect()
-            tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
-        except MemoryError:
-            unregister_context(dataset_id)
-            _reg_remove_loaded(dataset_id)
-            gc.collect()
-            tracker.update("idle", "", 0, 0, error="Out of memory — dataset too large.", step=None, total_steps=None)
-        except Exception as e:
-            import traceback as _tb
-
-            _tb.print_exc()
-            unregister_context(dataset_id)
-            _reg_remove_loaded(dataset_id)
-            error_msg = str(e) or repr(e) or "Unknown error during dataset loading"
-            tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
-        finally:
-            clear_thread_progress()
-            _loading_tasks.mark_finished(task_id)
-            set_thread_user(None)
+                _loading_tasks.mark_finished(task_id)
 
     thread = threading.Thread(target=load_task, daemon=True)
     thread.start()

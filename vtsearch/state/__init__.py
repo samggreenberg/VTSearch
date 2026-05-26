@@ -75,6 +75,8 @@ from vtscore.state import (  # noqa: F401
     set_thread_detector_context,
     set_vote,
     snapshot_medias,
+    thread_dataset_context,
+    thread_detector_context,
     toggle_vote,
     unregister_context,
     unregister_detector_context,
