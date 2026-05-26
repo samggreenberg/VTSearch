@@ -1112,8 +1112,7 @@ class TestBackgroundLoadThreadContext:
 
         kinds = [k for k, _ in observations]
         assert "enter" in kinds and "inside" in kinds and "after_exit" in kinds, (
-            "Background task did not enter+exit the thread_dataset_context scope; "
-            f"observed kinds: {kinds}"
+            f"Background task did not enter+exit the thread_dataset_context scope; observed kinds: {kinds}"
         )
         inside = next(v for k, v in observations if k == "inside")
         after = next(v for k, v in observations if k == "after_exit")
