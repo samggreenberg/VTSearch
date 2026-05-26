@@ -2,8 +2,9 @@
 
 Status: **#1 shipped (all five checkpoints). #2 shipped. #3 shipped.
 #4 shipped. #5 investigation shipped. #5 follow-up (per-domain split)
-shipped. #6 investigated — no native upstream support in Angular 19,
-documented as "wait for upstream" below.**
+shipped. Warning budget rolled back from 540 kB → 525 kB. #6
+investigated — no native upstream support in Angular 19, documented
+as "wait for upstream" below.**
 
 ## What shipped
 
@@ -256,6 +257,12 @@ documented as "wait for upstream" below.**
   the two. A per-domain split of both services is the next move,
   but is left as a follow-up (see Open follow-ups) — the
   investigation is what shipped here, not the refactor.
+- **Warning budget rolled back to 525 kB**: with #1–#5 in, the
+  initial bundle landed at **508.43 kB raw / 135.41 kB gzip** — well
+  under the 525 kB threshold that was bumped to 540 kB on `4bd4cc40`.
+  `angular.json`'s `maximumWarning` flipped from `"540kB"` back to
+  `"525kB"`, giving ~17 kB of headroom for future routine work
+  before the warning fires again. `maximumError` stays at `1MB`.
 - **#5 follow-up — per-domain split of `DetectorsApiService` /
   `DatasetsApiService`**: replaced the two flat 435 / 344 line services
   with nine focused slices so the eager bundle no longer drags in
@@ -676,23 +683,12 @@ maintaining. See the matching "What shipped" entry.
 After #1–#5 land, the initial bundle should drop comfortably back
 under the older 525 kB threshold on the same raw-byte metric the
 budget is using today, with the biggest god-classes broken into
-focused sub-components and shared widgets. Achieved: **508.40 kB
-raw / 135.37 kB gzip** as of the #5 follow-up. The 540 kB budget
-can now be rolled back (pending user approval — see Open
-follow-ups). #6 (gzip budget metric) stays a "wait for upstream"
-item.
+focused sub-components and shared widgets. Achieved: **508.43 kB
+raw / 135.41 kB gzip** as of the #5 follow-up, and the 540 kB
+warning budget has been rolled back to 525 kB to match. #6 (gzip
+budget metric) stays a "wait for upstream" item.
 
 ## Open follow-ups
-
-- **Roll the warning budget back to 525 kB** (or lower) now that
-  #1–#5 are in. Current initial total is **508.40 kB raw / 135.37 kB
-  gzip** against the 540 kB warning threshold; the previous 525 kB
-  threshold was bumped on `4bd4cc40` and the gains from #1
-  (Checkpoints 1-5), #4, and the #5 follow-up split mean there's
-  comfortable headroom under the older 525 kB threshold — and even
-  some room under a tighter 510 kB threshold. Requires user
-  approval (CLAUDE.md says budget bumps — including reductions
-  that could break future PRs — are user-decisions).
 
 - **#6 — Compressed-size budget (waiting on upstream):** revisit
   if/when `@angular-devkit/build-angular` adds a gzipped budget type
