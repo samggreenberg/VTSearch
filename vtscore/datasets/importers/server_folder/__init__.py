@@ -161,7 +161,6 @@ class ServerFolderDatasetImporter(DatasetImporter):
     icon = "\U0001f4c1"  # 📁 — frontend renders as a folder icon
     picker_view = "server_folder"
     category = "server"
-    multi_media = True
     fields = [
         ImporterField(
             key="media_type",

@@ -144,8 +144,10 @@ class DatasetImporter(PluginBase):
       with one upstream call covering every spec; yields (spec, raw_media) pairs.
     - `run()` — folder-shaped or full-control importer.
 
-    Multi-media importers set `multi_media = True`. The framework owns conversion
-    and ingestion for hooks 1–3 — subclasses never call `get_converter()`."""
+    Every importer accepts a `source_specs` form value (a list of
+    `SourceSpec(source_type, converter, params)`).  The framework owns
+    conversion and ingestion for hooks 1–3 — subclasses never call
+    `get_converter()`."""
 
 ImporterField = PluginField
 """Alias kept for clarity at import sites; identical to vtscore.plugins.PluginField."""

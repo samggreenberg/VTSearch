@@ -346,12 +346,6 @@ to the framework.
 | `resolve_file()` | `(origin, origin_name, filename) -> Path | None` | Resolve a media file from origin info. Default: `None` |
 | `effective_source_specs()` | `(field_values: dict) -> list[SourceSpec]` | Resolve the user's form values into a flat list of `(source_type, converter, params)` rows for multi-media imports. See [Multi-media imports](#multi-media-imports) |
 
-**Class attributes:**
-
-| Attribute | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `multi_media` | `bool` | `False` | When `True`, the importer participates in the new multi-media flow (output type + per-source-type converter rows). See [Multi-media imports](#multi-media-imports) |
-
 **Instance attributes (set during `run()`):**
 
 | Attribute | Type | Description |
@@ -600,9 +594,9 @@ every import is declared there. They are picked up the next time you run
 
 ### Multi-media imports
 
-Importers that want to pull in **multiple source media types** (e.g.
-"images, plus videos converted to images, plus documents converted to
-images") set the class attribute `multi_media = True`.
+Every importer can pull in **multiple source media types** in a single
+import (e.g. "images, plus videos converted to images, plus documents
+converted to images") via the user-supplied `source_specs` list.
 
 A `SourceSpec` (defined in `vtscore.datasets.importers.base`) is:
 
@@ -639,7 +633,6 @@ loops `effective_source_specs()` and calls you once per spec.
 ```python
 class DXImporter(DatasetImporter):
     name = "dx"
-    multi_media = True
     fields = [
         ImporterField(key="media_type", label="Output Media Type", field_type="select", ...),
         ImporterField(key="dataset_id", ..., required=True),
@@ -668,7 +661,6 @@ once with the full spec list; you yield `(spec, raw_media)` pairs.
 ```python
 class DXImporter(DatasetImporter):
     name = "dx"
-    multi_media = True
     fields = [...]
 
     def fetch_all_source_media(self, specs, field_values, thin=False):
@@ -695,25 +687,16 @@ behavioural change.
 
 > **Heads-up:** hooks 2 and 3 only run when
 > `effective_source_specs()` resolves to at least one spec.  That
-> requires either a `media_type` field on a legacy importer
-> (`multi_media = False`) or a `source_specs` value on a multi-media
-> importer (`multi_media = True`, with `media_type` declaring the
-> output type).  If your importer declares neither, `run()` falls
-> through to the hook-1 path and raises `NotImplementedError` from
-> `list_records()` — even when you've overridden `fetch_source_media`
-> or `fetch_all_source_media`.
-
-**Legacy / shim path.** Importers that have **not** flipped
-`multi_media` still work as before: they declare a single `media_type`
-field and (optionally) accept a comma-separated `converters` field that
-post-processes the imported folder through
-`run_converters_on_folder()`.  Legacy importers can also call
-`effective_source_specs()` — it synthesises an equivalent list from the
-classic `media_type` + `converters` fields, so a legacy importer can
-migrate to the new iteration style before changing its form schema.
+> requires a `media_type` field on the importer (declaring the output
+> type) plus either an empty / unset `source_specs` (the framework
+> synthesises a single direct row) or an explicit list submitted by
+> the user.  If your importer declares no `media_type` field, `run()`
+> falls through to the hook-1 path and raises `NotImplementedError`
+> from `list_records()` — even when you've overridden
+> `fetch_source_media` or `fetch_all_source_media`.
 
 See [`docs/plans/multi-media-import.md`](plans/multi-media-import.md) for
-the full design and migration checklist.
+the full design history.
 
 ---
 
