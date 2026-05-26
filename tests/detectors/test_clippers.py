@@ -26,7 +26,7 @@ class TestMediaClipperABC:
         d = c.to_dict()
         assert d == {
             "name": "sound_default",
-            "display_name": "Default",
+            "display_name": "None",
             "description": "Import each audio file as-is, without splitting.",
             "media_type": "audio",
         }
@@ -35,7 +35,7 @@ class TestMediaClipperABC:
         from vtscore.media.audio.clipper import SoundDefaultClipper
 
         c = SoundDefaultClipper()
-        assert c.display_name == "Default"
+        assert c.display_name == "None"
 
     def test_display_name_tiling(self):
         from vtscore.media.audio.clipper import SoundTilingClipper
@@ -2119,6 +2119,24 @@ class TestClipperParameters:
         c = SoundDefaultClipper()
         d = c.to_dict()
         assert "parameters" not in d
+
+    def test_to_dict_includes_summary_template_when_overridden(self):
+        from vtscore.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
+
+        # SoundTilingClipper provides a templated summary distinct from its
+        # description — that template should show up in to_dict().
+        d = SoundTilingClipper(2.0).to_dict()
+        assert d["summary_template"] == "Cut each audio file into {duration}s tiles (min overlap {min_overlap}s)."
+        # SoundAutoClipper too.
+        d = SoundAutoClipper().to_dict()
+        assert d["summary_template"] == "Cut into {tile_duration}s tiles when audio is over {threshold}s."
+
+    def test_to_dict_omits_summary_template_when_equal_to_description(self):
+        from vtscore.media.audio.clipper import SoundDefaultClipper
+
+        # No template override → summary_template equals description → not serialised.
+        d = SoundDefaultClipper().to_dict()
+        assert "summary_template" not in d
 
 
 class TestClipperParametersApi:

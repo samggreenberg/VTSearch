@@ -208,7 +208,6 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
     from vtsearch.routes._shared import (
         get_plugin_or_404,
         run_plugin_or_error,
-        validate_filepath_field,
         validate_plugin_args,
     )
 
@@ -218,9 +217,6 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
     assert importer is not None  # narrowed by err check
 
     field_values = validate_plugin_args(importer)
-    err = validate_filepath_field(field_values)
-    if err:
-        return err
 
     label_entries, err = run_plugin_or_error(importer, "run", field_values)
     if err:

@@ -24,11 +24,9 @@
   margin-bottom: var(--space-lg);
 }
 
-h2 {
-  color: var(--text-primary);
-  margin: 0 0 var(--space-xs);
-  font-size: var(--font-3xl);
-}
+// `<h1>` (the app name) inherits its font-size from `_components.scss`
+// (`--font-3xl`); only the bottom margin needs scoping.
+h1 { margin: 0 0 var(--space-xs); }
 
 .login-subtitle {
   color: var(--text-secondary);

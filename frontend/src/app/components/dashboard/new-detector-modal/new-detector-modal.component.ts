@@ -4,10 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
-import { DetectorsApiService } from '../../../services/detectors-api.service';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
+import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
+import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
+import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
+import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
+import { SettingsStateService } from '../../../services/settings-state.service';
 import {
   DemoDataset,
   ImporterField,
@@ -123,11 +127,10 @@ export class NewDetectorModalComponent implements OnInit {
   static readonly DEMO_COL_META: Record<string, ColMeta> = {
     label: { label: 'Name', title: 'Demo dataset name (click to sort)', sortable: true },
     num_files: { label: '# Media', title: 'Number of media files in the demo dataset (click to sort)', sortable: true },
-    num_categories: { label: '# Cat.', title: 'Number of distinct categories or classes in the dataset (click to sort)', sortable: true },
     description: { label: 'Description', title: 'Short description of the demo dataset contents (click to sort)', sortable: true },
     status: { label: 'Readiness', title: 'Whether the dataset is pre-downloaded and ready to browse, or still needs to be fetched (click to sort)', sortable: true },
   };
-  static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'num_categories', 'description', 'status'];
+  static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'description', 'status'];
   private static readonly DEMO_COL_ORDER_KEY = 'vtsearch.dashboard.demoColumnOrder';
 
   demoCols = new ManagedColumns(
@@ -163,11 +166,23 @@ export class NewDetectorModalComponent implements OnInit {
   labelImporterFileFieldKey: string | null = null;
 
   constructor(
-    private detectorsApi: DetectorsApiService,
-    private datasetsApi: DatasetsApiService,
+    private detectorsRegistryApi: DetectorsRegistryApiService,
+    private datasetsCrudApi: DatasetsCrudApiService,
+    private datasetsListingsApi: DatasetsListingsApiService,
+    private datasetsRegistryApi: DatasetsRegistryApiService,
+    private datasetsUiApi: DatasetsUiApiService,
     private sortingApi: SortingApiService,
     private labelImportersApi: LabelImportersApiService,
+    private settingsState: SettingsStateService,
   ) {}
+
+  /** Type_id of the active solo-mediaType streamlining, or ``null`` when
+   *  off. When non-null, the mediaType form-group is hidden in the
+   *  template and ``mediaType`` is locked to this value on init. */
+  get effectiveSoloMediaType(): string | null {
+    const v = this.settingsState.settings?.effective_solo_media_type;
+    return v ? v : null;
+  }
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
@@ -188,21 +203,30 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.datasetsApi.getMediaTypes().subscribe({
+    this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypeInfos = res.media_types || [];
         this.mediaTypes = this.mediaTypeInfos.map((t) => t.type_id || t.name);
       },
     });
+    // Settings power the solo-mediaType lockdown — load them so the
+    // template's @if guards see the resolved value on first render.
+    this.settingsState.load();
 
-    // Prefer the explicit default (active dataset's type) over the all-datasets guess.
-    // When the active dataset dictates the type, lock the field so the user
-    // can't change it without an explicit unlock click.
-    if (this.defaultMediaType) {
+    // Solo-mediaType mode forces the field to the chosen type and the
+    // template hides the picker entirely (no unlock button rendered).
+    const solo = this.effectiveSoloMediaType;
+    if (solo) {
+      this.mediaType = solo;
+      this.mediaTypeLocked = true;
+    } else if (this.defaultMediaType) {
+      // Prefer the explicit default (active dataset's type) over the all-datasets guess.
+      // When the active dataset dictates the type, lock the field so the user
+      // can't change it without an explicit unlock click.
       this.mediaType = this.defaultMediaType;
       this.mediaTypeLocked = true;
     } else {
-      this.datasetsApi.getRegistry().subscribe({
+      this.datasetsRegistryApi.getRegistry().subscribe({
         next: (res) => {
           const types = new Set(
             (res.datasets || []).map((d) => d['media_type'] as string).filter(Boolean),
@@ -237,6 +261,7 @@ export class NewDetectorModalComponent implements OnInit {
           this.exampleMediaType = this.mediaType;
           this.exampleThumbFailed = false;
           this.pendingText = '';
+          this.autoFillNameFromExample();
           this.submitting = false;
         },
         error: (err) => {
@@ -254,6 +279,26 @@ export class NewDetectorModalComponent implements OnInit {
    *  becomes a single-line name. */
   private sanitizeName(text: string): string {
     return text.trim().replace(/\s+/g, ' ');
+  }
+
+  /** Strip a trailing extension and the leading path so a filename like
+   *  ``/foo/bar/My Sound.wav`` becomes ``My Sound``. */
+  private nameFromFilename(text: string): string {
+    const base = text.split(/[\\/]/).pop() || text;
+    const dot = base.lastIndexOf('.');
+    return dot > 0 ? base.slice(0, dot) : base;
+  }
+
+  /** Auto-derive the detector name from the picked example while the user
+   *  hasn't typed into the name field. Lets the user fill the form
+   *  top-down and leave Name blank. */
+  private autoFillNameFromExample(): void {
+    if (this.nameTouched) return;
+    if (this.exampleType === 'media' && this.exampleDisplay) {
+      this.name = this.sanitizeName(this.nameFromFilename(this.exampleDisplay));
+    } else if (this.pendingText) {
+      this.name = this.sanitizeName(this.pendingText);
+    }
   }
 
   onPendingTextInput(value: string): void {
@@ -323,7 +368,7 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   private loadMediaImporters(): void {
-    this.datasetsApi.getAllImporters().subscribe({
+    this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
         this.mediaImporters = (res.importers || []).filter(
           (imp) =>
@@ -441,7 +486,7 @@ export class NewDetectorModalComponent implements OnInit {
   private openDemoPicker(): void {
     this.resetDemoPickerState();
     this.demoLoading = true;
-    this.datasetsApi.getDemoList().subscribe({
+    this.datasetsListingsApi.getDemoList().subscribe({
       next: (res) => {
         this.demos = res.datasets || [];
         this.buildDemoTabs();
@@ -529,7 +574,7 @@ export class NewDetectorModalComponent implements OnInit {
     if (!raw) return;
     this.demoFileLoading = true;
     this.demoTypedPathError = '';
-    this.datasetsApi.selectBrowsedFile(this.demoFileBrowseSource, raw).subscribe({
+    this.datasetsUiApi.selectBrowsedFile(this.demoFileBrowseSource, raw).subscribe({
       next: (res) => {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
@@ -537,6 +582,7 @@ export class NewDetectorModalComponent implements OnInit {
         this.exampleMediaType = this.activeDemoTab || this.mediaType;
         this.exampleThumbFailed = false;
         this.pendingText = '';
+        this.autoFillNameFromExample();
         this.demoFileLoading = false;
         this.view = 'main';
       },
@@ -575,7 +621,7 @@ export class NewDetectorModalComponent implements OnInit {
     if (!raw) return;
     this.sfFileSelecting = true;
     this.sfBrowseError = '';
-    this.datasetsApi.selectBrowsedFile('server_fs', raw).subscribe({
+    this.datasetsUiApi.selectBrowsedFile('server_fs', raw).subscribe({
       next: (res) => {
         this.exampleType = 'media';
         this.exampleValue = res.filename;
@@ -583,6 +629,7 @@ export class NewDetectorModalComponent implements OnInit {
         this.exampleMediaType = this.mediaType || this.mediaTypeFromFilename(raw);
         this.exampleThumbFailed = false;
         this.pendingText = '';
+        this.autoFillNameFromExample();
         this.sfFileSelecting = false;
         this.view = 'main';
       },
@@ -628,6 +675,7 @@ export class NewDetectorModalComponent implements OnInit {
           this.exampleMediaType = mediaType || this.mediaType;
           this.exampleThumbFailed = false;
           this.pendingText = '';
+          this.autoFillNameFromExample();
           // Close the picker if it was open so the user lands back on the form.
           if (this.view === 'media-picker') this.view = 'main';
         },
@@ -769,7 +817,7 @@ export class NewDetectorModalComponent implements OnInit {
       ...this.labelImporterValues,
     };
 
-    this.detectorsApi
+    this.detectorsRegistryApi
       .registerDetectorFromLabelset(
         this.selectedLabelImporter.name,
         params,
@@ -784,7 +832,7 @@ export class NewDetectorModalComponent implements OnInit {
             this.error = 'Server did not return a detector id';
             return;
           }
-          this.detectorsApi.loadDetector(newId).subscribe({
+          this.detectorsRegistryApi.loadDetector(newId).subscribe({
             next: () => {
               this.submitting = false;
               this.created.emit(newId);
@@ -837,7 +885,7 @@ export class NewDetectorModalComponent implements OnInit {
     const mediaExample = this.exampleType === 'media' ? this.exampleValue : '';
     const examplesPayload = [{ type: this.exampleType!, value: this.exampleValue }];
 
-    this.detectorsApi
+    this.detectorsRegistryApi
       .registerDetector({
         name: trimmedName,
         media_type: this.mediaType,

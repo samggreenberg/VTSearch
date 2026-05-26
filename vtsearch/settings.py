@@ -29,6 +29,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
@@ -118,8 +119,22 @@ if TYPE_CHECKING:
     def get_last_embedder_per_media_type() -> dict[str, str]: ...
     def set_last_embedder_per_media_type(value: dict[str, str]) -> None: ...
 
+    def get_import_defaults_by_media_type() -> dict[str, dict[str, Any]]: ...
+    def set_import_defaults_by_media_type(value: dict[str, dict[str, Any]]) -> None: ...
+
+    def get_solo_media_type() -> str | None: ...
+    def set_solo_media_type(value: str | None) -> None: ...
+    def get_solo_media_type_explicit() -> bool: ...
+    def set_solo_media_type_explicit(value: bool) -> None: ...
+
+    def get_solo_embedder_per_media_type() -> dict[str, str]: ...
+    def set_solo_embedder_per_media_type(value: dict[str, str]) -> None: ...
+
     def get_recent_sessions() -> list[dict[str, Any]]: ...
     def set_recent_sessions(value: list[dict[str, Any]]) -> None: ...
+
+    def get_hidden_plugins() -> dict[str, list[str]]: ...
+    def set_hidden_plugins(value: dict[str, list[str]]) -> None: ...
 
 
 logger = logging.getLogger(__name__)
@@ -127,6 +142,32 @@ logger = logging.getLogger(__name__)
 #: Path to the server-tier settings file. Tests monkey-patch this; the CLI
 #: ``set_settings_path()`` helper also points it at a different file.
 SETTINGS_PATH: Path = DATA_DIR / "settings.json"
+
+#: Process-level fallback for the per-user ``solo_media_type`` setting, set
+#: by :func:`set_cli_solo_media_type` from the ``--solo-media-type`` flag
+#: in :mod:`app`. ``None`` means "no CLI default"; a user with
+#: ``solo_media_type_explicit=False`` will see this value (or ``None``) as
+#: their effective solo mediaType. A user who has explicitly set their own
+#: value (including explicitly ``None`` for "show everything") overrides
+#: this fallback — see :func:`get_effective_solo_media_type`.
+_cli_solo_media_type: str | None = None
+
+#: Process-level fallback for the ``hidden_plugins`` server setting, set
+#: by :func:`set_cli_hidden_plugins` / :func:`add_cli_hidden_plugin` from
+#: the repeatable ``--hide-plugin family:name`` flag in :mod:`app`. Maps
+#: a plugin-family id to the set of plugin ``name``s to hide. Merged with
+#: the persisted ``hidden_plugins`` server setting at read time — see
+#: :func:`get_effective_hidden_plugins`. Empty dict means "no CLI hides".
+_cli_hidden_plugins: dict[str, set[str]] = {}
+
+#: Process-level fallback for the per-user
+#: ``solo_embedder_per_media_type`` setting, set by
+#: :func:`set_cli_solo_embedder` from the (repeatable) ``--solo-embedder``
+#: flag in :mod:`app`. Maps ``media_type_id`` → embedder name. Empty means
+#: "no CLI default". The resolver :func:`get_effective_solo_embedders`
+#: layers per-user entries over this dict (per-key), so a user can override
+#: individual mediaTypes without losing the others.
+_cli_solo_embedders: dict[str, str] = {}
 
 #: Filename used for the per-user settings file inside
 #: ``get_user_data_dir(user)``.
@@ -144,16 +185,49 @@ _USER_DATA_DIR_OVERRIDE: Path | None = None
 # Defaults, partitioned by tier
 # ---------------------------------------------------------------------------
 
-#: Server-tier defaults derived from the :class:`ServerSettings` model.
-_SERVER_DEFAULTS: dict[str, Any] = ServerSettings().model_dump()
+#: Lazy caches for the model-derived defaults dicts.  Instantiating
+#: :class:`ServerSettings` fires its pydantic ``default_factory`` callbacks
+#: (notably the GPU-aware default for ``max_concurrent_dataset_embeddings``),
+#: and that probe imports torch — ~870ms at startup just to pick an int.
+#: Defer the instantiation to first read so ``import vtsearch.settings``
+#: stays torch-free.
+_SERVER_DEFAULTS_CACHE: dict[str, Any] | None = None
+_USER_DEFAULTS_CACHE: dict[str, Any] | None = None
 
-#: Per-user defaults derived from the :class:`UserSettings` model.
-_USER_DEFAULTS: dict[str, Any] = UserSettings().model_dump()
 
-#: Combined defaults for callers that want a flat view of every key.
-_DEFAULTS: dict[str, Any] = {**_SERVER_DEFAULTS, **_USER_DEFAULTS}
+def _server_defaults() -> dict[str, Any]:
+    global _SERVER_DEFAULTS_CACHE
+    if _SERVER_DEFAULTS_CACHE is None:
+        _SERVER_DEFAULTS_CACHE = ServerSettings().model_dump()
+    return _SERVER_DEFAULTS_CACHE
+
+
+def _user_defaults() -> dict[str, Any]:
+    global _USER_DEFAULTS_CACHE
+    if _USER_DEFAULTS_CACHE is None:
+        _USER_DEFAULTS_CACHE = UserSettings().model_dump()
+    return _USER_DEFAULTS_CACHE
+
+
+def _all_defaults() -> dict[str, Any]:
+    return {**_server_defaults(), **_user_defaults()}
+
+
+def __getattr__(name: str) -> Any:
+    # PEP 562 — expose ``_SERVER_DEFAULTS`` / ``_USER_DEFAULTS`` / ``_DEFAULTS``
+    # as attributes for external readers (tests, future callers) without
+    # forcing the eager pydantic instantiation at module load.
+    if name == "_SERVER_DEFAULTS":
+        return _server_defaults()
+    if name == "_USER_DEFAULTS":
+        return _user_defaults()
+    if name == "_DEFAULTS":
+        return _all_defaults()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 #: Set of keys that belong to the server tier (everything else is per-user).
+#: Reading ``model_fields`` doesn't instantiate the model, so this stays eager.
 _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
@@ -743,11 +817,11 @@ def _read_value(key: str) -> Any:
     The caller is responsible for casting/coercion.
     """
     if key in _SERVER_KEYS:
-        return _ensure_server_loaded().get(key, _SERVER_DEFAULTS[key])
+        return _ensure_server_loaded().get(key, _server_defaults()[key])
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    return _ensure_user_loaded(username).get(key, _USER_DEFAULTS.get(key))
+    return _ensure_user_loaded(username).get(key, _user_defaults().get(key))
 
 
 def _write_value(key: str, value: Any) -> None:
@@ -794,7 +868,7 @@ def _mark_user_keys_dirty(username: str, keys) -> None:
 
 def get_defaults() -> dict[str, Any]:
     """Return a copy of the default settings (excluding infrastructure keys)."""
-    result = {k: v for k, v in _DEFAULTS.items() if k not in _EXCLUDE_FROM_DEFAULTS}
+    result = {k: v for k, v in _all_defaults().items() if k not in _EXCLUDE_FROM_DEFAULTS}
     valid_types = _valid_media_types()
     result["view_mode_left"] = {tid: _VIEW_MODE_DEFAULTS["left"] for tid in valid_types}
     result["view_mode_right"] = {tid: _VIEW_MODE_DEFAULTS["right"] for tid in valid_types}
@@ -826,7 +900,7 @@ def get_user_settings() -> dict[str, Any]:
     _ensure_user_loaded(username)
     with _settings_lock:
         user_copy = dict(_user_caches.get(username, {}))
-    result = dict(_USER_DEFAULTS)
+    result = dict(_user_defaults())
     result.update(user_copy)
     result["view_mode_left"] = get_view_mode_left()
     result["view_mode_right"] = get_view_mode_right()
@@ -854,7 +928,7 @@ def get_all() -> dict[str, Any]:
     with _settings_lock:
         server_copy = dict(_server_cache or {})
         user_copy = dict(_user_caches.get(username, {}))
-    result = dict(_DEFAULTS)
+    result = dict(_all_defaults())
     result.update(server_copy)
     result.update(user_copy)
     # Always return expanded per-media-type view/focus/panel dicts.
@@ -1133,6 +1207,159 @@ def set_last_embedder_for_media_type(media_type: str, embedder: str) -> None:
     set_last_embedder_per_media_type(updated)
 
 
+def set_cli_solo_media_type(value: str | None) -> None:
+    """Set the process-level fallback for the per-user ``solo_media_type`` setting.
+
+    Called once from ``app.py`` startup when ``--solo-media-type`` is
+    passed on the command line. The value is consulted by
+    :func:`get_effective_solo_media_type` for any user who has not
+    explicitly set their own ``solo_media_type`` via the settings UI.
+    Pass ``None`` (or call from a process where ``--solo-media-type`` was
+    not passed) to disable the fallback.
+    """
+    global _cli_solo_media_type
+    if value is not None:
+        value = value.strip() or None
+    _cli_solo_media_type = value
+
+
+def get_cli_solo_media_type() -> str | None:
+    """Return the process-level CLI fallback (``None`` if unset)."""
+    return _cli_solo_media_type
+
+
+def get_effective_solo_media_type() -> str | None:
+    """Return the effective solo mediaType for the current user.
+
+    Resolution order:
+
+    1. The user's explicit choice (``solo_media_type`` when
+       ``solo_media_type_explicit`` is True), including an explicit
+       ``None`` for "show everything".
+    2. The process-level CLI fallback set by
+       :func:`set_cli_solo_media_type`.
+    3. ``None`` (no streamlining — show every mediaType).
+
+    Returns ``None`` to mean "no solo mode active"; any other return
+    value is a mediaType id (e.g. ``"image"``) that the UI should lock
+    its pickers to.
+    """
+    if get_solo_media_type_explicit():  # type: ignore[name-defined]  # autogen'd accessor
+        explicit = get_solo_media_type()  # type: ignore[name-defined]  # autogen'd accessor
+        # Empty string from JSON drift normalises to None.
+        if isinstance(explicit, str) and not explicit.strip():
+            return None
+        return explicit
+    return _cli_solo_media_type
+
+
+def apply_user_solo_media_type(value: str | None) -> None:
+    """Persist *value* as the user's solo mediaType choice and flip ``explicit``.
+
+    Used by the settings PUT route so a single UI change updates both
+    fields atomically. ``value=None`` (or an empty string) means "show
+    everything"; any other string is validated against the media-type
+    registry by the route layer before this is called.
+    """
+    if isinstance(value, str) and not value.strip():
+        value = None
+    set_solo_media_type(value)  # type: ignore[name-defined]  # autogen'd accessor
+    set_solo_media_type_explicit(True)  # type: ignore[name-defined]  # autogen'd accessor
+
+
+def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:
+    """Set or clear a process-level solo-embedder fallback for *media_type*.
+
+    Called from ``app.py`` startup for each ``--solo-embedder TYPE=EMB``
+    pair on the command line. Pass ``embedder=None`` (or an empty
+    string) to clear an entry. Both arguments are stripped; an empty
+    *media_type* is silently ignored (the CLI parser already validates).
+    """
+    mt = (media_type or "").strip()
+    if not mt:
+        return
+    emb = (embedder or "").strip() if embedder else ""
+    if not emb:
+        _cli_solo_embedders.pop(mt, None)
+        return
+    _cli_solo_embedders[mt] = emb
+
+
+def get_cli_solo_embedders() -> dict[str, str]:
+    """Return a copy of the process-level solo-embedder CLI fallbacks."""
+    return dict(_cli_solo_embedders)
+
+
+def get_effective_solo_embedders() -> dict[str, str]:
+    """Return the merged ``{media_type: embedder}`` dict for the current user.
+
+    Combines the per-user :func:`get_solo_embedder_per_media_type` map
+    (user explicit) with the process-level
+    :data:`_cli_solo_embedders` (CLI fallback). User entries win per-key;
+    missing user keys fall through to the CLI value. An **empty-string
+    value** in the user map is a per-type opt-out sentinel — it removes
+    that type from the merged map even if the CLI fallback has a
+    value for it. This is the analog of setting ``solo_media_type=null``
+    with ``solo_media_type_explicit=True`` to override
+    ``--solo-media-type``.
+
+    Validity (does the embedder still exist for this type?) is *not*
+    checked here — the frontend resolves it against the live embedder
+    registry on its end and falls back to the normal picker for any
+    entry that no longer matches. Keeping validation client-side means a
+    rename or removal never blocks the settings UI from rendering.
+    """
+    merged: dict[str, str] = {}
+    for mt, emb in _cli_solo_embedders.items():
+        if mt and isinstance(emb, str) and emb.strip():
+            merged[mt] = emb.strip()
+    user_map = get_solo_embedder_per_media_type()  # type: ignore[name-defined]  # autogen'd accessor
+    if isinstance(user_map, dict):
+        for mt, emb in user_map.items():
+            if not isinstance(mt, str) or not mt:
+                continue
+            if isinstance(emb, str) and emb.strip():
+                merged[mt] = emb.strip()
+            else:
+                # Empty-string sentinel — user explicitly opted out for
+                # this type, so drop the CLI fallback too.
+                merged.pop(mt, None)
+    return merged
+
+
+def get_effective_solo_embedder(media_type: str) -> str | None:
+    """Return the effective solo embedder for *media_type*, or ``None``."""
+    if not media_type:
+        return None
+    return get_effective_solo_embedders().get(media_type)
+
+
+def apply_user_solo_embedder_per_media_type(value: dict[str, str] | None) -> None:
+    """Replace the per-user ``solo_embedder_per_media_type`` map.
+
+    Used by the settings PUT route. ``None`` clears every entry. Keys
+    are stripped and skipped if empty. Values are stripped; an
+    empty-string value is preserved as a **per-type opt-out sentinel**
+    (overrides the CLI fallback for that type — see
+    :func:`get_effective_solo_embedders`). The route layer is
+    responsible for validating non-empty ``(media_type, embedder)``
+    pairs against the live registries before calling this.
+    """
+    if value is None:
+        set_solo_embedder_per_media_type({})  # type: ignore[name-defined]  # autogen'd accessor
+        return
+    cleaned: dict[str, str] = {}
+    for mt, emb in value.items():
+        if not isinstance(mt, str) or not mt.strip():
+            continue
+        if isinstance(emb, str) and emb.strip():
+            cleaned[mt.strip()] = emb.strip()
+        elif isinstance(emb, str):
+            # Empty-string sentinel — preserve as opt-out marker.
+            cleaned[mt.strip()] = ""
+    set_solo_embedder_per_media_type(cleaned)  # type: ignore[name-defined]  # autogen'd accessor
+
+
 def get_autorun_detectors() -> list[str]:
     """Return the list of detector names flagged for autorun.
 
@@ -1195,6 +1422,126 @@ def is_autorun_detector(name: str) -> bool:
 
 
 # -------------------------------------------------------------------
+# Plugin hiding (admin-side picker declutter)
+# -------------------------------------------------------------------
+
+
+def _normalize_hidden_plugins(value: Any) -> dict[str, set[str]]:
+    """Coerce arbitrary input to ``{family: {name, ...}}`` form.
+
+    Accepts ``dict[str, Iterable[str]]`` shapes and drops empty entries.
+    Non-string keys / names and ``None`` values are silently skipped so a
+    corrupt settings file doesn't crash plugin listings.
+    """
+    out: dict[str, set[str]] = {}
+    if not isinstance(value, dict):
+        return out
+    for family, names in value.items():
+        if not isinstance(family, str) or not family:
+            continue
+        if isinstance(names, (str, bytes)):
+            continue
+        try:
+            members = {n for n in names if isinstance(n, str) and n}
+        except TypeError:
+            continue
+        if members:
+            out[family] = members
+    return out
+
+
+def set_cli_hidden_plugins(value: dict[str, Any] | None) -> None:
+    """Replace the process-level ``--hide-plugin`` fallback in one shot.
+
+    Called by ``app.py`` after parsing ``--hide-plugin family:name`` flags
+    (or by tests that want to seed a known CLI hide list). ``None`` or an
+    empty dict clears the fallback.
+    """
+    global _cli_hidden_plugins
+    _cli_hidden_plugins = _normalize_hidden_plugins(value or {})
+
+
+def add_cli_hidden_plugin(family: str, name: str) -> None:
+    """Append ``(family, name)`` to the CLI hide list (idempotent).
+
+    Used by the ``--hide-plugin`` argparse hook to accumulate one entry
+    per flag occurrence.
+    """
+    if not family or not name:
+        return
+    _cli_hidden_plugins.setdefault(family, set()).add(name)
+
+
+def get_cli_hidden_plugins() -> dict[str, set[str]]:
+    """Return a defensive copy of the CLI-only hide map."""
+    return {family: set(names) for family, names in _cli_hidden_plugins.items()}
+
+
+def get_effective_hidden_plugins() -> dict[str, set[str]]:
+    """Return the merged ``{family: {name, ...}}`` hide map.
+
+    Combines the persisted ``hidden_plugins`` server setting with the
+    process-level ``--hide-plugin`` fallback. The union semantics matter:
+    a plugin is hidden if either source asks for it, so the CLI flag can
+    only add hides (never un-hide something the settings file marks
+    hidden).
+    """
+    persisted = _normalize_hidden_plugins(get_hidden_plugins())  # type: ignore[name-defined]
+    merged: dict[str, set[str]] = {family: set(names) for family, names in persisted.items()}
+    for family, names in _cli_hidden_plugins.items():
+        merged.setdefault(family, set()).update(names)
+    return merged
+
+
+def is_plugin_hidden(family: str, name: str) -> bool:
+    """Return True if *name* is hidden in *family* by the effective hide map.
+
+    Static ``hidden_from_picker=True`` on a plugin class is **not**
+    consulted here — that flag is already serialised on the plugin's
+    ``to_dict()`` and filtered client-side. This function only answers
+    "is the admin hiding this in this deployment?"
+    """
+    hidden = _cli_hidden_plugins.get(family)
+    if hidden and name in hidden:
+        return True
+    persisted = get_hidden_plugins()  # type: ignore[name-defined]
+    if not isinstance(persisted, dict):
+        return False
+    family_names = persisted.get(family)
+    if not isinstance(family_names, (list, set, tuple)):
+        return False
+    return name in family_names
+
+
+def filter_visible_plugins(family: str, plugins: Iterable[Any], *, id_attr: str = "name") -> list[Any]:
+    """Drop plugins whose id-attribute is hidden in *family*.
+
+    The single chokepoint for the listing routes. *id_attr* names the
+    attribute that carries the plugin's registry id — ``"name"`` for the
+    PluginBase families, ``"type_id"`` for :class:`MediaType` (whose
+    registry key is the type id, not its human-readable name).
+    """
+    hidden = get_effective_hidden_plugins().get(family)
+    if not hidden:
+        return list(plugins)
+    return [p for p in plugins if getattr(p, id_attr, None) not in hidden]
+
+
+def filter_visible_plugin_dicts(
+    family: str, plugin_dicts: Iterable[dict[str, Any]], *, id_key: str = "name"
+) -> list[dict[str, Any]]:
+    """Same as :func:`filter_visible_plugins` but for pre-serialised dicts.
+
+    Reads ``dict[id_key]`` to compare against the hide set. Entries
+    without that key are kept.
+    """
+    hidden = get_effective_hidden_plugins().get(family)
+    if not hidden:
+        return list(plugin_dicts)
+    return [d for d in plugin_dicts if d.get(id_key) not in hidden]
+
+
+# -------------------------------------------------------------------
 # Directory path settings (server tier)
 # -------------------------------------------------------------------
 
@@ -1202,7 +1549,7 @@ def is_autorun_detector(name: str) -> bool:
 def _get_dir(key: str) -> Path:
     """Return a server-tier directory path setting as a :class:`~pathlib.Path`."""
     with _settings_lock:
-        raw = _ensure_server_loaded().get(key, _SERVER_DEFAULTS[key])
+        raw = _ensure_server_loaded().get(key, _server_defaults()[key])
     return Path(raw)
 
 

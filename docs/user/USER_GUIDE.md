@@ -1,24 +1,17 @@
 # VTSearch User Guide
 
-A walkthrough for people who want to **use** VTSearch — not install,
-extend, or debug it. Open it, load a dataset, train a detector (or
-apply an existing one), and export the matches. For installation see
-[SETUP.md](../SETUP.md). For CLI workflows (no browser) see
-[CLI.md](../CLI.md).
-
 ## Contents
 
 1. [What VTSearch does](#what-vtsearch-does)
-2. [Opening the app](#opening-the-app)
-3. [Loading a dataset](#loading-a-dataset)
-4. [The three-panel layout](#the-three-panel-layout)
-5. [Autopilot — the guided workflow](#autopilot--the-guided-workflow) *(start here)*
-6. [Manual mode — for power users](#manual-mode--for-power-users)
+2. [Loading a dataset](#loading-a-dataset)
+3. [The three-panel layout](#the-three-panel-layout)
+4. [Autopilot — the guided workflow](#autopilot--the-guided-workflow) *(start here)*
+5. [Manual mode — for power users](#manual-mode--for-power-users)
+6. [Region voting on images](#region-voting-on-images)
 7. [View options](#view-options)
 8. [Dashboard — managing datasets and detectors](#dashboard--managing-datasets-and-detectors)
 9. [Exporting your work](#exporting-your-work)
 10. [Importing pre-trained detectors](#importing-pre-trained-detectors)
-11. [Where to go next](#where-to-go-next)
 
 ---
 
@@ -52,27 +45,15 @@ need to think about sort modes or selection strategies directly.
 
 ---
 
-## Opening the app
-
-Once the server is running (see [SETUP.md](../SETUP.md)), visit
-`http://localhost:5000` in a browser. The app opens with an empty
-workspace and a hamburger menu (☰) in the top-left corner — that's
-your entry point for loading data.
-
-The interface is a single page with three vertical panels. They fill
-in as you load a dataset and start labeling.
-
----
-
 ## Loading a dataset
 
 Click the hamburger menu (☰) in the top-left. You get two choices:
 
 - **Demo datasets** — VTSearch ships with a catalogue of open
   datasets across all five media types (audio, image, text, video,
-  document). See [demos.md](../demos.md) for the full list. Each demo
-  downloads on first use (~15 MB to ~1.2 GB depending on dataset) and
-  is cached, so subsequent loads are instant.
+  document). Each demo downloads on first use (~15 MB to ~1.2 GB
+  depending on dataset) and is cached, so subsequent loads are
+  instant.
 - **Import your own** — Load a folder of files from the server, a
   VTSearch pickle file, a zipped HTTP archive, or combine several
   existing datasets. Each importer asks for the fields it needs
@@ -289,6 +270,42 @@ modal. All preferences are remembered per media type.
 There's a separate view modal for the right panel (vote piles),
 with the same controls.
 
+### Solo media type — streamline for one media type
+
+If you only ever work with one kind of media (e.g. you exclusively
+search images, optionally pulled in from videos and documents via
+the built-in converters), pick that type under **Appearance → Solo
+media type** in the Settings modal. Once set:
+
+- The dataset importer and new-detector dialogs stop asking which
+  media type you want — they lock to your chosen type.
+- Converter offerings filter to those that produce your type
+  (so picking "image" still lets you import videos-as-frames and
+  documents-as-pages, just not raw audio).
+- Your chosen type's default embedder is warmed at startup so the
+  first detector run is fast.
+
+Pick **Show everything** to opt back out. Operators can also pass
+`--solo-media-type image` (or any type id) on the command line as a
+fallback for new users — anyone who explicitly changes the setting
+overrides the CLI value for themselves.
+
+### Locking the embedder for a media type
+
+The dataset importer normally shows an **Advanced** dropdown so you
+can pick which embedding model is used (SigLIP for images, LAION-CLAP
+for audio, etc.). If you always pick the same one for a given type,
+lock it under **Appearance → Solo media embedder** in the Settings
+modal: pick one row per media type and the importer hides the
+dropdown for that type the next time you open it. Other media types
+keep the normal dropdown.
+
+Pick **Ask each time** for any type to opt back out. Operators can
+also pass `--solo-embedder image=siglip --solo-embedder audio=clap`
+on the command line as a fallback — anyone who picks their own value
+(or "Ask each time") in Settings overrides the CLI value for
+themselves, per media type.
+
 ---
 
 ## Region voting on images
@@ -408,9 +425,7 @@ your current labels. Formats:
 - **Email (SMTP)** — emails the result if SMTP is configured.
 
 You can also export **detector weights** from the Detectors dashboard —
-useful for sharing a trained detector with another VTSearch
-instance, or for running it from the CLI. See [CLI.md](../CLI.md) for
-command-line autodetect.
+useful for sharing a trained detector with another VTSearch instance.
 
 ---
 
@@ -427,16 +442,6 @@ Two ways to bring in existing work:
   contains the trained detector weights plus the threshold and
   metadata needed to score a new dataset. Once imported, you can
   use it for Load-sort or for autorun scoring.
-
----
-
-## Where to go next
-
-- Running workflows without the browser — [CLI.md](../CLI.md).
-- What the ML actually does — [ML.md](../ML.md).
-- Measuring sort quality on demo datasets — [EVAL.md](../EVAL.md).
-- How Autopilot and sort modes are implemented — the
-  [architecture doc](../ARCHITECTURE.md) (developer-oriented).
 
 ---
 

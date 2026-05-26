@@ -59,19 +59,18 @@
   // gap from the h3 to its own content, so the title visually belongs to
   // what's below it. Asymmetric margins handle this; flex-gap still
   // provides the rest of the in-section rhythm.
+  // `<h3>` inherits its font-size and color from `_components.scss`;
+  // we only need to scope the asymmetric section-title margins.
   h3 {
     margin: var(--space-xl) 0 0;
-    font-size: var(--font-xl);
-    color: var(--text-primary);
 
     &:first-child { margin-top: 0; }
   }
 
-  h4 {
-    margin: var(--space-md) 0 0;
-    font-size: var(--font-md);
-    color: var(--text-secondary);
-  }
+  // `<h4 class="subhead">` labels a small subsection inside an h3
+  // panel; identity comes from the global `.subhead`, only the
+  // contextual margin is scoped here.
+  h4 { margin: var(--space-md) 0 0; }
 }
 
 .checkbox-row {
@@ -82,50 +81,37 @@
   cursor: pointer;
 }
 
-.view-tabs {
+.solo-embedder-grid {
   display: flex;
-  gap: 0;
-  margin-bottom: 0;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  border: 1px solid var(--border-color);
-  border-bottom: none;
-  padding: var(--space-xs) var(--space-xs) 0;
+  flex-direction: column;
+  gap: var(--space-sm);
 }
 
-.view-tab {
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-  padding: var(--space-sm) var(--space-md);
-  font-size: var(--font-sm);
-  font-weight: var(--weight-medium);
+.solo-embedder-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: var(--space-md);
+
+  .form-hint {
+    grid-column: 2;
+    margin: 0;
+  }
+}
+
+.solo-embedder-label {
+  font-size: var(--font-md);
   color: var(--text-secondary);
-  cursor: pointer;
-  transition: color var(--transition-base), border-color var(--transition-base), background var(--transition-base);
-
-  &:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
-  }
-
-  &--active {
-    color: var(--text-primary);
-    background: var(--bg-primary);
-    border-bottom-color: var(--accent-color);
-  }
 }
 
+// Scroll Style's two-side layout sits inside the shared `.view-tab-content`
+// panel (base styling in `_components.scss`). Encapsulation scopes this
+// grid override to ScrollStyle's tab content only — other consumers
+// (e.g. Data Imports) keep their own inner layout.
 .view-tab-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-xl);
-  padding: var(--space-lg);
-  border: 1px solid var(--border-color);
-  border-top: 1px solid var(--border-color);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  background: var(--bg-primary);
 }
 
 .view-side-section {
@@ -133,10 +119,11 @@
   flex-direction: column;
   gap: var(--space-md);
 
+  // `<h4 class="subhead">` divider — global `.subhead` handles font
+  // identity; the border-bottom + padding-bottom are this site's
+  // contextual divider styling.
   h4 {
     margin: 0;
-    font-size: var(--font-md);
-    color: var(--text-secondary);
     border-bottom: 1px solid var(--border-color);
     padding-bottom: var(--space-xs);
   }

@@ -2,19 +2,22 @@
   <div class="ssp-row ssp-row--native">
     <label
       class="ssp-row-main"
-      title="Include files of the dataset's native media type directly, without any conversion."
+      title="Native files of the dataset's media type are always included."
     >
       <input
         type="checkbox"
         class="ssp-checkbox"
-        [checked]="isNativeChecked()"
-        (change)="toggleNative($any($event.target).checked)"
+        [checked]="true"
+        [disabled]="true"
       />
       <span class="ssp-row-label">
         <strong>{{ labelFor(nativeType) }}</strong>
-        <span class="ssp-native-tag">native</span>
       </span>
     </label>
+
+    @if (nativeSummary(); as summary) {
+      <span class="ssp-row-summary">{{ summary }}</span>
+    }
 
     @if (hasNativeDetails()) {
       <button
@@ -42,6 +45,10 @@
         />
         <span class="ssp-row-label">{{ labelFor(st) }}</span>
       </label>
+
+      @if (nonNativeSummary(st); as summary) {
+        <span class="ssp-row-summary">{{ summary }}</span>
+      }
 
       @if (hasDetails(st)) {
         <button

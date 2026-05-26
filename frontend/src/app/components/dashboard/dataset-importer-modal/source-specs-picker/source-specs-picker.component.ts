@@ -41,6 +41,14 @@ export class SourceSpecsPickerComponent implements OnChanges {
    *  Clipper section).  An empty list means "no clipper choice", and
    *  the Details button is suppressed. */
   @Input() clippers: ClipperInfo[] = [];
+  /** Name of the clipper currently selected by the parent for the
+   *  native row.  Used to look up the matching :class:`ClipperInfo`
+   *  for the inline summary preview. */
+  @Input() selectedClipperName = '';
+  /** Current parameter values for the selected native clipper, keyed by
+   *  the clipper's parameter ``key``.  Substituted into the clipper's
+   *  ``summary_template`` to render the inline preview. */
+  @Input() selectedClipperParams: Record<string, string | number> = {};
   @Output() specsChange = new EventEmitter<SourceSpec[]>();
   /** Fired when the user clicks the native row's "Details" button.
    *  The parent opens the shared clipper-chooser modal in response. */
@@ -72,10 +80,6 @@ export class SourceSpecsPickerComponent implements OnChanges {
 
   labelFor(sourceType: string): string {
     return this.typeLabels[sourceType] || sourceType;
-  }
-
-  isNativeChecked(): boolean {
-    return this.specs.some((s) => s.source_type === this.nativeType && s.converter === null);
   }
 
   isNonNativeChecked(sourceType: string): boolean {
@@ -117,6 +121,44 @@ export class SourceSpecsPickerComponent implements OnChanges {
     this.clipperChooserRequested.emit();
   }
 
+  /** Currently-selected clipper for the native row, looked up in the
+   *  ``clippers`` input by ``selectedClipperName``.  Falls back to the
+   *  first available clipper so the summary still renders when the
+   *  parent hasn't picked one yet. */
+  private currentClipper(): ClipperInfo | null {
+    if (!this.clippers.length) return null;
+    const byName = this.clippers.find((c) => c.name === this.selectedClipperName);
+    return byName || this.clippers[0];
+  }
+
+  /** Live one-line summary of the native row's clipper, with current
+   *  parameter values substituted into its ``summary_template``.  Falls
+   *  back to ``description`` when no template is set, and to an empty
+   *  string when neither is available.  Missing values fall back to the
+   *  clipper's declared parameter defaults so the preview reads cleanly
+   *  before the user opens the chooser. */
+  nativeSummary(): string {
+    const c = this.currentClipper();
+    if (!c) return '';
+    const params: Record<string, string | number | null | undefined> = {};
+    for (const p of c.parameters || []) {
+      params[p.key] = p.default;
+    }
+    for (const k of Object.keys(this.selectedClipperParams)) {
+      const v = this.selectedClipperParams[k];
+      if (v !== undefined && v !== null && v !== '') params[k] = v;
+    }
+    return formatSummary(c.summary_template || c.description || '', params);
+  }
+
+  /** Live one-line summary of a non-native row's converter, with the
+   *  current draft params substituted into its ``summary_template``. */
+  nonNativeSummary(sourceType: string): string {
+    const c = this.currentConverter(sourceType);
+    if (!c) return '';
+    return formatSummary(c.summary_template || c.description || '', this.getDraft(sourceType).params);
+  }
+
   currentConverterName(sourceType: string): string {
     return this.getDraft(sourceType).converter || '';
   }
@@ -129,15 +171,6 @@ export class SourceSpecsPickerComponent implements OnChanges {
   paramValue(sourceType: string, key: string): string | number | null {
     const v = this.getDraft(sourceType).params[key];
     return v === undefined ? null : v;
-  }
-
-  toggleNative(checked: boolean): void {
-    const others = this.specs.filter((s) => !(s.source_type === this.nativeType && s.converter === null));
-    if (checked) {
-      this.specsChange.emit([{ source_type: this.nativeType, converter: null, params: {} }, ...others]);
-    } else {
-      this.specsChange.emit(others);
-    }
   }
 
   toggleNonNative(sourceType: string, checked: boolean): void {
@@ -197,4 +230,19 @@ export class SourceSpecsPickerComponent implements OnChanges {
     }
     return out;
   }
+}
+
+/** Substitute ``{key}`` placeholders in *template* with values from
+ *  *params*.  Unknown keys and ``null`` / ``undefined`` values are
+ *  rendered as ``"?"`` so the surrounding sentence remains readable. */
+function formatSummary(
+  template: string,
+  params: Record<string, string | number | null | undefined>,
+): string {
+  if (!template) return '';
+  return template.replace(/\{([^{}]+)\}/g, (_match, key: string) => {
+    const v = params[key];
+    if (v === undefined || v === null || v === '') return '?';
+    return String(v);
+  });
 }

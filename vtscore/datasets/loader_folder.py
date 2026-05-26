@@ -1,7 +1,12 @@
 """Folder-based dataset loaders.
 
 Loads datasets from a directory tree of media files, with optional
-pre-computed embeddings/MD5s, custom metadata, and chunked iteration.
+pre-computed embeddings/MD5s and custom metadata.  Loaders build the
+media dicts but do **not** call the embedder — items without a
+pre-computed embedding leave ``embedding=None`` for the framework
+embed stage (:func:`vtscore.datasets.load_pipeline.embed_missing`) to
+fill in.
+
 Split out from :mod:`vtscore.datasets.loader` for navigability.
 """
 
@@ -34,229 +39,28 @@ def _scan_files(folder: Path, pattern: str, recursive: bool) -> list[Path]:
     return glob_top_level(folder, pattern)
 
 
-# ---------------------------------------------------------------------------
-# Bulk-embedding helpers used by the folder loaders below.
-# ---------------------------------------------------------------------------
-
-
-def _has_override(
-    rel_path: str,
-    file_name: str,
-    content_vectors: dict[str, Any] | None,
-    custom_metadata_map: dict[str, dict[str, Any]] | None,
-) -> bool:
-    """Return True if the file's embedding is already resolved by overrides.
-
-    An override is either a ``custom_metadata`` entry with an ``"embedding"``
-    key or a ``content_vectors`` entry.  Files with overrides do not need to
-    be sent to the embedding model.
-    """
-    if custom_metadata_map:
-        cm = custom_metadata_map.get(rel_path) or custom_metadata_map.get(file_name)
-        if cm and _get_embedding_value(cm) is not None:
-            return True
-    if content_vectors and (rel_path in content_vectors or file_name in content_vectors):
-        return True
-    return False
-
-
-def _make_embed_input(
-    file_path: Path,
+def _resolve_folder_load_inputs(
     folder_path: Path,
-    origin: dict[str, Any] | None,
-    custom_metadata_map: dict[str, dict[str, Any]] | None,
-) -> dict[str, Any]:
-    """Build a minimal media dict suitable for :meth:`MediaEmbedder.embed_media`.
-
-    File-based embedders pull ``media["media_path"]`` from this dict;
-    service-based embedders can use ``media["origin"]``, ``media["origin_name"]``,
-    and ``media.get("custom_metadata")`` to resolve the content without
-    touching local disk.  The full media dict (with bytes, md5, duration,
-    type-specific fields) is constructed after the embedding succeeds.
-    """
-    rel_path = file_path.relative_to(folder_path).as_posix()
-    file_cm: dict[str, Any] | None = None
-    if custom_metadata_map:
-        file_cm = custom_metadata_map.get(rel_path) or custom_metadata_map.get(file_path.name)
-    return {
-        "media_path": str(file_path.resolve()),
-        "origin": origin,
-        "origin_name": rel_path,
-        "filename": rel_path,
-        "custom_metadata": file_cm,
-    }
-
-
-def _bulk_embed_files(
-    emb: Any,
-    media_files: list[Path],
-    folder_path: Path,
-    content_vectors: dict[str, Any] | None,
-    custom_metadata_map: dict[str, dict[str, Any]] | None,
-    on_progress: ProgressCallback,
     media_type: str,
-    origin: dict[str, Any] | None = None,
-) -> dict[Path, Any]:
-    """Pre-compute embeddings for *media_files* via :meth:`embed_media_bulk`.
+    recursive: bool,
+    content_vectors: dict[str, Any] | None,
+    content_md5s: dict[str, str] | None,
+    custom_metadata_map: dict[str, dict[str, Any]] | None,
+) -> tuple[Any, list[Path], int]:
+    """Shared front-matter for the folder loaders.
 
-    Files already resolved by ``custom_metadata`` or ``content_vectors``
-    are skipped; the rest are packaged into minimal media dicts (via
-    :func:`_make_embed_input`) and handed to the embedder in a single
-    call.  The embedder's ``_on_progress`` callback is routed through
-    *on_progress* for the duration of the call so progress updates
-    (whether from the default per-item loop or a subclass's custom
-    batching) reach the UI.
-
-    Returns a dict mapping ``Path`` → embedding vector.  Paths whose
-    bulk call returned ``None`` are omitted, matching the per-file
-    behaviour of skipping files that fail to embed.
+    Resolves the media type, scans the folder, and validates the
+    override maps against the scanned file list.  Returns
+    ``(mt, media_files, total_files)``.  Raises ``ValueError`` for
+    unknown media types, empty folders, or ambiguous basename keys in
+    any override map.
     """
-    pending_paths: list[Path] = []
-    pending_medias: list[dict[str, Any]] = []
-    for file_path in media_files:
-        rel_path = file_path.relative_to(folder_path).as_posix()
-        if _has_override(rel_path, file_path.name, content_vectors, custom_metadata_map):
-            continue
-        pending_paths.append(file_path)
-        pending_medias.append(_make_embed_input(file_path, folder_path, origin, custom_metadata_map))
-
-    if not pending_paths:
-        return {}
-
-    on_progress("embedding", f"Embedding {len(pending_paths)} {media_type} files...", 0, len(pending_paths))
-
-    original_cb = emb._on_progress
-    emb._on_progress = on_progress
-    try:
-        vectors = emb.embed_media_bulk(pending_medias)
-    finally:
-        emb._on_progress = original_cb
-
-    return {fp: vec for fp, vec in zip(pending_paths, vectors) if vec is not None}
-
-
-def _bulk_patch_forward_files(
-    emb: Any,
-    media_files: list[Path],
-    folder_path: Path,
-    on_progress: ProgressCallback,
-    media_type: str,
-    origin: dict[str, Any] | None = None,
-    custom_metadata_map: dict[str, dict[str, Any]] | None = None,
-) -> dict[Path, Any]:
-    """Run :meth:`MediaEmbedder.patch_forward_bulk` on every file in *media_files*.
-
-    Only called when the active embedder reports
-    ``supports_patch_regions == True``.  Returns a ``Path → PatchEmbedOutput``
-    mapping; files whose patch forward returned ``None`` are omitted.
-
-    The embedder may batch the forward internally (DINOv2 / DINOv3 / EUPE
-    patch variants do) or fall back to per-item via the default loop
-    contract on :class:`MediaEmbedder`.
-    """
-    pending_paths: list[Path] = []
-    pending_medias: list[dict[str, Any]] = []
-    for file_path in media_files:
-        pending_paths.append(file_path)
-        pending_medias.append(_make_embed_input(file_path, folder_path, origin, custom_metadata_map))
-
-    if not pending_paths:
-        return {}
-
-    on_progress("embedding", f"Patch-embedding {len(pending_paths)} {media_type} files...", 0, len(pending_paths))
-
-    original_cb = emb._on_progress
-    emb._on_progress = on_progress
-    try:
-        outputs = emb.patch_forward_bulk(pending_medias)
-    finally:
-        emb._on_progress = original_cb
-
-    return {fp: out for fp, out in zip(pending_paths, outputs) if out is not None}
-
-
-def _resolve_folder_embedder(media_type: str, embedder_name: str, skip_embedding: bool) -> tuple[Any, Any]:
-    """Look up the media type and pick an embedder.
-
-    Returns ``(mt, emb)``.  ``emb`` is ``None`` when ``skip_embedding`` is
-    set or when no embedder is registered for the media type.
-    """
-    from vtscore.media import embedders_for_type, get_by_folder_name, get_embedder  # noqa: PLC0415
+    from vtscore.media import get_by_folder_name  # noqa: PLC0415
 
     try:
         mt = get_by_folder_name(media_type)
     except KeyError:
         raise ValueError(f"Invalid media type: {media_type}")
-
-    if skip_embedding:
-        return mt, None
-    if embedder_name:
-        try:
-            return mt, get_embedder(embedder_name)
-        except KeyError:
-            raise ValueError(f"Unknown embedder: {embedder_name}")
-    avail = embedders_for_type(mt.type_id)
-    return mt, (avail[0] if avail else None)
-
-
-def _eager_load_embedder_models(
-    emb: Any,
-    media_files: list[Path],
-    folder_path: Path,
-    content_vectors: dict[str, Any] | None,
-    custom_metadata_map: dict[str, dict[str, Any]] | None,
-    on_progress: ProgressCallback,
-) -> None:
-    """Eagerly load model weights when at least one file needs the embedder.
-
-    Skipped when every file already has an override (NPZ-only imports
-    shouldn't pay the weight-load cost).  Loading happens here so that
-    download / weight-loading time does not pollute the per-file
-    embedding progress bar that the caller starts immediately after.
-    """
-    if getattr(emb, "_model", None) is not None:
-        return
-    needs_model = any(
-        not _has_override(
-            fp.relative_to(folder_path).as_posix(),
-            fp.name,
-            content_vectors,
-            custom_metadata_map,
-        )
-        for fp in media_files
-    )
-    if not needs_model:
-        return
-
-    on_progress("loading", "Loading embedding model…", 0, 0)
-    original_cb = emb._on_progress
-    emb._on_progress = on_progress
-    try:
-        emb.load_models()
-    finally:
-        emb._on_progress = original_cb
-
-
-def _resolve_folder_load_inputs(
-    folder_path: Path,
-    media_type: str,
-    embedder_name: str,
-    skip_embedding: bool,
-    recursive: bool,
-    content_vectors: dict[str, Any] | None,
-    content_md5s: dict[str, str] | None,
-    custom_metadata_map: dict[str, dict[str, Any]] | None,
-    on_progress: ProgressCallback,
-) -> tuple[Any, Any, list[Path], int]:
-    """Shared front-matter for the folder loaders.
-
-    Resolves the media type + embedder, scans the folder, validates the
-    override maps against the scanned file list, and eagerly loads model
-    weights when needed.  Returns ``(mt, emb, media_files, total_files)``.
-    Raises ``ValueError`` for unknown media types, unknown embedder names,
-    empty folders, or ambiguous basename keys in any override map.
-    """
-    mt, emb = _resolve_folder_embedder(media_type, embedder_name, skip_embedding)
 
     media_files: list[Path] = []
     for ext in mt.file_extensions:
@@ -273,17 +77,7 @@ def _resolve_folder_load_inputs(
         custom_metadata_map,
     )
 
-    if not skip_embedding and emb is not None:
-        _eager_load_embedder_models(
-            emb,
-            media_files,
-            folder_path,
-            content_vectors,
-            custom_metadata_map,
-            on_progress,
-        )
-
-    return mt, emb, media_files, len(media_files)
+    return mt, media_files, len(media_files)
 
 
 def _embeddings_equal(a: Any, b: Any) -> bool:
@@ -480,20 +274,13 @@ def _resolve_file_embedding(
     file_name: str,
     file_cm: dict[str, Any] | None,
     content_vectors: dict[str, Any] | None,
-    skip_embedding: bool,
-    emb: Any,
-    bulk_embeddings: dict[Path, Any],
-    file_path: Path,
-) -> tuple[Any, str] | None:
-    """Pick the embedding + embedder_id for *file_path*.
+) -> tuple[Any, str]:
+    """Pick a pre-computed embedding for *file_path* if available.
 
-    Resolution order matches the original inline logic: custom_metadata
-    embedding → content_vectors[rel_path] → content_vectors[basename] →
-    ``None`` when ``skip_embedding`` → bulk-embedded vector.  Returns
-    ``None`` when the file should be skipped entirely (no embedder
-    available, or bulk embedding failed for this path).  External
-    vectors come back with ``embedder_id == ""`` so downstream code does
-    not re-embed against a mismatched model.
+    Resolution order: custom_metadata embedding → content_vectors[rel_path]
+    → content_vectors[basename] → ``(None, "")``.  External vectors come
+    back with ``embedder_id == ""``; the framework embed stage stamps
+    the live embedder name on items that come out at ``None`` here.
     """
     cm_embedding = _get_embedding_value(file_cm) if file_cm else None
     if cm_embedding is not None:
@@ -502,14 +289,7 @@ def _resolve_file_embedding(
         return content_vectors[rel_path], ""
     if content_vectors and file_name in content_vectors:
         return content_vectors[file_name], ""
-    if skip_embedding:
-        return None, ""
-    if emb is None:
-        return None
-    embedding = bulk_embeddings.get(file_path)
-    if embedding is None:
-        return None
-    return embedding, emb.name
+    return None, ""
 
 
 def _resolve_file_md5(
@@ -583,51 +363,8 @@ def _build_folder_media_data(
     }
 
 
-def _run_bulk_embedders(
-    emb: Any,
-    media_files: list[Path],
-    folder_path: Path,
-    content_vectors: dict[str, Any] | None,
-    custom_metadata_map: dict[str, dict[str, Any]] | None,
-    on_progress: ProgressCallback,
-    media_type: str,
-    origin: dict[str, Any] | None,
-    skip_embedding: bool,
-) -> tuple[dict[Path, Any], dict[Path, Any]]:
-    """Run :func:`_bulk_embed_files` and (when supported) the patch-forward pass.
-
-    Returns ``(bulk_embeddings, bulk_patch_outputs)``.  Both default to
-    empty dicts when ``emb`` is missing or ``skip_embedding`` is set.
-    """
-    if emb is None or skip_embedding:
-        return {}, {}
-    bulk_embeddings = _bulk_embed_files(
-        emb,
-        media_files,
-        folder_path,
-        content_vectors,
-        custom_metadata_map,
-        on_progress,
-        media_type,
-        origin=origin,
-    )
-    bulk_patch_outputs: dict[Path, Any] = {}
-    if getattr(emb, "supports_patch_regions", False) is True:
-        bulk_patch_outputs = _bulk_patch_forward_files(
-            emb,
-            media_files,
-            folder_path,
-            on_progress,
-            media_type,
-            origin=origin,
-            custom_metadata_map=custom_metadata_map,
-        )
-    return bulk_embeddings, bulk_patch_outputs
-
-
 def _emit_per_file_progress(
     on_progress: ProgressCallback,
-    skip_embedding: bool,
     media_type: str,
     rel_path: str,
     current: int,
@@ -635,10 +372,8 @@ def _emit_per_file_progress(
     chunk_label: str,
 ) -> None:
     """Emit a per-file progress update (folder loaders)."""
-    phase = "loading" if skip_embedding else "embedding"
-    verb = "Loading" if skip_embedding else "Embedding"
-    msg = f"{verb} {media_type} {rel_path}{chunk_label}..."
-    on_progress(phase, msg, current, total)
+    msg = f"Loading {media_type} {rel_path}{chunk_label}..."
+    on_progress("loading", msg, current, total)
 
 
 def _build_per_file_media(
@@ -647,38 +382,20 @@ def _build_per_file_media(
     file_path: Path,
     rel_path: str,
     mt: Any,
-    emb: Any,
-    bulk_embeddings: dict[Path, Any],
-    bulk_patch_outputs: dict[Path, Any],
     content_vectors: dict[str, Any] | None,
     content_md5s: dict[str, str] | None,
     custom_metadata_map: dict[str, dict[str, Any]] | None,
-    skip_embedding: bool,
     thin: bool,
     origin: dict[str, Any] | None,
-) -> dict[str, Any] | None:
-    """Resolve embedding + md5 and build the per-file media dict.
+) -> dict[str, Any]:
+    """Resolve any pre-computed embedding + md5 and build the per-file media dict.
 
-    Returns ``None`` when the file should be skipped (no embedder / bulk
-    embedding failed).  Handles both thin and full modes, attaches
-    custom_metadata and patch regions when available, and merges in
-    type-specific fields in full mode.
+    Files without a pre-computed embedding are returned with
+    ``embedding=None``; the framework embed stage fills those in.
     """
     file_cm = _lookup_file_custom_metadata(rel_path, file_path.name, custom_metadata_map)
 
-    resolved = _resolve_file_embedding(
-        rel_path,
-        file_path.name,
-        file_cm,
-        content_vectors,
-        skip_embedding,
-        emb,
-        bulk_embeddings,
-        file_path,
-    )
-    if resolved is None:
-        return None
-    embedding, embedder_id = resolved
+    embedding, embedder_id = _resolve_file_embedding(rel_path, file_path.name, file_cm, content_vectors)
 
     cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
@@ -716,34 +433,7 @@ def _build_per_file_media(
     if file_cm:
         media_data["custom_metadata"] = file_cm
 
-    patch_out = bulk_patch_outputs.get(file_path)
-    if patch_out is not None:
-        _attach_patch_regions(media_data, patch_out)
-
     return media_data
-
-
-def _attach_patch_regions(media_data: dict[str, Any], patch_out: Any) -> None:
-    """Build the HAC region tree from *patch_out* and attach it to *media_data*.
-
-    Converts the float32 region vectors and patch grid to **float16**
-    for pickling — vectors are rehydrated to float32 on read by callers
-    that score them.  Sets ``media_data["patch_regions"]`` (the
-    ``2K - 1 + 1`` region nodes including the CLS full-image node) and
-    ``media_data["patch_grid"]`` (the raw H × W × 768 patch tokens
-    needed by phase-2 region voting).
-
-    Both ``K`` and the HAC affinity ``alpha`` are pinned to the design
-    doc's defaults; the caltech101_s sweep is the prescribed way to
-    revisit them.
-    """
-    import numpy as np  # noqa: PLC0415
-
-    from vtscore.media.patch_embed import build_region_tree, to_fp16  # noqa: PLC0415
-
-    regions = build_region_tree(patch_out, k=12, alpha=0.5)
-    media_data["patch_regions"] = to_fp16(regions)
-    media_data["patch_grid"] = patch_out.patch_grid.astype(np.float16, copy=False)
 
 
 # ---------------------------------------------------------------------------
@@ -760,130 +450,83 @@ def load_dataset_from_folder(
     on_progress: Optional[ProgressCallback] = None,
     origin: dict[str, Any] | None = None,
     thin: bool = False,
-    embedder_name: str = "",
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
-    skip_embedding: bool = False,
     recursive: bool = True,
 ) -> None:
     """Generate a dataset in-place from a flat folder of media files.
 
-    Scans ``folder_path`` for all files matching the extensions for ``media_type``,
-    embeds each file using the appropriate model, and populates ``medias`` with
-    the resulting media dicts. Progress is reported via :func:`update_progress`.
-
-    Files whose basename appears in ``content_vectors`` will use the supplied
-    embedding instead of running the embedding model.  This allows importers
-    that already provide content vectors to avoid redundant computation.
-
-    Similarly, files whose basename appears in ``content_md5s`` will use the
-    supplied hash instead of computing it from the file contents.
+    Scans ``folder_path`` for all files matching the extensions for
+    ``media_type`` and populates ``medias`` with one media dict per
+    file.  Loaders do **not** call the embedder — items leave with
+    ``embedding=None`` unless a pre-computed vector is supplied through
+    ``content_vectors`` or ``custom_metadata_map``.  The framework
+    embed stage (:func:`vtscore.datasets.load_pipeline.embed_missing`)
+    fills the rest in after the importer returns.
 
     The ``medias`` dict is cleared before loading begins.
 
     ``media_type`` is looked up in the media type registry by
-    :attr:`~vtscore.media.base.MediaType.folder_import_name`.  Adding a
-    new media type to the registry automatically makes it available here
-    without any changes to this function.
+    :attr:`~vtscore.media.base.MediaType.folder_import_name`.
 
     Args:
         folder_path: Path to the root directory containing media files.
-            Subdirectories are scanned recursively.
         media_type: Media type identifier (e.g. ``"audio"``).
-        medias: Dict to populate in-place. Existing entries are removed before
-            loading. Keys are sequential integer media IDs starting from 1.
+        medias: Dict to populate in-place. Existing entries are removed
+            before loading. Keys are sequential integer media IDs
+            starting from 1.
         content_vectors: Optional mapping of filename to a pre-computed
             embedding ``numpy.ndarray``.  Keys may be relative paths
-            (``"subdir/file.wav"``) or basenames (``"file.wav"``); relative
-            paths are checked first for an exact match, then basenames as a
-            fallback.  When a bare basename would match more than one file
-            in the folder (without a disambiguating relative-path entry for
-            every match) the load fails with ``ValueError``; when both a
-            relative-path entry and a basename entry exist for the same
-            file with different values, the loader logs a warning and
-            keeps the relative-path entry.
-        content_md5s: Optional mapping of filename to a pre-computed MD5 hex
-            digest string.  Keys follow the same lookup logic as
-            ``content_vectors`` (relative path first, then basename), and
-            the same ambiguity checks apply.
+            (``"subdir/file.wav"``) or basenames (``"file.wav"``);
+            relative paths are checked first.  When a bare basename
+            would match more than one file in the folder without a
+            disambiguating relative-path entry, the load fails.
+        content_md5s: Optional mapping of filename to a pre-computed
+            MD5 hex digest string.  Same lookup logic as
+            ``content_vectors``.
         origin: Optional serialised
-            :class:`~vtscore.datasets.origin.Origin` dict to attach to each
-            media (as ``media["origin"]``).  When ``None`` no origin is set
-            and the caller is expected to set it afterwards.
-        thin: When ``True``, store a ``media_path`` reference to the file on
-            disk instead of reading all bytes into ``media_bytes``.  This saves
-            memory for CLI workflows that only need embeddings for scoring.
-            MD5 is still computed via streaming (constant memory).
-        embedder_name: Optional name of a registered embedder to use.
-            When empty, the first registered embedder for the media type
-            is used.
-        custom_metadata_map: Optional mapping of filename to a metadata dict.
-            Keys follow the same lookup logic as ``content_vectors`` (relative
-            path first, then basename), and the same ambiguity checks apply.
-            When a metadata dict contains a non-empty ``"md5"`` key, that
-            value is used as the media's MD5 instead of computing it from
-            the file contents.  When it contains an ``"embedding"`` key,
-            that value is used as the media's embedding vector (highest
-            priority, above ``content_vectors`` and the embedding model).
-            The metadata dict is also attached to the media as
-            ``custom_metadata``.
-        skip_embedding: When ``True``, skip embedder resolution and model
-            loading entirely.  Files with pre-computed vectors in
-            ``content_vectors`` use those; files without are included with
-            ``embedding=None``.  Useful when vectors have already been
-            downloaded or computed externally.
+            :class:`~vtscore.datasets.origin.Origin` dict.
+        thin: When ``True``, store ``media_path`` instead of reading
+            all bytes into ``media_bytes``.  MD5 is computed via
+            streaming.
+        custom_metadata_map: Optional mapping of filename to a metadata
+            dict.  Same lookup logic as ``content_vectors``.  An
+            ``"md5"`` key overrides the computed hash; an
+            ``"embedding"`` key supplies a pre-computed vector
+            (highest priority).  The dict is attached as
+            ``media["custom_metadata"]``.
+        recursive: When ``True`` (default), scan subdirectories.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, if no matching
-            files are found in ``folder_path``, or if an override map has
-            a bare-basename key that would silently fan out to multiple
-            files in the folder.
+            files are found in ``folder_path``, or if an override map
+            has a bare-basename key that would silently fan out to
+            multiple files in the folder.
     """
     if on_progress is None:
         on_progress = _default_progress()
 
     on_progress("loading", "Scanning media files...", 0, 0)
 
-    mt, emb, media_files, total_files = _resolve_folder_load_inputs(
+    mt, media_files, total_files = _resolve_folder_load_inputs(
         folder_path,
         media_type,
-        embedder_name,
-        skip_embedding,
         recursive,
         content_vectors,
         content_md5s,
         custom_metadata_map,
-        on_progress,
     )
 
     medias.clear()
     media_id = 1
     _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 1
 
-    # Flush everything that still needs embedding through the embedder's
-    # bulk entrypoint up front; the per-file loop below just looks up the
-    # pre-computed vector.  Subclasses that override ``_embed_media_bulk_impl``
-    # can batch internally; the default impl loops per item and emits
-    # per-item progress so the UI stays responsive.
     try:
-        bulk_embeddings, bulk_patch_outputs = _run_bulk_embedders(
-            emb,
-            media_files,
-            folder_path,
-            content_vectors,
-            custom_metadata_map,
-            on_progress,
-            media_type,
-            origin,
-            skip_embedding,
-        )
-
         for i, file_path in enumerate(media_files):
             rel_path = file_path.relative_to(folder_path).as_posix()
 
             if i % _progress_interval == 0 or i + 1 == total_files:
                 _emit_per_file_progress(
                     on_progress,
-                    skip_embedding,
                     media_type,
                     rel_path,
                     i + 1,
@@ -896,18 +539,12 @@ def load_dataset_from_folder(
                 file_path=file_path,
                 rel_path=rel_path,
                 mt=mt,
-                emb=emb,
-                bulk_embeddings=bulk_embeddings,
-                bulk_patch_outputs=bulk_patch_outputs,
                 content_vectors=content_vectors,
                 content_md5s=content_md5s,
                 custom_metadata_map=custom_metadata_map,
-                skip_embedding=skip_embedding,
                 thin=thin,
                 origin=origin,
             )
-            if built is None:
-                continue
             medias[media_id] = built
             media_id += 1
     except MemoryError:
@@ -956,61 +593,34 @@ def load_dataset_from_folder_chunked(
     on_progress: Optional[ProgressCallback] = None,
     origin: dict[str, Any] | None = None,
     thin: bool = False,
-    embedder_name: str = "",
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
-    skip_embedding: bool = False,
     recursive: bool = True,
 ) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield chunks of medias from a folder of media files.
 
     Works identically to :func:`load_dataset_from_folder` but yields the
-    medias in groups of at most *chunk_size*.  Each yielded dict is a
-    self-contained medias dict with IDs starting at 1.  After the caller
-    has processed a chunk, the dict can be discarded to free memory.
-
-    Args:
-        folder_path: Path to the root directory containing media files.
-            Subdirectories are scanned recursively.
-        media_type: Media type identifier (e.g. ``"audio"``).
-        chunk_size: Maximum number of medias per chunk.
-        content_vectors: Optional pre-computed embeddings keyed by filename
-            (relative path or basename; relative path is tried first).
-        content_md5s: Optional pre-computed MD5s keyed by filename (same
-            lookup logic as *content_vectors*).
-        origin: Optional origin dict to attach to each media.
-        thin: When ``True``, store ``media_path`` instead of ``media_bytes``.
-        embedder_name: Optional name of a registered embedder to use.
-            When empty, the first registered embedder for the media type
-            is used.
-        custom_metadata_map: Optional mapping of filename to a metadata dict.
-            Same semantics as in :func:`load_dataset_from_folder`.
-        skip_embedding: Same semantics as in :func:`load_dataset_from_folder`.
-
-    Yields:
-        A dict mapping int media IDs (starting at 1) to media data dicts.
-        Each yielded dict contains at most *chunk_size* medias.
+    medias in groups of at most *chunk_size*.  Each yielded dict is
+    self-contained with IDs starting at 1.  Embedding is left to the
+    framework embed stage; items without a pre-computed vector come out
+    with ``embedding=None``.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, if no matching
-            files are found in ``folder_path``, or if an override map has
-            a bare-basename key that would silently fan out to multiple
-            files in the folder.
+            files are found in ``folder_path``, or if an override map
+            has a bare-basename key that would silently fan out.
     """
     if on_progress is None:
         on_progress = _default_progress()
 
     on_progress("loading", "Scanning media files...", 0, 0)
 
-    mt, emb, media_files, total_files = _resolve_folder_load_inputs(
+    mt, media_files, total_files = _resolve_folder_load_inputs(
         folder_path,
         media_type,
-        embedder_name,
-        skip_embedding,
         recursive,
         content_vectors,
         content_md5s,
         custom_metadata_map,
-        on_progress,
     )
 
     _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 1
@@ -1019,19 +629,6 @@ def load_dataset_from_folder_chunked(
         batch = media_files[start : start + chunk_size]
         chunk_medias: dict[int, dict[str, Any]] = {}
         media_id = 1
-
-        # Scope bulk embedding to one chunk so memory stays bounded.
-        chunk_bulk_embeddings, chunk_bulk_patch_outputs = _run_bulk_embedders(
-            emb,
-            batch,
-            folder_path,
-            content_vectors,
-            custom_metadata_map,
-            on_progress,
-            media_type,
-            origin,
-            skip_embedding,
-        )
 
         chunk_label = f" (chunk {start // chunk_size + 1})"
 
@@ -1042,7 +639,6 @@ def load_dataset_from_folder_chunked(
             if global_idx % _progress_interval == 0 or global_idx + 1 == total_files:
                 _emit_per_file_progress(
                     on_progress,
-                    skip_embedding,
                     media_type,
                     rel_path,
                     global_idx + 1,
@@ -1055,18 +651,12 @@ def load_dataset_from_folder_chunked(
                 file_path=file_path,
                 rel_path=rel_path,
                 mt=mt,
-                emb=emb,
-                bulk_embeddings=chunk_bulk_embeddings,
-                bulk_patch_outputs=chunk_bulk_patch_outputs,
                 content_vectors=content_vectors,
                 content_md5s=content_md5s,
                 custom_metadata_map=custom_metadata_map,
-                skip_embedding=skip_embedding,
                 thin=thin,
                 origin=origin,
             )
-            if built is None:
-                continue
             chunk_medias[media_id] = built
             media_id += 1
 

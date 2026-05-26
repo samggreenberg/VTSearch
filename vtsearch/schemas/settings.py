@@ -82,6 +82,33 @@ class AppSettingsSchema(Schema):
     # same hint via ``guessedMediaEmbedder``.
     last_embedder_per_media_type = _PerMediaTypeStringDict()
 
+    # Per-user, ``{media_type_id: {embedder, clipper, clipper_params,
+    # source_specs}}`` — defaults the Add Dataset modal auto-fills when
+    # the user picks an importer whose output is the matching mediaType.
+    # See ``UserSettings.import_defaults_by_media_type`` for the value
+    # shape; the field is declared as a free-form dict here because the
+    # nested values are heterogeneous (string, dict, list).
+    import_defaults_by_media_type = fields.Dict(keys=fields.String(), values=fields.Raw())
+
+    # Solo mediaType streamlining. ``solo_media_type`` is the user's raw
+    # value (None or a media-type id); ``solo_media_type_explicit`` is True
+    # once the user has changed it from settings (so the CLI fallback no
+    # longer applies). ``effective_solo_media_type`` is the resolver's
+    # output the frontend should read to decide whether to hide mediaType
+    # pickers — it accounts for the CLI fallback and the explicit flag.
+    solo_media_type = fields.String(allow_none=True)
+    solo_media_type_explicit = fields.Boolean()
+    effective_solo_media_type = fields.String(allow_none=True, dump_only=True)
+
+    # Solo mediaEmbedder per mediaType. ``solo_embedder_per_media_type`` is
+    # the user's raw map (``{media_type_id: embedder_name}``);
+    # ``effective_solo_embedder_per_media_type`` is the resolver's view
+    # (user map layered over the ``--solo-embedder`` CLI fallback), and is
+    # what the frontend reads to decide whether to hide the embedder
+    # picker for a given type.
+    solo_embedder_per_media_type = _PerMediaTypeStringDict()
+    effective_solo_embedder_per_media_type = _PerMediaTypeStringDict(dump_only=True)
+
     class Meta:
         # Allow extra keys on dump so transitional fields (e.g.
         # ``settings_source`` config blobs, ``achievement_state``) flow
@@ -133,6 +160,20 @@ class SettingsUpdateSchema(Schema):
     detectors_dir = fields.String()
 
     last_embedder_per_media_type = fields.Raw()
+    import_defaults_by_media_type = fields.Raw()
+
+    # The route layer validates ``solo_media_type`` against the media-type
+    # registry and applies it via ``apply_user_solo_media_type`` so the
+    # ``solo_media_type_explicit`` flag flips automatically. Accept either
+    # a string id or ``null`` for "show everything".
+    solo_media_type = fields.String(allow_none=True)
+
+    # ``{media_type_id: embedder_name}`` map. The route layer validates
+    # each entry against the embedder registry and rejects unknown
+    # type/embedder pairs with a 400. Sending ``null`` or an empty dict
+    # clears every per-type lock. Sending ``{"image": ""}`` clears just
+    # the image lock while leaving the rest in place.
+    solo_embedder_per_media_type = fields.Raw(allow_none=True)
 
     class Meta:
         # Reject keys we don't know — the frontend should never send

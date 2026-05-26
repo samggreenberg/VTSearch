@@ -87,8 +87,12 @@
 // --- Demo table ---
 
 .demo-content-area {
+  // Fill remaining height inside the demo picker so the table is the
+  // only scrollable region. Without this, a hard-coded max-height would
+  // produce a nested scrollbar inside the modal body's scrollbar
+  // whenever the modal grew taller than its fixed cap.
+  flex: 1 1 0;
   min-height: 200px;
-  max-height: 50vh;
   overflow-y: auto;
   overflow-x: hidden;
 }

@@ -2,15 +2,16 @@
 
 This module provides :func:`run_converters_on_folder`, a reusable utility
 that any dataset importer can call to scan a directory for source media
-files, convert them via one or more :class:`MediaConverter` instances, embed
-the results with the target media type's embedder, and append them to an
-existing medias dict.
+files, convert them via one or more :class:`MediaConverter` instances,
+and append them to an existing medias dict.  The converter outputs are
+left with ``embedding=None``; the framework
+:func:`vtscore.datasets.load_pipeline.embed_missing` stage fills them
+in after the importer returns.
 """
 
 from __future__ import annotations
 
 import hashlib
-import tempfile
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -79,17 +80,6 @@ def _default_progress() -> ProgressCallback:
 _OPTIONAL_OUTPUT_FIELDS = ("media_bytes", "media_string", "width", "height", "word_count", "character_count")
 
 
-def _resolve_target_embedder(target_type: str):
-    """Resolve and (if necessary) warm up the embedder for *target_type*."""
-    from vtscore.media import embedders_for_type  # noqa: PLC0415
-
-    avail = embedders_for_type(target_type)
-    target_emb = avail[0] if avail else None
-    if target_emb is not None and getattr(target_emb, "_model", None) is None:
-        target_emb.load_models()
-    return target_emb
-
-
 def _scan_source_files(folder_path: Path, source_mt, recursive: bool) -> list[Path]:
     source_files: list[Path] = []
     for ext in source_mt.file_extensions:
@@ -124,16 +114,22 @@ def _build_converted_media_dict(
     media_id: int,
     output: dict[str, Any],
     target_type: str,
-    target_emb,
     origin: dict[str, Any],
     origin_name: str,
     media_path: str,
     category: str,
 ) -> dict[str, Any]:
+    """Build the media dict for one converter output.
+
+    ``embedding`` is left at ``None`` — the framework
+    :func:`~vtscore.datasets.load_pipeline.embed_missing` stage embeds
+    converter outputs via ``media_bytes`` / ``media_string`` after the
+    importer returns.
+    """
     media_data: dict[str, Any] = {
         "id": media_id,
         "media_type": target_type,
-        "embedder": target_emb.name if target_emb else "",
+        "embedder": "",
         "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
         "md5": _compute_md5(output),
         "embedding": None,
@@ -166,7 +162,7 @@ def _run_converter_on_source(
         except Exception:
             return None
     try:
-        return converter.convert(source_media, conv_params)
+        return converter.convert_normalized(source_media, conv_params)
     except Exception as exc:
         print(f"Converter {converter.name} failed on {source_rel}: {exc}")
         return None
@@ -178,33 +174,30 @@ def _emit_converted_outputs(
     source_rel: str,
     source_path: Path,
     target_type: str,
-    target_emb,
     origin: dict[str, Any],
     medias: dict[int, dict[str, Any]],
     start_id: int,
     category: str,
 ) -> int:
-    """Embed each converter output, append to *medias*, return next media_id."""
+    """Append each converter output to *medias*; return next media_id.
+
+    Outputs leave with ``embedding=None``; the framework embed stage
+    embeds them from ``media_bytes`` / ``media_string``.
+    """
     media_id = start_id
     for output in outputs:
         output_filename = output.get("filename", f"converted_{media_id}")
         origin_name = f"{source_rel}\u2192{output_filename}"
 
-        embedding = _embed_converted_output(target_emb, output)
-        if embedding is None:
-            continue
-
         media_data = _build_converted_media_dict(
             media_id,
             output,
             target_type,
-            target_emb,
             origin,
             origin_name,
             str(source_path.resolve()),
             category,
         )
-        media_data["embedding"] = embedding
         medias[media_id] = media_data
         media_id += 1
     return media_id
@@ -275,7 +268,6 @@ def run_converters_on_folder(
     if not converters_with_params:
         return
 
-    target_emb = _resolve_target_embedder(target_mt.type_id)
     media_id = max(medias.keys(), default=0) + 1
 
     for converter, conv_params in converters_with_params:
@@ -314,53 +306,11 @@ def run_converters_on_folder(
                 source_rel=source_rel,
                 source_path=source_path,
                 target_type=target_mt.type_id,
-                target_emb=target_emb,
                 origin=origin,
                 medias=medias,
                 start_id=media_id,
                 category="custom",
             )
-
-
-def _embed_converted_output(target_emb, output: dict[str, Any]):
-    """Embed converter output using the target embedder.
-
-    Writes the output to a temporary file and calls ``embed_media()``,
-    which is the most general approach across all media types.
-    """
-
-    if target_emb is None:
-        return None
-
-    media_bytes = output.get("media_bytes")
-    media_string = output.get("media_string")
-
-    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-
-    if media_bytes:
-        # Binary media (image, audio, video) — write to temp file.
-        suffix = Path(output.get("filename", "output")).suffix or ".bin"
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp.write(media_bytes)
-            tmp_path = Path(tmp.name)
-        try:
-            embedding = target_emb.embed_media(media_from_path(tmp_path))
-        finally:
-            tmp_path.unlink(missing_ok=True)
-        return embedding
-
-    if media_string:
-        # Text media — write to temp .txt file.
-        with tempfile.NamedTemporaryFile(suffix=".txt", mode="w", encoding="utf-8", delete=False) as tmp:
-            tmp.write(media_string)
-            tmp_path = Path(tmp.name)
-        try:
-            embedding = target_emb.embed_media(media_from_path(tmp_path))
-        finally:
-            tmp_path.unlink(missing_ok=True)
-        return embedding
-
-    return None
 
 
 def _compute_md5(output: dict[str, Any]) -> str:
@@ -374,36 +324,20 @@ def _compute_md5(output: dict[str, Any]) -> str:
     return hashlib.md5(b"").hexdigest()
 
 
-def _resolve_demo_target_embedder(converter, embedder_name: str):
-    """Resolve the target embedder for *converter* (named override > default)."""
-    from vtscore.media import get_embedder  # noqa: PLC0415
-
-    target_emb = None
-    if embedder_name:
-        try:
-            target_emb = get_embedder(embedder_name)
-        except KeyError:
-            pass
-    if target_emb is None:
-        target_emb = _resolve_target_embedder(converter.target_type)
-        return target_emb
-    if getattr(target_emb, "_model", None) is None:
-        target_emb.load_models()
-    return target_emb
-
-
 def apply_converter_to_demo(
     converter_name: str,
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
-    embedder_name: str = "",
+    embedder_name: str = "",  # noqa: ARG001 — kept for call-site compatibility; framework picks the embedder now
     on_progress: Optional[ProgressCallback] = None,
 ) -> None:
     """Convert all medias in-place using the named converter.
 
     After conversion, *medias* contains the converted outputs (target type)
     instead of the original source-type medias.  Each converted media's
-    origin records the demo dataset and the converter used.
+    origin records the demo dataset and the converter used.  Outputs
+    leave with ``embedding=None``; the framework embed stage fills them
+    in.
     """
     from vtscore.converters import get_converter  # noqa: PLC0415 — deferred to avoid circular import during eager registry discovery
 
@@ -413,8 +347,6 @@ def apply_converter_to_demo(
 
     if on_progress is None:
         on_progress = _default_progress()
-
-    target_emb = _resolve_demo_target_embedder(converter, embedder_name)
 
     source_items = list(medias.items())
     converted: dict[int, dict[str, Any]] = {}
@@ -432,7 +364,7 @@ def apply_converter_to_demo(
         )
 
         try:
-            outputs = converter.convert(src_media, {})
+            outputs = converter.convert_normalized(src_media, {})
         except Exception:
             continue
         if not outputs:
@@ -453,7 +385,6 @@ def apply_converter_to_demo(
             source_name=source_name,
             source_media=src_media,
             target_type=converter.target_type,
-            target_emb=target_emb,
             origin=origin,
             converted=converted,
             start_id=new_id,
@@ -469,32 +400,28 @@ def _emit_converted_demo_outputs(
     source_name: str,
     source_media: dict[str, Any],
     target_type: str,
-    target_emb,
     origin: dict[str, Any],
     converted: dict[int, dict[str, Any]],
     start_id: int,
 ) -> int:
-    """Embed each converter output, append to *converted*, return next id."""
+    """Append each converter output to *converted*, return next id.
+
+    Outputs leave with ``embedding=None`` for the framework embed stage.
+    """
     new_id = start_id
     for output in outputs:
         output_filename = output.get("filename", f"converted_{new_id}")
         origin_name = f"{source_name}\u2192{output_filename}"
 
-        embedding = _embed_converted_output(target_emb, output)
-        if embedding is None:
-            continue
-
         media_data = _build_converted_media_dict(
             new_id,
             output,
             target_type,
-            target_emb,
             origin,
             origin_name,
             source_media.get("media_path", ""),
             source_media.get("category", "custom"),
         )
-        media_data["embedding"] = embedding
         converted[new_id] = media_data
         new_id += 1
     return new_id

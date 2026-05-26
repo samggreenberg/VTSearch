@@ -1,0 +1,101 @@
+@if (visibleTypes.length === 0) {
+  <p class="empty-state">No media types registered.</p>
+} @else {
+  <p class="info-text import-defaults-intro" title="These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type.">
+    Default import settings per media type.
+  </p>
+
+  <div class="view-tabs">
+    @for (mt of visibleTypes; track mt.type_id) {
+      <button
+        class="view-tab"
+        [class.view-tab--active]="activeType === mt.type_id"
+        (click)="selectTab(mt.type_id)"
+        [title]="'Set import defaults for ' + mt.name + ' datasets'">
+        {{ mt.name }}
+      </button>
+    }
+  </div>
+
+  <div class="view-tab-content import-defaults-body">
+    @if (isLoading) {
+      <p class="empty-state">Loading options for {{ activeTypeLabel }}…</p>
+    } @else {
+      <!-- Source specs (converters per source mediaType) -->
+      @if (activeConverters.length > 0) {
+        <label class="form-label" title="Pick which other media types should be pulled in and converted whenever you import a {{ activeTypeLabel }} dataset. The native row is always included.">Include media</label>
+        <vt-source-specs-picker
+          [availableConverters]="activeConverters"
+          [nativeType]="activeType"
+          [typeLabels]="typeLabels"
+          [specs]="currentSourceSpecsForPicker"
+          [clippers]="activeClippers"
+          [selectedClipperName]="currentClipperName"
+          [selectedClipperParams]="currentClipperParams"
+          (specsChange)="onSourceSpecsChange($event)"
+          (clipperChooserRequested)="openClipperChooser()"
+        ></vt-source-specs-picker>
+      }
+
+      <!-- Embedder -->
+      @if (activeEmbedders.length > 1) {
+        <label class="form-label" [for]="'import-default-embedder-' + activeType" title="Embedding model used to compute vector representations for {{ activeTypeLabel }} items">Embedder</label>
+        <select
+          [id]="'import-default-embedder-' + activeType"
+          class="form-select"
+          [ngModel]="displayedEmbedder"
+          (ngModelChange)="onEmbedderChange($event)">
+          @if (recommendedEmbedders.length > 0) {
+            <optgroup label="Recommended">
+              @for (embedder of recommendedEmbedders; track embedder.name) {
+                <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+              }
+            </optgroup>
+          }
+          @if (advancedEmbedderOptions.length > 0) {
+            <optgroup label="Advanced ▾">
+              @for (embedder of advancedEmbedderOptions; track embedder.name) {
+                <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+              }
+            </optgroup>
+          }
+        </select>
+        @if (licenseNotice; as notice) {
+          <div class="license-warning" role="note">⚠ {{ notice }}</div>
+        }
+      }
+
+      <!-- Clipper (only shown when there's a real choice to make) -->
+      @if (activeClippers.length > 1) {
+        <label class="form-label" title="Pre-processing applied to each {{ activeTypeLabel }} item before embedding (e.g. clip into shorter segments)">Clipper</label>
+        <button
+          class="btn btn--secondary clipper-btn"
+          type="button"
+          (click)="openClipperChooser()"
+          title="Choose how to pre-process media before embedding">
+          Details: {{ clipperDisplayName }}
+        </button>
+      }
+
+      <div class="import-defaults-footer">
+        <button
+          type="button"
+          class="btn btn--ghost btn--sm"
+          [disabled]="!hasOverridesForActiveType"
+          (click)="resetActiveType()"
+          [title]="hasOverridesForActiveType
+            ? 'Clear your saved ' + activeTypeLabel + ' import defaults and restore the built-in defaults'
+            : activeTypeLabel + ' defaults are already at the built-in values — nothing to reset'">
+          Reset {{ activeTypeLabel }} defaults
+        </button>
+      </div>
+    }
+  </div>
+}
+
+<vt-clipper-chooser
+  [open]="clipperChooserOpen"
+  [clippers]="activeClippers"
+  (selected)="onClipperSelected($event)"
+  (cancelled)="onClipperChooserCancelled()"
+></vt-clipper-chooser>

@@ -155,7 +155,11 @@ class TestHttpArchiveImporterSSRF:
     """Verify that the HTTP archive importer validates URLs before downloading."""
 
     def test_run_rejects_private_url(self):
+        # Phase B: ``validate_url`` runs at the framework boundary, not
+        # inside ``imp.run()``.  Verify the framework's normalize pass
+        # fires on the importer's declared ``url`` field.
         from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.plugins.normalize import normalize_field_values
 
         imp = HttpArchiveDatasetImporter()
         with mock.patch(
@@ -163,25 +167,15 @@ class TestHttpArchiveImporterSSRF:
             return_value=[(2, 1, 0, "", ("127.0.0.1", 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
-                imp.run({"url": "http://localhost:8080/secret.zip", "media_type": "audio"}, {})
+                normalize_field_values(imp, {"url": "http://localhost:8080/secret.zip", "media_type": "audio"})
 
     def test_run_rejects_non_http_scheme(self):
         from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
+        from vtscore.plugins.normalize import normalize_field_values
 
         imp = HttpArchiveDatasetImporter()
         with pytest.raises(ValueError, match="http or https"):
-            imp.run({"url": "file:///etc/passwd", "media_type": "audio"}, {})
-
-    def test_download_and_extract_rejects_private_url(self):
-        from vtscore.datasets.importers.http_archive import HttpArchiveDatasetImporter
-
-        imp = HttpArchiveDatasetImporter()
-        with mock.patch(
-            "vtscore.security.url_validation.socket.getaddrinfo",
-            return_value=[(2, 1, 0, "", ("10.0.0.5", 0))],
-        ):
-            with pytest.raises(ValueError, match="private/internal"):
-                imp._download_and_extract({"url": "http://internal-server/data.tar.gz"})
+            normalize_field_values(imp, {"url": "file:///etc/passwd", "media_type": "audio"})
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +187,11 @@ class TestWebhookExporterSSRF:
     """Verify that the webhook exporter validates URLs before POSTing."""
 
     def test_export_rejects_private_url(self):
+        # Phase B: ``validate_url`` runs at the framework boundary, not
+        # inside ``exp.export()``.  Verify the framework's normalize
+        # pass fires on the exporter's declared ``url`` field.
         from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.plugins.normalize import normalize_field_values
 
         exp = WebhookLabelsetExporter()
         with mock.patch(
@@ -201,14 +199,15 @@ class TestWebhookExporterSSRF:
             return_value=[(2, 1, 0, "", ("192.168.1.1", 0))],
         ):
             with pytest.raises(ValueError, match="private/internal"):
-                exp.export({}, {"url": "http://192.168.1.1:9090/hook"})
+                normalize_field_values(exp, {"url": "http://192.168.1.1:9090/hook"})
 
     def test_export_rejects_non_http_scheme(self):
         from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.plugins.normalize import normalize_field_values
 
         exp = WebhookLabelsetExporter()
         with pytest.raises(ValueError, match="http or https"):
-            exp.export({}, {"url": "ftp://evil.example/hook"})
+            normalize_field_values(exp, {"url": "ftp://evil.example/hook"})
 
     def test_export_allows_public_url(self):
         from vtscore.exporters.webhook import WebhookLabelsetExporter

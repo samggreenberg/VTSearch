@@ -74,8 +74,11 @@ class PluginField:
 
     The ``field_type`` value drives how the frontend renders it:
 
-    - ``"file"``     – OS file-picker; value arrives as a Werkzeug
-      :class:`~werkzeug.datastructures.FileStorage` object.
+    - ``"file"``     – OS file-picker; value arrives as an
+      :class:`~vtscore.plugins.uploads.UploadedFile` (Werkzeug
+      ``FileStorage`` from a Flask request, a ``CliUploadedFile``
+      wrapping a path argument from the CLI, or a ``BytesIOUploadedFile``
+      for background-thread reads).
     - ``"folder"``   – Path text-input or OS folder-picker.
     - ``"url"``      – Text input pre-validated as a URL.
     - ``"text"``     – Generic single-line text input.
@@ -146,6 +149,37 @@ class PluginField:
     #: CLI parser to use :class:`float`; an integer step uses :class:`int`.
     step: str = ""
 
+    #: Whether this field's value should be copied into the importer's
+    #: persisted origin dict (see :meth:`DatasetImporter.build_origin`).
+    #: ``None`` means "use the field-type default": ``False`` for
+    #: ``"file"`` and ``"password"`` fields (don't persist file uploads or
+    #: secrets), ``True`` for every other type.  Set explicitly to
+    #: override the default — e.g. ``include_in_origin=False`` on a noisy
+    #: text field that doesn't belong in the persisted origin.
+    include_in_origin: bool | None = None
+
+    #: Optional callable that converts the field's value to the string
+    #: form persisted in the origin dict.  Receives the raw value (as
+    #: provided by the request or CLI) and must return a ``str``.  Use
+    #: this for list/dict-typed values whose default ``str(...)``
+    #: representation isn't round-trip safe (e.g. a list field that should
+    #: be serialised as a comma-joined string).  Ignored when
+    #: :attr:`include_in_origin` resolves to ``False``.
+    origin_serializer: Callable[[Any], str] | None = None
+
+    #: Template variables the framework should substitute into this
+    #: field's value before the plugin's ``run`` / ``export`` receives
+    #: it.  Each name (e.g. ``"detector_name"``) is replaced everywhere
+    #: it appears as ``{name}``; the substituted value is run through
+    #: :func:`vtscore.security.path_validation.sanitize_template_value`
+    #: so attacker-controlled values cannot escape the directory implied
+    #: by an admin-configured template.  Supported names:
+    #: ``"YYYYMMDD-HHMMSS"``, ``"detector_name"``, ``"detector_id"``,
+    #: ``"username"``.  Empty tuple (the default) means the framework
+    #: performs no substitution and the value reaches the plugin
+    #: verbatim.
+    template_vars: tuple[str, ...] = ()
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "key": self.key,
@@ -163,6 +197,7 @@ class PluginField:
             "min": self.min,
             "max": self.max,
             "step": self.step,
+            "template_vars": list(self.template_vars),
         }
 
     def is_integer_number(self) -> bool:
@@ -185,9 +220,147 @@ class PluginField:
 # ---------------------------------------------------------------------------
 
 
+#: Class-name suffixes stripped before snake-casing for the default
+#: :attr:`PluginBase.name`.  Order matters — longer / more-specific
+#: suffixes come first so ``HolderLabelsetExporter`` strips
+#: ``LabelsetExporter`` rather than just ``Exporter``.
+_PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
+    "DatasetImporter",
+    "LabelsetExporter",
+    "LabelImporter",
+    "LabelsetSource",
+    "SettingsImporter",
+    "SettingsExporter",
+    "SettingsSource",
+    "MediaConverter",
+    "MediaSource",
+    "Importer",
+    "Exporter",
+    "Source",
+    "Converter",
+)
+
+
+#: Framework-level abstract plugin bases that should never get
+#: auto-derived metadata stamped onto them.  Setting a derived
+#: ``name`` on, say, :class:`LabelImporter` itself would pollute every
+#: concrete subclass that doesn't declare its own ``name`` — concrete
+#: subclasses inherit the polluted value from the MRO before the
+#: per-subclass auto-default can fire.  Third-party intermediates that
+#: should behave the same way can opt out by setting
+#: ``_is_plugin_family_base = True`` in their own ``__dict__``.
+_PLUGIN_FAMILY_BASE_NAMES: frozenset[str] = frozenset(
+    {
+        "DatasetImporter",
+        "LabelsetExporter",
+        "LabelImporter",
+        "LabelsetSource",
+        "SettingsImporter",
+        "SettingsExporter",
+        "SettingsSource",
+        "MediaConverter",
+        "MediaSource",
+        "SyncSource",
+    }
+)
+
+
+def _snake_case(name: str) -> str:
+    """Convert a CamelCase / PascalCase identifier to snake_case."""
+    out: list[str] = []
+    for i, ch in enumerate(name):
+        if ch.isupper() and i > 0 and (not name[i - 1].isupper() or (i + 1 < len(name) and name[i + 1].islower())):
+            out.append("_")
+        out.append(ch.lower())
+    return "".join(out)
+
+
+def _default_plugin_name(cls: type) -> str:
+    raw = cls.__name__
+    for suffix in _PLUGIN_NAME_SUFFIXES:
+        if raw.endswith(suffix) and raw != suffix:
+            raw = raw[: -len(suffix)]
+            break
+    return _snake_case(raw)
+
+
+def _default_plugin_display_name(name: str) -> str:
+    return " ".join(word.capitalize() for word in name.split("_") if word)
+
+
+def _default_plugin_description(cls: type) -> str:
+    doc = (cls.__doc__ or "").strip()
+    if not doc:
+        return ""
+    return doc.splitlines()[0].strip()
+
+
+def _mro_provides(cls: type, attr: str) -> bool:
+    """Return True if any ancestor (above *cls*) already provides *attr*
+    as a non-empty string or a descriptor (e.g. a ``property``).
+
+    Used to decide whether the auto-default should fire — we never
+    overwrite an inherited descriptor or a concrete string supplied by
+    a parent (e.g. :class:`MediaConverter.name`, which is a property).
+    """
+    for base in cls.__mro__[1:]:
+        if attr in base.__dict__:
+            val = base.__dict__[attr]
+            if isinstance(val, str):
+                if val:
+                    return True
+            elif hasattr(val, "__get__"):
+                return True
+    return False
+
+
+def _autoderive_plugin_metadata(cls: type) -> None:
+    """Fill in default :attr:`name` / :attr:`display_name` /
+    :attr:`description` on *cls* when neither *cls* itself nor any
+    ancestor already provides them.
+
+    Called from :meth:`PluginBase.__init_subclass__`.  Framework-level
+    abstract bases (named in :data:`_PLUGIN_FAMILY_BASE_NAMES`) and
+    third-party intermediates that set
+    ``_is_plugin_family_base = True`` skip auto-derivation entirely so
+    they don't leak a derived name down to their concrete subclasses.
+    """
+    if cls.__name__ in _PLUGIN_FAMILY_BASE_NAMES:
+        return
+    if cls.__dict__.get("_is_plugin_family_base", False):
+        return
+    if "name" not in cls.__dict__ and not _mro_provides(cls, "name"):
+        cls.name = _default_plugin_name(cls)
+    if "display_name" not in cls.__dict__ and not _mro_provides(cls, "display_name"):
+        derived_name = getattr(cls, "name", None)
+        cls.display_name = _default_plugin_display_name(derived_name) if isinstance(derived_name, str) else ""
+    if "description" not in cls.__dict__ and not _mro_provides(cls, "description"):
+        cls.description = _default_plugin_description(cls)
+
+
 class PluginBase:
     """Mixin providing the CLI-argument, validation, and serialisation helpers
-    that are identical across all four plugin families."""
+    that are identical across all four plugin families.
+
+    Default metadata
+    ----------------
+    Subclasses that don't declare :attr:`name`, :attr:`display_name`, or
+    :attr:`description` get auto-derived defaults via
+    :meth:`__init_subclass__`:
+
+    - :attr:`name` — class name with the trailing family suffix
+      (``DatasetImporter`` / ``LabelsetExporter`` / ``MediaConverter`` /
+      etc.) stripped and the remainder snake-cased.  E.g.
+      ``MyShinyExporter`` → ``"my_shiny"``.
+    - :attr:`display_name` — title-cased :attr:`name`.
+    - :attr:`description` — first line of the class docstring.
+
+    Explicit declarations always win.  The defaults only fire when
+    nothing further up the MRO already provides a string value or a
+    descriptor (e.g. :class:`~vtscore.converters.base.MediaConverter`
+    declares ``name`` as a property, so concrete converter subclasses
+    inherit the property rather than getting a stomped string).
+    """
 
     #: Internal snake_case identifier used in API routes.
     name: str
@@ -212,6 +385,10 @@ class PluginBase:
     #: in the frontend.  Useful for plugins that are always invoked through
     #: a dedicated code path (e.g. the GUI exporter).
     hidden_from_picker: bool = False
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _autoderive_plugin_metadata(cls)
 
     def resolve_display_name(self, field_values: dict[str, Any] | None) -> str:
         """Return a human-readable name for a dataset loaded with *field_values*.
@@ -253,14 +430,37 @@ class PluginBase:
             parser.add_argument(arg_name, **kwargs)
 
     def validate_cli_field_values(self, field_values: dict[str, Any]) -> None:
-        """Raise ``ValueError`` if any required field is missing or empty."""
+        """Raise ``ValueError`` if any required field is missing or empty.
+
+        Also runs the shared
+        :func:`vtscore.plugins.normalize.normalize_field_values` pass —
+        whitespace strip, template variable substitution, and
+        field-type-driven security validation
+        (:func:`~vtscore.security.url_validation.validate_url` for
+        ``url`` fields,
+        :func:`~vtscore.security.path_validation.validate_server_filepath`
+        for ``server_path`` fields) — so CLI invocations get the same
+        guarantees the HTTP path does.  Required-field rejection is
+        delegated to the normalize pass so the two ingress points raise
+        identically on the same input.
+
+        ``--`` flag names are preferred in the surfaced error so CLI
+        users see the same identifier they typed; the normalize pass's
+        generic ``"<Label> is required."`` is rewritten when the
+        rejected field comes from missing CLI input.
+        """
         for f in self.fields:
             # Booleans are always populated by argparse (default included).
             if f.field_type == "checkbox":
                 continue
-            if f.required and not field_values.get(f.key):
+            value = field_values.get(f.key)
+            if f.required and (value is None or (isinstance(value, str) and not value.strip())):
                 cli_flag = f"--{f.key.replace('_', '-')}"
                 raise ValueError(f"Missing required argument: {cli_flag}")
+
+        from vtscore.plugins.normalize import normalize_field_values  # noqa: PLC0415
+
+        normalize_field_values(self, field_values)
 
     # -- Serialisation ------------------------------------------------------
 

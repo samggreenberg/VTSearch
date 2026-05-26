@@ -48,29 +48,13 @@
   max-width: 100%;
 }
 
-.back-btn {
-  align-self: flex-start;
-  margin-bottom: var(--space-xs);
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
+// `.back-btn`, `.form-group`, `.info-text`, `.error-text` come from
+// `_components.scss`. The back button used to carry a small bottom
+// margin to space it from the form below; the parent `.importer-form`
+// already provides `gap: var(--space-lg)` (12px) which is plenty.
 
 .required {
   color: var(--color-bad);
-}
-
-.info-text {
-  color: var(--text-muted);
-  font-size: var(--font-md);
-}
-
-.error-text {
-  color: var(--color-bad);
-  font-size: var(--font-md);
 }
 
 .form-actions {

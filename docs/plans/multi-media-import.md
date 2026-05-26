@@ -77,7 +77,7 @@ attribute, just like every other plugin family. `convert()` gains a
 class Video2ImageMediaConverter(MediaConverter):
     name = "video2image"
     display_name = "Video → Images"
-    converter_description = "Extract frames from video files"
+    description = "Extract frames from video files"
     fields = [
         PluginField(
             key="n_clips",

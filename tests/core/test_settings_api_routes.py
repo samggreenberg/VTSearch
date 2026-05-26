@@ -137,6 +137,41 @@ class TestSettingsAPI:
         assert "saved_datasets_dir" not in data
         assert "detectors_dir" not in data
 
+    def test_update_import_defaults_by_media_type(self, client):
+        # PUT round-trips the nested defaults dict through the JSON
+        # schema, then GET sees the same value (proving the field
+        # reaches the per-user JSON store).
+        payload = {
+            "import_defaults_by_media_type": {
+                "image": {
+                    "embedder": "siglip",
+                    "clipper": "image_grid_clipper",
+                    "clipper_params": {"rows": 2, "cols": 2},
+                    "source_specs": [
+                        {
+                            "source_type": "video",
+                            "converter": "video_to_image",
+                            "params": {"n_clips": "3"},
+                        },
+                    ],
+                },
+            },
+        }
+        res = client.put("/api/settings", json=payload)
+        assert res.status_code == 200
+        assert res.get_json()["import_defaults_by_media_type"] == payload["import_defaults_by_media_type"]
+
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["import_defaults_by_media_type"] == payload["import_defaults_by_media_type"]
+
+    def test_get_defaults_import_defaults_empty(self, client):
+        # Factory defaults: nothing saved means an empty dict, not a
+        # missing key — the frontend reads ``settings.import_defaults...``
+        # directly and shouldn't have to defend against ``undefined``.
+        res = client.get("/api/settings/defaults")
+        assert res.status_code == 200
+        assert res.get_json().get("import_defaults_by_media_type") == {}
+
     def test_update_safe_thresholds(self, client):
         res = client.put("/api/settings", json={"safe_thresholds": True})
         assert res.status_code == 200

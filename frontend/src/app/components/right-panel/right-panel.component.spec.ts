@@ -105,7 +105,7 @@ describe('RightPanelComponent', () => {
     cleanup();
   }));
 
-  it('should rename detector via detectorsApi', fakeAsync(() => {
+  it('should rename detector via detectors-registry-api', fakeAsync(() => {
     component.trainMode = { model: { name: 'Old', registry_id: 'r1' } };
     flushInit();
 

@@ -52,7 +52,7 @@ class PickleDatasetImporter(DatasetImporter):
     ]
 
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
-        file_obj = field_values["file"]  # werkzeug FileStorage
+        file_obj = field_values["file"]  # UploadedFile (FileStorage / CliUploadedFile / BytesIOUploadedFile)
         progress = _get_progress()
         progress("loading", "Loading dataset from file...", 0, 0)
         DATA_DIR.mkdir(exist_ok=True)
@@ -62,21 +62,13 @@ class PickleDatasetImporter(DatasetImporter):
             import os
 
             os.close(fd)
-            if hasattr(file_obj, "save"):
-                file_obj.save(temp_path)
-            else:
-                temp_path.write_bytes(file_obj.read())
+            # UploadedFile.save() persists to disk; FileStorage, CliUploadedFile,
+            # and BytesIOUploadedFile all implement it.
+            file_obj.save(temp_path)
             load_dataset_from_pickle(temp_path, medias, thin=thin)
         finally:
             temp_path.unlink(missing_ok=True)
         progress("idle", f"Loaded {len(medias)} medias from file")
-
-    def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
-        """Load from a pickle file path (string) instead of FileStorage."""
-        file_path = Path(field_values["file"])
-        if not file_path.exists():
-            raise FileNotFoundError(f"Dataset file not found: {file_path}")
-        load_dataset_from_pickle(file_path, medias, thin=thin)
 
     @property
     def supports_chunked(self) -> bool:

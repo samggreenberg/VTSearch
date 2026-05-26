@@ -31,32 +31,44 @@ class LabelsetSource(SyncSource[list[dict[str, str]], "LabelSet"]):
     """Abstract base class for labelset sources.
 
     Subclass this, set the class-level attributes, implement
-    :meth:`load` and :meth:`save`, and expose a module-level
+    :meth:`_do_load` and :meth:`_do_save`, and expose a module-level
     ``LABELSET_SOURCE = YourSource()`` — the registry picks it up
-    automatically.
+    automatically.  Public :meth:`load` / :meth:`save` are framework
+    wrappers that normalize *field_values* before dispatching; see
+    :mod:`vtscore.sync`.
 
     ``load(field_values)`` returns a list of label dicts
     (``{"md5": ..., "label": "good"|"bad"}``).
     ``save(labelset, field_values)`` persists a :class:`LabelSet`.
 
-    A subclass MAY additionally override :meth:`load_full` to surface any
-    detector-level metadata the source carries alongside the labels (e.g.
-    ``media_type``, ``input_spec``, ``threshold``).  The default
-    implementation wraps :meth:`load` into a :class:`LabelSet` with no
-    ``detector_meta``, so sources that only round-trip labels keep
-    working unchanged.
+    A subclass MAY additionally override :meth:`_do_load_full` to
+    surface any detector-level metadata the source carries alongside
+    the labels (e.g. ``media_type``, ``input_spec``, ``threshold``).
+    The default implementation wraps :meth:`_do_load` into a
+    :class:`LabelSet` with no ``detector_meta``, so sources that only
+    round-trip labels keep working unchanged.
     """
 
     def load_full(self, field_values: dict[str, str]) -> "LabelSet":
         """Return the full :class:`LabelSet` (labels + optional detector_meta).
 
-        Default implementation wraps :meth:`load` so sources that only
-        return raw label dicts still produce a valid :class:`LabelSet`.
-        Subclasses with access to richer metadata should override this to
-        attach a ``detector_meta`` block.
+        Normalizes *field_values* then delegates to
+        :meth:`_do_load_full`.  Subclasses override
+        :meth:`_do_load_full`, not this method.
+        """
+        return self._do_load_full(self._normalize(field_values))
+
+    def _do_load_full(self, field_values: dict[str, str]) -> "LabelSet":
+        """Subclass hook for :meth:`load_full`.
+
+        Receives an already-normalized *field_values* dict.  Default
+        implementation calls :meth:`_do_load` (also pre-normalized) so
+        sources that only return raw label dicts still produce a valid
+        :class:`LabelSet`.  Subclasses with access to richer metadata
+        should override this to attach a ``detector_meta`` block.
         """
         from vtscore.datasets.labelset import LabeledElement, LabelSet
 
-        entries = self.load(field_values)
+        entries = self._do_load(field_values)
         elements = [LabeledElement.from_dict(e) for e in entries if isinstance(e, dict)]
         return LabelSet(elements)

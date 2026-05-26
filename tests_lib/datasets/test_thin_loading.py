@@ -58,13 +58,13 @@ class TestThinLoadFromFolder:
         assert media["media_bytes"] is None
         assert media["media_string"] is None
 
-    def test_thin_clips_have_embedding(self, tmp_path):
+    def test_thin_clips_leave_embedding_none(self, tmp_path):
+        """The loader doesn't embed; framework ``embed_missing`` fills these in."""
         _make_wav_file(tmp_path, "test.wav")
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         media = medias[1]
-        assert isinstance(media["embedding"], np.ndarray)
-        assert len(media["embedding"]) > 0
+        assert media["embedding"] is None
 
     def test_thin_clips_have_correct_file_size(self, tmp_path):
         wav_path = _make_wav_file(tmp_path, "test.wav")

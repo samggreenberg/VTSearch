@@ -53,11 +53,7 @@ class ServerCsvLabelImporter(LabelImporter):
 
     def run(self, field_values: dict[str, Any]) -> list[dict[str, Any]]:
         """Read and parse the CSV labels file from the server filesystem."""
-        filepath = (field_values.get("filepath") or "").strip()
-        if not filepath:
-            raise ValueError("A file path is required.")
-
-        path = Path(filepath)
+        path = Path(field_values["filepath"])
         if not path.exists():
             raise ValueError(f"File not found: {path}")
         if not path.is_file():

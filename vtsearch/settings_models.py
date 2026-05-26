@@ -119,6 +119,17 @@ class ServerSettings(BaseModel):
     )
     autorun_detectors: list[str] = Field(default_factory=list)
 
+    # Admin-side plugin hiding. Maps a plugin-family id (e.g.
+    # ``"converters"``, ``"embedders"``, ``"importers"`` — the keys used by
+    # :mod:`vtscore.plugins.inventory`) to a list of plugin ``name``s that
+    # should be omitted from picker / listing API responses for this
+    # deployment. Hidden plugins remain importable and callable by name
+    # via execution endpoints; this is a UI-declutter setting, not a
+    # security boundary. Merged at read time with any
+    # ``--hide-plugin family:name`` flags passed on the CLI — see
+    # :func:`vtsearch.settings.get_effective_hidden_plugins`.
+    hidden_plugins: dict[str, list[str]] = Field(default_factory=dict)
+
 
 class UserSettings(BaseModel):
     """Per-user settings persisted in ``<user_data_dir>/user_settings.json``."""
@@ -172,6 +183,55 @@ class UserSettings(BaseModel):
     # dataset is around to supply the same hint via ``guessedMediaEmbedder``.
     # Keys are canonical media-type ids (e.g. ``"image"``, ``"audio"``).
     last_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
+
+    # Per-media-type default settings for the Add Dataset advanced panel —
+    # the embedder, clipper (+ params), and source-spec converter rows the
+    # user wants applied automatically every time they import a dataset of
+    # that output mediaType. Set from the Settings > Data Imports tab and
+    # silently auto-filled into the importer form when an importer is
+    # selected. Keys are canonical media-type ids; each value is a
+    # free-form dict shaped like:
+    #     {
+    #       "embedder": "<embedder name>" | "",
+    #       "clipper": "<clipper name>" | "",
+    #       "clipper_params": {"<key>": <value>, ...},
+    #       "source_specs": [{"source_type": "...", "converter": "..."|null,
+    #                         "params": {...}}, ...],
+    #     }
+    # Any missing sub-key falls back to the importer's existing default.
+    import_defaults_by_media_type: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    # Solo-mediaType streamlining. When set, the importer and new-detector
+    # flows hide their mediaType pickers and lock to this type, the converter
+    # picker filters to converters whose output is this type, and the
+    # mediaType-picking step in tabbed UIs is skipped. ``None`` means "show
+    # everything" (the default, non-streamlined experience).
+    #
+    # Resolution at read time is ``solo_media_type`` if
+    # ``solo_media_type_explicit`` is True, else the process-level CLI
+    # fallback (``settings.set_cli_solo_media_type``), else None. The
+    # ``explicit`` flag is set to True whenever the user changes the value
+    # through the settings UI — so once a user opts out (sets it to None),
+    # the CLI flag no longer reapplies on future launches for that user.
+    solo_media_type: str | None = None
+    solo_media_type_explicit: bool = False
+
+    # Solo mediaEmbedder streamlining (per mediaType). When a media-type id
+    # appears as a key here, the dataset-importer modal hides its embedder
+    # picker for that type and locks it to the named embedder. Types not
+    # present in the dict keep the normal embedder dropdown. ``None`` /
+    # empty-string values are treated as "not set" (no lock).
+    #
+    # Resolution at read time layers ``solo_embedder_per_media_type``
+    # (user explicit) over the process-level CLI fallback set by
+    # :func:`vtsearch.settings.set_cli_solo_embedder` — user entries win
+    # per-key, missing keys fall through to the CLI value. The full merged
+    # view is exposed at ``/api/settings`` as
+    # ``effective_solo_embedder_per_media_type``. A stored embedder id
+    # that no longer matches the registry is treated as absent by the
+    # frontend (it falls back to the normal picker), so renaming or
+    # removing an embedder never strands the user.
+    solo_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
 
     # Rolling list of recent (dataset_id, detector_id, last_activity)
     # entries, capped at MAX_RECENT_SESSIONS by the route handler. Most

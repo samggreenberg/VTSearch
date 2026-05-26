@@ -209,13 +209,6 @@ class TestCsvExporterExport:
         exp.export(results, {"filepath": str(filepath)})
         assert filepath.exists()
 
-    def test_csv_empty_filepath_raises(self):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
-
-        exp = ServerCsvLabelsetExporter()
-        with pytest.raises(ValueError, match="file path is required"):
-            exp.export({}, {"filepath": ""})
-
     def test_csv_multiple_detectors(self, tmp_path):
         from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
@@ -677,9 +670,14 @@ class TestWebhookExporterCLI:
 
 
 class TestWebhookExporterExport:
-    """Tests for the Webhook export() method using mocked HTTP."""
+    """Tests for the Webhook export() method using mocked HTTP.
 
-    _PATCH_VALIDATE = mock.patch("vtscore.exporters.webhook.validate_url")
+    Phase B moved ``validate_url`` out of the plugin body and into the
+    framework's ``normalize_field_values`` pass that fires before
+    ``.export()`` is invoked.  These tests call ``.export()`` directly
+    with already-normalized field values, so no URL validator runs and
+    no patch is needed.
+    """
 
     def test_posts_json_to_url(self):
         from vtscore.exporters.webhook import WebhookLabelsetExporter
@@ -692,7 +690,6 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            self._PATCH_VALIDATE,
             mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
         ):
             result = exp.export(results, {"url": "https://example.com/hook"})
@@ -714,7 +711,6 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            self._PATCH_VALIDATE,
             mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
@@ -733,20 +729,12 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            self._PATCH_VALIDATE,
             mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": ""})
 
         call_kwargs = mock_post.call_args
         assert "Authorization" not in call_kwargs.kwargs["headers"]
-
-    def test_empty_url_raises(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
-
-        exp = WebhookLabelsetExporter()
-        with pytest.raises(ValueError, match="webhook URL is required"):
-            exp.export({}, {"url": ""})
 
     def test_http_error_propagates(self):
         from vtscore.exporters.webhook import WebhookLabelsetExporter
@@ -757,7 +745,7 @@ class TestWebhookExporterExport:
         mock_resp = mock.MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("500 Server Error")
 
-        with self._PATCH_VALIDATE, mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
             with pytest.raises(Exception, match="500 Server Error"):
                 exp.export(results, {"url": "https://example.com/hook"})
 
@@ -771,7 +759,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert "3 hit(s)" in result["message"]
@@ -787,7 +775,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 201
         mock_resp.raise_for_status.return_value = None
 
-        with self._PATCH_VALIDATE, mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert result["status_code"] == 201
@@ -804,7 +792,7 @@ class TestWebhookExporterIntegration:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            mock.patch("vtscore.exporters.webhook.validate_url"),
+            mock.patch("vtscore.security.url_validation.validate_url"),
             mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp),
         ):
             _run_exporter("webhook", {"url": "https://example.com/hook"}, results)
@@ -845,19 +833,20 @@ class TestFilepathTemplateExpansion:
     def test_consecutive_csv_exports_do_not_overwrite(self, tmp_path):
         """Two exports a second apart should land in distinct files."""
         from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.plugins.normalize import normalize_field_values
 
         exp = ServerCsvLabelsetExporter()
         results = _make_sample_results()
         template = str(tmp_path / "out_{YYYYMMDD-HHMMSS}.csv")
 
-        with mock.patch("vtscore.exporters._template.datetime") as mock_dt:
+        with mock.patch("vtscore.plugins.normalize.datetime") as mock_dt:
             from datetime import datetime as real_dt
             from datetime import timezone
 
             mock_dt.now.return_value = real_dt(2026, 5, 16, 14, 30, 22, tzinfo=timezone.utc)
-            r1 = exp.export(results, {"filepath": template})
+            r1 = exp.export(results, normalize_field_values(exp, {"filepath": template}))
             mock_dt.now.return_value = real_dt(2026, 5, 16, 14, 30, 23, tzinfo=timezone.utc)
-            r2 = exp.export(results, {"filepath": template})
+            r2 = exp.export(results, normalize_field_values(exp, {"filepath": template}))
 
         # Both files exist with distinct, timestamp-stamped names.
         assert r1["filepath"] != r2["filepath"]
@@ -870,13 +859,14 @@ class TestFilepathTemplateExpansion:
         from datetime import timezone
 
         from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.plugins.normalize import normalize_field_values
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "j_{YYYYMMDD-HHMMSS}.json")
 
-        with mock.patch("vtscore.exporters._template.datetime") as mock_dt:
+        with mock.patch("vtscore.plugins.normalize.datetime") as mock_dt:
             mock_dt.now.return_value = real_dt(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
-            result = exp.export(_make_sample_results(), {"filepath": template})
+            result = exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         expected = tmp_path / "j_20260102-030405.json"
         assert expected.exists()
@@ -885,24 +875,26 @@ class TestFilepathTemplateExpansion:
     def test_username_template_expands(self, tmp_path):
         """The {username} template substitutes get_current_user(), sanitised."""
         from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.plugins.normalize import normalize_field_values
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
 
         with mock.patch("vtsearch.auth.get_current_user", return_value="alice"):
-            exp.export(_make_sample_results(), {"filepath": template})
+            exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         assert (tmp_path / "alice.json").exists()
 
     def test_username_template_sanitises_path_separators(self, tmp_path):
         """A malicious username with ``/`` cannot escape the parent directory."""
         from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.plugins.normalize import normalize_field_values
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
 
         with mock.patch("vtsearch.auth.get_current_user", return_value="../evil"):
-            exp.export(_make_sample_results(), {"filepath": template})
+            exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         # ``/`` and ``..`` are replaced with ``_``, so the result stays inside tmp_path.
         assert (tmp_path / ".._evil.json").exists()
@@ -910,6 +902,7 @@ class TestFilepathTemplateExpansion:
     def test_detector_name_template_expands(self, tmp_path):
         """The {detector_name} template pulls from the active detector context."""
         from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.plugins.normalize import normalize_field_values
         from vtscore.state.core import DetectorContext, set_thread_detector_context
 
         exp = ServerCsvLabelsetExporter()
@@ -918,7 +911,7 @@ class TestFilepathTemplateExpansion:
         ctx = DetectorContext("det-id-1", name="dog_bark")
         set_thread_detector_context(ctx)
         try:
-            exp.export(_make_sample_results(), {"filepath": template})
+            exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
         finally:
             set_thread_detector_context(None)
 
@@ -927,11 +920,12 @@ class TestFilepathTemplateExpansion:
     def test_detector_name_template_with_no_active_context_uses_placeholder(self, tmp_path):
         """An empty detector context (fallback) sanitises to ``_``."""
         from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.plugins.normalize import normalize_field_values
 
         exp = ServerCsvLabelsetExporter()
         template = str(tmp_path / "{detector_name}.csv")
 
-        exp.export(_make_sample_results(), {"filepath": template})
+        exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         # sanitize_template_value("") -> "_"
         assert (tmp_path / "_.csv").exists()

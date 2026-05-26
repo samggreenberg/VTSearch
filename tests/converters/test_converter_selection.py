@@ -16,8 +16,6 @@ import hashlib
 import io
 from unittest.mock import MagicMock, patch
 
-import numpy as np
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -113,11 +111,11 @@ class TestConverterBase:
         c = Video2ImageMediaConverter()
         assert c.display_name == "Video \u2192 Images"
 
-    def test_converter_description(self):
+    def test_description(self):
         from vtscore.converters import Document2ImageMediaConverter
 
         c = Document2ImageMediaConverter()
-        assert c.converter_description != ""
+        assert c.description != ""
 
     def test_to_dict(self):
         from vtscore.converters import Video2AudioMediaConverter
@@ -129,6 +127,27 @@ class TestConverterBase:
         assert d["target_type"] == "audio"
         assert "display_name" in d
         assert "description" in d
+        # summary_template surfaces the configurable ffmpeg_timeout so the
+        # frontend can preview the active setting next to the import row.
+        assert d["summary_template"] == "Pull the audio track from each video. Timeout {ffmpeg_timeout}s."
+
+    def test_to_dict_omits_summary_template_when_unset(self):
+        from vtscore.converters.base import MediaConverter
+
+        class Dummy(MediaConverter):
+            @property
+            def source_type(self):
+                return "foo"
+
+            @property
+            def target_type(self):
+                return "bar"
+
+            def convert(self, media, params=None):
+                return []
+
+        d = Dummy().to_dict()
+        assert "summary_template" not in d
 
     def test_to_dict_fallback_display_name(self):
         """If display_name is empty, to_dict derives one from type IDs."""
@@ -324,18 +343,21 @@ class TestRunConvertersOnFolder:
         c.source_type = "video"
         c.target_type = "image"
         c.display_name = "Video \u2192 Images"
-        c.convert.return_value = overrides.pop(
-            "convert_return",
-            [
-                {
-                    "filename": "clip_clip_1.png",
-                    "media_bytes": _make_png_bytes(),
-                    "duration": 0,
-                    "width": 4,
-                    "height": 4,
-                },
-            ],
-        )
+        default_return = [
+            {
+                "filename": "clip_clip_1.png",
+                "media_bytes": _make_png_bytes(),
+                "duration": 0,
+                "width": 4,
+                "height": 4,
+            },
+        ]
+        convert_return = overrides.pop("convert_return", default_return)
+        c.convert.return_value = convert_return
+        # Framework call sites route through ``convert_normalized``
+        # (Phase C #9); mirror the return value so tests that mock the
+        # raw ``convert`` still pass.
+        c.convert_normalized.return_value = convert_return
         for k, v in overrides.items():
             setattr(c, k, v)
         return c
@@ -375,7 +397,6 @@ class TestRunConvertersOnFolder:
 
         medias: dict = {}
         with (
-            patch("vtscore.converters.runner._embed_converted_output", return_value=np.zeros(768)),
             patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
@@ -388,19 +409,20 @@ class TestRunConvertersOnFolder:
         assert medias == {}
 
     def test_converter_produces_output_with_origin(self, tmp_path):
-        """Mock converter + embedder to verify the full pipeline."""
+        """Verify the runner emits one media per converter output with the
+        right origin.  The runner does not embed — outputs leave with
+        ``embedding=None`` for the framework embed stage to fill in.
+        """
         from vtscore.converters.runner import run_converters_on_folder
 
         # Create a fake "video" file.
         (tmp_path / "clip.mp4").write_bytes(b"fake-video-data")
 
-        fake_embedding = np.ones(768, dtype=np.float32)
         mock_converter = self._mock_video2image_converter()
 
         medias: dict = {}
         with (
             patch("vtscore.converters.get_converter", return_value=mock_converter),
-            patch("vtscore.converters.runner._embed_converted_output", return_value=fake_embedding),
             patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
@@ -428,8 +450,11 @@ class TestRunConvertersOnFolder:
         # Check media type
         assert media["media_type"] == "image"
 
-        # Check embedding
-        assert np.array_equal(media["embedding"], fake_embedding)
+        # Embedding is deferred to the framework embed stage.
+        assert media["embedding"] is None
+        # media_bytes flows through from the converter output so the
+        # framework embed stage can embed without a tempfile.
+        assert media["media_bytes"] is not None
 
     def test_converter_with_multiple_outputs(self, tmp_path):
         """A converter that produces multiple outputs per source file."""
@@ -466,7 +491,6 @@ class TestRunConvertersOnFolder:
         medias: dict = {}
         with (
             patch("vtscore.converters.get_converter", return_value=mock_converter),
-            patch("vtscore.converters.runner._embed_converted_output", return_value=np.ones(768)),
             patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
@@ -498,11 +522,11 @@ class TestRunConvertersOnFolder:
 
         mock_converter = self._mock_video2image_converter()
         mock_converter.convert.side_effect = _side_effect
+        mock_converter.convert_normalized.side_effect = _side_effect
 
         medias: dict = {}
         with (
             patch("vtscore.converters.get_converter", return_value=mock_converter),
-            patch("vtscore.converters.runner._embed_converted_output", return_value=np.ones(768)),
             patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
@@ -528,7 +552,6 @@ class TestRunConvertersOnFolder:
         medias: dict = {1: {"id": 1}, 5: {"id": 5}, 10: {"id": 10}}
         with (
             patch("vtscore.converters.get_converter", return_value=mock_converter),
-            patch("vtscore.converters.runner._embed_converted_output", return_value=np.ones(768)),
             patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
@@ -541,30 +564,6 @@ class TestRunConvertersOnFolder:
 
         # New media should start from ID 11
         assert 11 in medias
-
-    def test_embed_failure_skips_output(self, tmp_path):
-        """If embedding returns None, that output is skipped."""
-        from vtscore.converters.runner import run_converters_on_folder
-
-        (tmp_path / "clip.mp4").write_bytes(b"video")
-
-        mock_converter = self._mock_video2image_converter()
-
-        medias: dict = {}
-        with (
-            patch("vtscore.converters.get_converter", return_value=mock_converter),
-            patch("vtscore.converters.runner._embed_converted_output", return_value=None),
-            patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
-        ):
-            run_converters_on_folder(
-                folder_path=tmp_path,
-                converter_names=["video2image"],
-                target_media_type="image",
-                medias=medias,
-                on_progress=lambda *a: None,
-            )
-
-        assert medias == {}
 
     def test_converter_follows_symlinked_directories(self, tmp_path):
         """Source files in a symlinked subdirectory must be discovered."""
@@ -579,13 +578,11 @@ class TestRunConvertersOnFolder:
 
         (root / "linked").symlink_to(external)
 
-        fake_embedding = np.ones(768, dtype=np.float32)
         mock_converter = self._mock_video2image_converter()
 
         medias: dict = {}
         with (
             patch("vtscore.converters.get_converter", return_value=mock_converter),
-            patch("vtscore.converters.runner._embed_converted_output", return_value=fake_embedding),
             patch("vtscore.media.get_by_folder_name", return_value=self._mock_target_mt()),
         ):
             run_converters_on_folder(
@@ -603,7 +600,7 @@ class TestRunConvertersOnFolder:
 
 
 # ===========================================================================
-# _embed_converted_output and _compute_md5
+# _compute_md5
 # ===========================================================================
 
 
@@ -626,43 +623,6 @@ class TestEmbedAndMd5Helpers:
         from vtscore.converters.runner import _compute_md5
 
         assert _compute_md5({}) == hashlib.md5(b"").hexdigest()
-
-    def test_embed_converted_output_binary(self, tmp_path):
-        """Binary output is written to temp file and embed_media is called."""
-        from vtscore.converters.runner import _embed_converted_output
-
-        png_bytes = _make_png_bytes()
-        fake_embedding = np.ones(768)
-        mock_mt = MagicMock()
-        mock_mt.embed_media.return_value = fake_embedding
-
-        result = _embed_converted_output(mock_mt, {"media_bytes": png_bytes, "filename": "test.png"})
-
-        assert result is not None
-        assert np.array_equal(result, fake_embedding)
-        mock_mt.embed_media.assert_called_once()
-
-    def test_embed_converted_output_text(self, tmp_path):
-        """Text output is written to temp .txt and embed_media is called."""
-        from vtscore.converters.runner import _embed_converted_output
-
-        fake_embedding = np.ones(768)
-        mock_mt = MagicMock()
-        mock_mt.embed_media.return_value = fake_embedding
-
-        result = _embed_converted_output(mock_mt, {"media_string": "hello world", "filename": "doc.txt"})
-
-        assert result is not None
-        assert np.array_equal(result, fake_embedding)
-        mock_mt.embed_media.assert_called_once()
-
-    def test_embed_converted_output_empty(self):
-        """Empty output returns None."""
-        from vtscore.converters.runner import _embed_converted_output
-
-        mock_mt = MagicMock()
-        result = _embed_converted_output(mock_mt, {})
-        assert result is None
 
 
 # ===========================================================================

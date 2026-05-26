@@ -3,7 +3,9 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
+import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
+import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { ImporterInfo } from '../../../models/api.models';
 
@@ -52,7 +54,9 @@ export class ResortPromptModalComponent {
   typedPathError = '';
 
   constructor(
-    private datasetsApi: DatasetsApiService,
+    private datasetsCrudApi: DatasetsCrudApiService,
+    private datasetsListingsApi: DatasetsListingsApiService,
+    private datasetsUiApi: DatasetsUiApiService,
     private sortingApi: SortingApiService,
   ) {}
 
@@ -79,7 +83,7 @@ export class ResortPromptModalComponent {
     this.browseSourceLabel = '';
     this.typedPath = '';
     this.typedPathError = '';
-    this.datasetsApi.getAllImporters().subscribe({
+    this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
         this.mediaSources = (res.importers || []).filter(
           (imp) =>
@@ -98,7 +102,7 @@ export class ResortPromptModalComponent {
     this.fileBrowsing = false;
 
     if (source.name === 'demo') {
-      this.datasetsApi.getDemoList().subscribe({
+      this.datasetsListingsApi.getDemoList().subscribe({
         next: (res) => {
           this.browseItems = (res.datasets || []).map((d) => ({
             key: d.name,
@@ -146,7 +150,7 @@ export class ResortPromptModalComponent {
     if (!raw) return;
     this.fileLoading = true;
     this.typedPathError = '';
-    this.datasetsApi.selectBrowsedFile(this.browseSource, raw).subscribe({
+    this.datasetsUiApi.selectBrowsedFile(this.browseSource, raw).subscribe({
       next: (res) => {
         this.fileLoading = false;
         this.newExample.emit({ action: 'new-example', type: 'media', value: res.filename });

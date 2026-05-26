@@ -13,13 +13,12 @@ from __future__ import annotations
 import csv
 import io
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters._template import resolve_export_filepath
 from vtscore.exporters.base import ExporterField, LabelsetExporter
+from vtscore.io import atomic_write_text
 
 _DEFAULT_CSV_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
@@ -35,12 +34,7 @@ def _atomic_write_csv(path: Path, write_rows) -> None:
     buf = io.StringIO()
     writer = csv.writer(buf)
     write_rows(writer)
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8", newline="") as f:
-        f.write(buf.getvalue())
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    atomic_write_text(path, buf.getvalue())
 
 
 # Characters that trigger formula execution in spreadsheet applications.
@@ -78,6 +72,7 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
             ),
             placeholder=_DEFAULT_CSV_PATH,
             default=_DEFAULT_CSV_PATH,
+            template_vars=("YYYYMMDD-HHMMSS", "detector_name", "username"),
         ),
     ]
 
@@ -86,11 +81,7 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
     _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category"]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        filepath_str = field_values.get("filepath", "").strip()
-        if not filepath_str:
-            raise ValueError("A file path is required.")
-
-        filepath = Path(resolve_export_filepath(filepath_str))
+        filepath = Path(field_values["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
         # Labels format (from the export modal UI)

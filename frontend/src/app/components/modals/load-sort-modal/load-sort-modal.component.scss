@@ -5,16 +5,13 @@
 }
 
 .sort-section {
-  h3 {
-    margin: 0 0 var(--space-lg);
-    font-size: var(--font-xl);
-  }
+  // `<h3>` inherits its font-size from `_components.scss`.
+  h3 { margin: 0 0 var(--space-lg); }
 
-  h4 {
-    margin: var(--space-lg) 0 var(--space-md);
-    font-size: var(--font-md);
-    color: var(--text-secondary);
-  }
+  // `<h4 class="subhead">` ("Server Example Media") inherits its
+  // font-size/color from the global `.subhead`; we only scope its
+  // contextual margins here.
+  h4 { margin: var(--space-lg) 0 var(--space-md); }
 }
 
 .file-btn {
@@ -72,8 +69,11 @@
   min-height: 200px;
 }
 
-.back-btn {
-  margin-bottom: var(--space-lg);
+// `.back-btn` from `_components.scss`. The bottom margin here is the
+// gap between the back button and the source list below it — the
+// parent isn't a flex column with a `gap`, so we set it explicitly.
+:host {
+  .back-btn { margin-bottom: var(--space-lg); }
 }
 
 .picker-instructions {

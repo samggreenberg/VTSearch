@@ -41,7 +41,7 @@ field-driven configuration system every other plugin family uses.
 ```python
 class MediaConverter(PluginBase, ABC):
     display_name: str = ""
-    converter_description: str = ""
+    description: str = ""
     fields: list[PluginField] = []           # user-configurable params
 
     @property
@@ -206,7 +206,7 @@ Every concrete converter module ends with a module-level
 # vtscore/converters/audio2image.py
 class Audio2ImageMediaConverter(MediaConverter):
     display_name = "Audio → Image (spectrogram)"
-    converter_description = "Render audio as a mel-spectrogram or CQT image"
+    description = "Render audio as a mel-spectrogram or CQT image"
     fields = [...]
     @property
     def source_type(self) -> str: return "audio"
@@ -339,7 +339,7 @@ Sketch — the walk-through is in
 1. Create `vtscore/converters/<source>2<target>.py`.
 2. Subclass `MediaConverter`. Implement `source_type`,
    `target_type`, and `convert(media, params)`.
-3. Declare `display_name`, `converter_description`, and any
+3. Declare `display_name`, `description`, and any
    `fields` you need.
 4. At the bottom of the module, expose `CONVERTER = MyConverter()`.
 5. Restart the process — discovery picks it up on next import.
@@ -354,7 +354,7 @@ from vtscore.plugins import PluginField
 
 class Text2EmojiMediaConverter(MediaConverter):
     display_name = "Text → Emoji"
-    converter_description = "Replace common words with their emoji equivalents."
+    description = "Replace common words with their emoji equivalents."
     fields = [
         PluginField(
             key="lang",

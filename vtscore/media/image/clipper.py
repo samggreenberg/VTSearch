@@ -17,6 +17,10 @@ class ImageDefaultClipper(MediaClipper):
         return "image_default"
 
     @property
+    def display_name(self) -> str:
+        return "None"
+
+    @property
     def media_type(self) -> str:
         return "image"
 
@@ -246,6 +250,13 @@ class ImageObjectClipper(MediaClipper):
     @property
     def description(self) -> str:
         return "Detect objects with YOLO/RT-DETR and crop one clip per detection."
+
+    @property
+    def summary_template(self) -> str:
+        return (
+            "Detect objects with {model_id} (confidence ≥ {threshold}, max "
+            "{max_detections} per image) and crop one clip per detection."
+        )
 
     @property
     def threshold(self) -> float:
@@ -483,6 +494,12 @@ class ImageFaceClipper(MediaClipper):
         return (
             "Detect faces with MediaPipe and emit one crop per detected face; "
             "images with no detected faces are skipped."
+        )
+
+    @property
+    def summary_template(self) -> str:
+        return (
+            "Detect faces with MediaPipe (confidence ≥ {threshold}, min size {min_size}px) and crop one clip per face."
         )
 
     @property

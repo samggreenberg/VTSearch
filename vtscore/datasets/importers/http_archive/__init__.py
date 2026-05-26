@@ -33,7 +33,6 @@ from vtscore.config import DATA_DIR
 from vtscore.datasets.downloader import download_file_with_progress
 from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder
-from vtscore.security.url_validation import validate_url
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -208,6 +207,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             field_type="select",
             description="Type of media files contained in the archive.",
             default="audio",
+            required=False,
         ),
     ]
 
@@ -222,7 +222,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
-        validate_url(url)
         media_type = field_values.get("media_type", "audio")
         specs = self.effective_source_specs(field_values)
 
@@ -245,8 +244,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         _extract_archive(archive_path, extract_dir, on_progress=progress)
         archive_path.unlink(missing_ok=True)
 
-        emb_name = field_values.get("embedder", "")
-        skip_emb = bool(field_values.get("skip_embedding"))
         try:
             load_dataset_from_folder(
                 extract_dir,
@@ -254,20 +251,15 @@ class HttpArchiveDatasetImporter(DatasetImporter):
                 medias,
                 on_progress=progress,
                 thin=thin,
-                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=skip_emb,
             )
             _run_converter_specs(extract_dir, media_type, field_values, specs, medias, thin=thin)
         finally:
             shutil.rmtree(extract_dir, ignore_errors=True)
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
-        url = field_values.get("url", "")
-        if not url.startswith(("http://", "https://")):
-            raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
         self.run(field_values, medias, thin=thin)
 
     @property
@@ -282,7 +274,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         up the returned directory when they are done with it.
         """
         url = field_values["url"]
-        validate_url(url)
 
         DATA_DIR.mkdir(exist_ok=True)
         progress = _default_progress()
@@ -315,19 +306,15 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         media_type = field_values.get("media_type", "audio")
         specs = self.effective_source_specs(field_values)
         converter_specs = [s for s in specs if s.converter is not None]
-        emb_name = field_values.get("embedder", "")
-        skip_emb = bool(field_values.get("skip_embedding"))
         try:
             yield from load_dataset_from_folder_chunked(
                 extract_dir,
                 media_type,
                 chunk_size,
                 thin=thin,
-                embedder_name=emb_name,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=skip_emb,
             )
             if converter_specs:
                 converter_chunk: dict[int, dict[str, Any]] = {}
@@ -376,15 +363,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
                         return tail[: -len(suffix)] or self.display_name
                 return tail
         return self.display_name
-
-    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-        origin = super().build_origin(field_values)
-        specs = field_values.get("source_specs")
-        if specs:
-            if not isinstance(specs, str):
-                specs = json.dumps(specs)
-            origin["params"]["source_specs"] = specs
-        return origin
 
     def resolve_file(
         self,

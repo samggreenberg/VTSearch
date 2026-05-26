@@ -28,6 +28,7 @@ from vtsearch.schemas.datasets import (
     DashboardDatasetRenameRequestSchema,
     DashboardDatasetRenameResponseSchema,
     DashboardDiskUsageResponseSchema,
+    DashboardRamUsageResponseSchema,
     DemoCategoriesResponseSchema,
     DemoDatasetListQuerySchema,
     DemoDatasetListResponseSchema,
@@ -137,6 +138,7 @@ def demo_dataset_list(query: dict):
     """
     from vtscore.converters import list_converters_for_source
     from vtscore.media import get as media_get
+    from vtsearch.settings import filter_visible_plugins
 
     requested_embedder = query.get("embedder", "").strip()
     requested_clipper = query.get("clipper", "").strip()
@@ -174,7 +176,9 @@ def demo_dataset_list(query: dict):
                 "description": dataset_info.get("description", ""),
                 "media_type": media_type,
                 "num_categories": len(dataset_info["categories"]),
-                "available_converters": [c.to_dict() for c in list_converters_for_source(media_type)],
+                "available_converters": [
+                    c.to_dict() for c in filter_visible_plugins("converters", list_converters_for_source(media_type))
+                ],
                 "pkl_embedder": pkl_embedder or "",
                 "pkl_clipper": pkl_clipper or "",
             }
@@ -526,3 +530,30 @@ def dashboard_disk_usage():
         "free": usage.free,
         "path": str(probe),
     }
+
+
+@datasets_ui_bp.route("/api/dashboard/ram-usage")
+@datasets_ui_bp.response(200, DashboardRamUsageResponseSchema)
+def dashboard_ram_usage():
+    """Return free / used / total bytes of system RAM.
+
+    Reads ``MemTotal`` and ``MemAvailable`` from ``/proc/meminfo`` (Linux).
+    ``free`` is reported as ``MemAvailable`` (memory reclaimable without
+    swapping, which is what an application can actually use), and ``used``
+    is derived as ``total - free`` to match.
+    """
+    total = 0
+    available = 0
+    try:
+        with open("/proc/meminfo", encoding="ascii") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    total = int(line.split()[1]) * 1024
+                elif line.startswith("MemAvailable:"):
+                    available = int(line.split()[1]) * 1024
+                if total and available:
+                    break
+    except OSError:
+        pass
+    used = max(0, total - available)
+    return {"total": total, "used": used, "free": available}

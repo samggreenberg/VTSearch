@@ -49,6 +49,17 @@ export class ToastContainerComponent implements OnInit, OnDestroy {
     this.toastService.dismiss(t.id);
   }
 
+  /** Fire a toast's action button. The toast is dismissed regardless of
+   *  whether the handler throws so the user never sees a stuck toast
+   *  with a clicked action. */
+  runAction(t: Toast): void {
+    try {
+      t.action?.onClick();
+    } finally {
+      this.toastService.dismiss(t.id);
+    }
+  }
+
   async copyDebugInfo(t: Toast): Promise<void> {
     const text = this.toastService.formatForClipboard(t);
     try {

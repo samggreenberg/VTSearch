@@ -406,7 +406,15 @@ only when the UI needs to display or play the media.
 
 Most importers delegate to `load_dataset_from_folder()` after downloading
 files to a local directory.  However, importers whose data comes from
-API calls (not files on disk) can build media dicts directly in `run()`:
+API calls (not files on disk) can build media dicts directly in `run()`.
+
+**Importers do not embed.** Set `embedding=None` and `embedder=""`; the
+framework `embed_missing` stage embeds every item still at `None` after
+`run()` returns, using the user-selected embedder (or the default for
+the media type).  Only set `embedding` to a real vector when your data
+source ships pre-computed vectors that are dimension-compatible with the
+embedder the user picked — in that case also set `embedder` to the name
+of that embedder.
 
 ```python
 def run(self, field_values, medias, thin=False):
@@ -416,8 +424,8 @@ def run(self, field_values, medias, thin=False):
             "media_type": "audio",
             "filename": item["id"],
             "md5": item["md5"],                  # pre-computed by the service
-            "embedding": item["embedding"],      # pre-computed by the service
-            "embedder": item["embedder_name"],   # must match a VTSearch embedder
+            "embedding": None,                   # framework embed stage fills this in
+            "embedder": "",                      # framework embed stage stamps this
             "media_bytes": data if not thin else None,
             "media_path": None,
             "media_url": item["url"],            # URL-based lazy-fetch fallback
@@ -433,6 +441,11 @@ def run(self, field_values, medias, thin=False):
             "custom_metadata": {"contentID": item["id"], ...},
         }
 ```
+
+If the source ships pre-computed vectors, prefer
+`self.content_vectors[filename] = vec` or
+`self.custom_metadata_map[filename] = {"embedding": vec}` — the framework
+treats those as already-embedded and skips them.
 
 When building dicts directly, the importer should also override
 `build_origin()` to return an empty origin (since the default
@@ -732,7 +745,7 @@ from vtscore.plugins import PluginField
 
 class Image2TextMediaConverter(MediaConverter):
     display_name = "Image → Text (OCR)"
-    converter_description = "Run OCR on image files"
+    description = "Run OCR on image files"
     fields = [
         PluginField(
             key="lang",
@@ -777,7 +790,7 @@ CONVERTER = Image2TextMediaConverter()
 | `get_param(params, key)` | Helper: read a param value with field-default fallback |
 | `name` (property) | Auto-derived as `f"{source_type}2{target_type}"` |
 | `display_name` | Human-readable label shown in the picker |
-| `converter_description` | One-line description |
+| `description` | One-line description |
 
 Each returned dict must include a `filename` and the target type's data
 fields (`media_bytes` and `duration` for image/audio/video,

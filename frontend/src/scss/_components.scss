@@ -204,8 +204,13 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   min-width: 320px;
   max-width: 90vw;
   max-height: 85vh;
-  overflow-y: auto;
   box-shadow: var(--shadow-lg);
+  // Flex column so the body is the only scrollable area; the header
+  // and footer stay pinned even when the body overflows, so primary
+  // actions (Cancel / Import / etc.) remain visible.
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .modal-header {
@@ -237,6 +242,16 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 .modal-body {
   margin-bottom: var(--space-xl);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  // Flex column so a designated inner region (e.g. the demo table in the
+  // Add Dataset modal) can claim remaining space via `flex: 1` instead of
+  // capping itself with a hard-coded max-height that produces a second
+  // scrollbar nested inside the body's scrollbar. Normal block stacking
+  // is preserved for modals whose children all use natural height.
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-footer {
@@ -308,7 +323,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // the placeholder).  Stays visible after the user starts typing — used for
 // accepted extensions, expected column schemas, JSON/CSV sample snippets.
 .form-hint {
-  margin: 2px 0 0;
+  margin: var(--space-2xs) 0 0;
   font-size: var(--font-sm);
   line-height: 1.4;
   color: var(--text-muted);
@@ -326,22 +341,36 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   padding: var(--space-xs) var(--space-md);
 }
 
+// Body-text utility classes used on `<p>`/`<span>` elements inside modals
+// and panels. We explicitly zero the UA `<p>` margin: surrounding layouts
+// rely on the parent's flex `gap` to space stacked elements, and default
+// browser `<p>` margins (~1em) inject inconsistent extra space that
+// breaks the vertical rhythm (see style-guide §3.0).
+// `.info-text` is body helper text — the kind of muted explanatory
+// copy ("Pick a folder on this computer…") that sits below or
+// alongside form controls. Uses `--text-muted` per §1.5 ("hints"),
+// which matches the de-facto pattern that ~5 modals had been
+// reimplementing locally before this consolidation.
 .info-text {
+  margin: 0;
   font-size: var(--font-md);
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .error-text {
+  margin: 0;
   font-size: var(--font-md);
   color: var(--color-bad);
 }
 
 .success-text {
+  margin: 0;
   font-size: var(--font-md);
   color: var(--color-good);
 }
 
 .status-text {
+  margin: 0;
   font-size: var(--font-md);
   color: var(--text-secondary);
 }
@@ -351,6 +380,67 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   color: var(--text-muted);
   text-align: center;
   padding: var(--space-xl) 0;
+}
+
+// `.subhead` styles a heading tag (typically `<h4>`) as a small muted
+// sub-section label inside a larger panel — e.g. "Server Example
+// Media" inside the load-sort-modal's `<h3>` panel. Vertical rhythm
+// (margins) stays scoped per-component since it depends on what's
+// above/below; identity (font-size, color) lives here.
+.subhead {
+  font-size: var(--font-md);
+  color: var(--text-secondary);
+}
+
+// `.view-tabs` / `.view-tab` / `.view-tab-content` — a paneled tab strip
+// where the active tab visually flows into the inset content region
+// below. The active tab's background matches `.view-tab-content` so the
+// border between them disappears, leaving only the accent underline.
+// Lives here (not in a component SCSS) so child components can reuse the
+// pattern without copying the rules — Angular's emulated encapsulation
+// otherwise blocks parent classes from styling child template content.
+// `.view-tab-content` intentionally omits `display`; consumers pick
+// `flex` or `grid` to suit their inner layout.
+.view-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  padding: var(--space-xs) var(--space-xs) 0;
+}
+
+.view-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-base), border-color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  &--active {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border-bottom-color: var(--accent-color);
+  }
+}
+
+.view-tab-content {
+  padding: var(--space-lg);
+  border: 1px solid var(--border-color);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--bg-primary);
 }
 
 // --- Scrollbars ---

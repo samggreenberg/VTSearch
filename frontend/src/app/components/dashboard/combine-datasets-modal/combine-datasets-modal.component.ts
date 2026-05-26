@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
+import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { DatasetRegistryEntry, MediaTypeInfo } from '../../../models/api.models';
 
 interface CombineRow {
@@ -34,7 +35,10 @@ export class CombineDatasetsModalComponent implements OnInit {
   error = '';
   name = '';
 
-  constructor(private datasetsApi: DatasetsApiService) {}
+  constructor(
+    private datasetsCrudApi: DatasetsCrudApiService,
+    private datasetsListingsApi: DatasetsListingsApiService,
+  ) {}
 
   ngOnInit(): void {
     this.rows = this.datasets
@@ -49,7 +53,7 @@ export class CombineDatasetsModalComponent implements OnInit {
 
     this.name = this.defaultName();
 
-    this.datasetsApi.getMediaTypes().subscribe({
+    this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypes = res.media_types || [];
       },
@@ -109,7 +113,7 @@ export class CombineDatasetsModalComponent implements OnInit {
     this.error = '';
     const paths = this.rows.map((r) => r.pkl_path);
     const name = (this.name || '').trim() || this.defaultName();
-    this.datasetsApi.combineDatasets({ datasets: paths, name }).subscribe({
+    this.datasetsCrudApi.combineDatasets({ datasets: paths, name }).subscribe({
       next: () => {
         this.submitting = false;
         this.combineStarted.emit();

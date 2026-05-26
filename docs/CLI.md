@@ -207,6 +207,64 @@ python app.py --login trivial    # multi-user mode with simple username auth
 
 Without `--login`, the app uses `DefaultLoginProvider` (single-user, always authenticated).
 
+**Solo mediaType** (`--solo-media-type`) — streamline the UI for users
+who only ever look at one media type (e.g. images, optionally pulled
+in via converters from videos/documents). When set, the dataset
+importer and new-detector flows hide their mediaType pickers and lock
+to this type, the converter list filters to converters whose output is
+this type, and the type's default embedder is warmed at startup:
+
+```bash
+python app.py --solo-media-type image
+```
+
+Valid values are the registered media-type ids (`audio`, `image`,
+`video`, `text`, `document`). The flag is a per-process **fallback**:
+any user who explicitly sets their own solo mediaType (or explicitly
+opts back into "show everything") via the Settings dialog overrides
+the CLI value for themselves, and the choice persists across restarts.
+A user who has never touched the setting sees the CLI value.
+
+**Solo mediaEmbedder** (`--solo-embedder`) — lock the embedding model
+for one or more mediaTypes so the dataset-importer modal hides its
+embedder picker for those types and silently uses the named embedder.
+Repeatable, one `--solo-embedder` per mediaType; the format is
+`TYPE=EMBEDDER`:
+
+```bash
+python app.py --solo-embedder image=siglip --solo-embedder audio=clap
+```
+
+Other mediaTypes still show the normal embedder picker. The flag warms
+each locked embedder at startup even when no datasets or detectors are
+registered yet. Same fallback semantics as `--solo-media-type`: any
+user can override per-mediaType via the Settings dialog ("Ask each
+time" is the opt-out), and their choice persists across restarts.
+
+**Hidden plugins** (`--hide-plugin family:name`, repeatable) — drop a
+plugin from picker / listing API responses for this deployment without
+editing plugin code. The format is `family:name` where `family` is one
+of the keys printed by `--list-plugins` (`importers`, `exporters`,
+`label_importers`, `labelset_sources`, `converters`, `media_sources`,
+`media_types`, `embedders`, `clippers`, `settings_importers`,
+`settings_exporters`, `settings_sources`) and `name` is the plugin's
+registered name:
+
+```bash
+python app.py --hide-plugin converters:audio2image \
+              --hide-plugin embedders:e5 \
+              --hide-plugin importers:synthetic
+```
+
+Hidden plugins remain importable and callable by name via execution
+endpoints (autodetect, label import, etc.) — this is a UI declutter,
+not a security boundary. The CLI flag merges with the persisted
+`hidden_plugins` key in the server settings file (`data/settings.json`
+or whatever path `--settings` points at), where a deployment can set
+`{"hidden_plugins": {"converters": ["audio2image"]}}` and pick it up on
+every restart. Use `--list-plugins --format names` to discover the
+available `family:name` pairs.
+
 ## Inspecting plugins and the API schema
 
 `python app.py --list-plugins` enumerates every auto-discovered plugin —

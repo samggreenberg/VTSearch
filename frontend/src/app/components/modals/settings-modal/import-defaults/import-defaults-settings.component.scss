@@ -1,0 +1,30 @@
+.import-defaults-intro {
+  margin-bottom: var(--space-sm);
+}
+
+// Adds the inner column-flex layout on top of the shared `.view-tab-content`
+// base (border, padding, background) defined in global `_components.scss`.
+.import-defaults-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.license-warning {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated, transparent);
+}
+
+.clipper-btn {
+  align-self: flex-start;
+}
+
+.import-defaults-footer {
+  margin-top: var(--space-sm);
+  display: flex;
+  justify-content: flex-end;
+}

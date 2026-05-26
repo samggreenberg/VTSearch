@@ -6,15 +6,15 @@
 // `<vt-source-picker>` (see source-picker.component.scss).  Only
 // styles unique to this top-level modal remain below.
 
-// Pin the Add Dataset modal to a single large width so flipping between
-// tabs (Services / Server / Local / Demo) and inner widgets doesn't reflow
-// the dialog.  680px (matching the Settings modal) was too narrow for the
-// demo table; 900px gives the table room without overflowing typical
-// laptop displays.  min-height keeps the dialog from collapsing to a thin
-// strip in the no-selection state and then jumping to fit the demo table.
+// Pin the Add Dataset modal to a single width so flipping between tabs
+// (Services / Server / Local / Demo) and inner widgets doesn't reflow the
+// dialog.  Sized to fit the demo table comfortably after dropping the
+// #Cat column and tightening descriptions.  min-height keeps the dialog
+// from collapsing to a thin strip in the no-selection state and then
+// jumping to fit the demo table.
 :host {
   ::ng-deep .modal-content {
-    width: 900px;
+    width: 720px;
     min-height: 480px;
   }
 }

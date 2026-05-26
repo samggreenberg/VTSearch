@@ -4,8 +4,8 @@ import { catchError, filter, take, takeUntil } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
-import { DatasetsApiService } from './datasets-api.service';
-import { DetectorsApiService } from './detectors-api.service';
+import { DatasetsRegistryApiService } from './datasets-registry-api.service';
+import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 import { ProgressEventsService } from './progress-events.service';
 import { LoadingTask } from '../models/api.models';
 
@@ -61,8 +61,8 @@ export class ContextSwitchService {
   constructor(
     private activeContext: ActiveContextService,
     private datasetState: DatasetStateService,
-    private datasetsApi: DatasetsApiService,
-    private detectorsApi: DetectorsApiService,
+    private datasetsRegistryApi: DatasetsRegistryApiService,
+    private detectorsRegistryApi: DetectorsRegistryApiService,
     private progressEvents: ProgressEventsService,
     private router: Router,
   ) {}
@@ -198,7 +198,7 @@ export class ContextSwitchService {
 
   private runDatasetLoad(current: ActiveSwitch, datasetId: string): Observable<void> {
     return new Observable<void>((sub) => {
-      this.datasetsApi
+      this.datasetsRegistryApi
         .loadRegistered(datasetId)
         .pipe(
           takeUntil(current.cancellable),
@@ -223,7 +223,7 @@ export class ContextSwitchService {
 
   private runDetectorLoad(current: ActiveSwitch, detectorId: string): Observable<void> {
     return new Observable<void>((sub) => {
-      this.detectorsApi
+      this.detectorsRegistryApi
         .loadDetector(detectorId)
         .pipe(
           takeUntil(current.cancellable),
@@ -308,7 +308,7 @@ export class ContextSwitchService {
     // request-id check is the actual correctness guarantee.
     const datasetTasks = this.progressEvents.loadingTasks.filter((t) => t.status !== 'idle');
     for (const t of datasetTasks) {
-      this.datasetsApi.cancelTask(t.task_id).subscribe({
+      this.datasetsRegistryApi.cancelTask(t.task_id).subscribe({
         error: () => {
           /* tolerate races: the task may have completed already */
         },
@@ -316,7 +316,7 @@ export class ContextSwitchService {
     }
     const detectorTasks = this.progressEvents.detectorLoadingTasks.filter((t) => t.status !== 'idle');
     for (const t of detectorTasks) {
-      this.detectorsApi.cancelDetectorLoadingTask(t.task_id).subscribe({
+      this.detectorsRegistryApi.cancelDetectorLoadingTask(t.task_id).subscribe({
         error: () => {
           /* tolerate races */
         },

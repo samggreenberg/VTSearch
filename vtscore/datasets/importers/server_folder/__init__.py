@@ -23,7 +23,7 @@ from __future__ import annotations
 import hashlib
 import io
 from pathlib import Path
-from typing import Any, Iterator, cast
+from typing import Any, Iterator
 
 from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
@@ -38,70 +38,41 @@ def _coerce_recursive(field_values: dict[str, Any]) -> bool:
     return str(val).lower() != "false"
 
 
-def _load_pdf_images(  # noqa: C901
+def _load_pdf_images(
     folder: Path,
     medias: dict[int, dict[str, Any]],
     thin: bool = False,
-    embedder_name: str = "",
     recursive: bool = True,
 ) -> None:
     """Expand all PDFs in *folder* into per-page image medias.
 
-    Each page is rendered at 150 DPI, embedded with the image embedder, and
-    appended to *medias* with sequential IDs continuing from the current
-    maximum.  The ``origin`` is set to ``{"importer": "pdf", "params":
-    {"path": ...}}`` so the provenance points back to the source document.
+    Each page is rendered at 150 DPI and appended to *medias* with
+    sequential IDs continuing from the current maximum.  Pages leave
+    here with ``embedding=None``; the framework embed stage fills the
+    vectors in.  The ``origin`` is set to ``{"importer": "pdf",
+    "params": {"path": ...}}`` so provenance points back to the source
+    document.
     """
     pdf_files = sorted(rglob_follow_symlinks(folder, "*.pdf") if recursive else glob_top_level(folder, "*.pdf"))
     if not pdf_files:
         return
 
     from vtscore.datasets.pdf import render_pdf_pages  # noqa: PLC0415
-    from vtscore.media import embedders_for_type, get_by_folder_name, get_embedder  # noqa: PLC0415
+    from vtscore.media import get_by_folder_name  # noqa: PLC0415
 
     mt = get_by_folder_name("image")
-
-    # Resolve the embedder
-    emb = None
-    if embedder_name:
-        try:
-            emb = get_embedder(embedder_name)
-        except KeyError:
-            pass
-    if emb is None:
-        avail = embedders_for_type(mt.type_id)
-        if avail:
-            emb = avail[0]
-    if emb is None:
-        return
-
-    if getattr(emb, "_model", None) is None:
-        emb.load_models()
-
-    embedder_id = emb.name
     media_id = max(medias.keys(), default=0) + 1
 
     for pdf_path in pdf_files:
         origin = {"importer": "pdf", "params": {"path": str(pdf_path)}}
         pages = render_pdf_pages(pdf_path)
-        # Relative path prefix so that PDFs in different subdirectories
-        # produce distinct page names.
         pdf_rel = pdf_path.relative_to(folder).as_posix()
 
         for page_name, pil_image in pages:
-            # Image-type embedders all implement embed_pil_image, but
-            # it's not declared on the MediaEmbedder ABC.
-            embedding = cast(Any, emb).embed_pil_image(pil_image)
-            if embedding is None:
-                continue
-
             buf = io.BytesIO()
             pil_image.save(buf, format="PNG")
             image_bytes = buf.getvalue()
 
-            # page_name is e.g. "doc.pdf-1"; prefix with relative dir
-            # so that identically-named PDFs in different folders stay
-            # distinct (e.g. "subdir/doc.pdf-1").
             rel_dir = str(Path(pdf_rel).parent)
             if rel_dir and rel_dir != ".":
                 full_page_name = f"{rel_dir}/{page_name}"
@@ -111,10 +82,10 @@ def _load_pdf_images(  # noqa: C901
             media_data: dict[str, Any] = {
                 "id": media_id,
                 "media_type": mt.type_id,
-                "embedder": embedder_id,
+                "embedder": "",
                 "file_size": len(image_bytes),
                 "md5": hashlib.md5(image_bytes).hexdigest(),
-                "embedding": embedding,
+                "embedding": None,
                 "filename": full_page_name,
                 "category": "custom",
                 "origin": origin,
@@ -198,6 +169,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
             field_type="select",
             description="Type of media files the dataset ends up holding.",
             default="audio",
+            required=False,
         ),
         ImporterField(
             key="path",
@@ -250,11 +222,9 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 mt.folder_import_name,
                 medias,
                 thin=thin,
-                embedder_name=field_values.get("embedder", ""),
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=bool(field_values.get("skip_embedding")),
                 recursive=recursive,
             )
         except ValueError:
@@ -290,7 +260,6 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 folder,
                 medias,
                 thin=thin,
-                embedder_name=field_values.get("embedder", ""),
                 recursive=recursive,
             )
 
@@ -351,11 +320,9 @@ class ServerFolderDatasetImporter(DatasetImporter):
                     mt.folder_import_name,
                     chunk_size,
                     thin=thin,
-                    embedder_name=field_values.get("embedder", ""),
                     content_vectors=self.content_vectors or None,
                     content_md5s=self.content_md5s or None,
                     custom_metadata_map=self.custom_metadata_map or None,
-                    skip_embedding=bool(field_values.get("skip_embedding")),
                     recursive=recursive,
                 )
             except ValueError:
@@ -414,17 +381,6 @@ class ServerFolderDatasetImporter(DatasetImporter):
             if leaf:
                 return leaf
         return self.display_name
-
-    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-        origin = super().build_origin(field_values)
-        specs = field_values.get("source_specs")
-        if specs:
-            import json as _json  # noqa: PLC0415
-
-            if not isinstance(specs, str):
-                specs = _json.dumps(specs)
-            origin["params"]["source_specs"] = specs
-        return origin
 
     def origin_display(self, origin: dict[str, Any]) -> str:
         params = origin.get("params", {})

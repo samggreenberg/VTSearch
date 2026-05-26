@@ -10,7 +10,6 @@ from typing import Any
 import requests
 
 from vtscore.exporters.base import ExporterField, LabelsetExporter
-from vtscore.security.url_validation import validate_url
 
 
 class WebhookLabelsetExporter(LabelsetExporter):
@@ -43,13 +42,10 @@ class WebhookLabelsetExporter(LabelsetExporter):
     ]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        url = field_values.get("url", "").strip()
-        if not url:
-            raise ValueError("A webhook URL is required.")
-        validate_url(url)
+        url = field_values["url"]
 
         headers: dict[str, str] = {"Content-Type": "application/json"}
-        auth_header = field_values.get("auth_header", "").strip()
+        auth_header = field_values.get("auth_header", "")
         if auth_header:
             headers["Authorization"] = auth_header
 

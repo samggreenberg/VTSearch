@@ -130,6 +130,11 @@ export interface ConverterInfo {
   target_type: string;
   display_name?: string;
   description?: string;
+  /** One-line preview with ``{key}`` placeholders for each field.  The
+   *  importer modal renders it next to the source-spec row, substituting
+   *  the current field values, so the user sees a live summary of what
+   *  the converter will do.  Falls back to ``description`` when empty. */
+  summary_template?: string;
   fields?: ImporterField[];
 }
 
@@ -141,6 +146,22 @@ export interface SourceSpec {
   converter: string | null;
   params: Record<string, string | number | null>;
 }
+
+/** Saved per-mediaType defaults for the Add Dataset advanced panel —
+ *  the embedder, clipper (+ params), and converter rows the user wants
+ *  applied automatically every time they import a dataset whose output
+ *  is the matching mediaType. Edited from Settings > Data Imports;
+ *  silently auto-filled into the importer form on importer selection. */
+export interface ImportDefaultsForMediaType {
+  embedder?: string;
+  clipper?: string;
+  clipper_params?: Record<string, string | number>;
+  /** Source-spec rows to seed into the importer's "Include media" picker.
+   *  May omit the native "include directly" row — the importer adds it
+   *  implicitly so the form is never empty. */
+  source_specs?: SourceSpec[];
+}
+export type ImportDefaultsByMediaType = Record<string, ImportDefaultsForMediaType>;
 
 export interface ImporterField {
   key: string;
@@ -262,6 +283,11 @@ export interface ClipperInfo {
   name: string;
   display_name?: string;
   description?: string;
+  /** One-line preview with ``{key}`` placeholders for each parameter.  The
+   *  native row of the importer source-specs picker substitutes the current
+   *  parameter values, so the user sees a live summary of what the clipper
+   *  will do.  Falls back to ``description`` when empty. */
+  summary_template?: string;
   media_type: string;
   parameters?: ClipperParameter[];
   creation_questions?: ClipperParameter[];

@@ -28,14 +28,16 @@
     (lfFilesDropped)="lfOnFilesDropped($event)"
   >
     <ng-container demoBefore>
-      <vt-import-config
-        mediaTypeFieldId="demo-media-type"
-        [mediaType]="activeTab"
-        (mediaTypeChange)="selectDemoTabWithEmbedder($event)"
-        [mediaTypeOptions]="demoTabs"
-        [mediaTypeOptionLabels]="mediaTypeLabels"
-        [mediaTypeOptionIcons]="demoMediaTypeIcons"
-      ></vt-import-config>
+      @if (!effectiveSoloMediaType) {
+        <vt-import-config
+          mediaTypeFieldId="demo-media-type"
+          [mediaType]="activeTab"
+          (mediaTypeChange)="selectDemoTabWithEmbedder($event)"
+          [mediaTypeOptions]="demoTabs"
+          [mediaTypeOptionLabels]="mediaTypeLabels"
+          [mediaTypeOptionIcons]="demoMediaTypeIcons"
+        ></vt-import-config>
+      }
     </ng-container>
 
     <ng-container demoAfter>
@@ -64,7 +66,9 @@
               [sourceSpecs]="[]"
               [selectedEmbedder]="selectedDemoEmbedder"
               (selectedEmbedderChange)="onDemoEmbedderChange($event)"
+              [lockedEmbedder]="lockedEmbedderFor(activeTab, demoEmbedders)"
               [selectedClipper]="selectedDemoClipper"
+              [selectedClipperParams]="{}"
               (clipperChooserRequested)="openClipperChooser('demo')"
             ></vt-import-advanced>
           </div>
@@ -73,15 +77,17 @@
     </ng-container>
 
     <ng-container sfBefore>
-      <vt-import-config
-        mediaTypeFieldId="sf-media-type"
-        [mediaType]="sfMediaType"
-        (mediaTypeChange)="sfOnMediaTypeChange($event)"
-        [mediaTypeOptions]="sfMediaTypeOptions"
-        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-        [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-        [detectionHint]="detectionHint(sfDetection)"
-      ></vt-import-config>
+      @if (!effectiveSoloMediaType) {
+        <vt-import-config
+          mediaTypeFieldId="sf-media-type"
+          [mediaType]="sfMediaType"
+          (mediaTypeChange)="sfOnMediaTypeChange($event)"
+          [mediaTypeOptions]="sfMediaTypeOptions"
+          [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+          [mediaTypeOptionIcons]="mediaTypeOptionIcons"
+          [detectionHint]="detectionHint(sfDetection)"
+        ></vt-import-config>
+      }
     </ng-container>
 
     <ng-container sfAfter>
@@ -121,7 +127,9 @@
           (sourceSpecsChange)="onSfSpecsChange($event)"
           [selectedEmbedder]="sfSelectedEmbedder"
           (selectedEmbedderChange)="sfSelectedEmbedder = $event"
+          [lockedEmbedder]="lockedEmbedderFor(sfMediaType, sfEmbedders)"
           [selectedClipper]="sfSelectedClipper"
+          [selectedClipperParams]="sfClipperParamValues"
           (clipperChooserRequested)="openClipperChooser('sf')"
         ></vt-import-advanced>
       </div>
@@ -136,23 +144,23 @@
         <p class="info-text">Pick a folder on <strong>this computer</strong> (running your browser).</p>
       } @else {
         <p class="info-text">
-          Upload a single file from <strong>this computer</strong> that lists the media to import
-          (a UTF-8 text file with one server-side path per line, or a <code>.npz</code> archive of
-          paths + pre-computed embedding vectors).
+          Upload a single file from <strong>this computer</strong> that lists the media to import.<vt-field-hint-icon hint="A UTF-8 text file with one server-side path per line, or a .npz archive of paths + pre-computed embedding vectors."></vt-field-hint-icon>
         </p>
       }
     </ng-container>
 
     <ng-container lfBefore>
-      <vt-import-config
-        mediaTypeFieldId="lf-media-type"
-        [mediaType]="lfMediaType"
-        (mediaTypeChange)="lfOnMediaTypeChange($event)"
-        [mediaTypeOptions]="lfMediaTypeOptions"
-        [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-        [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-        [detectionHint]="detectionHint(lfDetection)"
-      ></vt-import-config>
+      @if (!effectiveSoloMediaType) {
+        <vt-import-config
+          mediaTypeFieldId="lf-media-type"
+          [mediaType]="lfMediaType"
+          (mediaTypeChange)="lfOnMediaTypeChange($event)"
+          [mediaTypeOptions]="lfMediaTypeOptions"
+          [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+          [mediaTypeOptionIcons]="mediaTypeOptionIcons"
+          [detectionHint]="detectionHint(lfDetection)"
+        ></vt-import-config>
+      }
     </ng-container>
 
     <ng-container lfAfter>
@@ -194,7 +202,9 @@
           (sourceSpecsChange)="onLfSpecsChange($event)"
           [selectedEmbedder]="lfSelectedEmbedder"
           (selectedEmbedderChange)="lfSelectedEmbedder = $event"
+          [lockedEmbedder]="lockedEmbedderFor(lfMediaType, lfEmbedders)"
           [selectedClipper]="lfSelectedClipper"
+          [selectedClipperParams]="lfClipperParamValues"
           (clipperChooserRequested)="openClipperChooser('lf')"
         ></vt-import-advanced>
       </div>
@@ -210,16 +220,18 @@
       @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
         @for (field of selectedImporter.fields; track field.key) {
           @if (field.field_type === 'select' && field.key === 'media_type') {
-            <vt-import-config
-              [mediaTypeFieldId]="'field-' + field.key"
-              [mediaType]="formValues[field.key] || ''"
-              (mediaTypeChange)="onMediaTypeChange($event)"
-              [mediaTypeOptions]="field.options || []"
-              [mediaTypeOptionLabels]="mediaTypeOptionLabels"
-              [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-            ></vt-import-config>
-            @if (field.hint) {
-              <p class="form-hint">{{ field.hint }}</p>
+            @if (!effectiveSoloMediaType) {
+              <vt-import-config
+                [mediaTypeFieldId]="'field-' + field.key"
+                [mediaType]="formValues[field.key] || ''"
+                (mediaTypeChange)="onMediaTypeChange($event)"
+                [mediaTypeOptions]="field.options || []"
+                [mediaTypeOptionLabels]="mediaTypeOptionLabels"
+                [mediaTypeOptionIcons]="mediaTypeOptionIcons"
+              ></vt-import-config>
+              @if (field.hint) {
+                <p class="form-hint">{{ field.hint }}</p>
+              }
             }
           } @else {
           <div class="form-group">
@@ -349,7 +361,9 @@
             (sourceSpecsChange)="onFormSpecsChange($event)"
             [selectedEmbedder]="selectedEmbedder"
             (selectedEmbedderChange)="selectedEmbedder = $event"
+            [lockedEmbedder]="lockedEmbedderFor(formOutputTypeId, availableEmbedders)"
             [selectedClipper]="selectedClipper"
+            [selectedClipperParams]="clipperParamValues"
             (clipperChooserRequested)="openClipperChooser('form')"
           ></vt-import-advanced>
         </div>

@@ -658,7 +658,7 @@ from typing import Any
 class Audio2TextMediaConverter(MediaConverter):
 
     display_name = "Audio → Text"
-    converter_description = "Transcribe audio to text using a speech model."
+    description = "Transcribe audio to text using a speech model."
 
     @property
     def source_type(self) -> str:
@@ -729,7 +729,7 @@ that expose a `CONVERTER` attribute. No manual registration in
 | Attribute               | Type  | Default | Description                              |
 |-------------------------|-------|---------|------------------------------------------|
 | `display_name`          | `str` | `""`    | Human-readable label (auto-derived if empty) |
-| `converter_description` | `str` | `""`    | Short description of the conversion      |
+| `description`           | `str` | `""`    | Short description of the conversion      |
 
 **Derived property (not overridable):**
 

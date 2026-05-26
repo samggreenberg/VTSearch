@@ -168,8 +168,11 @@ def load_dataset_from_folder(
     progress: ProgressCallback | None = None,
     **opts,
 ) -> tuple[list[Media], list[Embedding]]:
-    """Walk `folder`, embed each file with the default embedder for `media_type`,
-    return (medias, embeddings). Honours filetype filters declared by the MediaType."""
+    """Walk `folder` and build a media dict per file.  Loaders do NOT embed —
+    items leave with `embedding=None` unless a pre-computed vector is supplied
+    via `content_vectors` / `custom_metadata_map`.  The framework
+    `embed_missing` stage (or the caller) fills the rest in afterwards.
+    Honours filetype filters declared by the MediaType."""
 
 def load_dataset_from_pickle(path: Path | str) -> tuple[list[Media], list[Embedding]]:
     """Restore a (media, embedding) snapshot previously written by export_dataset_to_file.

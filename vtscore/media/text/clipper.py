@@ -16,6 +16,10 @@ class TextDefaultClipper(MediaClipper):
         return "text_default"
 
     @property
+    def display_name(self) -> str:
+        return "None"
+
+    @property
     def media_type(self) -> str:
         return "text"
 

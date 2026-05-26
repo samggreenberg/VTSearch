@@ -12,7 +12,7 @@ import {
 import { CommonModule } from '@angular/common';
 import type { DetectorLabelView } from '../../../generated/api-client/models/detector-label-view';
 import { LabelSortMode } from '../label-sort/label-sort.component';
-import { DetectorsApiService } from '../../../services/detectors-api.service';
+import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 
 interface SortedElement extends DetectorLabelView {
   confidence: number;
@@ -42,7 +42,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
   private pendingScrollPct: number | null = null;
   private thumbnailFailedUrls = new Set<string>();
 
-  constructor(private detectorsApi: DetectorsApiService) {}
+  constructor(private detectorsCrudApi: DetectorsCrudApiService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['viewMode'] && !changes['viewMode'].firstChange && this.voteListContainer) {
@@ -117,7 +117,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
 
   thumbnailUrl(entry: DetectorLabelView): string {
     if (!this.modelName) return '';
-    return this.detectorsApi.labelThumbnailUrl(this.modelName, entry.id);
+    return this.detectorsCrudApi.labelThumbnailUrl(this.modelName, entry.id);
   }
 
   onThumbnailError(url: string): void {

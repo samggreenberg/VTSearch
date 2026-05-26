@@ -7,9 +7,11 @@ import { ImportAdvancedComponent } from './import-advanced/import-advanced.compo
 import { ImportConfigComponent } from './import-config/import-config.component';
 import { SourcePickerComponent } from './source-picker/source-picker.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
+import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
-import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec } from '../../../models/api.models';
+import { ToastService } from '../../../services/toast.service';
+import { ImporterInfo, ImporterField, ImporterPickerTab, DemoDataset, MediaTypeInfo, MediaTypeDetectionResponse, ClipperInfo, ClipperParameter, EmbedderInfo, ConverterInfo, SourceSpec, ImportDefaultsForMediaType } from '../../../models/api.models';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 
 @Component({
@@ -81,11 +83,10 @@ export class DatasetImporterModalComponent implements OnInit {
   static readonly DEMO_COL_META: Record<string, ColMeta> = {
     label: { label: 'Name', title: 'Demo dataset name (click to sort)', sortable: true },
     num_files: { label: '# Media', title: 'Number of media files in the demo dataset (click to sort)', sortable: true },
-    num_categories: { label: '# Cat.', title: 'Number of distinct categories or classes in the dataset (click to sort)', sortable: true },
     description: { label: 'Description', title: 'Short description of the demo dataset contents (click to sort)', sortable: true },
     status: { label: 'Readiness', title: 'Whether the dataset is pre-downloaded and ready to load immediately, or needs to be fetched first (click to sort)', sortable: true },
   };
-  static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'num_categories', 'description', 'status'];
+  static readonly DEMO_COLUMNS_DEFAULT = ['label', 'num_files', 'description', 'status'];
   private static readonly DEMO_COL_ORDER_KEY = 'vtsearch.dashboard.demoColumnOrder';
 
   demoCols = new ManagedColumns(
@@ -177,12 +178,249 @@ export class DatasetImporterModalComponent implements OnInit {
   clipperChooserClippers: ClipperInfo[] = [];
 
   constructor(
-    private datasetsApi: DatasetsApiService,
+    private datasetsCrudApi: DatasetsCrudApiService,
+    private datasetsListingsApi: DatasetsListingsApiService,
     private settingsState: SettingsStateService,
+    private toastService: ToastService,
   ) {}
 
+  /** Saved import defaults for the active user, keyed by canonical
+   *  type_id. Used to silently pre-fill the embedder/clipper/source-spec
+   *  pickers on importer selection and to suppress the post-import
+   *  "Save as default" toast when the current config already matches. */
+  private importDefaultsForFolderOrTypeId(folderOrTypeId: string): ImportDefaultsForMediaType | null {
+    if (!folderOrTypeId) return null;
+    const typeId = this.toTypeId(folderOrTypeId) || folderOrTypeId;
+    const map = ((this.settingsState.settings as Record<string, unknown> | undefined)?.[
+      'import_defaults_by_media_type'
+    ] || {}) as Record<string, ImportDefaultsForMediaType>;
+    return map[typeId] || null;
+  }
+
+  /** Apply saved embedder default for *mediaType* if one is set and is
+   *  still in the *embedders* list; otherwise fall back to the usual
+   *  pickInitialEmbedder priority. Returns the chosen name. */
+  private chooseEmbedderForType(embedders: EmbedderInfo[], mediaType: string): string {
+    const saved = this.importDefaultsForFolderOrTypeId(mediaType)?.embedder;
+    if (saved && embedders.some((e) => e.name === saved)) return saved;
+    return this.pickInitialEmbedder(embedders, mediaType);
+  }
+
+  /** Apply saved clipper default for *mediaType*. Returns
+   *  ``{ name, params }`` so the caller can update both selection and
+   *  parameter values together. Falls back to the registry's default
+   *  (first entry) when no saved default exists or it's no longer in
+   *  the clipper list. */
+  private chooseClipperForType(
+    clippers: ClipperInfo[],
+    mediaType: string,
+  ): { name: string; params: Record<string, number | string> | null } {
+    const saved = this.importDefaultsForFolderOrTypeId(mediaType);
+    if (saved?.clipper && clippers.some((c) => c.name === saved.clipper)) {
+      return {
+        name: saved.clipper,
+        params: { ...(saved.clipper_params || {}) },
+      };
+    }
+    return {
+      name: clippers.length > 0 ? clippers[0].name : '',
+      params: null, // signals "use the clipper's own param defaults"
+    };
+  }
+
+  /** Snapshot of the per-view import-config (embedder/clipper/specs)
+   *  the user submitted, normalised to the same shape as the persisted
+   *  defaults. Used both to diff against the saved defaults and to
+   *  build the new defaults dict when the user accepts the toast. */
+  private snapshotImportConfig(
+    typeId: string,
+    embedder: string,
+    clipper: string,
+    clipperParams: Record<string, number | string>,
+    sourceSpecs: SourceSpec[],
+    availableEmbedders: EmbedderInfo[],
+    availableClippers: ClipperInfo[],
+  ): ImportDefaultsForMediaType {
+    const out: ImportDefaultsForMediaType = {};
+    // Treat the registry's default embedder as "no override worth saving".
+    const isDefaultEmbedder =
+      !embedder || !!availableEmbedders.find((e) => e.name === embedder)?.is_default;
+    if (embedder && !isDefaultEmbedder) {
+      out.embedder = embedder;
+    }
+    const isDefaultClipper =
+      !clipper ||
+      clipper.endsWith('_default') ||
+      (availableClippers.length > 0 && availableClippers[0].name === clipper);
+    if (clipper && !isDefaultClipper) {
+      out.clipper = clipper;
+      if (clipperParams && Object.keys(clipperParams).length > 0) {
+        out.clipper_params = { ...clipperParams };
+      }
+    }
+    // Strip the implicit native row from source_specs so the persisted
+    // value is just the user's converter additions. The importer
+    // re-adds the native row implicitly on load.
+    const nonNative = (sourceSpecs || []).filter(
+      (s) => !(s.source_type === typeId && s.converter === null),
+    );
+    if (nonNative.length > 0) {
+      out.source_specs = nonNative.map((s) => ({ ...s, params: { ...s.params } }));
+    }
+    return out;
+  }
+
+  /** True when *a* and *b* describe equivalent persisted defaults. Used
+   *  to suppress the post-import "save as default" toast when the user
+   *  already saved this exact config. */
+  private importDefaultsEqual(
+    a: ImportDefaultsForMediaType,
+    b: ImportDefaultsForMediaType,
+  ): boolean {
+    if ((a.embedder || '') !== (b.embedder || '')) return false;
+    if ((a.clipper || '') !== (b.clipper || '')) return false;
+    if (!shallowParamsEqual(a.clipper_params, b.clipper_params)) return false;
+    if (!shallowSpecsEqual(a.source_specs, b.source_specs)) return false;
+    return true;
+  }
+
+  /** True when *cfg* has at least one persisted override worth saving. */
+  private hasMeaningfulOverrides(cfg: ImportDefaultsForMediaType): boolean {
+    return !!(
+      cfg.embedder ||
+      cfg.clipper ||
+      (cfg.source_specs && cfg.source_specs.length > 0)
+    );
+  }
+
+  /** After a successful import, offer to save the user's advanced
+   *  settings as the default for this output mediaType. Skipped silently
+   *  when the user accepted the importer's natural defaults or already
+   *  has the same config saved. */
+  private maybeOfferSaveImportDefaults(view: 'form' | 'sf' | 'lf'): void {
+    let typeId = '';
+    let cfg: ImportDefaultsForMediaType = {};
+    if (view === 'form') {
+      typeId = this.formOutputTypeId;
+      cfg = this.snapshotImportConfig(
+        typeId,
+        this.selectedEmbedder,
+        this.selectedClipper,
+        this.clipperParamValues,
+        this.formSourceSpecs,
+        this.availableEmbedders,
+        this.availableClippers,
+      );
+    } else if (view === 'sf') {
+      typeId = this.sfOutputTypeId;
+      cfg = this.snapshotImportConfig(
+        typeId,
+        this.sfSelectedEmbedder,
+        this.sfSelectedClipper,
+        this.sfClipperParamValues,
+        this.sfSourceSpecs,
+        this.sfEmbedders,
+        this.sfClippers,
+      );
+    } else {
+      typeId = this.lfOutputTypeId;
+      cfg = this.snapshotImportConfig(
+        typeId,
+        this.lfSelectedEmbedder,
+        this.lfSelectedClipper,
+        this.lfClipperParamValues,
+        this.lfSourceSpecs,
+        this.lfEmbedders,
+        this.lfClippers,
+      );
+    }
+    if (!typeId) return;
+    if (!this.hasMeaningfulOverrides(cfg)) return;
+    const saved = this.importDefaultsForFolderOrTypeId(typeId) || {};
+    if (this.importDefaultsEqual(saved, cfg)) return;
+    const typeLabel = this.getTabLabel(typeId) || typeId;
+    this.toastService.success({
+      message: `Save these as default for ${typeLabel} imports?`,
+      detail: 'Your embedder, clipper, and converter picks will be auto-filled next time.',
+      action: {
+        label: 'Save as default',
+        onClick: () => this.persistImportDefaults(typeId, cfg),
+      },
+      dedupKey: `import-defaults-offer:${typeId}`,
+    });
+  }
+
+  /** Merge a new per-mediaType entry into the persisted import-defaults
+   *  map and push it through ``SettingsStateService`` so the next
+   *  importer open picks it up. */
+  private persistImportDefaults(typeId: string, cfg: ImportDefaultsForMediaType): void {
+    const current = (this.settingsState.settings as Record<string, unknown> | undefined)?.[
+      'import_defaults_by_media_type'
+    ] as Record<string, ImportDefaultsForMediaType> | undefined;
+    const next: Record<string, ImportDefaultsForMediaType> = { ...(current || {}) };
+    next[typeId] = cfg;
+    this.settingsState
+      .update({ import_defaults_by_media_type: next } as Record<string, unknown>)
+      .subscribe({
+        next: () => {
+          this.toastService.success({
+            message: 'Saved as default',
+            detail: `Future ${this.getTabLabel(typeId) || typeId} imports will pre-fill these settings.`,
+            dedupKey: `import-defaults-saved:${typeId}`,
+          });
+        },
+      });
+  }
+
+  /** Build a source-specs list for a freshly-opened picker, preferring
+   *  the user's saved defaults (filtered to converters that the active
+   *  importer actually supports) and falling back to the importer's
+   *  bare "include directly" row. */
+  private specsListWithDefaultsFor(
+    outputTypeId: string,
+    availableConverters: ConverterInfo[],
+  ): SourceSpec[] {
+    const fallback = this.defaultSpecListFor(outputTypeId);
+    if (!outputTypeId) return fallback;
+    const saved = this.importDefaultsForFolderOrTypeId(outputTypeId)?.source_specs;
+    if (!saved || saved.length === 0) return fallback;
+    const validConverterNames = new Set(availableConverters.map((c) => c.name));
+    const filtered = saved.filter(
+      (s) => s.converter === null || validConverterNames.has(s.converter),
+    );
+    if (filtered.length === 0) return fallback;
+    const hasNative = filtered.some(
+      (s) => s.source_type === outputTypeId && s.converter === null,
+    );
+    if (!hasNative) {
+      return [{ source_type: outputTypeId, converter: null, params: {} }, ...filtered];
+    }
+    return filtered;
+  }
+
+  /** Type_id (e.g. ``"image"``) of the solo-mediaType streamlining, or
+   *  ``null`` when not active. Reads from the live settings snapshot so
+   *  it picks up the per-user explicit choice and the CLI fallback.
+   *  When non-null, the importer hides every mediaType picker and forces
+   *  each flow's media_type field to this value. */
+  get effectiveSoloMediaType(): string | null {
+    const v = this.settingsState.settings?.effective_solo_media_type;
+    return v ? v : null;
+  }
+
+  /** Folder name (e.g. ``"images"``) of the solo mediaType, or ``""``
+   *  if not active. The sf/lf/form flows store media_type as folder
+   *  names rather than type_ids, so this is the value those flows
+   *  should snap to when solo mode is on. Returns the type_id as a
+   *  fallback when the media-type registry hasn't loaded yet. */
+  get effectiveSoloFolderName(): string {
+    const tid = this.effectiveSoloMediaType;
+    if (!tid) return '';
+    return this.toFolderName(tid) || tid;
+  }
+
   ngOnInit(): void {
-    this.datasetsApi.getAllImporters().subscribe({
+    this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
         this.importers = (res.importers || []).filter((imp) => !imp['hidden_from_picker']);
         this.declaredTabs = res.tabs || [];
@@ -191,12 +429,12 @@ export class DatasetImporterModalComponent implements OnInit {
         }
       },
     });
-    this.datasetsApi.getEmbedders().subscribe({
+    this.datasetsListingsApi.getEmbedders().subscribe({
       next: (embedders) => {
         this.allEmbedders = embedders || [];
       },
     });
-    this.datasetsApi.getMediaTypes().subscribe({
+    this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypes = res.media_types || [];
       },
@@ -208,9 +446,14 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   /** Pick the initial embedder for a picker view.  Priority:
-   *  1. ``guessedMediaEmbedder`` (computed from currently loaded datasets)
-   *  2. the user's last pick for this media type (per-user setting)
-   *  3. first option, or empty when the list is empty.
+   *  1. Solo mediaEmbedder lock for this mediaType (per-user setting or
+   *     ``--solo-embedder`` CLI fallback). When set and present in the
+   *     embedder list it wins over every other source — the picker is
+   *     also hidden in that case (see :prop:`lockedEmbedderFor`), so the
+   *     selected value is the only one the user can see.
+   *  2. ``guessedMediaEmbedder`` (computed from currently loaded datasets)
+   *  3. the user's last pick for this media type (per-user setting)
+   *  4. first option, or empty when the list is empty.
    *
    *  ``mediaTypeFolderOrTypeId`` accepts either form — the importer form
    *  values use the folder name (e.g. ``"images"``) while the settings
@@ -218,6 +461,8 @@ export class DatasetImporterModalComponent implements OnInit {
    *  type_id before looking up the saved setting. */
   private pickInitialEmbedder(embedders: EmbedderInfo[], mediaTypeFolderOrTypeId: string): string {
     if (embedders.length === 0) return '';
+    const locked = this.lockedEmbedderFor(mediaTypeFolderOrTypeId, embedders);
+    if (locked) return locked;
     const guessedMatch = this.guessedMediaEmbedder
       ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
       : null;
@@ -230,6 +475,23 @@ export class DatasetImporterModalComponent implements OnInit {
       if (savedMatch) return savedMatch.name;
     }
     return embedders[0].name;
+  }
+
+  /** Resolve the Solo mediaEmbedder lock for a mediaType. Returns the
+   *  embedder name when a lock is set AND that embedder is currently
+   *  registered for the type (verified against *embedders*, or the live
+   *  ``allEmbedders`` list when no per-tab list is supplied). A stale
+   *  entry — embedder renamed, removed, or now belongs to a different
+   *  mediaType — returns ``''`` so the normal picker reappears. */
+  lockedEmbedderFor(mediaTypeFolderOrTypeId: string, embedders?: EmbedderInfo[]): string {
+    if (!mediaTypeFolderOrTypeId) return '';
+    const typeId = this.toTypeId(mediaTypeFolderOrTypeId) || mediaTypeFolderOrTypeId;
+    const effectiveMap =
+      this.settingsState.settings?.effective_solo_embedder_per_media_type || {};
+    const locked = effectiveMap[typeId];
+    if (!locked) return '';
+    const list = embedders ?? this.allEmbedders.filter((e) => e.media_type_id === typeId);
+    return list.find((e) => e.name === locked) ? locked : '';
   }
 
   /** Front-of-list order for the picker within each tab.  Importers not
@@ -398,6 +660,15 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
 
+    // Solo-mediaType mode wins over both the default and the guess. The
+    // picker is hidden in the template so the user has no way to change
+    // this without leaving the modal and turning solo mode off.
+    if (mediaTypeField && this.effectiveSoloFolderName) {
+      if (mediaTypeField.options?.includes(this.effectiveSoloFolderName)) {
+        this.formValues['media_type'] = this.effectiveSoloFolderName;
+      }
+    }
+
     // Load clippers and embedders for the default media type
     if (mediaTypeField) {
       const defaultType = this.formValues['media_type'] || mediaTypeField.default || '';
@@ -509,7 +780,7 @@ export class DatasetImporterModalComponent implements OnInit {
     const key = field.key;
     this.dynamicFieldLoading[key] = true;
     this.dynamicFieldError[key] = '';
-    this.datasetsApi
+    this.datasetsCrudApi
       .getImporterFieldOptions(importer.name, key, { ...this.formValues })
       .subscribe({
         next: (res) => {
@@ -549,12 +820,16 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedClipper = '';
       return;
     }
-    this.datasetsApi.getClippers(mediaType).subscribe({
+    this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.availableClippers = clippers;
-        // Default to the first clipper (the default/null clipper)
-        this.selectedClipper = clippers.length > 0 ? clippers[0].name : '';
-        this.resetClipperParams();
+        const chosen = this.chooseClipperForType(clippers, mediaType);
+        this.selectedClipper = chosen.name;
+        if (chosen.params !== null) {
+          this.clipperParamValues = chosen.params;
+        } else {
+          this.resetClipperParams();
+        }
       },
     });
   }
@@ -582,10 +857,10 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedEmbedder = '';
       return;
     }
-    this.datasetsApi.getEmbedders(mediaType).subscribe({
+    this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.availableEmbedders = embedders;
-        this.selectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
+        this.selectedEmbedder = this.chooseEmbedderForType(embedders, mediaType);
       },
     });
   }
@@ -600,7 +875,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.demoDatasetNameDirty = false;
     this.selectedDemo = null;
 
-    this.datasetsApi.getMediaTypes().subscribe({
+    this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypes = res.media_types || [];
         this.fetchDemos();
@@ -612,7 +887,7 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   private fetchDemos(embedder?: string): void {
-    this.datasetsApi.getDemoList(embedder).subscribe({
+    this.datasetsListingsApi.getDemoList(embedder).subscribe({
       next: (demoRes) => {
         this.demos = demoRes.datasets || [];
         this.buildDemoTabs();
@@ -635,12 +910,24 @@ export class DatasetImporterModalComponent implements OnInit {
         this.demoTabs.push(mt);
       }
     }
+    // Solo-mediaType mode: only surface the chosen type. Falls back to
+    // the unfiltered list when the solo type has no demos so the user
+    // isn't left with an empty picker.
+    const solo = this.effectiveSoloMediaType;
+    if (solo && this.demoTabs.includes(solo)) {
+      this.demoTabs = [solo];
+    }
     // Pre-select a media-type tab so the demo table shows results instead
-    // of sitting empty.  Prefer "audio" when present (matches the default
-    // for most file-list importers), otherwise pick the first tab.
-    if (!this.activeTab && this.demoTabs.length > 0) {
-      const preferred = this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0];
-      this.selectDemoTabWithEmbedder(preferred);
+    // of sitting empty.  Prefer the solo type, then ``"audio"``, then
+    // the first tab.
+    if (this.demoTabs.length > 0) {
+      const needsSelect = !this.activeTab || (solo && this.activeTab !== solo);
+      if (needsSelect) {
+        const preferred = solo && this.demoTabs.includes(solo)
+          ? solo
+          : (this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0]);
+        this.selectDemoTabWithEmbedder(preferred);
+      }
     }
   }
 
@@ -652,7 +939,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedDemoClipper = '';
       return;
     }
-    this.datasetsApi.getEmbedders(mediaType).subscribe({
+    this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.demoEmbedders = embedders;
         this.selectedDemoEmbedder = this.pickInitialEmbedder(embedders, mediaType);
@@ -665,7 +952,7 @@ export class DatasetImporterModalComponent implements OnInit {
         }
       },
     });
-    this.datasetsApi.getClippers(mediaType).subscribe({
+    this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.demoClippers = clippers;
         this.selectedDemoClipper = clippers.length > 0 ? clippers[0].name : '';
@@ -728,7 +1015,7 @@ export class DatasetImporterModalComponent implements OnInit {
    * so the backend can authoritatively determine each demo's status.
    */
   private refetchDemoStatuses(embedder: string, clipper?: string): void {
-    this.datasetsApi.getDemoList(embedder, clipper).subscribe({
+    this.datasetsListingsApi.getDemoList(embedder, clipper).subscribe({
       next: (demoRes) => {
         this.demos = demoRes.datasets || [];
       },
@@ -950,6 +1237,10 @@ export class DatasetImporterModalComponent implements OnInit {
       this.lfMediaType = mtField?.default || this.lfMediaTypeOptions[0] || 'audio';
     }
 
+    if (this.effectiveSoloFolderName && this.lfMediaTypeOptions.includes(this.effectiveSoloFolderName)) {
+      this.lfMediaType = this.effectiveSoloFolderName;
+    }
+
     this.lfLoadEmbedders(this.lfMediaType);
     this.lfLoadClippers(this.lfMediaType);
     this.lfResetSourceSpecs();
@@ -1053,10 +1344,10 @@ export class DatasetImporterModalComponent implements OnInit {
       this.lfSelectedEmbedder = '';
       return;
     }
-    this.datasetsApi.getEmbedders(mediaType).subscribe({
+    this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.lfEmbedders = embedders;
-        this.lfSelectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
+        this.lfSelectedEmbedder = this.chooseEmbedderForType(embedders, mediaType);
       },
     });
   }
@@ -1067,11 +1358,18 @@ export class DatasetImporterModalComponent implements OnInit {
       this.lfSelectedClipper = '';
       return;
     }
-    this.datasetsApi.getClippers(mediaType).subscribe({
+    this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.lfClippers = clippers;
-        this.lfSelectedClipper = clippers.length > 0 ? clippers[0].name : '';
-        this.lfResetClipperParams();
+        const chosen = this.chooseClipperForType(clippers, mediaType);
+        this.lfSelectedClipper = chosen.name;
+        if (chosen.params !== null) {
+          this.lfClipperParams =
+            clippers.find((c) => c.name === chosen.name)?.parameters || [];
+          this.lfClipperParamValues = chosen.params;
+        } else {
+          this.lfResetClipperParams();
+        }
       },
     });
   }
@@ -1149,9 +1447,10 @@ export class DatasetImporterModalComponent implements OnInit {
       formData.append('source_specs', JSON.stringify(this.lfSourceSpecs));
     }
 
-    this.datasetsApi.importLocalFolder(formData).subscribe({
+    this.datasetsCrudApi.importLocalFolder(formData).subscribe({
       next: () => {
         this.lfSubmitting = false;
+        this.maybeOfferSaveImportDefaults('lf');
         this.importStarted.emit();
       },
       error: (err) => {
@@ -1174,9 +1473,10 @@ export class DatasetImporterModalComponent implements OnInit {
       formData.append('source_specs', JSON.stringify(this.lfSourceSpecs));
     }
 
-    this.datasetsApi.importLocalFiles(formData).subscribe({
+    this.datasetsCrudApi.importLocalFiles(formData).subscribe({
       next: () => {
         this.lfSubmitting = false;
+        this.maybeOfferSaveImportDefaults('lf');
         this.importStarted.emit();
       },
       error: (err) => {
@@ -1229,6 +1529,10 @@ export class DatasetImporterModalComponent implements OnInit {
       this.sfMediaType = mtField?.default || this.sfMediaTypeOptions[0] || 'audio';
     }
 
+    if (this.effectiveSoloFolderName && this.sfMediaTypeOptions.includes(this.effectiveSoloFolderName)) {
+      this.sfMediaType = this.effectiveSoloFolderName;
+    }
+
     this.sfLoadEmbedders(this.sfMediaType);
     this.sfLoadClippers(this.sfMediaType);
     this.sfResetSourceSpecs();
@@ -1278,7 +1582,7 @@ export class DatasetImporterModalComponent implements OnInit {
    *  and apply it to the sf-* form (output media-type + source specs). */
   private sfRunDetection(): void {
     const token = ++this.sfDetectionToken;
-    this.datasetsApi.detectMediaType('server_fs', this.sfBrowsePath, this.sfRecursive).subscribe({
+    this.datasetsCrudApi.detectMediaType('server_fs', this.sfBrowsePath, this.sfRecursive).subscribe({
       next: (res) => {
         if (token !== this.sfDetectionToken) return;
         this.sfDetection = res;
@@ -1513,7 +1817,7 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.availableConvertersFor('server_folder', this.sfOutputTypeId);
   }
   private sfResetSourceSpecs(): void {
-    this.sfSourceSpecs = this.defaultSpecListFor(this.sfOutputTypeId);
+    this.sfSourceSpecs = this.specsListWithDefaultsFor(this.sfOutputTypeId, this.sfAvailableConverters);
   }
   onSfSpecsChange(specs: SourceSpec[]): void { this.sfSourceSpecs = specs; }
 
@@ -1522,7 +1826,7 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.availableConvertersFor('server_folder', this.lfOutputTypeId);
   }
   private lfResetSourceSpecs(): void {
-    this.lfSourceSpecs = this.defaultSpecListFor(this.lfOutputTypeId);
+    this.lfSourceSpecs = this.specsListWithDefaultsFor(this.lfOutputTypeId, this.lfAvailableConverters);
   }
   onLfSpecsChange(specs: SourceSpec[]): void { this.lfSourceSpecs = specs; }
 
@@ -1534,7 +1838,7 @@ export class DatasetImporterModalComponent implements OnInit {
     return this.availableConvertersFor(this.selectedImporter.name, this.formOutputTypeId);
   }
   resetFormSourceSpecs(): void {
-    this.formSourceSpecs = this.defaultSpecListFor(this.formOutputTypeId);
+    this.formSourceSpecs = this.specsListWithDefaultsFor(this.formOutputTypeId, this.formAvailableConverters);
   }
   onFormSpecsChange(specs: SourceSpec[]): void { this.formSourceSpecs = specs; }
 
@@ -1544,10 +1848,10 @@ export class DatasetImporterModalComponent implements OnInit {
       this.sfSelectedEmbedder = '';
       return;
     }
-    this.datasetsApi.getEmbedders(mediaType).subscribe({
+    this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
       next: (embedders) => {
         this.sfEmbedders = embedders;
-        this.sfSelectedEmbedder = this.pickInitialEmbedder(embedders, mediaType);
+        this.sfSelectedEmbedder = this.chooseEmbedderForType(embedders, mediaType);
       },
     });
   }
@@ -1558,11 +1862,18 @@ export class DatasetImporterModalComponent implements OnInit {
       this.sfSelectedClipper = '';
       return;
     }
-    this.datasetsApi.getClippers(mediaType).subscribe({
+    this.datasetsListingsApi.getClippers(mediaType).subscribe({
       next: (clippers) => {
         this.sfClippers = clippers;
-        this.sfSelectedClipper = clippers.length > 0 ? clippers[0].name : '';
-        this.sfResetClipperParams();
+        const chosen = this.chooseClipperForType(clippers, mediaType);
+        this.sfSelectedClipper = chosen.name;
+        if (chosen.params !== null) {
+          this.sfClipperParams =
+            clippers.find((c) => c.name === chosen.name)?.parameters || [];
+          this.sfClipperParamValues = chosen.params;
+        } else {
+          this.sfResetClipperParams();
+        }
       },
     });
   }
@@ -1665,9 +1976,10 @@ export class DatasetImporterModalComponent implements OnInit {
       params['source_specs'] = this.sfSourceSpecs;
     }
 
-    this.datasetsApi.runImporter('server_folder', params).subscribe({
+    this.datasetsCrudApi.runImporter('server_folder', params).subscribe({
       next: () => {
         this.sfSubmitting = false;
+        this.maybeOfferSaveImportDefaults('sf');
         this.importStarted.emit();
       },
       error: (err) => {
@@ -1709,9 +2021,10 @@ export class DatasetImporterModalComponent implements OnInit {
     // If there's a file field, use loadFile; otherwise runImporter
     const fileField = this.selectedImporter.fields?.find((f) => f.field_type === 'file');
     if (fileField && this.selectedFile) {
-      this.datasetsApi.loadFile(this.selectedFile).subscribe({
+      this.datasetsCrudApi.loadFile(this.selectedFile).subscribe({
         next: () => {
           this.submitting = false;
+          this.maybeOfferSaveImportDefaults('form');
           this.importStarted.emit();
         },
         error: (err) => {
@@ -1720,9 +2033,10 @@ export class DatasetImporterModalComponent implements OnInit {
         },
       });
     } else {
-      this.datasetsApi.runImporter(this.selectedImporter.name, submitValues).subscribe({
+      this.datasetsCrudApi.runImporter(this.selectedImporter.name, submitValues).subscribe({
         next: () => {
           this.submitting = false;
+          this.maybeOfferSaveImportDefaults('form');
           this.importStarted.emit();
         },
         error: (err) => {
@@ -1736,4 +2050,48 @@ export class DatasetImporterModalComponent implements OnInit {
   close(): void {
     this.closed.emit();
   }
+}
+
+/** Shallow-equality check for clipper-param dicts — both are flat
+ *  ``{string: string|number}`` maps. */
+function shallowParamsEqual(
+  a: Record<string, string | number> | undefined,
+  b: Record<string, string | number> | undefined,
+): boolean {
+  const ka = Object.keys(a || {});
+  const kb = Object.keys(b || {});
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    if ((a as Record<string, unknown>)[k] !== (b as Record<string, unknown>)[k]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Order-insensitive deep-ish equality for source-spec lists — compares
+ *  each row by ``source_type`` + ``converter`` + params. Used to suppress
+ *  the post-import "save as default" toast when the user's submitted
+ *  config already matches what they saved. */
+function shallowSpecsEqual(
+  a: SourceSpec[] | undefined,
+  b: SourceSpec[] | undefined,
+): boolean {
+  const la = a || [];
+  const lb = b || [];
+  if (la.length !== lb.length) return false;
+  const key = (s: SourceSpec) => `${s.source_type}|${s.converter ?? ''}`;
+  const sortedA = [...la].sort((x, y) => key(x).localeCompare(key(y)));
+  const sortedB = [...lb].sort((x, y) => key(x).localeCompare(key(y)));
+  for (let i = 0; i < sortedA.length; i++) {
+    if (sortedA[i].source_type !== sortedB[i].source_type) return false;
+    if ((sortedA[i].converter ?? null) !== (sortedB[i].converter ?? null)) return false;
+    if (!shallowParamsEqual(
+      sortedA[i].params as Record<string, string | number>,
+      sortedB[i].params as Record<string, string | number>,
+    )) {
+      return false;
+    }
+  }
+  return true;
 }

@@ -2,10 +2,25 @@
 # VTSearch — LabBench CPU image (image search with SigLIP only)
 #
 # Streamlined for the LabBench environment: browsing/voting on an
-# image dataset using the SigLIP embedder. Skips audio, video,
-# document, text, and extractor plugins, and bakes the SigLIP model
+# image dataset using the SigLIP embedder. Bakes the SigLIP model
 # weights into the image at build time so the container is ready to
 # serve immediately on first run (no Hugging Face download needed).
+#
+# Streamlining knobs (all baked into this image; no flags required):
+#
+#   * Seeded ``data/default/user_settings.json`` locks the UI to
+#     ``solo_media_type = "image"`` and
+#     ``solo_embedder_per_media_type = {"image": "siglip"}``, so the
+#     dataset-importer modal hides both its mediaType picker and the
+#     embedder dropdown. Users can override either in
+#     Settings → Appearance.
+#   * Seeded ``data/settings.json`` sets ``hidden_plugins`` so the
+#     Aud2Img (spectrogram) converter and the Downloaded Demo Media
+#     importer are dropped from every picker / listing API response.
+#     See ``vtsearch.settings.get_effective_hidden_plugins`` for the
+#     merge semantics; the same effect is achievable at runtime with
+#     ``--hide-plugin converters:audio2image --hide-plugin importers:demo``
+#     in dev-mode invocations.
 #
 # Build (from repo root):
 #   docker build -f docker/Dockerfile.labbench -t vtsearch:labbench .
@@ -74,11 +89,51 @@ COPY --from=frontend /static/ /app/static/
 ARG VTSEARCH_VERSION=
 RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
 
-# Seed default settings so the SigLIP image embedder is preloaded at startup.
-# Docker copies this file into a fresh named volume on first creation, so new
-# deployments come ready-to-serve without the user manually toggling autoload.
-RUN mkdir -p /app/data && \
-    printf '{\n  "autoload_media_embedders": ["siglip"]\n}\n' > /app/data/settings.json
+# Seed the data volume so the LabBench container launches in its
+# streamlined image-only / SigLIP-only configuration. Docker copies these
+# files into a fresh named volume on first creation, so a new deployment
+# comes ready-to-serve without any first-run setup, and users can still
+# tweak any of these from the in-app Settings dialog afterwards.
+#
+# Server-tier (``data/settings.json``):
+#
+# * ``hidden_plugins`` drops the Aud2Img (spectrogram) converter and the
+#   Downloaded Demo Media importer from every picker / listing API
+#   response. The Aud2Img converter is useless without librosa/matplotlib
+#   (omitted from ``requirements/labbench.txt``) and the demo importer
+#   needs outbound network access this container doesn't expect to have.
+#   Hidden plugins remain importable by name for any backend code that
+#   names them directly — this is a UI declutter, not a security gate.
+#
+# Per-user tier (``data/default/user_settings.json`` — the
+# ``DefaultLoginProvider`` resolves to the ``default`` user):
+#
+# * ``solo_media_type=image`` + ``solo_media_type_explicit=true`` locks
+#   the dataset-importer and new-detector flows to image mediaType — the
+#   mediaType picker disappears entirely. ``_explicit=true`` is required
+#   because there's no ``--solo-media-type`` CLI flag in the
+#   gunicorn-launched server path; without it the resolver would
+#   treat the value as unset and fall back to "show everything".
+#
+# * ``solo_embedder_per_media_type={"image": "siglip"}`` hides the
+#   embedder dropdown for image flows and silently uses SigLIP — the
+#   only image embedder we ship in this image.
+RUN mkdir -p /app/data /app/data/default && \
+    printf '%s\n' \
+      '{' \
+      '  "hidden_plugins": {' \
+      '    "converters": ["audio2image"],' \
+      '    "importers": ["demo"]' \
+      '  }' \
+      '}' \
+      > /app/data/settings.json && \
+    printf '%s\n' \
+      '{' \
+      '  "solo_media_type": "image",' \
+      '  "solo_media_type_explicit": true,' \
+      '  "solo_embedder_per_media_type": {"image": "siglip"}' \
+      '}' \
+      > /app/data/default/user_settings.json
 
 # Runtime data directory (settings, embeddings, datasets, media files).
 # Mount a volume here to persist user data across container restarts.

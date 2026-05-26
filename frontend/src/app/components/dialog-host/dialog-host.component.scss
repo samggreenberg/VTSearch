@@ -5,7 +5,9 @@
   gap: var(--space-md);
 }
 
-.form-input {
-  width: 100%;
-  margin-top: var(--space-md);
+// `.form-input` is global; `width: 100%` is already set there.
+// The dialog needs a top margin so the input sits clear of the
+// message above — scoped via `:host`.
+:host {
+  .form-input { margin-top: var(--space-md); }
 }

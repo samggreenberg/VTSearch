@@ -53,7 +53,7 @@ describe('DatasetImporterModalComponent', () => {
     },
     {
       name: 'demo',
-      display_name: 'Downloaded Demo Media',
+      display_name: 'Downloaded Media',
       description: 'Pre-configured demo datasets',
       icon: '🗄',
       picker_view: 'demo',

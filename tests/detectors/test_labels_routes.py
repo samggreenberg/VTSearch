@@ -89,7 +89,8 @@ class TestImportLabelsRoute:
 
     def test_invalid_filepath_returns_400(self, client):
         _write_seed_detector()
-        # Path-traversal attempt — caught by validate_filepath_field.
+        # Path-traversal attempt — caught by the framework's field-driven
+        # server_path validator (see vtscore/plugins/normalize.py).
         res = client.post(
             "/api/detectors/labels-target/import-labels/server_json_file",
             json={"filepath": "/etc/passwd"},
@@ -102,7 +103,7 @@ class TestImportLabelsRoute:
         # A file that doesn't exist → server_json_file raises ValueError.
         from vtscore.config import DATA_DIR
 
-        # Place the path under DATA_DIR so validate_filepath_field accepts it.
+        # Place the path under DATA_DIR so the framework's server_path validator accepts it.
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         target = DATA_DIR / "does-not-exist.json"
         if target.exists():

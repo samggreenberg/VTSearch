@@ -25,7 +25,8 @@ class Document2TextMediaConverter(MediaConverter):
     """
 
     display_name = "Document \u2192 Text"
-    converter_description = "Extract embedded text from documents"
+    description = "Extract embedded text from documents"
+    summary_template = "Extract the embedded text of each document into a single text entry."
 
     @property
     def source_type(self) -> str:

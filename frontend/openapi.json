@@ -168,6 +168,18 @@
           "disable_achievements": {
             "type": "boolean"
           },
+          "effective_solo_embedder_per_media_type": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "readOnly": true,
+            "type": "object"
+          },
+          "effective_solo_media_type": {
+            "nullable": true,
+            "readOnly": true,
+            "type": "string"
+          },
           "enrich_descriptions": {
             "type": "boolean"
           },
@@ -197,6 +209,10 @@
           },
           "hide_autopilot": {
             "type": "boolean"
+          },
+          "import_defaults_by_media_type": {
+            "additionalProperties": {},
+            "type": "object"
           },
           "inclusion": {
             "type": "integer"
@@ -235,6 +251,19 @@
             "type": "string"
           },
           "show_metadata": {
+            "type": "boolean"
+          },
+          "solo_embedder_per_media_type": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "solo_media_type": {
+            "nullable": true,
+            "type": "string"
+          },
+          "solo_media_type_explicit": {
             "type": "boolean"
           },
           "swipe_animation": {
@@ -847,6 +876,26 @@
         "required": [
           "free",
           "path",
+          "total",
+          "used"
+        ],
+        "type": "object"
+      },
+      "DashboardRamUsageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "free": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "used": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "free",
           "total",
           "used"
         ],
@@ -3800,6 +3849,7 @@
           "hide_autopilot": {
             "type": "boolean"
           },
+          "import_defaults_by_media_type": {},
           "inclusion": {
             "type": "integer"
           },
@@ -3817,6 +3867,13 @@
           },
           "show_metadata": {
             "type": "boolean"
+          },
+          "solo_embedder_per_media_type": {
+            "nullable": true
+          },
+          "solo_media_type": {
+            "nullable": true,
+            "type": "string"
           },
           "swipe_animation": {
             "type": "boolean"
@@ -5694,6 +5751,31 @@
           }
         },
         "summary": "Return free / used / total bytes for the partition holding ``DATA_DIR``.",
+        "tags": [
+          "datasets_ui"
+        ]
+      }
+    },
+    "/api/dashboard/ram-usage": {
+      "get": {
+        "description": "Reads ``MemTotal`` and ``MemAvailable`` from ``/proc/meminfo`` (Linux).\n``free`` is reported as ``MemAvailable`` (memory reclaimable without\nswapping, which is what an application can actually use), and ``used``\nis derived as ``total - free`` to match.",
+        "operationId": "dashboard_ram_usage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardRamUsageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return free / used / total bytes of system RAM.",
         "tags": [
           "datasets_ui"
         ]
@@ -9954,6 +10036,7 @@
     },
     "/api/settings": {
       "get": {
+        "description": "Augments the persisted dict with ``effective_solo_media_type`` \u2014 the\nresolver's view of the per-user value plus the CLI fallback. The\nfrontend reads only this key when deciding whether to hide mediaType\npickers; the raw ``solo_media_type`` / ``solo_media_type_explicit``\npair is still exposed for the settings UI to render the current state.",
         "operationId": "get_settings",
         "responses": {
           "200": {

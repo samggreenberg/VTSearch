@@ -1,8 +1,13 @@
 """Importer loading tests.
 
-Tests for load_dataset_from_folder: content_vectors, skip_embedding,
-content_md5s, relative paths, archive extraction directory isolation,
-and the resolve_file contract.
+Tests for load_dataset_from_folder: content_vectors, content_md5s,
+relative paths, archive extraction directory isolation, and the
+resolve_file contract.
+
+The loader does **not** call any embedder — items leave with
+``embedding=None`` unless a pre-computed vector is supplied via
+``content_vectors`` or ``custom_metadata_map``.  The framework
+``embed_missing`` stage fills the rest in.
 """
 
 from __future__ import annotations
@@ -82,32 +87,28 @@ class TestLoadDatasetContentVectors:
         np.testing.assert_array_equal(medias[1]["embedding"], pre_vector)
         mt._mock_embedder.embed_media.assert_not_called()
 
-    def test_embeds_normally_when_not_in_content_vectors(self, tmp_path):
-        """A file NOT in content_vectors falls back to embed_media()."""
-        import numpy as np
-
+    def test_leaves_embedding_none_when_not_in_content_vectors(self, tmp_path):
+        """The loader no longer embeds; non-override files leave with embedding=None."""
         from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "b.wav"
         self._write_wav(wav)
 
-        model_vector = np.array([1.0, 2.0, 3.0])
-        mt = self._make_fake_media_type(embed_return=model_vector)
+        mt = self._make_fake_media_type(embed_return=None)
 
         medias: dict = {}
 
-        def _noop(*a):
-            pass
-
         with self._patch_media_registry(mt):
-            load_dataset_from_folder(tmp_path, "audio", medias, content_vectors={}, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "audio", medias, content_vectors={}, on_progress=lambda *a: None)
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], model_vector)
-        mt._mock_embedder.embed_media.assert_called_once()
+        assert medias[1]["embedding"] is None
+        assert medias[1]["embedder"] == ""
+        mt._mock_embedder.embed_media.assert_not_called()
+        mt._mock_embedder.embed_media_bulk.assert_not_called()
 
     def test_mixed_content_vectors_and_embedding(self, tmp_path):
-        """Only files in content_vectors skip embed_media; others are embedded."""
+        """Only files in content_vectors get a pre-computed vector; others get None."""
         import numpy as np
 
         from vtscore.datasets.loader import load_dataset_from_folder
@@ -118,53 +119,46 @@ class TestLoadDatasetContentVectors:
         self._write_wav(wav_b)
 
         pre_vector = np.array([10.0, 20.0])
-        model_vector = np.array([1.0, 2.0])
-        mt = self._make_fake_media_type(embed_return=model_vector)
+        mt = self._make_fake_media_type(embed_return=None)
 
         medias: dict = {}
 
-        def _noop(*a):
-            pass
-
         with self._patch_media_registry(mt):
             load_dataset_from_folder(
-                tmp_path, "audio", medias, content_vectors={"a.wav": pre_vector}, on_progress=_noop
+                tmp_path, "audio", medias, content_vectors={"a.wav": pre_vector}, on_progress=lambda *a: None
             )
 
         assert len(medias) == 2
-        # One media should have the pre-computed vector, the other the model vector
         embeddings = {c["filename"]: c["embedding"] for c in medias.values()}
         np.testing.assert_array_equal(embeddings["a.wav"], pre_vector)
-        np.testing.assert_array_equal(embeddings["b.wav"], model_vector)
+        assert embeddings["b.wav"] is None
+        mt._mock_embedder.embed_media_bulk.assert_not_called()
 
-    def test_no_content_vectors_param_embeds_all(self, tmp_path):
-        """When content_vectors is None (default), all files are embedded."""
-        import numpy as np
-
+    def test_no_content_vectors_param_leaves_all_none(self, tmp_path):
+        """When content_vectors is None (default), all files get embedding=None."""
         from vtscore.datasets.loader import load_dataset_from_folder
 
         wav = tmp_path / "c.wav"
         self._write_wav(wav)
 
-        model_vector = np.array([5.0, 6.0])
-        mt = self._make_fake_media_type(embed_return=model_vector)
+        mt = self._make_fake_media_type(embed_return=None)
 
         medias: dict = {}
 
-        def _noop(*a):
-            pass
-
         with self._patch_media_registry(mt):
-            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=_noop)
+            load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], model_vector)
-        mt._mock_embedder.embed_media.assert_called_once()
+        assert medias[1]["embedding"] is None
+        assert medias[1]["embedder"] == ""
+        mt._mock_embedder.embed_media.assert_not_called()
+        mt._mock_embedder.embed_media_bulk.assert_not_called()
 
     def test_content_vector_file_has_empty_embedder_id(self, tmp_path):
         """Files whose vectors came from content_vectors should not be stamped
-        with the active embedder's name — the external vector may be a different
-        dimension, and downstream re-embedding for queries would dimension-mismatch.
+        with any embedder name — the external vector may be a different
+        dimension.  Files without an override also get ``embedder=""`` (the
+        framework embed stage stamps the live embedder later).
         """
         import numpy as np
 
@@ -175,11 +169,8 @@ class TestLoadDatasetContentVectors:
         self._write_wav(wav_pre)
         self._write_wav(wav_model)
 
-        # External vector with a different dimension than the model would produce
-        # — simulates an NPZ from a higher-dim embedder (e.g. SigLIP-so400m 1152d).
         external_vector = np.array([10.0, 20.0, 30.0, 40.0, 50.0])
-        model_vector = np.array([1.0, 2.0, 3.0])
-        mt = self._make_fake_media_type(embed_return=model_vector)
+        mt = self._make_fake_media_type(embed_return=None)
 
         medias: dict = {}
 
@@ -194,10 +185,11 @@ class TestLoadDatasetContentVectors:
 
         by_name = {m["filename"]: m for m in medias.values()}
         assert by_name["pre.wav"]["embedder"] == ""
-        assert by_name["model.wav"]["embedder"] == "clap"
+        assert by_name["model.wav"]["embedder"] == ""
+        assert by_name["model.wav"]["embedding"] is None
 
-    def test_content_vector_file_skips_none_embed_check(self, tmp_path):
-        """A file with a content vector is included even if embed_media would return None."""
+    def test_content_vector_file_carries_vector_through(self, tmp_path):
+        """A file with a content vector is always included with its supplied vector."""
         import unittest.mock as mock
 
         import numpy as np
@@ -208,186 +200,21 @@ class TestLoadDatasetContentVectors:
         self._write_wav(wav)
 
         pre_vector = np.array([7.0, 8.0])
-        # embed_media returns None, which would normally skip the file
         mt = self._make_fake_media_type(embed_return=None)
 
         medias: dict = {}
 
-        def _noop(*a):
-            pass
-
         with mock.patch("vtscore.media.get_by_folder_name", return_value=mt):
             load_dataset_from_folder(
-                tmp_path, "audio", medias, content_vectors={"d.wav": pre_vector}, on_progress=_noop
+                tmp_path,
+                "audio",
+                medias,
+                content_vectors={"d.wav": pre_vector},
+                on_progress=lambda *a: None,
             )
 
         assert len(medias) == 1
         np.testing.assert_array_equal(medias[1]["embedding"], pre_vector)
-
-
-# ---------------------------------------------------------------------------
-# load_dataset_from_folder – skip_embedding support
-# ---------------------------------------------------------------------------
-
-
-class TestLoadDatasetSkipEmbedding:
-    """Verify that load_dataset_from_folder respects skip_embedding=True."""
-
-    def _write_wav(self, path):
-        """Write a minimal WAV file to *path*."""
-        path.write_bytes(_make_wav_bytes())
-
-    def test_skip_embedding_with_content_vectors(self, tmp_path):
-        """Pre-computed vectors are used; no embedder is resolved."""
-        import unittest.mock as mock
-
-        import numpy as np
-
-        from vtscore.datasets.loader import load_dataset_from_folder
-
-        wav = tmp_path / "a.wav"
-        self._write_wav(wav)
-
-        pre_vector = np.array([1.0, 2.0, 3.0])
-        medias: dict = {}
-
-        mt = mock.MagicMock()
-        mt.type_id = "audio"
-        mt.file_extensions = ["*.wav"]
-        mt.load_media_data.return_value = {"duration": 1.0}
-
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtscore.media.embedders_for_type") as mock_emb_for_type,
-            mock.patch("vtscore.media.get_embedder") as mock_get_emb,
-        ):
-            load_dataset_from_folder(
-                tmp_path,
-                "audio",
-                medias,
-                content_vectors={"a.wav": pre_vector},
-                on_progress=lambda *a: None,
-                skip_embedding=True,
-            )
-
-        assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], pre_vector)
-        # Embedder registry should never be consulted.
-        mock_emb_for_type.assert_not_called()
-        mock_get_emb.assert_not_called()
-
-    def test_skip_embedding_without_vectors_sets_none(self, tmp_path):
-        """Files without pre-computed vectors get embedding=None."""
-        import unittest.mock as mock
-
-        from vtscore.datasets.loader import load_dataset_from_folder
-
-        wav = tmp_path / "a.wav"
-        self._write_wav(wav)
-
-        medias: dict = {}
-
-        mt = mock.MagicMock()
-        mt.type_id = "audio"
-        mt.file_extensions = ["*.wav"]
-        mt.load_media_data.return_value = {"duration": 1.0}
-
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtscore.media.embedders_for_type") as mock_emb_for_type,
-        ):
-            load_dataset_from_folder(
-                tmp_path,
-                "audio",
-                medias,
-                on_progress=lambda *a: None,
-                skip_embedding=True,
-            )
-
-        assert len(medias) == 1
-        assert medias[1]["embedding"] is None
-        assert medias[1]["embedder"] == ""
-        mock_emb_for_type.assert_not_called()
-
-    def test_skip_embedding_progress_says_loading(self, tmp_path):
-        """Progress messages should say 'Loading' not 'Embedding'."""
-        import unittest.mock as mock
-
-        from vtscore.datasets.loader import load_dataset_from_folder
-
-        wav = tmp_path / "a.wav"
-        self._write_wav(wav)
-
-        mt = mock.MagicMock()
-        mt.type_id = "audio"
-        mt.file_extensions = ["*.wav"]
-        mt.load_media_data.return_value = {"duration": 1.0}
-
-        progress_calls: list = []
-
-        def track_progress(*args):
-            progress_calls.append(args)
-
-        medias: dict = {}
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtscore.media.embedders_for_type"),
-        ):
-            load_dataset_from_folder(
-                tmp_path,
-                "audio",
-                medias,
-                on_progress=track_progress,
-                skip_embedding=True,
-            )
-
-        # The per-file progress calls should use "loading" phase, not "embedding".
-        per_file = [c for c in progress_calls if len(c) >= 4 and c[2] > 0]
-        assert len(per_file) >= 1
-        assert per_file[0][0] == "loading"
-        assert "Loading" in per_file[0][1]
-
-    def test_skip_embedding_chunked(self, tmp_path):
-        """skip_embedding works with the chunked variant too."""
-        import unittest.mock as mock
-
-        import numpy as np
-
-        from vtscore.datasets.loader import load_dataset_from_folder_chunked
-
-        for name in ("a.wav", "b.wav"):
-            self._write_wav(tmp_path / name)
-
-        vectors = {
-            "a.wav": np.array([1.0, 2.0]),
-            "b.wav": np.array([3.0, 4.0]),
-        }
-
-        mt = mock.MagicMock()
-        mt.type_id = "audio"
-        mt.file_extensions = ["*.wav"]
-        mt.load_media_data.return_value = {"duration": 1.0}
-
-        with (
-            mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
-            mock.patch("vtscore.media.embedders_for_type") as mock_emb_for_type,
-        ):
-            chunks = list(
-                load_dataset_from_folder_chunked(
-                    tmp_path,
-                    "audio",
-                    chunk_size=10,
-                    content_vectors=vectors,
-                    on_progress=lambda *a: None,
-                    skip_embedding=True,
-                )
-            )
-
-        all_medias = {}
-        for chunk in chunks:
-            all_medias.update(chunk)
-        assert len(all_medias) == 2
-        mock_emb_for_type.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -693,9 +520,6 @@ class TestHttpArchiveExtractDirIsolation:
 
         with (
             mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
-            mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
@@ -725,9 +549,6 @@ class TestHttpArchiveExtractDirIsolation:
 
         with (
             mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
-            mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
@@ -753,9 +574,6 @@ class TestHttpArchiveExtractDirIsolation:
         imp = HttpArchiveDatasetImporter()
 
         with (
-            mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
             mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
@@ -784,9 +602,6 @@ class TestHttpArchiveExtractDirIsolation:
 
         with (
             mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
-            mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
@@ -814,9 +629,6 @@ class TestHttpArchiveExtractDirIsolation:
         imp = HttpArchiveDatasetImporter()
 
         with (
-            mock.patch(
-                "vtscore.datasets.importers.http_archive.validate_url",
-            ),
             mock.patch(
                 "vtscore.datasets.importers.http_archive.download_file_with_progress",
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),

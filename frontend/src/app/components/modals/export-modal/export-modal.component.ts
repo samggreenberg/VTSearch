@@ -7,7 +7,7 @@ import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { ActiveContextService } from '../../../services/active-context.service';
-import { DatasetsApiService } from '../../../services/datasets-api.service';
+import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { LabelSessionService } from '../../../services/label-session.service';
@@ -87,7 +87,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   private static readonly ALWAYS_EXPORT_KEYS = ['origin', 'origin_name'];
 
   constructor(
-    private datasetsApi: DatasetsApiService,
+    private datasetsRegistryApi: DatasetsRegistryApiService,
     private exportersApi: ExportersApiService,
     private labelSession: LabelSessionService,
     private sortingApi: SortingApiService,
@@ -108,7 +108,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.datasetsApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => {
         this.datasetName = status.display_name || '';
       },

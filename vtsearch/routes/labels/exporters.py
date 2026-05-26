@@ -23,10 +23,10 @@ from __future__ import annotations
 
 import logging
 
-import vtscore.security.path_validation as _paths
 from flask_smorest import Blueprint, abort
 
 from vtscore.exporters import get_exporter, list_exporters
+from vtsearch.routes._shared import validate_exporter_field_values
 from vtsearch.schemas.labels import (
     ExporterEntrySchema,
     RunExportRequestSchema,
@@ -46,7 +46,9 @@ exporters_bp = Blueprint(
 @exporters_bp.response(200, ExporterEntrySchema(many=True))
 def get_exporters():
     """Return a list of all registered labelset exporters."""
-    return [exp.to_dict() for exp in list_exporters()]
+    from vtsearch.settings import filter_visible_plugins
+
+    return [exp.to_dict() for exp in filter_visible_plugins("exporters", list_exporters())]
 
 
 @exporters_bp.route("/api/exporters/export", methods=["POST"])
@@ -66,22 +68,8 @@ def run_export(body: dict):
         known = [p.name for p in list_exporters()]
         abort(404, message=f"Unknown exporter '{exporter_name}'. Available: {known}")
 
-    field_values: dict = dict(body.get("field_values") or {})
+    field_values = validate_exporter_field_values(exporter, dict(body.get("field_values") or {}))
     results: dict = dict(body.get("results") or {})
-
-    missing = [
-        f.key
-        for f in exporter.fields
-        if f.required and f.field_type != "file" and not str(field_values.get(f.key, "")).strip()
-    ]
-    if missing:
-        abort(400, message=f"Missing required field(s): {missing}")
-
-    if "filepath" in field_values and str(field_values["filepath"]).strip():
-        try:
-            _paths.validate_server_filepath(str(field_values["filepath"]), base_dir=_paths.get_file_access_base_dir())
-        except ValueError as exc:
-            abort(400, message=str(exc))
 
     try:
         outcome = exporter.export(results, field_values)

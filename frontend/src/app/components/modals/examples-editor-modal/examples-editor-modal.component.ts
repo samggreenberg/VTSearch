@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
-import { DetectorsApiService } from '../../../services/detectors-api.service';
+import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 
 interface Example {
   type: 'good' | 'bad';
@@ -28,14 +28,14 @@ export class ExamplesEditorModalComponent implements OnInit {
   error = '';
   status = '';
 
-  constructor(private detectorsApi: DetectorsApiService) {}
+  constructor(private detectorsCrudApi: DetectorsCrudApiService) {}
 
   ngOnInit(): void {
     if (!this.modelName) {
       this.loading = false;
       return;
     }
-    this.detectorsApi.get(this.modelName).subscribe({
+    this.detectorsCrudApi.get(this.modelName).subscribe({
       next: (data: any) => {
         this.examples = data.examples || [];
         this.loading = false;
@@ -74,7 +74,7 @@ export class ExamplesEditorModalComponent implements OnInit {
     this.saving = true;
     this.error = '';
     this.status = '';
-    this.detectorsApi.setExamples(this.modelName, this.examples).subscribe({
+    this.detectorsCrudApi.setExamples(this.modelName, this.examples).subscribe({
       next: () => {
         this.saving = false;
         this.status = 'Saved.';

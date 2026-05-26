@@ -208,6 +208,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 "row with a matching converter pulls them in too."
             ),
             default="audio",
+            required=False,
         ),
         ImporterField(
             key="paths_file",
@@ -246,7 +247,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
         - ``content_vectors`` maps each staged symlink basename to a
           pre-computed embedding vector.  Populated when the paths file
           is itself a ``.npz`` archive that holds vectors alongside the
-          paths.
+          paths.  Returned as a local dict (not threaded through
+          :meth:`~DatasetImporter.yield_precomputed`) so the singleton
+          importer instance does not accumulate per-import state.
         """
         paths_file = Path(field_values["paths_file"])
         paths, path_to_vector = _read_paths_and_vectors(paths_file)
@@ -315,11 +318,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 mt.folder_import_name,
                 medias,
                 thin=thin,
-                embedder_name=field_values.get("embedder", ""),
                 content_vectors=merged_vectors or None,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
-                skip_embedding=bool(field_values.get("skip_embedding")),
             )
         except ValueError:
             return False
@@ -405,11 +406,9 @@ class ServerFilesDatasetImporter(DatasetImporter):
                         mt.folder_import_name,
                         chunk_size,
                         thin=thin,
-                        embedder_name=field_values.get("embedder", ""),
                         content_vectors=merged_vectors or None,
                         content_md5s=self.content_md5s or None,
                         custom_metadata_map=self.custom_metadata_map or None,
-                        skip_embedding=bool(field_values.get("skip_embedding")),
                     ):
                         self._rewrite_origins(chunk, name_to_source, origin)
                         yield chunk
@@ -463,16 +462,6 @@ class ServerFilesDatasetImporter(DatasetImporter):
             if stem:
                 return stem
         return self.display_name
-
-    def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-        params: dict[str, str] = {}
-        paths_file = field_values.get("paths_file", "")
-        if paths_file:
-            params["paths_file"] = str(paths_file)
-        media_type = field_values.get("media_type", "")
-        if media_type:
-            params["media_type"] = media_type
-        return {"importer": self.name, "params": params}
 
     def origin_display(self, origin: dict[str, Any]) -> str:
         params = origin.get("params", {})
