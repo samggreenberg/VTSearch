@@ -65,8 +65,8 @@
         }
       }
 
-      <!-- Clipper (only shown when there's a real choice to make) -->
-      @if (activeClippers.length > 1) {
+      <!-- Clipper (only shown when there's a real choice and no source-specs-picker to host it) -->
+      @if (activeClippers.length > 1 && activeConverters.length === 0) {
         <label class="form-label" title="Pre-processing applied to each {{ activeTypeLabel }} item before embedding (e.g. clip into shorter segments)">Clipper</label>
         <button
           class="btn btn--secondary clipper-btn"
