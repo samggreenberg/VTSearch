@@ -36,7 +36,7 @@ Four plugins are scaffolded (all `hidden_from_picker = True` until ready):
    `media["media_url"]` when `media_bytes` and `media_path` are both
    absent.
 
-3. **Origin params in enriched export** - `GET /api/labels/export?enrich=true`
+3. **Origin params in enriched export**: `GET /api/labels/export?enrich=true`
    flattens `origin.params` (e.g. `contentID`, `mediaID`) into
    `custom_metadata` and `available_columns`.  `custom_metadata` values
    override same-named `origin.params` if both are present.
@@ -61,7 +61,7 @@ def _rc_list_queries(media_type: str) -> list[str]:
     Powers the importer's ``query_id`` dropdown (declared with
     ``dynamic_options=True, depends_on=["media_type"]``).  The frontend
     re-fetches whenever the user picks a different media type, so the
-    user never has to copy-paste a queryID - they pick from a list.
+    user never has to copy-paste a queryID; they pick from a list.
     """
 
 
