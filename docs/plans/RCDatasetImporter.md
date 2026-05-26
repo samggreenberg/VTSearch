@@ -2,7 +2,7 @@
 
 This document describes everything needed to complete the ReCaller / Holder /
 PullWrest integration.  VTSearch core changes and plugin scaffolds are already
-in place - the developer's job is to implement the API client stubs.
+in place; the developer's job is to implement the API client stubs.
 
 ## Overview
 
@@ -26,12 +26,12 @@ Four plugins are scaffolded (all `hidden_from_picker = True` until ready):
 
 ## What's already done (VTSearch core)
 
-1. **`LabeledElement.metadata`** - Optional `dict[str, Any]` on each label
+1. **`LabeledElement.metadata`**: Optional `dict[str, Any]` on each label
    element that round-trips through `to_dict()` / `from_dict()`.  When
    building a LabelSet from votes, `custom_metadata` from the media
    automatically flows into `metadata`.
 
-2. **`media_url` lazy-fetch** - `_resolve_media_bytes()` and
+2. **`media_url` lazy-fetch**: `_resolve_media_bytes()` and
    `_resolve_media_string()` in `MediaType` fall back to fetching from
    `media["media_url"]` when `media_bytes` and `media_path` are both
    absent.

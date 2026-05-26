@@ -193,21 +193,21 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   /**
    * Headline phase intent shown as a hover tooltip on the collapsed dots
    * (where the only visible affordance is a number/letter) and as a richer
-   * tooltip on the expanded step label. Format: "Phase N: Short name -
-   * what the user is doing and why."
+   * tooltip on the expanded step label. Format: "Phase N: Short name.
+   * What the user is doing and why."
    */
   private phaseIntent(phase: AutopilotPhase, stepNumber: number): string {
     switch (phase) {
       case 'good':
-        return `Phase ${stepNumber}: Find initial goods - label a few positives so the detector knows what "good" looks like.`;
+        return `Phase ${stepNumber}: Find initial goods. Label a few positives so the detector knows what "good" looks like.`;
       case 'bad':
-        return `Phase ${stepNumber}: Find initial bads - label a few negatives so the detector has both sides of the boundary.`;
+        return `Phase ${stepNumber}: Find initial bads. Label a few negatives so the detector has both sides of the boundary.`;
       case 'hard':
-        return `Phase ${stepNumber}: Boundary refinement - votes on uncertain items train the model fastest.`;
+        return `Phase ${stepNumber}: Boundary refinement. Votes on uncertain items train the model fastest.`;
       case 'new':
-        return `Phase ${stepNumber}: Diversity exploration - items from unseen parts of the dataset catch edge cases the boundary phase missed.`;
+        return `Phase ${stepNumber}: Diversity exploration. Items from unseen parts of the dataset catch edge cases the boundary phase missed.`;
       case 'done':
-        return 'Done - all quality indicators are green. Keep labeling for more accuracy, or export your results.';
+        return 'Done. All quality indicators are green. Keep labeling for more accuracy, or export your results.';
       default:
         return '';
     }

@@ -42,7 +42,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   /**
    * True when the active detector (or active votes, when no detector is
    * loaded) has at least one good and one bad label.  Used to gate "Sort by
-   * Learned" - distinct from ``goodVotes`` / ``badVotes`` because those Sets
+   * Learned"; distinct from ``goodVotes`` / ``badVotes`` because those Sets
    * only contain media IDs in the *currently loaded* dataset.
    */
   @Input() learnedSortAvailable = false;
@@ -116,7 +116,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
       },
     });
     if (this.panelMode === 'find') {
-      // Find mode doesn't use tabs - keep manual as a no-op default
+      // Find mode doesn't use tabs; keep manual as a no-op default
       this.activeTab = 'manual';
     } else {
       this.activeTab = this.autopilotEnabled ? 'autopilot' : 'manual';

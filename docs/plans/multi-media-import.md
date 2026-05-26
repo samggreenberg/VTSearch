@@ -1,7 +1,7 @@
 # Multi-media importing
 
 Status: every in-tree importer now sets `multi_media=True`, and the
-framework now owns conversion - importers yield raw source-type media
+framework now owns conversion; importers yield raw source-type media
 and the base-class `run()` runs each spec's converter itself.  Shim
 removal is the next step but is **blocked on external extensions** (see
 "Open follow-ups" at the bottom).
@@ -10,17 +10,17 @@ removal is the next step but is **blocked on external extensions** (see
 
 Today every dataset import has two orthogonal user-supplied inputs:
 
-1. The importer's own `media_type` field - what type the user wants in the
+1. The importer's own `media_type` field: what type the user wants in the
    dataset (`audio`, `image`, `video`, `text`, `document`).
 2. An optional `converters` field on a few importers (a comma-separated string
-   of converter names) - extra source types to scan for and convert into the
+   of converter names): extra source types to scan for and convert into the
    primary `media_type`.
 
 For folder-shaped importers (`server_folder`, `local_folder`, `http_archive`)
 this kind of works: the importer hands its directory to
 `run_converters_on_folder()`, which globs for each converter's source-type
 extensions and converts. The user only declares "convert videos to images"
-once - the source-type discovery is implicit because the runner scans the
+once; the source-type discovery is implicit because the runner scans the
 filesystem itself.
 
 For service-style importers (ReCaller and hypothetical `DX`-style API
@@ -28,7 +28,7 @@ clients), the importer is the one that has to ask the upstream service for
 media. There is no folder to glob over. If the user picks `media_type=image`
 plus `converters=video2image,document2image`, the importer needs to know it
 should request **images, videos, and documents** from the upstream service.
-Today there is no convention for this - the importer would have to parse
+Today there is no convention for this; the importer would have to parse
 `field_values["converters"]` itself, resolve each converter's `source_type`,
 and union those types with `media_type`. None of the existing service-style
 importer scaffolds do this; they only fetch the single `media_type`.
@@ -41,7 +41,7 @@ instance uses defaults. There is no way for a user to set "video → image at
 ## Goals
 
 1. **One declaration per source type.** The user says "include videos via
-   video2image at n_clips=30" once - they do not separately have to say
+   video2image at n_clips=30" once; they do not separately have to say
    "also include videos" and "also use video2image".
 2. **Importers can iterate source types.** A service-style importer can
    ask `self.effective_source_specs(field_values)` and get back a list of
@@ -130,7 +130,7 @@ class DatasetImporter(PluginBase):
   the helper is also useful to legacy importers that want to migrate to the
   new iteration style without flipping the flag yet.
 - When `multi_media=True`: the helper parses `field_values["source_specs"]`
-  - a list of dicts (or a JSON-string for multipart submissions) - into
+  (a list of dicts, or a JSON-string for multipart submissions) into
   `SourceSpec`s. Validation: every spec must reference a real `source_type`,
   every named converter must exist and its `target_type` must equal the
   importer's chosen output media type, and at most one spec may have
@@ -152,7 +152,7 @@ in the serialised form:
 
 The frontend renders this as an "Include rows" repeater. The output media
 type is a separate field on the importer (still called `media_type` for
-continuity - its semantics narrow to "what type the dataset ends up
+continuity; its semantics narrow to "what type the dataset ends up
 holding"). Each row picks a converter (filtered to those whose
 `target_type` matches the output type) or "Include directly", and the
 form renders the converter's own `PluginField`s inline.
@@ -185,15 +185,15 @@ legacy path. The body passes `params` into `converter.convert()`.
 
 `dataset-importer-modal` renders:
 
-- Old shape (most importers): unchanged - `media_type` select +
+- Old shape (most importers): unchanged; `media_type` select +
   `recursive` checkbox + whatever importer-specific fields exist.
 - New shape (importers with `multi_media=True`): replaces the bare
   `media_type` field with an "Output media type" select plus an
   "Include …" repeater. Each repeater row:
   - Picks the **source type** (filtered to types that the chosen output
-    type can be derived from - i.e. the output type itself + every source
+    type can be derived from (i.e. the output type itself + every source
     type for which a converter to that target exists).
-  - When the source type ≠ output type, surfaces a converter dropdown
+  - When the source type does not equal the output type, surfaces a converter dropdown
     (filtered to `target_type == output_type` and `source_type == source`)
     and the converter's parameter inputs inline.
 
@@ -219,7 +219,7 @@ Until a maintainer flips `multi_media=True`, their users:
 
 - Cannot set converter parameters from the UI; the converter always runs
   with its declared `PluginField` defaults. (Previously the params lived
-  on the converter class itself, so this is not a regression vs. main -
+  on the converter class itself, so this is not a regression vs. main;
   parameters were never user-settable from the frontend at all.)
 - Cannot mix-and-match per-source-type behaviour in one import (e.g.
   "video2image at n=10 and a second video2image row at n=30").
@@ -231,7 +231,7 @@ Neither is a behavioural regression for any current shipping importer.
 When migrating an importer to `multi_media=True`:
 
 1. Set `multi_media = True` on the class.
-2. Drop the `media_type` field's "scan filter" semantics - rename to
+2. Drop the `media_type` field's "scan filter" semantics; rename to
    `output_type` if the new meaning is clearer, otherwise leave alone.
 3. Drop the `converters` field; the new repeater replaces it.
 4. Rewrite `run()` to iterate `self.effective_source_specs(field_values)`.
@@ -264,7 +264,7 @@ When migrating an importer to `multi_media=True`:
 
 ## What shipped (framework-driven conversion)
 
-Earlier rounds left importers to drive the converter loop themselves -
+Earlier rounds left importers to drive the converter loop themselves;
 the docs example showed a `DXImporter` calling
 `get_converter(spec.converter).convert(raw, spec.params)` inside its
 `run()`.  That leak is now closed:
@@ -302,7 +302,7 @@ fetch hook for that case:
 
 - New optional hook on `DatasetImporter`:
   `fetch_all_source_media(specs, field_values, thin=False) -> Iterator[tuple[SourceSpec, dict]]`.
-  Override this when one upstream call covers every spec - yield
+  Override this when one upstream call covers every spec; yield
   `(spec, raw_media)` pairs and the framework handles converter
   dispatch and ingestion exactly as it does for the per-spec hook.
 - The base-class `run()` now calls `fetch_all_source_media()` once
@@ -312,7 +312,7 @@ fetch hook for that case:
 - Converter lookups in `run()` are cached per-spec so a bulk importer
   that interleaves specs across yields doesn't re-resolve the same
   converter on every pair.
-- Subclasses still never call `get_converter()` themselves - the
+- Subclasses still never call `get_converter()` themselves; the
   framework owns conversion and ingestion regardless of which fetch
   hook is overridden.
 
@@ -330,11 +330,11 @@ in-tree set is uniformly off the legacy shim:
 - `synthetic`, `recaller`: have a `media_type` field but only ever pull
   one source type per import, so `run()` keeps reading
   `field_values["media_type"]` directly.  Label updated to "Output
-  Media Type".  No spec iteration added - there are no converter rows
+  Media Type". No spec iteration added; there are no converter rows
   for these flows.
 - `pickle`, `combine_datasets`, `demo`: no `media_type` field, no
   `converters` field, no spec iteration in `run()`.  The flag flip is
-  purely to take them off the legacy shim - their custom / file-upload
+  purely to take them off the legacy shim; their custom / file-upload
   UI modes mean the multi-media editor never renders anyway, and
   `effective_source_specs()` is never called on them.
 
@@ -353,7 +353,7 @@ covered for external importers until removal.
   UI, cannot accept user-tunable converter params, and pins us to the
   legacy `converters` field and `media_type`-as-scan-filter semantics.
   Shim removal is gated on those extension maintainers flipping their
-  importers - we cannot just delete the legacy path on our own schedule
+  importers; we cannot just delete the legacy path on our own schedule
   without breaking them.  Concrete asks per extension:
   1. Set `multi_media = True`.
   2. Replace the `converters` field handling in `run()` with a loop
@@ -379,5 +379,5 @@ covered for external importers until removal.
     `tests/converters/test_converter_selection.py`.
 
   Optionally rename `media_type` → `output_type` (per the original
-  plan) - note this is a user-visible field rename, not just an
+  plan); note this is a user-visible field rename, not just an
   internal cleanup.

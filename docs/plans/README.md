@@ -5,14 +5,14 @@ landed. Once a plan ships and its design notes are absorbed into
 [EXTENDING.md](../EXTENDING.md) / its siblings or
 [ARCHITECTURE.md](../ARCHITECTURE.md), the plan file is deleted.
 
-Open the file for status - this index is just a filename list so it
+Open the file for status; this index is just a filename list so it
 can't drift.
 
-- [clipper-chain.md](clipper-chain.md) - Clipper chain
-- [frontend-bundle-organization.md](frontend-bundle-organization.md) - Frontend bundle organization
-- [logical-bug-audit.md](logical-bug-audit.md) - Logical-bug audit
-- [multi-media-import.md](multi-media-import.md) - Multi-media importing
-- [openapi-schema.md](openapi-schema.md) - OpenAPI schema + generated TS client
-- [patch-embedder.md](patch-embedder.md) - Patch-based image embedder
-- [plugin-interface-streamlines.md](plugin-interface-streamlines.md) - Plugin author interface streamlines
-- [RCDatasetImporter.md](RCDatasetImporter.md) - RCDatasetImporter / Holder / PullWrest extension
+- [clipper-chain.md](clipper-chain.md): Clipper chain
+- [frontend-bundle-organization.md](frontend-bundle-organization.md): Frontend bundle organization
+- [logical-bug-audit.md](logical-bug-audit.md): Logical-bug audit
+- [multi-media-import.md](multi-media-import.md): Multi-media importing
+- [openapi-schema.md](openapi-schema.md): OpenAPI schema + generated TS client
+- [patch-embedder.md](patch-embedder.md): Patch-based image embedder
+- [plugin-interface-streamlines.md](plugin-interface-streamlines.md): Plugin author interface streamlines
+- [RCDatasetImporter.md](RCDatasetImporter.md): RCDatasetImporter / Holder / PullWrest extension
