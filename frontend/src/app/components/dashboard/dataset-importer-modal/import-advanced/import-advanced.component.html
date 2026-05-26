@@ -54,6 +54,7 @@
 }
 
 @if (showStandaloneClipperButton) {
+  <label class="form-label" title="Pre-processing clipper applied before embedding (e.g. clips audio into shorter segments)">Clipper</label>
   <button
     class="btn btn--secondary clipper-btn"
     (click)="onClipperClick()"
