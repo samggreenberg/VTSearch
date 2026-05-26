@@ -383,8 +383,8 @@ def learned_sort(body: dict):
         _empty_detector_context,
         get_active_context,
         get_active_detector_context,
-        set_thread_dataset_context,
-        set_thread_detector_context,
+        thread_dataset_context,
+        thread_detector_context,
     )
 
     wait = body["wait"]
@@ -427,9 +427,7 @@ def learned_sort(body: dict):
     # state updates rather than nested branching; splitting it further
     # would just smear cohesive logic across helpers.
     def _run(job):  # noqa: C901
-        set_thread_dataset_context(ds_ctx)
-        set_thread_detector_context(det_ctx)
-        try:
+        with thread_dataset_context(ds_ctx), thread_detector_context(det_ctx):
             if labelset is not None:
                 results, threshold, model = labelset_train_and_score(
                     det_ctx,
@@ -469,9 +467,6 @@ def learned_sort(body: dict):
                 )
 
             job.result = {"results": results, "threshold": round(threshold, 4)}
-        finally:
-            set_thread_dataset_context(None)
-            set_thread_detector_context(None)
 
     job = learned_sort_jobs.start(
         signature,

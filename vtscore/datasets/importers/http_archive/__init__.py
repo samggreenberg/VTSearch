@@ -192,7 +192,6 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     description = "Download an archive (.zip, .tar, .rar) from a web URL and embed the media files inside"
     icon = "\U0001f310"
     hidden_from_picker = True
-    multi_media = True
     fields = [
         ImporterField(
             key="url",

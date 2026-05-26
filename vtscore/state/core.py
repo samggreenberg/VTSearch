@@ -491,6 +491,9 @@ def get_active_context() -> DatasetContext:
 def set_thread_dataset_context(ctx: DatasetContext | None) -> None:
     """Set the thread-local dataset context for the current thread.
 
+    Prefer :func:`thread_dataset_context` (a context manager) for new code
+    (it saves and restores the prior value automatically).
+
     Called by test fixtures and background threads to direct proxy
     resolution without global state.
     """
@@ -500,6 +503,27 @@ def set_thread_dataset_context(ctx: DatasetContext | None) -> None:
 def get_thread_dataset_context() -> DatasetContext | None:
     """Return the thread-local dataset context, or ``None``."""
     return getattr(_thread_local, "dataset_context", None)
+
+
+@contextmanager
+def thread_dataset_context(ctx: DatasetContext | None) -> Iterator[None]:
+    """Scope the thread-local dataset context to *ctx* for the ``with``-block.
+
+    Snapshots the prior thread-local value on entry and restores it on
+    exit, so nested scopes compose correctly and a reused / pooled
+    thread cannot leak the wrong dataset context across jobs.
+
+    Unlike :class:`with_dataset_context` (which looks the context up by
+    ID from the registry and requires it to be registered), this helper
+    takes a context object directly; useful for newly-created contexts
+    that have not yet been registered.
+    """
+    prev = getattr(_thread_local, "dataset_context", None)
+    _thread_local.dataset_context = ctx
+    try:
+        yield
+    finally:
+        _thread_local.dataset_context = prev
 
 
 def register_context(ctx: DatasetContext) -> None:
@@ -663,13 +687,37 @@ def override_detector_context(ctx: DetectorContext) -> Iterator[None]:
 
 
 def set_thread_detector_context(ctx: DetectorContext | None) -> None:
-    """Set the thread-local detector context for the current thread."""
+    """Set the thread-local detector context for the current thread.
+
+    Prefer :func:`thread_detector_context` (a context manager) for new
+    code (it saves and restores the prior value automatically).
+    """
     _thread_local.detector_context = ctx
 
 
 def get_thread_detector_context() -> DetectorContext | None:
     """Return the thread-local detector context, or ``None``."""
     return getattr(_thread_local, "detector_context", None)
+
+
+@contextmanager
+def thread_detector_context(ctx: DetectorContext | None) -> Iterator[None]:
+    """Scope the thread-local detector context to *ctx* for the ``with``-block.
+
+    Snapshots the prior thread-local value on entry and restores it on
+    exit, so nested scopes compose correctly and a reused / pooled
+    thread cannot leak the wrong detector context across jobs.
+
+    Unlike :class:`with_detector_context` (which looks the context up by
+    ID from the registry and requires it to be registered), this helper
+    takes a context object directly.
+    """
+    prev = getattr(_thread_local, "detector_context", None)
+    _thread_local.detector_context = ctx
+    try:
+        yield
+    finally:
+        _thread_local.detector_context = prev
 
 
 def register_detector_context(ctx: DetectorContext) -> None:

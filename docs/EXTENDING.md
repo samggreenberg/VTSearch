@@ -1,16 +1,16 @@
 # Extending VTSearch
 
 This index points to the three topic-specific extension guides, plus the
-cross-cutting sections (authentication, dependencies, and a one-stop
-checklist for every extension type). Start here; open the child doc that
+cross-cutting sections: authentication, dependencies, and a one-stop
+checklist for every extension type. Start here; open the child doc that
 matches what you want to build.
 
 ## Extension guides
 
 | Guide | What you build |
 |-------|----------------|
-| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources: eight auto-discovered plugin families that share a common registry-based architecture. |
-| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, converters, and media sources: anything in `vtscore/media/` or `vtscore/converters/`. |
+| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, settings importers/exporters, settings sources, labelset sources, media converters, media sources: nine auto-discovered plugin families that share a common registry-based architecture. |
+| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). |
 | [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. |
 
 Each guide explains the interface contract, where files go, how
@@ -77,7 +77,7 @@ isolated in `DatasetContext` objects, and per-detector state (votes,
 label history, click times, learned scores, inclusion, labelset source)
 is isolated in `DetectorContext` objects. The frontend sends
 `X-Dataset-Id` / `X-Detector-Id` headers, and a `before_request`
-middleware resolves the active contexts per request; multiple users
+middleware resolves the active contexts per request, so multiple users
 can work with different datasets/models simultaneously.
 
 The auth infrastructure supports ownership tracking (`created_by` on
@@ -91,7 +91,7 @@ isolation yet.
 ## Dependency Management
 
 Runtime dependencies are declared in **`pyproject.toml`** under
-`[project.dependencies]`; that's the single source of truth, and deptry
+`[project.dependencies]`: that's the single source of truth, and deptry
 (wired into `lint.yml` and the pre-commit hook) verifies that every
 imported package is declared there. Dev tools (pytest, ruff,
 pre-commit, etc.) live under `[project.optional-dependencies].dev`.
@@ -155,17 +155,6 @@ See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#addin
 - [ ] Expose `LABEL_IMPORTER = YourImporter()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/label-importers` includes your importer
-
-### New Processor Importer Checklist
-
-See [EXTENDING-plugins.md § Adding a Processor Importer](EXTENDING-plugins.md#adding-a-processor-importer).
-
-- [ ] Create `vtsearch/processors/importers/<name>/__init__.py`
-- [ ] Subclass `ProcessorImporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `run(self, field_values)`: return a dict with `media_type`, `weights`, `threshold`
-- [ ] Expose `PROCESSOR_IMPORTER = YourImporter()` at module level
-- [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
-- [ ] Test: start the app and check `GET /api/processor-importers` includes your importer
 
 ### New Settings Source Checklist
 
@@ -240,7 +229,7 @@ See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-
 - [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `_load_models_impl()`, `embed_media()`
 - [ ] Optionally implement `embed_text()` for text-query sorting
 - [ ] Optionally set `description_wrappers` for enriched text embedding
-- [ ] Expose `EMBEDDER = YourEmbedder()` at module level; auto-discovery picks it up with no `__init__.py` edits needed (symlinked files are supported)
+- [ ] Expose `EMBEDDER = YourEmbedder()` at module level (auto-discovery picks it up; no `__init__.py` edits needed; symlinked files are supported)
 - [ ] Test: load a dataset and verify embeddings are generated
 
 ### New Media Clipper Checklist
@@ -267,7 +256,7 @@ See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a
 
 See [EXTENDING-processors.md](EXTENDING-processors.md).
 
-- [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.base`
+- [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.processors`
 - [ ] Implement `name`, `media_type`, and the type-specific method
       (`localize` or `extract`)
 - [ ] Optionally override `load_model()` for one-time resource loading

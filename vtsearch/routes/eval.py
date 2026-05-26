@@ -159,8 +159,8 @@ def eval_train_and_score(body: dict):
     from vtscore.state.core import (
         get_active_context,
         get_active_detector_context,
-        set_thread_dataset_context,
-        set_thread_detector_context,
+        thread_dataset_context,
+        thread_detector_context,
     )
 
     metric = body["metric"]
@@ -194,23 +194,19 @@ def eval_train_and_score(body: dict):
     update_eval_progress("running", f"Computing {metric}...", 0, n_total)
 
     def _run(job):
-        set_thread_dataset_context(ds_ctx)
-        set_thread_detector_context(det_ctx)
-        try:
-            if metric == "smart":
-                data = calculate_error_cost_over_time(clips, history, good_snap, bad_snap, inclusion)
-            elif metric == "stable":
-                data = calculate_prediction_stability_over_time(clips, history, inclusion)
-            else:
-                data = calculate_diversity_level_over_time(clips, history, inclusion)
-            job.result = {"metric": metric, "data": data}
-            update_eval_progress("idle", "Done", n_total, n_total)
-        except Exception:
-            update_eval_progress("idle", "Error", 0, 0)
-            raise
-        finally:
-            set_thread_dataset_context(None)
-            set_thread_detector_context(None)
+        with thread_dataset_context(ds_ctx), thread_detector_context(det_ctx):
+            try:
+                if metric == "smart":
+                    data = calculate_error_cost_over_time(clips, history, good_snap, bad_snap, inclusion)
+                elif metric == "stable":
+                    data = calculate_prediction_stability_over_time(clips, history, inclusion)
+                else:
+                    data = calculate_diversity_level_over_time(clips, history, inclusion)
+                job.result = {"metric": metric, "data": data}
+                update_eval_progress("idle", "Done", n_total, n_total)
+            except Exception:
+                update_eval_progress("idle", "Error", 0, 0)
+                raise
 
     job = eval_jobs.start(
         signature,

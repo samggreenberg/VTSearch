@@ -16,6 +16,8 @@ import hashlib
 import io
 from unittest.mock import MagicMock, patch
 
+from vtscore.datasets.importers.base import SourceSpec
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -368,7 +370,7 @@ class TestRunConvertersOnFolder:
         medias: dict = {}
         run_converters_on_folder(
             folder_path=tmp_path,
-            converter_names=[],
+            converter_specs=[],
             target_media_type="image",
             medias=medias,
         )
@@ -381,7 +383,7 @@ class TestRunConvertersOnFolder:
         # get_converter returns None for unknown names, so this is a no-op.
         run_converters_on_folder(
             folder_path=tmp_path,
-            converter_names=["nonexistent_converter"],
+            converter_specs=[SourceSpec(source_type="video", converter="nonexistent_converter")],
             target_media_type="image",
             medias=medias,
             on_progress=lambda *a: None,
@@ -401,7 +403,7 @@ class TestRunConvertersOnFolder:
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
-                converter_names=["video2image"],
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
                 target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
@@ -427,7 +429,7 @@ class TestRunConvertersOnFolder:
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
-                converter_names=["video2image"],
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
                 target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
@@ -495,7 +497,7 @@ class TestRunConvertersOnFolder:
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
-                converter_names=["video2image"],
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
                 target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
@@ -531,7 +533,7 @@ class TestRunConvertersOnFolder:
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
-                converter_names=["video2image"],
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
                 target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
@@ -556,7 +558,7 @@ class TestRunConvertersOnFolder:
         ):
             run_converters_on_folder(
                 folder_path=tmp_path,
-                converter_names=["video2image"],
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
                 target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
@@ -587,7 +589,7 @@ class TestRunConvertersOnFolder:
         ):
             run_converters_on_folder(
                 folder_path=root,
-                converter_names=["video2image"],
+                converter_specs=[SourceSpec(source_type="video", converter="video2image")],
                 target_media_type="image",
                 medias=medias,
                 on_progress=lambda *a: None,
@@ -721,41 +723,6 @@ class TestFolderImporterWithConverters:
 
 
 # ===========================================================================
-# Import API endpoint with converters
-# ===========================================================================
-
-
-class TestImportAPIConverters:
-    def test_import_endpoint_passes_converters(self, client):
-        """POST /api/dataset/import/server_folder passes converters to the importer."""
-        with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_run:
-            resp = client.post(
-                "/api/dataset/import/server_folder",
-                json={
-                    "path": "/tmp/test",
-                    "media_type": "image",
-                    "converters": "video2image,document2image",
-                },
-            )
-            assert resp.status_code == 200
-            # Check that converters was passed in field_values
-            call_args = mock_run.call_args
-            field_values = call_args[0][1]
-            assert field_values["converters"] == "video2image,document2image"
-
-    def test_import_endpoint_without_converters(self, client):
-        """Without converters, the field is not added."""
-        with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_run:
-            resp = client.post(
-                "/api/dataset/import/server_folder",
-                json={"path": "/tmp/test", "media_type": "image"},
-            )
-            assert resp.status_code == 200
-            field_values = mock_run.call_args[0][1]
-            assert "converters" not in field_values
-
-
-# ===========================================================================
 # Multi-media import: SourceSpec + effective_source_specs + API plumbing.
 # See docs/plans/multi-media-import.md.
 # ===========================================================================
@@ -763,8 +730,6 @@ class TestImportAPIConverters:
 
 class TestSourceSpecParsing:
     def test_from_dict_roundtrip(self):
-        from vtscore.datasets.importers.base import SourceSpec
-
         spec = SourceSpec.from_dict({"source_type": "video", "converter": "video2image", "params": {"n_clips": "12"}})
         assert spec.source_type == "video"
         assert spec.converter == "video2image"
@@ -773,90 +738,12 @@ class TestSourceSpecParsing:
         assert d == {"source_type": "video", "converter": "video2image", "params": {"n_clips": "12"}}
 
     def test_direct_row_has_no_converter(self):
-        from vtscore.datasets.importers.base import SourceSpec
-
         spec = SourceSpec.from_dict({"source_type": "image", "converter": None, "params": {}})
         assert spec.converter is None
 
 
-class _LegacyTestImporter:
-    """Stand-in for an external ``multi_media=False`` importer.
-
-    Every in-tree importer now sets ``multi_media=True``, so the legacy
-    synthesis branch of :meth:`DatasetImporter.effective_source_specs`
-    is exercised only by extension code.  We instantiate one explicitly
-    here to keep that branch under test until the shim is deleted.
-    """
-
-    @staticmethod
-    def make():
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
-
-        class _Legacy(DatasetImporter):
-            name = "_legacy_test"
-            display_name = "Legacy"
-            description = ""
-            multi_media = False
-            fields = [
-                ImporterField(key="media_type", label="Type", field_type="select", default="image"),
-            ]
-
-            def run(self, field_values, medias, thin=False):  # pragma: no cover
-                raise NotImplementedError
-
-        return _Legacy()
-
-
-class TestLegacyEffectiveSourceSpecs:
-    """Legacy (multi_media=False) importers synthesise specs from
-    media_type + comma-separated converters."""
-
-    def test_legacy_single_media_type_only(self):
-        imp = _LegacyTestImporter.make()
-
-        specs = imp.effective_source_specs({"media_type": "image"})
-        assert len(specs) == 1
-        assert specs[0].source_type == "image"
-        assert specs[0].converter is None
-
-    def test_legacy_with_converters_csv(self):
-        imp = _LegacyTestImporter.make()
-
-        specs = imp.effective_source_specs({"media_type": "image", "converters": "video2image,document2image"})
-        assert [s.converter for s in specs] == [None, "video2image", "document2image"]
-        assert [s.source_type for s in specs] == ["image", "video", "document"]
-
-    def test_legacy_unknown_converter_is_skipped(self):
-        imp = _LegacyTestImporter.make()
-
-        specs = imp.effective_source_specs({"media_type": "image", "converters": "video2image,bogus"})
-        assert [s.converter for s in specs] == [None, "video2image"]
-
-    def test_legacy_rejects_empty_media_type_and_converters(self):
-        """H11: a legacy importer called with no ``media_type`` and no
-        ``converters`` used to return ``[]`` silently, leaving downstream
-        loops to produce an empty dataset.  It must now raise."""
-        import pytest
-
-        imp = _LegacyTestImporter.make()
-
-        with pytest.raises(ValueError, match="legacy import requires"):
-            imp.effective_source_specs({"media_type": "", "converters": ""})
-
-    def test_legacy_rejects_only_unknown_converters(self):
-        """H11: ``media_type`` empty + every named converter unknown also
-        produces an empty spec list and must raise rather than silently
-        return ``[]``."""
-        import pytest
-
-        imp = _LegacyTestImporter.make()
-
-        with pytest.raises(ValueError, match="legacy import requires"):
-            imp.effective_source_specs({"media_type": "", "converters": "bogus_one,bogus_two"})
-
-
-class TestMultiMediaEffectiveSourceSpecs:
-    """multi_media=True importers parse the explicit source_specs form value."""
+class TestEffectiveSourceSpecs:
+    """``effective_source_specs`` parses the explicit ``source_specs`` form value."""
 
     def test_parses_list_of_dicts(self):
         from vtscore.datasets.importers.server_folder import IMPORTER
@@ -890,9 +777,8 @@ class TestMultiMediaEffectiveSourceSpecs:
         assert [s.converter for s in specs] == [None, "video2image"]
 
     def test_missing_source_specs_defaults_to_direct_only(self):
-        """When the multi_media flag is set but the form omits source_specs,
-        a single 'include directly' row is synthesised so the importer still
-        loads cleanly."""
+        """When the form omits source_specs, a single 'include directly'
+        row is synthesised so the importer still loads cleanly."""
         from vtscore.datasets.importers.server_folder import IMPORTER
 
         specs = IMPORTER.effective_source_specs({"media_type": "image"})
@@ -970,45 +856,6 @@ class TestMultiMediaEffectiveSourceSpecs:
             )
 
 
-class TestImporterMultiMediaFlagInToDict:
-    def test_server_folder_advertises_multi_media(self):
-        from vtscore.datasets.importers.server_folder import IMPORTER
-
-        d = IMPORTER.to_dict()
-        assert d.get("multi_media") is True
-
-    def test_http_archive_advertises_multi_media(self):
-        from vtscore.datasets.importers.http_archive import IMPORTER
-
-        d = IMPORTER.to_dict()
-        assert d.get("multi_media") is True
-
-    def test_pickle_advertises_multi_media(self):
-        from vtscore.datasets.importers.pickle import IMPORTER
-
-        assert IMPORTER.to_dict().get("multi_media") is True
-
-    def test_combine_datasets_advertises_multi_media(self):
-        from vtscore.datasets.importers.combine_datasets import IMPORTER
-
-        assert IMPORTER.to_dict().get("multi_media") is True
-
-    def test_synthetic_advertises_multi_media(self):
-        from vtscore.datasets.importers.synthetic import IMPORTER
-
-        assert IMPORTER.to_dict().get("multi_media") is True
-
-    def test_recaller_advertises_multi_media(self):
-        from vtscore.datasets.importers.recaller import IMPORTER
-
-        assert IMPORTER.to_dict().get("multi_media") is True
-
-    def test_demo_advertises_multi_media(self):
-        from vtscore.datasets.importers.demo import IMPORTER
-
-        assert IMPORTER.to_dict().get("multi_media") is True
-
-
 class TestConverterFieldsInToDict:
     def test_video2image_exposes_n_clips_field(self):
         from vtscore.converters import get_converter
@@ -1071,34 +918,15 @@ class TestImportAPISourceSpecs:
 
 
 # ===========================================================================
-# multi_media flag on the local_folder / local_files / server_files importers
+# Per-importer to_dict and effective_source_specs sanity checks
 # ===========================================================================
 
 
-class TestMultiMediaImportersFlag:
-    """The lf-* / sf-* importers all delegate to / share the same
-    multi-media flow.  Their to_dict() advertises multi_media=True so
-    the frontend renders the source-specs editor for each."""
-
-    def test_local_folder_advertises_multi_media(self):
-        from vtscore.datasets.importers.local_folder import IMPORTER
-
-        assert IMPORTER.to_dict().get("multi_media") is True
-
-    def test_local_files_advertises_multi_media(self):
-        from vtscore.datasets.importers.local_files import IMPORTER
-
-        assert IMPORTER.to_dict().get("multi_media") is True
-
-    def test_server_files_advertises_multi_media(self):
-        from vtscore.datasets.importers.server_files import IMPORTER
-
-        assert IMPORTER.to_dict().get("multi_media") is True
+class TestImporterToDict:
+    """Every importer's ``to_dict()`` exposes the converter map for the
+    frontend Include-rows editor without an extra ``/api/converters`` call."""
 
     def test_server_files_exposes_available_converters_map(self):
-        """server_files.to_dict() includes the converter map so the
-        frontend form view can render the Include rows without an extra
-        API call to /api/converters."""
         from vtscore.datasets.importers.server_files import IMPORTER
 
         d = IMPORTER.to_dict()
@@ -1110,7 +938,7 @@ class TestMultiMediaImportersFlag:
 
 
 class TestServerFilesEffectiveSourceSpecs:
-    def test_multi_media_with_converter_row(self):
+    def test_source_specs_with_converter_row(self):
         """server_files.effective_source_specs() validates against the
         same registries as server_folder."""
         from vtscore.datasets.importers.server_files import IMPORTER

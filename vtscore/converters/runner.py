@@ -21,48 +21,35 @@ ProgressCallback = Callable[[str, str, int, int], None]
 
 
 def _normalise_converter_specs(
-    converter_names: list[str] | None,
     converter_specs: "list | None",
 ) -> list[tuple[Any, dict[str, Any]]]:
-    """Build a ``list[(converter_instance, params)]`` from either input form.
+    """Build a ``list[(converter_instance, params)]`` from *converter_specs*.
 
-    Accepts:
-
-    * ``converter_specs`` - list of :class:`~vtscore.datasets.importers.base.SourceSpec`
-      objects or equivalent dicts with ``converter`` + ``params`` keys
-      (the multi-media path).  Specs whose ``converter`` is ``None`` are
-      skipped (those are the "include directly" rows, handled by the
-      importer's own loader, not the converter runner).
-    * ``converter_names`` - list of converter name strings (the legacy
-      path).  Each name gets an empty params dict.
-
-    Returns a list whose entries are guaranteed to be ``(converter, params)``
-    with both fields populated.  Unknown converter names are silently
-    dropped to match the runner's prior behaviour.
+    Accepts a list of :class:`~vtscore.datasets.importers.base.SourceSpec`
+    objects or equivalent dicts with ``converter`` + ``params`` keys.
+    Specs whose ``converter`` is ``None`` are skipped (those are the
+    "include directly" rows, handled by the importer's own loader, not
+    the converter runner).  Unknown converter names are silently dropped
+    to match the runner's prior behaviour.
     """
     from vtscore.converters import get_converter  # noqa: PLC0415 - deferred to avoid circular import during eager registry discovery
 
     result: list[tuple[Any, dict[str, Any]]] = []
-    if converter_specs:
-        for spec in converter_specs:
-            if hasattr(spec, "converter"):
-                name = spec.converter
-                params = dict(spec.params or {})
-            else:
-                name = spec.get("converter") if isinstance(spec, dict) else None
-                params = dict((spec.get("params") if isinstance(spec, dict) else None) or {})
-            if not name:
-                continue
-            c = get_converter(name)
-            if c is None:
-                continue
-            result.append((c, params))
-    if converter_names:
-        for name in converter_names:
-            c = get_converter(name)
-            if c is None:
-                continue
-            result.append((c, {}))
+    if not converter_specs:
+        return result
+    for spec in converter_specs:
+        if hasattr(spec, "converter"):
+            name = spec.converter
+            params = dict(spec.params or {})
+        else:
+            name = spec.get("converter") if isinstance(spec, dict) else None
+            params = dict((spec.get("params") if isinstance(spec, dict) else None) or {})
+        if not name:
+            continue
+        c = get_converter(name)
+        if c is None:
+            continue
+        result.append((c, params))
     return result
 
 
@@ -121,7 +108,7 @@ def _build_converted_media_dict(
 ) -> dict[str, Any]:
     """Build the media dict for one converter output.
 
-    ``embedding`` is left at ``None`` - the framework
+    ``embedding`` is left at ``None``; the framework
     :func:`~vtscore.datasets.load_pipeline.embed_missing` stage embeds
     converter outputs via ``media_bytes`` / ``media_string`` after the
     importer returns.
@@ -205,7 +192,6 @@ def _emit_converted_outputs(
 
 def run_converters_on_folder(
     folder_path: Path,
-    converter_names: list[str] | None = None,
     target_media_type: str = "",
     medias: dict[int, dict[str, Any]] | None = None,
     thin: bool = False,
@@ -216,9 +202,7 @@ def run_converters_on_folder(
 ) -> None:
     """Scan *folder_path* for source files, convert them, and add to *medias*.
 
-    For each converter (either named in *converter_names* with default
-    params, or supplied as a typed spec in *converter_specs* with explicit
-    per-converter params):
+    For each converter spec in *converter_specs*:
 
     1. Look up the converter's source media type to get file extensions.
     2. Scan *folder_path* recursively for files matching those extensions.
@@ -229,10 +213,6 @@ def run_converters_on_folder(
 
     Args:
         folder_path: Root directory to scan.
-        converter_names: Legacy entry point - a list of converter names
-            (e.g. ``["video2image"]``) that run with their declared
-            defaults.  Prefer *converter_specs* when per-converter params
-            need to flow through.
         target_media_type: The target media type identifier
             (e.g. ``"image"``).
         medias: The medias dict to append to (not cleared).
@@ -244,7 +224,7 @@ def run_converters_on_folder(
         base_origin: The origin dict of the parent import (e.g.
             ``{"importer": "server_folder", "params": {"path": "..."}}``)
             used to record provenance.
-        converter_specs: Multi-media entry point - a list of
+        converter_specs: A list of
             :class:`~vtscore.datasets.importers.base.SourceSpec`
             instances (or equivalent dicts) carrying both the converter
             name and the user-supplied params for that converter.  Specs
@@ -254,7 +234,7 @@ def run_converters_on_folder(
     """
     if medias is None:
         return
-    converters_with_params = _normalise_converter_specs(converter_names, converter_specs)
+    converters_with_params = _normalise_converter_specs(converter_specs)
     if not converters_with_params:
         return
 

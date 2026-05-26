@@ -1,5 +1,10 @@
 # RCDatasetImporter Extension Plan
 
+**Status:** Scaffold in place; API client implementation required. All four
+plugin scaffolds (`recaller` importer, `holder` exporter/importer, PullWrest
+media source) are registered but hidden from the picker until the stubs are
+filled in. See the checklist at the bottom of this doc.
+
 This document describes everything needed to complete the ReCaller / Holder /
 PullWrest integration.  VTSearch core changes and plugin scaffolds are already
 in place; the developer's job is to implement the API client stubs.

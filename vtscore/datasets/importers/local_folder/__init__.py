@@ -42,11 +42,6 @@ class LocalFolderDatasetImporter(DatasetImporter):
     ui_mode = "custom"
     picker_view = "local_folder"
     category = "local"
-    # The upload flow delegates to server_folder, which already
-    # participates in the multi-media flow.  Surfacing the flag here
-    # lets the frontend render the "Include media" repeater for this
-    # picker too.
-    multi_media = True
     fields = [
         ImporterField(
             key="recursive",

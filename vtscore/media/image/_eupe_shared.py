@@ -217,13 +217,17 @@ class _EupeBase(MediaEmbedder):
             self.load_models()
         if self._model is None or self._preprocess is None:
             return None
-        file_path = Path(media["media_path"])
+        from vtscore.media.image._image_bulk import _load_pil, _pil_source_for  # noqa: PLC0415
+
+        source = _pil_source_for(media)
+        if source is None:
+            return None
+        image = _load_pil(source)
+        if image is None:
+            return None
         try:
             import torch  # noqa: PLC0415
-            from PIL import Image  # noqa: PLC0415
 
-            with Image.open(file_path) as _img:
-                image = _img.convert("RGB")
             tensor = self._preprocess(image).unsqueeze(0)
             device = next(self._model.parameters()).device
             tensor = tensor.to(device)
@@ -231,5 +235,5 @@ class _EupeBase(MediaEmbedder):
                 features = self._model.forward_features(tensor)
             return features
         except Exception:
-            logging.getLogger(__name__).exception("Error running EUPE on %s", file_path)
+            logging.getLogger(__name__).exception("Error running EUPE on %s", source)
             return None

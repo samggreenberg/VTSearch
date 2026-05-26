@@ -1,6 +1,6 @@
 # Writing a `DatasetImporter`
 
-A dataset importer pulls media into a VTSearch dataset from a source -
+A dataset importer pulls media into a VTSearch dataset from a source;
 a local folder, an HTTP archive, an S3 bucket, a database, a remote
 embedding service, anything. The library auto-discovers importers
 under `vtscore.datasets.importers` (sentinel `IMPORTER`) and also walks
@@ -36,7 +36,7 @@ implement one of two flow shapes:
 
 | Attribute | Purpose |
 |-----------|---------|
-| `name: str` | Snake-case identifier - registry key, CLI subcommand, API path segment |
+| `name: str` | Snake-case identifier (registry key, CLI subcommand, API path segment) |
 | `display_name: str` | Human-readable label |
 | `description: str` | One-sentence subtitle |
 | `fields: list[PluginField]` | User-configurable inputs (rendered into a form / CLI flags / validation schema) |
@@ -44,12 +44,12 @@ implement one of two flow shapes:
 Then either:
 
 - Override `run(field_values, medias, thin=False)` to populate `medias`
-  in place - full control of the import flow, used by every
+  in place; full control of the import flow, used by every
   folder-style importer; or
 - Implement `list_records(field_values) → list` plus
   `fetch_record(record, field_values, thin) → dict | None`, optionally
   overriding `_fetch_records_bulk_impl()` for batched / concurrent
-  fetches - used by service-style importers (see
+  fetches; used by service-style importers (see
   [`vtscore/datasets/importers/recaller/__init__.py`](../../datasets/importers/recaller/__init__.py)
   for a working example that issues concurrent thread-pool fetches).
 
@@ -63,7 +63,7 @@ Both paths end up with the same shape: `medias[id] = {...}`. The split
 mirrors `MediaEmbedder.embed_media` / `embed_media_bulk`.
 
 **Use `run()` when** the import is fundamentally a single pass over a
-local resource - typically files in a folder. You control the entire
+local resource (typically files in a folder). You control the entire
 flow, including how IDs are assigned.
 
 **Use the per-record hooks when** records come from a remote service.
@@ -106,7 +106,7 @@ for the importer-side instance attributes that feed into the loader):
 | `custom_metadata` | `dict` | Optional | Per-media display fields surfaced in the labeling UI |
 
 Folder-style importers usually delegate everything after the download
-to `vtscore.datasets.loader.load_dataset_from_folder` - it walks the
+to `vtscore.datasets.loader.load_dataset_from_folder`, which walks the
 folder, embeds files (skipping any whose name appears in
 `self.content_vectors`), and assigns IDs. Service-style importers
 build the dicts directly (see the recaller importer for a real
@@ -119,7 +119,7 @@ and parameters needed to refetch the same content. The framework
 automatically calls `build_origin(field_values)` after `run()` and
 applies the result to every media whose `origin` is `None`, so the
 common case requires no work. Override `build_origin()` only when the
-default (importer name + stringified field values) is too coarse -
+default (importer name + stringified field values) is too coarse;
 e.g. when the importer fans out across multiple sources within a
 single dataset.
 
@@ -147,26 +147,27 @@ different values, the loader logs a warning and keeps the
 relative-path entry. When a bare basename would match multiple files
 in the folder (e.g. `class_a/foo.wav` and `class_b/foo.wav` with a
 single `"foo.wav"` key) without an explicit relative-path entry for
-every match, the loader raises `ValueError` - supply the full
+every match, the loader raises `ValueError`; supply the full
 relative path for each file to disambiguate. Don't persist vectors
-or MLP weights to disk on your own - the library re-derives them
+or MLP weights to disk on your own; the library re-derives them
 from origins.
 
 ## Multi-media imports
 
-An importer that wants to pull in multiple source media types in one
-shot - e.g. images, plus videos converted to images, plus documents
-converted to images - sets the class attribute `multi_media = True`.
-Each `SourceSpec` ([`vtscore/datasets/importers/base.py:67`](../../datasets/importers/base.py))
+Every importer can pull in multiple source media types in one shot;
+e.g. images, plus videos converted to images, plus documents
+converted to images.  The user submits a list of `source_specs` in
+the dataset modal; the framework iterates them and dispatches
+converters.  Each `SourceSpec` ([`vtscore/datasets/importers/base.py:67`](../../datasets/importers/base.py))
 is `(source_type, converter, params)`:
 
-- `converter is None` means "include directly" - fetch files of
+- `converter is None` means "include directly": fetch files of
   `source_type` straight into the dataset.
 - `converter is set` means "fetch files of `source_type`, then pass
   them through the named converter with `params`".
 
 **The framework owns conversion and ingestion.** Subclasses never
-call `get_converter()` or `converter.convert()` themselves - they
+call `get_converter()` or `converter.convert()` themselves; they
 just yield raw source-type media, and the framework runs each spec's
 converter on it before assigning IDs and storing the result.
 
@@ -178,7 +179,7 @@ one that fits your backend:
 | When your backend looks like… | Override |
 |------------------------------|----------|
 | One query, one media type per import (no per-source-type fan-out) | `list_records()` + `fetch_record()` |
-| Different query per media type - framework loops specs for you | `fetch_source_media(spec, ...)` |
+| Different query per media type (framework loops specs for you) | `fetch_source_media(spec, ...)` |
 | One query that returns mixed types in one response | `fetch_all_source_media(specs, ...)` |
 | Folder-shaped (already on disk; delegates to `load_dataset_from_folder()` / `run_converters_on_folder()`) | `run()` directly |
 
@@ -190,7 +191,7 @@ canonical `fetch_source_media()`-shaped example.
 
 The default `fetch_source_media()` delegates to `list_records()` +
 `fetch_record()`, and the default `fetch_all_source_media()`
-delegates to `fetch_source_media()` per spec - so each hook is a
+delegates to `fetch_source_media()` per spec; each hook is a
 strict generalisation of the one above it.  You can also call
 `self.effective_source_specs(field_values)` directly from any of
 these (or from a custom `run()`) to inspect the resolved spec list.
@@ -198,15 +199,9 @@ these (or from a custom `run()`) to inspect the resolved spec list.
 > **Heads-up:** `fetch_source_media()` and `fetch_all_source_media()`
 > only run when `effective_source_specs()` resolves to at least one
 > spec.  An importer that overrides one of those hooks but does
-> **not** declare a `media_type` field (or set `multi_media = True`
-> and accept a `source_specs` value) falls through to the
-> `list_records()` path and raises `NotImplementedError` at runtime.
-
-Legacy importers (`multi_media = False`) can still call
-`effective_source_specs()` - it synthesises an equivalent list from
-the classic `media_type` + comma-separated `converters` form fields,
-so you can migrate the body of `run()` before touching the form
-schema.
+> **not** declare a `media_type` field (declaring the output type)
+> falls through to the `list_records()` path and raises
+> `NotImplementedError` at runtime.
 
 ## Reporting progress
 
@@ -242,7 +237,7 @@ my_importer = "my_pkg.importer:IMPORTER"
 ```
 
 The value `my_pkg.importer:IMPORTER` must resolve to an
-already-instantiated `DatasetImporter` - typically you point straight
+already-instantiated `DatasetImporter`; typically you point straight
 at the module's `IMPORTER` sentinel. After `pip install`, the importer
 appears in `list_importers()`, the `/api/dataset/all-importers`
 endpoint, and `python app.py --list-plugins`.
@@ -298,7 +293,7 @@ run behaviour without any app dependency.
 
 A minimal third-party importer that pulls records from a hypothetical
 JSON-line catalogue API. Each line of the catalogue has an `id`, a
-public `url`, and a pre-computed embedding - perfect for the
+public `url`, and a pre-computed embedding (perfect for the
 service-style hook path because no per-file download or embedding is
 needed.
 
@@ -373,6 +368,6 @@ After `pip install`, the importer is discoverable via
 `vtscore.datasets.importers.get_importer("catalogue")`, runnable from
 the CLI as `python app.py --autodetect --importer catalogue
 --catalogue-url https://… --settings settings.json`, and the dataset
-loads with one media per catalogue line - no downloads, no embedding,
+loads with one media per catalogue line (no downloads, no embedding,
 just the pre-computed vectors. The actual bytes are fetched lazily
 when the UI needs to play a clip.

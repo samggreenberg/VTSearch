@@ -17,7 +17,6 @@ files are imported as plugins) - the variant modules import from here.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
@@ -90,16 +89,15 @@ class _Dinov2Base(MediaEmbedder):
             self.load_models()
         if self._model is None or self._processor is None:
             return None
-        file_path = Path(media["media_path"])
-        try:
-            from PIL import Image  # noqa: PLC0415
+        from vtscore.media.image._image_bulk import _load_pil, _pil_source_for  # noqa: PLC0415
 
-            with Image.open(file_path) as _img:
-                image = _img.convert("RGB")
-            return self.embed_pil_image(image)
-        except Exception:
-            logging.getLogger(__name__).exception("Error embedding %s", file_path)
+        source = _pil_source_for(media)
+        if source is None:
             return None
+        image = _load_pil(source)
+        if image is None:
+            return None
+        return self.embed_pil_image(image)
 
     def embed_pil_image(self, image: "Image.Image") -> Optional[np.ndarray]:
         if self._model is None:
@@ -173,13 +171,17 @@ class _Dinov2Base(MediaEmbedder):
             self.load_models()
         if self._model is None or self._processor is None:
             return None
-        file_path = Path(media["media_path"])
+        from vtscore.media.image._image_bulk import _load_pil, _pil_source_for  # noqa: PLC0415
+
+        source = _pil_source_for(media)
+        if source is None:
+            return None
+        image = _load_pil(source)
+        if image is None:
+            return None
         try:
             import torch  # noqa: PLC0415
-            from PIL import Image  # noqa: PLC0415
 
-            with Image.open(file_path) as _img:
-                image = _img.convert("RGB")
             inputs = self._processor(images=image, return_tensors="pt")
             device = next(self._model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}
@@ -187,5 +189,5 @@ class _Dinov2Base(MediaEmbedder):
                 outputs = self._model(**inputs, output_attentions=True)
             return hf_vit_to_patch_output(outputs, num_register_tokens=0)
         except Exception:
-            logging.getLogger(__name__).exception("Error patch-embedding %s (DINOv2)", file_path)
+            logging.getLogger(__name__).exception("Error patch-embedding %s (DINOv2)", source)
             return None

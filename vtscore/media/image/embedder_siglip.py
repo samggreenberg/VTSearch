@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
@@ -114,16 +113,15 @@ class ImageSiglipEmbedder(MediaEmbedder):
             self.load_models()
         if self._model is None or self._processor is None:
             return None
-        file_path = Path(media["media_path"])
-        try:
-            from PIL import Image  # noqa: PLC0415
+        from vtscore.media.image._image_bulk import _load_pil, _pil_source_for  # noqa: PLC0415
 
-            with Image.open(file_path) as _img:
-                image = _img.convert("RGB")
-            return self.embed_pil_image(image)
-        except Exception:
-            logging.getLogger(__name__).exception("Error embedding %s", file_path)
+        source = _pil_source_for(media)
+        if source is None:
             return None
+        image = _load_pil(source)
+        if image is None:
+            return None
+        return self.embed_pil_image(image)
 
     def embed_pil_image(self, image: Image.Image) -> Optional[np.ndarray]:
         """Embed a PIL Image that is already in memory (e.g. from CIFAR-10)."""

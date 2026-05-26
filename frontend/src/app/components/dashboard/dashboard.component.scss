@@ -32,15 +32,6 @@
   padding: var(--space-xl);
 }
 
-.dashboard-side-actions {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-xs) 0;
-}
-
 .side-action-btn {
   background: none;
   border: none;
@@ -192,6 +183,18 @@
 
 .dashboard-section-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.section-actions-sep {
+  width: 1px;
+  height: 1.1em;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 var(--space-2xs);
+  align-self: center;
 }
 
 .dashboard-grid {

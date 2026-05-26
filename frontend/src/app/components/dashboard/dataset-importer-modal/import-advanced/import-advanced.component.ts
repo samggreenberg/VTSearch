@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ClipperInfo, ConverterInfo, EmbedderInfo, SourceSpec } from '../../../../models/api.models';
 import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-picker.component';
 
-/** "Advanced ▾" block of the Add Dataset modal - Include media (source
+/** "Advanced ▾" block of the Add Dataset modal: Include media (source
  *  specs), Embedder, Clipper.  Pulled out of the parent component
  *  because the same block was inlined three times (server-folder,
  *  local-folder/files, generic form), with `sf*` / `lf*` / `form*`
@@ -35,7 +35,7 @@ export class ImportAdvancedComponent {
    *  source-specs picker.  Computed by the parent from the importer's
    *  ``available_converters_by_media_type``. */
   @Input() availableConverters: ConverterInfo[] = [];
-  /** Native (output) type id of the dataset (e.g. ``"image"``).  Drives
+  /** Native (output) type id of the dataset (e.g. ``"image"``). Drives
    *  the "include directly" row inside the source-specs picker. */
   @Input() nativeType = '';
   /** Map of ``type_id`` → human label for the source-specs picker. */
@@ -48,8 +48,8 @@ export class ImportAdvancedComponent {
    *  hide rule as :prop:`embedders`. */
   @Input() clippers: ClipperInfo[] = [];
   /** Whether the Include-media (source-specs) block should be offered
-   *  at all.  False for non-``multi_media`` generic-form importers; true
-   *  for the server-folder and local-folder/files flows. */
+   *  at all.  True for every importer that participates in the dataset
+   *  modal's form / server-folder / local-folder/files flows. */
   @Input() showSourceSpecs = false;
 
   /** Two-way bound source-spec list. */
@@ -83,7 +83,7 @@ export class ImportAdvancedComponent {
 
   /** Fired when the user clicks either the native row's Details
    *  button (inside the source-specs column) or the standalone
-   *  Details fallback below the Advanced block; parent opens its
+   *  Details fallback below the Advanced block and the parent opens its
    *  shared clipper chooser modal. */
   @Output() clipperChooserRequested = new EventEmitter<void>();
 
@@ -141,7 +141,7 @@ export class ImportAdvancedComponent {
    *  would be redundant.  In every other case where the user should be
    *  able to reach the clipper chooser (Advanced collapsed but a
    *  non-default clipper is in effect, or importers with no
-   *  source-specs column at all such as demo / non-multi-media form), we
+   *  source-specs column at all (demo form)), we
    *  fall back to this standalone button so the override stays visible
    *  and the chooser stays reachable. */
   get showStandaloneClipperButton(): boolean {
@@ -150,13 +150,13 @@ export class ImportAdvancedComponent {
     return !(this.advancedOpen && this.showSourceSpecs);
   }
 
-  /** Embedders flagged ``is_default`` for the active media type, shown
+  /** Embedders flagged ``is_default`` for the active media type; shown
    *  in the Recommended optgroup. */
   get recommendedEmbedders(): EmbedderInfo[] {
     return this.embedders.filter((e) => e.is_default);
   }
 
-  /** Non-default embedders, shown in the Advanced optgroup inside the
+  /** Non-default embedders; shown in the Advanced optgroup inside the
    *  embedder select. */
   get advancedEmbedderOptions(): EmbedderInfo[] {
     return this.embedders.filter((e) => !e.is_default);

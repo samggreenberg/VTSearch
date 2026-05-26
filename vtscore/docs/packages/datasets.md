@@ -1,6 +1,6 @@
 # `vtscore.datasets`
 
-Dataset ingestion - what gets loaded into memory, where it came from, and
+Dataset ingestion: what gets loaded into memory, where it came from, and
 how it gets persisted. Everything that converts external bytes (a folder of
 WAVs, an HTTP archive, a `.pkl` snapshot, a demo download) into the
 in-memory media dict that the rest of `vtscore` operates on lives here.
@@ -13,7 +13,7 @@ plug new bytes-providers into the system.
 
 Every loader populates a single dict, conventionally bound to the name
 `medias`, keyed by sequential integer IDs starting at 1. Each value is a
-plain `dict[str, Any]` - there is no `Media` dataclass - with the shape
+plain `dict[str, Any]` (there is no `Media` dataclass); with the shape
 below. The same shape round-trips through `export_dataset_to_file` /
 `load_dataset_from_pickle`.
 
@@ -26,7 +26,7 @@ below. The same shape round-trips through `export_dataset_to_file` /
 | `embedding`          | `np.ndarray`                  | The vector. On pickle round-trip embeddings are converted to plain lists and back.     |
 | `filename`           | `str`                         | Basename of the source file, e.g. `"clip_123.wav"`.                                    |
 | `category`           | `str`                         | Category derived from the parent folder name (or `"unknown"`).                         |
-| `origin`             | `dict \| None`                | Serialised `Origin.to_dict()` - `{"importer": ..., "params": {...}}`.                  |
+| `origin`             | `dict \| None`                | Serialised `Origin.to_dict()`: `{"importer": ..., "params": {...}}`.                  |
 | `origin_name`        | `str`                         | Unique name within the origin (typically the relative path or filename).               |
 | `media_bytes`        | `bytes \| None`               | Inline raw bytes (default). `None` when `thin=True`.                                   |
 | `media_path`         | `str \| None`                 | Filesystem path. Set by thin loaders instead of `media_bytes`.                         |
@@ -55,11 +55,11 @@ importer instance.
 
 ### `Origin`
 
-`vtscore/datasets/origin.py:27` - the importer name plus the params
+`vtscore/datasets/origin.py:27`: the importer name plus the params
 needed to reproduce one media element. Every media dict carries one
 (serialised via `Origin.to_dict()`); every `LabeledElement` carries
 one. Hashable, equal by value, and the canonical persisted form of
-"where this thing came from" - the *no persisted vectors* rule means
+"where this thing came from"; the *no persisted vectors* rule means
 an Origin plus a fresh embedder must be sufficient to re-derive the
 embedding.
 
@@ -74,7 +74,7 @@ Origin.from_dict(o.to_dict()) == o      # True
 
 ### `LabeledElement`
 
-`vtscore/datasets/labelset.py:27` - one `(md5, label, origin, …)` tuple,
+`vtscore/datasets/labelset.py:27`: one `(md5, label, origin, …)` tuple,
 the unit of a labelset. The optional `metadata` field is a free-form
 `dict[str, Any]` that round-trips through `to_dict()` / `from_dict()`,
 so importers (notably `holder`) can attach external system identifiers
@@ -97,7 +97,7 @@ serialised form compact for legacy consumers that only look at
 
 ### `LabelSet`
 
-`vtscore/datasets/labelset.py:107` - ordered list of `LabeledElement`
+`vtscore/datasets/labelset.py:107`: ordered list of `LabeledElement`
 plus an optional `detector_meta` block (`media_type`, `input_spec`,
 `threshold`). The serialised form
 `{"labels": [...], "detector_meta": {...}}` is a strict superset of
@@ -121,7 +121,7 @@ ls4 = LabelSet.from_results(autodetect_results)
 merged = ls_a.merge(ls_b, conflict_policy="drop")
 ```
 
-`"drop"` is the only supported `conflict_policy` today - entries with
+`"drop"` is the only supported `conflict_policy` today; entries with
 disagreeing labels across inputs are silently removed. See
 `element_key` at `vtscore/datasets/labelset.py:363` for the dedup key.
 
@@ -142,7 +142,7 @@ over three sibling modules:
 | `export_dataset_to_file`        | `loader.py:142`           | Returns pickle **bytes** (caller writes to disk).    |
 
 All three primary loaders **mutate** the `medias` dict the caller passes
-in - they clear it first, then populate it with sequential int IDs
+in; they clear it first, then populate it with sequential int IDs
 starting at 1. They do **not** return the dict; treat the in-place
 mutation as the result.
 
@@ -164,10 +164,10 @@ load_dataset_from_folder(
 
 Extra hooks short-circuit work the caller has already done:
 
-- `content_vectors: dict[str, np.ndarray]` - reuse a pre-computed embedding per filename.
-- `content_md5s: dict[str, str]` - reuse a pre-computed MD5.
-- `custom_metadata_map: dict[str, dict[str, Any]]` - attach `custom_metadata`; nested `"md5"` and `"embedding"` keys take priority over both the above.
-- `skip_embedding=True` - load metadata only; files without a pre-computed vector get `embedding=None`.
+- `content_vectors: dict[str, np.ndarray]`: reuse a pre-computed embedding per filename.
+- `content_md5s: dict[str, str]`: reuse a pre-computed MD5.
+- `custom_metadata_map: dict[str, dict[str, Any]]`: attach `custom_metadata`; nested `"md5"` and `"embedding"` keys take priority over both the above.
+- `skip_embedding=True`: load metadata only; files without a pre-computed vector get `embedding=None`.
 
 `media_type` is looked up in the `vtscore.media` registry by
 `MediaType.folder_import_name`, so a new media type registered through
@@ -182,7 +182,7 @@ from vtscore.datasets import load_dataset_from_pickle, export_dataset_to_file
 medias: dict[int, dict] = {}
 load_dataset_from_pickle(Path("dataset.pkl"), medias, thin=False)
 
-# round-trip - exporter returns bytes; caller writes them:
+# round-trip: exporter returns bytes; caller writes them:
 Path("snapshot.pkl").write_bytes(export_dataset_to_file(medias))
 ```
 
@@ -232,7 +232,7 @@ filename: `load_esc50_metadata`, `load_urbansound8k_metadata`,
 `load_video_metadata_from_folders`,
 `load_image_metadata_from_folders`,
 `load_paragraph_metadata_from_folders`. Library consumers normally
-don't call these directly - they're plumbed into the demo loaders.
+don't call these directly; they're plumbed into the demo loaders.
 They're public because external scripts re-use them when staging
 their own copies of the same datasets.
 
@@ -262,36 +262,36 @@ entry-point group; built-ins win on name clashes. See
 
 | Name               | Display name           | Notes                                                                             |
 |--------------------|------------------------|-----------------------------------------------------------------------------------|
-| `server_folder`    | Server                 | `multi_media=True`. Server-side folder scan.                                      |
-| `server_files`     | Files                  | `multi_media=True`, hidden from picker. Server-side file list.                    |
-| `local`            | Local                  | `multi_media=True`. Browser-upload placeholder; re-enters `server_folder`.        |
-| `pickle`           | Upload Saved Dataset   | `multi_media=True`, hidden. `.pkl` round-trip path.                               |
-| `http_archive`     | Import from URL        | `multi_media=True`, hidden. Downloads + extracts an archive.                      |
-| `demo`             | Downloaded Media       | `multi_media=True`. Wraps `load_demo_dataset`.                                    |
-| `synthetic`        | Synthetic Media        | `multi_media=True`. Generates deterministic media via `vtscore.utils.synthetic`.  |
-| `combine_datasets` | Combined Datasets      | `multi_media=True`, hidden. Internal: merges two loaded datasets.                 |
-| `recaller`         | ReCaller Query         | `multi_media=True`, hidden. Scaffold for the ReCaller external API.               |
+| `server_folder`    | Server                 | Server-side folder scan.                                                          |
+| `server_files`     | Files                  | Hidden from picker. Server-side file list.                                        |
+| `local`            | Local                  | Browser-upload placeholder; re-enters `server_folder`.                            |
+| `pickle`           | Upload Saved Dataset   | Hidden. `.pkl` round-trip path.                                                   |
+| `http_archive`     | Import from URL        | Hidden. Downloads + extracts an archive.                                          |
+| `demo`             | Downloaded Media       | Wraps `load_demo_dataset`.                                                        |
+| `synthetic`        | Synthetic Media        | Generates deterministic media via `vtscore.utils.synthetic`.                      |
+| `combine_datasets` | Combined Datasets      | Hidden. Internal: merges two loaded datasets.                                     |
+| `recaller`         | ReCaller Query         | Hidden. Scaffold for the ReCaller external API.                                   |
 
-**Multi-media imports.** Importers with `multi_media = True` accept a
-`source_specs` form value: a list of
-`SourceSpec(source_type, converter, params)` rows that fan one import
-out across several source media types, each optionally run through a
-named `MediaConverter`. The framework owns conversion and ingestion -
-subclasses never call `get_converter()` themselves.
+**Multi-media imports.** Every importer accepts a `source_specs` form
+value: a list of `SourceSpec(source_type, converter, params)` rows
+that fan one import out across several source media types, each
+optionally run through a named `MediaConverter`. The framework owns
+conversion and ingestion; subclasses never call `get_converter()`
+themselves.
 
 **Importer override points** (pick one, simplest first):
 
-1. `list_records()` + `fetch_record()` - single-source-type service
+1. `list_records()` + `fetch_record()`: single-source-type service
    importer. Default `fetch_source_media()` delegates here.
-2. `fetch_source_media(spec, ...)` - multi-source-type service
+2. `fetch_source_media(spec, ...)`: multi-source-type service
    importer where the backend serves one type per query. Framework
    calls you once per spec; you yield raw source-type media dicts.
-3. `fetch_all_source_media(specs, ...)` - multi-source-type service
+3. `fetch_all_source_media(specs, ...)`: multi-source-type service
    importer where one upstream call returns mixed types. Framework
    calls you once with the full spec list; you yield
    `(spec, raw_media)` pairs. Default delegates to
    `fetch_source_media()` per spec.
-4. `run()` - folder-shaped importers that own the medias dict
+4. `run()`: folder-shaped importers that own the medias dict
    directly (typical body: stage files, call
    `load_dataset_from_folder()` + `run_converters_on_folder()`).
 
@@ -303,17 +303,11 @@ converter on the yielded raw media before storing the result.
 bulk variant `_fetch_records_bulk_impl` lets you replace the per-item
 loop with batched / concurrent I/O.
 
-For legacy (`multi_media = False`) importers,
-`effective_source_specs()` synthesises an equivalent spec list from
-the legacy `media_type` + comma-separated `converters` form fields,
-so a legacy `run()` can migrate to the new iteration style before
-touching its form schema.
-
 **Resolving back to a file.** Importers whose media is reachable on
 disk **must** override `resolve_file(origin, origin_name, filename) ->
 Path | None` (`vtscore/datasets/importers/base.py:781`). Cross-dataset
-features - applying a saved detector to a different dataset via Find,
-re-embedding a labelset after switching embedders - depend on it. The
+features (applying a saved detector to a different dataset via Find,
+re-embedding a labelset after switching embedders) depend on it. The
 default returns `None`, which is only correct when the media genuinely
 cannot be relocated (e.g. browser-uploaded pickles with no server path).
 
@@ -343,7 +337,7 @@ if src is not None:
 Auto-discovery uses the `SOURCE` sentinel; matching is by the
 factory's `name` against `origin["importer"]`. Sources are
 **stateful** (an HTTP archive may unpack a zip on first access), so
-each `get_source_for_origin` call returns a fresh instance - call
+each `get_source_for_origin` call returns a fresh instance; call
 `cleanup()` when done.
 
 ### Built-in media sources
@@ -412,7 +406,7 @@ simulate, test = split_dataset(medias, test_fraction=0.2, seed=42)
 
 ## Concurrency gates
 
-`vtscore/datasets/load_pipeline.py:17` defines `ConcurrencyGate` - a
+`vtscore/datasets/load_pipeline.py:17` defines `ConcurrencyGate`: a
 semaphore whose limit is re-read on every `acquire()`, so changes to
 the underlying setting affect queued and future tasks without
 preempting in-flight ones. Two module-level gates drive dataset
@@ -428,7 +422,7 @@ on the importer's first `"embedding"` progress event, and runs
 post-load steps (clipping, dedup, diversity tree, embedder warm-up)
 under the embed gate. One dataset can start downloading while another
 is still embedding. Library consumers normally don't touch these
-gates directly - they're driven by the load orchestrator and read
+gates directly; they're driven by the load orchestrator and read
 their limits from `CoreConfig`. Default limits are 1/1, preserving
 serialised behaviour out of the box.
 
@@ -446,6 +440,6 @@ DEMO_DATASETS["esc50"]
 A flat `dict[str, DemoDataset]` populated lazily from every registered
 `MediaType.demo_datasets` at import time
 (`vtscore/datasets/config.py:12`). Adding a media type plugin
-automatically adds its demos here - there is no central registration
+automatically adds its demos here; there is no central registration
 step. `load_demo_dataset(name, medias)` keys into this dict; the
 `demo` importer enumerates it for its picker.

@@ -63,7 +63,7 @@ from typing import Any, Iterator
 
 from vtscore.plugins import PluginBase, PluginField
 
-# Backward-compatible alias: existing plugins import ``ImporterField``.
+# Backward-compatible alias; existing plugins import ``ImporterField``.
 ImporterField = PluginField
 
 __all__ = ["DatasetImporter", "ImporterField", "SourceSpec"]
@@ -109,10 +109,9 @@ class SourceSpec:
 def _parse_multi_media_specs(raw: Any, output_type: str) -> list[SourceSpec]:
     """Parse and validate the explicit ``source_specs`` form value.
 
-    Used by importers with ``multi_media=True``.  Falls back to a single
-    pass-through spec when no value is submitted (or when the submitted
-    value parses to an empty list) so a flipped importer still loads
-    cleanly before the frontend ships the new UI, and an empty
+    Falls back to a single pass-through spec when no value is submitted
+    (or when the submitted value parses to an empty list) so an importer
+    whose form omits ``source_specs`` still loads cleanly, and an empty
     spec-grid does not silently produce a zero-media dataset.
     """
     from vtscore.converters import get_converter  # noqa: PLC0415
@@ -130,7 +129,7 @@ def _parse_multi_media_specs(raw: Any, output_type: str) -> list[SourceSpec]:
         specs_raw = list(raw)
 
     if not output_type:
-        raise ValueError("multi_media import requires a 'media_type' (output) field")
+        raise ValueError("import requires a 'media_type' (output) field")
 
     if not specs_raw:
         specs_raw = [{"source_type": output_type, "converter": None, "params": {}}]
@@ -181,29 +180,6 @@ def _validate_spec_converter(spec: SourceSpec, output_type: str, get_converter) 
         converter.validate_params(spec.params)
     except ValidationError as exc:
         raise ValueError(f"Invalid params for converter {spec.converter!r}: {exc.messages}") from exc
-
-
-def _parse_legacy_specs(raw_converters: Any, output_type: str) -> list[SourceSpec]:
-    """Synthesise specs from the legacy ``media_type`` + comma-separated ``converters`` fields."""
-    from vtscore.converters import get_converter  # noqa: PLC0415
-
-    legacy_specs: list[SourceSpec] = []
-    if output_type:
-        legacy_specs.append(SourceSpec(source_type=output_type, converter=None, params={}))
-    raw = raw_converters or ""
-    if isinstance(raw, list):
-        names = [str(n).strip() for n in raw if str(n).strip()]
-    else:
-        names = [n.strip() for n in str(raw).split(",") if n.strip()]
-    for name in names:
-        converter = get_converter(name)
-        if converter is None:
-            # Match the runner's behaviour: silently skip unknown converters.
-            continue
-        legacy_specs.append(SourceSpec(source_type=converter.source_type, converter=name, params={}))
-    if not legacy_specs:
-        raise ValueError("legacy import requires a 'media_type' or at least one known converter")
-    return legacy_specs
 
 
 PickerView = str  # one of: "form", "demo", "server_folder", "local"
@@ -362,34 +338,13 @@ class DatasetImporter(PluginBase):
     #: that doesn't override this attribute.
     category: str = "services"
 
-    #: When ``True``, this importer participates in the multi-media import
-    #: flow: the user supplies a list of :class:`SourceSpec` rows (output
-    #: media type + per-source converters with per-converter params), and
-    #: :meth:`run` is expected to iterate :meth:`effective_source_specs`
-    #: rather than fetching a single ``media_type`` and bolting converters
-    #: on the side.
-    #:
-    #: When ``False`` (the default), the importer behaves as before: it
-    #: fetches a single ``media_type`` and optionally hands its folder to
-    #: :func:`vtscore.converters.runner.run_converters_on_folder` for a
-    #: legacy comma-separated ``converters`` field.  Such importers may
-    #: still call :meth:`effective_source_specs` to opt into the new
-    #: iteration style without flipping this flag; the helper returns a
-    #: list that mirrors the legacy form fields.
-    #:
-    #: See :doc:`/docs/plans/multi-media-import` for the migration
-    #: checklist.
-    multi_media: bool = False
-
     #: Extra keys to copy from ``field_values`` into the origin ``params``
     #: dict, in addition to the importer's declared :attr:`fields`.  Use
     #: this for transient request-time values that aren't first-class
-    #: :class:`PluginField`\s (e.g. ``"source_specs"`` for multi-media
-    #: importers).  List/dict values are JSON-encoded; everything else is
-    #: stringified via ``str(...)``.  Empty values are skipped.  When
-    #: :attr:`multi_media` is ``True``, the framework automatically adds
-    #: ``"source_specs"`` to this tuple, so multi-media importers usually
-    #: leave this empty.
+    #: :class:`PluginField`\s.  List/dict values are JSON-encoded;
+    #: everything else is stringified via ``str(...)``.  Empty values are
+    #: skipped.  The framework automatically adds ``"source_specs"`` to
+    #: this tuple, so importers usually leave this empty.
     extra_origin_keys: tuple[str, ...] = ()
 
     #: When ``True``, :meth:`build_origin` returns
@@ -401,25 +356,24 @@ class DatasetImporter(PluginBase):
     origin_suppressed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
+        from vtscore.converters import list_converters_for_target  # noqa: PLC0415
+        from vtscore.media import all_types_dict  # noqa: PLC0415
+
         d = super().to_dict()
         d["picker_view"] = self.picker_view
         d["category"] = self.category
-        d["multi_media"] = self.multi_media
         d["fields"] = d["fields"] + [_dataset_name_field().to_dict()]
-        if self.multi_media:
-            from vtscore.converters import list_converters_for_target  # noqa: PLC0415
-            from vtscore.media import all_types_dict  # noqa: PLC0415
 
-            # For each media type the user can select, list N→M converters
-            # that produce that type, so the UI can show a datagrid of
-            # available converters dynamically.
-            converters_by_target: dict[str, list[dict]] = {}
-            for mt_info in all_types_dict():
-                type_id = mt_info["type_id"]
-                convs = list_converters_for_target(type_id)
-                if convs:
-                    converters_by_target[type_id] = [c.to_dict() for c in convs]
-            d["available_converters_by_media_type"] = converters_by_target
+        # For each media type the user can select, list N→M converters
+        # that produce that type; the UI can show a datagrid of
+        # available converters dynamically.
+        converters_by_target: dict[str, list[dict]] = {}
+        for mt_info in all_types_dict():
+            type_id = mt_info["type_id"]
+            convs = list_converters_for_target(type_id)
+            if convs:
+                converters_by_target[type_id] = [c.to_dict() for c in convs]
+        d["available_converters_by_media_type"] = converters_by_target
         return d
 
     def default_display_name(self, field_values: dict[str, Any]) -> str:
@@ -429,7 +383,7 @@ class DatasetImporter(PluginBase):
         *field_values* (e.g. the demo importer reads the demo entry's
         label).  The base implementation just returns :attr:`display_name`.
         The user-typed ``dataset_name`` (when present) takes priority over
-        whatever this method returns. See :meth:`resolve_display_name`.
+        whatever this method returns (see :meth:`resolve_display_name`).
         """
         return self.display_name
 
@@ -449,8 +403,8 @@ class DatasetImporter(PluginBase):
     def __init__(self) -> None:
         #: Mapping of filename to pre-computed embedding vector.  Importers
         #: that supply content vectors alongside media should populate this
-        #: dict during :meth:`run` (keyed by the basename of each file).
-        #: Preferably, call :meth:`yield_precomputed` once per file instead,
+        #: dict during :meth:`run` (keyed by the basename of each file);
+        #: or, preferably, call :meth:`yield_precomputed` once per file
         #: which writes to all three precomputed dicts atomically.
         #: :func:`~vtscore.datasets.loader.load_dataset_from_folder` will
         #: skip the embedding model for any file whose name appears here.
@@ -527,13 +481,13 @@ class DatasetImporter(PluginBase):
         matches ``docs/EXTENDING-plugins.md``.
 
         1. :meth:`list_records` + :meth:`fetch_record` (and optionally
-           :meth:`_fetch_records_bulk_impl` for batched fetches): a
+           :meth:`_fetch_records_bulk_impl` for batched fetches); a
            single-spec convenience for service importers that only pull one
            source type.  The default :meth:`fetch_source_media` delegates to
            these hooks, so single-spec importers can keep using the
            per-record split without thinking about specs.  This hook is also
            the fallback when :meth:`effective_source_specs` cannot resolve
-           (no ``media_type`` declared and no legacy ``converters`` field).
+           (no ``media_type`` declared).
         2. :meth:`fetch_source_media`: yield raw source-type media one record
            at a time, for one :class:`SourceSpec` at a time.  The framework
            loops over each spec produced by :meth:`effective_source_specs`,
@@ -547,7 +501,7 @@ class DatasetImporter(PluginBase):
            (e.g. a service whose query returns "everything that matched" with
            a per-record type tag).  The framework still runs converters and
            ingests; subclasses never call
-           :func:`~vtscore.converters.get_converter` themselves. The default
+           :func:`~vtscore.converters.get_converter` themselves.  The default
            implementation delegates to :meth:`fetch_source_media` per spec,
            so importers using hook 1 or 2 don't need to know this hook exists.
         4. :meth:`run` directly: full control.  Folder-shaped importers
@@ -562,20 +516,19 @@ class DatasetImporter(PluginBase):
           ``(spec, raw)`` pair through ``spec.converter`` (when set) before
           assigning IDs and storing the result in *medias*.
         - When :meth:`effective_source_specs` cannot resolve (no
-          ``media_type`` declared and no legacy ``converters`` field, i.e.
-          a bare service importer), fall back to the
-          :meth:`list_records` + :meth:`fetch_records_bulk` path (hook 1)
-          with no conversion.
+          ``media_type`` declared (i.e. a bare service importer), fall
+          back to the :meth:`list_records` + :meth:`fetch_records_bulk`
+          path (hook 1) with no conversion.
 
         .. note::
 
            Hooks 2 and 3 only run when :meth:`effective_source_specs`
            resolves to at least one spec.  An importer that overrides
-           :meth:`fetch_source_media` or :meth:`fetch_all_source_media` but
-           does **not** declare a ``media_type`` field (or set
-           :attr:`multi_media` ``= True`` and accept a ``source_specs``
-           value) will fall through to the hook-1 path and raise
-           :class:`NotImplementedError` from :meth:`list_records`.
+           :meth:`fetch_source_media` or :meth:`fetch_all_source_media`
+           but does **not** declare a ``media_type`` field (or accept a
+           ``source_specs`` value) will fall through to the hook-1 path
+           and raise :class:`NotImplementedError` from
+           :meth:`list_records`.
 
         IDs are assigned as sequential integers starting at 1.  The default
         per-media origin is filled in from :meth:`build_origin` when the
@@ -592,8 +545,8 @@ class DatasetImporter(PluginBase):
             medias: The global medias dict to populate.  Modify it in-place;
                 do not replace the reference.
             thin: When ``True``, store a ``media_path`` file reference
-                instead of loading media bytes into ``media_bytes``.
-                This saves memory for CLI workflows that only need embeddings.
+                instead of loading media bytes into ``media_bytes``.  This
+                saves memory for CLI workflows that only need embeddings.
 
         Raises:
             NotImplementedError: If none of :meth:`run`,
@@ -701,11 +654,11 @@ class DatasetImporter(PluginBase):
         returns mixed source types in a single upstream call (e.g. one
         query that yields both images and videos, with a per-record type
         tag).  Override this to issue that one call, then yield each
-        record paired with the :class:`SourceSpec` it satisfies. The
+        record paired with the :class:`SourceSpec` it satisfies; the
         framework handles converter dispatch and ingestion exactly as it
         does for :meth:`fetch_source_media`.
 
-        For per-spec importers (the common case, one query per source
+        For per-spec importers (the common case: one query per source
         type), override :meth:`fetch_source_media` instead; the default
         implementation of this method loops it for you.
 
@@ -721,7 +674,7 @@ class DatasetImporter(PluginBase):
             specs: The full list of :class:`SourceSpec` rows resolved
                 from *field_values*, in the user's submitted order.
             field_values: The same mapping passed to :meth:`run`.
-            thin: When ``True``, skip downloading raw bytes and yield media
+            thin: When ``True``, skip downloading raw bytes; yield media
                 dicts with ``media_url`` / ``media_path`` instead of
                 ``media_bytes``.
 
@@ -768,7 +721,7 @@ class DatasetImporter(PluginBase):
             spec: The :class:`SourceSpec` row being fetched.  ``source_type``
                 is the canonical type id (e.g. ``"image"``, ``"video"``).
             field_values: The same mapping passed to :meth:`run`.
-            thin: When ``True``, skip downloading raw bytes and yield media
+            thin: When ``True``, skip downloading raw bytes; yield media
                 dicts with ``media_url`` / ``media_path`` instead of
                 ``media_bytes``.
 
@@ -796,7 +749,7 @@ class DatasetImporter(PluginBase):
     def list_records(self, field_values: dict[str, Any]) -> list[Any]:
         """Return the opaque list of records to import.
 
-        Each "record" is whatever shape the importer wants, typically a
+        Each "record" is whatever shape the importer wants (typically a
         dict with the identifiers and URLs needed by :meth:`fetch_record`.
         The framework only cares about the count (for progress) and order
         (preserved into *medias*).
@@ -810,9 +763,9 @@ class DatasetImporter(PluginBase):
             "(override this and fetch_record(), or override run() directly). "
             "If you intended to use fetch_source_media() or "
             "fetch_all_source_media() (hooks 2/3), make sure your importer "
-            "declares a 'media_type' field (or sets multi_media=True and "
-            "accepts a 'source_specs' value) so effective_source_specs() "
-            "resolves; otherwise run() falls back to this per-record path."
+            "declares a 'media_type' field (or accepts a 'source_specs' "
+            "value) so effective_source_specs() resolves; otherwise "
+            "run() falls back to this per-record path."
         )
 
     def fetch_record(
@@ -897,7 +850,7 @@ class DatasetImporter(PluginBase):
         ``dynamic_options=True``.  The frontend calls this via
         ``POST /api/dataset/import/<name>/options`` whenever a field listed
         in another field's ``depends_on`` changes (e.g. a ``query_id``
-        select might re-populate after the user picks a ``media_type``).
+        select might re-populate after the user picks a ``media_type``.
 
         Args:
             field_key: The :attr:`PluginField.key` of the field whose
@@ -945,7 +898,7 @@ class DatasetImporter(PluginBase):
 
         The default implementation calls :meth:`run` once and yields the
         result as a single chunk.  This means callers can always use the
-        chunked code path. Importers that have not overridden this method
+        chunked code path; importers that have not overridden this method
         simply produce one chunk equal to the full dataset.
 
         Importers that handle large data sources should override this
@@ -1049,33 +1002,24 @@ class DatasetImporter(PluginBase):
     def effective_source_specs(self, field_values: dict[str, Any]) -> list[SourceSpec]:
         """Resolve *field_values* into a flat list of :class:`SourceSpec`.
 
-        For importers with :attr:`multi_media` ``= True``, the user submits
-        the list explicitly via the ``source_specs`` form key.  This helper
-        parses that value (either a Python list or a JSON-encoded string),
-        validates each entry against the registered media types and
-        converter registry, and returns the typed list.
-
-        For importers with :attr:`multi_media` ``= False`` (the legacy
-        path), this helper synthesises an equivalent list from the
-        importer's classic ``media_type`` and (optional) comma-separated
-        ``converters`` form fields, so even legacy importers can rewrite
-        their :meth:`run` to iterate specs without first changing their
-        form schema.
+        The user submits the spec list explicitly via the ``source_specs``
+        form key.  This helper parses that value (either a Python list or
+        a JSON-encoded string), validates each entry against the
+        registered media types and converter registry, and returns the
+        typed list.
 
         Args:
             field_values: The same dict passed to :meth:`run`.
 
         Returns:
             A list of :class:`SourceSpec`.  Order matches the user's
-            submitted order (or, for legacy importers, ``[media_type]``
-            followed by the converter list in submission order).
+            submitted order.
 
         Raises:
             ValueError: If a referenced media type or converter is
                 unknown, if a converter's ``target_type`` does not match
-                the importer's chosen output media type, or if a
-                ``multi_media=True`` import is missing a ``media_type``
-                output declaration.
+                the importer's chosen output media type, or if the import
+                is missing a ``media_type`` output declaration.
         """
         from vtscore.media import get_by_folder_name  # noqa: PLC0415
 
@@ -1085,9 +1029,7 @@ class DatasetImporter(PluginBase):
         except (KeyError, AttributeError):
             output_type = str(output_type_raw)
 
-        if self.multi_media:
-            return _parse_multi_media_specs(field_values.get("source_specs"), output_type)
-        return _parse_legacy_specs(field_values.get("converters", ""), output_type)
+        return _parse_multi_media_specs(field_values.get("source_specs"), output_type)
 
     def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
         """Build an origin dict for elements imported by this importer.
@@ -1108,8 +1050,7 @@ class DatasetImporter(PluginBase):
         - :attr:`PluginField.origin_serializer`: per-field custom
           string conversion (e.g. comma-joining a list).
         - :attr:`extra_origin_keys`: non-``PluginField`` keys to copy
-          from ``field_values``.  ``multi_media`` importers
-          automatically include ``"source_specs"``.
+          from ``field_values``.  ``"source_specs"`` is always included.
 
         Subclasses may still override this method, in which case the
         override wins; every declarative knob above is ignored.  Prefer
@@ -1149,9 +1090,8 @@ class DatasetImporter(PluginBase):
         return {"importer": self.name, "params": params}
 
     def _effective_extra_origin_keys(self) -> tuple[str, ...]:
-        """Return :attr:`extra_origin_keys`, auto-adding ``"source_specs"``
-        for multi-media importers."""
-        if self.multi_media and "source_specs" not in self.extra_origin_keys:
+        """Return :attr:`extra_origin_keys`, auto-adding ``"source_specs"``."""
+        if "source_specs" not in self.extra_origin_keys:
             return self.extra_origin_keys + ("source_specs",)
         return self.extra_origin_keys
 
@@ -1218,7 +1158,7 @@ class DatasetImporter(PluginBase):
            saved Detector to a different dataset via "Find") rely on
            resolving label entries back to files for re-embedding.  If this
            method is not overridden, those features silently produce empty
-           results ("N/A" verdicts) with no error, making the root cause
+           results ("N/A" verdicts) with no error; making the root cause
            very hard to diagnose.
 
         The default implementation returns ``None``, which is only

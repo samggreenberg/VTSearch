@@ -14,15 +14,19 @@ import logging
 import re
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Thread-local fallback used when no Flask request context is available.
-# Background threads spawned by request handlers should call
-# :func:`set_thread_user` to propagate the user that triggered them; tests
-# can use the same hook to pin a user without a request context.
+# Background threads spawned by request handlers should use the
+# :func:`thread_user` context manager to propagate the user that triggered
+# them (it snapshots and restores the prior value automatically); tests
+# can use the bare :func:`set_thread_user` setter to pin or clear a user
+# without a request context.
 _thread_local = threading.local()
 
 
@@ -89,7 +93,7 @@ class LoginProvider(ABC):
 
 
 # ---------------------------------------------------------------------------
-# DefaultLoginProvider: single-user, no authentication
+# DefaultLoginProvider - single-user, no authentication
 # ---------------------------------------------------------------------------
 
 
@@ -113,12 +117,12 @@ class DefaultLoginProvider(LoginProvider):
         return False
 
     def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:  # noqa: ARG002
-        # Single-user mode: no subdirectory, use data/ directly.
+        # Single-user: no subdirectory, use data/ directly.
         return base_data_dir
 
 
 # ---------------------------------------------------------------------------
-# TrivialLoginProvider: cookie-based, no password
+# TrivialLoginProvider - cookie-based, no password
 # ---------------------------------------------------------------------------
 
 
@@ -159,7 +163,7 @@ class TrivialLoginProvider(LoginProvider):
 
 
 # ---------------------------------------------------------------------------
-# ApiKeyLoginProvider: bearer-token, for headless integrations
+# ApiKeyLoginProvider - bearer-token, for headless integrations
 # ---------------------------------------------------------------------------
 
 
@@ -189,8 +193,8 @@ class ApiKeyLoginProvider(LoginProvider):
 
     Requests without a valid bearer token resolve to the username
     ``"anonymous"`` and ``is_authenticated`` returns ``False``.  This
-    provider does not show a login UI (``login_required`` is ``False``).
-    It is meant for headless callers that send the header directly.
+    provider does not show a login UI (``login_required`` is ``False``);
+    it is meant for headless callers that send the header directly.
     """
 
     name = "api_key"
@@ -328,8 +332,9 @@ def get_current_user() -> str:
     Resolution order:
 
     1. ``g.user`` (set by the ``before_request`` middleware in ``app.py``).
-    2. Thread-local fallback (set by :func:`set_thread_user`; background
-       threads spawned from a request handler use this).
+    2. Thread-local fallback (scoped by the :func:`thread_user` context
+       manager; background threads spawned from a request handler use
+       this).
     3. ``"default"`` (CLI, tests, threads with no explicit user).
     """
     try:
@@ -348,9 +353,11 @@ def get_current_user() -> str:
 def set_thread_user(username: str | None) -> None:
     """Set the thread-local user for the current thread.
 
-    Background threads that need :func:`get_current_user` to resolve to a
-    specific user (rather than ``"default"``) should snapshot the request
-    user before ``Thread.start()`` and call this from the thread's target.
+    Prefer :func:`thread_user` (a context manager) for new code, as it saves
+    and restores the prior value automatically, removing the need for a
+    manual ``try/finally`` discipline that is easy to get wrong (and would
+    leak across requests if these threads were ever pooled).
+
     Pass ``None`` to clear.
     """
     _thread_local.user = username
@@ -359,6 +366,33 @@ def set_thread_user(username: str | None) -> None:
 def get_thread_user() -> str | None:
     """Return the thread-local user, or ``None`` if unset."""
     return getattr(_thread_local, "user", None)
+
+
+@contextmanager
+def thread_user(username: str | None) -> Iterator[None]:
+    """Scope the thread-local user to *username* for the ``with``-block.
+
+    On entry, snapshots the prior thread-local user (if any) and sets it
+    to *username*.  On exit, restores the snapshot, so nested scopes
+    compose correctly and a pooled / reused thread cannot leak identity
+    across jobs even if the inner body raises.
+
+    Use this from background threads (or anywhere outside a Flask request
+    context) that need :func:`get_current_user` to resolve to a specific
+    user::
+
+        request_user = get_current_user()
+
+        def task():
+            with thread_user(request_user):
+                ...  # per-user settings writes resolve correctly here
+    """
+    prev = getattr(_thread_local, "user", None)
+    _thread_local.user = username
+    try:
+        yield
+    finally:
+        _thread_local.user = prev
 
 
 def get_user_data_dir(username: str | None = None) -> Path:

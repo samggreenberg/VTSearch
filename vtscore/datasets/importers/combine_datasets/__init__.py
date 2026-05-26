@@ -125,10 +125,6 @@ class CombineDatasetsImporter(DatasetImporter):
     icon = "\U0001f500"  # twisted rightwards arrows
     ui_mode = "custom"
     hidden_from_picker = True
-    # The combined output type is determined by the source pickles, not
-    # by a user-chosen ``media_type``.  Flag set to keep the in-tree
-    # importer set uniformly off the legacy shim.
-    multi_media = True
     fields = [
         ImporterField(
             key="datasets",

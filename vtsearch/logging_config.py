@@ -6,8 +6,8 @@ request handler the values come from ``flask.g`` (populated by the
 ``before_request`` middleware in :mod:`app`); inside a background thread
 they come from the thread-locals already maintained by
 :mod:`vtsearch.auth` and :mod:`vtscore.state.core`
-(``set_thread_user``, ``set_thread_dataset_context``,
-``set_thread_detector_context``).
+(``thread_user`` / ``thread_dataset_context`` / ``thread_detector_context``
+context managers, or the bare ``set_thread_*`` setters they wrap).
 
 Two output formats are supported, selected by the
 ``VTSEARCH_LOG_FORMAT`` env var:
@@ -112,8 +112,9 @@ def _resolve_context() -> dict[str, Any]:  # noqa: C901
         except Exception:
             pass
 
-    # Thread-local fallbacks (background jobs propagate these via
-    # set_thread_user / set_thread_dataset_context / set_thread_detector_context).
+    # Thread-local fallbacks (background jobs propagate these via the
+    # thread_user / thread_dataset_context / thread_detector_context
+    # context managers in vtsearch.auth and vtscore.state.core).
     if "user" not in out:
         try:
             from vtsearch.auth import get_thread_user

@@ -3,9 +3,9 @@
 > **Status:** Canonical public-API inventory. Originally produced as a
 > docstring-only contract sketch when the library was carved out of
 > VTSearch. Every path below lives at its final `vtscore.*` home. The
-> contract this document captures - the set of symbols an external
+> contract this document captures; the set of symbols an external
 > `vtscore` consumer is expected to import, and the one-line semantics
-> each one guarantees - is what the refactor preserved.
+> each one guarantees; is what the refactor preserved.
 >
 > For developer-facing documentation (quickstart, architecture, per-package
 > guides, plugin authoring), see [`../vtscore/docs/`](../vtscore/docs/).
@@ -16,7 +16,7 @@ The inventory was assembled by walking the library tree under `vtscore/` and
 identifying public symbols (no leading underscore) in each library subpackage,
 cross-referenced against each package's `__init__.py` re-exports. Every package below
 lives at its final library path. `vtsearch.state` is an app-tier shim that re-exports
-`vtscore.state` plus the proxy view (`medias`, `good_votes`, …) - library callers
+`vtscore.state` plus the proxy view (`medias`, `good_votes`, …); library callers
 should use `vtscore.state`, app callers may continue using either.
 
 | Library import path         | Notes                                                       |
@@ -41,7 +41,7 @@ should use `vtscore.state`, app callers may continue using either.
 
 Symbols flagged **[SEAM]** import `flask` or `vtsearch.settings` today and must be
 detangled before they can ship in `vtscore`. They are listed here because they belong
-in the library by intent - what changes is the implementation, not the public name.
+in the library by intent; what changes is the implementation, not the public name.
 
 ---
 
@@ -137,15 +137,17 @@ class DatasetImporter(PluginBase):
     """Abstract base for a dataset importer. Subclasses declare `fields` (a list of
     PluginField) and override one of four hooks to populate medias:
 
-    - `list_records()` + `fetch_record()` - single-source-type service importer.
-    - `fetch_source_media(spec, ...)` - multi-source-type service importer with
+    - `list_records()` + `fetch_record()`: single-source-type service importer.
+    - `fetch_source_media(spec, ...)`: multi-source-type service importer with
       one query per spec.
-    - `fetch_all_source_media(specs, ...)` - multi-source-type service importer
+    - `fetch_all_source_media(specs, ...)`: multi-source-type service importer
       with one upstream call covering every spec; yields (spec, raw_media) pairs.
-    - `run()` - folder-shaped or full-control importer.
+    - `run()`: folder-shaped or full-control importer.
 
-    Multi-media importers set `multi_media = True`. The framework owns conversion
-    and ingestion for hooks 1–3 - subclasses never call `get_converter()`."""
+    Every importer accepts a `source_specs` form value (a list of
+    `SourceSpec(source_type, converter, params)`).  The framework owns
+    conversion and ingestion for hooks 1–3; subclasses never call
+    `get_converter()`."""
 
 ImporterField = PluginField
 """Alias kept for clarity at import sites; identical to vtscore.plugins.PluginField."""
@@ -168,7 +170,7 @@ def load_dataset_from_folder(
     progress: ProgressCallback | None = None,
     **opts,
 ) -> tuple[list[Media], list[Embedding]]:
-    """Walk `folder` and build a media dict per file.  Loaders do NOT embed -
+    """Walk `folder` and build a media dict per file.  Loaders do NOT embed;
     items leave with `embedding=None` unless a pre-computed vector is supplied
     via `content_vectors` / `custom_metadata_map`.  The framework
     `embed_missing` stage (or the caller) fills the rest in afterwards.
@@ -176,7 +178,7 @@ def load_dataset_from_folder(
 
 def load_dataset_from_pickle(path: Path | str) -> tuple[list[Media], list[Embedding]]:
     """Restore a (media, embedding) snapshot previously written by export_dataset_to_file.
-    Uses vtscore.security.safe_pickle_load - no arbitrary code execution risk."""
+    Uses vtscore.security.safe_pickle_load; no arbitrary code execution risk."""
 
 def load_demo_dataset(dataset_id: str, *, progress=None) -> tuple[list[Media], list[Embedding]]:
     """Download (if needed) and load one of the built-in demo datasets keyed by
@@ -357,9 +359,9 @@ def all_clippers_dict() -> list[dict]: ...
 
 Each `vtscore.media.{audio,image,text,video,document}` subpackage exports:
 
-- `MEDIA_TYPE: MediaType` - sentinel; auto-registered at import time.
-- `CLIPPERS: list[MediaClipper]` - sentinel; auto-registered at import time.
-- `EMBEDDER` sentinels in `embedder_*.py` modules - auto-registered.
+- `MEDIA_TYPE: MediaType`: sentinel; auto-registered at import time.
+- `CLIPPERS: list[MediaClipper]`: sentinel; auto-registered at import time.
+- `EMBEDDER` sentinels in `embedder_*.py` modules: auto-registered.
 
 ---
 
@@ -510,7 +512,7 @@ def train_model(
     """Train in-place; returns the same model. Early-stops on patience.
 
     Raises ``ValueError`` if ``y`` does not contain at least one positive
-    (``y==1``) and one negative (``y==0``) example - BCE has no
+    (``y==1``) and one negative (``y==0``) example; BCE has no
     discriminative signal on single-class data."""
 ```
 
@@ -574,7 +576,7 @@ def cosine_sort_with_boxes(
 
 Detector lifecycle and the resolve → embed → train pipeline. The current
 `vtscore/detectors/workflow.py` is **Flask-aware** today and needs Phase 1 surgery
-before it ships - but the public name and intent stay.
+before it ships; but the public name and intent stay.
 
 ### Registry
 
@@ -632,7 +634,7 @@ def train_detector_from_origins(
     with *embedder_name*, builds (X, y), and trains the MLP. Returns
     (weights_dict, threshold), or (None, 0.5) on insufficient data.
 
-    embedder_name is required - pass the embedder the detector was
+    embedder_name is required; pass the embedder the detector was
     originally trained with so re-derived vectors don't drift onto the
     media type's default."""
 ```
@@ -799,7 +801,7 @@ def run_voting_iterations_eval_from_pickles(pickles: list[Path]) -> list[dict]: 
 ```
 
 > `plot_eval_results` and `plot_voting_iterations` are **not** part of `vtscore`.
-> Plotting is presentation, not computation - those helpers move to `vtsearch/` and
+> Plotting is presentation, not computation; those helpers move to `vtsearch/` and
 > import matplotlib app-side. The library exports the data (`DatasetResult`,
 > `QueryMetrics`, `LearnedSortMetrics`, `format_results_json`); rendering it is
 > the app's job.
@@ -809,7 +811,7 @@ def run_voting_iterations_eval_from_pickles(pickles: list[Path]) -> list[dict]: 
 ## `vtscore.state`
 
 The library exports **context objects**. Module-level proxies (`medias`, `good_votes`,
-`label_history`, etc.) stay app-side per the plan - they read `flask.g` and are
+`label_history`, etc.) stay app-side per the plan; they read `flask.g` and are
 inherently a web-app affordance.
 
 ### Contexts (the library primitive)
@@ -841,6 +843,7 @@ def get_context(dataset_id: str) -> DatasetContext: ...
 def get_active_context() -> DatasetContext | None: ...
 def set_thread_dataset_context(ctx: DatasetContext | None) -> None: ...
 def get_thread_dataset_context() -> DatasetContext | None: ...
+def thread_dataset_context(ctx: DatasetContext | None) -> ContextManager[None]: ...
 def list_loaded_dataset_ids() -> list[str]: ...
 def clear_all_contexts() -> None: ...
 
@@ -850,6 +853,7 @@ def get_detector_context(detector_id: str) -> DetectorContext: ...
 def get_active_detector_context() -> DetectorContext | None: ...
 def set_thread_detector_context(ctx: DetectorContext | None) -> None: ...
 def get_thread_detector_context() -> DetectorContext | None: ...
+def thread_detector_context(ctx: DetectorContext | None) -> ContextManager[None]: ...
 def list_loaded_detector_ids() -> list[str]: ...
 def clear_all_detector_contexts() -> None: ...
 ```
@@ -918,12 +922,12 @@ The following names appear in `vtsearch.state` today but are app-side concerns a
 - `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`,
   `find_initial_labels`, `last_learned_scores`, `textsort_suggestions`, `inclusion`,
   `dataset_display_name`, `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
-  `enrich_descriptions` - these are `_ProxyDict` / `_ProxyList` objects that read
+  `enrich_descriptions`; these are `_ProxyDict` / `_ProxyList` objects that read
   `flask.g`. They stay in the app as a thin shim that delegates to library contexts.
 - `autorun_detectors`, `autorun_extractors`, `autorun_localizers` and their CRUD
   (`add_autorun_extractor`, `remove_autorun_extractor`, `rename_autorun_extractor`,
   `get_autorun_extractors`, `get_autorun_extractors_by_media`, and the matching
-  `_autorun_localizer` set) - *policy* about which processors to run automatically,
+  `_autorun_localizer` set); *policy* about which processors to run automatically,
   which is an app concern. The library keeps the `Processor` / `Detector` /
   `Localizer` / `Extractor` ABCs and the code that applies them; the app keeps
   the list of which ones to apply on load. Phase 3 wires the resolved list
@@ -931,7 +935,7 @@ The following names appear in `vtsearch.state` today but are app-side concerns a
 - `get_inclusion`, `set_inclusion`, `get_calibrate_count`, `set_calibrate_count`,
   `get_calibration_fraction`, `set_calibration_fraction`, `get_safe_thresholds`,
   `set_safe_thresholds`, `get_dataset_display_name`, `set_dataset_display_name`,
-  `add_autorun_extractor`/`add_autorun_localizer` etc. - each of these wraps a
+  `add_autorun_extractor`/`add_autorun_localizer` etc.; each of these wraps a
   `vtsearch.settings.get_*` / `set_*` accessor. The library never persists user prefs;
   it accepts the relevant value through a `CoreConfig` or a context field.
 
@@ -1210,7 +1214,7 @@ def autodetect_importer_main_chunked(
 def load_pipeline_file(path: str | Path) -> dict:
     """Parse a YAML pipeline file and return the validated config dict."""
 
-# vtscore.cli_progress - progress output formatting (text vs NDJSON)
+# vtscore.cli_progress: progress output formatting (text vs NDJSON)
 FORMATS: tuple[str, ...]              # ("text", "json")
 def set_format(fmt: str) -> None: ...
 def get_format() -> str: ...
@@ -1238,14 +1242,14 @@ A single-source list of everything the inventory flagged as importing `flask` or
 | `vtscore/detectors/media_seeding.py`       | `vtsearch.settings`           | Phase 2   |
 | `vtscore/embedding/loader.py`              | `vtsearch.settings` (defaults helpers) | Phase 2 |
 | `vtscore/detectors/labeling_progress.py`   | `vtsearch.settings`           | Phase 2   |
-| `vtscore/labels/sync.py`                   | implicit Flask via state proxies | Phase 1/3 - takes explicit ctx after detangling |
+| `vtscore/labels/sync.py`                   | implicit Flask via state proxies | Phase 1/3: takes explicit ctx after detangling |
 
 Two earlier seams the plan called out have already been resolved by the codebase split:
 
 - The plan refers to `vtsearch/models/training_workflow.py` (Flask-aware); that module
-  is today `vtscore/detectors/workflow.py` - same seam, new location.
+  is today `vtscore/detectors/workflow.py`; same seam, new location.
 - The plan refers to `vtsearch/models/loader.py`; that module is today
-  `vtscore/embedding/loader.py` - same settings imports.
+  `vtscore/embedding/loader.py`; same settings imports.
 
 The plan's "final shape" tree should be updated during Phase 1 to reflect the
 current packages: `detectors/`, `embedding/`, `training/`, `concurrency/`,
@@ -1253,22 +1257,22 @@ current packages: `detectors/`, `embedding/`, `training/`, `concurrency/`,
 
 ## Out of scope for `vtscore`
 
-Explicit non-goals - these are app concerns that stay in `vtsearch/`:
+Explicit non-goals; these are app concerns that stay in `vtsearch/`:
 
-- `vtsearch/app.py`, `vtsearch/routes/**` - every Flask blueprint.
-- `vtsearch/auth/` - `LoginProvider` ABC and the default single-user impl.
+- `vtsearch/app.py`, `vtsearch/routes/**`: every Flask blueprint.
+- `vtsearch/auth/`: `LoginProvider` ABC and the default single-user impl.
   (External library consumers don't have "users".)
 - `vtsearch/settings.py`, `vtsearch/settings_factory.py`,
-  `vtsearch/settings_models.py`, `vtsearch/settings_io/` - auto-saving JSON user prefs.
+  `vtsearch/settings_models.py`, `vtsearch/settings_io/`; auto-saving JSON user prefs.
   `SettingsSource` (the bidirectional-sync wrapper) stays app-side; the underlying
   `SyncSource[L,S]` ABC ships in `vtscore.sync`.
-- `vtsearch/logging_config.py` - Flask-aware structured-log setup.
-- `vtsearch/state/` proxy objects (`medias`, `good_votes`, etc.) - these read
+- `vtsearch/logging_config.py`: Flask-aware structured-log setup.
+- `vtsearch/state/` proxy objects (`medias`, `good_votes`, etc.): these read
   `flask.g`. The contexts they delegate to ship in `vtscore.state`.
-- `vtsearch/medias.py` (test-media generator) - already lives under
+- `vtsearch/medias.py` (test-media generator): already lives under
   `tests/fixtures/medias.py`; it's not part of the runtime app.
-- `vtsearch/achievements.py` - pure user-pref / gamification, no library consumer.
-- `vtsearch/schemas/` - flask-smorest marshmallow schemas for the HTTP API.
+- `vtsearch/achievements.py`: pure user-pref / gamification, no library consumer.
+- `vtsearch/schemas/`: flask-smorest marshmallow schemas for the HTTP API.
 
 ## Phase 1 decisions
 
@@ -1276,14 +1280,14 @@ The four open questions surfaced at Phase 0 review are settled. The principle
 that resolves them: **library = "the ability to do X"; app = "the policy that
 decides when X happens, what gets persisted, and where it shows up."**
 
-1. **`labelset_source` plugin family - ships in `vtscore.labels`.** Pulling labels
+1. **`labelset_source` plugin family; ships in `vtscore.labels`.** Pulling labels
    in from external systems is a core consumer affordance (you can't use the
    library without it), so the ABC, the registry (`get_labelset_source` /
    `list_labelset_sources`), and the discovery sentinel all live library-side.
    The shared `SyncSource[L,S]` base in `vtscore.sync` is unchanged. Contrast
    with `SettingsSource`, which is a user-pref concern and stays in `vtsearch/`.
 2. **Data visualization stays in the app.** Plotting eval results is presentation,
-   not computation - it belongs next to the routes that render charts, not in
+   not computation; it belongs next to the routes that render charts, not in
    the library that produces the numbers. `vtscore.eval` exports the dataclasses,
    metric functions, and runners (`run_eval`, `eval_text_sort`, `eval_learned_sort`,
    `simulate_voting_iterations`, `format_results_json`); the `plot_*` helpers move
@@ -1291,7 +1295,7 @@ decides when X happens, what gets persisted, and where it shows up."**
    `vtscore[viz]` extra.
 3. **`autorun_*` lists are app-side; processor execution is library-side.** The
    `Processor` / `Detector` / `Localizer` / `Extractor` ABCs and the code that
-   applies them to media stay in `vtscore` - the *ability* to run a processor is
+   applies them to media stay in `vtscore`; the *ability* to run a processor is
    a library concern. The registry of which processors to autorun
    (`autorun_detectors`, `autorun_extractors`, `autorun_localizers`) plus its
    CRUD (`add_autorun_extractor`, `remove_autorun_localizer`, etc.) is *policy*

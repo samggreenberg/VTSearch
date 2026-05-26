@@ -1,10 +1,13 @@
 # Multi-media importing
 
-Status: every in-tree importer now sets `multi_media=True`, and the
-framework now owns conversion; importers yield raw source-type media
-and the base-class `run()` runs each spec's converter itself.  Shim
-removal is the next step but is **blocked on external extensions** (see
-"Open follow-ups" at the bottom).
+Status: **Done.** The `multi_media` flag is gone (every importer is
+multi-media-aware by construction), the framework owns conversion
+end-to-end, and the legacy `converters` form-field path has been
+deleted.  See "Final cleanup" at the bottom for the deletion checklist.
+
+Any third-party `DatasetImporter` subclass still using the legacy
+`converters` form field or `multi_media=False` semantics will need to
+migrate; see the migration checklist below.
 
 ## The problem
 
@@ -185,7 +188,7 @@ legacy path. The body passes `params` into `converter.convert()`.
 
 `dataset-importer-modal` renders:
 
-- Old shape (most importers): unchanged; `media_type` select +
+- Old shape (most importers): unchanged. `media_type` select +
   `recursive` checkbox + whatever importer-specific fields exist.
 - New shape (importers with `multi_media=True`): replaces the bare
   `media_type` field with an "Output media type" select plus an
@@ -193,7 +196,7 @@ legacy path. The body passes `params` into `converter.convert()`.
   - Picks the **source type** (filtered to types that the chosen output
     type can be derived from (i.e. the output type itself + every source
     type for which a converter to that target exists).
-  - When the source type does not equal the output type, surfaces a converter dropdown
+  - When the source type ≠ output type, surfaces a converter dropdown
     (filtered to `target_type == output_type` and `source_type == source`)
     and the converter's parameter inputs inline.
 
@@ -330,7 +333,7 @@ in-tree set is uniformly off the legacy shim:
 - `synthetic`, `recaller`: have a `media_type` field but only ever pull
   one source type per import, so `run()` keeps reading
   `field_values["media_type"]` directly.  Label updated to "Output
-  Media Type". No spec iteration added; there are no converter rows
+  Media Type".  No spec iteration added; there are no converter rows
   for these flows.
 - `pickle`, `combine_datasets`, `demo`: no `media_type` field, no
   `converters` field, no spec iteration in `run()`.  The flag flip is
@@ -344,40 +347,62 @@ exercised via a `_LegacyTestImporter` stand-in (a tiny in-test
 `DatasetImporter` subclass with `multi_media=False`) so the shim stays
 covered for external importers until removal.
 
-## Open follow-ups
+## Final cleanup
 
-- **Update all EXTENSIONS.** Outside-developed importers are the only
-  remaining users of the legacy path now that every in-tree importer
-  has flipped.  Any third-party `DatasetImporter` subclass still works
-  via the `multi_media=False` shim but cannot expose the Include-rows
-  UI, cannot accept user-tunable converter params, and pins us to the
-  legacy `converters` field and `media_type`-as-scan-filter semantics.
-  Shim removal is gated on those extension maintainers flipping their
-  importers; we cannot just delete the legacy path on our own schedule
-  without breaking them.  Concrete asks per extension:
-  1. Set `multi_media = True`.
-  2. Replace the `converters` field handling in `run()` with a loop
-     over `self.effective_source_specs(field_values)`.
-  3. If the importer is service-style (fetches from an API, not a
-     folder), add a `list_records_for_source(source_type, ...)` (or
-     equivalent) so each spec drives its own upstream fetch.
-  4. Update `build_origin()` to record `source_specs` instead of the
-     legacy `media_type` / `converters` pair.
+The shim deletion landed.  Removed in one pass:
 
-  Track known extensions and their migration status here as they are
-  surveyed.
-- **Delete the shim.** Once every known external importer has flipped,
-  delete:
-  - the `multi_media` flag on `DatasetImporter` (always implicit
-    `True`);
-  - the legacy branch of `effective_source_specs()` that synthesises a
-    spec list from `media_type` + CSV `converters`;
-  - the legacy `converters` form-field handling and the
-    `converters` extra-key pass-through in routes (`load.py`,
-    `staging.py`);
-  - `_LegacyTestImporter` in
-    `tests/converters/test_converter_selection.py`.
+- `multi_media` class attribute on `DatasetImporter` (always implicit
+  `True` now).  Frontend `ImporterInfo.multi_media`, the gate in
+  `dataset-importer-modal.component.html`, and the `multi_media` check
+  in the submit handler are gone; the Include-rows editor renders
+  for every form-style importer.
+- `_parse_legacy_specs()` and the legacy branch of
+  `effective_source_specs()`.  The helper always parses
+  `source_specs` now; missing/empty falls back to a single direct
+  row.
+- `converters` form-field passthrough in `vtsearch/routes/datasets/load.py`
+  and the `extra_keys` tuples in `vtsearch/routes/datasets/staging.py`.
+- `converter_names: list[str] | None` parameter of
+  `run_converters_on_folder()`; converter rows always travel as typed
+  `SourceSpec`s now.
+- `_LegacyTestImporter` and `TestLegacyEffectiveSourceSpecs` /
+  `TestImportAPIConverters` / `TestImporterMultiMediaFlagInToDict` /
+  `TestMultiMediaImportersFlag` test classes; `multi_media` parameter
+  on `tests_lib/datasets/test_build_origin.py::_make_importer`.
+- `multi_media` entry in `.vulture-whitelist.py`.
+- Doc updates in `CLAUDE.md`, `docs/EXTENDING-plugins.md`,
+  `vtscore/docs/extending/dataset-importers.md`,
+  `vtscore/docs/packages/datasets.md`, and `docs/vtscore-api.md`.
 
-  Optionally rename `media_type` → `output_type` (per the original
-  plan); note this is a user-visible field rename, not just an
-  internal cleanup.
+We intentionally did **not** rename `media_type` → `output_type`.
+The rename touches importer fields, CLI flags, frontend form labels,
+every existing dataset's persisted origin params (which would silently
+break `reload_from_origin()` without a migration), and the entire
+doc surface (for a name that already reads correctly when there is
+exactly one media-type field per importer.  The class attribute
+keeps the original name; only the user-visible label inside the
+multi-media editor was already "Output Media Type" (no change).
+
+### What this breaks for external importers
+
+Any third-party `DatasetImporter` subclass that still relied on the
+`multi_media=False` semantics (i.e. that declared a `converters`
+form field and expected `run_converters_on_folder()` to be called for
+it) needs to migrate:
+
+1. Drop the `multi_media = True/False` line if present (it is no
+   longer read).
+2. Replace the `converters` form field with the multi-media editor
+   (the framework injects `source_specs` automatically).  Rewrite
+   `run()` to either:
+   - For folder-shaped importers, call
+     `run_converters_on_folder(folder_path, target_media_type=...,
+     converter_specs=runnable_specs, ...)`.
+   - For service-style importers, override `fetch_source_media(spec,
+     field_values, thin=False)` (per-spec fetch) or
+     `fetch_all_source_media(specs, field_values, thin=False)`
+     (single bulk fetch returning typed pairs), and the base-class
+     `run()` will run converters and ingest for you.
+3. Update `build_origin()` to record `source_specs` (the framework
+   auto-adds it via `_effective_extra_origin_keys()` for declarative
+   `build_origin` impls).

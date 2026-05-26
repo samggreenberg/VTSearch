@@ -25,6 +25,7 @@ from vtscore.state.core import (  # noqa: F401
     list_loaded_dataset_ids,
     register_context,
     set_thread_dataset_context,
+    thread_dataset_context,
     unregister_context,
 )
 
@@ -38,6 +39,7 @@ from vtscore.state.core import (  # noqa: F401
     list_loaded_detector_ids,
     register_detector_context,
     set_thread_detector_context,
+    thread_detector_context,
     unregister_detector_context,
 )
 

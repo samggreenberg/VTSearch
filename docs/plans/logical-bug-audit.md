@@ -1,12 +1,13 @@
 # Logical-Bug Audit: 2026-05
 
-**Status:** In progress; most findings still open. Resolved items
-are marked inline as struck-through headings.
+**Status:** Mostly resolved; C1–C12 (critical) and H1–H34 (high) are
+shipped; ~15 medium/low items remain open (M21–M34, L1–L9). Resolved
+findings are marked as struck-through headings.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on
-**logical** bugs (missed expectations between modules, race conditions,
-silent miscompute, data corruption, and broken invariants). Syntax,
+**logical** bugs; missed expectations between modules, race conditions,
+silent miscompute, data corruption, and broken invariants. Syntax,
 typing, and lint issues were explicitly out of scope (those are covered
 by `ruff` / `pyright` / `tsc`).
 
@@ -19,7 +20,7 @@ by `ruff` / `pyright` / `tsc`).
 - Each open finding has a stable ID (`C#` Critical, `H#` High,
   `M#` Medium, `L#` Low) so it can be referenced from other docs / PRs.
 - Shipped findings are reduced to a struck-through heading. The full
-  fix summary is the PR that landed it; see git log, not this doc.
+  fix summary is the PR that landed it; git log, not this doc.
 - The "Recurring patterns" section at the bottom is the actionable
   starting point; most findings collapse into a small number of root
   causes; fixing the pattern usually fixes many findings at once.
@@ -331,7 +332,7 @@ Cross-section interaction agents:
 ### CLI / app entry
 
 - ~~**H21. Successful `--autodetect` falls through to Flask startup**~~
-  Not a bug. The audit misread `elif args.local or not args.autodetect:`
+ ; Not a bug. The audit misread `elif args.local or not args.autodetect:`
   as an independent `if`; it is an `elif` paired with `if args.autodetect:`
   above it, so the two branches are mutually exclusive and Flask never
   starts after a successful autodetect. Simplified the redundant `elif`
@@ -359,7 +360,7 @@ Cross-section interaction agents:
 
 - ~~**H23. Settings-source filepath template not path-validated**~~:
   duplicate of C9 (already struck through above); shipped in commit
-  `988dca3b` ("logical-bug-audit C9: validate resolved sync-source
+  `988dca3b` ("logical-bug-audit C9; validate resolved sync-source
   paths"). Both sync sources now call
   `validate_server_filepath(resolved, base_dir=get_file_access_base_dir())`
   at the end of `_resolve_filepath()`
@@ -379,7 +380,7 @@ Cross-section interaction agents:
   `ActiveContextService` now exposes two layers:
   **intent** (what the user just picked, flips immediately for UI
   affordances like the pulldown highlight) and **active** (the loaded
-  pair, which is what `activeContextInterceptor` reads when attaching
+  pair; what `activeContextInterceptor` reads when attaching
   `X-Dataset-Id` / `X-Detector-Id`).  `ContextSwitchService.flipAndLoad`
   calls `setIntent()` on entry
   (`frontend/src/app/services/context-switch.service.ts:147`) and
@@ -412,7 +413,7 @@ Cross-section interaction agents:
   no-entry-on-error path, (b) `previousPolarity` capture before the
   flip, and (c) redo-stack preservation on a failed POST.
 - ~~**H27. Binary media endpoints bypass the `activeContextInterceptor`**~~
-  Not a bug. Functional `HttpInterceptorFn`s registered via
+ ; Not a bug. Functional `HttpInterceptorFn`s registered via
   `provideHttpClient(withInterceptors([...]))` apply to **every**
   `HttpClient` call; typed-client wrappers and raw `this.http.get(...)`
   share the same client and the same interceptor chain. The real
@@ -422,13 +423,13 @@ Cross-section interaction agents:
   appending `?dataset_id=…&detector_id=…` query params, with the
   backend reading them as a fallback (`app.py` L238, L252). Also
   removed the four dead `getAudio/getVideo/getImage/getMedia` methods
-  on `MediasApiService`; they had no callers, every binary-stream
+  on `MediasApiService`; they had no callers; every binary-stream
   consumer goes through `mediaUrl()`.
 
 ### Multi-process / settings
 
 - ~~**H28. Per-user cache is process-local; concurrent worker writes lose
-  updates**~~: fixed in `vtsearch/settings.py`. Every per-user (and
+  updates**~~; fixed in `vtsearch/settings.py`. Every per-user (and
   server-tier) write now goes through `_mutate_*_locked`, which holds a
   cross-process `fcntl.flock` on a sibling `.lock` file, re-reads the
   on-disk JSON, applies the mutator in place, and atomic-writes with
@@ -481,7 +482,7 @@ Cross-section interaction agents:
 ### Error flow
 
 - ~~**H30. Detector save's `os.replace` failure leaves in-memory state
-  "saved"**~~: fixed by surfacing persistence failures at the previously-
+  "saved"**~~; fixed by surfacing persistence failures at the previously-
   unprotected call sites (`POST /api/medias/<id>/vote`,
   `POST /api/votes/seed-from-examples`) with the same try/except + abort
   500 pattern that already guards `fill_labels_from_sort` (C11), and by
@@ -509,8 +510,8 @@ Cross-section interaction agents:
 
 ### State / concurrency
 
-- ~~**M1.** Lock held during cross-lock callbacks in `toggle_vote` (state ↔
-  progress lock ordering creates a narrow but real deadlock window).~~:
+- ~~**M1.** Lock held during cross-lock callbacks in `toggle_vote`: state ↔
+  progress lock ordering creates a narrow but real deadlock window.~~;
   investigated and closed (2026-05-20).  The literal deadlock the audit
   named was no longer reachable in the current code (post-H1 refactor:
   nothing inside `_progress_lock` calls back into `_state_lock`-acquiring
@@ -532,7 +533,7 @@ Cross-section interaction agents:
   acceptable).  Lock-order invariant documented in the
   `vtscore/detectors/labeling_progress.py` module docstring.
 - ~~**M2.** `combine_datasets.run_chunked` re-issues IDs starting at 1 on every
-  call → cid collision when consumed twice.~~: fixed in
+  call → cid collision when consumed twice.~~; fixed in
   `vtscore/cli.py`. Investigation showed this is not unique to
   `combine_datasets`: every chunked importer/loader emits IDs `1..N`
   per yielded chunk (the convention paired with
@@ -549,7 +550,7 @@ Cross-section interaction agents:
   `tests_lib/cli/test_chunk_renumber.py` (unit) and
   `tests/cli/test_chunked_id_renumber.py` (end-to-end via pickle and
   combine_datasets, including the JSON exporter).
-- ~~**M3.** `importers/base.py` L407–410 - skipped records leave `next_id`
+- ~~**M3.** `importers/base.py` L407–410: skipped records leave `next_id`
   unincremented, ID collisions on first-record-skip.~~
 
 ### Detector
@@ -559,7 +560,7 @@ Cross-section interaction agents:
   continues to be used.~~
 - ~~**M5.** `labelset_elements.resolve_current_dataset_cid` can return a
   colliding-MD5 cid in cross-dataset labelsets → clicks vote the
-  wrong media.~~: closed as not-a-bug on `dev`. The function returns
+  wrong media.~~; closed as not-a-bug on `dev`. The function returns
   `cids[0]` from the origin+name ∪ md5 union, which is only ambiguous
   when two cids in the active dataset share an MD5. Both Flask
   dataset-load paths (`vtscore/datasets/load_pipeline.py` and
@@ -577,7 +578,7 @@ Cross-section interaction agents:
   into in-memory votes (`vtsearch/routes/detectors/labels.py:601`).
 - ~~**M6.** `restore_labels_from_detector` resolves by MD5 only on the
   second pass; dedup-collapsed cids can land votes on the wrong cid
-  after reload.~~ Investigated and closed as not a real bug. Pass 1
+  after reload.~~; investigated and closed as not a real bug. Pass 1
   already consults `md5_lookup` via `resolve_media_ids`
   (`vtscore/state/media_lookup.py:62`), and the dedup-collapse reload
   path lands on the correct rep cid in every case (deduped,
@@ -589,7 +590,7 @@ Cross-section interaction agents:
   dataset stores the converted-output md5; track under detector
   findings if it bites.
 - ~~**M7. `safe_thresholds` read at training time, cached on DetectorContext, never refreshed**~~
-  Partial close. The audit's "baked into the detector JSON" claim was
+ ; partial close. The audit's "baked into the detector JSON" claim was
   wrong: the threshold is never serialised (see the "No Persisted Vectors
   or MLPs" rule in `CLAUDE.md`); every detector JSON write site lists
   only `name` / `text_query` / `media_example` / `media_type` / `examples`
@@ -674,7 +675,7 @@ Cross-section interaction agents:
 
 - ~~**M13.** `learned_scores` in `/api/votes` can serialize as JSON
   `NaN`/`Infinity` if the MLP destabilizes; invalid JSON to strict
-  clients.~~: fixed by routing every sigmoid→score path through
+  clients.~~; fixed by routing every sigmoid→score path through
   `vtscore.utils.scores.sigmoid_to_finite_scores` (NaN/±Inf → `-1.0`
   sentinel) and adding a defensive `finite_or` guard at
   `GET /api/votes`. Sanitised sites: `labelset_train_and_score`,
@@ -687,7 +688,7 @@ Cross-section interaction agents:
   Regression test in `tests/api/test_api_contracts.py` parses the
   response with a `parse_constant` that rejects `NaN`/`Infinity`.
 - ~~**M14.** `diversity_tree_next_sample` references stale media IDs after
-  `/api/dataset/clear`.~~: investigated and closed.  The literal scenario
+  `/api/dataset/clear`.~~; investigated and closed.  The literal scenario
   the audit named is no longer reachable: `clear_medias` (called via
   `clear_dataset → clear_all`) sets `ctx.diversity_tree = None`, and the
   active-dataset path of `/api/dataset/clear` unregisters the context so
@@ -709,7 +710,7 @@ Cross-section interaction agents:
 ### Settings / sync
 
 - ~~**M15.** Pending labelset sync stores `dataset_ctx = None` without
-  checking; later `_run_pending_sync` triggers `AttributeError`.~~:
+  checking; later `_run_pending_sync` triggers `AttributeError`.~~;
   investigated and closed as not a real bug.
   `sync_to_labelset_source` captures `dataset_ctx = get_active_context()`
   (`vtscore/labels/sync.py:97`), and `get_active_context()` /
@@ -730,7 +731,7 @@ Cross-section interaction agents:
   inside the 200ms debounce window. Both are silent inconsistencies, not
   crashes; file separate findings if they ever bite.
 - ~~**M16.** Sync to source on first read after `_synced_users` marker can
-  still return stale local config if source changes silently.~~: fixed
+  still return stale local config if source changes silently.~~; fixed
   alongside two adjacent latent defects in `_ensure_user_loaded`.
   Replaced the `_synced_users: set[str]` "claim-then-sync" marker with
   per-user `_UserSyncState` bookkeeping (`last_version`,
@@ -753,12 +754,12 @@ Cross-section interaction agents:
   dirty markers on a successful export (source now matches local).
   Regression tests:
   `tests/io/test_sync_sources.py::TestSyncFromSourceFreshness`
-  (six cases: version-bump detection, first-failure retry, concurrent
+  (six cases; version-bump detection, first-failure retry, concurrent
   reader sees post-sync cache, dirty-key skip on auto re-sync, manual
   sync clears dirty, freshness window avoids repeat probes).
 - ~~**M17.** Legacy migration `_maybe_migrate_legacy_settings_locked` pops keys
   from in-memory cache before per-user disk write; per-user-write
-  failure leaves cache and disk diverged.~~: investigated and partially
+  failure leaves cache and disk diverged.~~; investigated and partially
   closed (2026-05-21). The literal ordering claim is **inverted**:
   `_maybe_migrate_legacy_settings_locked` writes the user file
   *before* popping `_server_cache`, and returns early on user-write
@@ -780,7 +781,7 @@ Cross-section interaction agents:
   `vtscore/security/pickle.py`. `FLOAT` (protocol 0 ASCII float) now reads
   the line and pushes `None` instead of paying the `float(readline())`
   parse cost, and `BYTEARRAY8` (protocol 5's dedicated bytearray opcode,
-  not in the original audit entry but the same family of leak, and a
+  not in the original audit entry but the same family of leak; and a
   worse one, since it bypasses `BINBYTES` at the highest protocol) now
   drains the bytes and pushes an empty `bytearray`. `SETITEMS` was
   reviewed and left alone: by the time it runs, its values have already
@@ -792,7 +793,7 @@ Cross-section interaction agents:
   can distinguish "valid pickle with 0 medias" from "couldn't parse
   this file".
 - ~~**M19.** `embed_text_enriched` crashes (`np.mean` on empty) when text encoder
-  fails and all wrappers return None.~~: investigated and closed as not a
+  fails and all wrappers return None.~~; investigated and closed as not a
   real bug (2026-05-21).  `vtscore/media/embedder.py:727-750` explicitly
   guards the empty-list case with `if not embeddings: return
   self.embed_text(text)` immediately before the `np.mean` call, so the
@@ -811,7 +812,7 @@ Cross-section interaction agents:
   behaviour for a video with fewer source frames, and a 1-frame video
   genuinely has no temporal variation to encode. The resulting embedding is
   finite, well-defined, and represents the visual content of the frame.
-  Investigation surfaced a *real* nearby bug: silent partial-read failures
+  Investigation surfaced a *real* nearby bug; silent partial-read failures
   inside the same loop (some `cap.read()` calls return `ret=False`, get
   dropped, and the pad step biases the embedding toward the readable
   portion of the file). Fixed by adding a partial-read warning to
@@ -825,11 +826,28 @@ Cross-section interaction agents:
 
 ### Auth / context
 
-- **M22.** `set_thread_user()` cleanup relies on every caller's `finally`; a
+- ~~**M22.** `set_thread_user()` cleanup relies on every caller's `finally`; a
   future `ThreadPoolExecutor` reuse would leak user identity across
-  requests.
+  requests.~~; fixed by adding `thread_user(name)` (in
+  `vtsearch/auth/__init__.py`) and matching `thread_dataset_context(ctx)`
+  / `thread_detector_context(ctx)` context managers (in
+  `vtscore/state/core.py`).  Each scope snapshots the prior thread-local
+  on entry and restores it on exit, so a pooled / reused worker thread
+  cannot leak identity or context across jobs even if the body raises.
+  All production call sites (`vtscore/concurrency/async_jobs.py`,
+  `vtscore/datasets/load_pipeline.py`,
+  `vtsearch/routes/datasets/registry.py`,
+  `vtsearch/routes/detectors/registry.py`,
+  `vtsearch/routes/eval.py`, `vtsearch/routes/sorting.py`,
+  `vtscore/labels/sync.py`) migrated.  Tests in
+  `tests/core/test_thread_context_scopes.py` cover restore-on-exit,
+  restore-on-exception, nested scopes, per-thread isolation, and the
+  simulated-pool-reuse case the audit flagged.  The bare
+  `set_thread_user` / `set_thread_dataset_context` /
+  `set_thread_detector_context` setters remain available for tests and
+  for the rare call site that genuinely wants the unscoped form.
 - ~~**M23.** `setup_logging` re-running can leave duplicate handlers on
-  non-root loggers.~~: closed as not-a-bug.
+  non-root loggers.~~; closed as not-a-bug.
   `vtsearch/logging_config.py:setup_logging` only attaches a
   `StreamHandler` to the root logger, and clears `root.handlers`
   before re-attaching, so root cannot accumulate duplicates. For the
@@ -949,7 +967,7 @@ one PR is far more effective than one-off fixes.
 5. **Embedder identity is its own first-class attribute.** Track the
    detector's *training* embedder separately from the active
    dataset's embedder. Every train/score path must compare them and
-   refuse / clear caches when they differ - don't only compare
+   refuse / clear caches when they differ; don't only compare
    against the dataset.
 
 6. **`X-Dataset-Id` / `X-Detector-Id` headers must be required, not
@@ -976,18 +994,18 @@ one PR is far more effective than one-off fixes.
 
 ## Suggested fix order (highest leverage first)
 
-1. **C1, C2, C3**: gate hand-off + thread-local context
+1. **C1, C2, C3**; gate hand-off + thread-local context
    propagation. One small helper (pattern #1) unblocks 3+ bug
    classes.
-2. **C4** + pattern #4: embedding-matrix cache invalidation via a
+2. **C4** + pattern #4; embedding-matrix cache invalidation via a
    `media_revision` counter.
-3. **C7**: clamp `xcal_threshold` to a finite sentinel and assert
+3. **C7**; clamp `xcal_threshold` to a finite sentinel and assert
    no `NaN` in `safe_threshold`.
-4. **C9** + pattern #2: re-validate every resolved template path
+4. **C9** + pattern #2; re-validate every resolved template path
    in `SyncSource._resolve_filepath()`.
-5. **C5, C10, C11, C12**: straightforward request-handling and
+5. **C5, C10, C11, C12**; straightforward request-handling and
    frontend-cache fixes once the above patterns are in place.
-6. Pattern #6: make header presence + context-loaded a hard
+6. Pattern #6; make header presence + context-loaded a hard
    precondition.
 7. Detector-embedder identity (pattern #5) + C8 (achievement
    uniformity).

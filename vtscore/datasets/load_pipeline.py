@@ -86,8 +86,8 @@ _embed_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_
 # whatever the app installs here.  Default is a no-op so this module doesn't
 # need to import ``vtsearch.settings`` (Phase 2 of
 # ``../docs/architecture.md``).  ``vtsearch/shim/`` registers the
-# real implementation (``vtsearch.settings.set_last_embedder_for_media_type``)
-# at app startup.
+# real implementation; ``vtsearch.settings.set_last_embedder_for_media_type``
+# is wired at app startup.
 _last_embedder_persistence_hook: Callable[[str, str], None] | None = None
 
 
@@ -391,12 +391,12 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
 
     A clip needs recomputation when:
     - ``needs_recompute`` is ``True`` (genuine sub-item from a multi-output
-      clipper, meaning the parent's MD5 and embedding are stale), **or**
+      clipper (the parent's MD5 and embedding are stale), **or**
     - the clip has no embedding at all (import phase was skipped because a
       clipper was going to re-embed anyway).
 
     For any clip reaching this fixup with new content bytes (audio/image/
-    text), the MD5 is always rehashed from those final bytes, including
+    text), the MD5 is always rehashed from those final bytes (including
     single-output clippers that copy the parent dict via ``dict(media)``
     and would otherwise carry the parent's stale MD5 forward.
 
@@ -433,7 +433,7 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
             clip["md5"] = hashlib.md5(content_bytes).hexdigest()
         elif recompute:
             # Metadata-only clips (e.g. video): bytes unchanged but
-            # boundaries differ, so create a unique MD5 by hashing the
+            # boundaries differ; create a unique MD5 by hashing the
             # parent bytes + clip boundaries so dedup doesn't collapse
             # distinct clips.
             parent_bytes = clip.get("media_bytes", b"")
@@ -488,8 +488,8 @@ def _clip_content_bytes(clip: dict, media_type: str) -> bytes | None:
 
     For media types where the clipper produces new bytes (audio, image) or
     a new string (text), return those bytes so the caller can hash and
-    re-embed them.  For metadata-only clips (video), return ``None``; the
-    caller will use a boundary-based hash instead.
+    re-embed them.  For metadata-only clips (video), return ``None``;
+    the caller will use a boundary-based hash instead.
     """
     if media_type == "video":
         # Video clippers store boundaries as metadata without slicing
@@ -635,7 +635,7 @@ def _auto_register_dataset(
             ingest_started_at=ingest_started_at,
         )
     except Exception:
-        # Registry write failed. Clean up the orphaned pkl so we don't
+        # Registry write failed; clean up the orphaned pkl so we don't
         # leave a stale file behind with nothing pointing at it.
         traceback.print_exc()
         Path(pkl_path).unlink(missing_ok=True)
@@ -735,8 +735,8 @@ def _tag_origins(media_dict: dict, origin: dict) -> None:
     Each media gets its own fresh copy of the origin dict (including a
     fresh ``params``).  Sharing one dict by reference across siblings
     means any later mutation of ``media["origin"]["params"]`` on one
-    media silently corrupts every other media stamped by the same load.
-    That aliasing also survives pickle round-trips via backreferences.
+    media silently corrupts every other media stamped by the same load;
+    and that aliasing also survives pickle round-trips via backreferences.
     """
     for media in media_dict.values():
         if media.get("origin") is None:
@@ -917,7 +917,7 @@ def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
     ``_fixup_clip_md5_and_embeddings`` is best-effort: when its bulk
     re-embed call fails (no embedder, vector ``None``, exception) the
     clip is left in ``ctx.medias`` with ``embedding=None``.  Letting
-    those through poisons every downstream consumer: the matrix builder
+    those through poisons every downstream consumer; the matrix builder
     in ``vtscore/embedding/matrix.py`` raises (M11 fix); sort/score
     aggregations get wrong-length lists.  Drop them here so the rest of
     the load pipeline (dedup, diversity tree, registry) sees a clean
@@ -994,7 +994,7 @@ def _register_and_migrate(
 ) -> tuple[str, str | None]:
     """Save to registry, migrate the context from task_id to its real id.
 
-    Returns ``(context_id, registry_entry_id)``. *context_id* is the
+    Returns ``(context_id, registry_entry_id)``; *context_id* is the
     (possibly migrated) context id, and *registry_entry_id* is the id of
     the newly created registry entry (or ``None`` if registration was
     skipped).  Callers should retain *registry_entry_id* so a later
@@ -1026,7 +1026,7 @@ def _register_and_migrate(
         # finished-task tick is attributed to the right dashboard row.
         loading_tasks.set_dataset_id(task_id, entry_id)
     except Exception:
-        # Migration failed after the registry entry was written. Roll
+        # Migration failed after the registry entry was written; roll
         # it back so the dashboard doesn't show a half-built dataset.
         try:
             _reg_unregister(entry_id)
@@ -1070,7 +1070,7 @@ def _handle_load_failure(
     """Unregister the context and write the failure into *tracker*.
 
     If *registry_entry_id* is set, the on-disk registry entry (and its
-    backing pkl) is also removed. This prevents an orphaned dashboard
+    backing pkl) is also removed; this prevents an orphaned dashboard
     row when a load fails after :func:`_register_and_migrate` has
     already written the entry.
     """
@@ -1111,7 +1111,7 @@ def _run_origin_load_in_background(
 ) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
-    *load_fn* is called with a single argument (the target medias dict)
+    *load_fn* is called with a single argument (the target medias dict);
     and should populate it in-place.  Everything after (origin tagging,
     clipping, dedup, diversity tree, registry, embedder warm-up) is handled
     automatically.
@@ -1123,7 +1123,7 @@ def _run_origin_load_in_background(
     Returns the task_id that can be used to poll progress or cancel.
     """
     # Reset the legacy cancellation flag so a previous cancel does not
-    # immediately abort this new operation, but only when no other parallel
+    # immediately abort this new operation; but only when no other parallel
     # loads are running (otherwise we would clear cancellation that might
     # still be intended for those in-flight tasks).
     if not loading_tasks.has_active_tasks():
@@ -1150,10 +1150,9 @@ def _run_origin_load_in_background(
     request_user = created_by or get_current_user()
 
     def task():
-        from vtsearch.auth import set_thread_user  # noqa: PLC0415
-        from vtscore.state.core import set_thread_dataset_context  # noqa: PLC0415
+        from vtsearch.auth import thread_user  # noqa: PLC0415
+        from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
 
-        set_thread_user(request_user)
         ctx = DatasetContext(task_id)
         # Pin the in-flight context to this thread so importers, clippers,
         # dedup, diversity-tree, and label-sync helpers that resolve via
@@ -1161,75 +1160,76 @@ def _run_origin_load_in_background(
         # empty fallback context.  Without this, mutations addressed at
         # the active context (e.g. label restoration, vote replay) land
         # on ``_empty_dataset_context`` and are silently lost.
-        set_thread_dataset_context(ctx)
+        #
+        # ``thread_user`` / ``thread_dataset_context`` snapshot the prior
+        # thread-local values on entry and restore them on exit, so a
+        # future pooled / reused worker thread cannot leak identity or
+        # context across jobs.  ``mark_finished`` runs in the outer
+        # ``finally`` (after the scopes exit) so callers waiting on
+        # ``has_active_tasks() == False`` see fully cleaned-up worker
+        # state.
         context_id = task_id
         registry_entry_id: str | None = None
         controller = _LoadGateController(tracker)
         stepped = _make_stepped_progress(controller, tracker)
 
         try:
-            controller.acquire_download()
-            tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
-            register_context(ctx)
-            gc.collect()
+            with thread_user(request_user), thread_dataset_context(ctx):
+                try:
+                    controller.acquire_download()
+                    tracker.update("loading", "Preparing new dataset…", 0, 0, step=1, total_steps=_TOTAL_LOAD_STEPS)
+                    register_context(ctx)
+                    gc.collect()
 
-            _run_importer(load_fn, ctx, stepped)
-            tracker.check_cancelled()
+                    _run_importer(load_fn, ctx, stepped)
+                    tracker.check_cancelled()
 
-            # Backstop: an importer that completes without raising but
-            # produces zero medias would otherwise sail through clipping,
-            # dedup, and registry steps and surface as a green dashboard
-            # row with 0 items.  Fail loudly instead, mirroring the
-            # staging-flow guard at ``_stage_importer_in_background``.
-            if not ctx.medias:
-                raise ValueError("Import produced no medias.")
+                    # Backstop: an importer that completes without raising but
+                    # produces zero medias would otherwise sail through clipping,
+                    # dedup, and registry steps and surface as a green dashboard
+                    # row with 0 items.  Fail loudly instead, mirroring the
+                    # staging-flow guard at ``_stage_importer_in_background``.
+                    if not ctx.medias:
+                        raise ValueError("Import produced no medias.")
 
-            # Post-load stages are CPU/GPU-bound and touch embeddings, so
-            # gate them on the embed semaphore.  Calling swap here
-            # unconditionally is also the safety net for minimalist
-            # importers that complete without firing an ``"embedding"``
-            # status: ``_make_stepped_progress``'s callback-driven swap
-            # never fires for them, so without this call the download
-            # gate would stay held through every post-load stage.  The
-            # ``finally: controller.release()`` below is a second-line
-            # backstop that releases whichever gate is held on any
-            # error path.  No-op if the importer already swapped
-            # mid-load.
-            controller.swap_to_embed()
+                    # Post-load stages are CPU/GPU-bound and touch embeddings;
+                    # gate them on the embed semaphore.  Calling swap here
+                    # unconditionally is also the safety net for minimalist
+                    # importers that complete without firing an ``"embedding"``
+                    # status: ``_make_stepped_progress``'s callback-driven swap
+                    # never fires for them, so without this call the download
+                    # gate would stay held through every post-load stage.  The
+                    # ``finally: controller.release()`` below is a second-line
+                    # backstop that releases whichever gate is held on any
+                    # error path.  No-op if the importer already swapped
+                    # mid-load.
+                    controller.swap_to_embed()
 
-            apply_custom_metadata_md5(ctx.medias)
-            _tag_origins(ctx.medias, origin)
-            _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
-            _embed_missing_stage(ctx, tracker, embedder)
-            _drop_none_embeddings_stage(ctx, tracker)
-            _collapse_duplicates_stage(ctx, tracker)
-            _build_diversity_tree_stage(ctx, tracker)
-            tracker.check_cancelled()
-            context_id, registry_entry_id = _register_and_migrate(
-                ctx, tracker, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
-            )
-            # Embedder warm-up is fire-and-forget so the dashboard row goes
-            # green immediately.  Text sort waits behind its own progress
-            # bar on first use if the model isn't ready yet.
-            _warmup_embedder_async(ctx.medias)
+                    apply_custom_metadata_md5(ctx.medias)
+                    _tag_origins(ctx.medias, origin)
+                    _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
+                    _embed_missing_stage(ctx, tracker, embedder)
+                    _drop_none_embeddings_stage(ctx, tracker)
+                    _collapse_duplicates_stage(ctx, tracker)
+                    _build_diversity_tree_stage(ctx, tracker)
+                    tracker.check_cancelled()
+                    context_id, registry_entry_id = _register_and_migrate(
+                        ctx, tracker, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
+                    )
+                    # Embedder warm-up is fire-and-forget so the dashboard row goes
+                    # green immediately.  Text sort waits behind its own progress
+                    # bar on first use if the model isn't ready yet.
+                    _warmup_embedder_async(ctx.medias)
 
-            from vtsearch.achievements import record_dataset_load  # noqa: PLC0415
+                    from vtsearch.achievements import record_dataset_load  # noqa: PLC0415
 
-            record_dataset_load(str(origin.get("importer", "")))
-        except Exception as exc:
-            _handle_load_failure(exc, context_id, tracker, registry_entry_id=registry_entry_id)
+                    record_dataset_load(str(origin.get("importer", "")))
+                except Exception as exc:
+                    _handle_load_failure(exc, context_id, tracker, registry_entry_id=registry_entry_id)
+                finally:
+                    controller.release()
+                    clear_thread_progress()
         finally:
-            controller.release()
-            clear_thread_progress()
-            # Clear thread-locals *before* marking the task finished so
-            # callers waiting on ``has_active_tasks() == False`` see fully
-            # cleaned-up worker state.  Otherwise a daemon thread that is
-            # reused (or whose locals are scraped by a test) could still
-            # appear to hold the just-loaded dataset context.
-            set_thread_dataset_context(None)
-            from vtsearch.auth import set_thread_user as _clear_thread_user  # noqa: PLC0415
-
-            _clear_thread_user(None)
             loading_tasks.mark_finished(task_id)
 
     threading.Thread(target=task, daemon=True).start()
@@ -1366,69 +1366,65 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     _request_user = get_current_user()
 
     def stage_task():
-        from vtsearch.auth import set_thread_user
+        from vtsearch.auth import thread_user
 
-        set_thread_user(_request_user)
-        try:
-            temp_medias: dict = {}
-            importer.run(field_values, temp_medias)
-            apply_custom_metadata_md5(temp_medias)
-            embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=update_progress)
-            temp_medias = {mid: m for mid, m in temp_medias.items() if m.get("embedding") is not None}
+        with thread_user(_request_user):
+            try:
+                temp_medias: dict = {}
+                importer.run(field_values, temp_medias)
+                apply_custom_metadata_md5(temp_medias)
+                embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=update_progress)
+                temp_medias = {mid: m for mid, m in temp_medias.items() if m.get("embedding") is not None}
 
-            if not temp_medias:
-                update_progress("idle", "", 0, 0, error="Import produced no medias.")
-                return
+                if not temp_medias:
+                    update_progress("idle", "", 0, 0, error="Import produced no medias.")
+                    return
 
-            first = next(iter(temp_medias.values()))
-            media_type = first.get("media_type", "audio")
-            count = len(temp_medias)
-            name = label or importer.resolve_display_name(field_values)
+                first = next(iter(temp_medias.values()))
+                media_type = first.get("media_type", "audio")
+                count = len(temp_medias)
+                name = label or importer.resolve_display_name(field_values)
 
-            data_bytes = export_dataset_to_file(temp_medias)
-            del temp_medias
-            gc.collect()
+                data_bytes = export_dataset_to_file(temp_medias)
+                del temp_medias
+                gc.collect()
 
-            STAGING_DIR.mkdir(parents=True, exist_ok=True)
-            staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
-            staging_path.write_bytes(data_bytes)
-            del data_bytes
-            gc.collect()
+                STAGING_DIR.mkdir(parents=True, exist_ok=True)
+                staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
+                staging_path.write_bytes(data_bytes)
+                del data_bytes
+                gc.collect()
 
-            update_progress(
-                "idle",
-                f"Staged: {name} ({count} medias)",
-                100,
-                100,
-                staging_result={"path": str(staging_path), "name": name, "count": count, "media_type": media_type},
-            )
-        except ImportError as e:
-            traceback.print_exc()
-            gc.collect()
-            update_progress(
-                "idle",
-                "",
-                0,
-                0,
-                error=f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'",
-            )
-        except MemoryError:
-            gc.collect()
-            update_progress(
-                "idle",
-                "",
-                0,
-                0,
-                error="Out of memory: this dataset is too large. Try a smaller dataset or free up system RAM.",
-            )
-        except Exception as e:
-            traceback.print_exc()
-            error_msg = str(e) or repr(e) or "Unknown error during staging"
-            update_progress("idle", "", 0, 0, error=error_msg)
-        finally:
-            from vtsearch.auth import set_thread_user as _clear_thread_user
-
-            _clear_thread_user(None)
+                update_progress(
+                    "idle",
+                    f"Staged: {name} ({count} medias)",
+                    100,
+                    100,
+                    staging_result={"path": str(staging_path), "name": name, "count": count, "media_type": media_type},
+                )
+            except ImportError as e:
+                traceback.print_exc()
+                gc.collect()
+                update_progress(
+                    "idle",
+                    "",
+                    0,
+                    0,
+                    error=f"Missing dependency: {e}. Install all required packages with: pip install -e '.[cpu,dev]'",
+                )
+            except MemoryError:
+                gc.collect()
+                update_progress(
+                    "idle",
+                    "",
+                    0,
+                    0,
+                    error="Out of memory: this dataset is too large. Try a smaller dataset or free up system RAM.",
+                )
+            except Exception as e:
+                traceback.print_exc()
+                error_msg = str(e) or repr(e) or "Unknown error during staging"
+                update_progress("idle", "", 0, 0, error=error_msg)
 
     thread = threading.Thread(target=stage_task, daemon=True)
     thread.start()

@@ -37,7 +37,18 @@
   <div class="panel-center">
     @if (sortState.sortBusy) {
       <div class="find-wait-overlay">
-        <p class="find-wait-message">Scoring dataset with detector, please wait...</p>
+        <div class="find-wait-content">
+          <p class="find-wait-message">Please wait: scoring dataset with detector…</p>
+          <vt-progress-bar
+            [indeterminate]="sortState.sortProgressTotal <= 0"
+            [value]="sortState.sortProgress"
+            [max]="sortState.sortProgressTotal"
+          />
+          @if (sortState.sortProgressTotal > 0) {
+            <span class="find-wait-count">{{ sortState.sortProgress | number }} / {{ sortState.sortProgressTotal | number }}</span>
+          }
+          <button class="btn btn--secondary btn--sm" (click)="onSortCancel()">Cancel</button>
+        </div>
       </div>
     }
     <vt-center-panel

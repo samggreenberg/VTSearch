@@ -1,4 +1,4 @@
-"""Synthetic dataset importer - generates fake media offline.
+"""Synthetic dataset importer: generates fake media offline.
 
 Useful for trying out VTSearch without an internet connection. Pick a
 ``media_type`` and a ``size`` and the importer renders that many synthetic
@@ -26,7 +26,7 @@ def _cache_dir(media_type: str, size: int) -> Path:
 
 
 class SyntheticDatasetImporter(DatasetImporter):
-    """Generate a fake dataset of images, audio, or video - no network needed.
+    """Generate a fake dataset of images, audio, or video (no network needed).
 
     The user only picks a media type and a size; everything else is
     deterministic (fixed seed) so repeated loads of the same parameters
@@ -35,17 +35,11 @@ class SyntheticDatasetImporter(DatasetImporter):
 
     name = "synthetic"
     display_name = "Synthetic Media"
-    description = "Generate fake media offline - useful for demos and field testing without internet"
-    # 🏭 - frontend renders this as a line-drawing factory icon (see
+    description = "Generate fake media offline (useful for demos and field testing without internet)"
+    # 🏭 (frontend renders this as a line-drawing factory icon; see
     # frontend/src/app/components/icon/icon.component.ts).
     icon = "\U0001f3ed"
     category = "demo"
-    # The generator only ever produces one media type per import
-    # (image | audio | video), so the "Include rows" editor only ever
-    # shows the auto-populated direct row - there are no converters
-    # for synthetic sources.  Flag set to keep the in-tree importer set
-    # uniformly off the legacy shim.
-    multi_media = True
 
     fields = [
         ImporterField(

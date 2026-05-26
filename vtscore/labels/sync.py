@@ -126,27 +126,16 @@ def _run_pending_sync(detector_id: str) -> None:
 
 
 def _push_with_thread_context(entry: _PendingSync) -> None:
-    """Set thread-local user / dataset / detector context, run the push, restore."""
-    from vtsearch.auth import get_thread_user, set_thread_user
-    from vtscore.state.core import (
-        get_thread_dataset_context,
-        get_thread_detector_context,
-        set_thread_dataset_context,
-        set_thread_detector_context,
-    )
+    """Scope thread-local user / dataset / detector context, run the push, restore."""
+    from vtsearch.auth import thread_user
+    from vtscore.state.core import thread_dataset_context, thread_detector_context
 
-    prev_user = get_thread_user()
-    prev_dataset = get_thread_dataset_context()
-    prev_detector = get_thread_detector_context()
-    set_thread_user(entry.user)
-    set_thread_dataset_context(entry.dataset_ctx)
-    set_thread_detector_context(entry.detector_ctx)
-    try:
+    with (
+        thread_user(entry.user),
+        thread_dataset_context(entry.dataset_ctx),
+        thread_detector_context(entry.detector_ctx),
+    ):
         _push_to_labelset_source()
-    finally:
-        set_thread_user(prev_user)
-        set_thread_dataset_context(prev_dataset)
-        set_thread_detector_context(prev_detector)
 
 
 def flush_pending_label_syncs() -> None:

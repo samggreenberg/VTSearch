@@ -197,14 +197,13 @@ location_data  # noqa: F821
 # clipper / processor tests; ``_extract_dir`` / ``dir_key`` mirror the
 # corresponding production attribute on a fake media source; ``text_sort``
 # / ``learned_sort`` are stub-result dataclass attributes for the eval CLI
-# tests; ``multi_media`` is the class-level marker on a stub importer.
+# tests.
 # ---------------------------------------------------------------------------
 _detector  # noqa: F821
 _extract_dir  # noqa: F821
 dir_key  # noqa: F821
 text_sort  # noqa: F821
 learned_sort  # noqa: F821
-multi_media  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # Pytest fixture parameters whose side effects are the point - the body

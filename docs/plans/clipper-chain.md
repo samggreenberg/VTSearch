@@ -1,11 +1,11 @@
 # Clipper chain
 
-*Status: Phase 1 in flight (PR open against `dev`); the dataset-load
-pipeline accepts an ordered list of converter/clipper steps via a new
-`clipper_chain` field, stamps the resolved trail on every clip's
-`origin.params`, and the cross-dataset resolver replays the chain
-end-to-end. Frontend chooser, sidecar JSON, and detector `input_spec`
-migration are deferred; see Open follow-ups.*
+*Status: Phase 1 shipped. The dataset-load pipeline accepts an ordered
+list of converter/clipper steps via a new `clipper_chain` field, stamps
+the resolved trail on every clip's `origin.params`, and the cross-dataset
+resolver replays the chain end-to-end. Phases 2-4 (frontend chooser,
+sidecar JSON, detector `input_spec` migration) are deferred (see Open
+follow-ups).*
 
 This plan implements a `clipper_chain` abstraction so we can run e.g.
 `document_section → text_token_window` without writing a custom clipper.
@@ -27,8 +27,8 @@ import. Real use cases want composition:
 
 The headline case is cross-type composition (document → text). That
 can't be expressed by chaining
-`MediaClipper`s alone; a `MediaClipper` produces output of the same
-media type by contract. It needs a `MediaConverter` step (the existing
+`MediaClipper`s alone (a `MediaClipper` produces output of the same
+media type by contract). It needs a `MediaConverter` step (the existing
 `Document2TextMediaConverter` already does document → text).
 
 So a "clipper chain" is really a generalised **transform chain**: an

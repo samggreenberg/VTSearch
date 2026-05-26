@@ -92,7 +92,7 @@ def _build_local_folder_field_values(form, upload_dir: Path, clipper_params: dic
         "media_type": (form.get("media_type") or "").strip(),
         "recursive": (form.get("recursive") or "true").strip().lower() not in ("false", "0", "no", "off"),
     }
-    for key in ("embedder", "converters", "source_specs"):
+    for key in ("embedder", "source_specs"):
         val = (form.get(key) or "").strip()
         if val:
             field_values[key] = val

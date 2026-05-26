@@ -2,8 +2,9 @@
 
 Status: **#1 shipped (all five checkpoints). #2 shipped. #3 shipped.
 #4 shipped. #5 investigation shipped. #5 follow-up (per-domain split)
-shipped. #6 investigated; no native upstream support in Angular 19,
-documented as "wait for upstream" below.**
+shipped. Warning budget rolled back from 540 kB → 525 kB. #6
+investigated; no native upstream support in Angular 19, documented
+as "wait for upstream" below.**
 
 ## What shipped
 
@@ -20,8 +21,8 @@ documented as "wait for upstream" below.**
   Parent .ts dropped from 1814 → 1668 lines; template from 669 → 545
   lines. **Initial bundle went from 540 kB → 526.40 kB** (gzip
   136.35 kB), back under the previous (525 kB) warning threshold.
-- **#1 Checkpoint 2** (`d1d3e2d7`): extracted `<vt-import-config>`
-  (the output media-type select + auto-detection hint chip) from the
+- **#1 Checkpoint 2** (`d1d3e2d7`): extracted `<vt-import-config>`;
+  the output media-type select + auto-detection hint chip; from the
   `sf` and `lf` flows. The block was inlined twice with identical
   markup (same label, same select shape, same `.detection-hint`
   rendering) and only the bound state and field id differing. Both
@@ -93,8 +94,8 @@ documented as "wait for upstream" below.**
   → 9.79 kB gzip); the new shared chunk is ~21 kB raw / 5.6 kB gzip.
   The total deferred-chunk weight is slightly higher than before
   Checkpoint 4 (the per-component Angular plumbing adds overhead),
-  but the structural goal (single source of truth for the picker
-  chrome and demo table) is achieved, and any future edits to the
+  but the structural goal; single source of truth for the picker
+  chrome and demo table; is achieved, and any future edits to the
   picker UI now touch one component instead of two.
 - **#2 Split `dashboard.component.ts`**: extracted two focused
   services from the page-shell god component.  Dashboard dropped
@@ -132,7 +133,7 @@ documented as "wait for upstream" below.**
       is 1-15 lines of API + dialog glue, and pushing them in would
       require the card components to inject `DatasetsApiService`,
       `DetectorsApiService`, `VtDialogService`, and
-      `DatasetStateService`, coupling presentation to backend +
+      `DatasetStateService`; coupling presentation to backend +
       dialog system.  Cards stay presentational; the dashboard keeps
       the thin glue methods.  Extracting them into yet another service
       was also rejected: they have a single caller (the dashboard
@@ -214,9 +215,9 @@ documented as "wait for upstream" below.**
   land in its chunk.  Lazy `label-view-component` chunk dropped from
   ~58 kB → 55.72 kB raw (12.44 kB gzip) as the four divider-drag
   handlers and the inline dict-loading cascade were replaced with
-  smaller delegations.  Structural goal (three focused files:
-  directive, service, pure factory, instead of one 1200-line
-  coordinator) is what shipped.
+  smaller delegations.  Structural goal; three focused files
+  (directive, service, pure factory) instead of one 1200-line
+  coordinator; is what shipped.
 - **#4 Lazy-load icon SVGs**: split `IconComponent`'s 42 inline SVGs
   out of the eager bundle.  Shell now ships only the 5 icons the
   `DialogHostComponent` needs (`warning`, `x-circle`, `check`,
@@ -256,6 +257,12 @@ documented as "wait for upstream" below.**
   the two. A per-domain split of both services is the next move,
   but is left as a follow-up (see Open follow-ups); the
   investigation is what shipped here, not the refactor.
+- **Warning budget rolled back to 525 kB**: with #1–#5 in, the
+  initial bundle landed at **508.43 kB raw / 135.41 kB gzip**; well
+  under the 525 kB threshold that was bumped to 540 kB on `4bd4cc40`.
+  `angular.json`'s `maximumWarning` flipped from `"540kB"` back to
+  `"525kB"`, giving ~17 kB of headroom for future routine work
+  before the warning fires again. `maximumError` stays at `1MB`.
 - **#5 follow-up: per-domain split of `DetectorsApiService` /
   `DatasetsApiService`**: replaced the two flat 435 / 344 line services
   with nine focused slices so the eager bundle no longer drags in
@@ -292,9 +299,9 @@ documented as "wait for upstream" below.**
   and their spec files were deleted, and every consumer
   (~20 components + 5 state services) was updated to inject only the
   slices it actually calls. Spec coverage rebuilt as per-slice files
-  matching the original test cases. The structural goal (`activeContextGuard`
+  matching the original test cases. The structural goal; `activeContextGuard`
   no longer drags CRUD/Scoring/Find/Processors/Listings/UI into the
-  eager bundle) is what shipped.
+  eager bundle; is what shipped.
   **Bundle effect.** Initial bundle dropped from **525.73 kB → 508.40
   kB raw** (137.54 → 135.37 kB gzip), well below the 525 kB threshold
   that was bumped to 540 kB on `4bd4cc40`. Lazy chunks rebalance
@@ -315,8 +322,8 @@ documented as "wait for upstream" below.**
   bytes today. Filing this as **"wait for upstream"**; revisit when
   Angular adds the schema option, or when the team decides to write a
   small post-build script. No `angular.json` change in this commit.
-- **#1 Checkpoint 4**: extracted `<vt-source-picker>` (the importer
-  category-tab + sub-tab chrome plus the source-side widgets: demo
+- **#1 Checkpoint 4**: extracted `<vt-source-picker>`: the importer
+  category-tab + sub-tab chrome plus the source-side widgets (demo
   media-type tabs + sortable demo table, server-folder typed-path
   input, local-folder/local-files dropzone with file-count display).
   Migrated `dataset-importer-modal` to consume it.
@@ -338,7 +345,7 @@ documented as "wait for upstream" below.**
   `source-picker.component.scss`.  Dead helpers removed from the
   parent: `getTabIcon`, `getTabText`, `statusBadgeClass`,
   `statusBadgeLabel`, `onDemoHeaderClick`.  Dead component imports
-  removed: `IconComponent`, `DropZoneComponent` (both still used
+  removed: `IconComponent`, `DropZoneComponent` (both still used;
   inside the new sub-component).  Parent template dropped from 529 →
   362 lines; .ts from 1687 → 1648 lines.
   **Bundle effect.** The Add Dataset modal is `@defer`-loaded, so the
@@ -369,8 +376,8 @@ that punishes readable code.
 
 The biggest single offender is
 `frontend/src/app/components/dashboard/dataset-importer-modal/dataset-importer-modal.component.ts`
-(**1814 lines / 68 KB raw**, ~206 methods, four near-identical inner
-flows in one class). Its own section comment in `new-detector-modal`
+:  **1814 lines / 68 KB raw**, ~206 methods, four near-identical inner
+flows in one class. Its own section comment in `new-detector-modal`
 admits the duplication ("Media picker (shared structure with Add
 Dataset)"). Both modals are `@defer`-loaded so they don't sit in the
 initial bundle, but the duplication forces parallel edits on every
@@ -424,7 +431,7 @@ Two extracted sub-components, both standalone Angular components in
 the same shape as the existing
 `SourceSpecsPickerComponent`:
 
-1. **`<vt-source-picker>`**: the importer-tab/subtab chrome plus the
+1. **`<vt-source-picker>`**; the importer-tab/subtab chrome plus the
    demo table, server-folder typed path, and local-folder / local-files
    dropzone affordances. Emits "user picked source X with args Y" via
    `@Output`. Both modals subscribe; each handles the event
@@ -436,7 +443,7 @@ the same shape as the existing
    twice with the same storage key), the typed-path server-folder
    widget, and the local-file dropzone wrapper.
 
-2. **`<vt-import-config>`**: "output media type + embedder + clipper
+2. **`<vt-import-config>`**; "output media type + embedder + clipper
    + clipper params + source-specs" form, used by the three
    import-configuring flows (`form`, `lf`, `sf`) inside
    `dataset-importer-modal`. Two-way bound state. Owns the
@@ -451,12 +458,12 @@ contained extraction so the pattern is proved on one flow before
 touching the cross-modal picker chrome):
 
 1. **Checkpoint 1 (shipped, `fe2ef1e2`)**: Extracted
-   `<vt-import-advanced>` (the Advanced block: Include media +
+   `<vt-import-advanced>`; the Advanced ▾ block (Include media +
    Embedder + Clipper). Migrated all four call sites (`sf`, `lf`,
    `form`, `demo`) in `dataset-importer-modal` to use it.
 2. **Checkpoint 2 (shipped, `d1d3e2d7`)**: Extracted
-   `<vt-import-config>` (the output media-type select + detection
-   hint chip). Migrated the `sf` and `lf` flows in
+   `<vt-import-config>`; the output media-type select + detection
+   hint chip. Migrated the `sf` and `lf` flows in
    `dataset-importer-modal` to use it. Scope stayed at just the
    media-type widget (not the optional collapse-with-Advanced) because
    the source widget and recursive checkbox sit between media-type and
@@ -610,7 +617,7 @@ chunks (dashboard, label-view, find-view, the deferred modals), but
 they all ship in the eager bundle today because Angular cannot
 tree-shake methods off an injectable class.
 
-#### Follow-up: per-domain split (shipped; see "What shipped")
+#### Follow-up: per-domain split (shipped: see "What shipped")
 
 Split `DetectorsApiService` and `DatasetsApiService` along the
 section boundaries already documented in the source:
@@ -637,7 +644,7 @@ keeping CRUD/scoring/find/listings/UI out of the eager bundle.
 
 The split was mostly mechanical (no logic change, no API change to
 the generated client) but touched **all consumers** of the two
-services (~20 components and 5 state services). Old combined
+services; ~20 components and 5 state services. Old combined
 services + their spec files were deleted (no shims, per CLAUDE.md);
 spec coverage was rebuilt as per-slice files matching the original
 test cases. Bundle effect is documented in the matching "What
@@ -646,7 +653,7 @@ shipped" entry.
 Outcome: both halves of #5 are now done; the investigation report
 (this section) plus the per-domain split (see "What shipped").
 
-### #6: Switch budget metric to compressed size (investigated; wait for upstream)
+### #6: Switch budget metric to compressed size (investigated; waiting for upstream)
 
 The current Angular budget (`maximumWarning: 540kB`) is raw,
 uncompressed bytes. This actively punishes readable code: the design
@@ -676,23 +683,12 @@ maintaining. See the matching "What shipped" entry.
 After #1–#5 land, the initial bundle should drop comfortably back
 under the older 525 kB threshold on the same raw-byte metric the
 budget is using today, with the biggest god-classes broken into
-focused sub-components and shared widgets. Achieved: **508.40 kB
-raw / 135.37 kB gzip** as of the #5 follow-up. The 540 kB budget
-can now be rolled back (pending user approval; see Open
-follow-ups). #6 (gzip budget metric) stays a "wait for upstream"
-item.
+focused sub-components and shared widgets. Achieved: **508.43 kB
+raw / 135.41 kB gzip** as of the #5 follow-up, and the 540 kB
+warning budget has been rolled back to 525 kB to match. #6 (gzip
+budget metric) stays a "wait for upstream" item.
 
 ## Open follow-ups
-
-- **Roll the warning budget back to 525 kB** (or lower) now that
-  #1–#5 are in. Current initial total is **508.40 kB raw / 135.37 kB
-  gzip** against the 540 kB warning threshold; the previous 525 kB
-  threshold was bumped on `4bd4cc40` and the gains from #1
-  (Checkpoints 1-5), #4, and the #5 follow-up split mean there's
-  comfortable headroom under the older 525 kB threshold, and even
-  some room under a tighter 510 kB threshold. Requires user
-  approval (CLAUDE.md says budget bumps, including reductions
-  that could break future PRs, are user-decisions).
 
 - **#6: Compressed-size budget (waiting on upstream):** revisit
   if/when `@angular-devkit/build-angular` adds a gzipped budget type

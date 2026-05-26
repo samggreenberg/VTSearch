@@ -22,20 +22,20 @@ python app.py --autodetect --dataset path/to/dataset.pkl --settings settings.jso
 **From any supported data source** (folder, HTTP archive):
 
 ```bash
-python app.py --autodetect --importer folder --path /data/sounds --media-type audio --settings settings.json
+python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json
 python app.py --autodetect --importer http_archive --url https://example.com/data.zip --settings settings.json
 ```
 
-Available importers: `folder`, `pickle`, `http_archive`, `combine_datasets`, `demo`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them.
+Use `python app.py --list-importers` to see all available importers. The full set includes: `server_folder`, `server_files`, `local_folder`, `local_files`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them.
 
-**Chunked loading** - for large datasets, use `--chunk-size N` to process in batches to limit memory:
+**Chunked loading**: for large datasets, use `--chunk-size N` to process in batches to limit memory:
 
 ```bash
 python app.py --autodetect --dataset data.pkl --settings settings.json --chunk-size 1000
-python app.py --autodetect --importer folder --path /data/sounds --media-type audio --settings settings.json --chunk-size 500
+python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json --chunk-size 500
 ```
 
-**Exporting results:** by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
+**Exporting results**: by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
 
 ```bash
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter server_json_file --filepath results.json
@@ -48,8 +48,8 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 
 **How to get the files:**
 
-- **Dataset file:** Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
-- **Settings file:** A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh MLP, and scores the dataset.
+- **Dataset file**: Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
+- **Settings file**: A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh MLP, and scores the dataset.
 
 ```json
 {
@@ -58,7 +58,7 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 }
 ```
 
-- **Detector file:** Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the MLP is rebuilt from origins at scoring time.
+- **Detector file**: Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the MLP is rebuilt from origins at scoring time.
 
 **Example output:**
 
@@ -111,8 +111,8 @@ Exporter: server_json_file
 
 `--dry-run` validates importer and exporter names, checks that the
 dataset pickle (if given) exists, verifies required CLI fields are
-populated, and reports any detector JSON files that are missing. This
-means typos in a cron-style invocation fail immediately instead of after a
+populated, and reports any detector JSON files that are missing; so
+typos in a cron-style invocation fail immediately instead of after a
 multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...`
 is announced as part of the plan but skipped (no detector JSON is
 modified).
@@ -174,7 +174,7 @@ before any media is loaded.
 
 ## Web server modes
 
-**Development (Flask dev server):** bind to `0.0.0.0:5000`:
+**Development (Flask dev server)**: bind to `0.0.0.0:5000`:
 
 ```bash
 python app.py
@@ -185,7 +185,7 @@ banner text (`LOCAL` vs. `PRODUCTION`); the bind address is the same either
 way. This entry point uses Flask's built-in dev server and is not
 recommended for production.
 
-**Production (gunicorn):** run the WSGI app under the bundled config:
+**Production (gunicorn)**: run the WSGI app under the bundled config:
 
 ```bash
 VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
@@ -193,10 +193,10 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 
 `VTSEARCH_SERVER_INIT=1` runs the same startup sequence (model
 initialization, autoload preloading, settings-source sync) that `python
-app.py` runs. Gunicorn imports `app.py` rather than executing its
+app.py` runs; gunicorn imports `app.py` rather than executing its
 `__main__` block, so the env var is what triggers initialization. The
 bundled Docker images already run gunicorn this way. See
-[DEPLOYMENT.md](DEPLOYMENT.md#gunicorn-tuning) for tuning.
+[DEPLOYMENT.md](DEPLOYMENT.md#tuning) for tuning.
 
 **Authentication mode** (`--login`): select the login provider (dev
 server only; set up the provider in code when running under gunicorn):
@@ -257,7 +257,7 @@ python app.py --hide-plugin converters:audio2image \
 ```
 
 Hidden plugins remain importable and callable by name via execution
-endpoints (autodetect, label import, etc.). This is a UI declutter,
+endpoints (autodetect, label import, etc.); this is a UI declutter,
 not a security boundary. The CLI flag merges with the persisted
 `hidden_plugins` key in the server settings file (`data/settings.json`
 or whatever path `--settings` points at), where a deployment can set
@@ -267,9 +267,9 @@ available `family:name` pairs.
 
 ## Inspecting plugins and the API schema
 
-`python app.py --list-plugins` enumerates every auto-discovered plugin
-(dataset importers, exporters, label importers/sources, settings I/O,
-media converters/types/embedders/clippers, and media sources) and
+`python app.py --list-plugins` enumerates every auto-discovered plugin;
+dataset importers, exporters, label importers/sources, settings I/O,
+media converters/types/embedders/clippers, and media sources; and
 exits without starting the server. Three output formats:
 
 ```bash

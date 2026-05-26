@@ -279,7 +279,6 @@ path.
 | Media embedders | `vtscore.media` | - (registered via `register_embedder`) | `MediaEmbedder` | `vtscore.embedders` |
 | Media clippers | `vtscore.media` | - (registered via `register_clipper`) | `MediaClipper` | `vtscore.clippers` |
 | Media converters | `vtscore.converters` | `CONVERTER` | `MediaConverter` | `vtscore.converters` |
-| Processor importers | `vtsearch.processors.importers` (app tier) | `PROCESSOR_IMPORTER` | `ProcessorImporter` | `vtscore.processor_importers` |
 
 App-tier families keep their own entry-point group prefix, e.g.
 `vtsearch.settings_importers`, `vtsearch.settings_exporters`,

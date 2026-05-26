@@ -158,8 +158,8 @@ def stage_file():
 # importer's :attr:`fields`), so missing required fields / invalid
 # select values raise 422.  File fields are read into ``BytesIO`` so the
 # background staging thread can consume them after the request context
-# tears down.  Pass-through keys (``converters``, ``source_specs``,
-# ``dataset_name``) ride along on the request body and are preserved via
+# tears down.  Pass-through keys (``source_specs``, ``dataset_name``)
+# ride along on the request body and are preserved via
 # ``Meta.unknown = "include"`` in the per-plugin schema.
 # ---------------------------------------------------------------------------
 
@@ -178,7 +178,7 @@ def stage_import(importer_name: str):
     field_values = validate_plugin_args(
         importer,
         file_mode="bytesio",
-        extra_keys=("converters", "source_specs", "dataset_name"),
+        extra_keys=("source_specs", "dataset_name"),
     )
 
     _stage_importer_in_background(importer, field_values)
@@ -273,9 +273,9 @@ def importer_field_options(body: dict, importer_name: str):
 # Plugin-field route: same per-plugin validation pattern as
 # ``stage-import``.  Body shape isn't in the OpenAPI spec, but
 # :func:`validate_plugin_args` enforces the per-plugin field types at
-# request time; pass-through keys (``converters``, ``source_specs``,
-# ``clipper``, ``embedder``, ``clipper_params``, ``dataset_name``) ride
-# along on the body and are preserved via ``Meta.unknown = "include"``.
+# request time; pass-through keys (``source_specs``, ``clipper``,
+# ``embedder``, ``clipper_params``, ``dataset_name``) ride along on the
+# body and are preserved via ``Meta.unknown = "include"``.
 # ---------------------------------------------------------------------------
 
 
@@ -293,7 +293,7 @@ def import_dataset(importer_name: str):
     field_values = validate_plugin_args(
         importer,
         file_mode="bytesio",
-        extra_keys=("converters", "source_specs", "clipper", "embedder", "dataset_name"),
+        extra_keys=("source_specs", "clipper", "embedder", "dataset_name"),
     )
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the

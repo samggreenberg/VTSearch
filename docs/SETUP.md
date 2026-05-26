@@ -270,13 +270,13 @@ You should see output like:
 
 Open `http://localhost:5000` in your browser. The server binds to `0.0.0.0:5000`, so it is also reachable from other devices on the network.
 
-`python app.py` uses Flask's built-in dev server (fine for development, but **not recommended for production**). For production, run under gunicorn using the bundled config:
+`python app.py` uses Flask's built-in dev server (fine for development but **not recommended for production**). For production, run under gunicorn using the bundled config:
 
 ```bash
 VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 ```
 
-`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, autoload preloading, settings-source sync) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads; VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#gunicorn-tuning) for tuning.
+`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, autoload preloading, settings-source sync) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads; VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#tuning) for tuning.
 
 The Docker images already use this configuration (see [Docker](#docker) below).
 
@@ -375,11 +375,9 @@ Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 
 ## Running the tests
 
-Install dependencies (pytest and ruff are included in `requirements/base.txt`):
-
-```bash
-pip install -r requirements/base.txt
-```
+Dependencies (pytest, ruff, and the Angular build tools) are already
+installed if you ran `bash scripts/install-cpu.sh` above.  If not,
+`./run-tests.sh` installs them automatically on first run.
 
 The recommended way to run tests uses the helper script, which installs
 dependencies automatically and supports grouped test subsets:
@@ -390,14 +388,14 @@ dependencies automatically and supports grouped test subsets:
 ./run-tests.sh sorting api  # multiple groups
 ```
 
-Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `models`,
+Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `detectors`,
 `downloads`, `integration`, `cli`, `converters`. See [`CLAUDE.md`](../CLAUDE.md) for the
 full group-to-file mapping.
 
 You can also run pytest directly:
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/ tests_lib/ -v
 ```
 
 This runs fast CPU tests only. Additional test modes:
@@ -405,19 +403,19 @@ This runs fast CPU tests only. Additional test modes:
 **Full CPU tests** (includes slow CLI subprocess tests):
 
 ```bash
-python -m pytest tests/ -v -m 'not gpu'
+python -m pytest tests/ tests_lib/ -v -m 'not gpu'
 ```
 
 **GPU tests** (requires CUDA):
 
 ```bash
-python -m pytest tests/test_gpu.py -v -m gpu
+python -m pytest tests_lib/gpu/test_gpu.py -v -m gpu
 ```
 
 **All tests**:
 
 ```bash
-python -m pytest tests/ -v -m ''
+python -m pytest tests/ tests_lib/ -v -m ''
 ```
 
 ## Environment variables
