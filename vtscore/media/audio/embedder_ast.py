@@ -110,12 +110,22 @@ class AudioASTEmbedder(MediaEmbedder):
             self.load_models()
         if self._model is None or self._processor is None:
             return None
-        file_path = Path(media["media_path"])
+        audio_bytes = media.get("media_bytes")
+        file_path: Optional[Path] = None
+        if not isinstance(audio_bytes, (bytes, bytearray)) or not audio_bytes:
+            audio_bytes = None
+            path_str = media.get("media_path")
+            if not path_str:
+                return None
+            file_path = Path(path_str)
+        source_repr = file_path if file_path is not None else "<bytes>"
         try:
+            import io  # noqa: PLC0415
             import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
-            audio_data, _sr = librosa.load(file_path, sr=AST_SAMPLE_RATE, mono=True)
+            source = io.BytesIO(bytes(audio_bytes)) if audio_bytes is not None else file_path
+            audio_data, _sr = librosa.load(source, sr=AST_SAMPLE_RATE, mono=True)
             inputs = self._processor(audio_data, sampling_rate=AST_SAMPLE_RATE, return_tensors="pt")
             device = next(self._model.parameters()).device
             inputs = {k: v.to(device) for k, v in inputs.items()}
@@ -126,7 +136,7 @@ class AudioASTEmbedder(MediaEmbedder):
                 embedding = outputs.pooler_output.detach().cpu().numpy()
             return embedding[0]
         except Exception:
-            logging.getLogger(__name__).exception("Error embedding %s", file_path)
+            logging.getLogger(__name__).exception("Error embedding %s", source_repr)
             return None
 
 
