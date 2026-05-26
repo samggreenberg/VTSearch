@@ -196,7 +196,7 @@ def _run_converter_step(media: dict[str, Any], step: ChainStep) -> tuple[list[di
     n_out = len(outputs)
     trail_entries: list[ChainStep] = []
     for idx, clip in enumerate(outputs):
-        clip.setdefault("type", target)
+        clip["media_type"] = target
         entry: ChainStep = {
             "kind": "converter",
             "name": conv.name,
@@ -361,7 +361,7 @@ def apply_chain_to_clips(  # noqa: C901
         # in a different vector space).
         is_sub_item = chain_changes_type or outputs_per_parent[parent_idx] > 1
         media["id"] = new_id
-        media.setdefault("type", final_type)
+        media.setdefault("media_type", final_type)
         _stamp_origin(media, parent_origin, parent_name, trail, is_sub_item=is_sub_item)
         clips_dict[new_id] = media
         needs_recompute.append(is_sub_item)
