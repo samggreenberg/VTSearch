@@ -470,7 +470,7 @@ describe('LabelViewComponent', () => {
     // Switch to manual mode
     component.onAutopilotStop();
 
-    // Vote many times - resort prompt should never fire because autopilot is off
+    // Vote many times; resort prompt should never fire because autopilot is off
     for (let i = 0; i < 15; i++) {
       component.onMediaVoted({ id: 1, vote: 'good' });
       httpMock.match('/api/votes').forEach(req =>
@@ -562,7 +562,7 @@ describe('LabelViewComponent', () => {
     expect(voteState.badVotes.size).toBe(4);
 
     // Creating a new label-view should clear stale votes before autopilot
-    // activates, so it starts in 'good' phase - NOT 'hard' (Refine Boundary)
+    // activates, so it starts in 'good' phase (NOT 'hard'/Refine Boundary)
     const freshFixture = TestBed.createComponent(LabelViewComponent);
     freshFixture.detectChanges();
 

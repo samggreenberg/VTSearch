@@ -63,7 +63,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   datasetName = '';
   /** Name of the trainable model owning the labels shown on the right pane.
-   *  Empty when no trainable model is active - the right pane then falls
+   *  Empty when no trainable model is active; the right pane then falls
    *  back to cid-based vote display. */
   trainableModelName: string | null = null;
   labelingStatus: LabelingStatusResponse | null = null;
@@ -153,7 +153,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.refreshTrainableModelName(this.activeContext.modelId);
 
     // Reload data when the active pair changes via the top-bar switcher.
-    // Skip the first emission - `ngOnInit` above already triggered the
+    // Skip the first emission; `ngOnInit` above already triggered the
     // initial loads.
     let firstPair = true;
     this.activeContext.pair$

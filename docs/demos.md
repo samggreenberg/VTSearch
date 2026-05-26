@@ -55,20 +55,20 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **places365_m** | Scene photos across 365 Places365 categories (medium) |
 | **places365_l** | Scene photos across 365 Places365 categories (large) |
 | **places365_a** | Scene photos across 365 Places365 categories: indoor, outdoor natural, and outdoor man-made environments (all) |
-| **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library - tobacco, food, drug, chemical, fossil fuel, and opioids |
+| **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library: tobacco, food, drug, chemical, fossil fuel, and opioids |
 
 ## Text
 
 | Demo | Description |
 |------|-------------|
-| **20newsgroups_s** | ~375 articles across 15 topics from 20 Newsgroups - sports, science, politics, religion, and more |
+| **20newsgroups_s** | ~375 articles across 15 topics from 20 Newsgroups: sports, science, politics, religion, and more |
 | **20newsgroups_m** | ~750 articles across 15 topics from 20 Newsgroups |
 | **20newsgroups_l** | ~1875 articles across 15 topics from 20 Newsgroups |
 | **ag_news_s** | Short news summaries across AG News categories (small) |
 | **ag_news_m** | Short news summaries across AG News categories (medium) |
 | **ag_news_l** | Short news summaries across AG News categories (large) |
-| **ag_news_a** | Short news summaries across 4 AG News categories - world, sports, business, and sci/tech (all) |
-| **bbc_news_a** | Full BBC news articles across 5 categories - business, entertainment, politics, sport, and tech |
+| **ag_news_a** | Short news summaries across 4 AG News categories: world, sports, business, and sci/tech (all) |
+| **bbc_news_a** | Full BBC news articles across 5 categories: business, entertainment, politics, sport, and tech |
 | **imdb_s** | Long-form movie reviews with positive/negative sentiment labels (small) |
 | **imdb_m** | Long-form movie reviews with positive/negative sentiment labels (medium) |
 | **imdb_l** | Long-form movie reviews with positive/negative sentiment labels (large) |
@@ -78,10 +78,10 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 
 | Demo | Description |
 |------|-------------|
-| **ucf101_s** | ~150 clips across 10 UCF-101 action categories - personal activities and sports |
+| **ucf101_s** | ~150 clips across 10 UCF-101 action categories: personal activities and sports |
 | **ucf101_m** | ~250 clips across 10 UCF-101 action categories |
 | **ucf101_l** | ~600 clips across 10 UCF-101 action categories |
 
-> **Note:** UCF-101 demos are downloaded from HuggingFace Datasets. On some networks or air-gapped systems this may require manual setup - see [DEPLOYMENT.md](DEPLOYMENT.md) for offline deployment instructions.
+> **Note:** UCF-101 demos are downloaded from HuggingFace Datasets. On some networks or air-gapped systems this may require manual setup; see [DEPLOYMENT.md](DEPLOYMENT.md) for offline deployment instructions.
 
 You can also load your own data from pickle files or folders via the same menu.
