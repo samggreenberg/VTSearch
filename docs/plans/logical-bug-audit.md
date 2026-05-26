@@ -1,7 +1,8 @@
 # Logical-Bug Audit — 2026-05
 
-**Status:** In progress — most findings still open; resolved items
-are marked inline as struck-through headings.
+**Status:** Mostly resolved — C1–C12 (critical) and H1–H34 (high) are
+shipped; ~15 medium/low items remain open (M21–M34, L1–L9). Resolved
+findings are marked as struck-through headings.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on

@@ -9,7 +9,7 @@ matches what you want to build.
 
 | Guide | What you build |
 |-------|----------------|
-| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources — eight auto-discovered plugin families that share a common registry-based architecture. |
+| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, settings importers/exporters, settings sources, labelset sources, media converters, media sources — nine auto-discovered plugin families that share a common registry-based architecture. |
 | [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, converters, and media sources — anything in `vtscore/media/` or `vtscore/converters/`. |
 | [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors — the three kinds of `Processor`. |
 
@@ -156,17 +156,6 @@ See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#addin
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/label-importers` includes your importer
 
-### New Processor Importer Checklist
-
-See [EXTENDING-plugins.md § Adding a Processor Importer](EXTENDING-plugins.md#adding-a-processor-importer).
-
-- [ ] Create `vtsearch/processors/importers/<name>/__init__.py`
-- [ ] Subclass `ProcessorImporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `run(self, field_values)` — return a dict with `media_type`, `weights`, `threshold`
-- [ ] Expose `PROCESSOR_IMPORTER = YourImporter()` at module level
-- [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
-- [ ] Test: start the app and check `GET /api/processor-importers` includes your importer
-
 ### New Settings Source Checklist
 
 See [EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#adding-a-settings-source).
@@ -267,7 +256,7 @@ See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a
 
 See [EXTENDING-processors.md](EXTENDING-processors.md).
 
-- [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.base`
+- [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.processors`
 - [ ] Implement `name`, `media_type`, and the type-specific method
       (`localize` or `extract`)
 - [ ] Optionally override `load_model()` for one-time resource loading

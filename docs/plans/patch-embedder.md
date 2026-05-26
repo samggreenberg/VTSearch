@@ -1,5 +1,10 @@
 # Patch-based Image Embedder — Design
 
+**Status:** V1 shipped — six image embedders (DINOv2/v3/EUPE × single/patch) with
+HAC region tree, region voting via Shift-drag, and asymmetric training loss. V2
+(region voting on focus pane) shipped. V3 (broader region-aware UX improvements)
+is in design phase — see Open follow-ups.
+
 ## Status of related work
 
 CLS-pooled DINOv2, DINOv3, and what dev calls "eupe" (actually `facebook/PE-Core-B16-224`, see below) landed in dev via PR #1250 as plain image embedders in the existing registry, alongside the `MediaEmbedder.supports_text` capability flag and a `POST /api/sort` short-circuit that returns 400 + `supports_text: false` when the active embedder can't embed text. The frontend's sort bar already greys the text-sort affordance using that signal.
