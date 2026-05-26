@@ -196,7 +196,6 @@ class ServerFilesDatasetImporter(DatasetImporter):
     icon = "\U0001f5c2"  # 🗂 — falls back to a generic file icon
     picker_view = "form"
     category = "server"
-    multi_media = True
     fields = [
         ImporterField(
             key="media_type",

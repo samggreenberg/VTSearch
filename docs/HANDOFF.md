@@ -144,10 +144,10 @@ of **processors** and can be exported/imported as JSON files.
 
 ### Plugin systems
 
-Ten auto-discovered plugin families share a common `PluginRegistry`
+Nine auto-discovered plugin families share a common `PluginRegistry`
 architecture: dataset importers, results exporters, label importers,
-processor importers, settings importers/exporters, settings sources,
-labelset sources, media converters, and media sources.
+settings importers/exporters, settings sources, labelset sources,
+media converters, and media sources.
 
 See [EXTENDING.md](EXTENDING.md) (and its split child docs) for how
 each family works and how to add new plugins.
@@ -206,19 +206,19 @@ graph, plugin directories — see
 ## Running the test suite
 
 ```bash
-pip install -r requirements/base.txt
+bash scripts/install-cpu.sh   # installs pytest, ruff, etc. (skip if already installed)
 
 # Fast CPU tests (~35s)
-python -m pytest tests/ -v
+python -m pytest tests/ tests_lib/ -v
 
 # Full CPU tests including slow CLI subprocess tests (~5 min)
-python -m pytest tests/ -v -m 'not gpu'
+python -m pytest tests/ tests_lib/ -v -m 'not gpu'
 
 # GPU tests only (requires CUDA)
-python -m pytest tests/test_gpu.py -v -m gpu
+python -m pytest tests_lib/gpu/test_gpu.py -v -m gpu
 
 # All tests
-python -m pytest tests/ -v -m ''
+python -m pytest tests/ tests_lib/ -v -m ''
 ```
 
 ### Test groups
@@ -320,10 +320,10 @@ exports results without starting the web server.
 3. Click "Learned Sort" to train the MLP on your votes
 4. Export the detector via the detectors panel
 
-### Import pre-trained processors
+### Import pre-trained detectors
 
-Use the processor importers panel or CLI to load detectors from
-server-side JSON files.
+Use the detectors panel in the UI or the CLI (`--autodetect --settings`)
+to apply detectors from server-side JSON files.
 
 ### Evaluate sorting quality
 
@@ -358,8 +358,10 @@ theme, volume, view/focus/panel modes, autopilot config, achievements
 state, and the per-user `settings_source` — lives in
 `<get_user_data_dir(user)>/user_settings.json` and is isolated per
 user. Background threads spawned from a request handler propagate the
-user via `vtsearch.auth.set_thread_user()` so per-user writes (e.g.
-autopilot toggles, sync-source exports) land in the right file. Legacy
+user via the `vtsearch.auth.thread_user(...)` context manager (which
+snapshots and restores the prior thread-local automatically) so per-user
+writes (e.g. autopilot toggles, sync-source exports) land in the right
+file. Legacy
 single-file `data/settings.json` files that pre-date the split are
 migrated to the default user's file on first load.
 

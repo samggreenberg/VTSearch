@@ -262,18 +262,21 @@ no-op on an already-resolved string (sanitize is idempotent).
 ### 8. Background-thread context propagation
 
 **Leak.** CLAUDE.md flags this explicitly: "Background threads spawned
-from a request handler must call `vtsearch.auth.set_thread_user()` so
+from a request handler must scope `vtsearch.auth.thread_user(name)` so
 per-user writes resolve correctly." Same applies to
-`set_thread_dataset_context()` / `set_thread_detector_context()` for
-the `medias` / `good_votes` / etc. proxies. `JobManager` and the
-dataset-load thread spawn sites do this; ad-hoc background threads in
-plugins are on their own.
+`thread_dataset_context()` / `thread_detector_context()` for the
+`medias` / `good_votes` / etc. proxies. (Audit M22, now closed, added
+those context-manager scopes and migrated every production call site
+off the bare `set_thread_*` setters.) `JobManager` and the dataset-load
+thread spawn sites do this; ad-hoc background threads in plugins are
+on their own.
 
 **Fix.** Provide `vtsearch.threading.spawn(target, ...)` that snapshots
-the current `(user, dataset_ctx, detector_ctx)` and replays them inside
-the new thread. Plugin / route code uses `spawn()` instead of
-`threading.Thread(target=...).start()`; the context plumbing disappears
-from sight.
+the current `(user, dataset_ctx, detector_ctx)` and enters the matching
+`thread_user` / `thread_dataset_context` / `thread_detector_context`
+scopes inside the new thread. Plugin / route code uses `spawn()` instead
+of `threading.Thread(target=...).start()`; the context plumbing
+disappears from sight.
 
 **Eval.** Medium win. Lower volume than #1–#3 but high consequence —
 when this leak fires it silently writes per-user settings to the wrong
@@ -282,9 +285,10 @@ already calls out context-propagation gaps as a recurring root-cause
 pattern; this would close most of them.
 
 **Shim.** Purely additive — `vtsearch.threading.spawn(...)` is a new
-helper. `set_thread_user()` / `set_thread_dataset_context()` /
-`set_thread_detector_context()` stay exported with the same signatures.
-A third-party plugin that builds its own `threading.Thread` and calls
+helper. The `thread_user()` / `thread_dataset_context()` /
+`thread_detector_context()` context managers and the bare
+`set_thread_*` setters stay exported with the same signatures. A
+third-party plugin that builds its own `threading.Thread` and calls
 the setters by hand keeps working exactly as today; new code is just
 recommended to use `spawn()` instead.
 

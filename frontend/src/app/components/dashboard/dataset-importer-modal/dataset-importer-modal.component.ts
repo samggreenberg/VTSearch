@@ -95,8 +95,7 @@ export class DatasetImporterModalComponent implements OnInit {
     { initialSort: 'num_files', storageKey: DatasetImporterModalComponent.DEMO_COL_ORDER_KEY },
   );
 
-  /** Source-specs editor state for the form view (server_files +
-   *  any future ``multi_media=True`` form-style importer). */
+  /** Source-specs editor state for the form view. */
   formSourceSpecs: SourceSpec[] = [];
 
   /** Source-specs editor state for the local-folder / local-files
@@ -2014,7 +2013,7 @@ export class DatasetImporterModalComponent implements OnInit {
     if (this.selectedEmbedder) {
       submitValues['embedder'] = this.selectedEmbedder;
     }
-    if (this.selectedImporter.multi_media && this.formSourceSpecs.length > 0) {
+    if (this.formSourceSpecs.length > 0) {
       submitValues['source_specs'] = this.formSourceSpecs;
     }
 

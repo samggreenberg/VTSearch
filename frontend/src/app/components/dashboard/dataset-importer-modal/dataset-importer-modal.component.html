@@ -41,38 +41,36 @@
     </ng-container>
 
     <ng-container demoAfter>
-      @if (selectedDemo) {
-        <div class="form-group">
-          <label class="form-label" for="demo-dataset-name" title="Optional name for the new dataset. Leave blank to use the demo's name.">Dataset Name</label>
-          <input
-            id="demo-dataset-name"
-            type="text"
-            class="form-input"
-            [ngModel]="demoDatasetName"
-            (ngModelChange)="onDemoDatasetNameInput($event)"
-            placeholder="Leave blank to use the demo's name"
-          />
-        </div>
+      <div class="form-group">
+        <label class="form-label" for="demo-dataset-name" title="Optional name for the new dataset. Leave blank to use the demo's name.">Dataset Name</label>
+        <input
+          id="demo-dataset-name"
+          type="text"
+          class="form-input"
+          [ngModel]="demoDatasetName"
+          (ngModelChange)="onDemoDatasetNameInput($event)"
+          placeholder="Leave blank to use the demo's name"
+        />
+      </div>
 
-        @if (demoEmbedders.length > 1 || demoClippers.length > 1) {
-          <div class="form-group form-group--section">
-            <vt-import-advanced
-              [availableConverters]="[]"
-              [nativeType]="''"
-              [typeLabels]="mediaTypeLabels"
-              [embedders]="demoEmbedders"
-              [clippers]="demoClippers"
-              [showSourceSpecs]="false"
-              [sourceSpecs]="[]"
-              [selectedEmbedder]="selectedDemoEmbedder"
-              (selectedEmbedderChange)="onDemoEmbedderChange($event)"
-              [lockedEmbedder]="lockedEmbedderFor(activeTab, demoEmbedders)"
-              [selectedClipper]="selectedDemoClipper"
-              [selectedClipperParams]="{}"
-              (clipperChooserRequested)="openClipperChooser('demo')"
-            ></vt-import-advanced>
-          </div>
-        }
+      @if (demoEmbedders.length > 1 || demoClippers.length > 1) {
+        <div class="form-group form-group--section">
+          <vt-import-advanced
+            [availableConverters]="[]"
+            [nativeType]="''"
+            [typeLabels]="mediaTypeLabels"
+            [embedders]="demoEmbedders"
+            [clippers]="demoClippers"
+            [showSourceSpecs]="false"
+            [sourceSpecs]="[]"
+            [selectedEmbedder]="selectedDemoEmbedder"
+            (selectedEmbedderChange)="onDemoEmbedderChange($event)"
+            [lockedEmbedder]="lockedEmbedderFor(activeTab, demoEmbedders)"
+            [selectedClipper]="selectedDemoClipper"
+            [selectedClipperParams]="{}"
+            (clipperChooserRequested)="openClipperChooser('demo')"
+          ></vt-import-advanced>
+        </div>
       }
     </ng-container>
 
@@ -348,26 +346,24 @@
         <p class="info-text">This importer requires no additional configuration.</p>
       }
 
-      @if (selectedImporter.multi_media || availableEmbedders.length > 1 || availableClippers.length > 1) {
-        <div class="form-group form-group--section">
-          <vt-import-advanced
-            [availableConverters]="formAvailableConverters"
-            [nativeType]="formOutputTypeId"
-            [typeLabels]="mediaTypeLabels"
-            [embedders]="availableEmbedders"
-            [clippers]="availableClippers"
-            [showSourceSpecs]="!!selectedImporter.multi_media"
-            [sourceSpecs]="formSourceSpecs"
-            (sourceSpecsChange)="onFormSpecsChange($event)"
-            [selectedEmbedder]="selectedEmbedder"
-            (selectedEmbedderChange)="selectedEmbedder = $event"
-            [lockedEmbedder]="lockedEmbedderFor(formOutputTypeId, availableEmbedders)"
-            [selectedClipper]="selectedClipper"
-            [selectedClipperParams]="clipperParamValues"
-            (clipperChooserRequested)="openClipperChooser('form')"
-          ></vt-import-advanced>
-        </div>
-      }
+      <div class="form-group form-group--section">
+        <vt-import-advanced
+          [availableConverters]="formAvailableConverters"
+          [nativeType]="formOutputTypeId"
+          [typeLabels]="mediaTypeLabels"
+          [embedders]="availableEmbedders"
+          [clippers]="availableClippers"
+          [showSourceSpecs]="true"
+          [sourceSpecs]="formSourceSpecs"
+          (sourceSpecsChange)="onFormSpecsChange($event)"
+          [selectedEmbedder]="selectedEmbedder"
+          (selectedEmbedderChange)="selectedEmbedder = $event"
+          [lockedEmbedder]="lockedEmbedderFor(formOutputTypeId, availableEmbedders)"
+          [selectedClipper]="selectedClipper"
+          [selectedClipperParams]="clipperParamValues"
+          (clipperChooserRequested)="openClipperChooser('form')"
+        ></vt-import-advanced>
+      </div>
 
       @if (error) {
         <p class="error-text">{{ error }}</p>

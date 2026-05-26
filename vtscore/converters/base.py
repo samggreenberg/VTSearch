@@ -134,7 +134,12 @@ class MediaConverter(PluginBase, ABC):
         framework's plugin-arg error contract.
         """
         normalized = self.normalize_params(params)
-        return self.convert(media, normalized)
+        outputs = self.convert(media, normalized)
+        source_metadata = media.get("custom_metadata")
+        if source_metadata:
+            for output in outputs:
+                output.setdefault("custom_metadata", source_metadata)
+        return outputs
 
     # ------------------------------------------------------------------
     # Param helpers
