@@ -12,7 +12,7 @@ export class DocumentViewerComponent implements OnChanges {
   @Input() media!: Media;
 
   mediaSrc = '';
-  // See ImageViewerComponent.lastMediaId - keep the iframe stable across
+  // See ImageViewerComponent.lastMediaId; keep the iframe stable across
   // metadata-enrichment ngOnChanges cycles for the same id.
   private lastMediaId: number | null = null;
 

@@ -38,7 +38,7 @@ def _el(md5, label, *, importer="server_folder", path="/data", name="", metadata
 
 
 # ---------------------------------------------------------------------------
-# LabelSet.merge - direct unit tests
+# LabelSet.merge; direct unit tests
 # ---------------------------------------------------------------------------
 
 

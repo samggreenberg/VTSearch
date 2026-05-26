@@ -7,7 +7,7 @@ embedding because:
   2. ``_fixup_clip_md5_and_embeddings`` skipped re-embedding for video
      (since video clippers don't slice bytes);
   3. The video embedders sampled ``np.linspace(0, frame_count - 1, n)``
-     unconditionally - ignoring the clip range.
+     unconditionally; ignoring the clip range.
 
 These tests cover all three layers.
 """
@@ -23,7 +23,7 @@ import pytest
 
 
 # ---------------------------------------------------------------------------
-# _frame_index_range - boundary math
+# _frame_index_range; boundary math
 # ---------------------------------------------------------------------------
 
 
@@ -85,7 +85,7 @@ class TestFrameIndexRange:
 
 
 # ---------------------------------------------------------------------------
-# sample_video_frames - uses clip_start/clip_end to pick frame indices
+# sample_video_frames; uses clip_start/clip_end to pick frame indices
 # ---------------------------------------------------------------------------
 
 
@@ -125,7 +125,7 @@ class _FakeCapture:
 
     def read(self):
         # Encode the position into the frame so different seeks produce
-        # different PIL Images - useful as a sanity check.
+        # different PIL Images; useful as a sanity check.
         b = max(0, min(255, self._next_pos))
         frame = np.full((1, 1, 3), b, dtype=np.uint8)
         return True, frame
@@ -225,7 +225,7 @@ class TestSampleVideoFrames:
 
 
 # ---------------------------------------------------------------------------
-# _build_clip_embed_input - propagates clip metadata for video
+# _build_clip_embed_input; propagates clip metadata for video
 # ---------------------------------------------------------------------------
 
 
@@ -281,12 +281,12 @@ class TestBuildClipEmbedInput:
 
 
 # ---------------------------------------------------------------------------
-# _fixup_clip_md5_and_embeddings - video tiles each get their own embedding
+# _fixup_clip_md5_and_embeddings; video tiles each get their own embedding
 # ---------------------------------------------------------------------------
 
 
 def _make_tiled_video_clips() -> list[dict]:
-    """Build three tiles of one parent video - same bytes, distinct boundaries."""
+    """Build three tiles of one parent video; same bytes, distinct boundaries."""
     parent_bytes = b"parent-video-bytes"
     parent_md5 = hashlib.md5(parent_bytes).hexdigest()
     tiles = []
@@ -331,7 +331,7 @@ class TestFixupClipMd5AndEmbeddingsVideo:
 
     def test_tiles_get_distinct_embeddings(self):
         """The embedder must see each tile's boundaries and produce distinct
-        vectors - modelled here by returning ``clip_start`` as the embedding."""
+        vectors; modelled here by returning ``clip_start`` as the embedding."""
         from vtscore.datasets.load_pipeline import _fixup_clip_md5_and_embeddings
 
         clips = _make_tiled_video_clips()

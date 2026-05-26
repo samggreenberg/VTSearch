@@ -321,7 +321,7 @@ def combine_detectors(body: dict):  # noqa: C901
     supported policy today), any element key that appears with disagreeing
     labels across the sources is removed entirely.
 
-    The combined detector is *purely a labelset entry* - no
+    The combined detector is *purely a labelset entry*; no
     labelset-source is inherited from the sources, and the threshold/MLP
     are computed later when the detector is activated against a dataset.
     """

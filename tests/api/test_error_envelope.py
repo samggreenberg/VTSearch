@@ -1,7 +1,7 @@
 """Tests for the standardized JSON error envelope.
 
 The ``{error, detail, request_id}`` shape is consumed by the frontend
-``ErrorService`` / global error banner - keep this contract stable.
+``ErrorService`` / global error banner; keep this contract stable.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ class TestErrorEnvelope:
         assert resp.headers.get("X-Request-Id") == body["request_id"]
 
     def test_inbound_request_id_round_trips_into_body(self, client):
-        # Same endpoint as above - see comment there for why ``/api/embed``
+        # Same endpoint as above; see comment there for why ``/api/embed``
         # rather than a migrated route.
         resp = client.post(
             "/api/embed",
@@ -60,7 +60,7 @@ class TestErrorEnvelope:
             assert body["request_id"] == "abc123"
 
     def test_error_response_omits_request_id_outside_request(self):
-        # Background-thread error paths have no g.request_id - the helper
+        # Background-thread error paths have no g.request_id; the helper
         # should still produce a valid JSON envelope.
         from app import app as flask_app
         from vtsearch.routes._shared import error_response
@@ -80,10 +80,10 @@ class TestErrorEnvelope:
 
     def test_non_api_404_is_not_json(self, client):
         # Non-/api/ paths fall through to the SPA / static handler, which
-        # may return HTML or its own response - we only standardize JSON
+        # may return HTML or its own response; we only standardize JSON
         # for /api/. Just check the API guard didn't accidentally hijack it.
         resp = client.get("/some-non-api-path")
-        # We don't care about the status - only that we didn't wrap it
+        # We don't care about the status; only that we didn't wrap it
         # in our JSON envelope when the path isn't /api/.
         if resp.status_code == 404 and resp.is_json:
             body = json.loads(resp.data)
@@ -99,7 +99,7 @@ class TestUncaughtExceptionHandler:
     def test_uncaught_exception_returns_json_500(self, client, monkeypatch):
         # Hijack an existing view function so we exercise the global
         # error handler against a real request. We can't add a new route
-        # to the app at test time - Flask freezes the URL map after the
+        # to the app at test time; Flask freezes the URL map after the
         # first request, which has already happened by the time the api/
         # suite reaches this test.
         from app import app as flask_app

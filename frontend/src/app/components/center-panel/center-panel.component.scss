@@ -8,7 +8,7 @@
 //   1. Media viewer (flex: 1, grows to fill all remaining space)
 //   2. Metadata grid (flex-shrink: 0, hugs the voting buttons)
 //   3. Voting buttons (flex-shrink: 0, pinned to bottom)
-// Do NOT add justify-content: center here - it adds wasted space above/below
+// Do NOT add justify-content: center here; it adds wasted space above/below
 // the media. The .empty state is the only case that needs centering.
 .center-panel {
   flex: 1;

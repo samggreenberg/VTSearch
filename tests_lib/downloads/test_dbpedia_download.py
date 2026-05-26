@@ -121,7 +121,7 @@ class TestDownloadDbpedia:
 
 
 # ---------------------------------------------------------------------------
-# load_demo_source - dbpedia branch
+# load_demo_source; dbpedia branch
 # ---------------------------------------------------------------------------
 
 

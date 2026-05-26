@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-import app as app_module  # noqa: F401 - triggers conftest media init
+import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import settings as settings_mod
 
 
@@ -80,7 +80,7 @@ class TestCliFallback:
 
     def test_cli_can_only_add_not_remove(self):
         settings_mod.set_hidden_plugins({"converters": ["audio2image"]})
-        # No CLI hides - but settings still hides.
+        # No CLI hides; but settings still hides.
         assert settings_mod.is_plugin_hidden("converters", "audio2image") is True
 
 
@@ -202,7 +202,7 @@ class TestRouteIntegration:
 
     def test_hidden_plugin_still_callable_by_name(self, client):
         # Hiding declutters listings but does NOT block direct execution
-        # endpoints - that matches existing ``hidden_from_picker`` semantics.
+        # endpoints; that matches existing ``hidden_from_picker`` semantics.
         from vtscore.datasets.importers import list_importers
 
         importers = list_importers()

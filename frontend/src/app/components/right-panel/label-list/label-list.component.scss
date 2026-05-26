@@ -17,7 +17,7 @@
 // The "Good votes" / "Bad votes" panel headers use `<h3>` semantically
 // but are styled as compact uppercase chips, not as full section
 // headings. See the load-sort-modal comment about promoting a shared
-// `.subhead` class - same pattern, same eventual fix.
+// `.subhead` class; same pattern, same eventual fix.
 h3 {
   font-size: var(--font-sm);
   letter-spacing: 0.05em;

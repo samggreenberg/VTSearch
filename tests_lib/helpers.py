@@ -16,7 +16,7 @@ from pathlib import Path
 def make_wav_bytes(frequency: float = 440.0, duration: float = 0.1) -> bytes:
     """Generate a WAV file using the application's audio generator.
 
-    Supports variable ``frequency`` and ``duration`` - useful when tests
+    Supports variable ``frequency`` and ``duration``; useful when tests
     need multiple distinct WAV files (e.g. different frequencies per media).
     """
     from vtscore.media.audio.audio_generator import generate_wav  # noqa: PLC0415
@@ -27,7 +27,7 @@ def make_wav_bytes(frequency: float = 440.0, duration: float = 0.1) -> bytes:
 def make_raw_wav_bytes() -> bytes:
     """Create a minimal valid WAV file (100 zero-samples) in memory.
 
-    Lighter weight than :func:`make_wav_bytes` - does not depend on the
+    Lighter weight than :func:`make_wav_bytes`; does not depend on the
     ``vtscore.media.audio.audio_generator`` module.
     """
     buf = io.BytesIO()
@@ -76,7 +76,7 @@ def make_png_bytes(width: int = 16, height: int = 16, color: tuple = (128, 64, 2
     try:
         from PIL import Image  # noqa: PLC0415
     except ImportError:
-        # 1×1 magenta PNG - fixed bytes
+        # 1×1 magenta PNG (fixed bytes)
         return bytes.fromhex(
             "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
             "0000000d49444154789c63f8cf00000003000100" + "5cdd3a7d" + "0000000049454e44ae426082"
@@ -90,7 +90,7 @@ def make_minimal_mp4_bytes() -> bytes:
     """Return a tiny (not a real video) MP4 byte string suitable for testing.
 
     Has the ftyp header so basic probes recognise the container.  This is NOT a
-    playable video - it exists so code that inspects file headers works.
+    playable video; it exists so code that inspects file headers works.
     """
     # ftyp box: size=32, type='ftyp', major_brand='isom', minor_version=0x200,
     # compat='isom','iso2','avc1','mp41'

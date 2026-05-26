@@ -90,19 +90,19 @@ Each eval dataset wraps a demo dataset and defines text queries targeting specif
 
 Text sort evaluation measures how well embedding-based search ranks clips. For each query:
 
-- **Average Precision (AP)** - How well all relevant items are ranked near the top. 1.0 means every relevant item appeared before every irrelevant one.
-- **Precision@k (P@k)** - Of the top-k results, what fraction is relevant.
-- **Recall@k (R@k)** - Of all relevant items, what fraction appears in the top-k.
-- **Mean Average Precision (mAP)** - AP averaged across all queries for a dataset.
+- **Average Precision (AP):** How well all relevant items are ranked near the top. 1.0 means every relevant item appeared before every irrelevant one.
+- **Precision@k (P@k):** Of the top-k results, what fraction is relevant.
+- **Recall@k (R@k):** Of all relevant items, what fraction appears in the top-k.
+- **Mean Average Precision (mAP):** AP averaged across all queries for a dataset.
 
 ### Learned sort metrics
 
 Learned sort evaluation simulates voting, trains a binary classifier, then measures on a held-out test set:
 
-- **Accuracy** - Fraction of correct predictions.
-- **Precision** - Of items predicted positive, fraction that is actually positive.
-- **Recall** - Of actual positives, fraction predicted positive.
-- **F1** - Harmonic mean of precision and recall.
+- **Accuracy:** Fraction of correct predictions.
+- **Precision:** Of items predicted positive, fraction that is actually positive.
+- **Recall:** Of actual positives, fraction predicted positive.
+- **F1:** Harmonic mean of precision and recall.
 
 ## Visualisations
 
@@ -133,7 +133,7 @@ When `--plot-dir` is set, the following charts are generated:
 
 ## Writing a custom evaluation script
 
-For more control - looping over parameter values, running voting-iteration simulations, or combining results across experiments - write a Python script that uses the eval API directly.
+For more control (looping over parameter values, running voting-iteration simulations, or combining results across experiments), write a Python script that uses the eval API directly.
 
 ### Example: sweep over train fractions
 

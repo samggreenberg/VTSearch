@@ -11,11 +11,11 @@ decorators. Schema-level validation failures (missing required ``path`` /
 envelope; handler-level rejects (unknown demo, invalid path, importer
 not available) keep their HTTP codes (400 / 500) with the standard
 ``message`` envelope (except 404s, which the app-level ``NotFound``
-handler intercepts - see plan doc).
+handler intercepts (see plan doc).
 
 Routes whose request body is multipart (``import-local-folder``,
 ``import-local-files``, ``load-file``) or whose success body is a binary stream (``export``)
-omit ``@arguments`` and declare error responses via ``alt_response`` -
+omit ``@arguments`` and declare error responses via ``alt_response``;
 same pattern as ``add-to-pile`` / ``server-media-files/upload`` /
 ``server-media-files/<f>/thumbnail`` in ``media/list.py`` and
 ``media/server.py``.
@@ -187,7 +187,7 @@ def import_local_folder():
 
     field_values = _build_local_folder_field_values(request.form, upload_dir, clipper_params)
 
-    # Origin is intentionally synthetic - the on-disk path is a temp dir we
+    # Origin is intentionally synthetic; the on-disk path is a temp dir we
     # are about to delete, so storing it on each media would be misleading
     # and ``can_reload_from_origin`` would (correctly) refuse to reload.
     origin = {
@@ -277,7 +277,7 @@ def import_local_files():
         if clipper_params is not None:
             field_values["clipper_params"] = clipper_params
 
-    # Origin is intentionally synthetic - the on-disk paths file is in a temp
+    # Origin is intentionally synthetic; the on-disk paths file is in a temp
     # dir we are about to delete, so storing it on each media would be
     # misleading and ``can_reload_from_origin`` would (correctly) refuse to
     # reload.

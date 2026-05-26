@@ -12,7 +12,7 @@
   min-width: 0;
 }
 
-// 8px hit target with a 4px visible line centered inside - same wider-hit-zone
+// 8px hit target with a 4px visible line centered inside; same wider-hit-zone
 // pattern as `.col-resize-handle`, easier to grab than the visible line alone.
 .divider-left {
   width: 8px;
@@ -39,7 +39,7 @@
 
 // LAYOUT INTENT: The center panel child (vt-center-panel) must stretch to fill
 // the entire grid cell. Do NOT add align-items: center or justify-content: center
-// here - that prevents the child from using the full height, wasting space and
+// here; that prevents the child from using the full height, wasting space and
 // shrinking the media viewer.
 .panel-center {
   overflow: hidden;

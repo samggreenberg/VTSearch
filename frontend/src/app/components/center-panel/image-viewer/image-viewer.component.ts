@@ -58,12 +58,12 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   // Track the id of the media we last reset for. The `media` input reference
   // changes whenever `MediaMetadataCacheService` hydrates richer metadata for
   // the same id; re-running ngOnChanges for those enrichments would clobber
-  // `imageReady=true` back to false and - since `imageSrc` is the same string
-  // - Angular wouldn't re-fire the `<img>` load event, leaving the canvas
+  // `imageReady=true` back to false and, since `imageSrc` is the same string,
+  // Angular wouldn't re-fire the `<img>` load event, leaving the canvas
   // permanently hidden behind `visibility: hidden`.
   private lastMediaId: number | null = null;
 
-  // Region voting state (v2 of the patch-embedder plan, UI only - see docs/plans/patch-embedder.md).
+  // Region voting state (v2 of the patch-embedder plan, UI only; see docs/plans/patch-embedder.md).
   regionBox: RegionBox | null = null;
   regionBoxShake = false;
   shiftHeld = false;
@@ -198,7 +198,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       const x = clamp01(local.x);
       const y = clamp01(local.y);
       if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
-      // Remember the prior box so we can restore it on a zero-area release -
+      // Remember the prior box so we can restore it on a zero-area release;
       // a stray Shift-click on empty space must not throw away real work.
       this.drag = { kind: 'draw', anchor: { x, y }, previousBox: this.regionBox };
       this.regionBox = [x, y, x, y];
@@ -431,7 +431,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     const tooSmall = x1 - x0 < MIN_BOX_SIZE || y1 - y0 < MIN_BOX_SIZE;
     if (drag.kind === 'draw' && tooSmall) {
       // Zero-area Shift-drag (a stray click without motion). Restore the
-      // prior box rather than discarding it - drawing a box is real work.
+      // prior box rather than discarding it; drawing a box is real work.
       // Don't emit: the parent's last-known state was already previousBox
       // (the transient zero-area draw was never emitted).
       this.regionBox = drag.previousBox;
@@ -444,7 +444,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     this.keyDownHandler = (e: KeyboardEvent) => this.onWindowKeyDown(e);
     this.keyUpHandler = (e: KeyboardEvent) => this.onWindowKeyUp(e);
     this.blurHandler = () => {
-      // Releasing focus (alt-tab, etc.) drops the Shift state - don't leave the
+      // Releasing focus (alt-tab, etc.) drops the Shift state; don't leave the
       // user stuck in region mode invisibly.
       this.shiftHeld = false;
     };
@@ -475,9 +475,9 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     }
     if (e.key !== 'Escape' || this.isTyping()) return;
     // Esc while a bad-vote-with-box discard is armed cancels the armed state but
-    // keeps the box - per the v2 patch-embedder plan, drawing a box is real work
+    // keeps the box (per the v2 patch-embedder plan, drawing a box is real work,
     // and Esc should be the "I changed my mind about voting no" out, not "throw
-    // away the box". Only consume the key if we actually had an action to take.
+    // away the box"). Only consume the key if we actually had an action to take.
     if (this.pendingBadConfirm) {
       e.preventDefault();
       this.armedConfirmCanceled.emit();

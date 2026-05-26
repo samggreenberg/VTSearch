@@ -1,6 +1,6 @@
 """Tests for the eval CLI entry points.
 
-* ``python -m vtscore.eval`` - :mod:`vtscore.eval.__main__`
+* ``python -m vtscore.eval``; :mod:`vtscore.eval.__main__`
 * ``python -m vtscore.eval.label_curve_main``
 
 The full ``run_eval`` / ``run_label_curve_eval`` calls download demo
@@ -42,7 +42,7 @@ class TestEvalMainList:
 
 
 class TestEvalMainRun:
-    """The body of ``main`` after argument parsing - printing, JSON write,
+    plot generation; exercised with ``run_eval`` stubbed."""
     plot generation - exercised with ``run_eval`` stubbed."""
 
     @pytest.fixture
@@ -171,7 +171,7 @@ class TestLabelCurveMain:
 
         monkeypatch.setattr(lc_main, "run_label_curve_eval", lambda **kw: df)
 
-        # summarise just returns the same df shape we built - pass through.
+        # summarise just returns the same df shape we built; pass through.
         monkeypatch.setattr(lc_main, "summarise", lambda d: d)
         return df
 

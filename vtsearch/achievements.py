@@ -50,7 +50,7 @@ ACHIEVEMENTS: list[dict[str, Any]] = [
     {
         "id": "detectors_trained",
         "name": "Detectors Trained",
-        "description": "Each detector you trained - counted on its first vote.",
+        "description": "Each detector you trained, counted on its first vote.",
         "icon": "graduation",
         "tiers": [2, 20, 200, 2000],
     },
@@ -126,7 +126,7 @@ STREAK_GAP_SECONDS: float = 10 * 60
 #: guess and we compare it to ``_DOC_HASHES`` (SHA-256 of the normalised
 #: phrase).  Phrases are kept in source so the test suite can verify each doc's
 #: footer is in sync, but :func:`get_full_state` never returns them to the
-#: client - only the per-doc read state.
+#: client; it returns only the per-doc read state.
 #:
 #: ``path`` is repo-relative so the docs route can stream the raw markdown.
 _DOCS_RAW: list[dict[str, str]] = [
@@ -244,8 +244,8 @@ def wipe_state() -> None:
 
     Called from the settings route when ``disable_achievements`` flips
     from False to True so the counters reset to zero (and stay there
-    while the toggle remains on). Idempotent - running it on an already-
-    empty state is a no-op write.
+    while the toggle remains on). Idempotent: running it on an already-empty
+    state is a no-op write.
     """
 
     def _apply(cache: dict[str, Any]) -> None:
@@ -383,7 +383,7 @@ def record_find(n_scored: int) -> None:
 def record_doc_phrase(phrase: str) -> dict[str, Any]:
     """Check a user-submitted phrase against every doc and credit on match.
 
-    The match is case-insensitive and whitespace-normalised - anything that
+    The match is case-insensitive and whitespace-normalised. Anything that
     survives :func:`_normalize_phrase` and SHA-256-hashes to a registered doc
     counts.  A phrase that matches a doc already in ``docs_read_ids`` is
     reported as ``already_read`` (idempotent, no double-credit).

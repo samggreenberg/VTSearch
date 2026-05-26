@@ -1,13 +1,13 @@
 """Generic plugin registry with auto-discovery.
 
-Provides :class:`PluginRegistry` - a reusable registry that scans a package
+Provides :class:`PluginRegistry`, a reusable registry that scans a package
 directory for sub-packages exposing a sentinel attribute, and
-:class:`PluginField` / :class:`PluginBase` - shared base types that eliminate
+:class:`PluginField` / :class:`PluginBase`, shared base types that eliminate
 the duplicated field-dataclass and CLI / serialisation boilerplate across the
 four plugin families (dataset importers, exporters, label importers, processor
 importers).
 
-Usage - creating a registry::
+Usage for creating a registry::
 
     from vtscore.plugins import PluginRegistry
 
@@ -20,7 +20,7 @@ Usage - creating a registry::
     get_exporter    = _registry.get
     list_exporters  = _registry.list
 
-Usage - defining a field / base class::
+Usage for defining a field / base class::
 
     from vtscore.plugins import PluginBase, PluginField
 
@@ -64,7 +64,7 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
-# PluginField - shared field descriptor
+# PluginField: shared field descriptor
 # ---------------------------------------------------------------------------
 
 
@@ -102,7 +102,7 @@ class PluginField:
     Dynamic option fields
     ---------------------
     Set ``dynamic_options=True`` on a ``"select"`` field whose options must
-    be computed at runtime - e.g. by querying a remote service.  The plugin
+    be computed at runtime (e.g. by querying a remote service).  The plugin
     must implement ``get_field_options(field_key, current_values)`` to return
     the list.  The frontend re-fetches options every time any field listed
     in :attr:`depends_on` changes value.  Currently honoured by dataset
@@ -154,7 +154,7 @@ class PluginField:
     #: ``None`` means "use the field-type default": ``False`` for
     #: ``"file"`` and ``"password"`` fields (don't persist file uploads or
     #: secrets), ``True`` for every other type.  Set explicitly to
-    #: override the default - e.g. ``include_in_origin=False`` on a noisy
+    #: override the default, e.g. ``include_in_origin=False`` on a noisy
     #: text field that doesn't belong in the persisted origin.
     include_in_origin: bool | None = None
 
@@ -216,7 +216,7 @@ class PluginField:
 
 
 # ---------------------------------------------------------------------------
-# PluginBase - shared base class with CLI & serialisation helpers
+# PluginBase: shared base class with CLI and serialisation helpers
 # ---------------------------------------------------------------------------
 
 
@@ -236,10 +236,10 @@ class PluginBase:
     fields: list[PluginField]
 
     #: How the frontend should render this plugin's UI.
-    #: ``"form"`` - generic form built from :attr:`fields` (default).
-    #: ``"file_upload"`` - the frontend should use its native file picker.
-    #: ``"custom"`` - the plugin has a dedicated UI section in the frontend.
-    #: ``"none"`` - no user-facing UI (e.g. the GUI exporter is handled
+    #: ``"form"``: generic form built from :attr:`fields` (default).
+    #: ``"file_upload"``: the frontend should use its native file picker.
+    #: ``"custom"``: the plugin has a dedicated UI section in the frontend.
+    #: ``"none"``: no user-facing UI (e.g. the GUI exporter is handled
     #:   automatically by the frontend results view).
     ui_mode: str = "form"
 
@@ -291,13 +291,13 @@ class PluginBase:
         """Raise ``ValueError`` if any required field is missing or empty.
 
         Also runs the shared
-        :func:`vtscore.plugins.normalize.normalize_field_values` pass -
-        whitespace strip, template variable substitution, and
-        field-type-driven security validation
-        (:func:`~vtscore.security.url_validation.validate_url` for
-        ``url`` fields,
+        :func:`vtscore.plugins.normalize.normalize_field_values` pass
+        (whitespace strip, template variable substitution, and
+        field-type-driven security validation such as
+        :func:`~vtscore.security.url_validation.validate_url` for
+        ``url`` fields and
         :func:`~vtscore.security.path_validation.validate_server_filepath`
-        for ``server_path`` fields) - so CLI invocations get the same
+        for ``server_path`` fields) so CLI invocations get the same
         guarantees the HTTP path does.  Required-field rejection is
         delegated to the normalize pass so the two ingress points raise
         identically on the same input.
@@ -336,7 +336,7 @@ class PluginBase:
 
 
 # ---------------------------------------------------------------------------
-# PluginRegistry - generic auto-discovery registry
+# PluginRegistry: generic auto-discovery registry
 # ---------------------------------------------------------------------------
 
 T = TypeVar("T")
@@ -369,13 +369,13 @@ class PluginRegistry(Generic[T]):
             my_importer = "my_pkg.my_module:IMPORTER"
 
         The entry point must resolve to an already-instantiated plugin
-        object (same shape as a sentinel attribute) - typically you point
+        object (same shape as a sentinel attribute); typically you point
         directly at the module's ``IMPORTER`` / ``EXPORTER`` / ... sentinel.
     eager:
         When ``True`` (the default) discovery runs at construction time so
         the registry is populated by the time the constructor returns.
         Set ``False`` to defer discovery until the first :meth:`get` /
-        :meth:`list` call - useful in tests that want to inspect the
+        :meth:`list` call; useful in tests that want to inspect the
         pre-discovery state or simulate concurrent first access.
     """
 
@@ -423,7 +423,7 @@ class PluginRegistry(Generic[T]):
 
             # Sub-packages (directories with __init__.py)
             if entry.is_dir():
-                # Skip names containing dots - they aren't valid Python
+                # Skip names containing dots; they aren't valid Python
                 # identifiers and would be misinterpreted as nested module
                 # paths by importlib (e.g. "foo.symbolic_link" would try to
                 # import package "foo" first).  This commonly happens with
@@ -546,7 +546,7 @@ class PluginRegistry(Generic[T]):
                 # is True, importing a sibling module may trigger get()/list()
                 # on this registry before discovery finishes (e.g. runner.py
                 # importing from its own package's __init__).  In that case
-                # we return early with a partial registry - the ongoing
+                # we return early with a partial registry; the ongoing
                 # discovery will complete shortly and fill in the rest.
                 if self._discovering:
                     return
@@ -571,7 +571,7 @@ class PluginRegistry(Generic[T]):
 
 
 # ---------------------------------------------------------------------------
-# Factory helper - collapses the per-package boilerplate into one call
+# Factory helper: collapses the per-package boilerplate into one call
 # ---------------------------------------------------------------------------
 
 

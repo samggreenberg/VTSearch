@@ -179,7 +179,7 @@ class TestFlaskAuthMiddleware:
 
     def test_g_user_set_on_api_requests(self, client):
         """Verify g.user is set via the before_request middleware."""
-        # Any API call should work without errors - the middleware sets g.user
+        # Any API call should work without errors; the middleware sets g.user
         resp = client.get("/api/medias/ids")
         assert resp.status_code == 200
 
@@ -297,7 +297,7 @@ def _write_keys(path: Path, mapping: dict[str, str]) -> None:
 
 
 class _FakeRequest:
-    """Minimal stand-in for a Flask request - only ``headers.get`` is used."""
+    """Minimal stand-in for a Flask request; only ``headers.get`` is used."""
 
     def __init__(self, headers: dict[str, str] | None = None) -> None:
         self.headers = headers or {}

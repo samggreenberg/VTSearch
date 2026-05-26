@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-import app as app_module  # noqa: F401 - triggers conftest media init
+import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import settings as settings_mod
 
 
@@ -111,7 +111,7 @@ class TestSettingsModule:
 
         expected = max(1, min(4, os.cpu_count() or 1))
         assert settings_mod.get_max_concurrent_dataset_downloads() == expected
-        # The hardware-derived default must NOT be persisted to disk - only
+        # The hardware-derived default must NOT be persisted to disk; only
         # explicit ``set_*`` calls write keys. (The fixture pre-writes a few
         # path keys; we just check our key is absent.)
         raw = isolated_settings.read_text() if isolated_settings.exists() else ""
@@ -512,7 +512,7 @@ class TestSettingsModule:
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
         assert defaults["volume"] == 1.0
-        # Theme defaults to ``"system"`` - the frontend resolves this to
+        # Theme defaults to ``"system"``; the frontend resolves this to
         # the OS ``prefers-color-scheme`` at render time.
         assert defaults["theme"] == "system"
         assert defaults["calibrate_count"] == 1
@@ -671,7 +671,7 @@ class TestSettingsModule:
         assert settings_mod.get_last_embedder_for_media_type("image") == "siglip"
 
     def test_import_defaults_by_media_type_default(self):
-        # Empty per-user dict - nothing saved means the importer falls
+        # Empty per-user dict; nothing saved means the importer falls
         # back to its own natural defaults.
         assert settings_mod.get_import_defaults_by_media_type() == {}
 
@@ -845,7 +845,7 @@ class TestConcurrentWrites:
         disk["autorun_detectors"] = list(disk.get("autorun_detectors", [])) + ["sibling"]
         server_path.write_text(json.dumps(disk))
 
-        # We add another - should merge with disk, not clobber.
+        # We add another; should merge with disk, not clobber.
         settings_mod.add_autorun_detector("ours-post")
 
         final = json.loads(server_path.read_text())

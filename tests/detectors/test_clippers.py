@@ -271,7 +271,7 @@ class TestSoundClipClipper:
 
         wav = generate_wav(440, 2.0)
         media = {"id": 1, "media_type": "audio", "media_bytes": wav, "duration": 2.0}
-        # Request a window that runs past the end - clamps.
+        # Request a window that runs past the end; clamps.
         result = SoundClipClipper(1.0, 10.0).clip(media)
         assert len(result) == 1
         assert result[0]["clip_start"] == pytest.approx(1.0)
@@ -988,7 +988,7 @@ class TestImageBboxClipper:
 
         img_bytes = _make_image_bytes(50, 50)
         media = {"id": 1, "media_type": "image", "media_bytes": img_bytes, "width": 50, "height": 50}
-        # Request a box wider than the image - clamps to (0,0,50,50).
+        # Request a box wider than the image; clamps to (0,0,50,50).
         result = ImageBboxClipper([0, 0, 200, 200]).clip(media)
         assert len(result) == 1
         clip = result[0]
@@ -2124,7 +2124,7 @@ class TestClipperParameters:
         from vtscore.media.audio.clipper import SoundAutoClipper, SoundTilingClipper
 
         # SoundTilingClipper provides a templated summary distinct from its
-        # description - that template should show up in to_dict().
+        # description; that template should show up in to_dict().
         d = SoundTilingClipper(2.0).to_dict()
         assert d["summary_template"] == "Cut each audio file into {duration}s tiles (min overlap {min_overlap}s)."
         # SoundAutoClipper too.
@@ -2289,7 +2289,7 @@ class TestSoundAutoClipper:
         assert resolved.duration == 10.0
 
     def test_resolve_for_media_uses_own_duration_not_dataset(self):
-        """Each media gets its own routing decision - no median trick."""
+        """Each media gets its own routing decision; no median trick."""
         from vtscore.media.audio.clipper import (
             SoundAutoClipper,
             SoundDefaultClipper,
@@ -2680,7 +2680,7 @@ class TestImageFaceClipper:
         from vtscore.media.image.clipper import ImageFaceClipper
 
         c = ImageFaceClipper(min_size=100, padding=0.0)
-        # 0.05 * 640 = 32px - below the 100px floor.
+        # 0.05 * 640 = 32px; below the 100px floor.
         c._detector = _stub_detector([_FakeDetection(0.95, _FakeBBox(0.1, 0.1, 0.05, 0.05))])
         media = {"id": 1, "media_type": "image", "media_bytes": _make_image_bytes(640, 480)}
         assert c.clip(media) == []
@@ -2699,7 +2699,7 @@ class TestImageFaceClipper:
         assert (x2 - x1) >= 96 and (y2 - y1) >= 96
 
     def test_clip_drops_inherited_embedding_and_md5(self):
-        """Cropped faces must not keep the parent's embedding / md5 -
+        """Cropped faces must not keep the parent's embedding / md5; 
         otherwise the load-pipeline fixup won't re-embed single-face crops."""
         from vtscore.media.image.clipper import ImageFaceClipper
         import numpy as np

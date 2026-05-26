@@ -6,11 +6,11 @@ basename (relative path wins).  Two situations used to silently
 miscompute and are now surfaced:
 
 1. A file has *both* its relative path *and* its basename as keys in the
-   same override map with different values - the loader keeps the
+   same override map with different values; the loader keeps the
    relative-path entry and logs a warning naming both keys.
 
 2. A bare basename key matches multiple files in the folder and not
-   every one of those files has its own relative-path entry - the
+   every one of those files has its own relative-path entry; the
    loader raises ``ValueError`` rather than silently fanning the same
    value out to every match.
 
@@ -277,7 +277,7 @@ class TestAmbiguousBasenameKeyRaises:
 
     def test_unique_basename_in_recursive_scan_uses_basename_fallback(self, tmp_path):
         """A basename key that uniquely identifies one file in a nested
-        layout is fine - that's the whole point of the fallback."""
+        layout is fine; that's the whole point of the fallback."""
         from vtscore.datasets.loader import load_dataset_from_folder
 
         _write_wav(tmp_path / "sub" / "only.wav")

@@ -5,7 +5,7 @@ Migrated to ``flask_smorest`` so the JSON-shaped routes appear in the
 
 The thumbnail GET route serves binary bytes (or an error JSON) and only
 declares its ``alt_response`` error codes; the success body is not
-described. The upload POST route is multipart - its body is left
+described. The upload POST route is multipart; its body is left
 undescribed (no ``arguments`` decorator) but the success body is
 declared via ``response``.
 """
@@ -91,9 +91,9 @@ def upload_server_media_file():
 
     Optional form fields:
 
-    * ``media_type`` - required when ``crop_params`` is present (``"audio"``
+    * ``media_type``: required when ``crop_params`` is present (``"audio"``
       or ``"image"``); identifies which bounded clipper to apply.
-    * ``crop_params`` - JSON object with the user-cropped bounds.  When set,
+    * ``crop_params``: JSON object with the user-cropped bounds.  When set,
       the file is cropped server-side before being saved, so the persisted
       example is the cropped sub-region (and downstream code that reads
       the saved file by name does not need any changes).
@@ -405,7 +405,7 @@ def example_sort_by_id(body: dict):
     """Sort medias by similarity to an already-loaded media item.
 
     When ``crop_params`` is absent the existing ``media["embedding"]``
-    is reused - no fetch, no re-embed.  When set, the media's bytes are
+    is reused (no fetch, no re-embed).  When set, the media's bytes are
     materialised, cropped, and re-embedded before sorting.
     """
     media_id = body["media_id"]

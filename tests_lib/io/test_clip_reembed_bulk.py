@@ -2,7 +2,7 @@
 ``(clip-list, media_type)`` invocation, with no tempfile detour.
 
 The old ``_reembed_clip`` helper wrote each clip to a ``tempfile.mkstemp``
-and then called ``embed_file`` one clip at a time - defeating GPU
+and then called ``embed_file`` one clip at a time; defeating GPU
 batching and adding two syscalls per clip.  Phase C replaces that with a
 single ``embedder.embed_media_bulk`` call wired through the bulk surface
 established in Phase A, handing the embedder ``media_bytes`` /
@@ -118,7 +118,7 @@ class TestBulkClipReembed:
         )
         sent = emb.embed_media_bulk.call_args.args[0]
         assert len(sent) == len(clips_dict)
-        # Every dict carries the in-memory content the embedder needs -
+        # Every dict carries the in-memory content the embedder needs; 
         # and **never** a ``media_path``, which would mean the loader was
         # still routing through a tempfile.
         for media in sent:
@@ -137,7 +137,7 @@ class TestBulkClipReembed:
             _apply_clipper(clips_dict, clipper_name, clipper_params)
 
         # Each clip should hold the vector the bulk hook returned for its
-        # slot - i.e. ``np.full(512, slot_idx + 1)`` from the fake.
+        # slot; i.e. ``np.full(512, slot_idx + 1)`` from the fake.
         ordered = list(clips_dict.values())
         for slot_idx, clip in enumerate(ordered):
             expected = np.full(512, float(slot_idx + 1), dtype=np.float32)
@@ -145,7 +145,7 @@ class TestBulkClipReembed:
 
 
 class TestBulkClipReembedFailureFallback:
-    """When ``embed_media_bulk`` returns ``None`` for a clip - or the
+    whole call raises; the affected clip keeps the parent embedding it
     whole call raises - the affected clip keeps the parent embedding it
     inherited from the clipper, matching the legacy ``except: pass``
     contract in the pre-refactor ``_reembed_clip`` helper."""
@@ -223,11 +223,11 @@ class TestSingleOutputClipperMD5Recompute:
     """Single-output clippers that rewrite ``media_bytes`` (e.g.
     ImageBboxClipper, ImageObjectClipper with one detection) must have
     their MD5 rehashed from the final bytes, not inherited from the
-    parent - otherwise dedup would collapse distinct crops.
+    parent; otherwise dedup would collapse distinct crops.
 
     ``needs_recompute=False`` (single output, no converter) but
     ``embedding is None`` (importer skipped embedding because a clipper
-    was specified) - the historical bug case.
+    was specified); the historical bug case.
     """
 
     def test_md5_recomputed_when_embedding_is_none_even_without_recompute_flag(self):
@@ -290,7 +290,7 @@ class TestSingleOutputClipperMD5Recompute:
 class TestBulkClipReembedNoTempfile:
     """The pre-refactor path wrote each clip to ``tempfile.mkstemp`` and
     called ``embed_file`` from ``vtscore.detectors.resolver`` one clip
-    at a time.  The refactor deletes that detour entirely - verify
+    at a time.  The refactor deletes that detour entirely; verify
     neither code path is invoked from clip re-embed."""
 
     def test_no_tempfile_mkstemp_calls(self):

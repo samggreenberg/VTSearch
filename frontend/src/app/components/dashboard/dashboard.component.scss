@@ -197,14 +197,14 @@
 .dashboard-grid {
   flex: 1 1 0;
   min-height: 0;
-  // Vertical scroll only - Name is pinned left, Actions is pinned right, and
+  // Vertical scroll only: Name is pinned left, Actions is pinned right, and
   // the middle columns share the remaining width so the table always fills
   // the container without horizontal overflow.
   overflow-y: auto;
   overflow-x: hidden;
 }
 
-// Loading task rows - per-dataset progress bars inline in the table
+// Loading task rows: per-dataset progress bars inline in the table
 .loading-task-row {
   .loading-task-name {
     font-weight: var(--weight-medium);
@@ -295,7 +295,7 @@
   }
 }
 
-// DESIGN CONSTRAINT - STABLE BUTTON POSITIONING
+// DESIGN CONSTRAINT: STABLE BUTTON POSITIONING
 // .action-btn-group has fixed width, hints use visibility toggling (not display),
 // and .btn-disabled-reason has fixed height to prevent reflow.
 .action-btn-group {

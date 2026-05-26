@@ -151,7 +151,7 @@ describe('CenterPanelComponent', () => {
    * v2 patch-embedder plan, item 15: vote-API contract for region annotations.
    * `region_box` must be present on a yes-vote when a box is drawn, absent on
    * a yes-vote without a box, and never present on any no-vote (no-votes are
-   * region-agnostic - see "Vote attribution → v2" in docs/plans/patch-embedder.md).
+   * region-agnostic (see "Vote attribution → v2" in docs/plans/patch-embedder.md).
    */
   describe('vote-API contract for region_box', () => {
     const imageMedia: Media = { ...mockMedia, media_type: 'image', filename: 'pic.png' };
@@ -187,7 +187,7 @@ describe('CenterPanelComponent', () => {
     it('omits region_box from a no-vote even when a box is drawn (after confirm)', () => {
       setup();
       component.onRegionBoxChange(box);
-      // First ← arms the discard-confirm - no request yet.
+      // First ← arms the discard-confirm; no request yet.
       component.castVote('bad');
       httpMock.expectNone('/api/medias/1/vote');
       expect(component.pendingBadConfirm).toBeTrue();

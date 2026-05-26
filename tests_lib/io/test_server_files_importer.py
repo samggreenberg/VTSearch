@@ -189,7 +189,7 @@ class TestImporterMetadata:
 
 class TestRunEndToEnd:
     """Verify run() produces medias whose origin/origin_name point at the
-    real source paths.  The importer does not embed - items leave with
+    real source paths.  The importer does not embed; items leave with
     ``embedding=None`` for the framework ``embed_missing`` stage."""
 
     def test_run_imports_listed_files_and_rewrites_origin(self, tmp_path):

@@ -15,7 +15,7 @@ which one library helpers operate on.
 The app-side facade
 -------------------
 Module-level convenience names (``medias``, ``good_votes``, …) used to
-live here as proxy objects, but they belong to the app layer - the
+live here as proxy objects, but they belong to the app layer; the
 library never imports them.  They now live in
 :mod:`vtsearch.shim.state_proxies` and are re-exported from
 :mod:`vtsearch.state` so existing app-tier imports continue to work.
@@ -43,7 +43,7 @@ class DatasetNotLoadedError(LookupError):
     :func:`get_active_context`) when an ``X-Dataset-Id`` header (or
     ``?dataset_id=`` query param) was sent but no matching
     :class:`DatasetContext` is registered. Silent fallback to an empty
-    context produced stale results that the client could not detect -
+    context produced stale results that the client could not detect;
     see logical-bug-audit H16.
     """
 
@@ -65,7 +65,7 @@ class DetectorNotLoadedError(LookupError):
 
 
 # ---------------------------------------------------------------------------
-# Request-missing sentinel - frozen empty context returned when a Flask
+# Request-missing sentinel: frozen empty context returned when a Flask
 # request didn't identify a dataset/detector (missing header or unloaded id).
 # Reads see an empty context (so non-mutating endpoints continue working);
 # any mutation raises ``RequestMissingContextError`` immediately so the
@@ -78,7 +78,7 @@ class RequestMissingContextError(RuntimeError):
 
     The sentinel is what :func:`get_active_context` /
     :func:`get_active_detector_context` return inside a Flask request when
-    the client didn't identify a dataset/detector - either the
+    the client didn't identify a dataset/detector; either the
     ``X-Dataset-Id`` / ``X-Detector-Id`` header was missing, or it named an
     unloaded id.  Reads against the sentinel see an empty context (so
     listing/dashboard endpoints keep working); writes hit this exception so
@@ -104,8 +104,8 @@ class _FrozenDict(dict):  # type: ignore[type-arg]
 
     def __init__(self, kind: str) -> None:
         super().__init__()
-        # Bypass our own __setattr__ - dict subclasses don't get one by
-        # default, but be explicit so adding one later doesn't break this.
+        # Bypass our own __setattr__ (dict subclasses don't get one by default,
+        # but be explicit so adding one later doesn't break this).
         object.__setattr__(self, "_kind", kind)
 
     def __setitem__(self, key: Any, value: Any) -> None:
@@ -254,7 +254,7 @@ def register_detector_context_resolver(fn: Callable[[], Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# DatasetContext - bundles all per-dataset mutable state
+# DatasetContext: bundles all per-dataset mutable state
 # ---------------------------------------------------------------------------
 
 
@@ -325,7 +325,7 @@ class DetectorContext:
         # region-pooled vector keyed to an element that no longer has a
         # region.  See ``logical-bug-audit.md`` finding M4.
         "label_embedding_regions",
-        "model",  # nn.Sequential | None - current trained MLP
+        "model",  # nn.Sequential | None (current trained MLP)
         "threshold",  # decision threshold
         # Cross-dataset training-corpus counts (from on-disk labelset).  These
         # are independent of ``good_votes``/``bad_votes``, which only count
@@ -349,13 +349,13 @@ class DetectorContext:
         "cached_labelset_mtime",  # float
         "cached_labelset_media_type",  # str
         # Sync source
-        "labelset_source",  # dict | None - {"source_name": "...", "field_values": {...}}
+        "labelset_source",  # dict | None: {"source_name": "...", "field_values": {...}}
         # Calibration threshold cache.  Holds ``(key, threshold)`` where *key*
         # is a deterministic fingerprint of the inputs to
         # :func:`calculate_cross_calibration_threshold` (training vectors,
         # labels, inclusion, calibrate_count, calibration_fraction,
         # hidden_dim).  Reusing the cached threshold is safe iff *key*
-        # matches - calibration is a deterministic function of these inputs
+        # matches; calibration is a deterministic function of these inputs
         # (seeded RNG), so a hit is a pure memoization, not a stale carry-
         # over from a previously trained model.
         "calibration_cache",  # tuple[Any, float] | None
@@ -386,7 +386,7 @@ class DetectorContext:
         # Embeddings for every saved labelset element, keyed by
         # stable_element_id.  Populated at detector load (resolve_file +
         # embed_file) and topped up when new votes come in.  Lets MLP
-        # training and learned-sort use *all* saved labels - including
+        # training and learned-sort use *all* saved labels, including
         # those whose underlying media isn't part of the active dataset.
         self.label_embeddings: dict[str, Any] = {}
         self.label_embedding_regions: dict[str, tuple[float, float, float, float] | None] = {}
@@ -463,13 +463,13 @@ def get_active_context() -> DatasetContext:
 
     Resolution order:
     1. Request-scoped context (set by ``before_request`` from ``X-Dataset-Id`` header)
-    2. Thread-local context (set by ``set_thread_dataset_context`` - for
+    2. Thread-local context (set by ``set_thread_dataset_context``, for
        background threads and tests)
-    3. Request-missing sentinel - when inside a Flask request that didn't
+    3. Request-missing sentinel, when inside a Flask request that didn't
        identify a dataset (registered via
        :func:`register_request_context_predicate`).  Reads see an empty
        context; writes raise :class:`RequestMissingContextError`.
-    4. Empty fallback context - for CLI / library callers outside any
+    4. Empty fallback context for CLI / library callers outside any
        Flask request.
     """
     # 1. Per-request override (Flask shim or whatever the host app registered)
@@ -618,10 +618,10 @@ def get_active_detector_context() -> DetectorContext:
     1. Forced override (``override_detector_context`` context manager)
     2. Request-scoped context (set by ``before_request`` from ``X-Detector-Id`` header)
     3. Thread-local context (set by ``set_thread_detector_context``)
-    4. Request-missing sentinel - inside a Flask request with no header
+    4. Request-missing sentinel, inside a Flask request with no header
        and no thread-local; mutations raise
        :class:`RequestMissingContextError`.
-    5. Empty fallback context - for CLI / library callers outside Flask.
+    5. Empty fallback context for CLI / library callers outside Flask.
     """
     # 1. Forced override (set by override_detector_context context manager)
     forced = getattr(_thread_local, "forced_detector_context", None)
@@ -748,8 +748,8 @@ def invalidate_loaded_detector_models() -> None:
 # Scalar state accessors
 # ---------------------------------------------------------------------------
 # These thin helpers wrap "give me the X of whatever context is currently
-# active" so callers that operate on the active context - but don't need
-# a full DatasetContext / DetectorContext reference - can stay one-liners.
+# active" so callers that operate on the active context but don't need
+# a full DatasetContext / DetectorContext reference can stay one-liners.
 # Dataset-intrinsic scalars (diversity_tree, dataset_display_name) delegate
 # to the active DatasetContext.  Detector-related scalars (click_counter,
 # inclusion) delegate to the active DetectorContext.
@@ -797,7 +797,7 @@ class with_dataset_context:
     """Context manager for temporarily switching the active dataset.
 
     Saves the current active dataset ID on entry, switches to the
-    requested *dataset_id*, and restores the original on exit -
+    requested *dataset_id*, and restores the original on exit
     even if an exception occurs.
 
     Usage::

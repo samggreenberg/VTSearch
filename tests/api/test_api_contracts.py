@@ -7,7 +7,7 @@ Verifies that every major API endpoint returns the correct:
 - Consistent error format {"error": "..."} with appropriate status codes
 
 These tests complement the existing functional tests by focusing on the
-*contract* - the shape of the response that the frontend relies on.
+*contract*; the shape of the response that the frontend relies on.
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ class TestVotesContract:
         a non-finite float, the ``/api/votes`` response must still parse under
         strict JSON (``json.loads`` with ``parse_constant`` raising).  Python's
         ``json.dumps`` emits the literal token ``NaN`` for ``float('nan')`` by
-        default, which browser ``JSON.parse`` rejects - so without the route's
+        default, which browser ``JSON.parse`` rejects; so without the route's
         ``finite_or`` guard this returns invalid JSON to every Angular client.
         """
         from vtsearch.state import last_learned_scores
@@ -118,7 +118,7 @@ class TestVotesContract:
         assert resp.status_code == 200
 
         # ``parse_constant`` is invoked for ``NaN``, ``Infinity``, and
-        # ``-Infinity`` - fail loudly so a regression at the route handler
+        # ``-Infinity``; fail loudly so a regression at the route handler
         # surfaces here instead of as a browser-side parse error in prod.
         def _reject_constant(c):
             raise AssertionError(f"non-strict JSON token in /api/votes response: {c!r}")
@@ -143,7 +143,7 @@ class TestVotesContract:
 
     def test_vote_response_state_on_idempotent_call(self, client):
         client.post("/api/medias/1/vote", json={"target": "good"})
-        # Second call with the same target is idempotent - server still
+        # Second call with the same target is idempotent; server still
         # returns state="good" so the client knows it landed.
         resp = client.post("/api/medias/1/vote", json={"target": "good"})
         data = resp.get_json()

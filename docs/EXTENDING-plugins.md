@@ -1,4 +1,4 @@
-# Extending VTSearch - Plugin Systems
+# Extending VTSearch: Plugin Systems
 
 Eight auto-discovered plugin families share a common registry-based
 architecture. Subclass the relevant base class, expose a sentinel
@@ -13,7 +13,7 @@ extractors).
 
 ## Contents
 
-- [Shared Plugin Architecture](#shared-plugin-architecture) - PluginField,
+- [Shared Plugin Architecture](#shared-plugin-architecture): PluginField,
   PluginRegistry, discovery, route generation
 - [Adding a Data Importer](#adding-a-data-importer)
 - [Adding a Media Converter](#adding-a-media-converter)
@@ -29,10 +29,10 @@ extractors).
 
 ## Shared Plugin Architecture
 
-Ten plugin systems - data importers, results exporters, label
+Ten plugin systems (data importers, results exporters, label
 importers, processor importers, settings importers, settings exporters,
 settings sources, labelset sources, media converters, and media
-sources - share the same architecture built on two base classes in
+sources) share the same architecture built on two base classes in
 `vtscore/plugins/__init__.py`:
 
 ### PluginField
@@ -43,9 +43,9 @@ families use the same field type (aliased as `ImporterField`,
 
 | Parameter     | Type        | Default  | Description                                             |
 |---------------|-------------|----------|---------------------------------------------------------|
-| `key`         | `str`       | -        | Field identifier (dict key in `field_values`)           |
-| `label`       | `str`       | -        | Display label in the UI                                 |
-| `field_type`  | `FieldType` | -        | `"text"`, `"url"`, `"folder"`, `"file"`, `"password"`, `"email"`, `"select"`, or `"server_path"` |
+| `key`         | `str`       | (required) | Field identifier (dict key in `field_values`)           |
+| `label`       | `str`       | (required) | Display label in the UI                                 |
+| `field_type`  | `FieldType` | (required) | `"text"`, `"url"`, `"folder"`, `"file"`, `"password"`, `"email"`, `"select"`, or `"server_path"` |
 | `description` | `str`       | `""`     | Helper text shown below the field                       |
 | `accept`      | `str`       | `""`     | For `"file"` fields: comma-separated extensions (e.g. `".pkl"`) |
 | `options`     | `list[str]` | `[]`     | For `"select"` fields: allowed dropdown values          |
@@ -105,7 +105,7 @@ Most plugin families use sub-packages, which pair well with per-plugin
 | Data Importers      | `vtscore.datasets.importers`      | `IMPORTER`            | `DatasetImporter`   | `vtscore.importers`            |
 | Results Exporters   | `vtscore.exporters`               | `EXPORTER`            | `LabelsetExporter`  | `vtscore.exporters`            |
 | Label Importers     | `vtscore.labels.importers`        | `LABEL_IMPORTER`      | `LabelImporter`     | `vtscore.label_importers`      |
-| Processor Importers | `vtsearch.processors.importers`    | `PROCESSOR_IMPORTER`  | `ProcessorImporter` | -                              |
+| Processor Importers | `vtsearch.processors.importers`    | `PROCESSOR_IMPORTER`  | `ProcessorImporter` | (none)                         |
 | Settings Importers  | `vtsearch.settings_io.importers`   | `SETTINGS_IMPORTER`   | `SettingsImporter`  | `vtsearch.settings_importers`  |
 | Settings Exporters  | `vtsearch.settings_io.exporters`   | `SETTINGS_EXPORTER`   | `SettingsExporter`  | `vtsearch.settings_exporters`  |
 | Settings Sources    | `vtsearch.settings_io.sources`     | `SETTINGS_SOURCE`     | `SettingsSource`    | `vtsearch.settings_sources`    |
@@ -113,7 +113,7 @@ Most plugin families use sub-packages, which pair well with per-plugin
 | Media Converters    | `vtscore.converters`              | `CONVERTER`           | `MediaConverter`    | `vtscore.converters`           |
 | Media Sources       | `vtscore.datasets.sources`        | `SOURCE`              | `MediaSource`       | `vtscore.media_sources`        |
 
-Failed imports emit a warning but do not break the application - a missing
+Failed imports emit a warning but do not break the application; a missing
 optional dependency gracefully disables that plugin.
 
 ### Third-party plugins via `importlib.metadata` entry points
@@ -129,7 +129,7 @@ my_importer = "my_pkg.importer:IMPORTER"
 ```
 
 The value (`my_pkg.importer:IMPORTER`) must resolve to an already-instantiated
-plugin object - the same shape that the in-tree sentinel attribute holds.
+plugin object (the same shape that the in-tree sentinel attribute holds).
 After `pip install` of the third-party package, the plugin appears in
 `list_importers()`, the relevant `/api/...` endpoint, and `python app.py
 --list-plugins` without any changes to the core repo.
@@ -137,12 +137,12 @@ After `pip install` of the third-party package, the plugin appears in
 Built-in plugins take precedence: if an entry point's `name` clashes with
 a name already registered by the package scan, it is skipped and a warning
 is emitted. A broken entry point (import error, missing `name` attribute)
-warns and is skipped - it cannot block discovery of other plugins.
+warns and is skipped; it cannot block discovery of other plugins.
 
 ### Listing every registered plugin
 
 `python app.py --list-plugins` prints every auto-discovered plugin
-across all families - useful both for humans (`--format plain`, the
+across all families, useful both for humans (`--format plain`, the
 default) and for shell completion scripts (`--format names`). Add
 `--plugin-family <name>` to scope the output, e.g.
 `python app.py --list-plugins --plugin-family importers --format names`
@@ -154,7 +154,7 @@ Output formats:
 |-----------------|---------------------------------------------------------|
 | `plain` (default) | Human-readable grouped table                          |
 | `json`          | Machine-readable; full `{name, display_name, description}` for each plugin |
-| `names`         | One name per line; with a family, bare names - without one, `family:name` pairs |
+| `names`         | One name per line; with a family these are bare names, without a family these are `family:name` pairs |
 
 The same inventory is also available programmatically as
 `vtscore.plugins.inventory.gather_plugins()`.
@@ -164,7 +164,7 @@ The same inventory is also available programmatically as
 ## Adding a Data Importer
 
 Data importers let users load datasets from new sources (S3 buckets,
-databases, APIs, etc.). The system auto-discovers importers at runtime - no
+databases, APIs, etc.). The system auto-discovers importers at runtime; no
 changes to routes or core code are needed.
 
 ### File structure
@@ -274,7 +274,7 @@ type per query?
 │
 ├─ Yes, and the importer only ever pulls one media type per import.
 │  └─→ Hook 1: list_records() + fetch_record()
-│       Simplest split - return opaque record handles, then convert
+│       Simplest split: return opaque record handles, then convert
 │       each to a media dict. Default fetch_source_media() delegates
 │       here, so the spec list is invisible to you. Best for
 │       single-source-type service importers (e.g. "pull all rows
@@ -288,7 +288,7 @@ type per query?
 │       framework runs spec.converter on each. Best for service-style
 │       multi-media importers (e.g. ReCaller).
 │
-├─ No - one upstream call returns mixed source types in a single
+├─ No; one upstream call returns mixed source types in a single
 │  response, and you want to make it only once.
 │  └─→ Hook 3: fetch_all_source_media(specs, ...)
 │       Framework calls you once with the full spec list. You make
@@ -296,7 +296,7 @@ type per query?
 │       tagging each record with the spec it satisfies. Framework
 │       still runs converters and ingests.
 │
-└─ Neither - the data is folder-shaped (already on disk, or staged
+└─ Neither: the data is folder-shaped (already on disk, or staged
    there after download) and you want to delegate to the folder
    loader / converter runner.
    └─→ Hook 4: run()
@@ -315,19 +315,19 @@ threads through to it without you knowing the spec exists.
 
 **Multi-spec rule of thumb:** if the user can pick multiple source
 types in one import, use hook 2 unless making N upstream calls is
-actively wasteful - in which case use hook 3.  Both leave conversion
+actively wasteful (in which case use hook 3). Both leave conversion
 to the framework.
 
 ### DatasetImporter class reference
 
-**Required to implement (pick one - see [Choosing your override point](#choosing-your-override-point)):**
+**Required to implement (pick one; see [Choosing your override point](#choosing-your-override-point)):**
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `list_records()` + `fetch_record()` | see [Bulk-record hooks](#bulk-record-hooks) | **Hook 1.** Per-record / bulk-record split for **single-source-type** service importers. Default `fetch_source_media()` delegates to these |
 | `fetch_source_media()` | `(spec: SourceSpec, field_values: dict, thin: bool = False) -> Iterator[dict]` | **Hook 2.** Per-spec fetch for **multi-source-type** service importers. Yield raw media dicts of `spec.source_type`; framework runs `spec.converter` on each. See [Multi-media imports](#multi-media-imports) |
 | `fetch_all_source_media()` | `(specs: list[SourceSpec], field_values: dict, thin: bool = False) -> Iterator[tuple[SourceSpec, dict]]` | **Hook 3.** Bulk fetch for service-style importers whose backend returns mixed source types in one call. Yield `(spec, raw_media)` pairs; framework runs converters and ingests. Default delegates to `fetch_source_media()` per spec. See [Multi-media imports](#multi-media-imports) |
-| `run()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | **Hook 4.** Full control - populate `medias` in-place yourself. Used by folder-shaped importers that delegate to `load_dataset_from_folder()` and `run_converters_on_folder()` |
+| `run()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | **Hook 4.** Full control: populate `medias` in-place yourself. Used by folder-shaped importers that delegate to `load_dataset_from_folder()` and `run_converters_on_folder()` |
 
 **Optional overrides:**
 
@@ -362,7 +362,7 @@ to the framework.
 ### Element-level origin tracking
 
 Every clip produced by an importer is automatically tagged with an
-**origin** - a dict identifying the importer and its parameters. This
+**origin** (a dict identifying the importer and its parameters). This
 happens in `_run_importer_in_background()` after `run()` completes:
 
 ```python
@@ -392,9 +392,9 @@ set `media["media_url"]` to the URL of the media file.  The lazy-loading
 system (`_resolve_media_bytes` / `_resolve_media_string`) resolves media
 in this priority order:
 
-1. `media_bytes` / `media_string` - already in memory.
-2. `media_path` - local file on disk (thin mode with local files).
-3. `media_url` - remote URL (fetched on demand).
+1. `media_bytes` / `media_string`: already in memory.
+2. `media_path`: local file on disk (thin mode with local files).
+3. `media_url`: remote URL (fetched on demand).
 
 In thin mode, URL-backed importers can skip downloading entirely: set
 `media_bytes=None`, `media_path=None`, and `media_url="https://..."`.
@@ -413,7 +413,7 @@ framework `embed_missing` stage embeds every item still at `None` after
 `run()` returns, using the user-selected embedder (or the default for
 the media type).  Only set `embedding` to a real vector when your data
 source ships pre-computed vectors that are dimension-compatible with the
-embedder the user picked - in that case also set `embedder` to the name
+embedder the user picked; in that case also set `embedder` to the name
 of that embedder.
 
 ```python
@@ -444,7 +444,7 @@ def run(self, field_values, medias, thin=False):
 
 If the source ships pre-computed vectors, prefer
 `self.content_vectors[filename] = vec` or
-`self.custom_metadata_map[filename] = {"embedding": vec}` - the framework
+`self.custom_metadata_map[filename] = {"embedding": vec}`; the framework
 treats those as already-embedded and skips them.
 
 When building dicts directly, the importer should also override
@@ -456,8 +456,8 @@ in `run()` are preserved.
 
 ### Bulk-record hooks
 
-For service-style importers - those that fetch records from a remote
-source rather than scanning a local folder - override the per-record /
+For service-style importers (those that fetch records from a remote
+source rather than scanning a local folder), override the per-record /
 bulk-record hooks instead of writing `run()` from scratch.  The split
 mirrors the embedder's `embed_media` / `embed_media_bulk` pattern: a
 working baseline comes from the per-item method, and you can opt into
@@ -466,7 +466,7 @@ batched / concurrent I/O by overriding the bulk hook.
 ```python
 class MyServiceImporter(DatasetImporter):
     def list_records(self, field_values):
-        # Return whatever shape you want - opaque to the framework.
+        # Return whatever shape you want; it is opaque to the framework.
         return _api.list(query=field_values["query"])
 
     def fetch_record(self, record, field_values, thin=False):
@@ -519,9 +519,9 @@ concurrently via a thread pool.
 
 ### Dynamic field options
 
-When a `"select"` field's options must be computed at runtime - for
+When a `"select"` field's options must be computed at runtime (for
 example, populating a list of remote queries after the user picks a
-media type - declare it with `dynamic_options=True` and list the parent
+media type), declare it with `dynamic_options=True` and list the parent
 fields it depends on in `depends_on`.  Then implement
 `get_field_options(field_key, current_values)` on your importer:
 
@@ -557,7 +557,7 @@ The frontend wiring is fully automatic:
 API contract: `POST /api/dataset/import/<name>/options` with body
 `{"field_key": "...", "values": {...}}` returns `{"options": [...]}`.
 Any exception your `get_field_options()` raises is returned as a 502
-with the exception message - perfect for surfacing remote-service
+with the exception message, which is perfect for surfacing remote-service
 errors directly to the user.
 
 ### How it gets invoked
@@ -594,7 +594,7 @@ your `run()` expects non-string values (e.g. FileStorage objects).
 ### Wiring up dependencies
 
 Add any extra packages to `[project.dependencies]` in the repo's
-`pyproject.toml` - that's the single source of truth and deptry verifies
+`pyproject.toml`; that's the single source of truth and deptry verifies
 every import is declared there. They are picked up the next time you run
 `bash scripts/install-cpu.sh` (or any editable install).
 
@@ -617,21 +617,21 @@ SourceSpec(
 `effective_source_specs()` reads the user's `source_specs` form value
 (either a Python list or a JSON-encoded string), validates it against
 the converter registry, and returns the typed list.  Each spec where
-`converter is None` is a "include directly" row - the framework ingests
+`converter is None` is a "include directly" row; the framework ingests
 files of `source_type` straight into the dataset.  Each spec where
 `converter` is set asks the framework to take files of `source_type`
 from the importer and pass them through that converter (with
 `spec.params`) to produce media of the dataset's output type.
 
-**The framework drives the conversion, not your importer.**  Your job
+**The framework drives the conversion, not your importer.** Your job
 is just to **yield raw source-type media**; the framework runs each
-spec's converter and ingests the result.  Subclasses **never** call
+spec's converter and ingests the result. Subclasses **never** call
 `get_converter()` or `converter.convert()` directly.
 
 You pick one of two fetch hooks depending on how your backend is
 shaped.
 
-#### Hook 2 - per-spec fetch (`fetch_source_media`)
+#### Hook 2: per-spec fetch (`fetch_source_media`)
 
 When the backend serves one media type per query.  The framework
 loops `effective_source_specs()` and calls you once per spec.
@@ -646,7 +646,7 @@ class DXImporter(DatasetImporter):
     ]
 
     def fetch_source_media(self, spec, field_values, thin=False):
-        """Yield raw media dicts of spec.source_type - one per upstream record.
+        """Yield raw media dicts of spec.source_type, one per upstream record.
 
         Called once per spec. When spec.converter is set the framework
         runs converter.convert(raw, spec.params) on every yielded dict
@@ -656,10 +656,10 @@ class DXImporter(DatasetImporter):
             yield self._dx_fetch(record, spec.source_type, field_values)
 ```
 
-That's the entire integration - no `run()`, no converter calls, no
+That's the entire integration: no `run()`, no converter calls, no
 spec loop.
 
-#### Hook 3 - bulk fetch (`fetch_all_source_media`)
+#### Hook 3: bulk fetch (`fetch_all_source_media`)
 
 When one upstream call returns mixed source types in a single
 response and you want to make it only once.  The framework calls you
@@ -700,7 +700,7 @@ behavioural change.
 > importer (`multi_media = True`, with `media_type` declaring the
 > output type).  If your importer declares neither, `run()` falls
 > through to the hook-1 path and raises `NotImplementedError` from
-> `list_records()` - even when you've overridden `fetch_source_media`
+> `list_records()`; this happens even when you've overridden `fetch_source_media`
 > or `fetch_all_source_media`.
 
 **Legacy / shim path.** Importers that have **not** flipped
@@ -708,7 +708,7 @@ behavioural change.
 field and (optionally) accept a comma-separated `converters` field that
 post-processes the imported folder through
 `run_converters_on_folder()`.  Legacy importers can also call
-`effective_source_specs()` - it synthesises an equivalent list from the
+`effective_source_specs()`; it synthesises an equivalent list from the
 classic `media_type` + `converters` fields, so a legacy importer can
 migrate to the new iteration style before changing its form schema.
 
@@ -729,7 +729,7 @@ Converters are auto-discovered from `vtscore.converters` via the
 ### File structure
 
 ```
-vtscore/converters/<your_converter>.py    # flat module - single file per converter
+vtscore/converters/<your_converter>.py    # flat module; one file per converter
 ```
 
 ### What to implement
@@ -802,7 +802,7 @@ outputs.
 ## Adding a Results Exporter
 
 Results exporters deliver autodetect results **or labels** to a destination
-(file, webhook, email, Holder, etc.).  Auto-discovered - no changes to
+(file, webhook, email, Holder, etc.). Auto-discovered; no changes to
 routes needed.
 
 Exporters receive **two possible result formats** and should detect which:
@@ -931,13 +931,13 @@ endpoints:
 | Endpoint                       | Method | What it exports                           | Format          |
 |--------------------------------|--------|-------------------------------------------|-----------------|
 | `/api/dataset/export`          | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
-| `/api/labels/export`           | GET    | LabelSet - labels with per-element origin  | JSON            |
+| `/api/labels/export`           | GET    | LabelSet: labels with per-element origin   | JSON            |
 | `/api/detectors/{name}` | GET    | Detector labelset + examples              | JSON            |
 
 ### Wiring up dependencies
 
 Add any extra packages to `[project.dependencies]` in the repo's
-`pyproject.toml` - that's the single source of truth and deptry verifies
+`pyproject.toml`; that's the single source of truth and deptry verifies
 every import is declared there. They are picked up the next time you run
 `bash scripts/install-cpu.sh` (or any editable install).
 
@@ -1039,11 +1039,11 @@ publish or share a classifier:
 2. Toggle its autorun flag with
    `PUT /api/detectors/registry/<id>/autorun` so it runs from
    `/api/auto-detect` and the CLI's `--autodetect` flow.
-3. The MLP itself lives only in RAM - it's trained on demand from the
+3. The MLP itself lives only in RAM; it's trained on demand from the
    labelset's origins each time the model is loaded or scored.
 
 For ready-made classifiers without labels (e.g. an OCR or face-detector
-heuristic), build an Extractor or Localizer plugin instead - see
+heuristic), build an Extractor or Localizer plugin instead. See
 [EXTENDING-processors.md](EXTENDING-processors.md).
 
 ---
@@ -1086,7 +1086,7 @@ class S3SettingsImporter(SettingsImporter):
         """Import settings from S3. Return a settings dict.
 
         The returned dict is applied via the settings module's update
-        mechanism - only keys present in the dict are changed.
+        mechanism; only keys present in the dict are changed.
         """
         import boto3, json
         s3 = boto3.client("s3")
@@ -1201,7 +1201,7 @@ SETTINGS_EXPORTER = S3SettingsExporter()
 
 ## Adding a Settings Source
 
-Settings sources provide **bidirectional sync** - combining the roles of
+Settings sources provide **bidirectional sync**, combining the roles of
 a settings importer and exporter into a single plugin that stays
 connected. When a source is active, changing any setting auto-exports to
 the source, and syncing pulls from the source back into the app.
@@ -1262,7 +1262,7 @@ The sentinel `SETTINGS_SOURCE` at module level is required for auto-discovery.
 
 ### Template variables
 
-Field values support `{username}` - resolved at runtime from
+Field values support `{username}`, resolved at runtime from
 `get_current_user()`. This enables per-user settings files
 (e.g. `data/{username}.settings.json`).
 
@@ -1303,7 +1303,7 @@ curl -X PUT http://localhost:5000/api/settings-sources/active \
 
 On the next app startup, VTSearch will call `source.load()` and apply
 the returned settings before starting the server. The built-in
-`server_json_file` source does this with a local file path - your
+`server_json_file` source does this with a local file path; your
 custom source can fetch from S3, a database, a remote API, etc.
 
 If the source is unavailable at startup (file missing, network error),
@@ -1314,7 +1314,7 @@ fallback.
 
 ## Adding a Labelset Source
 
-Labelset sources provide **bidirectional sync** for detector labels -
+Labelset sources provide **bidirectional sync** for detector labels,
 combining the roles of a label importer and exporter into a single
 plugin. Each detector can link to a source that auto-exports labels on
 change and imports them on sync.
@@ -1369,7 +1369,7 @@ The sentinel `LABELSET_SOURCE` at module level is required for auto-discovery.
 
 ### Template variables
 
-Field values support `{detector_id}` and `{detector_name}` - resolved
+Field values support `{detector_id}` and `{detector_name}`, resolved
 at runtime from the active `DetectorContext`.
 
 ### How it gets invoked

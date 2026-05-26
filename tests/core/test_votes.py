@@ -45,7 +45,7 @@ class TestVoteClip:
         """Re-sending target=good on a good media is a no-op (H1 fix).
 
         Two stale-view tabs that both POST target=good no longer alternate
-        ADD/REMOVE on the server - the second call is idempotent.
+        ADD/REMOVE on the server; the second call is idempotent.
         """
         r1 = client.post("/api/medias/1/vote", json={"target": "good"})
         assert r1.status_code == 200
@@ -92,7 +92,7 @@ class TestVoteClip:
         assert resp.status_code == 422
 
     def test_legacy_vote_field_rejected(self, client):
-        # The pre-H1 ``vote`` field is no longer accepted - the schema requires
+        # The pre-H1 ``vote`` field is no longer accepted; the schema requires
         # ``target`` with absolute-state semantics so the toggle race cannot
         # be re-introduced by a client that hasn't been updated.
         resp = client.post("/api/medias/1/vote", json={"vote": "good"})
@@ -338,7 +338,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 4
 
-        # Switch media 1 from good to bad - steps 0-1 preserved, 2-3 discarded
+        # Switch media 1 from good to bad; steps 0-1 preserved, 2-3 discarded
         client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
 
@@ -351,7 +351,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 4
 
-        # Switch media 1 from bad to good - steps 0-1 preserved, 2-3 discarded
+        # Switch media 1 from bad to good; steps 0-1 preserved, 2-3 discarded
         client.post("/api/medias/1/vote", json={"target": "good"})
         assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
 
@@ -362,13 +362,13 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 2
 
-        # Switch media 1 (present from step 0) - full clear
+        # Switch media 1 (present from step 0); full clear
         client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_cached_steps) == 0, "Cache should be fully cleared when media was in step 0"
 
     def test_unvote_invalidates_cache_from_first_appearance(self, client):
         """Un-voting (X→none) now invalidates the progress cache from the
-        media's first appearance - same rule as polarity flips (H1 cache-
+        media's first appearance; same rule as polarity flips (H1 cache-
         invalidation fix).  Previously cache was retained, leaving cached
         models trained against a label the user has since withdrawn.
         """
@@ -379,7 +379,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 3
 
-        # Un-vote media 1 (first appears at step 2) - keep 2 earlier steps.
+        # Un-vote media 1 (first appears at step 2); keep 2 earlier steps.
         client.post("/api/medias/1/vote", json={"target": "none"})
         assert len(_cached_steps) == 2
 
@@ -412,7 +412,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         assert resp.status_code == 200
         assert len(_live_models) > 0
 
-        # Switch media 1 from good to bad - live models should be cleared
+        # Switch media 1 from good to bad; live models should be cleared
         client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_live_models) == 0, "Live models should be cleared on vote switch"
 
@@ -424,7 +424,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
 
-        # Switch media 1 - truncates to 2 steps (steps 0-1)
+        # Switch media 1; truncates to 2 steps (steps 0-1)
         client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_cached_steps) == 2
         # Running ID sets should match step 1's state: good={3}, bad={4}
@@ -442,11 +442,11 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 4
 
-        # Switch media 1 from good to bad - truncates to 2 steps
+        # Switch media 1 from good to bad; truncates to 2 steps
         client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_cached_steps) == 2
 
-        # Rebuild cache - should replay from step 2 onward
+        # Rebuild cache; should replay from step 2 onward
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == len(label_history)
         # After replay, media 1 should be in bad_ids (final state)
@@ -562,7 +562,7 @@ class TestStableIndicatorThresholds:
         assert result["status"] == "yellow", "~1.5% flip rate should stay yellow (threshold is 0.5% avg / 1% max)"
 
     def test_near_zero_flips_green(self, client):
-        """Green requires practically zero flips - only the rare single flip tolerated."""
+        """Green requires practically zero flips; only the rare single flip tolerated."""
         entries: list = [None]  # no prior model
         for i in range(1, 7):
             # Mostly 0 flips, one step with 1 flip out of ~496 → 0.2%
@@ -579,9 +579,9 @@ class TestStableIndicatorThresholds:
                 None,  # no prior model (first model step)
                 {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
                 {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
-                None,  # model lost (gap - user unlabeled all bad)
+                None,  # model lost (gap; user unlabeled all bad)
                 None,  # still no model
-                None,  # first model step after gap - no prior model
+                None,  # first model step after gap; no prior model
                 {"time_index": 6, "num_labels": 16, "num_flips": 0, "num_unlabeled": 84},
                 {"time_index": 7, "num_labels": 17, "num_flips": 0, "num_unlabeled": 83},
             ]
@@ -619,8 +619,8 @@ class TestStabilitySkipsUnchangedModel:
         _ensure_cache(clips, history, inclusion_value=0)
 
         assert len(_cached_steps) == 3
-        # Steps 0 and 1 change the training data - they should attempt training.
-        # Step 2 has the same good/bad IDs as step 1 - stability should be None.
+        # Steps 0 and 1 change the training data; they should attempt training.
+        # Step 2 has the same good/bad IDs as step 1; stability should be None.
         assert _cached_steps[2]["stability"] is None, (
             "Stability should not be recorded when training data didn't change"
         )

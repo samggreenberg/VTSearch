@@ -2,11 +2,11 @@
 
 Covers endpoints that had zero direct tests:
 
-* ``GET  /api/dataset/export`` - round-trips the current medias to a
+* ``GET  /api/dataset/export``; round-trips the current medias to a
   pickle download.
-* ``POST /api/dataset/load-file`` - accepts a multipart pickle upload
+* ``POST /api/dataset/load-file``; accepts a multipart pickle upload
   (validates the no-file / empty-filename branches).
-* ``POST /api/dataset/load-source`` - the ``_load_from_origin``
+* ``POST /api/dataset/load-source``; the ``_load_from_origin``
   pseudo-origin and unknown-importer branches.
 
 The tests do not exercise the background import thread itself; that
@@ -102,7 +102,7 @@ class TestLoadSource:
         assert "Unknown importer" in resp.get_json()["message"]
 
     def test_dupe_set_without_members_returns_400(self, client):
-        """The ``dupe_set`` pseudo-origin needs ``members`` - empty rejects."""
+        """The ``dupe_set`` pseudo-origin needs ``members``; empty rejects."""
         resp = client.post(
             "/api/dataset/load-source",
             json={"source": {"importer": "dupe_set", "members": []}},
@@ -111,7 +111,7 @@ class TestLoadSource:
         assert "dupe_set" in resp.get_json()["message"]
 
     def test_dupe_set_unwraps_to_inner_origin(self, client):
-        """``dupe_set`` recurses into the first member's origin - an inner
+        """``dupe_set`` recurses into the first member's origin; an inner
         unknown-importer surface as the inner's 400, proving the unwrap ran."""
         resp = client.post(
             "/api/dataset/load-source",

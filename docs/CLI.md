@@ -28,14 +28,14 @@ python app.py --autodetect --importer http_archive --url https://example.com/dat
 
 Available importers: `folder`, `pickle`, `http_archive`, `combine_datasets`, `demo`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them.
 
-**Chunked loading:** for large datasets, use `--chunk-size N` to process in batches to limit memory:
+**Chunked loading** - for large datasets, use `--chunk-size N` to process in batches to limit memory:
 
 ```bash
 python app.py --autodetect --dataset data.pkl --settings settings.json --chunk-size 1000
 python app.py --autodetect --importer folder --path /data/sounds --media-type audio --settings settings.json --chunk-size 500
 ```
 
-**Exporting results** - by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
+**Exporting results:** by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
 
 ```bash
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter server_json_file --filepath results.json
@@ -44,12 +44,12 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --exporte
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter email_smtp --to recipient@example.com
 ```
 
-Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST, optional `--auth-header`), `email_smtp` (SMTP email, requires `--to`), `gui` (default - print to console).
+Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST, optional `--auth-header`), `email_smtp` (SMTP email, requires `--to`), `gui` (default: print to console).
 
 **How to get the files:**
 
-- **Dataset file** - Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
-- **Settings file** - A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh MLP, and scores the dataset.
+- **Dataset file:** Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
+- **Settings file:** A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh MLP, and scores the dataset.
 
 ```json
 {
@@ -58,7 +58,7 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 }
 ```
 
-- **Detector file** - Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the MLP is rebuilt from origins at scoring time.
+- **Detector file:** Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the MLP is rebuilt from origins at scoring time.
 
 **Example output:**
 
@@ -91,7 +91,7 @@ settings file, every detector listed under `autorun_detectors` (with its
 media type and label count), and the exporter + its field values:
 
 ```
-DRY RUN - no media will be loaded, embedded, scored, or exported.
+DRY RUN: no media will be loaded, embedded, scored, or exported.
 
 Source:
   Importer: server_folder
@@ -111,8 +111,8 @@ Exporter: server_json_file
 
 `--dry-run` validates importer and exporter names, checks that the
 dataset pickle (if given) exists, verifies required CLI fields are
-populated, and reports any detector JSON files that are missing - so
-typos in a cron-style invocation fail immediately instead of after a
+populated, and reports any detector JSON files that are missing. This
+means typos in a cron-style invocation fail immediately instead of after a
 multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...`
 is announced as part of the plan but skipped (no detector JSON is
 modified).
@@ -127,7 +127,7 @@ python app.py --pipeline pipeline.yaml
 ```
 
 The YAML supports every knob the `--autodetect` flag set does. It cannot be
-combined with the other autodetect flags - declare everything inline.
+combined with the other autodetect flags; declare everything inline.
 
 ```yaml
 # Pick exactly one source.
@@ -174,7 +174,7 @@ before any media is loaded.
 
 ## Web server modes
 
-**Development (Flask dev server)** - bind to `0.0.0.0:5000`:
+**Development (Flask dev server):** bind to `0.0.0.0:5000`:
 
 ```bash
 python app.py
@@ -185,7 +185,7 @@ banner text (`LOCAL` vs. `PRODUCTION`); the bind address is the same either
 way. This entry point uses Flask's built-in dev server and is not
 recommended for production.
 
-**Production (gunicorn)** - run the WSGI app under the bundled config:
+**Production (gunicorn):** run the WSGI app under the bundled config:
 
 ```bash
 VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
@@ -193,12 +193,12 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 
 `VTSEARCH_SERVER_INIT=1` runs the same startup sequence (model
 initialization, autoload preloading, settings-source sync) that `python
-app.py` runs - gunicorn imports `app.py` rather than executing its
+app.py` runs. Gunicorn imports `app.py` rather than executing its
 `__main__` block, so the env var is what triggers initialization. The
 bundled Docker images already run gunicorn this way. See
 [DEPLOYMENT.md](DEPLOYMENT.md#gunicorn-tuning) for tuning.
 
-**Authentication mode** (`--login`) - select the login provider (dev
+**Authentication mode** (`--login`): select the login provider (dev
 server only; set up the provider in code when running under gunicorn):
 
 ```bash
@@ -207,7 +207,7 @@ python app.py --login trivial    # multi-user mode with simple username auth
 
 Without `--login`, the app uses `DefaultLoginProvider` (single-user, always authenticated).
 
-**Solo mediaType** (`--solo-media-type`) - streamline the UI for users
+**Solo mediaType** (`--solo-media-type`): streamline the UI for users
 who only ever look at one media type (e.g. images, optionally pulled
 in via converters from videos/documents). When set, the dataset
 importer and new-detector flows hide their mediaType pickers and lock
@@ -225,7 +225,7 @@ opts back into "show everything") via the Settings dialog overrides
 the CLI value for themselves, and the choice persists across restarts.
 A user who has never touched the setting sees the CLI value.
 
-**Solo mediaEmbedder** (`--solo-embedder`) - lock the embedding model
+**Solo mediaEmbedder** (`--solo-embedder`): lock the embedding model
 for one or more mediaTypes so the dataset-importer modal hides its
 embedder picker for those types and silently uses the named embedder.
 Repeatable, one `--solo-embedder` per mediaType; the format is
@@ -241,7 +241,7 @@ registered yet. Same fallback semantics as `--solo-media-type`: any
 user can override per-mediaType via the Settings dialog ("Ask each
 time" is the opt-out), and their choice persists across restarts.
 
-**Hidden plugins** (`--hide-plugin family:name`, repeatable) - drop a
+**Hidden plugins** (`--hide-plugin family:name`, repeatable): drop a
 plugin from picker / listing API responses for this deployment without
 editing plugin code. The format is `family:name` where `family` is one
 of the keys printed by `--list-plugins` (`importers`, `exporters`,
@@ -257,7 +257,7 @@ python app.py --hide-plugin converters:audio2image \
 ```
 
 Hidden plugins remain importable and callable by name via execution
-endpoints (autodetect, label import, etc.) - this is a UI declutter,
+endpoints (autodetect, label import, etc.). This is a UI declutter,
 not a security boundary. The CLI flag merges with the persisted
 `hidden_plugins` key in the server settings file (`data/settings.json`
 or whatever path `--settings` points at), where a deployment can set
@@ -267,9 +267,9 @@ available `family:name` pairs.
 
 ## Inspecting plugins and the API schema
 
-`python app.py --list-plugins` enumerates every auto-discovered plugin -
-dataset importers, exporters, label importers/sources, settings I/O,
-media converters/types/embedders/clippers, and media sources - and
+`python app.py --list-plugins` enumerates every auto-discovered plugin
+(dataset importers, exporters, label importers/sources, settings I/O,
+media converters/types/embedders/clippers, and media sources) and
 exits without starting the server. Three output formats:
 
 ```bash
@@ -277,10 +277,10 @@ python app.py --list-plugins                          # human-readable
 python app.py --list-plugins --format json            # machine-readable
 python app.py --list-plugins --format names           # one "family:name" per line
 python app.py --list-plugins --plugin-family importers --format names
-                                                      # one bare name per line - completion-friendly
+                                                      # one bare name per line (completion-friendly)
 ```
 
-Per-family shortcuts are available for every plugin family - they're
+Per-family shortcuts are available for every plugin family; they're
 equivalent to `--list-plugins --plugin-family <family>` and accept the
 same `--format` flag:
 

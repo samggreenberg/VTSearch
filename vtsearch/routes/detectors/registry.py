@@ -19,7 +19,7 @@ PUT    /api/detectors/registry/<id>/autorun           Toggle the detector's auto
 POST   /api/detectors/cancel/<task_id>                Cancel a load task.
 
 Migrated to ``flask_smorest`` so the routes are described in
-``/api/openapi.json`` - except for ``POST /from-labelset/<importer>``, which
+``/api/openapi.json``, except for ``POST /from-labelset/<importer>``, which
 takes plugin-dependent fields and stays on plain Flask (see
 ``docs/plans/openapi-schema.md`` *Open questions / Plugin field endpoints*).
 """
@@ -162,7 +162,7 @@ def register_detector_route(body: dict):
 # ---------------------------------------------------------------------------
 # POST /api/detectors/registry/from-labelset/<importer_name>
 #
-# Plugin-field route - body shape depends on the importer plugin and isn't
+# Plugin-field route: body shape depends on the importer plugin and isn't
 # described in the OpenAPI spec.  Runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the importer's
 # :attr:`fields`), so missing required fields / invalid select values
@@ -236,7 +236,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         return jsonify(
             {
                 "error": (
-                    "Could not infer media type from the imported labels - none of "
+                    "Could not infer media type from the imported labels; none of "
                     "the entries carry origin information with a detectable type. "
                     "Re-export the labels with origin metadata, or use a different "
                     "importer."
@@ -449,7 +449,7 @@ def load_detector_route(body: dict):  # noqa: C901
         # dataset embedded with SigLIP to one embedded with CLIP). Re-embed
         # the labels in that case so MLP training mixes only same-space
         # vectors. The cache invalidation itself happens inside
-        # ``populate_label_embeddings`` - this branch just makes the work
+        # ``populate_label_embeddings``; this branch just makes the work
         # visible via a progress task instead of letting it run lazily
         # inside the next vote or learned-sort request.
         det_ctx_existing = get_active_detector_context()

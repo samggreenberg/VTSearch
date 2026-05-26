@@ -6,16 +6,16 @@ Migrated to ``flask_smorest`` so these routes appear in
 Endpoints
 ---------
 Settings sources:
-    GET  /api/settings-sources              - list available source plugins
-    GET  /api/settings-sources/active       - get the active source config
-    PUT  /api/settings-sources/active       - set or clear the active source
-    POST /api/settings-sources/sync         - force import from source
+    GET  /api/settings-sources              (list available source plugins)
+    GET  /api/settings-sources/active       (get the active source config)
+    PUT  /api/settings-sources/active       (set or clear the active source)
+    POST /api/settings-sources/sync         (force import from source)
 
 Labelset sources:
-    GET  /api/labelset-sources                       - list available source plugins
-    GET  /api/detectors/<name>/labelset-source       - get detector's source
-    PUT  /api/detectors/<name>/labelset-source       - set or clear source
-    POST /api/detectors/<name>/labelset-source/sync  - force import from source
+    GET  /api/labelset-sources                       (list available source plugins)
+    GET  /api/detectors/<name>/labelset-source       (get detector's source)
+    PUT  /api/detectors/<name>/labelset-source       (set or clear source)
+    POST /api/detectors/<name>/labelset-source/sync  (force import from source)
 
 Schema-level validation failures surface as 422 with the standard
 ``errors`` envelope; handler-level rejects (unknown source, detector not

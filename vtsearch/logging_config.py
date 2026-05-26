@@ -12,13 +12,13 @@ they come from the thread-locals already maintained by
 Two output formats are supported, selected by the
 ``VTSEARCH_LOG_FORMAT`` env var:
 
-* ``json`` (default) - one JSON object per line, suitable for log aggregators.
-* ``text`` - human-readable bracketed-tag form, suitable for local dev.
+* ``json`` (default): one JSON object per line, suitable for log aggregators.
+* ``text``: human-readable bracketed-tag form, suitable for local dev.
 
 The level is controlled by ``VTSEARCH_LOG_LEVEL`` (default ``WARNING``).
 
 Existing ``logging.getLogger(__name__)`` call sites scattered throughout
-the codebase inherit the context automatically - no per-call ``extra=``
+the codebase inherit the context automatically; no per-call ``extra=``
 dict is needed.
 """
 
@@ -40,7 +40,7 @@ _DEFAULT_FORMAT = "json"
 # TextFormatter walks them in this order to build the bracketed tag list.
 _CONTEXT_FIELDS: tuple[str, ...] = ("request_id", "user", "dataset_id", "detector_id")
 
-# Built-in LogRecord attributes - used to filter the record's __dict__
+# Built-in LogRecord attributes, used to filter the record's __dict__
 # down to caller-supplied ``extra=`` keys when emitting JSON.
 _STD_RECORD_ATTRS = frozenset(
     {
@@ -86,7 +86,7 @@ def _resolve_context() -> dict[str, Any]:  # noqa: C901
     out: dict[str, Any] = {}
 
     try:
-        from flask import g, has_request_context  # local import - Flask may not be loaded yet
+        from flask import g, has_request_context  # local import; Flask may not be loaded yet
     except Exception:
         has_request_context = lambda: False  # noqa: E731
         g = None  # type: ignore[assignment]
@@ -159,7 +159,7 @@ class ContextFilter(logging.Filter):
         ctx = _resolve_context()
         for field in _CONTEXT_FIELDS:
             # Don't overwrite an explicit ``extra={"dataset_id": "..."}``
-            # value passed by the caller - they know what they're doing.
+            # value passed by the caller (they know what they're doing).
             if not hasattr(record, field):
                 setattr(record, field, ctx.get(field))
         return True
@@ -285,7 +285,7 @@ def setup_logging(
     root.addHandler(handler)
     root.setLevel(level_value)
 
-    # Quiet down chatty libraries - preserved from app.py's old basicConfig.
+    # Quiet down chatty libraries; preserved from app.py's old basicConfig.
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
     logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
     logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
@@ -306,8 +306,8 @@ def install_transformers_logging_bridge() -> None:
     Deferred from ``setup_logging`` because importing ``transformers.utils.logging``
     pulls in the full ``transformers`` package (~0.7s), which we don't want
     to pay for in unit tests that stub embedders. Call once during app
-    startup before any model load - :func:`vtscore.embedding.loader.initialize_models`
-    is the canonical site.
+    startup before any model load; :func:`vtscore.embedding.loader.initialize_models`
+    is the canonical call site.
     """
     try:
         import transformers.utils.logging as hf_logging  # noqa: PLC0415

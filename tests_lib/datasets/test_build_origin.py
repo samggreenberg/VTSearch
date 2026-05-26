@@ -179,7 +179,7 @@ class TestCheckboxStillSerialised:
         imp = _make_importer(
             fields=[ImporterField("on", "On", "checkbox", default="true")],
         )
-        # Field absent from field_values - falls back to declared default.
+        # Field absent from field_values; falls back to declared default.
         assert imp.build_origin({})["params"] == {"on": "true"}
 
 
@@ -198,7 +198,7 @@ class TestSubclassOverrideWins:
             ]
 
             def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:
-                # Deliberately include the password - the override wins even
+                # Deliberately include the password; the override wins even
                 # over the new "exclude password by default" rule.
                 return {
                     "importer": self.name,
@@ -261,7 +261,7 @@ class TestInTreeImportersAfterMigration:
 
         origin = IMPORTER.build_origin({"datasets": ["/a.pkl", "/b.pkl"], "name": "Combined"})
         assert origin["importer"] == "combine_datasets"
-        # ``name`` is display-only - excluded from origin.
+        # ``name`` is display-only; excluded from origin.
         assert origin["params"] == {"datasets": "/a.pkl,/b.pkl"}
 
     def test_combine_datasets_passes_through_string(self):

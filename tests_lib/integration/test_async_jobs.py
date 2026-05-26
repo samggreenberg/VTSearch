@@ -67,7 +67,7 @@ class TestCoalescing:
         assert first_started.wait(timeout=5)
         assert first.status == "running"
 
-        # Second start while first is running - must enqueue, not spawn.
+        # Second start while first is running; must enqueue, not spawn.
         second_release = threading.Event()
         second_started = threading.Event()
         second_release.set()
@@ -75,7 +75,7 @@ class TestCoalescing:
         assert second.status == "pending"
         assert second.job_id != first.job_id
 
-        # Second's target must NOT have run yet - only first is on a thread.
+        # Second's target must NOT have run yet; only first is on a thread.
         assert ran == ["sig-A"]
         assert not second_started.is_set()
 
@@ -104,7 +104,7 @@ class TestCoalescing:
         second = mgr.start("sig-B", _make_target(release_bc, started_b, ran))
         third = mgr.start("sig-C", _make_target(release_bc, started_c, ran))
 
-        # Same pending object reused - latest signature wins.
+        # Same pending object reused; latest signature wins.
         assert second.job_id == third.job_id
         assert third.signature == "sig-C"
         assert second.signature == "sig-C"  # second was mutated in place
@@ -202,7 +202,7 @@ class TestCoalescing:
 
     def test_serial_starts_after_idle_do_not_enqueue(self):
         """When nothing is running, start() should spawn immediately, not
-        pend - the pending slot is only used while a job is in flight."""
+        pend; the pending slot is only used while a job is in flight."""
         mgr = JobManager("test")
         release = threading.Event()
         release.set()
@@ -257,7 +257,7 @@ class TestThreadContextPropagation:
 
     Without this, every learned-sort / eval job target that reads votes,
     media, or any other context-scoped state from a background thread sees
-    empty containers - silent miscompute. See ``docs/plans/logical-bug-audit.md``
+    empty containers; silent miscompute. See ``docs/plans/logical-bug-audit.md``
     finding C2.
     """
 
@@ -314,7 +314,7 @@ class TestThreadContextPropagation:
     def test_run_clears_thread_context_after_target_returns(self):
         """The worker thread's thread-locals must be reset after the target
         runs, including on the error path, so a follow-up job on a freshly
-        spawned thread doesn't inherit stale context (defensive - daemon
+        spawned thread doesn't inherit stale context (defensive; daemon
         threads are one-shot today, but the contract should hold)."""
         mgr = JobManager("ctx-test")
         ds_ctx = DatasetContext("ds-ctx-B")

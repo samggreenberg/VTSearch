@@ -552,7 +552,7 @@ class TestExportEndpoint:
 
         ``server_json_file`` declares a ``{YYYYMMDD-HHMMSS}``-stamped
         default for ``filepath``, so an export with no ``filepath`` at
-        all proceeds with that default - same behaviour as if the
+        all proceeds with that default; same behaviour as if the
         frontend had submitted the pre-filled default verbatim.
         """
         res = client.post(

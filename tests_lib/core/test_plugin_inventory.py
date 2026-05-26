@@ -29,11 +29,11 @@ class TestGatherPlugins:
         assert set(inv.keys()) == set(FAMILIES)
 
     def test_each_family_has_entries(self):
-        # The codebase ships built-ins for every family - if one comes back
+        # The codebase ships built-ins for every family; if one comes back
         # empty something has broken auto-discovery.
         inv = gather_plugins()
         for family in FAMILIES:
-            assert inv[family], f"family {family!r} is empty - discovery regressed?"
+            assert inv[family], f"family {family!r} is empty; discovery regressed?"
 
     def test_importers_include_server_folder(self):
         inv = gather_plugins()
@@ -126,7 +126,7 @@ class TestFamilyShortcutFlags:
         assert (short.list_plugins, short.plugin_family) == (long.list_plugins, long.plugin_family)
 
     def test_help_lists_shortcut(self, parser):
-        # Discoverability is the whole point - `--help` must mention them.
+        # Discoverability is the whole point; `--help` must mention them.
         help_text = parser.format_help()
         assert "--list-importers" in help_text
         assert "--list-exporters" in help_text

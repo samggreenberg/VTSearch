@@ -120,7 +120,7 @@ def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:  # noqa:
                 check=True,
             )
         except FileNotFoundError:
-            pass  # ffmpeg not installed - fall through to cv2
+            pass  # ffmpeg not installed; fall through to cv2
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             pass
         else:
@@ -264,7 +264,7 @@ def list_media_ids():
 
     This replaces the previous unpaginated ``GET /api/medias`` endpoint,
     which serialised the full metadata for every media in the dataset on
-    every call - a 10-20× larger payload that the cache + batch pattern
+    every call; a 10-20x larger payload that the cache + batch pattern
     makes unnecessary.
     """
     result: list[dict[str, Any]] = []
@@ -385,7 +385,7 @@ def media_video(media_id: int):
         if transcoded is not None:
             c["_transcoded_mp4"] = transcoded
             return _send_video_bytes(transcoded, "video/mp4", f"media_{media_id}.mp4")
-        # ffmpeg and OpenCV both unavailable - cannot transcode
+        # ffmpeg and OpenCV both unavailable; cannot transcode
         abort(
             415,
             message=f"Cannot play {ext} videos: install ffmpeg or opencv-python-headless to enable transcoding",
@@ -529,21 +529,21 @@ def vote_media(body: dict, media_id: int):
 
     ``target`` is one of:
 
-    - ``"good"`` - set to good (overrides ``bad`` if present).
-    - ``"bad"`` - set to bad (overrides ``good`` if present).
-    - ``"none"`` - un-vote (remove any existing vote).
+    - ``"good"``: set to good (overrides ``bad`` if present).
+    - ``"bad"``: set to bad (overrides ``good`` if present).
+    - ``"none"``: un-vote (remove any existing vote).
 
     Behaviour is **idempotent**: sending the current state is a no-op
     that does not append to ``label_history``, does not credit
     achievements, and returns the existing click-time.  This is the
-    fix for logical-bug-audit H1 - two stale-view tabs that race the
+    fix for logical-bug-audit H1; two stale-view tabs that race the
     same media no longer alternate ADD/REMOVE on the server, so the
     achievement counter no longer inflates beyond the number of real
     labeling decisions.
 
     Yes-targets may carry ``"region_box": [x0, y0, x1, y1]`` (normalised
     image coords in ``[0, 1]``) to designate the good region.
-    ``"bad"`` and ``"none"`` targets must not include ``region_box`` - by
+    ``"bad"`` and ``"none"`` targets must not include ``region_box``; by
     design no-votes are image-level always (patch-embedder v2).
 
     Returns ``{"ok": true, "state": <new state>, "click_time": <int|null>}``
@@ -652,7 +652,7 @@ def add_media_to_pile():  # noqa: C901
         _sync_pile_label_to_storage()
         return {"ok": True, "media_id": existing_cids[0], "is_new": False}
 
-    # No match - embed and insert as new media.
+    # No match: embed and insert as new media.
     if not snap:
         abort(400, message="No dataset loaded. Load a dataset first.")
 
@@ -726,7 +726,7 @@ def add_media_to_pile():  # noqa: C901
     # Embedding above ran without the lock (it can take seconds), so a
     # concurrent request uploading the same bytes may have inserted a media
     # with this MD5 in the meantime. Without this re-check, both requests
-    # would each insert a fresh media - producing duplicates with identical
+    # would each insert a fresh media, producing duplicates with identical
     # md5/embedding/bytes. (logical-bug-audit.md H32.)
     with _state_lock:
         _, md5_lookup_now, _ = build_media_lookup(medias)

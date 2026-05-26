@@ -22,7 +22,7 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   videoError = false;
 
   private clipCheckInterval: ReturnType<typeof setInterval> | null = null;
-  // See ImageViewerComponent.lastMediaId - guards against metadata-enrichment
+  // See ImageViewerComponent.lastMediaId; guards against metadata-enrichment
   // ngOnChanges cycles rebuilding videoSrc (and yanking playback) for the
   // same id.
   private lastMediaId: number | null = null;

@@ -67,7 +67,7 @@ class TestRenumberChunks:
         assert out[3][2]["name"] == "b"
 
     def test_lazy_evaluation_does_not_consume_upstream(self):
-        """The helper should be a true generator - it must not buffer."""
+        """The helper should be a true generator; it must not buffer."""
         consumed = []
 
         def source():

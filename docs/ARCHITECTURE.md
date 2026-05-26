@@ -29,9 +29,9 @@ imported/loaded from disk and applied as-is. The architecture combines:
 
 - **Detectors (learned search):** a small MLP trained on user votes
   to predict good/bad labels. This is the primary search mechanism.
-  Detectors are persisted as **labelsets** (origin info + labels; never
-  weights - weights are an in-memory artifact, re-derived on demand from
-  origins and the active embedder).
+  Detectors are persisted as **labelsets** (origin info + labels; weights
+  are an in-memory artifact, re-derived on demand from origins and the
+  active embedder).
 - **Semantic sort (text-similarity search):** LAION-CLAP (audio),
   SigLIP (images), X-CLIP (video), E5-base-v2 (text) for
   embedding-based similarity search, with alternative embedders

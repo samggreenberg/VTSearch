@@ -1,6 +1,6 @@
 // Picker chrome (importer tabs, demo table, server folder browser, badges)
 // lives in `frontend/src/scss/_picker-shared.scss` so it's defined once
-// globally and shared with the Add Dataset modal - only styles unique to
+// globally and shared with the Add Dataset modal; only styles unique to
 // this component remain below.
 
 // Pin the modal to a wider size when the media picker is on screen so the
@@ -106,7 +106,7 @@
 
 // In the example column the drop zone sits below the "Browse Media…" button,
 // so use a more compact padding than the standalone version inside the media
-// picker - the column is short and we don't want it to dwarf the text input.
+// picker; the column is short and we don't want it to dwarf the text input.
 .example-col vt-drop-zone ::ng-deep .drop-zone {
   padding: var(--space-lg) var(--space-lg);
 }

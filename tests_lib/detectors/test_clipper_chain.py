@@ -133,7 +133,7 @@ class TestValidateChain:
 
 
 # ---------------------------------------------------------------------------
-# Apply chain - origin stamping + final clips
+# Apply chain; origin stamping + final clips
 # ---------------------------------------------------------------------------
 
 
@@ -296,7 +296,7 @@ class TestReplayChainOnFile:
 
     def test_replay_fails_closed_when_out_index_out_of_range(self, tmp_path, monkeypatch, caplog):
         """If the source file produces fewer outputs than recorded, replay
-        must NOT silently embed outputs[0] - it must return None so the
+        must NOT silently embed outputs[0]; it must return None so the
         resolver records an embed failure rather than training on the
         wrong sub-clip's embedding."""
         import logging
@@ -351,7 +351,7 @@ class TestReplayChainOnFile:
         monkeypatch.setattr(resolver_module, "embed_file", fake_embed_file)
 
         # Replay produces 3 sentences. Trail recorded n_out=4 with
-        # content_hash matching "Charlie." - i.e. the original load had
+        # content_hash matching "Charlie."; i.e. the original load had
         # one extra sentence (now removed) but Charlie still exists.
         source = tmp_path / "doc.txt"
         source.write_text("Alpha. Bravo. Charlie.", encoding="utf-8")

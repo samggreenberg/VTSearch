@@ -13,10 +13,10 @@
 //
 // Three semantic heading roles. Components MUST use the matching tag rather
 // than restyling a smaller tag with a bigger font.
-//   h1 - page header (rarely used; reserved for top-of-app surfaces)
-//   h2 - modal/section title
-//   h3 - sub-section title within a modal/panel
-//   h4 - minor grouping label
+//   h1: page header (rarely used; reserved for top-of-app surfaces)
+//   h2: modal/section title
+//   h3: sub-section title within a modal/panel
+//   h4: minor grouping label
 h1, h2, h3, h4 {
   margin: 0;
   color: var(--text-primary);
@@ -36,7 +36,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // the container resets its top margin so it sits flush with the panel edge.
 //
 // Pair this with a flex parent that uses `gap: 0` so the asymmetric margins
-// - not the flex gap - produce the spacing.
+// (not the flex gap) produce the spacing.
 .section-title {
   margin-top: var(--space-2xl);
   margin-bottom: var(--space-sm);
@@ -47,14 +47,14 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // --- Buttons ---
 //
 // Anatomy:
-//   .btn              - base; outline-on-surface, default size
-//   .btn--primary     - filled accent (commit action)
-//   .btn--secondary   - filled secondary (neutral action)
-//   .btn--danger      - destructive (red outline → red bg on hover)
-//   .btn--cancel      - subtle, link-weight cancel/close (no fill, small)
-//   .btn--sm          - compact size modifier
-//   .btn--xs          - inline mini size modifier (used inside table rows etc.)
-//   .btn--icon-square - square 28×28 plus/icon button
+//   .btn              base; outline-on-surface, default size
+//   .btn--primary     filled accent (commit action)
+//   .btn--secondary   filled secondary (neutral action)
+//   .btn--danger      destructive (red outline → red bg on hover)
+//   .btn--cancel      subtle, link-weight cancel/close (no fill, small)
+//   .btn--sm          compact size modifier
+//   .btn--xs          inline mini size modifier (used inside table rows etc.)
+//   .btn--icon-square square 28×28 plus/icon button
 //
 // Combine variant + size as needed: `class="btn btn--primary btn--sm"`.
 
@@ -121,7 +121,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
     }
   }
 
-  // Size modifiers - change padding + font, keep border/colors from the variant.
+  // Size modifiers: change padding + font, keep border/colors from the variant.
   &--sm {
     padding: var(--space-2xs) var(--space-md);
     font-size: var(--font-sm);
@@ -320,7 +320,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 // Inline format-hint chip rendered below an importer form field when the
 // PluginField declares a `hint` (separate from `description`, which feeds
-// the placeholder).  Stays visible after the user starts typing - used for
+// the placeholder).  Stays visible after the user starts typing; used for
 // accepted extensions, expected column schemas, JSON/CSV sample snippets.
 .form-hint {
   margin: var(--space-2xs) 0 0;
@@ -346,7 +346,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // rely on the parent's flex `gap` to space stacked elements, and default
 // browser `<p>` margins (~1em) inject inconsistent extra space that
 // breaks the vertical rhythm (see style-guide §3.0).
-// `.info-text` is body helper text - the kind of muted explanatory
+// `.info-text` is body helper text: the kind of muted explanatory
 // copy ("Pick a folder on this computer…") that sits below or
 // alongside form controls. Uses `--text-muted` per §1.5 ("hints"),
 // which matches the de-facto pattern that ~5 modals had been
@@ -383,8 +383,8 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 }
 
 // `.subhead` styles a heading tag (typically `<h4>`) as a small muted
-// sub-section label inside a larger panel - e.g. "Server Example
-// Media" inside the load-sort-modal's `<h3>` panel. Vertical rhythm
+// sub-section label inside a larger panel (e.g. "Server Example
+// Media" inside the load-sort-modal's `<h3>` panel). Vertical rhythm
 // (margins) stays scoped per-component since it depends on what's
 // above/below; identity (font-size, color) lives here.
 .subhead {
@@ -392,12 +392,12 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   color: var(--text-secondary);
 }
 
-// `.view-tabs` / `.view-tab` / `.view-tab-content` - a paneled tab strip
+// `.view-tabs` / `.view-tab` / `.view-tab-content`: a paneled tab strip
 // where the active tab visually flows into the inset content region
 // below. The active tab's background matches `.view-tab-content` so the
 // border between them disappears, leaving only the accent underline.
 // Lives here (not in a component SCSS) so child components can reuse the
-// pattern without copying the rules - Angular's emulated encapsulation
+// pattern without copying the rules; Angular's emulated encapsulation
 // otherwise blocks parent classes from styling child template content.
 // `.view-tab-content` intentionally omits `display`; consumers pick
 // `flex` or `grid` to suit their inner layout.

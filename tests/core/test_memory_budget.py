@@ -31,7 +31,7 @@ class TestEarlyReturns:
         assert cap_workers_by_memory(1_000_000, 1024, max_workers=1) == 1
 
     def test_zero_workers_returns_one(self, fixed_memory):
-        # Floor of 1 - never return 0.
+        # Floor of 1; never return 0.
         fixed_memory(10 * 1024 * 1024 * 1024)
         assert cap_workers_by_memory(100, 128, max_workers=0) == 1
 
@@ -40,7 +40,7 @@ class TestEarlyReturns:
         assert cap_workers_by_memory(100, 128, max_workers=-5) == 1
 
     def test_zero_items_uses_requested_workers(self, fixed_memory):
-        # With no items, per-worker memory is 0 - return the request.
+        # With no items, per-worker memory is 0; return the request.
         fixed_memory(0)
         assert cap_workers_by_memory(0, 128, max_workers=8) == 8
 
@@ -52,7 +52,7 @@ class TestEarlyReturns:
 class TestBudgetCapping:
     def test_budget_allows_all_workers(self, fixed_memory):
         # 8 GiB available, 25% budget = 2 GiB.  100 items * 128 dim * 4 B =
-        # ~50 KB per worker - plenty of room for 8 workers.
+        # ~50 KB per worker; plenty of room for 8 workers.
         fixed_memory(8 * 1024 * 1024 * 1024)
         assert cap_workers_by_memory(100, 128, max_workers=8) == 8
 
@@ -91,7 +91,7 @@ class TestBudgetCapping:
         assert cap == 4
 
     def test_request_lower_than_budget_wins(self, fixed_memory):
-        # Budget would allow 10 workers but request is only 3 - return 3.
+        # Budget would allow 10 workers but request is only 3; return 3.
         fixed_memory(10 * 1024 * 1024 * 1024)
         assert cap_workers_by_memory(100, 128, max_workers=3) == 3
 

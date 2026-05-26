@@ -36,7 +36,7 @@ class _FakeImageEmbedder(MediaEmbedder):
     def supports_text(self) -> bool:
         return self._supports_text
 
-    def _load_models_impl(self) -> None:  # pragma: no cover - pre-loaded
+    def _load_models_impl(self) -> None:  # pragma: no cover; pre-loaded
         return
 
     def _embed_media_impl(self, media):

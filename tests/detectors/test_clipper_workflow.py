@@ -31,7 +31,7 @@ from vtsearch.state import (
 def _make_audio_media(media_id: int, duration: float = 5.1, *, origin_path: str = "/data/audio") -> dict:
     """Create a fake audio media dict with WAV bytes and an embedding."""
     # Use 441Hz and 5.1s so that tile boundaries don't align with exact
-    # sine wave periods - otherwise slices could be byte-identical.
+    # sine wave periods; otherwise slices could be byte-identical.
     wav = generate_wav(441, duration)
     rng = np.random.default_rng(media_id)
     return {
@@ -105,7 +105,7 @@ def _make_video_media(media_id: int, duration: float = 10.0) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# _apply_clipper - clip thumbnail regeneration
+# _apply_clipper; clip thumbnail regeneration
 # ---------------------------------------------------------------------------
 
 
@@ -138,7 +138,7 @@ class TestApplyClipperThumbnails:
         parent["thumbnail_bytes"] = b"PARENT_WAVEFORM_PNG"
         clips_dict = {1: parent}
 
-        # sound_default returns the media unchanged - no clipping happens.
+        # sound_default returns the media unchanged; no clipping happens.
         _apply_clipper(clips_dict, "sound_default")
 
         assert len(clips_dict) == 1
@@ -148,7 +148,7 @@ class TestApplyClipperThumbnails:
 
 
 # ---------------------------------------------------------------------------
-# _apply_clipper - MD5 recomputation
+# _apply_clipper; MD5 recomputation
 # ---------------------------------------------------------------------------
 
 
@@ -259,7 +259,7 @@ class TestApplyClipperMD5:
         # is kept as-is (acceptable fallback).
         for clip in clips_dict.values():
             if not np.array_equal(clip["embedding"], parent_embedding):
-                # Re-embedding worked - great.
+                # Re-embedding worked; great.
                 pass
             # Either way, the clip should have *an* embedding.
             assert "embedding" in clip
@@ -278,7 +278,7 @@ class TestApplyClipperMD5:
 
 
 # ---------------------------------------------------------------------------
-# _apply_clipper - origin boundary storage
+# _apply_clipper; origin boundary storage
 # ---------------------------------------------------------------------------
 
 
@@ -560,7 +560,7 @@ class TestCrossDatasetClipEmbedding:
 
 
 # ---------------------------------------------------------------------------
-# API endpoint - clip metadata exposure
+# API endpoint; clip metadata exposure
 # ---------------------------------------------------------------------------
 
 
@@ -718,7 +718,7 @@ class TestMultipleMediasClipped:
 
 
 # ---------------------------------------------------------------------------
-# _apply_clipper - on_progress callback
+# _apply_clipper; on_progress callback
 # ---------------------------------------------------------------------------
 
 

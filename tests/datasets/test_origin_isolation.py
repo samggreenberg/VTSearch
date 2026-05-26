@@ -1,4 +1,4 @@
-"""Regression tests for H8 - origin dict shared by reference across medias.
+"""Regression tests for H8; origin dict shared by reference across medias.
 
 The previous implementations of ``_tag_origins`` (in
 ``vtscore/datasets/load_pipeline.py``), the legacy ingest path in
@@ -6,7 +6,7 @@ The previous implementations of ``_tag_origins`` (in
 and ``_build_folder_media_data`` (in ``vtscore/datasets/loader_folder.py``)
 all stamped the same ``origin`` dict reference onto every media they
 visited.  A later mutation of ``media["origin"]["params"]`` on any one
-of them therefore silently propagated to every sibling - and the
+of them therefore silently propagated to every sibling; and the
 aliasing survived pickle round-trips via backreferences.
 
 These tests pin down the fixed behaviour: each media must own a fresh,
@@ -134,7 +134,7 @@ class TestBuildFolderMediaDataIsolation:
 
 class TestRewriteOriginsIsolation:
     """``ServerFilesDatasetImporter._rewrite_origins`` repoints each media's
-    origin at the canonical importer dict - but every media must get its
+    origin at the canonical importer dict; but every media must get its
     own copy, not a shared reference.
     """
 

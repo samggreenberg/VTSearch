@@ -336,7 +336,7 @@ class TestEmbedMediasDictWrapper:
 
     def test_propagates_none_for_failed_embeddings(self):
         """A None vector from the underlying bulk call surfaces as None
-        at the matching key - no silent dropping like the loader does."""
+        at the matching key; no silent dropping like the loader does."""
         from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):

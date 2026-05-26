@@ -59,7 +59,7 @@ def _make_malicious_pickle() -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# RestrictedUnpickler - blocks malicious payloads
+# RestrictedUnpickler; blocks malicious payloads
 # ---------------------------------------------------------------------------
 
 
@@ -123,7 +123,7 @@ class TestRestrictedUnpicklerBlocks:
 
 
 # ---------------------------------------------------------------------------
-# RestrictedUnpickler - allows safe types
+# RestrictedUnpickler; allows safe types
 # ---------------------------------------------------------------------------
 
 
@@ -289,14 +289,14 @@ class TestMaliciousPickleInLoader:
 
 
 # ---------------------------------------------------------------------------
-# _PeekUnpickler - strips heavy leaf values across pickle protocols
+# _PeekUnpickler; strips heavy leaf values across pickle protocols
 # ---------------------------------------------------------------------------
 
 
 class TestPeekUnpicklerStripsAcrossProtocols:
     """``peek_pickle_dataset_summary`` must extract ``count`` and the first
     entry's ``"type"`` field without materialising embedding lists or inline
-    media-byte blobs - at every supported pickle protocol.
+    media-byte blobs; at every supported pickle protocol.
 
     Regression cover for audit M18 (FLOAT opcode, protocol 0) and the
     sibling BYTEARRAY8 opcode (protocol 5).
@@ -346,7 +346,7 @@ class TestPeekUnpicklerStripsAcrossProtocols:
 
     def test_protocol_0_floats_stripped_quickly(self):
         """Protocol 0 ASCII floats fall through to the default handler if
-        FLOAT isn't overridden - they're still dropped by APPEND, but the
+        FLOAT isn't overridden; they're still dropped by APPEND, but the
         parse cost is wasted. This pins the peek to a generous time bound
         on a moderately float-heavy payload."""
         import time
@@ -369,7 +369,7 @@ class TestPeekUnpicklerStripsAcrossProtocols:
 
         assert len(peeked["medias"]) == 200
         assert len(next(iter(peeked["medias"].values()))["embedding"]) == 0
-        # ~100k floats. Generous bound - actual measured ~110 ms; the goal
+        # ~100k floats. Generous bound; actual measured ~110 ms; the goal
         # is to catch a regression to the unoverridden default that would
         # blow this up by a meaningful factor.
         assert elapsed < 2.0, f"protocol-0 peek took {elapsed:.2f}s"

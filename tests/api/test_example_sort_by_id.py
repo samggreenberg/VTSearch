@@ -2,9 +2,9 @@
 
 Covers:
 
-* ``POST /api/example-sort-by-id`` - sort by similarity to an
+* ``POST /api/example-sort-by-id``; sort by similarity to an
   already-loaded media (in-memory embedding path, no re-embed).
-* ``POST /api/server-media-files/from-media-id`` - materialise a loaded
+* ``POST /api/server-media-files/from-media-id``; materialise a loaded
   media's bytes to ``example_media/`` for the new-detector seed flow.
 """
 
@@ -18,7 +18,7 @@ from vtsearch.state import medias
 @pytest.fixture
 def loaded_media_id(reset_state):
     """Return the id of a loaded media. The autouse ``reset_state`` fixture
-    seeds the snapshot from ``_test_medias_snapshot`` - pick the first id."""
+    seeds the snapshot from ``_test_medias_snapshot``; pick the first id."""
     if not medias:
         pytest.skip("No medias loaded in test environment")
     return next(iter(medias.keys()))
@@ -55,7 +55,7 @@ class TestExampleSortByIdEndpoint:
         body = resp.get_json()
         assert "results" in body
         assert "threshold" in body
-        # Cosine similarity to self is 1.0 - the query item should rank #1.
+        # Cosine similarity to self is 1.0; the query item should rank #1.
         assert body["results"][0]["id"] == loaded_media_id
 
     def test_media_without_embedding_returns_400(self, client, loaded_media_id):
@@ -87,7 +87,7 @@ class TestServerMediaFileFromMediaIdEndpoint:
 
     def test_media_without_bytes_returns_404(self, client, loaded_media_id):
         """A loaded media that has no resolvable bytes (no media_bytes,
-        no media_path, no media_string) is a 404 - we can't materialise it."""
+        no media_path, no media_string) is a 404; we can't materialise it."""
         saved = medias[loaded_media_id].copy()
         for key in ("media_bytes", "media_path", "media_string"):
             medias[loaded_media_id].pop(key, None)

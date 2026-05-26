@@ -24,7 +24,7 @@ MODELS_CACHE_DIR = (
 # ---------------------------------------------------------------------------
 
 # Thread count for native math libraries (OpenMP / MKL) and ``torch``.  The
-# default of 1 keeps memory overhead low in constrained environments - each
+# default of 1 keeps memory overhead low in constrained environments; each
 # additional thread allocates its own scratch buffers.  Override with
 # ``VTSEARCH_TORCH_THREADS`` on bigger boxes where embedding throughput
 # matters more than RSS.  Consumed by ``app.py`` (OMP/MKL env vars set
@@ -35,7 +35,7 @@ TORCH_THREADS = max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1")))
 # Preferred compute device for embedding and training.  ``"auto"`` resolves
 # to ``"cuda"`` when a GPU is visible to PyTorch and ``"cpu"`` otherwise;
 # explicit values like ``"cuda"``, ``"cuda:0"``, ``"cpu"``, or ``"mps"`` are
-# passed through unchanged.  Resolution is lazy - the env var stores the
+# passed through unchanged.  Resolution is lazy; the env var stores the
 # user's intent, ``resolve_device()`` actually imports torch when called.
 # Currently advisory: every embedder still loads on CPU.  Reserved for the
 # upcoming device-aware embedder refactor.
@@ -67,7 +67,7 @@ def _parse_server_roots(value: str | None) -> tuple[Path, ...]:
 
     Splits on :data:`os.pathsep` (``:`` on Unix, ``;`` on Windows).  Empty
     segments are ignored.  When the env var is unset or empty the tuple
-    contains a single entry - ``Path.cwd()`` at import time - which
+    contains a single entry (``Path.cwd()`` at import time) which
     reproduces the historical "anything under CWD" behaviour exactly.
     """
     if not value:
@@ -84,7 +84,7 @@ def _parse_server_roots(value: str | None) -> tuple[Path, ...]:
 # In single-user mode these define the directories the user is permitted to
 # read from and write to via the API.  The first entry is the default browse
 # root (what ``/api/browse`` shows when no ``path`` parameter is provided).
-# Multi-user mode is unaffected - each user is still confined to their own
+# Multi-user mode is unaffected; each user is still confined to their own
 # ``data/<username>/`` subtree regardless of this setting.
 SERVER_ROOTS: tuple[Path, ...] = _parse_server_roots(os.environ.get("VTSEARCH_SERVER_ROOTS"))
 
@@ -98,7 +98,7 @@ MAX_UPLOAD_MB = max(0, int(os.environ.get("VTSEARCH_MAX_UPLOAD_MB", "0")))
 
 # Training
 #
-# ``TRAIN_EPOCHS`` is an *upper bound* - :func:`vtscore.training.mlp.train_model`
+# ``TRAIN_EPOCHS`` is an *upper bound*; :func:`vtscore.training.mlp.train_model`
 # also short-circuits on a loss plateau (see ``TRAIN_PATIENCE``).  Override with
 # ``VTSEARCH_TRAIN_EPOCHS`` for benchmarking or to disable early-stop entirely
 # by pairing with ``VTSEARCH_TRAIN_PATIENCE=0``.
@@ -111,7 +111,7 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # trade calibration quality for latency.  Min 1 (clamped in
 # :mod:`vtsearch.settings`).  The default is 1: with
 # ``calibration_fraction=0.5`` a single fold already trains on half the
-# labels, and a second fold mostly averages out per-split noise - bumping
+# labels, and a second fold mostly averages out per-split noise; bumping
 # back up is a one-setting change when the noise actually matters.
 DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "1")))
 MLP_HIDDEN_MIN = 4
@@ -137,7 +137,7 @@ repo with this URL passed as the ``weights`` kwarg.  The HF repo
 under Meta's FAIR Noncommercial Research Licence (surfaced to users via
 ``MediaEmbedder.license_notice`` on the EUPE embedder).
 
-Not the same model as ``facebook/PE-Core-B16-224`` - that was Meta's
+Not the same model as ``facebook/PE-Core-B16-224``; that was Meta's
 Perception Encoder Core, which the dev "eupe" slug was confusingly
 aliased to via a broken ``AutoModel.from_pretrained`` path (the PE-Core
 HF repo has no ``config.json`` so ``AutoModel`` could never load it).
@@ -154,7 +154,7 @@ VIDEOMAE_MODEL_ID = "OpenGVLab/VideoMAEv2-Base"
 """Hugging Face repo for VideoMAE v2 Base weights.
 
 Loaded via ``AutoModel.from_pretrained(..., trust_remote_code=True)``.
-Vision-only encoder - there is no paired text tower, so the embedder
+Vision-only encoder with no paired text tower, so the embedder
 sets ``supports_text=False`` and :meth:`embed_text` returns ``None``.
 The masked-autoencoder objective produces unusually strong action /
 motion features compared to image-only encoders applied per frame.
@@ -162,19 +162,19 @@ motion features compared to image-only encoders applied per frame.
 
 
 # ---------------------------------------------------------------------------
-# CoreConfig - runtime config bundle the (future) ``vtscore`` library consumes
+# CoreConfig: runtime config bundle the (future) ``vtscore`` library consumes
 # ---------------------------------------------------------------------------
 #
 # Today every library-candidate package reaches into ``vtsearch.settings``
 # directly for tunables like ``saved_datasets_dir``, ``detectors_dir``,
 # ``calibrate_count``, etc.  That couples the library to the app's settings
 # layer and makes it impossible to vendor the library as ``vtscore`` (see
-# ``docs/architecture.md`` - Phase 2).
+# ``docs/architecture.md``, Phase 2).
 #
 # ``CoreConfig`` is the seam: a frozen value object that bundles every knob
 # library code reads.  Follow-up PRs convert each call site to accept (or
 # look up) a ``CoreConfig`` instead of importing ``vtsearch.settings``.
-# Until those land this class is unused at runtime - the scaffold just
+# Until those land this class is unused at runtime; the scaffold just
 # defines the type so the conversions can happen one file at a time.
 #
 # The app side will build a fresh ``CoreConfig`` at each request boundary
@@ -182,7 +182,7 @@ motion features compared to image-only encoders applied per frame.
 # directly with whatever values they want.
 #
 # The implementation of :meth:`from_settings` is installed by the app via
-# :func:`register_core_config_builder` - see ``vtsearch/shim`` for the
+# :func:`register_core_config_builder`; see ``vtsearch/shim`` for the
 # concrete builder that snapshots ``vtsearch.settings``.  This keeps the
 # library import-clean: ``vtscore.config`` itself never imports
 # ``vtsearch.settings`` (Phase 8 of ``docs/architecture.md``).
@@ -198,7 +198,7 @@ def register_core_config_builder(fn: Callable[[str | Path | None], CoreConfig]) 
 
     The Flask app wires this at startup via
     :func:`vtsearch.shim.register_app_config_builder`.  Once registered,
-    :meth:`CoreConfig.from_settings` delegates to *fn* - the library file
+    :meth:`CoreConfig.from_settings` delegates to *fn*; the library file
     itself stays settings-import-free.
     """
     global _core_config_builder
@@ -209,7 +209,7 @@ def register_core_config_builder(fn: Callable[[str | Path | None], CoreConfig]) 
 class CoreConfig:
     """Runtime configuration bundle the ``vtscore`` library consumes.
 
-    Field set is intentionally narrow - only knobs that library code (loaders,
+    Field set is intentionally narrow; only knobs that library code (loaders,
     detectors, training, embedding) reads.  User-pref concerns like theme or
     grid-icon size are app-tier and stay in ``vtsearch.settings``.
     """
@@ -240,7 +240,7 @@ class CoreConfig:
         Called by the Flask app at the request boundary (after auth resolves
         the current user) and by the CLI before kicking off autodetect.  The
         result is a frozen immutable value safe to hand to background
-        threads - settings changes during a request will not retroactively
+        threads; settings changes during a request will not retroactively
         rewrite a config already in flight.
 
         When *settings_path* is given, the server-tier settings file path is

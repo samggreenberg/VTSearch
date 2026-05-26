@@ -86,12 +86,12 @@ class TestResizeHandleCentering:
         assert _decl(block, "left") == "-6px", (
             f"{scss_path.name}: .col-resize-handle must be `left: -6px` so the "
             "grab zone straddles the divider. If you changed this, re-read the "
-            "comment above the rule - `left: 0`/`right: 0` puts the grab zone "
+            "comment above the rule; `left: 0`/`right: 0` puts the grab zone "
             "entirely on one side, and `right: -6px` is covered by the next "
             "<th>'s stacking context."
         )
         assert _decl(block, "width") == "12px", f"{scss_path.name}: .col-resize-handle must be `width: 12px`."
-        # The handle must NOT also pin to the right edge - that would shrink or
+        # The handle must NOT also pin to the right edge; that would shrink or
         # mis-center the grab zone.
         assert _decl(block, "right") is None, (
             f"{scss_path.name}: .col-resize-handle should not set `right`; "

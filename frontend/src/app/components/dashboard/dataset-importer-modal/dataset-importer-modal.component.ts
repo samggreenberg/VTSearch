@@ -101,11 +101,11 @@ export class DatasetImporterModalComponent implements OnInit {
 
   /** Source-specs editor state for the local-folder / local-files
    *  views.  These uploads go through ``/api/dataset/import-local-folder``,
-   *  which delegates to server_folder - so the same multi-media flow
+   *  which delegates to server_folder, so the same multi-media flow
    *  applies. */
   lfSourceSpecs: SourceSpec[] = [];
 
-  // Local folder upload state - files come from the browser machine
+  // Local folder upload state (files come from the browser machine):
   lfFiles: File[] = [];
   lfMediaType = '';
   lfMediaTypeOptions: string[] = [];
@@ -151,7 +151,7 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Whether the user has manually edited :prop:`sfDatasetName`. */
   private sfDatasetNameDirty = false;
   /** Multi-media import rows for the server_folder picker.  Each row is a
-   *  ``(source_type, converter|null, params)`` triple - see
+   *  ``(source_type, converter|null, params)`` triple; see
    *  ``docs/plans/multi-media-import.md``. */
   sfSourceSpecs: SourceSpec[] = [];
 
@@ -448,14 +448,14 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Pick the initial embedder for a picker view.  Priority:
    *  1. Solo mediaEmbedder lock for this mediaType (per-user setting or
    *     ``--solo-embedder`` CLI fallback). When set and present in the
-   *     embedder list it wins over every other source - the picker is
+   *     embedder list it wins over every other source; the picker is
    *     also hidden in that case (see :prop:`lockedEmbedderFor`), so the
    *     selected value is the only one the user can see.
    *  2. ``guessedMediaEmbedder`` (computed from currently loaded datasets)
    *  3. the user's last pick for this media type (per-user setting)
    *  4. first option, or empty when the list is empty.
    *
-   *  ``mediaTypeFolderOrTypeId`` accepts either form - the importer form
+   *  ``mediaTypeFolderOrTypeId`` accepts either form; the importer form
    *  values use the folder name (e.g. ``"images"``) while the settings
    *  map is keyed by canonical type_id (e.g. ``"image"``).  We resolve to
    *  type_id before looking up the saved setting. */

@@ -4,9 +4,9 @@ The existing ``test_labelset_elements_api.py`` covers ``labels-detail``,
 ``vote``, and ``thumbnail`` error paths.  This file fills in the
 remaining gaps:
 
-* ``POST /api/detectors/<name>/import-labels/<importer>`` - the entire
+* ``POST /api/detectors/<name>/import-labels/<importer>``; the entire
   90-line method was at 0% coverage.
-* ``GET /api/detectors/<name>/labels/<element_id>/preview`` - file path
+* ``GET /api/detectors/<name>/labels/<element_id>/preview``; file path
   resolution, mimetype selection, text-mode JSON branch.
 
 Tests use a stub :class:`~vtscore.labels.importers.LabelImporter` to
@@ -89,7 +89,7 @@ class TestImportLabelsRoute:
 
     def test_invalid_filepath_returns_400(self, client):
         _write_seed_detector()
-        # Path-traversal attempt - caught by the framework's field-driven
+        # Path-traversal attempt; caught by the framework's field-driven
         # server_path validator (see vtscore/plugins/normalize.py).
         res = client.post(
             "/api/detectors/labels-target/import-labels/server_json_file",

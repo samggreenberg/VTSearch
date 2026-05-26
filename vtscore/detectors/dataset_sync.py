@@ -1,7 +1,7 @@
 """Keep a loaded detector's cid-keyed vote state aligned with the active dataset.
 
 A ``DetectorContext``'s ``good_votes`` / ``bad_votes`` (and related per-vote
-state) are dicts keyed by integer media id - but media ids are only meaningful
+state) are dicts keyed by integer media id; media ids are only meaningful
 within a single dataset.  When the same detector is used across two datasets
 (e.g. trained on dataset A, then reused with dataset B), the in-memory cids
 from A leak into B's space, so unrelated B-medias whose ids happen to coincide
@@ -9,7 +9,7 @@ with A's voted ids appear as voted in the labeling UI.  Worse, the next vote
 in B feeds those stale cids into ``sync_labels_to_loaded_detector``, which
 silently writes corrupt entries back to the on-disk labelset.
 
-The on-disk labelset is the canonical source of truth (dataset-agnostic - its
+The on-disk labelset is the canonical source of truth (dataset-agnostic; its
 elements are keyed by origin / md5).  This module re-derives the cid dicts
 from that labelset whenever the active dataset has changed.
 
@@ -92,7 +92,7 @@ def ensure_votes_match_active_dataset() -> None:
 
     data = _read_detector(path)
     if data is None:
-        # Detector file missing - still mark the dataset transition so we
+        # Detector file missing. Still mark the dataset transition so we
         # don't keep stale cids around.
         with _state_lock:
             det_ctx.good_votes.clear()
@@ -115,7 +115,7 @@ def ensure_votes_match_active_dataset() -> None:
     from vtscore.state.diversity import resync_diversity_tree_to_detector
 
     with _state_lock:
-        # Re-check inside the lock - another request may have rehydrated us.
+        # Re-check inside the lock; another request may have rehydrated us.
         refreshed_mtime = _detector_file_mtime(path)
         if (
             det_ctx.votes_dataset_id == ds_ctx.dataset_id
@@ -144,7 +144,7 @@ def ensure_votes_match_active_dataset() -> None:
         # ``diversity_level`` track the now-active detector.  Restored
         # labels above are applied with ``silent=True`` (see
         # ``label_restoration.py``) and therefore skip the per-vote tree
-        # update - this is where the equivalent bulk update lands.
+        # update; this is where the equivalent bulk update lands.
         resync_diversity_tree_to_detector(ds_ctx, det_ctx)
 
 
@@ -245,7 +245,7 @@ class VoteSnapshot(NamedTuple):
     Holds shallow copies of the active dataset's ``medias`` and the active
     detector's cid-keyed vote dicts, all captured under a single
     ``_state_lock`` acquisition.  Composing the four fields is safe because
-    they were taken together - subsequent mutations to the live contexts
+    they were taken together; subsequent mutations to the live contexts
     cannot leak into a held snapshot.
 
     ``safe`` reports whether the vote dicts could be proved to be keyed in
@@ -253,7 +253,7 @@ class VoteSnapshot(NamedTuple):
     / ``bad_votes`` / ``vote_region_boxes`` are returned empty (so read paths
     that just compose with ``medias`` degrade to an empty result instead of
     leaking cross-dataset cids).  Write paths that would replace on-disk
-    state must check ``safe`` and skip the write - otherwise an empty
+    state must check ``safe`` and skip the write; otherwise an empty
     composition would erase legitimate labels for the active dataset.
     """
 
@@ -275,7 +275,7 @@ def validated_vote_snapshot() -> VoteSnapshot:
 
     The rehydrate that aligns ``votes_dataset_id`` with the active dataset
     is the responsibility of :func:`ensure_votes_match_active_dataset` in
-    ``before_request`` - calling it again here would double-clear vote dicts
+    ``before_request``; calling it again here would double-clear vote dicts
     that test code or in-flight mutations have already populated.
 
     Refuses to compose when the snapshot cannot be made safe.  Returns

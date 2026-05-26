@@ -137,7 +137,7 @@ class TestDownloadArxivAbstracts:
 
 
 # ---------------------------------------------------------------------------
-# load_demo_source - arxiv branch
+# load_demo_source; arxiv branch
 # ---------------------------------------------------------------------------
 
 

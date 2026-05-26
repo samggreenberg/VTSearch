@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-import app as app_module  # noqa: F401 - triggers conftest side effects
+import app as app_module  # noqa: F401  (triggers conftest side effects)
 
 
 class TestLiveness:
@@ -45,7 +45,7 @@ class TestReadiness:
             return_value=["clap"],
         ):
             # In the test session embedders' load_models is stubbed, so _model
-            # remains None - exactly the "still loading" condition we want.
+            # remains None; exactly the "still loading" condition we want.
             resp = client.get("/readyz")
         assert resp.status_code == 503
         body = resp.get_json()

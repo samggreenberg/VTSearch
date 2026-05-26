@@ -1,8 +1,8 @@
 // Picker chrome (importer tabs, demo table, server folder browser,
 // badges) lives in `frontend/src/scss/_picker-shared.scss` so it's
 // defined once globally and shared with the New Model > Browse Media
-// picker.  Source-side picker widgets - tab chrome, demo table, server
-// folder typed-path input, local-folder dropzone - live inside
+// picker.  Source-side picker widgets (tab chrome, demo table, server
+// folder typed-path input, local-folder dropzone) live inside
 // `<vt-source-picker>` (see source-picker.component.scss).  Only
 // styles unique to this top-level modal remain below.
 

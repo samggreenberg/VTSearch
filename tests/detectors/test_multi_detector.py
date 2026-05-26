@@ -314,7 +314,7 @@ class TestModelLoadEndpoints:
         _load_detector_and_wait(client, mid)
         det1 = get_detector_context(mid)
 
-        # Load again - should reuse, not create new
+        # Load again; should reuse, not create new
         _load_detector_and_wait(client, mid)
         det2 = get_detector_context(mid)
         assert det1 is det2

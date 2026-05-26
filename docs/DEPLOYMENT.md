@@ -23,7 +23,7 @@ installation and getting started, see [SETUP.md](SETUP.md).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key - **set this to a random value in production** |
+| `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (**set this to a random value in production**) |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
 
@@ -31,10 +31,10 @@ installation and getting started, see [SETUP.md](SETUP.md).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn - triggers model init / autoload / settings-source sync at import time (the Flask `__main__` block is skipped under WSGI). Set automatically in the Dockerfiles. |
+| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn. Triggers model init / autoload / settings-source sync at import time (the Flask `__main__` block is skipped under WSGI). Set automatically in the Dockerfiles. |
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
 | `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
-| `VTSEARCH_TIMEOUT` | `0` | Worker request timeout in seconds; `0` (default) disables. Long imports, training, and evaluation runs routinely exceed any short timeout - overriding to anything below ~1800 risks SIGKILL mid-operation. |
+| `VTSEARCH_TIMEOUT` | `0` | Worker request timeout in seconds; `0` (default) disables. Long imports, training, and evaluation runs routinely exceed any short timeout; overriding to anything below ~1800 risks SIGKILL mid-operation. |
 
 ### HuggingFace / PyTorch
 
@@ -94,7 +94,7 @@ timeout = 0  # disabled; long imports / training would otherwise SIGKILL the wor
 **Why one worker?** VTSearch keeps all dataset/model state in-process
 (multi-dataset context, global registries, RLock-protected mutable
 state). Multiple worker processes would each hold their own independent
-copy - which wastes memory and breaks cross-request state continuity.
+copy, which wastes memory and breaks cross-request state continuity.
 Concurrency comes from threads within the single worker, matching the
 Flask dev server's `threaded=True` behaviour.
 
@@ -105,7 +105,7 @@ Override the relevant config via environment variables:
 | Env var | Default | Notes |
 |---------|---------|-------|
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | `host:port` |
-| `VTSEARCH_THREADS` | `8` | Threads per worker - raise for more concurrent requests |
+| `VTSEARCH_THREADS` | `8` | Threads per worker; raise for more concurrent requests |
 | `VTSEARCH_TIMEOUT` | `0` | Worker timeout in seconds; `0` (default) disables. Long imports / training routinely exceed short timeouts. |
 | `VTSEARCH_LOG_LEVEL` | `warning` | Gunicorn log level |
 
@@ -151,7 +151,7 @@ These are only downloaded if explicitly selected:
 | CLAP Music & Speech | Audio | `laion/larger_clap_music_and_speech` | ~1.3 GB |
 | BGE | Text | `BAAI/bge-base-en-v1.5` | ~440 MB |
 
-All model downloads use `token=False` - no HuggingFace account or API
+All model downloads use `token=False`; no HuggingFace account or API
 token is required.
 
 ### Demo dataset downloads
@@ -218,16 +218,16 @@ export VTSEARCH_MODELS_DIR=/path/to/cached/models
 ```
 
 With `HF_HUB_OFFLINE=1`, the HuggingFace `transformers` library will never
-attempt network requests - it only loads from the local cache.
+attempt network requests; it only loads from the local cache.
 
 ### 3. Provide datasets locally
 
 In offline mode, demo datasets cannot be downloaded. Use one of these
 local-only importers instead:
 
-- **Folder importer** - point at a directory of media files
-- **Pickle importer** - load a pre-built `.pkl` dataset file
-- **Combine-datasets importer** - merge multiple pickle files
+- **Folder importer:** point at a directory of media files
+- **Pickle importer:** load a pre-built `.pkl` dataset file
+- **Combine-datasets importer:** merge multiple pickle files
 
 ### Docker offline deployment
 
@@ -242,7 +242,7 @@ COPY ./pre-downloaded-models/ /app/data/models/
 ENV HF_HUB_OFFLINE=1
 ```
 
-**Option B - Mount as a volume** (smaller image, models shared across
+**Option B - Mount as a volume** (smaller image; models shared across
 containers):
 
 ```bash
@@ -346,14 +346,14 @@ and auto-saved on every change. Schema:
 
 Notable fields:
 
-- `autorun_detectors` - list of registered detector names
+- `autorun_detectors`: list of registered detector names
   to run during `/api/auto-detect` and the CLI `--autodetect` flow.
   Toggle a model's flag through the UI or
   `PUT /api/detectors/registry/<id>/autorun`.
-- `saved_datasets_dir`, `detectors_dir` -
+- `saved_datasets_dir`, `detectors_dir`:
   infrastructure directories (overridable for custom data layouts)
 - `max_concurrent_dataset_downloads` /
-  `max_concurrent_dataset_embeddings` - concurrency gates for dataset
+  `max_concurrent_dataset_embeddings`: concurrency gates for dataset
   loading. The download gate covers the bandwidth/disk-bound import
   phase; the embed gate covers CPU/GPU-bound embedding plus post-load
   clipping, dedup, and diversity-tree construction. Changes take
@@ -362,20 +362,20 @@ Notable fields:
   **not** persisted to disk): downloads = `min(4, cpu_count)`,
   embeddings = `1` on CPU-only hosts else `min(2, gpu_count)`. An
   explicit value in `settings.json` always wins.
-- `settings_source` (not shown above; excluded from defaults) - opt-in
+- `settings_source` (not shown above; excluded from defaults): opt-in
   bidirectional sync. Set to a plugin name + field values to auto-export
   every settings change and auto-import at startup. See `settings_io/sources/`.
-- `theme` - `"dark"`, `"light"`, or `"highviz"`
-- `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*` -
+- `theme`: `"dark"`, `"light"`, or `"highviz"`
+- `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`:
   per-media-type UI layout preferences (keyed by media type ID)
-- `autopilot_enabled` - whether the autopilot feature is active
+- `autopilot_enabled`: whether the autopilot feature is active
 
 ---
 
 ## Docker production notes
 
 Both images run the app under gunicorn with the bundled `gunicorn.conf.py`
-(single worker + gthread threads) - not Flask's dev server - and set
+(single worker + gthread threads, not Flask's dev server) and set
 `VTSEARCH_SERVER_INIT=1` so the startup sequence runs at WSGI import
 time. See [Running under gunicorn](#running-under-gunicorn) for tuning.
 
@@ -407,7 +407,7 @@ docker compose -f docker/compose/docker-compose.labbench.yml up -d
 ```
 
 Uses `docker/Dockerfile.labbench` (base: `python:3.10-slim`) and
-`requirements/labbench.txt` - a pared-down dependency set that skips audio,
+`requirements/labbench.txt`, a pared-down dependency set that skips audio,
 video, document, text, and extractor plugins. The SigLIP model weights
 (`google/siglip-base-patch16-224`) are pre-downloaded **at build time**,
 so the container is ready to serve immediately on first run with no
@@ -435,7 +435,7 @@ docker run -p 5000:5000 -v /path/on/host:/app/data vtsearch
 
 - **Memory**: Each embedding model uses ~500 MB–1.5 GB of RAM when loaded.
   With all four loaded simultaneously, expect ~4–6 GB total application
-  memory. Models are loaded lazily - only the media types actually used are
+  memory. Models are loaded lazily; only the media types actually used are
   loaded.
 - **Disk**: The `data/models/` directory uses ~3.2 GB. Dataset embeddings
   and media files vary by dataset size.
@@ -471,7 +471,7 @@ Add `--no-cache` after dependency changes to force a full rebuild.
 Runtime + dev dependencies are declared in `pyproject.toml` (under
 `[project.dependencies]` and `[project.optional-dependencies].dev`).
 The top-level `requirements/base.txt` and `requirements/gpu.txt` just
-forward to it via `-e .[dev]` - so pyproject is the single source of
+forward to it via `-e .[dev]`, so pyproject is the single source of
 truth and deptry verifies every imported package is declared there.
 
 The labbench / image-embedders requirements files are deliberately
@@ -482,9 +482,9 @@ images) and do **not** flow through pyproject.
 pyproject.toml                       ← [project.dependencies] + [project.optional-dependencies].dev
 requirements/base.txt                ← --extra-index-url <cpu wheel index> + `-e .[dev]`
 requirements/gpu.txt                 ← `-e .[dev]` (install-gpu.sh / Dockerfile.gpu set --extra-index-url)
-requirements/labbench.txt            ← LabBench (SigLIP-only) image deps - standalone
-requirements/image-embedders.txt     ← All-image-embedders image deps (CPU) - standalone
-requirements/image-embedders-gpu.txt ← All-image-embedders image deps (GPU) - standalone
+requirements/labbench.txt            ← LabBench (SigLIP-only) image deps (standalone)
+requirements/image-embedders.txt     ← All-image-embedders image deps (CPU, standalone)
+requirements/image-embedders-gpu.txt ← All-image-embedders image deps (GPU, standalone)
 ```
 
 Install commands:
@@ -531,7 +531,7 @@ pre-download models with `./scripts/download_models.sh` and set
 
 **Fix**: Load fewer media types simultaneously. The smart-preload pass
 at startup warms every embedder referenced by the dataset and detector
-registries - unregister datasets you no longer use so their embedders
+registries; unregister datasets you no longer use so their embedders
 aren't preloaded. For GPU, ensure adequate VRAM (4+ GB recommended).
 
 ### Docker build fails on pip install

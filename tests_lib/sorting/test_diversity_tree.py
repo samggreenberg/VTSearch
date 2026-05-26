@@ -288,7 +288,7 @@ class TestResetSeen:
         assert leaf1 in tree.seen
 
         tree.reset_seen()
-        # Label a different vector - only its leaf+ancestors should be seen.
+        # Label a different vector; only its leaf+ancestors should be seen.
         tree.label(31)
         leaf31 = tree.lookup(31)
         assert leaf31 in tree.seen
@@ -504,7 +504,7 @@ class TestNextSample:
         tree = DiversityTree(vecs, k=2, min_node_size=20)
         # Single node tree; scores 1..50
         scores = {i: float(i) for i in range(1, 51)}
-        # Median of 1..50 is 25.5 - set threshold below that
+        # Median of 1..50 is 25.5; set threshold below that
         sample = tree.next_sample(scores=scores, threshold=20.0)
         # Median (25.5) >= 20.0, so we pick the lowest-scored element
         assert sample == 1
@@ -514,7 +514,7 @@ class TestNextSample:
         vecs = _make_vectors(50)
         tree = DiversityTree(vecs, k=2, min_node_size=20)
         scores = {i: float(i) for i in range(1, 51)}
-        # Median of 1..50 is 25.5 - set threshold above that
+        # Median of 1..50 is 25.5; set threshold above that
         sample = tree.next_sample(scores=scores, threshold=30.0)
         # Median (25.5) < 30.0, so we pick the highest-scored element
         assert sample == 50
@@ -528,7 +528,7 @@ class TestNextSample:
         assert sample == 50
 
     def test_threshold_at_median_picks_lowest(self):
-        """When threshold equals the median exactly, treat as above - pick lowest."""
+        """When threshold equals the median exactly, treat as above; pick lowest."""
         vecs = _make_vectors(50)
         tree = DiversityTree(vecs, k=2, min_node_size=20)
         scores = {i: float(i) for i in range(1, 51)}

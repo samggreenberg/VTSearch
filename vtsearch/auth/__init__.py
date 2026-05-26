@@ -89,7 +89,7 @@ class LoginProvider(ABC):
 
 
 # ---------------------------------------------------------------------------
-# DefaultLoginProvider - single-user, no authentication
+# DefaultLoginProvider: single-user, no authentication
 # ---------------------------------------------------------------------------
 
 
@@ -113,12 +113,12 @@ class DefaultLoginProvider(LoginProvider):
         return False
 
     def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:  # noqa: ARG002
-        # Single-user: no subdirectory - use data/ directly.
+        # Single-user mode: no subdirectory, use data/ directly.
         return base_data_dir
 
 
 # ---------------------------------------------------------------------------
-# TrivialLoginProvider - cookie-based, no password
+# TrivialLoginProvider: cookie-based, no password
 # ---------------------------------------------------------------------------
 
 
@@ -127,7 +127,7 @@ class TrivialLoginProvider(LoginProvider):
 
     The frontend prompts for a username and sends it via
     ``POST /api/auth/login``.  The server stores the name in a
-    signed Flask session cookie.  Completely insecure - useful only
+    signed Flask session cookie.  Completely insecure; useful only
     for testing multi-user features locally.
     """
 
@@ -159,7 +159,7 @@ class TrivialLoginProvider(LoginProvider):
 
 
 # ---------------------------------------------------------------------------
-# ApiKeyLoginProvider - bearer-token, for headless integrations
+# ApiKeyLoginProvider: bearer-token, for headless integrations
 # ---------------------------------------------------------------------------
 
 
@@ -189,8 +189,8 @@ class ApiKeyLoginProvider(LoginProvider):
 
     Requests without a valid bearer token resolve to the username
     ``"anonymous"`` and ``is_authenticated`` returns ``False``.  This
-    provider does not show a login UI (``login_required`` is ``False``)
-    - it is meant for headless callers that send the header directly.
+    provider does not show a login UI (``login_required`` is ``False``).
+    It is meant for headless callers that send the header directly.
     """
 
     name = "api_key"
@@ -207,7 +207,7 @@ class ApiKeyLoginProvider(LoginProvider):
         self._load_keys_if_changed()
         if not self._keys:
             logger.warning(
-                "ApiKeyLoginProvider: no keys loaded from %s - every request will be anonymous. "
+                "ApiKeyLoginProvider: no keys loaded from %s; every request will be anonymous. "
                 "Add entries with the snippet in the class docstring.",
                 self._keys_file,
             )
@@ -233,7 +233,7 @@ class ApiKeyLoginProvider(LoginProvider):
                 data = json.load(f)
         except Exception:
             logger.exception(
-                "ApiKeyLoginProvider: failed to load %s - keeping previously loaded keys",
+                "ApiKeyLoginProvider: failed to load %s; keeping previously loaded keys",
                 self._keys_file,
             )
             return
@@ -328,7 +328,7 @@ def get_current_user() -> str:
     Resolution order:
 
     1. ``g.user`` (set by the ``before_request`` middleware in ``app.py``).
-    2. Thread-local fallback (set by :func:`set_thread_user` - background
+    2. Thread-local fallback (set by :func:`set_thread_user`; background
        threads spawned from a request handler use this).
     3. ``"default"`` (CLI, tests, threads with no explicit user).
     """

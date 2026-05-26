@@ -1,6 +1,6 @@
 """End-to-end tests for chunk-id renumbering in the CLI autodetect flow.
 
-Every chunked importer/loader emits chunks with ids ``1..N`` - the
+Every chunked importer/loader emits chunks with ids ``1..N``; the
 in-process consumer ``consume_chunks_into`` renumbers them, but the CLI
 pipeline used to score and merge them as-is, which collided ``id``
 values across chunks in the merged hit lists and produced ambiguous
@@ -67,7 +67,7 @@ def _settings_file_with_detector(tmp_path: Path, detector_name: str) -> Path:
 def _write_pretrained_detector(name: str, dim: int = 2) -> Path:
     """Write a detector with a labelset that yields a trainable MLP.
 
-    The CLI re-resolves the labelset's origins and re-embeds - we stub
+    The CLI re-resolves the labelset's origins and re-embeds; we stub
     that resolution out at runtime in the test bodies, so the labelset
     contents only need to satisfy "has >=1 good and >=1 bad label".
     """
@@ -119,7 +119,7 @@ def _stub_detector_training(monkeypatch):
 
     The CLI's ``_load_and_train_detectors`` walks the labelset, resolves
     origins, and re-embeds them.  For these tests we only care that
-    *some* trained MLP comes back - we stub the loader to return a
+    *some* trained MLP comes back; we stub the loader to return a
     fixed (mlp, threshold) pair so the test focuses on chunk-id
     renumbering, not training mechanics.
     """
@@ -146,7 +146,7 @@ class TestChunkedPickleIdRenumber:
         """A pickle of 5 medias loaded with chunk_size=2 yields 3 chunks.
 
         Without renumbering, the chunks would carry ids ``[1,2]``,
-        ``[1,2]``, ``[1]`` - and the merged JSON would have ``id``
+        ``[1,2]``, ``[1]``; and the merged JSON would have ``id``
         collisions.  After the fix every hit's ``id`` is unique.
         """
         _write_pretrained_detector("renum-tm")
@@ -176,7 +176,7 @@ class TestChunkedPickleIdRenumber:
         all_ids = [h["id"] for h in det_result.get("hits", [])]
         all_ids += [h["id"] for h in det_result.get("negative_hits", [])]
         assert sorted(all_ids) == [1, 2, 3, 4, 5]
-        # And every filename appears exactly once (sanity - medias
+        # And every filename appears exactly once (sanity; medias
         # weren't dropped or duplicated).
         all_names = [h["filename"] for h in det_result.get("hits", [])]
         all_names += [h["filename"] for h in det_result.get("negative_hits", [])]
@@ -209,7 +209,7 @@ class TestChunkedCombineDatasetsIdRenumber:
 
         from vtscore.cli import autodetect_importer_main_chunked
 
-        # chunk_size=100 is irrelevant for combine_datasets - it yields
+        # one chunk per source pickle regardless; but the CLI requires
         # one chunk per source pickle regardless - but the CLI requires
         # a positive int.
         autodetect_importer_main_chunked(

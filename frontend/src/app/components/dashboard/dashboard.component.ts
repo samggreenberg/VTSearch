@@ -183,13 +183,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
         const newIds = [...currentIds].filter((id) => !this.knownDatasetIds.has(id));
         if (newIds.length > 0 && this.knownDatasetIds.size > 0) {
-          // Items were added after initial load - select only the new ones
+          // Items were added after initial load; select only the new ones
           this.selectedDatasetIds.clear();
           for (const id of newIds) {
             this.selectedDatasetIds.add(id);
           }
         } else if (datasets.length === 1 && this.selectedDatasetIds.size === 0) {
-          // First load with exactly one item - auto-select it
+          // First load with exactly one item; auto-select it
           this.selectedDatasetIds.add(datasets[0].id);
         }
         this.knownDatasetIds = currentIds;
@@ -206,13 +206,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
         const newIds = [...currentIds].filter((id) => !this.knownDetectorIds.has(id));
         if (newIds.length > 0 && this.knownDetectorIds.size > 0) {
-          // Items were added after initial load - select only the new ones
+          // Items were added after initial load; select only the new ones
           this.selectedDetectorIds.clear();
           for (const id of newIds) {
             this.selectedDetectorIds.add(id);
           }
         } else if (models.length === 1 && this.selectedDetectorIds.size === 0) {
-          // First load with exactly one item - auto-select it
+          // First load with exactly one item; auto-select it
           this.selectedDetectorIds.add(models[0].id);
         }
         this.knownDetectorIds = currentIds;
@@ -1042,7 +1042,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     const modelId = [...this.selectedDetectorIds][0] || null;
     if (!modelId) {
-      // No model selected - open the New Model modal; on creation we'll proceed to training
+      // No model selected; open the New Model modal. On creation we'll proceed to training
       this.trainAfterModelCreation = true;
       this.openNewDetectorModal();
       return;
@@ -1063,12 +1063,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const model = this.detectors.find((m) => this.selectedDetectorIds.has(m.id));
     if (!model) return;
 
-    // See `onLabel` - the route guard owns context + loading.
+    // See `onLabel`; the route guard owns context + loading.
     this.findLoading = true;
     this.router.navigate(['/find', dataset.id, model.id]);
   }
 
-  /** Old Find window - runs multi-dataset multi-detector find and shows results modal. */
+  /** Old Find window: runs multi-dataset multi-detector find and shows results modal. */
   onOldFind(): void {
     const datasetIds = [...this.selectedDatasetIds];
     const detectorIds = [...this.selectedDetectorIds];

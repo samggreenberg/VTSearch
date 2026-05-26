@@ -1,4 +1,4 @@
-# Extending VTSearch - Media System
+# Extending VTSearch: Media System
 
 How to add new content types, embedders, clippers, converters, and media
 sources. Media plugins are auto-discovered via sentinel attributes on
@@ -12,15 +12,15 @@ extractors).
 
 ## Contents
 
-- [Media System](#media-system) - discovery, sentinels, registration
-- [Adding a Media Type](#adding-a-media-type) - e.g. a new content kind
-- [Adding a Media Embedder](#adding-a-media-embedder) - alternative or new
+- [Media System](#media-system): discovery, sentinels, registration
+- [Adding a Media Type](#adding-a-media-type): e.g. a new content kind
+- [Adding a Media Embedder](#adding-a-media-embedder): alternative or new
   embedding model
-- [Adding a Media Clipper](#adding-a-media-clipper) - cut clips out of a
+- [Adding a Media Clipper](#adding-a-media-clipper): cut clips out of a
   longer source file
-- [Adding a Media Converter](#adding-a-media-converter) - transform
-  between media types (e.g. document → image)
-- [Adding a Media Source](#adding-a-media-source) - resolve media bytes
+- [Adding a Media Converter](#adding-a-media-converter): transform
+  between media types (e.g. document to image)
+- [Adding a Media Source](#adding-a-media-source): resolve media bytes
   from an origin (local, HTTP archive, custom backend)
 
 ---
@@ -43,7 +43,7 @@ inside a media-type package is auto-loaded and its module-level `EMBEDDER`
 sentinel is registered. Symlinked directories **and** symlinked embedder
 files are both supported, so a custom embedder can live outside the
 VTSearch tree and be wired in by symlinking a single file into the
-appropriate media-type package - no edits to any `__init__.py` required.
+appropriate media-type package. No edits to any `__init__.py` are required.
 
 Third-party or project-specific types can still be registered manually
 via `register()`, `register_embedder()`, and `register_clipper()`.
@@ -62,7 +62,7 @@ datasets are available, and how to load media-specific fields from files.
 vtscore/media/<your_type>/
 ├── __init__.py       # Must expose MEDIA_TYPE and CLIPPERS sentinels
 ├── media_type.py     # Your MediaType subclass (required)
-└── embedder_<name>.py  # Optional - one file per embedder, each exposing EMBEDDER
+└── embedder_<name>.py  # Optional; one file per embedder, each exposing EMBEDDER
 ```
 
 ### What to implement
@@ -158,7 +158,7 @@ Expose the sentinels in your sub-package's `__init__.py`:
 from vtscore.media.code.media_type import CodeMediaType
 
 MEDIA_TYPE = CodeMediaType()
-CLIPPERS = []  # No clippers yet - add when needed
+CLIPPERS = []  # No clippers yet (add when needed)
 ```
 
 Each embedder lives in its own `embedder_<name>.py` file with an `EMBEDDER`
@@ -294,7 +294,7 @@ class CodeBertEmbedder(MediaEmbedder):
 
     @property
     def name(self) -> str:
-        """Unique identifier - also the registry key."""
+        """Unique identifier (also the registry key)."""
         return "codebert"
 
     @property
@@ -400,7 +400,7 @@ for media_id, vec in vectors.items():
         medias[media_id]["embedding"] = vec
 ```
 
-`embed_medias` delegates to `embed_media_bulk` internally - subclasses
+`embed_medias` delegates to `embed_media_bulk` internally. Subclasses
 only need to override `_embed_media_bulk_impl` to gain a native bulk
 path; the dict wrapper picks it up automatically.
 
@@ -408,7 +408,7 @@ path; the dict wrapper picks it up automatically.
 
 Drop the embedder into an `embedder_<name>.py` file inside the media-type
 package and expose an `EMBEDDER` sentinel at the bottom. Discovery is
-automatic - no edits to `__init__.py` are needed:
+automatic; no edits to `__init__.py` are needed:
 
 ```python
 # vtscore/media/code/embedder_codebert.py
@@ -423,7 +423,7 @@ For an alternative embedder on an **existing** media type, drop a new
 `embedder_<name>.py` file into that type's package (e.g.
 `vtscore/media/image/embedder_myclip.py`) with its own `EMBEDDER`
 sentinel. To wire in a custom embedder living outside the VTSearch
-source tree, symlink the file in - symlinked embedder modules are
+source tree, symlink the file in. Symlinked embedder modules are
 loaded via `spec_from_file_location` so discovery still works.
 
 ### MediaEmbedder abstract interface reference
@@ -476,9 +476,9 @@ loaded via `spec_from_file_location` so discovery still works.
 | `AudioClapEmbedder` | `clap` | `audio` | LAION CLAP (laion/clap-htsat-unfused) | 512 |
 | `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
 | `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
-| `ImageDinov2SingleEmbedder` / `ImageDinov2PatchEmbedder` | `dinov2_single` / `dinov2_patch` | `image` | DINOv2 ViT-B/14 (facebook/dinov2-base) - ungated | 768 |
-| `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | `dinov3_single` / `dinov3_patch` | `image` | DINOv3 ViT-B/16 (facebook/dinov3-vitb16-pretrain-lvd1689m) - HF-gated | 768 |
-| `ImageEupeSingleEmbedder` / `ImageEupePatchEmbedder` | `eupe_single` / `eupe_patch` | `image` | EUPE ViT-B/16 (facebookresearch/EUPE) - FAIR Noncommercial Research Licence | 768 |
+| `ImageDinov2SingleEmbedder` / `ImageDinov2PatchEmbedder` | `dinov2_single` / `dinov2_patch` | `image` | DINOv2 ViT-B/14 (facebook/dinov2-base), ungated | 768 |
+| `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | `dinov3_single` / `dinov3_patch` | `image` | DINOv3 ViT-B/16 (facebook/dinov3-vitb16-pretrain-lvd1689m), HF-gated | 768 |
+| `ImageEupeSingleEmbedder` / `ImageEupePatchEmbedder` | `eupe_single` / `eupe_patch` | `image` | EUPE ViT-B/16 (facebookresearch/EUPE), FAIR Noncommercial Research Licence | 768 |
 | `TextE5Embedder` | `e5` | `text` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
 | `TextBGEEmbedder` | `bge` | `text` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
 | `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |
@@ -608,8 +608,8 @@ CLIPPERS = [SoundDefaultClipper(), SoundTilingClipper(2.0), SoundOverlapClipper(
 | `with_params(p)`     | `(dict) -> MediaClipper` | Return new clipper with overridden parameters                     |
 
 Parameter dicts support an optional `description` key alongside `label`
-- this is shown as a tooltip when the user hovers over the setting in
-the clipper chooser dialog.
+(shown as a tooltip when the user hovers over the setting in
+the clipper chooser dialog).
 
 ### Clip method contract
 
@@ -679,7 +679,7 @@ class Audio2TextMediaConverter(MediaConverter):
           for text, "media_bytes" for images)
 
         Returns empty list if conversion fails.
-        Does NOT include "id", "embedding", or "md5" - caller handles those.
+        Does NOT include "id", "embedding", or "md5"; the caller handles those.
         """
         # ... transcription logic ...
         return [{"filename": "transcript.txt", "media_string": transcript}]
@@ -743,7 +743,7 @@ that expose a `CONVERTER` attribute. No manual registration in
 
 Media sources provide low-level access to media files at a location
 (local folder, HTTP archive, S3 bucket, etc.). They sit *below* dataset
-importers - importers that access file-like storage compose a
+importers. Importers that access file-like storage compose a
 `MediaSource` for single-file resolution and cross-dataset label
 re-ingestion.
 

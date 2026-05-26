@@ -291,7 +291,7 @@ class TestIngestMissingClips:
 
 # ---------------------------------------------------------------------------
 # Clipped-origin re-ingest (H10): MD5 / media_bytes / file_size must
-# describe the clip, not the parent - otherwise distinct clips of the same
+# describe the clip, not the parent; otherwise distinct clips of the same
 # parent collide on collapse_duplicates after a save+reload round-trip.
 # ---------------------------------------------------------------------------
 
@@ -473,7 +473,7 @@ class TestClippedReingest:
     def test_video_metadata_only_clips_get_unique_md5_via_boundary_tag(self, tmp_path):
         """Two video clips of the same parent (metadata-only) still get distinct MD5s.
 
-        Video clippers don't slice the underlying bytes - they only stamp
+        Video clippers don't slice the underlying bytes; they only stamp
         ``clip_start`` / ``clip_end``. Without the boundary-tag fallback,
         all clips of one parent collide on the parent's MD5 and
         ``collapse_duplicates`` merges them after a save+reload.

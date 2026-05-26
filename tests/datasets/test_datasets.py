@@ -727,7 +727,7 @@ class TestImporterMetadata:
         data = resp.get_json()
         folder_imp = next((i for i in data["importers"] if i["name"] == "server_folder"), None)
         assert folder_imp is not None
-        # 📁 - frontend renders this as a "folder" icon (see icon.component.ts).
+        # 📁; frontend renders this as a "folder" icon (see icon.component.ts).
         assert folder_imp["icon"] == "\U0001f4c1"
 
     def test_folder_importer_description(self, client):
@@ -932,7 +932,7 @@ class TestDemoCacheEmbedderMismatch:
         ):
             load_demo_dataset(demo_name, medias, embedder_name="clip")
 
-        # Cache was used - media was loaded
+        # Cache was used; media was loaded
         assert 1 in medias
 
     def test_no_sidecar_accepts_cache(self, tmp_path):
@@ -960,7 +960,7 @@ class TestDemoCacheEmbedderMismatch:
                 }
             )
         )
-        # No sidecar written - simulates a legacy pickle
+        # No sidecar written; simulates a legacy pickle
 
         medias: dict = {}
 
@@ -1303,7 +1303,7 @@ class TestLoadProgressRaceCondition:
             resp = client.post(f"/api/datasets/registry/{dataset_id}/load")
             assert resp.status_code == 200
 
-            # Immediately check progress - it must NOT be 'idle'
+            # Immediately check progress; it must NOT be 'idle'
             progress = get_progress()
             assert progress["status"] != "idle", (
                 "Progress must be set to 'loading' before the thread starts "
@@ -1393,13 +1393,13 @@ class TestLoadProgressRaceCondition:
 
 
 class TestLoadFailureCleanup:
-    """C12 - a failure anywhere in the load pipeline must not leave an
+    """C12; a failure anywhere in the load pipeline must not leave an
     orphan registry entry behind.
 
     Before the fix, ``_register_and_migrate`` wrote the registry entry +
     pkl, and if any later step (the in-place context migration, the
     achievement record, etc.) raised, ``_handle_load_failure`` only
-    unregistered the in-memory context - leaving a half-built dashboard
+    unregistered the in-memory context; leaving a half-built dashboard
     row pointing at a pkl with no in-memory context to back it.
     """
 
@@ -1460,7 +1460,7 @@ class TestLoadFailureCleanup:
             )
 
         assert list_datasets() == [], (
-            "registry entry must be rolled back when a post-register step fails - "
+            "registry entry must be rolled back when a post-register step fails; "
             "otherwise the dashboard shows a phantom dataset row backed by a half-built pkl"
         )
 
@@ -1515,7 +1515,7 @@ class TestLoadFailureCleanup:
 
 
 class TestEmptyLoadBackstop:
-    """H11 - an importer that completes without raising but produces zero
+    """H11; an importer that completes without raising but produces zero
     medias must surface as a load error, not as a silent green dashboard
     row with 0 items.  The backstop lives in
     ``_run_origin_load_in_background`` and mirrors the existing guard in
@@ -1558,7 +1558,7 @@ class TestEmptyLoadBackstop:
             )
 
         assert list_datasets() == [], (
-            "an empty load must not register a dataset - the dashboard would otherwise show a green row with 0 items"
+            "an empty load must not register a dataset; the dashboard would otherwise show a green row with 0 items"
         )
         progress = get_progress()
         assert progress["error"] == "Import produced no medias.", (
@@ -1602,7 +1602,7 @@ class TestCancelIngest:
 
             # Simulate a slow importer that checks cancellation via progress.
             # Use ``while True`` so the function can only exit via
-            # CancelledError - a bounded loop (e.g. ``range(100)``) can
+            # CancelledError; a bounded loop (e.g. ``range(100)``) can
             # finish before the cancel is processed on a loaded machine,
             # making the test flaky.
             def slow_load():
@@ -1652,7 +1652,7 @@ class TestCancelIngest:
 
         saved = dict(app_module.medias)
         try:
-            # Start a new load - should reset the flag
+            # Start a new load; should reset the flag
             from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
             with patch("vtscore.datasets.load_pipeline._warmup_embedder_async"):
