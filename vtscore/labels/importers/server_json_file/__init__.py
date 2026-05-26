@@ -13,11 +13,10 @@ No additional pip packages are required; uses only Python's ``json`` and
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
+from vtscore.io import read_server_json
 from vtscore.labels.importers.base import LabelImporter, LabelImporterField
 
 
@@ -53,14 +52,8 @@ class ServerJsonLabelImporter(LabelImporter):
 
     def run(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Read and parse the JSON labels file from the server filesystem."""
-        path = Path(field_values["filepath"])
-        if not path.exists():
-            raise ValueError(f"File not found: {path}")
-        if not path.is_file():
-            raise ValueError(f"Not a file: {path}")
-
-        raw = path.read_bytes()
-        return _parse_json_bytes(raw)
+        data = read_server_json(field_values["filepath"])
+        return _extract_labels(data)
 
     def run_cli(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Load labels from a file-path string (CLI usage)."""
@@ -75,13 +68,9 @@ class ServerJsonLabelImporter(LabelImporter):
         )
 
 
-def _parse_json_bytes(raw: bytes) -> list[dict[str, str]]:
-    """Decode *raw* bytes as JSON and extract the labels list."""
-    try:
-        data = json.loads(raw.decode("utf-8"))
-    except Exception as exc:
-        raise ValueError(f"Invalid JSON: {exc}") from exc
-    labels = data.get("labels")
+def _extract_labels(data: Any) -> list[dict[str, str]]:
+    """Pull the labels list out of an already-parsed JSON object."""
+    labels = data.get("labels") if isinstance(data, dict) else None
     if not isinstance(labels, list):
         raise ValueError("JSON must contain a top-level 'labels' list.")
     return [entry for entry in labels if isinstance(entry, dict)]

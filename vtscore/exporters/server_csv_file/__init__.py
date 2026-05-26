@@ -13,12 +13,12 @@ from __future__ import annotations
 import csv
 import io
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import ExporterField, LabelsetExporter
+from vtscore.io import atomic_write_text
 
 _DEFAULT_CSV_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
@@ -34,12 +34,7 @@ def _atomic_write_csv(path: Path, write_rows) -> None:
     buf = io.StringIO()
     writer = csv.writer(buf)
     write_rows(writer)
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8", newline="") as f:
-        f.write(buf.getvalue())
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    atomic_write_text(path, buf.getvalue())
 
 
 # Characters that trigger formula execution in spreadsheet applications.

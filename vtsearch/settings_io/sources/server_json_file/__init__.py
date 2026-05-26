@@ -7,11 +7,10 @@ that is resolved at runtime via :func:`~vtsearch.auth.get_current_user`.
 
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 from typing import Any
 
+from vtscore.io import atomic_write_json, read_server_json
 from vtsearch.settings_io.sources.base import SettingsSource, SettingsSourceField
 
 
@@ -36,32 +35,16 @@ class ServerFileSettingsSource(SettingsSource):
 
     def _do_load(self, field_values: dict[str, Any]) -> dict[str, Any]:
         """Read settings from a JSON file on the server."""
-        path = Path(field_values["filepath"])
-        if not path.exists():
+        data = read_server_json(field_values["filepath"], missing_ok=True)
+        if data is None:
             return {}
-        if not path.is_file():
-            raise ValueError(f"Not a file: {path}")
-
-        raw = path.read_bytes()
-        try:
-            data = json.loads(raw.decode("utf-8"))
-        except Exception as exc:
-            raise ValueError(f"Invalid JSON: {exc}") from exc
-
         if not isinstance(data, dict):
             raise ValueError("Settings JSON must be a JSON object (dict).")
         return data
 
     def _do_save(self, settings_data: dict[str, Any], field_values: dict[str, Any]) -> None:
         """Write settings to a JSON file on the server."""
-        filepath = Path(field_values["filepath"])
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        tmp = filepath.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(json.dumps(settings_data, indent=2) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, filepath)
+        atomic_write_json(field_values["filepath"], settings_data)
 
     def _do_peek_version(self, field_values: dict[str, Any]) -> int | None:
         """Return the source file's ``st_mtime_ns`` as a freshness token.

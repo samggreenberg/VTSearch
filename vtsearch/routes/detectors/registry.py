@@ -27,7 +27,6 @@ takes plugin-dependent fields and stays on plain Flask (see
 from __future__ import annotations
 
 import logging
-import threading
 import time
 
 from flask import jsonify
@@ -390,8 +389,9 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
         finally:
             detector_loading_tasks.mark_finished(task_id)
 
-    thread = threading.Thread(target=reembed_task, daemon=True)
-    thread.start()
+    from vtsearch.threading import spawn
+
+    spawn(reembed_task, name=f"det-reembed-{det_ctx.detector_id[:8]}")
     return task_id
 
 
@@ -592,8 +592,9 @@ def load_detector_route(body: dict):  # noqa: C901
         finally:
             detector_loading_tasks.mark_finished(task_id)
 
-    thread = threading.Thread(target=load_task, daemon=True)
-    thread.start()
+    from vtsearch.threading import spawn
+
+    spawn(load_task, name=f"det-load-{detector_id[:8]}")
     return {
         "ok": True,
         "message": "Loading started",
