@@ -17,3 +17,4 @@ can't drift.
 - [plugin-interface-streamlines.md](plugin-interface-streamlines.md) — Plugin author interface streamlines
 - [RCDatasetImporter.md](RCDatasetImporter.md) — RCDatasetImporter / Holder / PullWrest extension
 - [scalability.md](scalability.md) — Scalability brainstorm: 100 k / 1 M / 10 M datasets
+- [scalability-plan.md](scalability-plan.md) — Scalability implementation plan (phases 1–4)
