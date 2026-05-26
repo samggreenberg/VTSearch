@@ -583,8 +583,12 @@ resolved per-request:
    `X-Dataset-Id` and `X-Detector-Id` headers, resolves the matching
    contexts, and stashes them on Flask's `g`. Proxies check `g` first.
 2. **Outside a request** (background threads, CLI, tests) — proxies
-   fall back to a thread-local context set via
-   `set_thread_dataset_context()` / `set_thread_detector_context()`.
+   fall back to a thread-local context scoped via the
+   `thread_dataset_context()` / `thread_detector_context()` context
+   managers (which snapshot and restore the prior value automatically).
+   The bare `set_thread_dataset_context()` / `set_thread_detector_context()`
+   setters remain available for tests and for the rare call site that
+   wants the unscoped form.
 
 There is no single global "active" pointer. Key functions:
 `register_context()`, `unregister_context()`, `get_context()`,

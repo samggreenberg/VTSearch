@@ -1067,26 +1067,36 @@ class TestBackgroundLoadThreadContext:
     def test_thread_context_cleared_after_task(self):
         """The worker thread's dataset-context thread-local must be cleared
         when the task finishes so a reused thread does not leak the prior
-        context to unrelated work.  Patch ``set_thread_dataset_context`` so
-        we can observe both the in-task pin and the post-task clear without
+        context to unrelated work.  Wrap ``thread_dataset_context`` so we
+        can observe both the in-task pin and the post-task restore without
         racing the daemon worker's thread-local from another thread.
         """
+        import contextlib
+
         import vtscore.state.core as state_core
         from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
-        original_setter = state_core.set_thread_dataset_context
-        calls: list[object] = []
+        original_cm = state_core.thread_dataset_context
+        observations: list[tuple[str, object]] = []
 
-        def recording_setter(ctx):
-            calls.append(ctx)
-            original_setter(ctx)
+        @contextlib.contextmanager
+        def recording_cm(ctx):
+            observations.append(("enter", ctx))
+            with original_cm(ctx):
+                observations.append(("inside", state_core.get_thread_dataset_context()))
+                yield
+            observations.append(("after_exit", state_core.get_thread_dataset_context()))
 
         ran = threading.Event()
 
         def load_fn(target_medias):
             ran.set()
 
-        with mock.patch.object(state_core, "set_thread_dataset_context", recording_setter):
+        # The production task imports ``thread_dataset_context`` from
+        # ``vtscore.state.core`` lazily inside the worker function, so
+        # patching the attribute on that module is what the worker
+        # actually resolves.
+        with mock.patch.object(state_core, "thread_dataset_context", recording_cm):
             task_id = _run_origin_load_in_background(
                 load_fn,
                 {"importer": "ctx_cleanup", "params": {}},
@@ -1100,11 +1110,14 @@ class TestBackgroundLoadThreadContext:
             finally:
                 loading_tasks.remove_task(task_id)
 
-        # The task should have both pinned a real context and cleared it.
-        non_none_pins = [c for c in calls if c is not None]
-        none_clears = [c for c in calls if c is None]
-        assert non_none_pins, "Background task never pinned a dataset context"
-        assert none_clears, (
-            "Background task never cleared its thread-local dataset context — "
-            "a reused worker thread would leak the prior dataset to unrelated work."
+        kinds = [k for k, _ in observations]
+        assert "enter" in kinds and "inside" in kinds and "after_exit" in kinds, (
+            f"Background task did not enter+exit the thread_dataset_context scope; observed kinds: {kinds}"
+        )
+        inside = next(v for k, v in observations if k == "inside")
+        after = next(v for k, v in observations if k == "after_exit")
+        assert inside is not None, "Background task never pinned a dataset context"
+        assert after is None, (
+            "Background task did not restore its thread-local dataset context on exit — "
+            f"a reused worker thread would leak the prior dataset to unrelated work (saw {after!r})."
         )

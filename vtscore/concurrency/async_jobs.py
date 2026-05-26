@@ -207,30 +207,26 @@ class JobManager:
         ).start()
 
     def _run(self, job: AsyncJob, target: Callable[[AsyncJob], Any]) -> None:
-        from vtsearch.auth import set_thread_user
+        from contextlib import ExitStack
+
+        from vtsearch.auth import thread_user
         from vtscore.state.core import (
             get_context,
             get_detector_context,
-            set_thread_dataset_context,
-            set_thread_detector_context,
+            thread_dataset_context,
+            thread_detector_context,
         )
 
-        if job.user is not None:
-            set_thread_user(job.user)
-        if job.dataset_id:
-            ds_ctx = get_context(job.dataset_id)
+        ds_ctx = get_context(job.dataset_id) if job.dataset_id else None
+        det_ctx = get_detector_context(job.detector_id) if job.detector_id else None
+        with ExitStack() as stack:
+            if job.user is not None:
+                stack.enter_context(thread_user(job.user))
             if ds_ctx is not None:
-                set_thread_dataset_context(ds_ctx)
-        if job.detector_id:
-            det_ctx = get_detector_context(job.detector_id)
+                stack.enter_context(thread_dataset_context(ds_ctx))
             if det_ctx is not None:
-                set_thread_detector_context(det_ctx)
-        try:
+                stack.enter_context(thread_detector_context(det_ctx))
             self._run_inner(job, target)
-        finally:
-            set_thread_user(None)
-            set_thread_dataset_context(None)
-            set_thread_detector_context(None)
 
     def _run_inner(self, job: AsyncJob, target: Callable[[AsyncJob], Any]) -> None:
         try:
