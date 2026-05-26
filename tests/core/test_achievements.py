@@ -637,6 +637,28 @@ class TestActionHooks:
         client.post(f"/api/medias/{media_id}/vote", json={"target": "good"})
         assert _by_id(achievements.get_full_state(), "votes_cast")["counter"] == 1
 
+    def test_find_label_does_not_credit_votes_cast(self, client):
+        """Find-mode auto-labels must not count toward votes_cast or vote_streak.
+
+        The app applies labels to every media item in Find mode, but those are
+        system-generated scores — the user did not cast them — so they must not
+        inflate the Votes Cast or Marathoner achievements.
+        """
+        from helpers import setup_trainable_model_in_registry
+        from vtsearch.state import snapshot_medias
+
+        detector_id = setup_trainable_model_in_registry(
+            "find-label-achievement-test",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        resp = client.post("/api/find-label", json={"detector_id": detector_id})
+        assert resp.status_code == 200, resp.get_json()
+        state = achievements.get_full_state()
+        assert _by_id(state, "votes_cast")["counter"] == 0
+        assert _by_id(state, "vote_streak")["counter"] == 0
+
 
 # ---------------------------------------------------------------------------
 # disable_achievements opt-out
