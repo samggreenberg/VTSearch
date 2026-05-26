@@ -88,13 +88,26 @@
   justify-content: center;
   z-index: var(--z-elevated);
   background: var(--bg-panel);
-  opacity: 0.85;
+  opacity: 0.9;
   pointer-events: all;
+}
+
+.find-wait-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  width: min(380px, 80%);
 }
 
 .find-wait-message {
   font-size: var(--font-xl);
   color: var(--text-secondary);
   text-align: center;
-  padding: 0 var(--space-2xl);
+}
+
+.find-wait-count {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
