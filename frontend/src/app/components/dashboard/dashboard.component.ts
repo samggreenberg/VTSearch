@@ -11,6 +11,7 @@ import { DetectorsRegistryApiService } from '../../services/detectors-registry-a
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
+import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
 import { AuthService } from '../../services/auth.service';
 import { TopBarStateService } from '../../services/top-bar-state.service';
@@ -150,6 +151,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
     public datasetState: DatasetStateService,
+    private activeContext: ActiveContextService,
     private contextSwitch: ContextSwitchService,
     private authService: AuthService,
     private topBarState: TopBarStateService,
@@ -612,6 +614,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.detectorsRegistryApi.deleteFromRegistry(model.id).subscribe({
         next: () => {
           this.selectedDetectorIds.delete(model.id);
+          if (this.activeContext.modelId === model.id || this.activeContext.intentModelId === model.id) {
+            this.activeContext.setActivePair(this.activeContext.datasetId, '');
+          }
           this.datasetState.refresh();
         },
         error: () => {
@@ -691,6 +696,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetsRegistryApi.deleteRegistered(dataset.id).subscribe({
       next: () => {
         this.selectedDatasetIds.delete(dataset.id);
+        if (this.activeContext.datasetId === dataset.id || this.activeContext.intentDatasetId === dataset.id) {
+          this.activeContext.setActivePair('', '');
+        }
         this.datasetState.refresh();
       },
     });
@@ -742,6 +750,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.detectorsRegistryApi.deleteFromRegistry(model.id).subscribe({
       next: () => {
         this.selectedDetectorIds.delete(model.id);
+        if (this.activeContext.modelId === model.id || this.activeContext.intentModelId === model.id) {
+          this.activeContext.setActivePair(this.activeContext.datasetId, '');
+        }
         this.datasetState.refresh();
       },
       error: () => {

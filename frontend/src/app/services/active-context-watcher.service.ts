@@ -65,7 +65,8 @@ export class ActiveContextWatcherService {
       } else if (
         pair.datasetId &&
         this.lastSeenDatasetName?.id === pair.datasetId &&
-        datasets.length > 0
+        detectors.length > 0 &&
+        this.activeContext.intentDatasetId === pair.datasetId
       ) {
         const removedName = this.lastSeenDatasetName.name;
         this.lastSeenDatasetName = null;
@@ -83,7 +84,8 @@ export class ActiveContextWatcherService {
       } else if (
         pair.modelId &&
         this.lastSeenDetectorName?.id === pair.modelId &&
-        detectors.length > 0
+        datasets.length > 0 &&
+        this.activeContext.intentModelId === pair.modelId
       ) {
         const removedName = this.lastSeenDetectorName.name;
         this.lastSeenDetectorName = null;
