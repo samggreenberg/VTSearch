@@ -2,27 +2,27 @@
 
 CRUD endpoints (``vtsearch/routes/processors/crud.py``):
 
-* ``GET    /api/autorun-extractors``              - :class:`AutorunExtractorsListResponseSchema`
-* ``POST   /api/autorun-extractors``              - :class:`AutorunExtractorCreateRequestSchema` →
+* ``GET    /api/autorun-extractors``              -> :class:`AutorunExtractorsListResponseSchema`
+* ``POST   /api/autorun-extractors``              -> :class:`AutorunExtractorCreateRequestSchema` ->
                                                     :class:`AutorunProcessorCreateResponseSchema`
-* ``DELETE /api/autorun-extractors/<name>``       - :class:`AutorunProcessorDeleteResponseSchema`
-* ``PUT    /api/autorun-extractors/<name>/rename`` - :class:`AutorunProcessorRenameRequestSchema` →
+* ``DELETE /api/autorun-extractors/<name>``       -> :class:`AutorunProcessorDeleteResponseSchema`
+* ``PUT    /api/autorun-extractors/<name>/rename`` -> :class:`AutorunProcessorRenameRequestSchema` ->
                                                     :class:`AutorunProcessorRenameResponseSchema`
-* ``GET    /api/autorun-localizers``              - :class:`AutorunLocalizersListResponseSchema`
-* ``POST   /api/autorun-localizers``              - :class:`AutorunLocalizerCreateRequestSchema` →
+* ``GET    /api/autorun-localizers``              -> :class:`AutorunLocalizersListResponseSchema`
+* ``POST   /api/autorun-localizers``              -> :class:`AutorunLocalizerCreateRequestSchema` ->
                                                     :class:`AutorunProcessorCreateResponseSchema`
-* ``DELETE /api/autorun-localizers/<name>``       - :class:`AutorunProcessorDeleteResponseSchema`
-* ``PUT    /api/autorun-localizers/<name>/rename`` - :class:`AutorunProcessorRenameRequestSchema` →
+* ``DELETE /api/autorun-localizers/<name>``       -> :class:`AutorunProcessorDeleteResponseSchema`
+* ``PUT    /api/autorun-localizers/<name>/rename`` -> :class:`AutorunProcessorRenameRequestSchema` ->
                                                     :class:`AutorunProcessorRenameResponseSchema`
-* ``GET    /api/pregen-processors``               - :class:`PregenProcessorsListResponseSchema`
-* ``POST   /api/pregen-processors/add``           - :class:`PregenProcessorsAddResponseSchema`
+* ``GET    /api/pregen-processors``               -> :class:`PregenProcessorsListResponseSchema`
+* ``POST   /api/pregen-processors/add``           -> :class:`PregenProcessorsAddResponseSchema`
 
 Scoring endpoints (``vtsearch/routes/processors/scoring.py``):
 
-* ``POST /api/extract``       - :class:`ExtractRequestSchema` → :class:`ExtractResponseSchema`
-* ``POST /api/auto-extract``  - :class:`AutoExtractResponseSchema`
-* ``POST /api/localize``      - :class:`LocalizeRequestSchema` → :class:`LocalizeResponseSchema`
-* ``POST /api/auto-localize`` - :class:`AutoLocalizeResponseSchema`
+* ``POST /api/extract``       -> :class:`ExtractRequestSchema` -> :class:`ExtractResponseSchema`
+* ``POST /api/auto-extract``  -> :class:`AutoExtractResponseSchema`
+* ``POST /api/localize``      -> :class:`LocalizeRequestSchema` -> :class:`LocalizeResponseSchema`
+* ``POST /api/auto-localize`` -> :class:`AutoLocalizeResponseSchema`
 
 The extract / localize routes accept a request body with the processor's
 ``config`` dict, whose inner keys vary per processor type. The ``config``
@@ -31,7 +31,7 @@ shape passes the schema layer; the handler still rejects configs that
 don't construct a valid processor.
 
 Note the ``POST /api/auto-extract`` / ``/api/auto-localize`` routes take
-no body - they read the autorun store and the active dataset. They're
+no body; they read the autorun store and the active dataset. They're
 modelled as plain ``POST`` with no ``arguments`` decorator.
 """
 
@@ -124,7 +124,7 @@ class AutorunProcessorRenameResponseSchema(Schema):
 class _PregenProcessorEntrySchema(Schema):
     """One entry in the pregen-processor list.
 
-    ``kind`` is ``"extractor"`` or ``"localizer"`` - it tells the
+    ``kind`` is ``"extractor"`` or ``"localizer"``; it tells the
     /api/pregen-processors/add handler which autorun store to route the
     processor into.
     """
@@ -159,7 +159,7 @@ class _ProcessorHitSchema(Schema):
 
     The shape is a media dict augmented with an ``extractions`` or
     ``localizations`` array. The set of media-dict fields is intentionally
-    open - different importers populate different keys - and the
+    open; different importers populate different keys, and the
     extraction/localization arrays themselves are processor-specific
     (bounding boxes, text strings, etc.).
     """
@@ -175,7 +175,7 @@ class _ProcessorHitSchema(Schema):
 class ExtractRequestSchema(Schema):
     """Body for ``POST /api/extract``.
 
-    ``name`` is optional - when absent the handler labels the extractor as
+    ``name`` is optional; when absent the handler labels the extractor as
     ``"adhoc"``. ``config`` is processor-specific and validated by the
     factory rather than at the schema layer.
     """

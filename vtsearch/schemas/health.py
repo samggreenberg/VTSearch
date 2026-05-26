@@ -14,7 +14,7 @@ class HealthSchema(Schema):
 
     status = fields.String(
         required=True,
-        metadata={"description": "Always 'ok' - the process is running and serving requests."},
+        metadata={"description": "Always 'ok'; the process is running and serving requests."},
     )
 
 

@@ -79,7 +79,7 @@ class TestAutoChunkSize:
 
 
 # ===========================================================================
-# _DummyChunkedImporter; supports_chunked=True, no real I/O
+# _DummyChunkedImporter: supports_chunked=True, no real I/O
 # ===========================================================================
 
 
@@ -147,7 +147,7 @@ class _DummyNonChunkedImporter(DatasetImporter):
 
 
 # ===========================================================================
-# _run_importer_in_background; chunked-vs-whole dispatch
+# _run_importer_in_background: chunked-vs-whole dispatch
 # ===========================================================================
 
 

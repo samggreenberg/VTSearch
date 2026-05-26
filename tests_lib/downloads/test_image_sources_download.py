@@ -373,7 +373,7 @@ class TestLoadOxfordFlowersMetadata:
 
 
 # ---------------------------------------------------------------------------
-# load_demo_source; image (oxford_flowers_102, food101, eurosat, stanford_dogs)
+# load_demo_source: image (oxford_flowers_102, food101, eurosat, stanford_dogs)
 # ---------------------------------------------------------------------------
 
 
@@ -744,7 +744,7 @@ class TestLoadPlaces365Metadata:
 
 
 # ---------------------------------------------------------------------------
-# load_demo_source; places365
+# load_demo_source: places365
 # ---------------------------------------------------------------------------
 
 

@@ -1,11 +1,11 @@
-# All-image-embedders GPU deployment - every supported image embedder
+# All-image-embedders GPU deployment: every supported image embedder
 # (SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3, EUPE) with weights baked in,
 # running on CUDA 12.1 so the embedders use the GPU at inference time.
 #
 # Requires the NVIDIA Container Toolkit on the host:
 #   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
 #
-# DINOv3 (and optionally EUPE) are gated - populate ./model_cache/ on
+# DINOv3 (and optionally EUPE) are gated; populate ./model_cache/ on
 # the host BEFORE building. See docker/Dockerfile.image-embedders.gpu
 # for details.
 #

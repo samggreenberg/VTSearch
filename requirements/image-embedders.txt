@@ -1,4 +1,4 @@
-# VTSearch - All image embedders (CPU)
+# VTSearch: All image embedders (CPU)
 #
 # Image-only deployment that ships every supported image embedder:
 #   * SigLIP   (google/siglip-base-patch16-224)         - default, text-capable, ungated

@@ -641,7 +641,7 @@ class TestActionHooks:
         """Find-mode auto-labels must not count toward votes_cast or vote_streak.
 
         The app applies labels to every media item in Find mode, but those are
-        system-generated scores — the user did not cast them — so they must not
+        system-generated scores (the user did not cast them), so they must not
         inflate the Votes Cast or Marathoner achievements.
         """
         from helpers import setup_trainable_model_in_registry

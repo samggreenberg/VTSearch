@@ -2626,7 +2626,7 @@
         "additionalProperties": false,
         "properties": {
           "status": {
-            "description": "Always 'ok' - the process is running and serving requests.",
+            "description": "Always 'ok'; the process is running and serving requests.",
             "type": "string"
           }
         },

@@ -276,7 +276,7 @@ class TestLoadUrbansound8kMetadata:
 
 
 # ---------------------------------------------------------------------------
-# load_demo_source; audio (gtzan, speech_commands_v2, urbansound8k)
+# load_demo_source: audio (gtzan, speech_commands_v2, urbansound8k)
 # ---------------------------------------------------------------------------
 
 

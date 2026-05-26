@@ -12,10 +12,10 @@ class Processor(ABC):
     A *Processor* takes a single media media and produces an answer.  The
     exact type of the answer depends on the subclass:
 
-    * A :class:`Detector` returns ``bool`` - "does this media match?"
-    * A :class:`Localizer` returns ``list[dict]`` - "where in this media
+    * A :class:`Detector` returns ``bool``: "does this media match?"
+    * A :class:`Localizer` returns ``list[dict]``: "where in this media
       is the item of interest?" (bounding boxes with confidence scores).
-    * An :class:`Extractor` returns ``list[dict]`` - "what details are
+    * An :class:`Extractor` returns ``list[dict]``: "what details are
       inside this media?" (bounding boxes, labels, and other metadata).
 
     Every processor knows its :attr:`name` (a unique human-readable
@@ -26,11 +26,11 @@ class Processor(ABC):
 
     * :attr:`name`
     * :attr:`media_type`
-    * :meth:`process` - run the processor on a single media dict.
+    * :meth:`process`: run the processor on a single media dict.
 
     Subclasses *may* override:
 
-    * :meth:`load_model` - called once before first use to load heavy
+    * :meth:`load_model`: called once before first use to load heavy
       resources (model weights, etc.).  Default is a no-op.
     """
 
@@ -56,7 +56,7 @@ class Processor(ABC):
         """Load any heavyweight resources (model weights, etc.).
 
         Called lazily before the first :meth:`process` call.  The default
-        implementation is a no-op - override in subclasses that need
+        implementation is a no-op; override in subclasses that need
         one-time model loading.
         """
 
@@ -96,9 +96,9 @@ class Detector(Processor):
 
     Subclasses must implement:
 
-    * :attr:`name` - unique identifier for this detector.
-    * :attr:`media_type` - which media type it works on.
-    * :meth:`detect` - run detection on a single media dict and return
+    * :attr:`name`: unique identifier for this detector.
+    * :attr:`media_type`: which media type it works on.
+    * :meth:`detect`: run detection on a single media dict and return
       ``True`` if the media matches, ``False`` otherwise.
 
     The generic :meth:`process` method delegates to :meth:`detect`.
@@ -129,7 +129,7 @@ class Localizer(Processor):
     match?" (bool) and an Extractor answers "what details are inside this
     media?" (bounding boxes, labels, metadata, etc.), a Localizer answers
     "**where** in this media is the item of interest?" by returning bounding
-    boxes with confidence scores - but no further classification or
+    boxes with confidence scores but no further classification or
     extraction metadata.
 
     Each concrete ``Localizer`` operates on exactly **one** media type
@@ -137,9 +137,9 @@ class Localizer(Processor):
 
     Subclasses must implement:
 
-    * :attr:`name` - unique identifier for this localizer.
-    * :attr:`media_type` - which media type it works on.
-    * :meth:`localize` - run localization on a single media dict and return
+    * :attr:`name`: unique identifier for this localizer.
+    * :attr:`media_type`: which media type it works on.
+    * :meth:`localize`: run localization on a single media dict and return
       a list of bounding-box dicts.
 
     The generic :meth:`process` method delegates to :meth:`localize`.
@@ -156,8 +156,8 @@ class Localizer(Processor):
         Each dict in the returned list describes **one region** where the
         item of interest was found.  Every dict **must** include:
 
-        * ``"confidence"`` - a float in ``[0, 1]``.
-        * ``"bbox"`` - the bounding box (format is media-specific, e.g.
+        * ``"confidence"``: a float in ``[0, 1]``.
+        * ``"bbox"``: the bounding box (format is media-specific, e.g.
           ``[x1, y1, x2, y2]`` for images).
 
         Returns an empty list when nothing is found.
@@ -193,9 +193,9 @@ class Extractor(Processor):
 
     Subclasses must implement:
 
-    * :attr:`name` - unique identifier for this extractor.
-    * :attr:`media_type` - which media type it works on.
-    * :meth:`extract` - run extraction on a single media dict and return a
+    * :attr:`name`: unique identifier for this extractor.
+    * :attr:`media_type`: which media type it works on.
+    * :meth:`extract`: run extraction on a single media dict and return a
       list of result dicts.
 
     The generic :meth:`process` method delegates to :meth:`extract`.

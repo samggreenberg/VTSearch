@@ -213,7 +213,7 @@ class TestDownloadUcsfDocuments:
 
 
 # ---------------------------------------------------------------------------
-# load_demo_source; ucsf_documents branch
+# load_demo_source: ucsf_documents branch
 # ---------------------------------------------------------------------------
 
 

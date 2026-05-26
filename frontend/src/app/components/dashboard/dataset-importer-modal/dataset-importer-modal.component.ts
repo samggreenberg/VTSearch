@@ -481,8 +481,8 @@ export class DatasetImporterModalComponent implements OnInit {
    *  embedder name when a lock is set AND that embedder is currently
    *  registered for the type (verified against *embedders*, or the live
    *  ``allEmbedders`` list when no per-tab list is supplied). A stale
-   *  entry - embedder renamed, removed, or now belongs to a different
-   *  mediaType - returns ``''`` so the normal picker reappears. */
+   *  entry (embedder renamed, removed, or now belonging to a different
+   *  mediaType) returns ``''`` so the normal picker reappears. */
   lockedEmbedderFor(mediaTypeFolderOrTypeId: string, embedders?: EmbedderInfo[]): string {
     if (!mediaTypeFolderOrTypeId) return '';
     const typeId = this.toTypeId(mediaTypeFolderOrTypeId) || mediaTypeFolderOrTypeId;
@@ -581,7 +581,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.activeImporterTab = tabId;
     this.selectedImporter = null;
     // When the tab has exactly one importer, the inner sub-tab row is
-    // redundant - clicking the outer tab already declared the intent.
+    // redundant; clicking the outer tab already declared the intent.
     // Auto-select the lone importer so the user lands directly on its
     // form instead of having to click a single-option card.
     const importers = this.importersForActiveTab;

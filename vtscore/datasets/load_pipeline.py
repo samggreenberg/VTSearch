@@ -513,7 +513,7 @@ def _build_clip_embed_input(clip: dict, media_type: str) -> dict:
 
     Video clips additionally carry ``clip_start`` / ``clip_end`` (and
     ``media_path`` when available) because the underlying parent bytes
-    are shared across every tile - the embedder uses the boundary
+    are shared across every tile; the embedder uses the boundary
     metadata to sample distinct frame ranges per tile.
     """
     base: dict = {

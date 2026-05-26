@@ -4,7 +4,7 @@ When the app is running, click the hamburger menu in the top-left corner to open
 
 ## Synthetic (offline)
 
-If you don't have an internet connection - or just want a quick test fixture - pick **Synthetic Dataset** (🏭) from the dataset importer list. Choose `image`, `audio`, or `video` and a size (e.g. 100, 1000, 10000) and the app will generate fake media on the fly:
+If you don't have an internet connection (or just want a quick test fixture), pick **Synthetic Dataset** (🏭) from the dataset importer list. Choose `image`, `audio`, or `video` and a size (e.g. 100, 1000, 10000) and the app will generate fake media on the fly:
 
 | Media type | Ideas it cycles through |
 |------------|-------------------------|
@@ -12,16 +12,16 @@ If you don't have an internet connection - or just want a quick test fixture - p
 | Audio      | sine tones, chords (major / minor / dim / sus4), drums (kick / snare / hihat at varying BPMs), rain, wind, FM-swept bird chirps |
 | Video      | bouncing ball, walking smiley, rotating polygon, scrolling marquee |
 
-Files are deterministic for a given size and cached under `data/synthetic/<media_type>_<size>/`, so reloads skip regeneration. The clusters are coarse on purpose - they give CLAP / CLIP / X-CLIP something to actually distinguish when you're testing a sort.
+Files are deterministic for a given size and cached under `data/synthetic/<media_type>_<size>/`, so reloads skip regeneration. The clusters are coarse on purpose; they give CLAP / CLIP / X-CLIP something to actually distinguish when you're testing a sort.
 
 ## Audio
 
 | Demo | Description |
 |------|-------------|
-| **esc50_s** | ~350 clips across all 50 ESC-50 sound categories - animals, nature, urban, domestic, and human sounds |
+| **esc50_s** | ~350 clips across all 50 ESC-50 sound categories: animals, nature, urban, domestic, and human sounds |
 | **esc50_m** | ~650 clips across all 50 ESC-50 sound categories |
 | **esc50_l** | ~1000 clips across all 50 ESC-50 sound categories |
-| **gtzan_a** | 30-second music excerpts across 10 GTZAN genres - blues, classical, country, disco, hiphop, jazz, metal, pop, reggae, and rock |
+| **gtzan_a** | 30-second music excerpts across 10 GTZAN genres: blues, classical, country, disco, hiphop, jazz, metal, pop, reggae, and rock |
 | **speech_commands_v2_s** | One-second keyword utterances across 35 Google Speech Commands v2 categories (small) |
 | **speech_commands_v2_m** | One-second keyword utterances across 35 Speech Commands v2 categories (medium) |
 | **speech_commands_v2_l** | One-second keyword utterances across 35 Speech Commands v2 categories (large) |
@@ -29,13 +29,13 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **urbansound8k_s** | Real urban field recordings across 10 UrbanSound8K categories (small) |
 | **urbansound8k_m** | Real urban field recordings across 10 UrbanSound8K categories (medium) |
 | **urbansound8k_l** | Real urban field recordings across 10 UrbanSound8K categories (large) |
-| **urbansound8k_a** | Real urban field recordings across 10 UrbanSound8K categories - air conditioner, car horn, children playing, dog bark, and more |
+| **urbansound8k_a** | Real urban field recordings across 10 UrbanSound8K categories: air conditioner, car horn, children playing, dog bark, and more |
 
 ## Image
 
 | Demo | Description |
 |------|-------------|
-| **caltech101_s** | ~500 photographs across 25 Caltech-101 categories - animals, vehicles, household objects, and nature |
+| **caltech101_s** | ~500 photographs across 25 Caltech-101 categories: animals, vehicles, household objects, and nature |
 | **caltech101_m** | ~1,000 photographs across 25 Caltech-101 categories |
 | **caltech256_l** | ~2,000 photographs across 25 Caltech-256 categories - animals, landmarks, vehicles, and everyday objects |
 | **oxford_flowers_102_a** | Close-up flower photography across 102 Oxford Flowers species |

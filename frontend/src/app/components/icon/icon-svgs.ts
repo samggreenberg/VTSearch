@@ -1,5 +1,5 @@
 /**
- * Shell icon SVGs - kept in the initial bundle.
+ * Shell icon SVGs, kept in the initial bundle.
  *
  * Only the icons that components in the eager app shell (today: the
  * `DialogHostComponent`, which renders ``info`` / ``warning`` /
@@ -8,7 +8,7 @@
  * `IconComponent` from `icon-svgs-extended.ts` on first request.
  *
  * SVGs are stored as plain strings without ``width`` / ``height``
- * attributes - `IconComponent` sets the size on its wrapper span so
+ * attributes; `IconComponent` sets the size on its wrapper span so
  * the SVG (which has a 24x24 ``viewBox``) scales via CSS.
  */
 export const SHELL_ICON_SVGS: Record<string, string> = {

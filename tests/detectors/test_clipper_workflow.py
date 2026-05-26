@@ -105,7 +105,7 @@ def _make_video_media(media_id: int, duration: float = 10.0) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# _apply_clipper; clip thumbnail regeneration
+# _apply_clipper: clip thumbnail regeneration
 # ---------------------------------------------------------------------------
 
 
@@ -148,7 +148,7 @@ class TestApplyClipperThumbnails:
 
 
 # ---------------------------------------------------------------------------
-# _apply_clipper; MD5 recomputation
+# _apply_clipper: MD5 recomputation
 # ---------------------------------------------------------------------------
 
 
@@ -278,7 +278,7 @@ class TestApplyClipperMD5:
 
 
 # ---------------------------------------------------------------------------
-# _apply_clipper; origin boundary storage
+# _apply_clipper: origin boundary storage
 # ---------------------------------------------------------------------------
 
 
@@ -718,7 +718,7 @@ class TestMultipleMediasClipped:
 
 
 # ---------------------------------------------------------------------------
-# _apply_clipper; on_progress callback
+# _apply_clipper: on_progress callback
 # ---------------------------------------------------------------------------
 
 

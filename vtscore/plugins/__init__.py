@@ -447,7 +447,7 @@ class PluginRegistry(Generic[T]):
         """Load third-party plugins registered via :mod:`importlib.metadata`.
 
         Each entry point in :attr:`_entry_point_group` is resolved to an
-        object that's treated like a sentinel value - its ``.name`` is the
+        object that's treated like a sentinel value; its ``.name`` is the
         registry key.  Failures are surfaced as warnings so a single bad
         third-party plugin can't break the rest of the registry.
 

@@ -103,7 +103,7 @@ def _trained_labelset() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# load_pipeline_file; schema validation
+# load_pipeline_file: schema validation
 # ---------------------------------------------------------------------------
 
 

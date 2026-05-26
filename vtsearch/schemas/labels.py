@@ -2,19 +2,19 @@
 
 Covers the three JSON-only routes in ``vtsearch/routes/labels/vote.py``:
 
-* ``GET  /api/labels/export``       - :class:`LabelsExportResponseSchema`
-* ``POST /api/labels/import``       - :class:`LabelsImportRequestSchema` →
+* ``GET  /api/labels/export``       -> :class:`LabelsExportResponseSchema`
+* ``POST /api/labels/import``       -> :class:`LabelsImportRequestSchema` ->
                                        :class:`LabelsImportResponseSchema`
-* ``POST /api/labels/fill-from-sort`` - :class:`FillFromSortRequestSchema` →
+* ``POST /api/labels/fill-from-sort`` -> :class:`FillFromSortRequestSchema` ->
                                          :class:`FillFromSortResponseSchema`
 
 Listing / non-plugin-field routes in ``importers.py`` / ``exporters.py``:
 
-* ``GET  /api/exporters``                       - :class:`ExportersListResponseSchema`
-* ``POST /api/exporters/export``                - :class:`RunExportRequestSchema` →
+* ``GET  /api/exporters``                       -> :class:`ExportersListResponseSchema`
+* ``POST /api/exporters/export``                -> :class:`RunExportRequestSchema` ->
                                                    :class:`RunExportResponseSchema`
-* ``GET  /api/label-importers``                 - :class:`LabelImportersListResponseSchema`
-* ``POST /api/label-importers/ingest-missing``  - :class:`IngestMissingRequestSchema` →
+* ``GET  /api/label-importers``                 -> :class:`LabelImportersListResponseSchema`
+* ``POST /api/label-importers/ingest-missing``  -> :class:`IngestMissingRequestSchema` ->
                                                    :class:`IngestMissingResponseSchema`
 
 The per-plugin shape of ``field_values`` on ``POST /api/exporters/export``
@@ -22,7 +22,7 @@ is intentionally declared as ``fields.Dict()``: the inner keys vary per
 exporter and ``field_values`` is validated inside the handler against the
 selected plugin's :attr:`fields` declaration. The multipart-or-JSON
 ``POST /api/label-importers/import/<importer_name>`` route stays on the
-legacy plain-Flask path (no decorator) for the same reason - see the
+legacy plain-Flask path (no decorator) for the same reason; see the
 *Resolved questions / Plugin field endpoints* section of
 ``docs/plans/openapi-schema.md``.
 """
@@ -247,7 +247,7 @@ class IngestMissingResponseSchema(Schema):
     """Response for ``POST /api/label-importers/ingest-missing``.
 
     ``failed`` lists per-entry failures from the label-application
-    pass - see logical-bug-audit H31.  A single entry that raises during
+    pass; see logical-bug-audit H31.  A single entry that raises during
     ``apply_label`` no longer aborts the rest of the batch.
     """
 
@@ -264,7 +264,7 @@ class RunLabelImporterResponseSchema(Schema):
     The route stays on the legacy plain-Flask path (request body is a
     plugin-field shape), but the success body is the same on every
     importer, so we declare it here for cross-reference. Currently
-    *not* attached to the route via ``@response`` - kept for the
+    *not* attached to the route via ``@response``; kept for the
     eventual unified plugin-field migration.
 
     ``failed`` carries per-entry application failures (logical-bug-audit

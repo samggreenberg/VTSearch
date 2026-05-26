@@ -11,14 +11,14 @@ embeddings for training.  This module handles that resolution:
 File resolution is split into two pluggable resolvers, auto-wired on
 first use:
 
-- **Source resolver** - delegates to
+- **Source resolver**: delegates to
   :func:`~vtscore.datasets.sources.get_source_for_origin` and calls
   :meth:`~MediaSource.resolve_path`.  Registers the source's
   :meth:`~MediaSource.cleanup` on the caller's :class:`ExitStack` so
   per-call temp storage is held alive for the duration of the
   :func:`resolve_file_context` block (otherwise GC of the source can
   delete the path before the caller embeds the file).
-- **Importer resolver** - delegates to
+- **Importer resolver**: delegates to
   :func:`~vtscore.datasets.importers.get_importer` and calls
   :meth:`~DatasetImporter.resolve_file`.
 
@@ -26,7 +26,7 @@ External code can replace or extend these via
 :func:`register_source_resolver` and :func:`register_importer_resolver`.
 
 Two synthetic origin types (``dupe_set`` and ``converter``) are handled inline
-because they are not importers in the registry - they delegate to real
+because they are not importers in the registry; they delegate to real
 importers.
 """
 
@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# FileResolver protocol - the contract for pluggable file resolution
+# FileResolver protocol: the contract for pluggable file resolution
 # ---------------------------------------------------------------------------
 
 
@@ -71,7 +71,7 @@ class SourceResolver(Protocol):
 class ImporterResolver(Protocol):
     """Callable that resolves an origin via its dataset importer.
 
-    Importer-based dispatch does not allocate a per-call source - importers
+    Importer-based dispatch does not allocate a per-call source; importers
     that need to cache materialised content (e.g. ``http_archive``) are
     expected to write to a stable directory and never call ``cleanup()``,
     so no :class:`ExitStack` is threaded through.
@@ -143,7 +143,7 @@ def _auto_wire_resolvers() -> None:
                 source = get_source_for_origin(origin)
                 if source is None:
                     return None
-                # Keep the source alive - and its temp dir, if any - until
+                # Keep the source alive (and its temp dir, if any) until
                 # the caller's resolve_file_context exits.
                 stack.callback(source.cleanup)
                 return source.resolve_path(origin_name, filename)
@@ -204,7 +204,7 @@ def resolve_file_context(
     (e.g. PullWrest) materialise the file inside a
     :class:`tempfile.TemporaryDirectory` they own.  If the source is dropped
     before the caller accesses the file, the temp dir is finalized by GC and
-    the path goes stale - ``embed_file`` then crashes with
+    the path goes stale; ``embed_file`` then crashes with
     ``FileNotFoundError``.
 
     This context manager owns the source for the duration of the ``with``
@@ -231,7 +231,7 @@ def resolve_file_from_origin(
     :func:`resolve_file_context` for callers that only need to test
     existence or read the file immediately (synchronously, in the same
     expression).  Callers that hold the returned path across an operation
-    that re-enters Python - embedding, opening with PIL, etc. - must use
+    that re-enters Python (embedding, opening with PIL, etc.) must use
     :func:`resolve_file_context` instead, because some media sources own
     temporary directories that are garbage-collected as soon as this
     function returns.
@@ -257,7 +257,7 @@ def _resolve_with_stack(  # noqa: C901
     - ``converter``: reconstructs the parent origin and delegates.
     """
     if origin is None:
-        log.debug("resolve_file: origin is None - cannot resolve")
+        log.debug("resolve_file: origin is None; cannot resolve")
         return None
 
     importer_name = origin.get("importer", "")
@@ -277,14 +277,14 @@ def _resolve_with_stack(  # noqa: C901
         result = _resolve_dupe_set(stack, origin)
         if result is None:
             members = origin.get("members", [])
-            log.debug("resolve_file: dupe_set with %d members - none resolved", len(members))
+            log.debug("resolve_file: dupe_set with %d members; none resolved", len(members))
         return result
 
     if importer_name == "converter":
         result = _resolve_converter(stack, params)
         if result is None:
             log.debug(
-                "resolve_file: converter origin failed - source_file=%r, parent_importer=%r",
+                "resolve_file: converter origin failed; source_file=%r, parent_importer=%r",
                 params.get("source_file", ""),
                 params.get("parent_importer", ""),
             )
@@ -330,7 +330,7 @@ def _resolve_with_stack(  # noqa: C901
         if p.is_file():
             log.debug("resolve_file: generic path fallback succeeded → %s", p)
             return p
-        log.debug("resolve_file: generic path fallback - %r is not a file", path)
+        log.debug("resolve_file: generic path fallback; %r is not a file", path)
 
     log.debug(
         "resolve_file: ALL dispatch methods failed for importer=%r, origin_name=%r, filename=%r",
@@ -399,7 +399,7 @@ def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.
         avail = embedders_for_type(media_type)
         if not avail:
             log.warning(
-                "embed_file: no embedders registered for media_type=%r - cannot embed %s",
+                "embed_file: no embedders registered for media_type=%r; cannot embed %s",
                 media_type,
                 file_path,
             )
@@ -509,7 +509,7 @@ def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> tuple[
 
     Returns ``(embedding, clip_bytes)`` on success, or ``None`` when
     nothing applies or the replay fails. ``clip_bytes`` is the content
-    bytes of the final clip (post-chain) - what the embedder consumed,
+    bytes of the final clip (post-chain): what the embedder consumed,
     or ``None`` when the chain ends in a metadata-only clipper (e.g.
     video) whose output bytes equal the parent's bytes.
     """
@@ -540,7 +540,7 @@ def _apply_clip_and_embed(
     unrecognised clipper) or when the clip step raises.
 
     Returns ``(embedding, clip_bytes)`` where ``clip_bytes`` is the bytes
-    that were actually embedded - i.e. the sliced/cropped content for
+    that were actually embedded, i.e. the sliced/cropped content for
     audio / image / text clippers (and for chain replays). ``clip_bytes``
     is ``None`` when the function fell through to embedding the full
     parent file (no clipper, clip step failed, or a media type whose
@@ -613,7 +613,7 @@ def _log_resolve_failure(
     if status == "no_origin":
         log.info(
             "  label[%d] FAILED (no origin): md5=%s, origin_name=%r, "
-            "filename=%r - this label has no origin trail and cannot "
+            "filename=%r; this label has no origin trail and cannot "
             "be resolved to a file",
             index,
             entry.get("md5", "?")[:12],
@@ -760,7 +760,7 @@ def resolve_label_embeddings(
         embedder_name: Name of the embedder to use for resolved files.
             Callers that will mix these vectors with a dataset's stored
             embeddings (e.g. find-label training) must pass the dataset's
-            embedder so all training vectors share one space - mixing
+            embedder so all training vectors share one space; mixing
             output from two embedders into a single MLP produces garbage.
             Empty ``""`` falls back to the media type's first registered
             embedder.

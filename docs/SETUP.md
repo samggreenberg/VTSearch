@@ -175,7 +175,7 @@ Runtime + dev dependencies are declared in `pyproject.toml` (under
 `requirements/base.txt` and `requirements/gpu.txt` just forward to it via
 `-e .[dev]`, so pyproject is the single source of truth and deptry
 catches any drift. The labbench / image-embedders requirements files
-under `requirements/` are deliberately standalone - they pin a minimal
+under `requirements/` are deliberately standalone; they pin a minimal
 subset for size-constrained Docker images.
 
 **For CPU only** (recommended if you don't have a compatible GPU):
@@ -202,7 +202,7 @@ build (~2 GB).
 
 ## Building the frontend
 
-The Angular frontend must be built after checking out the code - the compiled files are not committed to Git. You'll need **Node.js 18+** and **npm**.
+The Angular frontend must be built after checking out the code; the compiled files are not committed to Git. You'll need **Node.js 18+** and **npm**.
 
 Check if they're installed:
 
@@ -245,7 +245,7 @@ Then install dependencies and build:
 cd frontend; npm install; npm run build:prod; cd ..
 ```
 
-This compiles the Angular app into `static/` (index.html, main.js, polyfills.js, styles.css). You must run `npm install` before the first build - it installs the Angular CLI and other tools locally.
+This compiles the Angular app into `static/` (index.html, main.js, polyfills.js, styles.css). You must run `npm install` before the first build; it installs the Angular CLI and other tools locally.
 
 For development with live reload (proxies API calls to Flask at localhost:5000):
 
@@ -270,13 +270,13 @@ You should see output like:
 
 Open `http://localhost:5000` in your browser. The server binds to `0.0.0.0:5000`, so it is also reachable from other devices on the network.
 
-`python app.py` uses Flask's built-in dev server - fine for development but **not recommended for production**. For production, run under gunicorn using the bundled config:
+`python app.py` uses Flask's built-in dev server (fine for development, but **not recommended for production**). For production, run under gunicorn using the bundled config:
 
 ```bash
 VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 ```
 
-`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, autoload preloading, settings-source sync) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads - VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#gunicorn-tuning) for tuning.
+`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, autoload preloading, settings-source sync) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads; VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#gunicorn-tuning) for tuning.
 
 The Docker images already use this configuration (see [Docker](#docker) below).
 
@@ -290,7 +290,7 @@ Install [Docker](https://docs.docker.com/get-docker/) (includes Docker Compose).
 
 ### CPU (default)
 
-Using Docker Compose (recommended - run from the repo root):
+Using Docker Compose (recommended; run from the repo root):
 
 ```bash
 docker compose -f docker/compose/docker-compose.yml up            # build & run (foreground)
@@ -309,7 +309,7 @@ docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch
 > `Dockerfile.labbench`, `Dockerfile.image-embedders`,
 > `Dockerfile.image-embedders.gpu`) includes a Node.js `frontend` build
 > stage that runs `npm ci` and `npm run build:prod` inside the image, so
-> you do **not** need to build the Angular app on the host first - any
+> you do **not** need to build the Angular app on the host first; any
 > stale checked-in `static/` is overwritten with the freshly built bundle.
 
 ### GPU
@@ -331,8 +331,8 @@ docker run --gpus all -p 5000:5000 -v vtsearch-data:/app/data vtsearch:gpu
 
 ### LabBench (SigLIP-only image search)
 
-For the LabBench deployment - image search with the SigLIP
-embedder - use the streamlined `docker/Dockerfile.labbench` variant. It skips
+For the LabBench deployment (image search with the SigLIP
+embedder), use the streamlined `docker/Dockerfile.labbench` variant. It skips
 audio, video, document, text, and extractor plugin dependencies, and **bakes
 the SigLIP model weights into the image at build time** so the container is
 ready to serve immediately on first run (no Hugging Face download).
@@ -429,7 +429,7 @@ VTSearch reads several optional environment variables:
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (set this in production) |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
-| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn - triggers model init / settings sync at import time |
+| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn; triggers model init / settings sync at import time |
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
 | `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
 | `VTSEARCH_TIMEOUT` | `0` | Gunicorn worker timeout in seconds (`0` = disabled; long imports / training would otherwise SIGKILL the worker) |

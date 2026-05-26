@@ -419,8 +419,8 @@ class TestCliScoringNegativeHits:
         y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
         mlp, threshold = train_and_threshold(X, y, snap=snap)
 
-        # Build a broken snap that doesn't share the active ctx's key set
-        #; that forces the fresh-build path in
+        # Build a broken snap that doesn't share the active ctx's key set;
+        # that forces the fresh-build path in
         # ``get_embedding_matrix_for_snap`` where the M11 guard lives.
         # (The cached-matrix fast path would return the still-valid
         # matrix built from the active ctx, masking the bug.)

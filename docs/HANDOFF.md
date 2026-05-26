@@ -1,7 +1,7 @@
 # Project Handoff
 
 This document provides a concise orientation for anyone picking up VTSearch
-for the first time - whether to operate it, extend it, or evaluate it. It
+for the first time (whether to operate it, extend it, or evaluate it). It
 ties together the full documentation set and highlights the things you need
 to know first.
 
@@ -22,7 +22,7 @@ to know first.
 ## What is VTSearch?
 
 VTSearch is a trainable media search tool. It searches collections of
-audio, images, text, video, and documents using a **detector** - a
+audio, images, text, video, and documents using a **detector**: a
 small trained ranker that scores every item in the dataset by how well
 it matches what you're looking for. There are two ways to search:
 
@@ -31,9 +31,9 @@ it matches what you're looking for. There are two ways to search:
   rest of the collection. **Autopilot** drives this loop, picking which
   item to show next and when each phase ends, so most users never need
   to think about sort modes or selection strategies directly.
-- **Use an existing detector.** Apply a previously trained detector -
-  one you saved earlier, exported from another VTSearch instance, or
-  imported from disk - to a fresh dataset of the same media type. No
+- **Use an existing detector.** Apply a previously trained detector
+  (one you saved earlier, exported from another VTSearch instance, or
+  imported from disk) to a fresh dataset of the same media type. No
   new labeling required.
 
 A natural-language query ("dog barking", "red car in snow") seeds
@@ -53,14 +53,14 @@ deployments. Runs locally or in Docker.
 | Document | Purpose |
 |----------|---------|
 | [SETUP.md](SETUP.md) | Installation, prerequisites, getting started, basic Docker usage |
-| [user/USER_GUIDE.md](user/USER_GUIDE.md) | End-user walkthrough - training a detector with Autopilot, manual mode, applying existing detectors, sort modes, dashboard, exporting |
+| [user/USER_GUIDE.md](user/USER_GUIDE.md) | End-user walkthrough: training a detector with Autopilot, manual mode, applying existing detectors, sort modes, dashboard, exporting |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment, offline mode, network deps, env vars, data directory, troubleshooting |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management |
 | [API.md](API.md) | HTTP API reference (all REST endpoints, request/response formats) |
 | [CLI.md](CLI.md) | Command-line interface reference (autodetect, importers, exporters) |
 | [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration |
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
-| [EXTENDING.md](EXTENDING.md) | Plugin authoring index - splits into **[EXTENDING-plugins.md](EXTENDING-plugins.md)** (importers/exporters/sources), **[EXTENDING-media.md](EXTENDING-media.md)** (media types/embedders/clippers/converters), **[EXTENDING-processors.md](EXTENDING-processors.md)** (detectors/localizers/extractors). EXTENDING.md itself holds auth, dependencies, and checklists. |
+| [EXTENDING.md](EXTENDING.md) | Plugin authoring index: splits into **[EXTENDING-plugins.md](EXTENDING-plugins.md)** (importers/exporters/sources), **[EXTENDING-media.md](EXTENDING-media.md)** (media types/embedders/clippers/converters), **[EXTENDING-processors.md](EXTENDING-processors.md)** (detectors/localizers/extractors). EXTENDING.md itself holds auth, dependencies, and checklists. |
 | [demos.md](demos.md) | Available demo datasets |
 | [plans/README.md](plans/README.md) | Filename index of open design plans (multi-media import, patch embedders, clipper chain, etc.) |
 | [../vtscore/docs/README.md](../vtscore/docs/README.md) | Developer documentation for the `vtscore` library (the Flask-free reusable core extracted from VTSearch) |
@@ -102,7 +102,7 @@ dataset or import your own data.
 
 ### Clips
 
-A **clip** is the fundamental data unit - a dict with an `id`, media bytes,
+A **clip** is the fundamental data unit: a dict with an `id`, media bytes,
 an embedding vector, and optional metadata (`origin`, `origin_name`, `md5`).
 All clips live in a global dict keyed by integer ID.
 
@@ -122,9 +122,9 @@ Five media types are supported:
 |-----------|-----------------|----------|-------------|
 | Audio | CLAP | `laion/clap-htsat-unfused` | CLAP Music (`laion/larger_clap_music_and_speech`) |
 | Image | SigLIP | `google/siglip-base-patch16-224` | CLIP (`openai/clip-vit-base-patch32`) |
-| Video | X-CLIP | `microsoft/xclip-base-patch32` | - |
+| Video | X-CLIP | `microsoft/xclip-base-patch32` | None |
 | Text | E5 | `intfloat/e5-base-v2` | BGE (`BAAI/bge-base-en-v1.5`) |
-| Document | None (convert first) | N/A - use converters to transform to image/text | - |
+| Document | None (convert first) | N/A; use converters to transform to image/text | None |
 
 Models are loaded lazily on first use. Default models total ~3.1 GB.
 
@@ -164,13 +164,13 @@ coexist, and exported labels can be matched back to their source.
 
 ### Entry point
 
-`app.py` - Flask app setup, blueprint registration, startup logic, CLI
+`app.py`: Flask app setup, blueprint registration, startup logic, CLI
 argument parsing. Key startup sequence:
 
 1. Create `data/` directory structure
 2. Initialize model cache directory
 3. Load persistent settings from `data/settings.json`
-4. Smart-preload predicted embedders (`predict_embedders_to_preload()` in `vtscore/embedding/loader.py`) - walks the dataset and detector registries and warms each unique embedder referenced
+4. Smart-preload predicted embedders (`predict_embedders_to_preload()` in `vtscore/embedding/loader.py`): walks the dataset and detector registries and warms each unique embedder referenced
 5. Start Flask server (or run CLI autodetect workflow)
 
 ### Where things live (quick lookup)
@@ -184,8 +184,8 @@ argument parsing. Key startup sequence:
 | Dataset loading, demo downloads | `vtscore/datasets/` |
 | Frontend (Angular source / build output) | `frontend/` → `static/` |
 
-For the full module-by-module map - extractability matrix, dependency
-graph, plugin directories - see
+For the full module-by-module map (extractability matrix, dependency
+graph, plugin directories) see
 [ARCHITECTURE.md](ARCHITECTURE.md#directory-map).
 
 ### Architectural boundaries
@@ -197,7 +197,7 @@ graph, plugin directories - see
   some modules import specific helpers (e.g. `update_progress`,
   `next_media_id`) for progress reporting and ID generation.
 - **Each plugin is self-contained** in its own subdirectory.
-  Runtime dependencies - including each plugin's extras - live in
+  Runtime dependencies (including each plugin's extras) live in
   `pyproject.toml` under `[project.dependencies]`; deptry verifies every
   import is declared.
 
@@ -353,9 +353,9 @@ can work with different datasets/models simultaneously via
 tiers: a small set of server-wide infrastructure keys
 (`saved_datasets_dir`, `detectors_dir`, `max_concurrent_*`,
 `autorun_detectors`) live in
-`data/settings.json` and are shared across users; everything else -
-theme, volume, view/focus/panel modes, autopilot config, achievements
-state, and the per-user `settings_source` - lives in
+`data/settings.json` and are shared across users; everything else
+(theme, volume, view/focus/panel modes, autopilot config, achievements
+state, and the per-user `settings_source`) lives in
 `<get_user_data_dir(user)>/user_settings.json` and is isolated per
 user. Background threads spawned from a request handler propagate the
 user via `vtsearch.auth.set_thread_user()` so per-user writes (e.g.

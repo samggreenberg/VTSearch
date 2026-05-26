@@ -23,7 +23,7 @@ import pytest
 
 
 # ---------------------------------------------------------------------------
-# _frame_index_range; boundary math
+# _frame_index_range: boundary math
 # ---------------------------------------------------------------------------
 
 
@@ -85,7 +85,7 @@ class TestFrameIndexRange:
 
 
 # ---------------------------------------------------------------------------
-# sample_video_frames; uses clip_start/clip_end to pick frame indices
+# sample_video_frames: uses clip_start/clip_end to pick frame indices
 # ---------------------------------------------------------------------------
 
 
@@ -225,7 +225,7 @@ class TestSampleVideoFrames:
 
 
 # ---------------------------------------------------------------------------
-# _build_clip_embed_input; propagates clip metadata for video
+# _build_clip_embed_input: propagates clip metadata for video
 # ---------------------------------------------------------------------------
 
 
@@ -281,7 +281,7 @@ class TestBuildClipEmbedInput:
 
 
 # ---------------------------------------------------------------------------
-# _fixup_clip_md5_and_embeddings; video tiles each get their own embedding
+# _fixup_clip_md5_and_embeddings: video tiles each get their own embedding
 # ---------------------------------------------------------------------------
 
 

@@ -1,4 +1,4 @@
-# GPU deployment - use as an override on top of docker-compose.yml:
+# GPU deployment; use as an override on top of docker-compose.yml:
 #
 #   docker compose \
 #     -f docker/compose/docker-compose.yml \

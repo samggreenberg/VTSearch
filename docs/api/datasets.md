@@ -33,7 +33,7 @@ GET /api/media-types
 GET /api/embedders
 ```
 
-**Query:** `?media_type=image` - optional, filter by `type_id` or
+**Query:** `?media_type=image` (optional): filter by `type_id` or
 `folder_import_name`.
 
 → `{"embedders": [{"name": "siglip", "display_name": "SigLIP", "media_type_id": "image", ...}]}`
@@ -45,7 +45,7 @@ POST /api/embed
 ```
 
 Embed a single media file or text snippet with a chosen embedder, without
-loading a dataset.  Two input modes share the endpoint - the embedder
+loading a dataset. Two input modes share the endpoint; the embedder
 declares its own `media_type_id`, so the caller does not pass a media
 type separately.
 
@@ -56,13 +56,13 @@ type separately.
 | `embedder` | Required. Embedder name from `GET /api/embedders`. |
 | `file` | Required. Binary upload. The extension is checked against the embedder's `media_type_id` before any model load. |
 
-**Text (`application/json`)** - body:
+**Text (`application/json`)** - request body:
 
 ```json
 {"embedder": "e5", "text": "a cat on a mat"}
 ```
 
-Calls `embed_text(...)` - only embedders whose `supports_text` is `true`
+Calls `embed_text(...)`; only embedders whose `supports_text` is `true`
 accept this mode (image/audio cross-modal embedders like CLIP, SigLIP, CLAP
 support it; vision-only embedders like DINOv3 do not).
 
@@ -91,7 +91,7 @@ support it; vision-only embedders like DINOv3 do not).
 GET /api/clippers
 ```
 
-**Query:** `?media_type=audio` - optional, filter by `type_id` or
+**Query:** `?media_type=audio` (optional): filter by `type_id` or
 `folder_import_name`.
 
 → `{"clippers": [{"name": "sound_default", "media_type": "audio", "display_name": "Sound Default", "description": "Import each audio file as-is, without splitting.", ...}]}`
@@ -108,7 +108,7 @@ configurable settings also include `parameters` and
 GET /api/converters
 ```
 
-**Query (mutually exclusive):** `?source=video` or `?target=image` - filter by
+**Query (mutually exclusive):** `?source=video` or `?target=image`: filter by
 `type_id` or `folder_import_name`. Omit both to list all converters.
 
 → `{"converters": [{"name": "video2image", "source_type": "video", "target_type": "image", ...}]}`
@@ -131,14 +131,14 @@ Progress for dataset operations is streamed through the unified
 [`/api/events`](events.md) Server-Sent Events endpoint. Two channels
 carry dataset state:
 
-- `dataset` - the singleton dataset progress tracker (used by staging,
+- `dataset`: the singleton dataset progress tracker (used by staging,
   embedding, and other one-at-a-time operations):
 
   ```json
   {"status": "loading", "message": "Embedding medias…", "current": 50, "total": 500}
   ```
 
-- `loading-tasks` - array of all active dataset loading tasks:
+- `loading-tasks`: array of all active dataset loading tasks:
 
   ```json
   [{"task_id": "task_abc", "name": "ESC-50", "status": "loading", "message": "...", "current": 50, "total": 500}]
@@ -146,7 +146,7 @@ carry dataset state:
 
 Connect with `new EventSource('/api/events')` and listen for the
 `dataset` and `loading-tasks` events. The first frame on each channel
-is the current snapshot - no separate bootstrap call is needed.
+is the current snapshot; no separate bootstrap call is needed.
 
 ### Cancel loading
 
@@ -208,7 +208,7 @@ Lists `.pkl` files in the embeddings directory.
 POST /api/dataset/load-file
 ```
 
-**Form:** `file` - `.pkl` file.
+**Form:** `file`: `.pkl` file.
 
 → `{"ok": true, "message": "Loading started"}`
 
@@ -252,7 +252,7 @@ POST /api/dataset/load-source
 
 → `{"ok": true, "message": "Loading started"}`
 
-All load endpoints are async - subscribe to the `dataset` and
+All load endpoints are async; subscribe to the `dataset` and
 `loading-tasks` channels on [`/api/events`](events.md) (SSE) for progress.
 
 ### Demo datasets

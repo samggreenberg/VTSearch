@@ -2,14 +2,14 @@
 
 Listing / per-media routes (``vtsearch/routes/media/list.py``):
 
-* ``GET  /api/medias/ids`` - :class:`MediaIdsListResponseSchema`
-* ``POST /api/medias/batch`` - :class:`MediaBatchRequestSchema` →
+* ``GET  /api/medias/ids`` -> :class:`MediaIdsListResponseSchema`
+* ``POST /api/medias/batch`` -> :class:`MediaBatchRequestSchema` ->
                                 :class:`MediaBatchResponseSchema`
-* ``POST /api/medias/<id>/vote`` - :class:`MediaVoteRequestSchema` →
+* ``POST /api/medias/<id>/vote`` -> :class:`MediaVoteRequestSchema` ->
                                     :class:`MediaVoteResponseSchema`
-* ``GET  /api/medias/<id>/paragraph`` and ``GET /api/medias/<id>/text`` -
+* ``GET  /api/medias/<id>/paragraph`` and ``GET /api/medias/<id>/text`` ->
         :class:`MediaParagraphResponseSchema`
-* ``POST /api/medias/add-to-pile`` - :class:`MediaAddToPileResponseSchema`
+* ``POST /api/medias/add-to-pile`` -> :class:`MediaAddToPileResponseSchema`
         (multipart body; ``arguments`` decorator omitted because the
         request shape isn't a single marshmallow schema, but the JSON
         success body is described)
@@ -22,24 +22,24 @@ the spec leaves it undescribed (mirroring
 
 Server media files + example-sort routes (``vtsearch/routes/media/server.py``):
 
-* ``GET  /api/server-media-files`` - :class:`ServerMediaListResponseSchema`
-* ``POST /api/server-media-files/upload`` - :class:`ServerMediaUploadResponseSchema`
+* ``GET  /api/server-media-files`` -> :class:`ServerMediaListResponseSchema`
+* ``POST /api/server-media-files/upload`` -> :class:`ServerMediaUploadResponseSchema`
         (multipart body; ``arguments`` decorator omitted)
-* ``GET  /api/server-media-files/<filename>/thumbnail`` - binary,
+* ``GET  /api/server-media-files/<filename>/thumbnail``: binary,
         :class:`alt_response` only.
-* ``POST /api/example-sort-server`` - :class:`ExampleSortServerRequestSchema` →
+* ``POST /api/example-sort-server`` -> :class:`ExampleSortServerRequestSchema` ->
                                        :class:`ExampleSortResponseSchema`
-* ``POST /api/example-sort-origin`` - :class:`ExampleSortOriginRequestSchema` →
+* ``POST /api/example-sort-origin`` -> :class:`ExampleSortOriginRequestSchema` ->
                                        :class:`ExampleSortResponseSchema`
-* ``POST /api/example-sort-by-id`` - :class:`ExampleSortByIdRequestSchema` →
+* ``POST /api/example-sort-by-id`` -> :class:`ExampleSortByIdRequestSchema` ->
                                       :class:`ExampleSortResponseSchema`
-* ``POST /api/server-media-files/from-media-id`` -
-        :class:`ServerMediaFromMediaIdRequestSchema` →
+* ``POST /api/server-media-files/from-media-id`` ->
+        :class:`ServerMediaFromMediaIdRequestSchema` ->
         :class:`ServerMediaUploadResponseSchema`
 
 The ``POST /api/embed`` route (``vtsearch/routes/media/embed.py``) is a
 dual-mode dispatcher (multipart upload OR JSON body) and is left
-undecorated on the same ``flask_smorest.Blueprint`` - see the module
+undecorated on the same ``flask_smorest.Blueprint``; see the module
 docstring there.
 """
 
@@ -132,7 +132,7 @@ class MediaVoteRequestSchema(Schema):
 
     The endpoint uses **absolute-target** semantics: ``target`` is the
     state the caller wants the media to be in after the call.  Repeats
-    are idempotent - sending ``target="good"`` on a media that's already
+    are idempotent; sending ``target="good"`` on a media that's already
     good does nothing, does not append to ``label_history``, and does
     not credit achievements.  This closes the H1 counter-inflation race
     where two stale-view tabs each thought they were toggling the same
@@ -288,8 +288,8 @@ class ExampleSortByIdRequestSchema(Schema):
 
     Sorts the loaded snapshot by similarity to an already-loaded media,
     identified by its in-memory ``media_id``.  When ``crop_params`` is
-    absent the existing ``media["embedding"]`` is reused - no fetch or
-    re-embed.  When set, the media's bytes are materialised, cropped,
+    absent, the existing ``media["embedding"]`` is reused (no fetch or
+    re-embed).  When set, the media's bytes are materialised, cropped,
     and re-embedded before sorting.
     """
 

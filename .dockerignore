@@ -28,7 +28,7 @@ data/
 tests/
 run-tests.sh
 
-# Frontend node_modules and build cache - the Dockerfile's frontend
+# Frontend node_modules and build cache; the Dockerfile's frontend
 # build stage runs `npm ci` and `ng build` inside the image, so we want
 # the frontend source in the context but never these generated dirs.
 frontend/node_modules/

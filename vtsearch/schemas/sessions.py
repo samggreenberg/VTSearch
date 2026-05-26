@@ -17,7 +17,7 @@ class RecentSessionSchema(Schema):
 
     ``last_activity`` is epoch seconds (float). The ``dataset_name`` /
     ``detector_name`` fields are resolved against the current registry
-    at read time - entries pointing at deleted ids are dropped before
+    at read time; entries pointing at deleted ids are dropped before
     we get here, so these are always populated.
     """
 

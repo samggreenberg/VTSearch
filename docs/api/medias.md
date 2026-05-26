@@ -24,7 +24,7 @@ GET /api/medias/ids
 Every stub carries `id` and `type`; `embedder` is included when the media
 has one.  Display-worthy metadata (`filename`, `md5`, `custom_metadata`,
 `origin_name`, `description`, `clip_*`) is fetched on demand for the IDs
-the client actually needs via [Batch fetch](#batch-fetch-metadata) - this
+the client actually needs via [Batch fetch](#batch-fetch-metadata); this
 keeps the listing payload bounded even for datasets with tens of
 thousands of items.
 
@@ -165,7 +165,7 @@ medias by cosine similarity. Includes a GMM-based threshold.
 
 When the dataset's embedder is patch-region-aware (e.g.
 `dinov3_patch`), each result additionally carries
-`"best_region": [x0, y0, x1, y1]` - the normalised box of the
+`"best_region": [x0, y0, x1, y1]`: the normalised box of the
 region whose vector matched best against the query, used by the
 gallery card to draw a faint outline. Boxes that cover the full
 image (the single-vector fallback `[0, 0, 1, 1]`) are suppressed by
@@ -210,7 +210,7 @@ for the design.
 POST /api/example-sort
 ```
 
-**Form:** `file` - media file to use as the query example.
+**Form:** `file`: media file to use as the query example.
 
 Embeds the uploaded file and sorts by cosine similarity.
 
@@ -258,7 +258,7 @@ Sorts by similarity to a file resolved from an origin dict.
 POST /api/server-media-files/upload
 ```
 
-**Form:** `file` - media file to upload.
+**Form:** `file`: media file to upload.
 
 → `{"filename": "abc123.wav", "original_name": "dog_bark.wav"}` (201)
 
@@ -278,7 +278,7 @@ Seeds good votes from the active model's media examples.
 POST /api/label-file-sort
 ```
 
-**Form:** `file` - JSON file with a `labels` array. Each entry has `label`
+**Form:** `file`: JSON file with a `labels` array. Each entry has `label`
 (`"good"` / `"bad"`) and a `path`/`file`/`filename` pointing to an audio file.
 
 Trains an MLP on the labeled files, then scores all loaded medias.
@@ -337,7 +337,7 @@ POST /api/textsort-suggestions
 GET /api/labels/export
 ```
 
-**Query:** `?goods_only=1` - optional, export only good labels.
+**Query:** `?goods_only=1` (optional): export only good labels.
 
 → LabelSet JSON with per-element origin and MD5 info:
 
@@ -373,8 +373,8 @@ POST /api/medias/add-to-pile
 ```
 
 **Form:**
-- `file` - the media file to upload.
-- `label` - `"good"` or `"bad"`.
+- `file`: the media file to upload.
+- `label`: `"good"` or `"bad"`.
 
 Uploads a media file and adds it to the Good or Bad pile. If a media with
 the same MD5 already exists, the existing media is voted accordingly.

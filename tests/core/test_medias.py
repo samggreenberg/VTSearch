@@ -463,8 +463,8 @@ class TestMediaAudio:
     def test_returns_404_for_invalid_id(self, client):
         # The global 404 handler in ``app.py`` normalises NotFound
         # exceptions on ``/api/`` paths to ``error_response(exc.name, 404)``
-        #; that's the JSON-for-SPA hook that overrides werkzeug's HTML
-        # 404. The flask-smorest message passed to ``abort()`` is dropped
+        # (the JSON-for-SPA hook that overrides werkzeug's HTML 404).
+        # The flask-smorest message passed to ``abort()`` is dropped
         # in favour of the canonical reason phrase.
         resp = client.get("/api/medias/9999/audio")
         assert resp.status_code == 404
@@ -666,7 +666,7 @@ class TestAddToPile:
                 # workers' ContextVars and breaks the main-thread teardown.
                 # The conftest ``client`` fixture auto-injects context
                 # headers; freshly-built test clients don't, so we attach
-                # them explicitly here (H34; vote/pile-add now requires
+                # them explicitly here (H34: vote/pile-add now requires
                 # ``X-Dataset-Id`` / ``X-Detector-Id``).
                 with app_module.app.test_client() as c:
                     r = c.post(

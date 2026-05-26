@@ -295,7 +295,7 @@ def validated_vote_snapshot() -> VoteSnapshot:
     The ``medias`` field is always populated from whatever the active
     dataset context resolves to (empty when the header is missing).  When no
     detector is loaded at all, or when ``votes_dataset_id`` is empty (no
-    rehydrate has ever stamped it - typical for a brand-new detector with
+    rehydrate has ever stamped it, typical for a brand-new detector with
     no votes), the snapshot is considered safe by construction.
     """
     from vtscore.state.core import (
@@ -310,17 +310,17 @@ def validated_vote_snapshot() -> VoteSnapshot:
         snap = dict(ds_ctx.medias)
         # Compose votes only when we can prove they're keyed in the active
         # dataset's cid space.  Two cases are safe to compose:
-        #   1. ``votes_dataset_id == ds_ctx.dataset_id`` - the post-rehydrate
+        #   1. ``votes_dataset_id == ds_ctx.dataset_id``: the post-rehydrate
         #      invariant holds; the cid dicts are derived against the active
         #      dataset.
-        #   2. ``votes_dataset_id == ""`` - the detector has never been
+        #   2. ``votes_dataset_id == ""``: the detector has never been
         #      stamped against any dataset, which in production means no
         #      votes have ever been cast (vote-casting goes through paths
         #      that stamp the id).  Composing empty vote dicts is harmless,
         #      and short-circuiting here lets save / sync endpoints work
         #      against newly-created detectors that haven't been loaded.
-        # The remaining case - non-empty ``votes_dataset_id`` that doesn't
-        # match the active dataset - is the race / stale-state scenario and
+        # The remaining case (non-empty ``votes_dataset_id`` that doesn't
+        # match the active dataset) is the race / stale-state scenario and
         # is the only one we refuse to compose for.
         if det_ctx.detector_id and det_ctx.votes_dataset_id and det_ctx.votes_dataset_id != ds_ctx.dataset_id:
             return VoteSnapshot(snap, {}, {}, {}, safe=False)

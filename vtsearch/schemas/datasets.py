@@ -1,6 +1,6 @@
 """Schemas for dataset-management routes.
 
-These cover the read-only / display-oriented dataset blueprints - listings
+These cover the read-only / display-oriented dataset blueprints: listings
 (media types, embedders, clippers, converters, importers), status / cancel,
 and UI helpers (demo dataset list, file browser, dashboard). The heavier
 modules (``load``, ``staging``, ``registry``) involve multipart upload,
@@ -11,7 +11,7 @@ The ``to_dict()`` payloads for media types, embedders, clippers,
 converters, and importers are intentionally declared as ``fields.Dict()``
 rather than nested schemas: the inner shapes are plugin-dependent and
 already round-trip cleanly via ``to_dict()``. Re-declaring every field
-would buy nothing - drift between schema and plugin metadata would be
+would buy nothing; drift between schema and plugin metadata would be
 caught at the *plugin* layer, not the route.
 """
 
@@ -206,7 +206,7 @@ class BrowseMediaFilesResponseSchema(Schema):
 
     The directory- and file-entry shapes are identical to the ones
     used by ``GET /api/browse`` (see ``vtsearch.schemas.file_browser``),
-    so reuse those nested schemas - registering distinct
+    so reuse those nested schemas; registering distinct
     ``_BrowseDirectoryEntry`` / ``_BrowseFileEntry`` schemas alongside
     the public names made the generated TS client emit duplicate
     identifiers (ng-openapi-gen strips the leading underscore).
@@ -220,7 +220,7 @@ class BrowseMediaFilesResponseSchema(Schema):
         dump_default="",
         metadata={
             "description": (
-                "Suggested initial relative sub-path for this source - for example "
+                "Suggested initial relative sub-path for this source, for example "
                 "the server user's home directory when ``source=server_fs``. Empty "
                 "for sources where the root is already the right starting point."
             )
@@ -484,7 +484,7 @@ class DatasetsRegistryListResponseSchema(Schema):
 
     Each entry's inner shape is the registry record (plus a derived
     ``loaded`` flag and resolved ``clipper`` display name). Declared as
-    ``fields.Dict`` to avoid duplicating the registry record schema -
+    ``fields.Dict`` to avoid duplicating the registry record schema;
     drift between schema and registry would be caught at the registry
     layer, not the route.
     """

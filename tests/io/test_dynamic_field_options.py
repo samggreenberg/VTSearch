@@ -69,7 +69,7 @@ def registered_stub():
 
 
 # ---------------------------------------------------------------------------
-# PluginField; dataclass attributes & serialisation
+# PluginField: dataclass attributes & serialisation
 # ---------------------------------------------------------------------------
 
 

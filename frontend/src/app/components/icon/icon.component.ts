@@ -45,7 +45,7 @@ function emojiToType(icon: string): string {
     // Actions & misc
     '🎓': 'graduation',  // 🎓
     '🏭': 'factory',     // 🏭
-    '🧪': 'factory',     // 🧪 - alias for synthetic-data factory
+    '🧪': 'factory',     // 🧪 (alias for synthetic-data factory)
     '🗄': 'database',     // 🗄
     '⬆': 'arrow-up',          // ⬆
     '🔀': 'shuffle',     // 🔀
@@ -66,7 +66,7 @@ function emojiToType(icon: string): string {
 /**
  * Cache of sanitised SVG markup keyed by icon name (or
  * ``__letter:<X>`` for letter glyphs).  Shared across every
- * `IconComponent` instance - sanitisation per icon happens once per
+ * `IconComponent` instance; sanitisation per icon happens once per
  * process and the result is trusted SVG that Angular can blit via
  * ``[innerHTML]``.
  */
@@ -146,7 +146,7 @@ export class IconComponent implements OnChanges {
       this.svgHtml = this.cached(t, () => peeked[t] ?? SHELL_ICON_SVGS['file']);
       return;
     }
-    // Extended set hasn't been loaded yet - defer the render until the
+    // Extended set hasn't been loaded yet; defer the render until the
     // dynamic import resolves.  Until then we render nothing rather
     // than flashing the fallback (avoids a visible glyph swap).
     this.svgHtml = null;

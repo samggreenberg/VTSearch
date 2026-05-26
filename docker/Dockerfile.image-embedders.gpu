@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------
-# VTSearch - All-image-embedders GPU (CUDA) image
+# VTSearch: All-image-embedders GPU (CUDA) image
 #
 # GPU twin of Dockerfile.image-embedders. Same six embedders, same
 # baked-in weights, but on the CUDA 12.1 runtime base with PyTorch
@@ -20,7 +20,7 @@
 #                                                          download access)
 #
 # Gated weights (DINOv3, optionally EUPE's GitHub clone) are sourced
-# from the host's ./model_cache/ - populate it with
+# from the host's ./model_cache/; populate it with
 # scripts/cache_gated_models.sh BEFORE building. See the comments in
 # Dockerfile.image-embedders for the full rationale.
 #
@@ -32,7 +32,7 @@
 #   #   …or, EUPE only (no token needed):
 #   SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
 #
-#   # 2. Build the image (from repo root) - no token, no secrets:
+#   # 2. Build the image (from repo root); no token, no secrets:
 #   docker build -f docker/Dockerfile.image-embedders.gpu \
 #                -t vtsearch:image-embedders-gpu .
 #
@@ -45,7 +45,7 @@
 #   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
 #
 # Build args:
-#   * VTSEARCH_VERSION  - bake a version string into the image
+#   * VTSEARCH_VERSION: bake a version string into the image
 # -----------------------------------------------------------------
 
 # ---------- frontend build stage ----------
@@ -66,7 +66,7 @@ FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Python 3.10 + the handful of native libs Pillow / transformers pull in.
-# (No ffmpeg / libsndfile here - this image is image-only.)
+# (No ffmpeg / libsndfile here; this image is image-only.)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         python3.10 \
@@ -148,7 +148,7 @@ CLIPModel.from_pretrained(CLIP_MODEL_ID, cache_dir=cache); \
 CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache); \
 print('CLIP weights cached.', flush=True)"
 
-# DINOv2 (ungated - anyone can download these).
+# DINOv2 (ungated; anyone can download these).
 RUN python -u -c "import os; \
 from vtsearch.config import DINOV2_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
@@ -178,7 +178,7 @@ print('DINOv3 weights loaded from local cache.', flush=True)" \
 # $TORCH_HOME/hub/. We point TORCH_HOME at the same dir the COPY above
 # seeded from ./model_cache/ so a host-cache run skips both the clone
 # and the weights download. If neither is present we still attempt the
-# fetch (EUPE's HF mirror is ungated - no token required) and fall back
+# fetch (EUPE's HF mirror is ungated; no token required) and fall back
 # to skipping EUPE if the build host has no network access.
 ENV TORCH_HOME=${VTSEARCH_MODELS_DIR}
 RUN python -u -c "import os; \
@@ -202,7 +202,7 @@ ARG VTSEARCH_VERSION=
 RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
 
 # Seed default settings so SigLIP is preloaded at startup (the other
-# embedders stay cold until explicitly selected - they all live on
+# embedders stay cold until explicitly selected; they all live on
 # disk thanks to the RUNs above, so first selection is a from-cache
 # load rather than a HF download).
 RUN mkdir -p /app/data && \

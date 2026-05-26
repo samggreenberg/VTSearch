@@ -59,7 +59,7 @@ def _make_malicious_pickle() -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# RestrictedUnpickler; blocks malicious payloads
+# RestrictedUnpickler: blocks malicious payloads
 # ---------------------------------------------------------------------------
 
 
@@ -123,7 +123,7 @@ class TestRestrictedUnpicklerBlocks:
 
 
 # ---------------------------------------------------------------------------
-# RestrictedUnpickler; allows safe types
+# RestrictedUnpickler: allows safe types
 # ---------------------------------------------------------------------------
 
 
@@ -289,7 +289,7 @@ class TestMaliciousPickleInLoader:
 
 
 # ---------------------------------------------------------------------------
-# _PeekUnpickler; strips heavy leaf values across pickle protocols
+# _PeekUnpickler: strips heavy leaf values across pickle protocols
 # ---------------------------------------------------------------------------
 
 
