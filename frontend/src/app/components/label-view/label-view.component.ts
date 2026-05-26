@@ -226,7 +226,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  reloaded labelset has both classes, fire one `onLearnedSort` call
    *  after votes land. The server's signature cache short-circuits the
    *  re-fire when the pair has been trained recently (free re-entry),
-   *  and starts a fresh job otherwise - either way the user lands on
+   *  and starts a fresh job otherwise; either way the user lands on
    *  learned-sorted content without a manual mode toggle. */
   private reloadForNewPair(): void {
     this.rehydrateLearnedSub?.unsubscribe();
@@ -264,7 +264,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Divider drag ---
 
-  /** Min width the left panel can shrink to right now - autopilot-collapsed
+  /** Min width the left panel can shrink to right now (autopilot-collapsed
    *  state lets the user drag down to a thin sliver. */
   get leftMin(): number {
     return this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
