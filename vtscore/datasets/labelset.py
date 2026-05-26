@@ -1,4 +1,4 @@
-"""LabelSet — a dataset of labeled elements with origin tracking.
+"""LabelSet - a dataset of labeled elements with origin tracking.
 
 A :class:`LabelSet` is conceptually an extension of a dataset: each element
 knows its *origin* (where it came from), its *origin_name* (a unique
@@ -117,7 +117,7 @@ class LabelSet:
             ``media_type``, ``input_spec`` (clipper + params), and current
             ``threshold`` so an external consumer can reproduce the
             detector's expected input format and decision boundary without
-            reading the detector JSON directly.  Strictly informational —
+            reading the detector JSON directly.  Strictly informational -
             ``None`` (the default) means the labelset carries only labels,
             preserving the legacy format.
     """
@@ -168,7 +168,7 @@ class LabelSet:
                 map populated by yes-votes that designated a region.  Each
                 box is attached to the corresponding good vote's
                 :class:`LabeledElement`.  Ignored for bad votes (no-votes
-                are always image-level — see the patch-embedder v2 design).
+                are always image-level - see the patch-embedder v2 design).
             detector_meta: Optional detector-level metadata block to attach
                 to the labelset (e.g. ``{"media_type": ..., "input_spec":
                 ..., "threshold": ...}``).  Lets the labelset carry the
@@ -254,7 +254,7 @@ class LabelSet:
             top-level ``"detector_meta"`` block when one was attached.
             The format is a superset of the legacy label-export format
             (which only had ``md5`` and ``label`` keys), so existing
-            consumers remain compatible — they ignore ``detector_meta``.
+            consumers remain compatible - they ignore ``detector_meta``.
         """
         out: dict[str, Any] = {"labels": [e.to_dict() for e in self.elements]}
         if self.detector_meta is not None:
@@ -355,7 +355,7 @@ class LabelSet:
                 )
         # Merged labelsets represent a new combined detector; do not
         # carry the originating detector's ``detector_meta`` (input_spec,
-        # threshold) into the merged result — those describe a single
+        # threshold) into the merged result - those describe a single
         # detector's training context.
         return LabelSet(merged)
 
@@ -415,7 +415,7 @@ def _clip_to_elements(
     When *region_box* is provided (only ever populated for ``label == "good"``
     by the caller), it is attached to every emitted element so the region
     annotation rides along through label export / detector sync.  Dupe-set
-    members share the representative's box — the user voted "this region is
+    members share the representative's box - the user voted "this region is
     good in *this* image" and the representative is what the user actually
     saw, so cloning the box across structurally-identical members is the
     right default.
@@ -439,7 +439,7 @@ def _clip_to_elements(
                 for m in members
             ]
 
-    # Non-dupe or missing members — single element
+    # Non-dupe or missing members - single element
     return [
         LabeledElement(
             md5=media["md5"],

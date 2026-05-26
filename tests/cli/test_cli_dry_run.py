@@ -1,7 +1,7 @@
 """Tests for the ``--dry-run`` autodetect mode.
 
 The dry-run path must print the plan derived from the command-line
-arguments + the settings file and return immediately — without consuming
+arguments + the settings file and return immediately - without consuming
 the media-source iterator, training any detectors, or invoking the
 exporter. It must still validate importer/exporter names, the dataset
 pickle's existence, and any required CLI fields so misconfiguration
@@ -189,7 +189,7 @@ class TestDryRunImporter:
 
         from vtscore.cli import autodetect_importer_main
 
-        # server_folder requires "path" — empty value should error during dry-run.
+        # server_folder requires "path" - empty value should error during dry-run.
         with pytest.raises(SystemExit):
             autodetect_importer_main(
                 "server_folder",

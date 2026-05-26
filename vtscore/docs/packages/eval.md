@@ -1,9 +1,9 @@
-# `vtscore.eval` — Offline evaluation
+# `vtscore.eval` - Offline evaluation
 
 Reproducible evaluation of text-sort and learned-sort quality on demo
 datasets, plus a voting-iteration simulator that tracks classification
 cost as a function of how many labels have been cast. Everything in
-this package is computation only — the numbers come out as dataclasses
+this package is computation only - the numbers come out as dataclasses
 and DataFrames. Rendering them to PNGs lives in `vtscore.eval.visualize`,
 which is the one module here that imports matplotlib.
 
@@ -61,7 +61,7 @@ class EvalQuery:
 value is `{"demo_dataset": "...", "queries": list[EvalQuery]}`. The
 registry covers all 50 ESC-50 categories, 25 Caltech-101 / Caltech-256
 categories, 15 of the 20-Newsgroups categories, and 10 UCF-101
-categories — see `vtscore/eval/config.py` for the full lists.
+categories - see `vtscore/eval/config.py` for the full lists.
 
 ### `QueryMetrics`
 
@@ -125,7 +125,7 @@ class DatasetResult:
 
 `vtscore/eval/metrics.py` provides four pure functions on lists of ids
 and labels. None of them depend on a dataset context, embedder, or
-sort — they take what the runner produces and return numbers.
+sort - they take what the runner produces and return numbers.
 
 | Function                                                          | Behaviour                                                 |
 |-------------------------------------------------------------------|-----------------------------------------------------------|
@@ -224,7 +224,7 @@ through `json.dumps(indent=2)`.
 ## Voting iterations
 
 `vtscore/eval/voting_iterations.py` simulates an interactive labelling
-session — votes are cast one at a time in a shuffled order, and at
+session - votes are cast one at a time in a shuffled order, and at
 each step (once both polarities have at least one vote) a fresh MLP is
 trained, a threshold is computed, the held-out test set is scored,
 and the inclusion-weighted cost is recorded. This is how the team
@@ -299,7 +299,7 @@ The sweep iterates over `dataset × target_category × trainer ×
 label_count × seed` and writes one row per cell to a tidy DataFrame.
 
 The headline metrics are rank-based on purpose: VTSearch never trusts
-the raw score as a probability — it derives the operating threshold
+the raw score as a probability - it derives the operating threshold
 via cross-calibration. So `AUROC`, `AP`, and the production-path
 `f1_at_xcal` (which uses
 `find_optimal_threshold` on a held-out calibration slice) are what
@@ -361,8 +361,8 @@ Notable flags:
 | `--no-plot`              | Disable plots even when `--plot-dir` is set                  |
 | `--list`                 | Print the eval-dataset registry and exit                     |
 
-The full user guide — including how the demo datasets are sourced,
-what each metric means in practice, and how to interpret the output —
+The full user guide - including how the demo datasets are sourced,
+what each metric means in practice, and how to interpret the output -
 is at [`docs/EVAL.md`](../../../docs/EVAL.md).
 
 ---
@@ -382,7 +382,7 @@ return values directly and skip this module.
 Both functions create `output_dir` if missing and return a list of the
 generated `Path`s. They apply a clean default matplotlib style
 (`white` facecolor, grid on, top/right spines off) before plotting.
-matplotlib is not in the library's core dependencies — installing
+matplotlib is not in the library's core dependencies - installing
 `matplotlib` separately is required to use these helpers.
 
 ---
@@ -398,7 +398,7 @@ matplotlib is not in the library's core dependencies — installing
   [`training.md`](training.md)).
 - **Pure computation.** The runner and voting-iterations modules take
   pre-loaded medias dicts as input. The CLI is the only entry point
-  that calls `load_demo_dataset` — programmatic consumers are
+  that calls `load_demo_dataset` - programmatic consumers are
   expected to load their own data.
 - **No Flask, no settings.** Every threshold knob (`inclusion`,
   `safe_thresholds`, `calibrate_count`, `calibration_fraction`,

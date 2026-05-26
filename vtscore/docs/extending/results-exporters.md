@@ -1,7 +1,7 @@
 # Writing a `LabelsetExporter`
 
 A results exporter sends autodetect output or a label export to a
-destination — a file on the server, a webhook, an email, a queue, an
+destination - a file on the server, a webhook, an email, a queue, an
 S3 object, anything reachable from the Python process. The library
 auto-discovers exporters under `vtscore.exporters` (sentinel
 `EXPORTER`) and walks the `vtscore.exporters` entry-point group so a
@@ -13,7 +13,7 @@ your `fields`, and implement `export(results, field_values) -> dict`.
 The base class is named `LabelsetExporter` for historical reasons; in
 practice it handles both autodetect-results payloads and label
 exports. The `export()` method should detect which is which (label
-payloads carry a top-level `"labels"` key — see
+payloads carry a top-level `"labels"` key - see
 [`vtscore/exporters/server_json_file/__init__.py:75`](../../exporters/server_json_file/__init__.py)
 for the pattern).
 
@@ -38,7 +38,7 @@ and third-party packaging.
 
 | Member | Type | Purpose |
 |--------|------|---------|
-| `name: str` | class attr | Snake-case identifier — registry key, CLI subcommand, API path segment |
+| `name: str` | class attr | Snake-case identifier - registry key, CLI subcommand, API path segment |
 | `display_name: str` | class attr | Human-readable label |
 | `description: str` | class attr | One-sentence subtitle |
 | `fields: list[PluginField]` | class attr | User-configurable inputs |
@@ -112,15 +112,15 @@ this pattern.
 `server_path` fields support template variables resolved at export
 time:
 
-- `{YYYYMMDD-HHMMSS}` — current UTC timestamp
-- `{detector_name}` / `{detector_id}` — active detector identity
-- `{username}` — current user (single-user installs: `"default"`)
+- `{YYYYMMDD-HHMMSS}` - current UTC timestamp
+- `{detector_name}` / `{detector_id}` - active detector identity
+- `{username}` - current user (single-user installs: `"default"`)
 
 The interpolation helper lives at
 [`vtscore/exporters/_template.py`](../../exporters/_template.py); use
 `resolve_export_filepath(filepath_str)` to apply every supported
 substitution to a user-supplied path string. Don't roll your own
-regex — `resolve_export_filepath` also sanitises substituted values
+regex - `resolve_export_filepath` also sanitises substituted values
 via `sanitize_template_value` so a malicious `{detector_name}`
 containing `../` can't escape the configured `SERVER_ROOTS`.
 
@@ -137,14 +137,14 @@ This refuses paths that resolve outside the configured
 from vtscore.security.path_validation import validate_server_filepath
 
 path = validate_server_filepath(field_values["filepath"])
-# Raises ValueError if outside SERVER_ROOTS — let it propagate.
+# Raises ValueError if outside SERVER_ROOTS - let it propagate.
 ```
 
 Any exporter that makes an outbound HTTP request **must** validate
 the URL through `vtscore.security.validate_url`
 ([`vtscore/security/url_validation.py:30`](../../security/url_validation.py)).
 It rejects non-HTTP(S) schemes and resolves the hostname to refuse
-private / loopback / link-local IPs — the standard SSRF guard:
+private / loopback / link-local IPs - the standard SSRF guard:
 
 ```python
 from vtscore.security.url_validation import validate_url
@@ -183,7 +183,7 @@ app.py --list-plugins`.
 
 ## Worked example
 
-A minimal third-party exporter that POSTs labels (and only labels — it
+A minimal third-party exporter that POSTs labels (and only labels - it
 ignores autodetect-results payloads) to a webhook with HMAC signing.
 
 ```python

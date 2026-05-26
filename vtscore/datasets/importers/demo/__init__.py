@@ -1,4 +1,4 @@
-"""Demo dataset importer — loads pre-configured demo datasets.
+"""Demo dataset importer - loads pre-configured demo datasets.
 
 Each registered :class:`~vtscore.media.base.MediaType` defines a list of
 :class:`~vtscore.media.base.DemoDataset` entries.  This importer exposes
@@ -31,11 +31,11 @@ class DemoDatasetImporter(DatasetImporter):
     name = "demo"
     display_name = "Downloaded Media"
     description = "Choose from a selection of pre-configured demo datasets"
-    icon = "\U0001f5c4"  # 🗄 — frontend renders as a database icon
+    icon = "\U0001f5c4"  # 🗄 - frontend renders as a database icon
     ui_mode = "custom"
     picker_view = "demo"
     category = "demo"
-    # Demo datasets have a fixed media type baked into the demo entry —
+    # Demo datasets have a fixed media type baked into the demo entry -
     # there is no user-chosen output type and no converter rows in the
     # picker UI.  Flag set to keep the in-tree importer set uniformly
     # off the legacy shim.
@@ -159,7 +159,7 @@ class DemoDatasetImporter(DatasetImporter):
                 if candidate.is_file():
                     return candidate
 
-        # Basename fallback — some demo datasets store origin_name with a
+        # Basename fallback - some demo datasets store origin_name with a
         # category prefix (e.g. "dog/1-100032-A-0.wav") but the on-disk
         # layout is flat (ESC-50) or uses a different hierarchy (UrbanSound8K
         # fold dirs, Oxford Flowers flat jpg/).  Try the bare filename.

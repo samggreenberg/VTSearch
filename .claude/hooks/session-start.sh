@@ -1,6 +1,6 @@
 #!/bin/bash
 # Note: deliberately NOT using `set -u`. The hook used to start with
-# `set -euo pipefail` and `cd "$CLAUDE_PROJECT_DIR"` — if CLAUDE_PROJECT_DIR
+# `set -euo pipefail` and `cd "$CLAUDE_PROJECT_DIR"` - if CLAUDE_PROJECT_DIR
 # was unset (which happens in some harness configurations), nounset would
 # error out before the rebase ever ran, and the harness silently swallowed
 # the failure. Removing -u plus the fallback below keeps the rebase running
@@ -53,7 +53,7 @@ else
     # already landed on `dev`. `git cherry origin/dev HEAD` flags each
     # unique-to-branch commit as `+` (genuinely new) or `-` (patch-equivalent
     # to a commit already on dev). All-`-` means a rebase would just produce
-    # phantom conflicts against the already-merged work — hard-reset is the
+    # phantom conflicts against the already-merged work - hard-reset is the
     # safe and correct move. Any `+` line means there's real local work to
     # preserve, so fall back to a normal rebase.
     cherry_out=$(git cherry origin/dev HEAD 2>/dev/null || echo "")
@@ -81,25 +81,25 @@ fi
 # Echoed to stdout so it appears as session-context for the assistant.
 if [ -n "$skip_reason" ]; then
   cat <<EOF
-‼ session-start: DID NOT rebase onto origin/dev — $skip_reason.
+‼ session-start: DID NOT rebase onto origin/dev - $skip_reason.
 
 ACTION REQUIRED before editing any code:
   1. Save / commit / stash any in-progress work.
   2. Run: git fetch origin --prune && git rebase origin/dev
   3. Resolve conflicts (or hard-reset to origin/dev if local commits are stale duplicates).
-  4. Re-run any complexity / lint / test analysis AFTER the rebase — the pre-rebase
+  4. Re-run any complexity / lint / test analysis AFTER the rebase - the pre-rebase
      view of the codebase is stale and conclusions drawn from it will be wrong.
 EOF
 fi
 
-# Install lightweight dev tools only — linter and formatter.
+# Install lightweight dev tools only - linter and formatter.
 # Heavy dependencies (PyTorch, transformers, etc.) are installed lazily
 # by ensure-test-deps.sh the first time tests or the app are run.
 pip install ruff -q
 
 # Surface missing or placeholder HF_TOKEN loudly so gated-model downloads
 # (DINOv3 etc.) don't fail later with confusing 401s. Don't hard-fail the
-# session — non-gated work should still proceed.
+# session - non-gated work should still proceed.
 if [ -z "${HF_TOKEN:-}" ]; then
   echo "‼ HF_TOKEN is not set. Gated Hugging Face downloads (e.g. DINOv3) will fail." >&2
   echo "  Set it in .claude/settings.local.json under {\"env\": {\"HF_TOKEN\": \"hf_...\"}}." >&2

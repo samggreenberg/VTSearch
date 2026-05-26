@@ -159,7 +159,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   /** Currently selected solo embedder name for *typeId*. Reads from the
    *  effective map (user explicit overlaid on the CLI fallback) so the
    *  picker shows what the user will actually get when they open the
-   *  importer — including a CLI-only lock that has not been overridden. */
+   *  importer - including a CLI-only lock that has not been overridden. */
   soloEmbedderSelectValue(typeId: string): string {
     const map = this.settings.effective_solo_embedder_per_media_type || {};
     const value = map[typeId];
@@ -170,7 +170,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     return valid.find((e) => e.name === value) ? value : '';
   }
 
-  /** Hint text under a solo-embedder dropdown — explains a CLI override
+  /** Hint text under a solo-embedder dropdown - explains a CLI override
    *  ("from --solo-embedder") or a stale embedder reference so the user
    *  understands why the dropdown shows what it does. Returns ``''`` for
    *  the normal case (no lock, or a user-explicit pick). */
@@ -195,7 +195,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     const userMap = { ...(this.settings.solo_embedder_per_media_type || {}) };
     // Empty value = "Ask each time". Persist it as the opt-out sentinel
     // (an empty-string entry) so it overrides any ``--solo-embedder``
-    // CLI fallback for this type — same pattern as solo_media_type's
+    // CLI fallback for this type - same pattern as solo_media_type's
     // explicit-null override of --solo-media-type.
     userMap[typeId] = value || '';
     (this.settings as Record<string, unknown>)['solo_embedder_per_media_type'] = userMap;
@@ -295,7 +295,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Effective solo-mediaType for the import-defaults tab — collapses
+  /** Effective solo-mediaType for the import-defaults tab - collapses
    *  the per-mediaType picker to a single tab when the user is in solo
    *  mode (so they only configure what they'll actually import). */
   get effectiveSoloMediaType(): string | null {

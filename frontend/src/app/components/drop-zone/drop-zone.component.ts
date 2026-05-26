@@ -97,7 +97,7 @@ export class DropZoneComponent {
     }
   }
 
-  // Some drag events on a page also carry text/other payloads — only react to
+  // Some drag events on a page also carry text/other payloads - only react to
   // drags that actually include files so users can still e.g. drag-select text
   // over the zone without triggering the highlight.
   private hasFiles(event: DragEvent): boolean {
@@ -116,7 +116,7 @@ export class DropZoneComponent {
         fileEntry.file(resolve, reject);
       });
       const rel = prefix ? `${prefix}/${file.name}` : file.name;
-      // webkitRelativePath is normally a getter on File.prototype — define an
+      // webkitRelativePath is normally a getter on File.prototype - define an
       // own property to shadow it so consumers (e.g. the dataset importer's
       // recursive-folder filter and folder-name derivation) see the path from
       // the drop root.

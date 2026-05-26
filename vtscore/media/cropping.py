@@ -22,8 +22,8 @@ def crop_file_bytes(
 
     *params* must be a dict matching the clipper's bounds:
 
-    * Audio: ``{"start": float, "end": float}`` — seconds.
-    * Image: ``{"box": [x1, y1, x2, y2]}`` — pixel coords in the original image.
+    * Audio: ``{"start": float, "end": float}`` - seconds.
+    * Image: ``{"box": [x1, y1, x2, y2]}`` - pixel coords in the original image.
 
     Raises :class:`ValueError` for unsupported media types or invalid params.
     Raises :class:`FileNotFoundError` if *file_path* does not exist.

@@ -2,7 +2,7 @@
 
 This document describes everything needed to complete the ReCaller / Holder /
 PullWrest integration.  VTSearch core changes and plugin scaffolds are already
-in place — the developer's job is to implement the API client stubs.
+in place - the developer's job is to implement the API client stubs.
 
 ## Overview
 
@@ -26,17 +26,17 @@ Four plugins are scaffolded (all `hidden_from_picker = True` until ready):
 
 ## What's already done (VTSearch core)
 
-1. **`LabeledElement.metadata`** — Optional `dict[str, Any]` on each label
+1. **`LabeledElement.metadata`** - Optional `dict[str, Any]` on each label
    element that round-trips through `to_dict()` / `from_dict()`.  When
    building a LabelSet from votes, `custom_metadata` from the media
    automatically flows into `metadata`.
 
-2. **`media_url` lazy-fetch** — `_resolve_media_bytes()` and
+2. **`media_url` lazy-fetch** - `_resolve_media_bytes()` and
    `_resolve_media_string()` in `MediaType` fall back to fetching from
    `media["media_url"]` when `media_bytes` and `media_path` are both
    absent.
 
-3. **Origin params in enriched export** — `GET /api/labels/export?enrich=true`
+3. **Origin params in enriched export** - `GET /api/labels/export?enrich=true`
    flattens `origin.params` (e.g. `contentID`, `mediaID`) into
    `custom_metadata` and `available_columns`.  `custom_metadata` values
    override same-named `origin.params` if both are present.
@@ -61,7 +61,7 @@ def _rc_list_queries(media_type: str) -> list[str]:
     Powers the importer's ``query_id`` dropdown (declared with
     ``dynamic_options=True, depends_on=["media_type"]``).  The frontend
     re-fetches whenever the user picks a different media type, so the
-    user never has to copy-paste a queryID — they pick from a list.
+    user never has to copy-paste a queryID - they pick from a list.
     """
 
 
@@ -101,7 +101,7 @@ def _pw_fetch_media(media_url: str) -> bytes:
     """GET {media_url} → raw binary media content."""
 ```
 
-This function appears in **two** places — DRY it up:
+This function appears in **two** places - DRY it up:
 - `vtscore/datasets/importers/recaller/__init__.py`
 - `vtscore/datasets/sources/pullwrest.py`
 
@@ -136,7 +136,7 @@ Replace stubs in:
 If the API clients use a package that isn't already declared (e.g.
 `httpx` if you switch off `requests`), add it to `[project.dependencies]`
 in the repo's `pyproject.toml`. `requests` is already declared.
-pyproject.toml is the single source of truth — deptry verifies every
+pyproject.toml is the single source of truth - deptry verifies every
 imported package is declared there.
 
 Re-run `bash scripts/install-cpu.sh` (or any editable install) to pick
@@ -297,9 +297,9 @@ the response dict alongside the standard `"message"` key.
 
 The Holder exporter looks for `contentID` in three places (first wins):
 
-1. `entry["metadata"]["contentID"]` — from a Holder import round-trip
-2. `entry["custom_metadata"]["contentID"]` — from enriched RC media
-3. `entry["origin"]["params"]["contentID"]` — from RC origin
+1. `entry["metadata"]["contentID"]` - from a Holder import round-trip
+2. `entry["custom_metadata"]["contentID"]` - from enriched RC media
+3. `entry["origin"]["params"]["contentID"]` - from RC origin
 
 ### Origin reconstruction in importer
 
@@ -318,7 +318,7 @@ This enables origin-based matching when importing into an RC-loaded dataset.
 
 - [ ] Implement `_rc_fetch_results()` in `recaller/__init__.py`
 - [ ] Implement `_dw_get_embedding()` in `recaller/__init__.py`
-- [ ] Implement `_pw_fetch_media()` — shared between `recaller/__init__.py`
+- [ ] Implement `_pw_fetch_media()` - shared between `recaller/__init__.py`
       and `sources/pullwrest.py`
 - [ ] Implement `_holder_create_package()` in `exporters/holder/__init__.py`
 - [ ] Implement `_holder_create_folder()` in `exporters/holder/__init__.py`
@@ -328,4 +328,4 @@ This enables origin-based matching when importing into an RC-loaded dataset.
 - [ ] Write unit tests with mocked API clients
 - [ ] Test with live services (import → vote → export → re-import)
 - [ ] Set `hidden_from_picker = False` on all four plugins
-- [ ] Run `./run-tests.sh` — all tests must pass
+- [ ] Run `./run-tests.sh` - all tests must pass

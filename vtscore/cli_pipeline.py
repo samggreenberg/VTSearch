@@ -35,7 +35,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
     :class:`ValueError` for any shape problem (unknown key, wrong type,
     mutually-exclusive options both set, etc.).  The plugin names inside
     ``importer:`` / ``exporter:`` / ``import_labels.importer`` are looked
-    up against the registries at parse time so a typo fails fast — before
+    up against the registries at parse time so a typo fails fast - before
     the pipeline starts loading any media.
     """
     import yaml  # noqa: PLC0415
@@ -194,7 +194,7 @@ def _validate_field_keys(
     section: str,
     keys_for: Any,
 ) -> None:
-    """Reject fields that the named plugin doesn't declare — matches argparse,
+    """Reject fields that the named plugin doesn't declare - matches argparse,
     which rejects unknown flags."""
     allowed = keys_for(plugin_name)
     unknown = set(fields.keys()) - allowed
@@ -210,7 +210,7 @@ def run_pipeline_file(path: str | Path) -> None:
     """Load *path* and execute the pipeline it declares.
 
     Errors are converted to a one-line ``Error: ...`` on stderr followed by
-    ``sys.exit(1)`` — same convention as the other CLI entry points in
+    ``sys.exit(1)`` - same convention as the other CLI entry points in
     :mod:`vtscore.cli`.
     """
     import sys  # noqa: PLC0415

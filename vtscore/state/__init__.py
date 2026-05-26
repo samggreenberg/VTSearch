@@ -1,7 +1,7 @@
 """Library-tier state package: contexts, votes, clicks, diversity, lookup.
 
 The library-only API for the dataset / detector context system and its
-operations.  No Flask, no ``vtsearch.settings``, no proxy view — those
+operations.  No Flask, no ``vtsearch.settings``, no proxy view - those
 app-tier concerns live in :mod:`vtsearch.state` (a thin shim that
 re-exports this package and layers the proxy view on top).
 """
@@ -46,7 +46,7 @@ from vtscore.state.core import (  # noqa: F401
     with_dataset_context,
     with_detector_context,
 )
-import vtscore.state.core as _core  # noqa: F401 — for conftest direct access
+import vtscore.state.core as _core  # noqa: F401 - for conftest direct access
 
 # Re-export click tracking ------------------------------------------------
 from vtscore.state.clicks import (  # noqa: F401
@@ -143,7 +143,7 @@ def clear_medias() -> None:
 def clear_all() -> None:
     """Clear all medias, votes, and label history.
 
-    Each clear acquires ``_state_lock`` independently — the two operations
+    Each clear acquires ``_state_lock`` independently - the two operations
     are *not* atomic with respect to each other so the progress cache can
     be cleared (under ``_progress_lock``) outside ``_state_lock`` (audit
     M1).  The sole caller is dataset-load, which immediately rebuilds
@@ -202,7 +202,7 @@ def set_inclusion(value: int) -> None:
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
     # two locks never establish a cross-module ordering (audit M1).
     # ``_ensure_cache`` self-heals if a concurrent reader observes the new
-    # inclusion before this clear runs — it re-clears whenever
+    # inclusion before this clear runs - it re-clears whenever
     # ``_cache_inclusion`` differs from the current value.
     if changed:
         from vtscore.detectors.labeling_progress import clear_progress_cache

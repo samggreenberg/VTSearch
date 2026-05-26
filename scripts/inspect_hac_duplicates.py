@@ -2,7 +2,7 @@
 
 Throwaway script supporting the HAC-duplicates investigation.  Builds
 region trees over synthetic patch grids + saliency maps (the structural
-properties we care about — box duplicates and cell-set duplicates —
+properties we care about - box duplicates and cell-set duplicates -
 depend on grid geometry and the Voronoi-by-spatial-distance leaf
 assignment, not on the patch contents).  Reports:
 
@@ -12,7 +12,7 @@ assignment, not on the patch contents).  Reports:
   children's boxes (the specific case the user flagged: "merging C into
   AB might make no change at all").
 * % of internal HAC nodes whose underlying cell set equals an earlier
-  node's cell set (this is the *true* duplicate test — same patches
+  node's cell set (this is the *true* duplicate test - same patches
   pooled, regardless of merge order).
 * For pairs of nodes with the same bounding box, the distribution of
   cosine similarity between their stored vectors (to quantify how much

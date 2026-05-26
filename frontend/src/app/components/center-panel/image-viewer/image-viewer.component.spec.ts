@@ -69,7 +69,7 @@ describe('ImageViewerComponent', () => {
   // a *new reference*, which used to retrigger this ngOnChanges body. That
   // flipped `imageReady` back to false while leaving `imageSrc` unchanged, so
   // Angular's property binding skipped the DOM write and no fresh (load) event
-  // fired — leaving the canvas hidden behind `visibility: hidden`. The id
+  // fired - leaving the canvas hidden behind `visibility: hidden`. The id
   // guard keeps the loaded state stable across enrichment events.
   it('should not reset imageReady when the media reference changes but id is the same', () => {
     component.media = mockMedia;
@@ -195,7 +195,7 @@ describe('ImageViewerComponent', () => {
       expect(br.y).toBeCloseTo(1, 6);
     });
 
-    it('compensates for zoom — screen offsets shrink in image coords as zoom grows', () => {
+    it('compensates for zoom - screen offsets shrink in image coords as zoom grows', () => {
       setupWrap(component);
       component.zoom = 2;
       // 25px right of centre at 2× zoom should be 12.5px in image coords =
@@ -205,7 +205,7 @@ describe('ImageViewerComponent', () => {
       expect(local.y).toBeCloseTo(0.5, 6);
     });
 
-    it('compensates for pan — translating the image shifts the inferred image coords', () => {
+    it('compensates for pan - translating the image shifts the inferred image coords', () => {
       setupWrap(component);
       component.zoom = 2;
       // Image translated 20px right; a click at screen 70 used to map to image
@@ -217,7 +217,7 @@ describe('ImageViewerComponent', () => {
       expect(local.y).toBeCloseTo(0.5, 6);
     });
 
-    it('inverts rotation — a click on the screen-right edge maps to the image-top edge at 90° CW', () => {
+    it('inverts rotation - a click on the screen-right edge maps to the image-top edge at 90° CW', () => {
       setupWrap(component);
       component.rotation = 90;
       // Positive rotation rotates the image clockwise, so screen-right is image-top.
@@ -314,7 +314,7 @@ describe('ImageViewerComponent', () => {
       let lastEmitted: RegionBox | null | undefined = undefined;
       component.regionBoxChange.subscribe((v) => (lastEmitted = v));
 
-      // Click at (10, 10) with Shift held — mousedown then mouseup at same point.
+      // Click at (10, 10) with Shift held - mousedown then mouseup at same point.
       const ev: MouseEvent = {
         button: 0,
         clientX: 10,

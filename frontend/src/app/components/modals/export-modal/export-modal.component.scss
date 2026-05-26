@@ -203,7 +203,7 @@
 //
 // `.form-group`, `.info-text`, `.error-text`, `.status-text` come from
 // `_components.scss`. The two trailing rows below need a small top
-// margin to sit clear of the form section above — scoped via `:host`
+// margin to sit clear of the form section above - scoped via `:host`
 // so it's a contextual override, not a redeclaration of the base.
 :host {
   .status-text, .error-text {

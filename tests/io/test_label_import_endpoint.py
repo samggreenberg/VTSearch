@@ -264,7 +264,7 @@ class TestResolveClipIdsUnion:
             resolve_media_ids,
         )
 
-        # Entry with only md5, no origin — should match by md5
+        # Entry with only md5, no origin - should match by md5
         md5 = app_module.medias[1]["md5"]
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entry = {"md5": md5, "label": "good"}
@@ -336,10 +336,10 @@ class TestResolveClipIdsUnion:
         origin_name = app_module.medias[1].get("origin_name", "")
         assert origin_name, "Test media 1 must have origin_name"
         entry = {"origin_name": origin_name, "label": "good"}
-        # Without name_lookup — no match
+        # Without name_lookup - no match
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert cids == []
-        # With name_lookup — matches by origin_name
+        # With name_lookup - matches by origin_name
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
         assert 1 in cids
 
@@ -387,7 +387,7 @@ class TestResolveClipIdsUnion:
         assert origin_name
         # md5 is present but doesn't match anything in this dataset (the
         # detector's labelset was built on a different dataset).  origin_name
-        # collides with media 1 by basename — but the content is different.
+        # collides with media 1 by basename - but the content is different.
         entry = {"md5": "md5_from_other_dataset", "origin_name": origin_name, "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
         assert cids == []
@@ -455,7 +455,7 @@ class TestFindMissingEntries:
         origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
         entries = [
             {"md5": "unknown1", "label": "good"},
-            {"md5": "unknown2", "label": "meh"},  # invalid label — excluded
+            {"md5": "unknown2", "label": "meh"},  # invalid label - excluded
         ]
         missing = find_missing_entries(entries, origin_lookup, md5_lookup)
         assert len(missing) == 1
@@ -611,7 +611,7 @@ class TestLabelImportMissingElements:
 
 
 # ---------------------------------------------------------------------------
-# Partial-failure handling — logical-bug-audit H31
+# Partial-failure handling - logical-bug-audit H31
 #
 # A single entry that raises during ``apply_label`` must not abort the
 # rest of the import. The handler isolates each entry, reports the

@@ -1,8 +1,8 @@
-# `vtscore.training` — Learned-sort training primitives
+# `vtscore.training` - Learned-sort training primitives
 
 Generic neural-net training and decision-threshold helpers extracted from
 the detector pipeline. Everything in this package operates on raw numpy
-arrays and PyTorch tensors — there are no media-type, embedder, vote,
+arrays and PyTorch tensors - there are no media-type, embedder, vote,
 or context dependencies. Library consumers can use it as a stand-alone
 learned-sort toolkit: feed in `(N, D)` feature matrices and binary
 labels, get back a trained MLP, a calibrated threshold, and (optionally)
@@ -72,7 +72,7 @@ return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
 
 With the default `MLP_HIDDEN_MIN=4` and `MLP_HIDDEN_MAX=32` (from
 `vtscore.config`), the heuristic keeps the model small when only a
-handful of labels exist — n_train=10 picks 4, n_train=60 picks 20,
+handful of labels exist - n_train=10 picks 4, n_train=60 picks 20,
 n_train=120 picks 32 (capped). The function is private but stable; the
 detector code in `vtscore/detectors/training.py:182` and
 `vtscore/detectors/labelset_training.py:277` use it to ensure
@@ -151,12 +151,12 @@ format (`0.weight`, `0.bias`, `3.weight`, `3.bias`) and silently
 remaps the legacy 3-layer format (`0.*`, `2.*`) to the current keys, so
 old detector files don't have to be migrated.
 
-> **Invariant — no persisted MLP weights.** In VTSearch proper, detector
+> **Invariant - no persisted MLP weights.** In VTSearch proper, detector
 > JSON files store labelsets (origin info + per-element labels) only;
 > MLP weights are re-derived from those origins on every load. See
 > [`detectors.md`](detectors.md) for the detector storage contract.
 > `build_model_from_weights` exists for callers (eval harnesses, third-
-> party tooling) that have their own reason to ship weights around — the
+> party tooling) that have their own reason to ship weights around - the
 > detector pipeline never calls it on the production path.
 
 ---
@@ -169,9 +169,9 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 
 | Function                                  | When it fires                                                 |
 |-------------------------------------------|---------------------------------------------------------------|
-| `calculate_gmm_threshold`                 | All-media score distribution — used by the safe blend         |
+| `calculate_gmm_threshold`                 | All-media score distribution - used by the safe blend         |
 | `find_optimal_threshold`                  | F1 maximiser on (scores, labels) for one model                |
-| `calculate_cross_calibration_threshold`   | Production threshold — k-fold cross-calibration               |
+| `calculate_cross_calibration_threshold`   | Production threshold - k-fold cross-calibration               |
 | `cross_calibration_threshold_cached`      | Memoised wrapper around the cross-cal trainer                 |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
 
@@ -180,7 +180,7 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 `vtscore/training/thresholds.py:17`. Fits a 2-component
 `sklearn.mixture.GaussianMixture` to the score list and returns the
 midpoint between the two component means. Used to produce a reasonable
-operating point even when only a few labels exist — the score
+operating point even when only a few labels exist - the score
 distribution still tends to be bimodal because the embedder space
 already separates "kind of like X" from "kind of not like X".
 
@@ -233,7 +233,7 @@ t = calculate_cross_calibration_threshold(
 )
 ```
 
-The fold models honour `hidden_dim` when provided — important for the
+The fold models honour `hidden_dim` when provided - important for the
 detector pipeline, which wants fold thresholds calibrated against a
 model with the same capacity as the final full-data model.
 
@@ -288,7 +288,7 @@ probability source: `base` (`LinearSVC` or `SVC`), `calibrator`
 calibrator is fitted, it consults `calibrator.predict_proba(...)`;
 otherwise it sigmoids the raw `decision_function` (clipped to ±30).
 The sigmoid wrapper is not a true probability, but it is monotone in
-the SVM score — which is all the ranker and threshold-finder need.
+the SVM score - which is all the ranker and threshold-finder need.
 
 ### `train_svm(...)` (`vtscore/training/svm.py:130`)
 
@@ -338,7 +338,7 @@ top_ten = results[:10]
 - **No hardcoded paths.** `train_model` reads
   `vtscore.config.TRAIN_EPOCHS` / `TRAIN_PATIENCE` /
   `MLP_HIDDEN_MIN` / `MLP_HIDDEN_MAX` / `MLP_DROPOUT` at call time;
-  the only filesystem-aware module in this package is none — `config`
+  the only filesystem-aware module in this package is none - `config`
   itself centralises every path via `DATA_DIR`.
 - **Thread-safe RNG.** `train_model` uses `torch.random.fork_rng` so
   parallel training calls don't interfere; cross-calibration uses an

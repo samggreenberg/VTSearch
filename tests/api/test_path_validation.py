@@ -305,7 +305,7 @@ class TestMultiUserFileRestriction:
                 "/api/dataset/load-folder",
                 json={"path": str(cwd / "some_folder"), "media_type": "audio"},
             )
-            # Should not get a "must be within" error — may get "Invalid folder path"
+            # Should not get a "must be within" error - may get "Invalid folder path"
             # since the folder doesn't exist, but not a path-validation error.
             # ``load-folder`` is on flask-smorest, so the human-readable text
             # lives under ``message``.

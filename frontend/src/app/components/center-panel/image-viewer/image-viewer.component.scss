@@ -55,7 +55,7 @@
     animation: region-box-shake 0.45s ease-in-out;
   }
 
-  // The bad-vote-with-box discard is armed — pulse a red glow so it's
+  // The bad-vote-with-box discard is armed - pulse a red glow so it's
   // unmistakable that the next ArrowLeft will throw the box away. The state
   // has no timeout; the user backs out via Esc or by touching the box.
   &.armed {

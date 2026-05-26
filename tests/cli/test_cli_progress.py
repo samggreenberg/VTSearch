@@ -2,9 +2,9 @@
 
 Covers two layers:
 
-1. The :mod:`vtscore.cli_progress` module itself — format toggle, text /
+1. The :mod:`vtscore.cli_progress` module itself - format toggle, text /
    JSON output shape, error routing.
-2. End-to-end behaviour via :func:`vtscore.cli.autodetect_main` — the
+2. End-to-end behaviour via :func:`vtscore.cli.autodetect_main` - the
    pipeline emits the documented events when invoked with the JSON format
    selected, and is byte-identical to the pre-flag behaviour in text mode.
 """
@@ -27,7 +27,7 @@ from vtsearch.settings import get_detectors_dir
 
 
 # ---------------------------------------------------------------------------
-# Unit tests — emitter module
+# Unit tests - emitter module
 # ---------------------------------------------------------------------------
 
 
@@ -54,7 +54,7 @@ class TestEmitText:
         assert captured.err == ""
 
     def test_no_text_no_output(self, capsys):
-        # An event without a text= analogue is silent in text mode — used
+        # An event without a text= analogue is silent in text mode - used
         # for JSON-only events that have no prose representation.
         cli_progress.emit("foo", chunk_num=1)
         captured = capsys.readouterr()
@@ -87,7 +87,7 @@ class TestEmitJson:
         cli_progress.set_format("json")
         cli_progress.emit("export_complete", text="Done.", message="Done.")
         captured = capsys.readouterr()
-        # Only the JSON line — no duplicate prose
+        # Only the JSON line - no duplicate prose
         lines = [ln for ln in captured.out.splitlines() if ln.strip()]
         assert len(lines) == 1
         event = json.loads(lines[0])
@@ -144,7 +144,7 @@ class TestProgressCallback:
 
     def test_json_mode_drops_empty_ticks(self, capsys):
         cli_progress.set_format("json")
-        # Idle ticks with no message and no total — pure noise; drop them.
+        # Idle ticks with no message and no total - pure noise; drop them.
         cli_progress.progress_callback("idle", "", 0, 0)
         captured = capsys.readouterr()
         assert captured.out == ""
@@ -160,7 +160,7 @@ class TestProgressCallback:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end tests — autodetect emits the documented events
+# End-to-end tests - autodetect emits the documented events
 # ---------------------------------------------------------------------------
 
 
@@ -304,7 +304,7 @@ class TestAutodetectJsonOutput:
         )
 
         captured = capsys.readouterr()
-        # No JSON braces on stdout — pure prose
+        # No JSON braces on stdout - pure prose
         assert "{" not in captured.out
         # Exporter confirmation message is preserved verbatim
         assert "Saved" in captured.out

@@ -335,7 +335,7 @@ class TestLabelSet:
         assert ls.detector_meta == meta
 
     def test_detector_meta_dropped_on_merge(self):
-        """Merged labelsets get a fresh identity — meta from sources doesn't leak."""
+        """Merged labelsets get a fresh identity - meta from sources doesn't leak."""
         a = LabelSet(
             [LabeledElement(md5="x", label="good", origin={"importer": "t", "params": {"i": "1"}}, origin_name="x")],
             detector_meta={"media_type": "audio"},

@@ -153,7 +153,7 @@ def _clipper_entry(clip: Any) -> PluginEntry:
 
 # Lazy loaders for the library-tier families.  Each one imports its
 # package on first call so ``python app.py --list-plugins`` doesn't pay
-# the full app startup cost — Flask blueprints, model registries, etc.
+# the full app startup cost - Flask blueprints, model registries, etc.
 # only get imported when their family is asked for.
 
 
@@ -278,7 +278,7 @@ def format_plain(inventory: dict[str, list[PluginEntry]]) -> str:
 
 
 def format_names(inventory: dict[str, list[PluginEntry]], family: str | None = None) -> str:
-    """Render plugin *names* one per line — designed for shell completion.
+    """Render plugin *names* one per line - designed for shell completion.
 
     When *family* is given, only that family's names are emitted; otherwise
     every family is emitted as ``<family>:<name>`` so a completion script
@@ -362,7 +362,7 @@ def __getattr__(name: str) -> Any:
 
     ``FAMILIES`` is exposed as a tuple snapshot of the current registry
     keys at access time, so callers that ``from vtscore.plugins.inventory
-    import FAMILIES`` see every family that's been registered by then —
+    import FAMILIES`` see every family that's been registered by then -
     including app-only ones the shim installs at startup.
     """
     if name == "FAMILIES":
@@ -371,7 +371,7 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "FAMILIES",  # noqa: F822 — exposed dynamically via module __getattr__
+    "FAMILIES",  # noqa: F822 - exposed dynamically via module __getattr__
     "FamilyProvider",
     "PluginEntry",
     "family_flag",

@@ -44,7 +44,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   labels: LabeledElement[] = [];
   labelsLoaded = false;
 
-  /** Column definitions with selection state — built dynamically from API response. */
+  /** Column definitions with selection state - built dynamically from API response. */
   columns: ColumnDef[] = [];
 
   /** Filter which labels to show/export. */
@@ -59,7 +59,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     { value: ';', label: 'Semicolon (;)' },
   ];
 
-  /** Active export tab — 'clipboard' or an exporter name. */
+  /** Active export tab - 'clipboard' or an exporter name. */
   activeTab = 'clipboard';
 
   /** Exporter form state. */
@@ -98,7 +98,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   /** Detector/model name from any available source. Falls back to the
    *  registry entry for the active detector id when the
    *  parent-supplied name and `labelSession.modelName` are both
-   *  empty — typical when this modal opens from the Find view. */
+   *  empty - typical when this modal opens from the Find view. */
   private get effectiveDetectorName(): string {
     if (this.detectorName) return this.detectorName;
     if (this.labelSession.modelName) return this.labelSession.modelName;
@@ -294,7 +294,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Start exporter flow — if no fields, export immediately. */
+  /** Start exporter flow - if no fields, export immediately. */
   startExporter(exporter: ExporterEntry): void {
     const fields = this.exporterFieldsOf(exporter);
     if (fields.length === 0) {

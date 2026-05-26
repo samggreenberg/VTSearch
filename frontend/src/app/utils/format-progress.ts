@@ -46,7 +46,7 @@ export function formatEta(seconds: number | null | undefined): string {
  * Each piece is optional:
  *   - The ``[Step S/T]`` prefix appears only when ``total_steps > 1``.
  *   - The ``(C/T)`` fraction appears only when ``total > 0``.
- *   - The ``· ~Xs left`` tail appears only when ``eta_seconds > 0`` — the
+ *   - The ``· ~Xs left`` tail appears only when ``eta_seconds > 0`` - the
  *     backend gates this on at least 5s of elapsed work, so it stays hidden
  *     for short bars.
  *   - When none are present, returns the bare ``message`` (or
@@ -86,7 +86,7 @@ export function formatProgressMessage(
 }
 
 /**
- * Return ``true`` when a progress event has no known total — i.e. callers
+ * Return ``true`` when a progress event has no known total - i.e. callers
  * should show an indeterminate spinner rather than a percent bar.
  */
 export function isProgressIndeterminate(
@@ -105,7 +105,7 @@ export function isProgressIndeterminate(
  *   - ``subtitle``: a plain-English one-liner explaining what the phase actually does.
  *   - ``detail``: the original message + ``(current/total)`` counts, with the
  *     redundant ``[Step S/T]`` prefix stripped (the header conveys the phase).
- *     The ETA tail is omitted here — it is returned separately as ``eta`` so the
+ *     The ETA tail is omitted here - it is returned separately as ``eta`` so the
  *     UI can pin it to the right of the progress bar where it stays visible
  *     even when a long file path ellipsizes the detail.
  *   - ``eta``: the bare ``~Xs left`` chip, or empty when no estimate is available.
@@ -157,7 +157,7 @@ function stripStepPrefix(msg: string): string {
  * ``ProgressHeader`` interface for the meaning of each field. ``kind`` selects
  * between the dataset-load and detector-load phase vocabularies; ``embedder``
  * is woven into the subtitle when the phase mentions one ("Loading SigLIP
- * weights. First-time only — cached on disk afterwards.").
+ * weights. First-time only - cached on disk afterwards.").
  */
 export function formatProgressHeader(
   progress: ProgressEvent | null | undefined,
@@ -186,8 +186,8 @@ export function formatProgressHeader(
     phase = 'embedding model';
     const pretty = prettifyEmbedder(embedder);
     subtitle = pretty
-      ? `Loading ${pretty} weights. First-time only — cached on disk afterwards.`
-      : 'Loading model weights. First-time only — cached on disk afterwards.';
+      ? `Loading ${pretty} weights. First-time only - cached on disk afterwards.`
+      : 'Loading model weights. First-time only - cached on disk afterwards.';
   } else if (status === 'loading' && /text encoder|warming/i.test(message)) {
     phase = 'warming text encoder';
     subtitle = 'One-time warm-up so the first text search returns instantly.';

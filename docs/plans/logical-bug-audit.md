@@ -1,11 +1,11 @@
-# Logical-Bug Audit — 2026-05
+# Logical-Bug Audit - 2026-05
 
-**Status:** In progress — most findings still open; resolved items
+**Status:** In progress - most findings still open; resolved items
 are marked inline as struck-through headings.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on
-**logical** bugs — missed expectations between modules, race conditions,
+**logical** bugs - missed expectations between modules, race conditions,
 silent miscompute, data corruption, and broken invariants. Syntax,
 typing, and lint issues were explicitly out of scope (those are covered
 by `ruff` / `pyright` / `tsc`).
@@ -19,9 +19,9 @@ by `ruff` / `pyright` / `tsc`).
 - Each open finding has a stable ID (`C#` Critical, `H#` High,
   `M#` Medium, `L#` Low) so it can be referenced from other docs / PRs.
 - Shipped findings are reduced to a struck-through heading. The full
-  fix summary is the PR that landed it — git log, not this doc.
+  fix summary is the PR that landed it - git log, not this doc.
 - The "Recurring patterns" section at the bottom is the actionable
-  starting point — most findings collapse into a small number of root
+  starting point - most findings collapse into a small number of root
   causes; fixing the pattern usually fixes many findings at once.
 - The "Suggested fix order" section recommends which root-cause PRs to
   land first for maximum leverage.
@@ -55,7 +55,7 @@ Cross-section interaction agents:
 
 ---
 
-## Critical — data corruption / loss / hangs / silent miscompute
+## Critical - data corruption / loss / hangs / silent miscompute
 
 ### ~~C1. Download gate is never released if importer skips the `"embedding"` status~~
 
@@ -83,12 +83,12 @@ Cross-section interaction agents:
 
 ---
 
-## High — likely-encountered correctness or security bugs
+## High - likely-encountered correctness or security bugs
 
 ### State / concurrency
 
 - ~~**`record_vote()` called after releasing `_state_lock`**~~
-- ~~**H1. Vote-progress invalidation / `record_vote` race**~~ — fixed by
+- ~~**H1. Vote-progress invalidation / `record_vote` race**~~ - fixed by
   replacing the toggle contract on `POST /api/medias/<id>/vote` with an
   absolute-target contract.  Body takes `target: "good" | "bad" | "none"`
   instead of `vote: "good" | "bad"`; handler delegates to a new
@@ -98,7 +98,7 @@ Cross-section interaction agents:
   two stale-view tabs racing the same target collapse into a single
   transition on the server instead of alternating ADD/REMOVE.  Progress
   cache now invalidates on **any** training-set membership change for
-  the media (was: polarity flips only — left un-vote cached models
+  the media (was: polarity flips only - left un-vote cached models
   stale).  Response shape grew `state` + `click_time`; the Angular
   `VoteStateService` was rewritten around a single `submitToggleVote()`
   entry point that computes the target from local state and clears
@@ -112,7 +112,7 @@ Cross-section interaction agents:
 
 ### Detector / training
 
-- ~~**H2. Cross-dataset region-box loss**~~ — fixed in
+- ~~**H2. Cross-dataset region-box loss**~~ - fixed in
   `vtscore/detectors/labelset_training.py`. `_embed_one` now resolves the
   origin, runs `patch_forward` on the file when the active embedder
   supports patch regions, and pools the box via `box_to_vote_vector` so a
@@ -122,7 +122,7 @@ Cross-section interaction agents:
   no output. Covered by `TestRegionAwareTrainingCrossDataset` in
   `tests/detectors/test_patch_embedder.py`.
 - ~~**H3. Embedder drift on save → reload**~~
-- ~~**H5. Detector embedder not revalidated on dataset switch**~~ —
+- ~~**H5. Detector embedder not revalidated on dataset switch**~~ -
   fixed in `vtscore/detectors/dataset_sync.py` +
   `vtsearch/routes/detectors/scoring.py` +
   `vtsearch/routes/detectors/find.py`.
@@ -159,12 +159,12 @@ Cross-section interaction agents:
 
 - ~~**H8. Origin dict shared by reference across medias**~~
 - ~~**H9. Single-item split has 0 test samples**~~
-- ~~**H10. Clipped media re-ingest reads whole file for MD5**~~ —
+- ~~**H10. Clipped media re-ingest reads whole file for MD5**~~ -
   fixed (2026-05-20). `vtscore/datasets/ingest.py` (formerly
   `vtsearch/datasets/ingest.py`) now routes both `_ingest_via_source`
   and `_ingest_via_resolver` through a new
   `_resolve_clip_content_and_embedding` helper that pairs the clip
-  embedding with the clip's actual content bytes — so `md5`,
+  embedding with the clip's actual content bytes - so `md5`,
   `file_size`, and `media_bytes` describe the clip, not the parent.
   Video metadata-only clips (and other fall-through paths) fall back
   to the load-pipeline's `MD5(parent_bytes) + boundary_tag` scheme so
@@ -176,24 +176,24 @@ Cross-section interaction agents:
 
 ### Routes / API
 
-- ~~**H12. `add_media_to_pile` race**~~ — investigation closed
+- ~~**H12. `add_media_to_pile` race**~~ - investigation closed
   (2026-05-20): not a real race in the current architecture. The
   audit's framing assumes a global "active dataset" pointer that
   could be switched mid-handler between `snapshot_medias()` and
   `apply_label()`, but `before_request` in `app.py` pins both
   `g._dataset_context` and `g._detector_context` for the duration
   of each request (resolver in `vtsearch/shim/__init__.py:19-39`),
-  and `flask.g` is request-local — so the two calls inside one
+  and `flask.g` is request-local - so the two calls inside one
   `add_media_to_pile` invocation always resolve to the same
   contexts. Note also that `apply_label` writes to the *detector*
   context's `good_votes` / `bad_votes`, not to a dataset, so the
   audit's "labels applied to wrong dataset" framing is a category
   error. The same line window (L600-694) does contain real bugs,
-  but they are different from the one H12 names — see H32 / H33 /
+  but they are different from the one H12 names - see H32 / H33 /
   H34.
 - ~~**H13. `vote_media` silent-mistarget on dropped header**~~
 - ~~**H14. `export_labels` leaks votes across datasets**~~
-- ~~**H15. File-browser symlink metadata leak**~~ — investigation
+- ~~**H15. File-browser symlink metadata leak**~~ - investigation
   revised and fixed (2026-05-20). The audit's literal claim was
   incorrect: the `target.resolve().relative_to(root)` check at
   `vtsearch/routes/file_browser.py:90` does block drill-through into
@@ -206,7 +206,7 @@ Cross-section interaction agents:
   In multi-user mode this violated the data-dir isolation contract
   asserted by `TestMultiUserBrowseIsolation`. Fix: in the listing
   loop, call `entry.resolve(strict=True).relative_to(root)` on
-  symlinks and skip any that escape root or are broken — intra-root
+  symlinks and skip any that escape root or are broken - intra-root
   symlinks remain visible. Covered by `TestBrowseSymlinks` in
   `tests/api/test_file_browser.py`
   (`test_symlink_to_external_dir_hidden`,
@@ -217,13 +217,13 @@ Cross-section interaction agents:
   symlink-follow content escape exists in
   `vtscore/security/path_validation.py:rglob_follow_symlinks`
   (importers walk with `followlinks=True` and per-file paths
-  outside the validated root are not re-checked) — that's a
+  outside the validated root are not re-checked) - that's a
   different code path, not covered by this fix.
-- ~~**H16. Header refers to unloaded dataset → silent fallback**~~ —
+- ~~**H16. Header refers to unloaded dataset → silent fallback**~~ -
   also closes the "header points to an unloaded id" half of H34 by the
   same mechanism. The "header absent → thread-local leak" half of H34
   remains open.
-- ~~**H32. `add_media_to_pile` TOCTOU between md5 check and insertion**~~ —
+- ~~**H32. `add_media_to_pile` TOCTOU between md5 check and insertion**~~ -
   fixed in `vtsearch/routes/media/list.py`. After the initial
   outside-the-lock MD5 lookup (fast path for an existing match) and
   the unlocked embed step, the route now re-runs
@@ -236,7 +236,7 @@ Cross-section interaction agents:
   `tests/core/test_medias.py`, which uses a `threading.Barrier(2)`
   patched into the embedder to deterministically hold both requests
   inside the unlocked window.
-- ~~**H33. `add_media_to_pile` label not synced to disk**~~ — fixed
+- ~~**H33. `add_media_to_pile` label not synced to disk**~~ - fixed
   in `vtsearch/routes/media/list.py`. Both branches of
   `add_media_to_pile` (existing-MD5 match and new-media insertion)
   now call `_sync_pile_label_to_storage()` after `apply_label`,
@@ -249,7 +249,7 @@ Cross-section interaction agents:
   `TestAddToPile.test_existing_media_label_synced_to_disk`,
   `test_new_media_label_synced_to_disk`, and
   `test_label_survives_rehydration` in `tests/core/test_medias.py`.
-- ~~**H34. Missing `X-Detector-Id` → silent detector fallback**~~ —
+- ~~**H34. Missing `X-Detector-Id` → silent detector fallback**~~ -
   fixed in `vtsearch/routes/_shared.py`. Added two stateless route
   decorators, `require_detector_header` and `require_dataset_header`,
   that reject 400 when the corresponding header (or its `?detector_id=`
@@ -275,11 +275,11 @@ Cross-section interaction agents:
 ### Plugins / converters / exporters
 
 - ~~**H17. Plugin scanner silently shadows duplicate names**~~
-- ~~**H18. CSV exporter doesn't escape embedded newlines**~~ —
+- ~~**H18. CSV exporter doesn't escape embedded newlines**~~ -
   investigation closed (2026-05-20): not a real bug. The audit's
   path is also stale (exporters moved to `vtscore/exporters/`); the
   actual file is `vtscore/exporters/server_csv_file/__init__.py`.
-  The code at L120–141 does not hand-roll CSV rows — it dispatches
+  The code at L120–141 does not hand-roll CSV rows - it dispatches
   dict vs scalar cells and hands the row to `writer.writerow(row)`
   (L141), where `writer` is a stdlib `csv.writer` (L36) using the
   default `QUOTE_MINIMAL`, which always quotes fields containing
@@ -293,8 +293,8 @@ Cross-section interaction agents:
   the label: the exporter wrote a valid quoted CSV and the
   importer returned the original strings byte-for-byte
   (`.strip().lower()` on the label only trims leading/trailing
-  whitespace — interior newlines pass through).
-- ~~**H19. Required select fields silently accept empty string**~~ —
+  whitespace - interior newlines pass through).
+- ~~**H19. Required select fields silently accept empty string**~~ -
   investigation closed (2026-05-20): not a real bug. The audit's
   framing assumes `_presence_kwargs()` in `vtscore/plugins/schema.py`
   produces `{"required": True, "load_default": ""}` for a required
@@ -303,7 +303,7 @@ Cross-section interaction agents:
   True}` only; default present → `{"load_default": <default>}`
   only). More importantly, `_build_select` adds
   `_non_empty_after_strip` to the validator list for every required
-  select (schema.py:116-117) — empty strings and whitespace-only
+  select (schema.py:116-117) - empty strings and whitespace-only
   strings are rejected with `"Field may not be empty."`, and the
   OneOf at L119 excludes `""` from its allowed set for required
   fields too (double defence). Empirical check via
@@ -311,7 +311,7 @@ Cross-section interaction agents:
   with static options, dynamic options, and with a non-empty default
   alike. The parallel text-field case is already covered by
   `tests_lib/core/test_plugin_schema.py::test_required_text_rejects_whitespace_only`.
-- ~~**H20. `audio2image` has no upper bound on `n_mels`**~~ — fixed
+- ~~**H20. `audio2image` has no upper bound on `n_mels`**~~ - fixed
   systemically in `vtscore/plugins/schema.py:_build_number()`, which
   now attaches `validate.Range` whenever a `PluginField` declares
   numeric `min` / `max` (so every plugin family that goes through
@@ -322,7 +322,7 @@ Cross-section interaction agents:
   the converter's own plugin schema, and the two upstream parsers
   (`_parse_multi_media_specs` and `clipper_chain.validate_chain`) call
   it before any expensive work runs. The `audio2image` declared range
-  is now actually enforced — `n_mels=10_000_000` is rejected at
+  is now actually enforced - `n_mels=10_000_000` is rejected at
   request time instead of building a ~41 GB mel filter bank inside
   librosa. Audited every numeric `PluginField` in the codebase; no
   declared `max` was tighter than real usage, so attaching `Range`
@@ -331,7 +331,7 @@ Cross-section interaction agents:
 ### CLI / app entry
 
 - ~~**H21. Successful `--autodetect` falls through to Flask startup**~~
-  — Not a bug. The audit misread `elif args.local or not args.autodetect:`
+  - Not a bug. The audit misread `elif args.local or not args.autodetect:`
   as an independent `if`; it is an `elif` paired with `if args.autodetect:`
   above it, so the two branches are mutually exclusive and Flask never
   starts after a successful autodetect. Simplified the redundant `elif`
@@ -340,7 +340,7 @@ Cross-section interaction agents:
 
 ### Embedding
 
-- ~~**H22. `predict_embedders_to_preload` mismatched media type**~~ —
+- ~~**H22. `predict_embedders_to_preload` mismatched media type**~~ -
   shipped in commit `92e27a39` (PR #1561, "H22: persist detector
   embedder for accurate preload prediction"). The detector registry
   now carries an `embedder` field stamped by
@@ -352,14 +352,14 @@ Cross-section interaction agents:
   that prefers `entry["embedder"]` and falls back to the media
   type's default only when the field is unset or unrecognised.
   Legacy detector entries written before the field existed remain on
-  the default-embedder fallback until the next retrain stamps them —
+  the default-embedder fallback until the next retrain stamps them -
   documented as expected behaviour in the function's docstring.
 
 ### Security / sync
 
-- ~~**H23. Settings-source filepath template not path-validated**~~ —
+- ~~**H23. Settings-source filepath template not path-validated**~~ -
   duplicate of C9 (already struck through above); shipped in commit
-  `988dca3b` ("logical-bug-audit C9 — validate resolved sync-source
+  `988dca3b` ("logical-bug-audit C9 - validate resolved sync-source
   paths"). Both sync sources now call
   `validate_server_filepath(resolved, base_dir=get_file_access_base_dir())`
   at the end of `_resolve_filepath()`
@@ -373,13 +373,13 @@ Cross-section interaction agents:
 ### Frontend
 
 - ~~**H24. Vote-state polling chain dies on a single error**~~
-- ~~**H25. Active dataset pair is set before load completes**~~ —
+- ~~**H25. Active dataset pair is set before load completes**~~ -
   shipped in commit `9470cf1a` (PR #1563, "Fix H25: split
   ActiveContextService into intent + active layers").
   `ActiveContextService` now exposes two layers:
   **intent** (what the user just picked, flips immediately for UI
   affordances like the pulldown highlight) and **active** (the loaded
-  pair — what `activeContextInterceptor` reads when attaching
+  pair - what `activeContextInterceptor` reads when attaching
   `X-Dataset-Id` / `X-Detector-Id`).  `ContextSwitchService.flipAndLoad`
   calls `setIntent()` on entry
   (`frontend/src/app/services/context-switch.service.ts:147`) and
@@ -397,12 +397,12 @@ Cross-section interaction agents:
   loading-tasks idle signal arrive, (c) cancel-and-replace via
   request-id mismatch when a second switch starts before the first
   finishes.
-- ~~**H26. `recordVote` runs before the HTTP vote returns**~~ — fixed
+- ~~**H26. `recordVote` runs before the HTTP vote returns**~~ - fixed
   by gating the undo-stack push on the POST's success.  A new
   `VoteStateService.submitToggleVoteAndRecord(id, vote, mediaName,
   regionBox?)` captures `previousPolarity` synchronously (before the
   optimistic flip), then calls `submitToggleVote(...)` and pushes the
-  undo entry inside the resulting Observable's `tap` — so an entry
+  undo entry inside the resulting Observable's `tap` - so an entry
   only lands on `past` after the server confirms.  On error the `tap`
   doesn't run, leaving the undo / redo stacks untouched.  The three
   callers (`center-panel`, `find-view`, `label-view`) were migrated to
@@ -412,9 +412,9 @@ Cross-section interaction agents:
   no-entry-on-error path, (b) `previousPolarity` capture before the
   flip, and (c) redo-stack preservation on a failed POST.
 - ~~**H27. Binary media endpoints bypass the `activeContextInterceptor`**~~
-  — Not a bug. Functional `HttpInterceptorFn`s registered via
+  - Not a bug. Functional `HttpInterceptorFn`s registered via
   `provideHttpClient(withInterceptors([...]))` apply to **every**
-  `HttpClient` call — typed-client wrappers and raw `this.http.get(...)`
+  `HttpClient` call - typed-client wrappers and raw `this.http.get(...)`
   share the same client and the same interceptor chain. The real
   bypass surface is native `<img src>` / `<audio src>` / `<video src>` /
   `<iframe>` / `fetch()`, which don't go through `HttpClient` at all;
@@ -422,13 +422,13 @@ Cross-section interaction agents:
   appending `?dataset_id=…&detector_id=…` query params, with the
   backend reading them as a fallback (`app.py` L238, L252). Also
   removed the four dead `getAudio/getVideo/getImage/getMedia` methods
-  on `MediasApiService` — they had no callers; every binary-stream
+  on `MediasApiService` - they had no callers; every binary-stream
   consumer goes through `mediaUrl()`.
 
 ### Multi-process / settings
 
 - ~~**H28. Per-user cache is process-local; concurrent worker writes lose
-  updates**~~ — fixed in `vtsearch/settings.py`. Every per-user (and
+  updates**~~ - fixed in `vtsearch/settings.py`. Every per-user (and
   server-tier) write now goes through `_mutate_*_locked`, which holds a
   cross-process `fcntl.flock` on a sibling `.lock` file, re-reads the
   on-disk JSON, applies the mutator in place, and atomic-writes with
@@ -436,7 +436,7 @@ Cross-section interaction agents:
   then save whole dict" pattern was removed (including from
   `vtsearch/achievements.py`, which now uses the new public
   `settings.mutate_user(mutator)` RMW helper for nested-dict updates).
-  Canonical lock order is `file_lock → settings_lock` everywhere — the
+  Canonical lock order is `file_lock → settings_lock` everywhere - the
   outer `with _settings_lock:` was removed from setter wrappers and
   from read paths that previously held it across `_ensure_user_loaded`
   (which can transitively trigger setter writes via sync-from-source).
@@ -459,7 +459,7 @@ Cross-section interaction agents:
     to the in-process lock only. Not a regression (the codebase ships
     Linux-only Docker images), but worth a note if a contributor ever
     wants to test on Windows.
-- ~~**H29. `_save_user` holds `_settings_lock` across sync I/O**~~ —
+- ~~**H29. `_save_user` holds `_settings_lock` across sync I/O**~~ -
   was at `vtsearch/settings.py` ~L331–338. H28's fix already moved
   `_sync_to_source` outside both the file lock and `_settings_lock`,
   which neutralised the worst case (a hung NFS/webhook source could
@@ -471,7 +471,7 @@ Cross-section interaction agents:
   in-memory cache.  A slow local fsync (NFS data dir, full disk,
   hung disk controller) therefore no longer blocks unrelated
   settings reads, and only blocks writes to the *same* user's file
-  via the per-file lock — different users' writes proceed in
+  via the per-file lock - different users' writes proceed in
   parallel.  Regression tests:
   `tests/integration/test_thread_safety.py::TestSlowSettingsIODoesNotBlockOthers`
   (slow `_sync_to_source` doesn't block a reader; slow
@@ -481,7 +481,7 @@ Cross-section interaction agents:
 ### Error flow
 
 - ~~**H30. Detector save's `os.replace` failure leaves in-memory state
-  "saved"**~~ — fixed by surfacing persistence failures at the previously-
+  "saved"**~~ - fixed by surfacing persistence failures at the previously-
   unprotected call sites (`POST /api/medias/<id>/vote`,
   `POST /api/votes/seed-from-examples`) with the same try/except + abort
   500 pattern that already guards `fill_labels_from_sort` (C11), and by
@@ -494,7 +494,7 @@ Cross-section interaction agents:
   `tests/detectors/test_workflow.py::TestPersistenceFailureIsTransactional`,
   `tests/api/test_api_contracts.py::TestVotesContract::test_disk_sync_failure_surfaces_as_500`,
   and `tests/detectors/test_detectors.py::TestSeedVotesFromExamples::test_seed_disk_sync_failure_surfaces_as_500`.
-- ~~**H31. Partial label-import has no rollback**~~ — fixed by
+- ~~**H31. Partial label-import has no rollback**~~ - fixed by
   isolating each entry inside `_apply_labels` with a per-entry
   try/except and surfacing the per-entry failures in the response
   (`failed` / `failed_count`).  Downstream syncs
@@ -505,17 +505,17 @@ Cross-section interaction agents:
 
 ---
 
-## Medium — real bugs but lower frequency or non-corrupting impact
+## Medium - real bugs but lower frequency or non-corrupting impact
 
 ### State / concurrency
 
-- ~~**M1.** Lock held during cross-lock callbacks in `toggle_vote` — state ↔
-  progress lock ordering creates a narrow but real deadlock window.~~ —
+- ~~**M1.** Lock held during cross-lock callbacks in `toggle_vote` - state ↔
+  progress lock ordering creates a narrow but real deadlock window.~~ -
   investigated and closed (2026-05-20).  The literal deadlock the audit
   named was no longer reachable in the current code (post-H1 refactor:
   nothing inside `_progress_lock` calls back into `_state_lock`-acquiring
   code, and route callers of progress functions do not hold `_state_lock`
-  when entering the progress module).  But the design was fragile —
+  when entering the progress module).  But the design was fragile -
   four sites (`vtscore/state/votes.py:_set_vote_locked` + `clear_votes`,
   `vtscore/state/__init__.py:clear_medias` + `set_inclusion`) held
   `_state_lock` while calling into the progress module, while two others
@@ -532,12 +532,12 @@ Cross-section interaction agents:
   acceptable).  Lock-order invariant documented in the
   `vtscore/detectors/labeling_progress.py` module docstring.
 - ~~**M2.** `combine_datasets.run_chunked` re-issues IDs starting at 1 on every
-  call → cid collision when consumed twice.~~ — fixed in
+  call → cid collision when consumed twice.~~ - fixed in
   `vtscore/cli.py`. Investigation showed this is not unique to
   `combine_datasets`: every chunked importer/loader emits IDs `1..N`
   per yielded chunk (the convention paired with
   `consume_chunks_into`'s renumbering in the in-process loader). The
-  HTTP/UI path is safe — `vtscore/datasets/load_pipeline.py:1057-1073`
+  HTTP/UI path is safe - `vtscore/datasets/load_pipeline.py:1057-1073`
   already renumbers. The CLI path (`_run_live_pipeline`) scored each
   chunk independently and merged the per-chunk hit lists, so the
   exported JSON's `id` fields collided across chunks (the CSV
@@ -549,7 +549,7 @@ Cross-section interaction agents:
   `tests_lib/cli/test_chunk_renumber.py` (unit) and
   `tests/cli/test_chunked_id_renumber.py` (end-to-end via pickle and
   combine_datasets, including the JSON exporter).
-- ~~**M3.** `importers/base.py` L407–410 — skipped records leave `next_id`
+- ~~**M3.** `importers/base.py` L407–410 - skipped records leave `next_id`
   unincremented, ID collisions on first-record-skip.~~
 
 ### Detector
@@ -559,13 +559,13 @@ Cross-section interaction agents:
   continues to be used.~~
 - ~~**M5.** `labelset_elements.resolve_current_dataset_cid` can return a
   colliding-MD5 cid in cross-dataset labelsets → clicks vote the
-  wrong media.~~ — closed as not-a-bug on `dev`. The function returns
+  wrong media.~~ - closed as not-a-bug on `dev`. The function returns
   `cids[0]` from the origin+name ∪ md5 union, which is only ambiguous
   when two cids in the active dataset share an MD5. Both Flask
   dataset-load paths (`vtscore/datasets/load_pipeline.py` and
   `vtsearch/routes/datasets/registry.py`) run `collapse_duplicates`,
   which collapses same-MD5 medias into a single `dupe_set`
-  representative — so the md5 lookup never yields more than one cid.
+  representative - so the md5 lookup never yields more than one cid.
   Cross-dataset MD5 match is the intended semantic (same content →
   same logical media), not a miscompute. Docstring on
   `resolve_current_dataset_cid` records the invariant and points at
@@ -577,7 +577,7 @@ Cross-section interaction agents:
   into in-memory votes (`vtsearch/routes/detectors/labels.py:601`).
 - ~~**M6.** `restore_labels_from_detector` resolves by MD5 only on the
   second pass; dedup-collapsed cids can land votes on the wrong cid
-  after reload.~~ — investigated and closed as not a real bug. Pass 1
+  after reload.~~ - investigated and closed as not a real bug. Pass 1
   already consults `md5_lookup` via `resolve_media_ids`
   (`vtscore/state/media_lookup.py:62`), and the dedup-collapse reload
   path lands on the correct rep cid in every case (deduped,
@@ -586,12 +586,12 @@ Cross-section interaction agents:
   worrying latent issue is that pass 2 recomputes the *parent*
   file's md5 for `converter` origins
   (`vtscore/detectors/resolver.py:_resolve_converter`) while the
-  dataset stores the converted-output md5 — track under detector
+  dataset stores the converted-output md5 - track under detector
   findings if it bites.
 - ~~**M7. `safe_thresholds` read at training time, cached on DetectorContext, never refreshed**~~
-  — partial close. The audit's "baked into the detector JSON" claim was
+  - partial close. The audit's "baked into the detector JSON" claim was
   wrong: the threshold is never serialised (see the "No Persisted Vectors
-  or MLPs" rule in `CLAUDE.md`) — every detector JSON write site lists
+  or MLPs" rule in `CLAUDE.md`) - every detector JSON write site lists
   only `name` / `text_query` / `media_example` / `media_type` / `examples`
   / `created_at` / `labelset` / `input_spec`. But a narrower staleness
   was real: the in-memory `DetectorContext.model` / `threshold` cached on
@@ -616,12 +616,12 @@ Cross-section interaction agents:
 - **M8.** ~~Thin-mode pickle loader treats `embedding: None` as present, then
   `np.array(None)` produces an object-dtype row.~~ **Shipped (with M12).**
   `_convert_one_pickle_media` now treats missing key and explicit `None`
-  identically for both thin and full modes — entry is skipped and the
+  identically for both thin and full modes - entry is skipped and the
   "missing media" warning fires.
 - ~~**M9.** `loader_folder._has_override` doesn't warn when both `rel_path`
   and `file_name` override entries exist with different embeddings.~~
 - **M10.** ~~`clipper_chain._run_clipper_step` assumes deterministic output count
-  across calls — no validation.~~ **Shipped.** `_run_clipper_step` /
+  across calls - no validation.~~ **Shipped.** `_run_clipper_step` /
   `_run_converter_step` now stamp `n_out`, `clip_index`, and a short
   `content_hash` on every trail entry. `_select_chain_output` prefers
   content matching over positional, logs warnings on output-count
@@ -638,7 +638,7 @@ Cross-section interaction agents:
   in `negative_hits` with `NaN` in the JSON response. Fixed at three
   layers:
   (1) `vtscore/embedding/matrix.py` raises `ValueError` naming the
-  offending cid when any media has `embedding=None` — defensive root
+  offending cid when any media has `embedding=None` - defensive root
   guard catching every entry point (M8/M12 pickle loaders are one path;
   `_fixup_clip_md5_and_embeddings` silently leaving `embedding=None`
   after a failed bulk re-embed is another).
@@ -647,7 +647,7 @@ Cross-section interaction agents:
   `embedding=None` after the clipper stage and surfaces the dropped
   count via the progress tracker so the load row reflects the real N.
   (3) `zip(strict=True)` on every id↔score callsite
-  (`vtscore/cli.py` — already shipped with the M8/M12 PR;
+  (`vtscore/cli.py` - already shipped with the M8/M12 PR;
   `vtsearch/routes/sorting.py`,
   `vtsearch/routes/detectors/{find,scoring}.py`,
   `vtscore/detectors/{training,labelset_training,labeling_progress}.py`,
@@ -662,7 +662,7 @@ Cross-section interaction agents:
 - **M12.** ~~`loader_pickle._build_pickle_full_media` has no null-check before
   `np.array(media_info["embedding"])`.~~ **Shipped.**
   `_convert_one_pickle_media` skips any entry whose `embedding` is
-  missing or `None` before the build helpers run — symmetric with the
+  missing or `None` before the build helpers run - symmetric with the
   thin-mode path (M8) and with the folder loader's drop-on-no-embed
   behaviour. The registry load path doesn't re-embed after
   `load_dataset_from_pickle`, so preserving `None` would have just
@@ -673,8 +673,8 @@ Cross-section interaction agents:
 ### Routes / API
 
 - ~~**M13.** `learned_scores` in `/api/votes` can serialize as JSON
-  `NaN`/`Infinity` if the MLP destabilizes — invalid JSON to strict
-  clients.~~ — fixed by routing every sigmoid→score path through
+  `NaN`/`Infinity` if the MLP destabilizes - invalid JSON to strict
+  clients.~~ - fixed by routing every sigmoid→score path through
   `vtscore.utils.scores.sigmoid_to_finite_scores` (NaN/±Inf → `-1.0`
   sentinel) and adding a defensive `finite_or` guard at
   `GET /api/votes`. Sanitised sites: `labelset_train_and_score`,
@@ -682,12 +682,12 @@ Cross-section interaction agents:
   `/api/label-file-sort`, `/api/find-label`, `/api/find` (live + cold
   paths), `/api/auto-detect`, and CLI autodetect. `-1.0` sits outside
   the `[0, 1]` sigmoid range so `score >= threshold` is always False
-  for sanitised scores and they sink to the bottom of any sort —
+  for sanitised scores and they sink to the bottom of any sort -
   matches the frontend's existing `learnedScores[id] ?? -1` fallback.
   Regression test in `tests/api/test_api_contracts.py` parses the
   response with a `parse_constant` that rejects `NaN`/`Infinity`.
 - ~~**M14.** `diversity_tree_next_sample` references stale media IDs after
-  `/api/dataset/clear`.~~ — investigated and closed.  The literal scenario
+  `/api/dataset/clear`.~~ - investigated and closed.  The literal scenario
   the audit named is no longer reachable: `clear_medias` (called via
   `clear_dataset → clear_all`) sets `ctx.diversity_tree = None`, and the
   active-dataset path of `/api/dataset/clear` unregisters the context so
@@ -709,7 +709,7 @@ Cross-section interaction agents:
 ### Settings / sync
 
 - ~~**M15.** Pending labelset sync stores `dataset_ctx = None` without
-  checking; later `_run_pending_sync` triggers `AttributeError`.~~ —
+  checking; later `_run_pending_sync` triggers `AttributeError`.~~ -
   investigated and closed as not a real bug.
   `sync_to_labelset_source` captures `dataset_ctx = get_active_context()`
   (`vtscore/labels/sync.py:97`), and `get_active_context()` /
@@ -730,14 +730,14 @@ Cross-section interaction agents:
   inside the 200ms debounce window. Both are silent inconsistencies, not
   crashes; file separate findings if they ever bite.
 - ~~**M16.** Sync to source on first read after `_synced_users` marker can
-  still return stale local config if source changes silently.~~ — fixed
+  still return stale local config if source changes silently.~~ - fixed
   alongside two adjacent latent defects in `_ensure_user_loaded`.
   Replaced the `_synced_users: set[str]` "claim-then-sync" marker with
   per-user `_UserSyncState` bookkeeping (`last_version`,
   `last_check_monotonic`, `last_sync_succeeded`, `dirty_keys`) protected
   by a per-user `_per_user_sync_lock` RLock, so:
   (a) the TOCTOU race where a concurrent reader saw the marker before
-  the actual sync had populated the cache is gone — the lock now
+  the actual sync had populated the cache is gone - the lock now
   serialises the decide-and-sync slow path,
   (b) a transient first-sync failure no longer permanently locks the
   user out of sync (`last_sync_succeeded` stays `False` and the slow
@@ -753,12 +753,12 @@ Cross-section interaction agents:
   dirty markers on a successful export (source now matches local).
   Regression tests:
   `tests/io/test_sync_sources.py::TestSyncFromSourceFreshness`
-  (six cases — version-bump detection, first-failure retry, concurrent
+  (six cases - version-bump detection, first-failure retry, concurrent
   reader sees post-sync cache, dirty-key skip on auto re-sync, manual
   sync clears dirty, freshness window avoids repeat probes).
 - ~~**M17.** Legacy migration `_maybe_migrate_legacy_settings_locked` pops keys
   from in-memory cache before per-user disk write; per-user-write
-  failure leaves cache and disk diverged.~~ — investigated and partially
+  failure leaves cache and disk diverged.~~ - investigated and partially
   closed (2026-05-21). The literal ordering claim is **inverted**:
   `_maybe_migrate_legacy_settings_locked` writes the user file
   *before* popping `_server_cache`, and returns early on user-write
@@ -776,29 +776,29 @@ Cross-section interaction agents:
 
 ### Embedding / training
 
-- ~~**M18. `_PeekUnpickler` missing opcode overrides**~~ — fixed in
+- ~~**M18. `_PeekUnpickler` missing opcode overrides**~~ - fixed in
   `vtscore/security/pickle.py`. `FLOAT` (protocol 0 ASCII float) now reads
   the line and pushes `None` instead of paying the `float(readline())`
   parse cost, and `BYTEARRAY8` (protocol 5's dedicated bytearray opcode,
-  not in the original audit entry but the same family of leak — and a
+  not in the original audit entry but the same family of leak - and a
   worse one, since it bypasses `BINBYTES` at the highest protocol) now
   drains the bytes and pushes an empty `bytearray`. `SETITEMS` was
   reviewed and left alone: by the time it runs, its values have already
   been emptied by the existing APPEND/APPENDS/BINBYTES overrides, and
   the peek needs the dict structure intact for `len(media_dict)` /
   `first["media_type"]` in the staging route. As a side-fix, the staging
-  endpoint stopped silently swallowing peek failures — the response
+  endpoint stopped silently swallowing peek failures - the response
   schema grew an `error` field carrying the exception message so the UI
   can distinguish "valid pickle with 0 medias" from "couldn't parse
   this file".
 - ~~**M19.** `embed_text_enriched` crashes (`np.mean` on empty) when text encoder
-  fails and all wrappers return None.~~ — investigated and closed as not a
+  fails and all wrappers return None.~~ - investigated and closed as not a
   real bug (2026-05-21).  `vtscore/media/embedder.py:727-750` explicitly
   guards the empty-list case with `if not embeddings: return
   self.embed_text(text)` immediately before the `np.mean` call, so the
   crash described is unreachable.  Git archaeology confirms the guard has
   been in place since the function was introduced in PR #334 (commit
-  `b2c7bb4a`, 2026-02-28) — the audit's claim was a false positive.
+  `b2c7bb4a`, 2026-02-28) - the audit's claim was a false positive.
   `tests/sorting/test_enrich_descriptions.py::test_enriched_falls_back_when_all_fail`
   already exercises this path.  All other `np.mean` call sites in the
   codebase (`vtscore/eval/metrics.py:53,60`,
@@ -811,7 +811,7 @@ Cross-section interaction agents:
   behaviour for a video with fewer source frames, and a 1-frame video
   genuinely has no temporal variation to encode. The resulting embedding is
   finite, well-defined, and represents the visual content of the frame.
-  Investigation surfaced a *real* nearby bug — silent partial-read failures
+  Investigation surfaced a *real* nearby bug - silent partial-read failures
   inside the same loop (some `cap.read()` calls return `ret=False`, get
   dropped, and the pad step biases the embedding toward the readable
   portion of the file). Fixed by adding a partial-read warning to
@@ -829,7 +829,7 @@ Cross-section interaction agents:
   future `ThreadPoolExecutor` reuse would leak user identity across
   requests.
 - ~~**M23.** `setup_logging` re-running can leave duplicate handlers on
-  non-root loggers.~~ — closed as not-a-bug.
+  non-root loggers.~~ - closed as not-a-bug.
   `vtsearch/logging_config.py:setup_logging` only attaches a
   `StreamHandler` to the root logger, and clears `root.handlers`
   before re-attaching, so root cannot accumulate duplicates. For the
@@ -870,7 +870,7 @@ Cross-section interaction agents:
 
 ### Security
 
-- **M32.** `sanitize_template_value` allows `...` (and worse — any non-`.` /
+- **M32.** `sanitize_template_value` allows `...` (and worse - any non-`.` /
   `..` token of dots).
 - **M33.** `rglob_follow_symlinks` doesn't detect cycles → CPU/RAM DoS on
   circular link layouts.
@@ -884,7 +884,7 @@ Cross-section interaction agents:
 
 ---
 
-## Low — latent / cosmetic / hypothetical
+## Low - latent / cosmetic / hypothetical
 
 - **L1.** `_run_pipeline` returns `None` silently in text mode (no "done"
   signal).
@@ -949,7 +949,7 @@ one PR is far more effective than one-off fixes.
 5. **Embedder identity is its own first-class attribute.** Track the
    detector's *training* embedder separately from the active
    dataset's embedder. Every train/score path must compare them and
-   refuse / clear caches when they differ — don't only compare
+   refuse / clear caches when they differ - don't only compare
    against the dataset.
 
 6. **`X-Dataset-Id` / `X-Detector-Id` headers must be required, not
@@ -976,18 +976,18 @@ one PR is far more effective than one-off fixes.
 
 ## Suggested fix order (highest leverage first)
 
-1. **C1, C2, C3** — gate hand-off + thread-local context
+1. **C1, C2, C3** - gate hand-off + thread-local context
    propagation. One small helper (pattern #1) unblocks 3+ bug
    classes.
-2. **C4** + pattern #4 — embedding-matrix cache invalidation via a
+2. **C4** + pattern #4 - embedding-matrix cache invalidation via a
    `media_revision` counter.
-3. **C7** — clamp `xcal_threshold` to a finite sentinel and assert
+3. **C7** - clamp `xcal_threshold` to a finite sentinel and assert
    no `NaN` in `safe_threshold`.
-4. **C9** + pattern #2 — re-validate every resolved template path
+4. **C9** + pattern #2 - re-validate every resolved template path
    in `SyncSource._resolve_filepath()`.
-5. **C5, C10, C11, C12** — straightforward request-handling and
+5. **C5, C10, C11, C12** - straightforward request-handling and
    frontend-cache fixes once the above patterns are in place.
-6. Pattern #6 — make header presence + context-loaded a hard
+6. Pattern #6 - make header presence + context-loaded a hard
    precondition.
 7. Detector-embedder identity (pattern #5) + C8 (achievement
    uniformity).
@@ -1016,7 +1016,7 @@ Cross-cutting open items that don't fit any single finding above:
   The staging route now surfaces this as an `error` field (no longer
   silent), but a user trying to load an externally-produced legacy
   pickle still gets a hard reject. Add `_codecs.encode` to the
-  allowlist (low risk — it's a codec dispatcher, not RCE) if we want
+  allowlist (low risk - it's a codec dispatcher, not RCE) if we want
   to support those uploads.
   (2) `BINUNICODE` / `BINUNICODE8` are not overridden, so a pickle
   with a multi-MB inline `media_string` (a long document) is still
@@ -1029,7 +1029,7 @@ Cross-cutting open items that don't fit any single finding above:
   `POST /api/detectors/<name>/labels/<element_id>/vote` (and the
   underlying `apply_element_vote_in_data` in
   `vtscore/detectors/labelset_elements.py`) still takes
-  `vote: "good" | "bad"` with toggle-on-same-direction semantics — a
+  `vote: "good" | "bad"` with toggle-on-same-direction semantics - a
   stale-view tab voting against an already-good labelset element
   removes the element from the on-disk labelset, same kind of
   inflation race the media-vote H1 fix eliminated.  Migrating that

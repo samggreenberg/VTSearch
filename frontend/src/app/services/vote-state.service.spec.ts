@@ -224,7 +224,7 @@ describe('VoteStateService', () => {
     it('reconciles local state from the server response, even when the prediction was wrong', () => {
       service.submitToggleVote(5, 'good').subscribe();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      // Server says the state is actually "none" — e.g. another tab raced
+      // Server says the state is actually "none" - e.g. another tab raced
       // ahead of us. The optimistic 'good' must be overridden.
       req.flush({ ok: true, state: 'none', click_time: null });
 
@@ -262,7 +262,7 @@ describe('VoteStateService', () => {
         .flush({ ok: true, state: 'good', click_time: 300 });
 
       // A subsequent stale poll (server reflects pre-vote state) must NOT
-      // re-introduce the optimistic ghost — pendingOptimistic was cleared
+      // re-introduce the optimistic ghost - pendingOptimistic was cleared
       // by reconcileVoteResponse, so the poll's absence of the vote wins.
       service.loadVotes();
       httpMock
@@ -420,7 +420,7 @@ describe('VoteStateService', () => {
       const req = httpMock.expectOne('/api/medias/5/vote');
       req.flush(null, { status: 500, statusText: 'Server Error' });
 
-      // The failed POST must not leave a phantom undo entry — Cmd-Z next
+      // The failed POST must not leave a phantom undo entry - Cmd-Z next
       // would otherwise post a "reversal" of a vote that never happened.
       expect(service.canUndo()).toBeFalse();
     });
@@ -454,7 +454,7 @@ describe('VoteStateService', () => {
         .flush({ ok: true, state: 'none', click_time: null });
       expect(service.canRedo()).toBeTrue();
 
-      // A new vote whose POST fails must NOT wipe the redo stack — the
+      // A new vote whose POST fails must NOT wipe the redo stack - the
       // vote never happened, so the redo entry is still legitimate.
       service.submitToggleVoteAndRecord(2, 'bad', 'b').subscribe({
         next: () => {},

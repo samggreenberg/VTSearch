@@ -13,9 +13,9 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
     For each ``type: "media"`` example, reads the file from
     ``data/example_media/`` and adds it to ``good_votes``:
 
-    * **Match by MD5** — if a loaded media has the same content hash,
+    * **Match by MD5** - if a loaded media has the same content hash,
       that media is voted good (keeping its original dataset origin).
-    * **No match** — the example file is embedded using the dataset's
+    * **No match** - the example file is embedded using the dataset's
       embedder, inserted into the ``medias`` dict as a new item with
       an ``example_media`` origin, and voted good.  This makes it
       available for training (its embedding is in the medias snapshot)
@@ -72,14 +72,14 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
         cids = md5_lookup.get(file_md5, [])
 
         if cids:
-            # Example matches existing dataset media — just vote good.
+            # Example matches existing dataset media - just vote good.
             # System-driven seeding from a detector's saved examples, not a
             # user vote action, so don't credit achievement counters.
             for cid in cids:
                 apply_label(cid, "good", record_achievement=False)
             seeded += 1
         else:
-            # Example is NOT in the dataset — embed and insert as new media.
+            # Example is NOT in the dataset - embed and insert as new media.
             if embedder is None:
                 from vtscore.media import embedders_for_type, get_embedder
 

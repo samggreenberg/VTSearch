@@ -67,7 +67,7 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
         filepath = Path(field_values["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        # Labels format (from the export modal UI) — filter to selected columns
+        # Labels format (from the export modal UI) - filter to selected columns
         if "labels" in results:
             return self._export_labels(results, filepath)
 

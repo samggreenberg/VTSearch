@@ -35,7 +35,7 @@ _entries: list[dict[str, Any]] | None = None
 _loaded_ids: set[str] = set()
 
 # When ``True`` the detector most recently used for scoring is in "find mode"
-# — its labels should NOT be synced back to the detector's saved labelset.
+# - its labels should NOT be synced back to the detector's saved labelset.
 _find_mode: bool = False
 
 

@@ -76,7 +76,7 @@ class TestGetEmbeddingMatrixForSnapRaisesOnNoneEmbedding:
 
     def test_snap_matching_active_ctx_with_none(self):
         """The matching-keys fast path delegates to ``get_embedding_matrix``
-        on the active ctx — the same guard fires there too."""
+        on the active ctx - the same guard fires there too."""
         ctx = DatasetContext("test_snap_match")
         ctx.medias[1] = {"id": 1, "embedding": np.ones(4, dtype=np.float32)}
         ctx.medias[2] = {"id": 2, "embedding": None}

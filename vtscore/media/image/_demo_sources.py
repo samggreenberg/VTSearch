@@ -5,7 +5,7 @@ Builds the :class:`~vtscore.media.base.DemoDataset` list returned by
 + embed dispatcher behind ``ImageMediaType.load_demo_source``.
 
 Both live here rather than on the class because they are pure functions
-of the demo-category constants — they don't touch instance state and
+of the demo-category constants - they don't touch instance state and
 splitting them out keeps ``media_type.py`` focused on the
 ``MediaType`` contract.
 """

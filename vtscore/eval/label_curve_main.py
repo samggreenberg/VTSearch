@@ -44,10 +44,10 @@ def _print_summary(summary: pd.DataFrame) -> None:
 
     Leads with rank-based metrics (AUROC, AP) and the production-path F1
     (``f1_at_xcal``), since VTSearch never trusts the raw score as a
-    probability — it always picks a threshold via cross-calibration.
+    probability - it always picks a threshold via cross-calibration.
     """
     if summary.empty:
-        print("(no rows — every cell was skipped)")
+        print("(no rows - every cell was skipped)")
         return
     for _, row in summary.iterrows():
         # row['n_labels'] is a scalar at runtime but pandas stubs widen it.
@@ -162,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
     if not dataset_clips:
-        print("No datasets loaded — aborting.", file=sys.stderr)
+        print("No datasets loaded - aborting.", file=sys.stderr)
         return 2
 
     categories = None

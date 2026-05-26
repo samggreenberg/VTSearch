@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-import app as app_module  # noqa: F401 — triggers conftest media init
+import app as app_module  # noqa: F401 - triggers conftest media init
 
 # Flask API routes
 # ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ class TestSettingsAPI:
             data="",
             content_type="application/json",
         )
-        # Empty body is a legitimate no-op PUT under the new schema —
+        # Empty body is a legitimate no-op PUT under the new schema -
         # every key is optional, so nothing to apply. Returns 200 with
         # the current settings dict.
         assert res.status_code == 200
@@ -121,7 +121,7 @@ class TestSettingsAPI:
         assert res.status_code == 200
         data = res.get_json()
         assert data["volume"] == 1.0
-        # Theme defaults to ``"system"`` — the frontend resolves this to
+        # Theme defaults to ``"system"`` - the frontend resolves this to
         # the OS ``prefers-color-scheme`` at render time.
         assert data["theme"] == "system"
         assert data["calibrate_count"] == 1
@@ -166,7 +166,7 @@ class TestSettingsAPI:
 
     def test_get_defaults_import_defaults_empty(self, client):
         # Factory defaults: nothing saved means an empty dict, not a
-        # missing key — the frontend reads ``settings.import_defaults...``
+        # missing key - the frontend reads ``settings.import_defaults...``
         # directly and shouldn't have to defend against ``undefined``.
         res = client.get("/api/settings/defaults")
         assert res.status_code == 200
@@ -203,7 +203,7 @@ class TestSettingsAPI:
         assert res.get_json()["show_metadata"] is True
 
     def test_update_label_hint_dismissed(self, client):
-        # Default is False — the hint shows on first session.
+        # Default is False - the hint shows on first session.
         initial = client.get("/api/settings").get_json()
         assert initial["label_hint_dismissed"] is False
 

@@ -175,7 +175,7 @@ PUT /api/detectors/registry/{detector_id}/autorun
 
 **Body:** `{"autorun": true}`
 
-→ `{"ok": true, "autorun": true}` — writes the detector's name into
+→ `{"ok": true, "autorun": true}` - writes the detector's name into
 `autorun_detectors` so `/api/auto-detect` and the CLI
 `--autodetect` flow pick it up.
 
@@ -185,14 +185,14 @@ PUT /api/detectors/registry/{detector_id}/autorun
 POST /api/detectors/registry/load
 ```
 
-**Body:** `{"detector_id": "abc123"}` — pass `null` (or omit the field)
+**Body:** `{"detector_id": "abc123"}` - pass `null` (or omit the field)
 to unload the active detector without loading another one.
 
 → `{"ok": true, "message": "Loading started", "task_id": "..."}` when
 loading; `{"ok": true, "labels_restored": 0, "examples_seeded": 0}`
 when unloading.
 
-Loading is async — subscribe to the `detector-loading-tasks` channel
+Loading is async - subscribe to the `detector-loading-tasks` channel
 on [`/api/events`](events.md) (SSE) for progress. 404 if the detector
 is not in the registry.
 

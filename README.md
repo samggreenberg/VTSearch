@@ -1,6 +1,6 @@
 # VTSearch
 
-A trainable media search tool. VTSearch searches collections of audio clips, images, text paragraphs, videos, and documents using a **detector** — a small trained ranker that scores every item in the collection by how well it matches what you're looking for. You search either by **training a new detector** (vote a handful of items "good" or "bad" and a small neural net learns from your votes to rank the rest of the collection) or by **using an existing detector** (one you saved earlier, exported from another VTSearch instance, or imported from disk). Trained detectors are reusable — apply the same one to any future dataset of the same media type. A natural-language query ("dog barking", "red car in snow") seeds either flow via pretrained embeddings (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text), and also works as a quick stand-alone search when you don't need a trained detector. Several demo datasets are available directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
+A trainable media search tool. VTSearch searches collections of audio clips, images, text paragraphs, videos, and documents using a **detector** - a small trained ranker that scores every item in the collection by how well it matches what you're looking for. You search either by **training a new detector** (vote a handful of items "good" or "bad" and a small neural net learns from your votes to rank the rest of the collection) or by **using an existing detector** (one you saved earlier, exported from another VTSearch instance, or imported from disk). Trained detectors are reusable - apply the same one to any future dataset of the same media type. A natural-language query ("dog barking", "red car in snow") seeds either flow via pretrained embeddings (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text), and also works as a quick stand-alone search when you don't need a trained detector. Several demo datasets are available directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
 
 ## Setup and running tests
 
@@ -20,7 +20,7 @@ You should see output like:
  * Running on http://0.0.0.0:5000
 ```
 
-Open `http://localhost:5000` in your browser. The app starts with no clips loaded — use the menu to load a demo dataset (see below).
+Open `http://localhost:5000` in your browser. The app starts with no clips loaded - use the menu to load a demo dataset (see below).
 
 Press **Ctrl+C** in the terminal to stop the server.
 
@@ -32,11 +32,11 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 
 See [docs/SETUP.md](docs/SETUP.md#running-the-app) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
 
-> **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** — a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
+> **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** - a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
 
 ## Command-line interface
 
-VTSearch provides several CLI workflows for applying detectors to datasets, importing labels, and importing processors — all without starting the web server. See [docs/CLI.md](docs/CLI.md) for the full CLI reference.
+VTSearch provides several CLI workflows for applying detectors to datasets, importing labels, and importing processors - all without starting the web server. See [docs/CLI.md](docs/CLI.md) for the full CLI reference.
 
 ## Loading a demo dataset
 
@@ -81,8 +81,8 @@ You can also load your own data from pickle files or folders via the same menu.
 │   ├── schemas/                    # JSON / OpenAPI schemas
 │   └── utils/                      # build_media_hit helper + offline synthetic-media generators
 ├── static/                         # Angular build output (HTML, JS, CSS, assets)
-├── frontend/                       # Angular SPA source (TypeScript, SCSS) — builds into static/
-├── tests/                          # Test suite (pytest) — grouped by folder (core, api, sorting, datasets, io, …)
+├── frontend/                       # Angular SPA source (TypeScript, SCSS) - builds into static/
+├── tests/                          # Test suite (pytest) - grouped by folder (core, api, sorting, datasets, io, …)
 ├── docs/                           # Extended documentation
 │   ├── HANDOFF.md                  # Project handoff & orientation guide
 │   ├── DEPLOYMENT.md               # Deployment, offline mode, operations
@@ -128,19 +128,19 @@ python -m vtscore.eval --plot-dir eval_output
 
 This runs text-sort and learned-sort evaluations across all demo datasets, prints a summary, and saves visualisation charts as PNGs. See [docs/EVAL.md](docs/EVAL.md) for the full guide, including:
 
-- **[CLI reference](docs/EVAL.md#cli-reference)** — All flags and options for the eval runner.
-- **[Understanding the metrics](docs/EVAL.md#understanding-the-metrics)** — What mAP, P@k, R@k, F1, and other metrics mean.
-- **[Visualisations](docs/EVAL.md#visualisations)** — Charts generated by the eval framework.
-- **[Writing a custom evaluation script](docs/EVAL.md#writing-a-custom-evaluation-script)** — How to sweep over parameters, run voting-iteration simulations, and use the Python API directly.
+- **[CLI reference](docs/EVAL.md#cli-reference)** - All flags and options for the eval runner.
+- **[Understanding the metrics](docs/EVAL.md#understanding-the-metrics)** - What mAP, P@k, R@k, F1, and other metrics mean.
+- **[Visualisations](docs/EVAL.md#visualisations)** - Charts generated by the eval framework.
+- **[Writing a custom evaluation script](docs/EVAL.md#writing-a-custom-evaluation-script)** - How to sweep over parameters, run voting-iteration simulations, and use the Python API directly.
 
 ## Extending with plugins
 
 VTSearch has a plugin architecture for media types, data importers, results exporters, label importers, processor importers, and sync sources. The extending guide is split into three topic-specific docs plus an index:
 
-- **[docs/EXTENDING.md](docs/EXTENDING.md)** — index, authentication providers, dependency management, and a one-stop checklist for every extension type.
-- **[docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md)** — data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources (eight auto-discovered plugin families).
-- **[docs/EXTENDING-media.md](docs/EXTENDING-media.md)** — media types, embedders, clippers, converters, media sources.
-- **[docs/EXTENDING-processors.md](docs/EXTENDING-processors.md)** — detectors, localizers, extractors.
+- **[docs/EXTENDING.md](docs/EXTENDING.md)** - index, authentication providers, dependency management, and a one-stop checklist for every extension type.
+- **[docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md)** - data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources (eight auto-discovered plugin families).
+- **[docs/EXTENDING-media.md](docs/EXTENDING-media.md)** - media types, embedders, clippers, converters, media sources.
+- **[docs/EXTENDING-processors.md](docs/EXTENDING-processors.md)** - detectors, localizers, extractors.
 
 ---
 

@@ -18,7 +18,7 @@ def ensure_torch_configured() -> None:
 
     Thread count comes from :data:`vtscore.config.TORCH_THREADS`, which in
     turn reads ``VTSEARCH_TORCH_THREADS`` (default ``1``).  Safe to call
-    multiple times — the configuration is applied only once.  Call this from
+    multiple times - the configuration is applied only once.  Call this from
     any code path that imports torch before doing work (e.g. ``load_models``,
     ``train_model``).
     """

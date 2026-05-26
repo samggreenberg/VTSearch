@@ -128,10 +128,10 @@ class TestBuildModel:
         assert isinstance(model, torch.nn.Sequential)
 
     def test_build_model_output_is_logits(self):
-        """build_model should NOT include sigmoid — output can be outside [0,1]."""
+        """build_model should NOT include sigmoid - output can be outside [0,1]."""
         from vtscore.training.mlp import build_model
 
-        # Use a seeded generator so the random weights are deterministic —
+        # Use a seeded generator so the random weights are deterministic -
         # without this, the test is flaky because random initialisation can
         # occasionally produce weights that map extreme input into [0, 1].
         gen = torch.Generator().manual_seed(42)
@@ -141,7 +141,7 @@ class TestBuildModel:
         X = torch.ones(1, 32) * 100.0
         with torch.no_grad():
             logit = model(X).item()
-        # Raw logit is unbounded — with extreme input it should land outside [0, 1]
+        # Raw logit is unbounded - with extreme input it should land outside [0, 1]
         assert isinstance(logit, float)
         assert logit < 0.0 or logit > 1.0, f"Expected unbounded logit outside [0,1] with extreme input, got {logit}"
 
@@ -312,7 +312,7 @@ class TestTrainModelEpochs:
 
 class TestCalibrationSkippedForTinyLabels:
     """``train_and_score`` should skip cross-calibration when there are
-    too few labels for the result to be useful — regardless of
+    too few labels for the result to be useful - regardless of
     ``safe_thresholds``.  Calibration costs two 200-epoch trainings per
     call, and below the blend's ramp floor those trainings are either
     discarded (safe_thresholds=True) or trained on too little data to
@@ -320,7 +320,7 @@ class TestCalibrationSkippedForTinyLabels:
 
     def test_skips_calibration_when_safe_and_under_six_labels(self):
         """With safe_thresholds=True and n_labels<6, calculate_cross_calibration_threshold
-        must not be invoked — its output is entirely discarded by the blender."""
+        must not be invoked - its output is entirely discarded by the blender."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
@@ -343,7 +343,7 @@ class TestCalibrationSkippedForTinyLabels:
 
     def test_skips_calibration_when_safe_off_and_under_six_labels(self):
         """With safe_thresholds=False and n_labels<6, calibration is still
-        skipped — fold trainings are unreliable with so few labels, and the
+        skipped - fold trainings are unreliable with so few labels, and the
         gate is purely a function of n_labels."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
@@ -475,7 +475,7 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache is not None
         first_key = det_ctx.calibration_cache[0]
 
-        # Flip one media's label — calibration must recompute.
+        # Flip one media's label - calibration must recompute.
         app_module.good_votes.pop(3)
         app_module.bad_votes[3] = None
 
@@ -647,7 +647,7 @@ class TestLearnedSortAsync:
         assert first["status"] == "done"
         first_job_id = first["job_id"]
 
-        # Second call with the same signature should reuse the cached result —
+        # Second call with the same signature should reuse the cached result -
         # job_id is the original job's id and we get back done immediately
         # without ``wait=true``.
         second = client.post("/api/learned-sort", json={}).get_json()

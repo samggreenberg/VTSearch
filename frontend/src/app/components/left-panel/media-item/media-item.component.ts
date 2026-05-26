@@ -71,7 +71,7 @@ export class MediaItemComponent implements OnChanges {
     const w = x1 - x0;
     const h = y1 - y0;
     if (w <= 0 || h <= 0) return null;
-    // Hide near-full-image boxes — they're the legacy single-vector fallback
+    // Hide near-full-image boxes - they're the legacy single-vector fallback
     // and would just outline the whole thumbnail.
     if (w >= 0.99 && h >= 0.99) return null;
     return {

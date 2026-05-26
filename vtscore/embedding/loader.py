@@ -1,4 +1,4 @@
-"""Model loading and initialisation — delegates to the media type registry.
+"""Model loading and initialisation - delegates to the media type registry.
 
 All embedding models are now owned by their respective
 :class:`~vtscore.media.base.MediaType` instances and are loaded **lazily**
@@ -31,7 +31,7 @@ def get_torch_device():
     """Return the preferred ``torch.device`` for MLP training / scoring.
 
     Resolves :data:`vtscore.config.DEVICE` (``VTSEARCH_DEVICE``, default
-    ``"auto"``) to a concrete device — ``cuda`` when available, ``mps`` on
+    ``"auto"``) to a concrete device - ``cuda`` when available, ``mps`` on
     Apple silicon, or ``cpu``.  Imports torch lazily.
     """
     import torch  # noqa: PLC0415
@@ -43,7 +43,7 @@ def _detect_cuda_devices() -> int:
     """Return the count of visible CUDA GPUs, or 0 if none / torch missing.
 
     Imports torch lazily so callers (e.g. settings default factories) can
-    run before torch is loaded. All exceptions degrade to ``0`` — a missing
+    run before torch is loaded. All exceptions degrade to ``0`` - a missing
     or broken CUDA stack must not block startup.
     """
     try:
@@ -149,7 +149,7 @@ def _make_console_progress(original_callback):
             _last_base[0] = base
             _last_msg[0] = message
         elif message and message != _last_msg[0]:
-            # New phase message — print on its own line
+            # New phase message - print on its own line
             if _on_progress_line[0]:
                 sys.stdout.write("\n")
                 _on_progress_line[0] = False
@@ -175,7 +175,7 @@ def predict_embedders_to_preload(
       and recognised, otherwise the default embedder for
       ``entry["media_type"]``.  A set-but-unrecognised ``embedder`` (e.g.
       the embedder was renamed or removed) also falls back to the media
-      type's default rather than being silently dropped — losing the
+      type's default rather than being silently dropped - losing the
       optimisation entirely on a typo is worse than warming the wrong
       embedder, which the user can still override.
     - For every media type in *extra_media_types*: the default embedder
@@ -190,7 +190,7 @@ def predict_embedders_to_preload(
 
     Detector entries written before the ``embedder`` field existed have
     ``entry["embedder"] == ""``, so they fall through to the media type's
-    default — matching the previous behaviour for unmigrated state.
+    default - matching the previous behaviour for unmigrated state.
 
     Order reflects discovery order (extras first so a solo-mode user
     isn't stuck behind unrelated dataset warmups, then datasets, then
@@ -280,7 +280,7 @@ def smart_preload_in_background() -> None:
     """Kick a daemon thread that warms any predicted embedders not yet loaded.
 
     Idempotent: embedders whose model is already in memory are skipped.
-    Failures are swallowed because this is a best-effort optimisation —
+    Failures are swallowed because this is a best-effort optimisation -
     the real load path will retry on first use.
     """
     import threading

@@ -1,4 +1,4 @@
-"""Audio embedder — CLAP Music & Speech (laion/larger_clap_music_and_speech)."""
+"""Audio embedder - CLAP Music & Speech (laion/larger_clap_music_and_speech)."""
 
 from __future__ import annotations
 

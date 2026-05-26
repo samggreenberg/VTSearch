@@ -1,4 +1,4 @@
-# VTSearch — LabBench dependencies (image search with SigLIP only)
+# VTSearch - LabBench dependencies (image search with SigLIP only)
 #
 # Pared-down requirements for the LabBench deployment: browsing/voting
 # on an image dataset with the SigLIP embedder. Skips audio, video,

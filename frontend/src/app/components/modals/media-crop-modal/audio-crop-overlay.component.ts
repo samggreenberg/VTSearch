@@ -28,7 +28,7 @@ const HANDLE_HIT_PX = 12;
 })
 export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
   @Input() audioUrl = '';
-  /** Original audio file — used to decode the waveform. */
+  /** Original audio file - used to decode the waveform. */
   @Input() audioFile?: File;
   @Output() applied = new EventEmitter<AudioCropResult>();
   @Output() cancelled = new EventEmitter<void>();
@@ -161,7 +161,7 @@ export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
       this.dragMode = 'move';
       this.dragOffsetSec = sec - this.start;
     } else {
-      // Click outside the selection — reposition closer handle.
+      // Click outside the selection - reposition closer handle.
       const distToStart = Math.abs(px - x1);
       const distToEnd = Math.abs(px - x2);
       if (distToStart < distToEnd) {

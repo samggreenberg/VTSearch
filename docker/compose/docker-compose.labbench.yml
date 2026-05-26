@@ -1,4 +1,4 @@
-# LabBench CPU deployment — image search with SigLIP only.
+# LabBench CPU deployment - image search with SigLIP only.
 #
 # Streamlined for the LabBench environment: browsing/voting on images
 # with the SigLIP embedder. The SigLIP weights are baked into the image

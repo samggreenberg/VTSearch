@@ -63,7 +63,7 @@ class TestFindLabel:
         The dataset to score against comes exclusively from the
         ``X-Dataset-Id`` header set by ``before_request``. An extra
         ``dataset_id`` in the body must fail schema validation rather
-        than silently override ``g._dataset_context`` — which used to
+        than silently override ``g._dataset_context`` - which used to
         let a confused client wipe one detector's votes while the UI
         thought it was labeling a different dataset.
         """

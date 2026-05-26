@@ -2,18 +2,18 @@
 
 Covers four routes in ``vtsearch/routes/eval.py``:
 
-* ``POST /api/labeling-progress``                — :class:`LabelingProgressResponseSchema`
-* ``GET  /api/labeling-status``                  — :class:`LabelingStatusResponseSchema`
-* ``GET  /api/indicator-score-history``          — :class:`IndicatorScoreHistoryQuerySchema`
+* ``POST /api/labeling-progress``                - :class:`LabelingProgressResponseSchema`
+* ``GET  /api/labeling-status``                  - :class:`LabelingStatusResponseSchema`
+* ``GET  /api/indicator-score-history``          - :class:`IndicatorScoreHistoryQuerySchema`
                                                     → :class:`IndicatorScoreHistoryResponseSchema`
-* ``POST /api/eval/train-and-score``             — :class:`EvalTrainAndScoreRequestSchema`
+* ``POST /api/eval/train-and-score``             - :class:`EvalTrainAndScoreRequestSchema`
                                                     → :class:`EvalTrainAndScoreResponseSchema`
-* ``GET  /api/eval/train-and-score/result``      — :class:`EvalTrainAndScoreResultQuerySchema`
+* ``GET  /api/eval/train-and-score/result``      - :class:`EvalTrainAndScoreResultQuerySchema`
                                                     → :class:`EvalTrainAndScoreResponseSchema`
 
 The per-step ``error_cost`` / ``stability`` / ``diversity`` lists are
 declared as ``fields.List(fields.Dict())`` rather than fully nested
-schemas — the inner shapes are computed by
+schemas - the inner shapes are computed by
 ``vtscore.detectors.labeling_progress`` and round-trip cleanly as
 plain dicts.
 
@@ -57,7 +57,7 @@ class StatusIndicatorSchema(Schema):
     ``reason`` is the human-readable explanation.  Metric-specific keys
     (``cost``, ``flips``, ``diversity_level``, ``avg_flip_rate``, …) flow
     through unchanged via ``unknown = "include"`` plus :meth:`_include_extras`
-    — the :mod:`vtscore.detectors.labeling_progress` analyzer remains the
+    - the :mod:`vtscore.detectors.labeling_progress` analyzer remains the
     source of truth for that shape."""
 
     status = fields.String(required=True)

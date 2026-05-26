@@ -125,7 +125,7 @@ class TestEntryPointDiscovery:
 
     def test_no_group_means_no_entry_point_scan(self, monkeypatch):
         # If a registry has no entry_point_group, importlib.metadata is never
-        # consulted — even if our patched version would have happily loaded
+        # consulted - even if our patched version would have happily loaded
         # something.
         called = {"count": 0}
 

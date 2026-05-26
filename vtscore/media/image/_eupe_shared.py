@@ -4,22 +4,22 @@ EUPE (Efficient Universal Perception Encoder, `facebookresearch/EUPE`)
 is Meta's distillation-based "universal" ViT-B/16.  It's exposed as two
 embedders that share the same backbone but differ in what they expose:
 
-- ``eupe_single`` — CLS-pooled single vector per image; fast, small
+- ``eupe_single`` - CLS-pooled single vector per image; fast, small
   storage, no region search.
-- ``eupe_patch``  — same CLS vector plus a per-patch grid + HAC region
+- ``eupe_patch``  - same CLS vector plus a per-patch grid + HAC region
   tree; ~30× slower per image and ~100× more storage, but enables region
   similarity and region-aware MLP scoring.
 
 EUPE's weights mirror at ``facebook/EUPE-ViT-B`` are **ungated** (no HF
 token needed), but the **outputs** are bound by Meta's FAIR Noncommercial
-Research Licence — embeddings, datasets and detectors produced via EUPE
+Research Licence - embeddings, datasets and detectors produced via EUPE
 inherit that restriction.  Both variants surface that via
 :attr:`license_notice` so the embedder picker shows a warning chip
 before users opt in.
 
 EUPE's attention path uses ``torch.nn.functional.scaled_dot_product_attention``
 which **does not return weights**, so we don't have a real CLS→patch
-attention map — :attr:`patch_saliency` falls back to a CLS-cosine-similarity
+attention map - :attr:`patch_saliency` falls back to a CLS-cosine-similarity
 proxy (softmax of each patch's cosine similarity to the CLS vector).
 See :func:`vtscore.media.patch_embed.eupe_features_to_patch_output`
 for the adapter.
@@ -53,7 +53,7 @@ _IMAGENET_STD = (0.229, 0.224, 0.225)
 LICENSE_NOTICE = (
     "EUPE is released under Meta's FAIR Noncommercial Research Licence. "
     "Embeddings, datasets, and detectors produced with EUPE inherit that "
-    "restriction — they may only be used for noncommercial research. "
+    "restriction - they may only be used for noncommercial research. "
     "Pick a different image embedder if your use case is commercial."
 )
 

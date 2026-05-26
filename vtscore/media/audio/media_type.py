@@ -1,4 +1,4 @@
-"""Audio media type — WAV/MP3/FLAC/OGG/M4A files."""
+"""Audio media type - WAV/MP3/FLAC/OGG/M4A files."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def generate_waveform_thumbnail_from_file(file_path: Path, *, size: int = _THUMB
 
 
 class AudioMediaType(MediaType):
-    """Handles audio medias — file import, HTTP serving, and demo datasets.
+    """Handles audio medias - file import, HTTP serving, and demo datasets.
 
     Embedding is handled by :class:`~vtscore.media.audio.embedder_clap.AudioClapEmbedder`.
     """

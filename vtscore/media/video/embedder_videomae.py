@@ -1,10 +1,10 @@
-"""Video embedder — VideoMAE v2 (OpenGVLab/VideoMAEv2-Base).
+"""Video embedder - VideoMAE v2 (OpenGVLab/VideoMAEv2-Base).
 
 VideoMAE v2 is a vision-only video encoder pretrained with a masked
 autoencoder objective on a large action-recognition corpus. Compared
 to X-CLIP / LanguageBind (which optimise for video-text alignment) it
 produces noticeably stronger motion / action features at the cost of a
-text tower — there is no paired text encoder, so :meth:`embed_text`
+text tower - there is no paired text encoder, so :meth:`embed_text`
 returns ``None`` and :attr:`supports_text` is ``False``. Use it when
 the dataset is mostly about *what is happening* rather than *what the
 caption says*; pair with image-/text-based detectors for hybrid flows.
@@ -28,7 +28,7 @@ from vtscore.media.embedder import (
 )
 from vtscore.media.video._frame_sampling import sample_video_frames
 
-# ImageNet normalisation — VideoMAE's standard preprocessing pipeline.
+# ImageNet normalisation - VideoMAE's standard preprocessing pipeline.
 _IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
@@ -41,7 +41,7 @@ _IMAGE_SIZE = 224
 def _preprocess_frames(frames: list) -> np.ndarray:
     """Resize, center-crop, and normalise PIL Images for VideoMAE v2.
 
-    Returns a ``(T, C, H, W)`` ``float32`` array — the caller wraps it
+    Returns a ``(T, C, H, W)`` ``float32`` array - the caller wraps it
     in a batch dimension to produce VideoMAE's expected
     ``(B, T, C, H, W)`` input.
     """
@@ -70,7 +70,7 @@ def _pool_features(outputs: Any) -> Any:
     """Reduce a VideoMAE forward-pass output to a single ``(B, D)`` tensor.
 
     Different VideoMAE checkpoints expose features under different
-    attribute names — the original transformers ``VideoMAEModel`` exposes
+    attribute names - the original transformers ``VideoMAEModel`` exposes
     ``last_hidden_state``, while OpenGVLab's custom remote-code variant
     sometimes returns a raw tensor or a ``pooler_output``. We probe the
     common shapes and mean-pool patch tokens when needed.
@@ -84,7 +84,7 @@ def _pool_features(outputs: Any) -> Any:
         return pooled
     hidden = getattr(outputs, "last_hidden_state", None)
     if isinstance(hidden, torch.Tensor):
-        # (B, T*H*W, D) — no CLS token in VideoMAE, so mean-pool every patch.
+        # (B, T*H*W, D) - no CLS token in VideoMAE, so mean-pool every patch.
         return hidden.mean(dim=1)
     # Fallback: assume tuple-like with the feature tensor first.
     first = outputs[0]
@@ -96,7 +96,7 @@ class VideoVideoMAEEmbedder(MediaEmbedder):
 
     * Videos -> 768-dimensional vectors via VideoMAE's video encoder
       (16 sampled frames, mean-pooled over patch tokens, L2-normalised).
-    * Text queries are **not** supported — VideoMAE has no text tower,
+    * Text queries are **not** supported - VideoMAE has no text tower,
       so :meth:`embed_text` returns ``None`` and the frontend hides
       text-search UI for datasets embedded with this model.
     """
@@ -196,7 +196,7 @@ class VideoVideoMAEEmbedder(MediaEmbedder):
             return None
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
-        """VideoMAE is vision-only — text queries are unsupported.
+        """VideoMAE is vision-only - text queries are unsupported.
 
         Returns ``None`` so :func:`vtsearch.routes.media.embed.embed_text`
         and other callers can surface the "this embedder doesn't support

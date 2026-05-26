@@ -56,7 +56,7 @@ class TestEmptySnapshot:
 
 class TestLabelResolution:
     def test_invalid_labels_are_skipped(self, det_ctx):
-        # ``maybe`` is not a recognised label — counts as 0 resolved.
+        # ``maybe`` is not a recognised label - counts as 0 resolved.
         entries = [_audio_entry(1, "maybe")]
         resolved, trained = apply_and_retrain("test-det", det_ctx, entries, "Test")
         assert resolved == 0
@@ -228,7 +228,7 @@ class TestPersistenceFailureIsTransactional:
         assert det_ctx.training_medias == {}
 
     def test_sync_failure_preserves_prior_votes(self, det_ctx, monkeypatch):
-        """A pre-existing vote on the context must survive the rollback —
+        """A pre-existing vote on the context must survive the rollback -
         the snapshot restores the state at apply_and_retrain entry, not an
         unconditional clear.
         """

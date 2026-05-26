@@ -534,7 +534,7 @@ class TestConverterRegistrySourceFilter:
 
 
 # ===========================================================================
-# /api/converters endpoint — source filter
+# /api/converters endpoint - source filter
 # ===========================================================================
 
 

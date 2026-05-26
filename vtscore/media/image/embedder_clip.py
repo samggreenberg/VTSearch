@@ -1,4 +1,4 @@
-"""Image embedder — OpenAI CLIP (openai/clip-vit-base-patch32)."""
+"""Image embedder - OpenAI CLIP (openai/clip-vit-base-patch32)."""
 
 from __future__ import annotations
 

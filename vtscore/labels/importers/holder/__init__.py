@@ -1,4 +1,4 @@
-"""Holder label importer — import labels from a Holder package.
+"""Holder label importer - import labels from a Holder package.
 
 Given a *holderID*, this importer reads the ``Good`` and ``Bad`` folders
 from the Holder package.  Each folder contains ``contentID`` entries with
@@ -6,14 +6,14 @@ per-entry metadata: ``{mediaID, md5, media_url, media_type}``.
 
 The returned label dicts include:
 
-- ``md5`` and ``label`` — for standard VTSearch label matching.
-- ``origin`` — reconstructed to match the ReCaller importer's per-media
+- ``md5`` and ``label`` - for standard VTSearch label matching.
+- ``origin`` - reconstructed to match the ReCaller importer's per-media
   origin format, enabling origin-based matching::
 
       {"importer": "recaller", "params": {"contentID": "...", ...}}
 
-- ``origin_name`` — set to the ``contentID``.
-- ``metadata`` — carries ``{contentID, mediaID, media_url, media_type}``
+- ``origin_name`` - set to the ``contentID``.
+- ``metadata`` - carries ``{contentID, mediaID, media_url, media_type}``
   so that these fields survive re-export (e.g. back to Holder).
 """
 

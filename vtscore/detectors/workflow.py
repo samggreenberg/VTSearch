@@ -30,14 +30,14 @@ def apply_and_retrain(  # noqa: C901
     resolved entries) is fed to :func:`train_and_score` *before* any vote is
     written to ``det_ctx`` or persisted to disk.  If training raises, the
     detector's in-memory votes, persisted labelset, and active model are all
-    left untouched — so a failed retrain can never leave a vote live with a
+    left untouched - so a failed retrain can never leave a vote live with a
     stale model behind it (audit finding H7).
 
     Persistence rollback: votes are committed to ``det_ctx`` *before*
     ``sync_labels_to_loaded_detector`` writes the merged labelset to disk,
     because the sync reads votes from the active context.  If the disk write
     fails (e.g. ``os.replace`` EBUSY/ENOSPC), the in-memory votes are rolled
-    back to their pre-call state and the exception is re-raised — so a
+    back to their pre-call state and the exception is re-raised - so a
     failed save never leaves votes live in memory while the on-disk
     labelset omits them (audit finding H30).
 
@@ -90,7 +90,7 @@ def apply_and_retrain(  # noqa: C901
                 proposed_bad[cid] = None
 
         # 3) Try retraining on the proposed votes first.  If this raises,
-        #    nothing has been mutated yet — the detector stays in its
+        #    nothing has been mutated yet - the detector stays in its
         #    prior consistent state and the exception propagates.
         new_model = None
         new_threshold = 0.5
@@ -128,8 +128,8 @@ def apply_and_retrain(  # noqa: C901
         #    stale after a failed save) and achievements live in a
         #    separate per-user JSON whose rollback would race with other
         #    workers.  The vote dicts, region boxes, label history, click
-        #    times, and click counter — the inputs to retrain and to the
-        #    on-disk labelset — are what must stay aligned with disk.
+        #    times, and click counter - the inputs to retrain and to the
+        #    on-disk labelset - are what must stay aligned with disk.
         saved_good_votes = dict(det_ctx.good_votes)
         saved_bad_votes = dict(det_ctx.bad_votes)
         saved_region_boxes = dict(det_ctx.vote_region_boxes)

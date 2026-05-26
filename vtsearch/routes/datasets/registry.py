@@ -234,7 +234,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
             unregister_context(dataset_id)
             _reg_remove_loaded(dataset_id)
             gc.collect()
-            tracker.update("idle", "", 0, 0, error="Out of memory — dataset too large.", step=None, total_steps=None)
+            tracker.update("idle", "", 0, 0, error="Out of memory - dataset too large.", step=None, total_steps=None)
         except Exception as e:
             import traceback as _tb
 

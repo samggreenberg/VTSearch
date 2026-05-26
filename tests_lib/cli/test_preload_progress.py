@@ -76,7 +76,7 @@ class TestMakeConsoleProgress:
 
     def test_progress_bar_completes_with_newline(self, capsys):
         """A completed bar should be terminated with a newline when flushed
-        or when a different message arrives — but not auto-finalized at 100%
+        or when a different message arrives - but not auto-finalized at 100%
         (so timed_progress ticker updates can keep overwriting in place).
         """
         cb = _make_console_progress(lambda *a, **kw: None)
@@ -275,7 +275,7 @@ class TestPredictEmbeddersToPreload:
     def test_detector_with_unrecognised_embedder_falls_back_to_default(self):
         # When the recorded embedder is no longer registered (renamed,
         # removed, typo) fall back to the media type's default rather than
-        # silently skipping — losing the optimisation entirely is worse
+        # silently skipping - losing the optimisation entirely is worse
         # than warming the wrong embedder.
         fake_default = MagicMock()
         fake_default.name = "siglip"
@@ -292,7 +292,7 @@ class TestPredictEmbeddersToPreload:
     def test_dataset_with_unrecognised_embedder_falls_back_to_default(self):
         # Same hardening on the dataset side: a set-but-invalid embedder
         # name (e.g. embedder removed between sessions) shouldn't silently
-        # drop the preload — fall back to the media type's default.
+        # drop the preload - fall back to the media type's default.
         fake_default = MagicMock()
         fake_default.name = "clap"
         with (
@@ -394,7 +394,7 @@ class TestInterceptWeightLoadingProgress:
         calls = []
 
         with intercept_weight_loading_progress(lambda *a: calls.append(a), "test"):
-            x = torch.zeros(3, 3)  # noqa: F841 — no model loading, just tensor creation
+            x = torch.zeros(3, 3)  # noqa: F841 - no model loading, just tensor creation
 
         assert len(calls) == 0
 
@@ -443,7 +443,7 @@ class TestInterceptWeightLoadingProgress:
 
             orig = tm.set_module_tensor_to_device  # pyright: ignore[reportAttributeAccessIssue]
         except (ImportError, AttributeError):
-            # accelerate not installed — patch it onto transformers.modeling_utils
+            # accelerate not installed - patch it onto transformers.modeling_utils
             # so the interceptor can find it
             import transformers.modeling_utils as tm
 
@@ -722,7 +722,7 @@ class TestTimedProgress:
             calls.append((status, message, current, total))
 
         with timed_progress(cb, "loading", "Importing torch…", 1, 2):
-            pass  # fast — no tick fires
+            pass  # fast - no tick fires
 
         assert len(calls) >= 1
         assert calls[0] == ("loading", "Importing torch…", 1, 2)
@@ -756,7 +756,7 @@ class TestTimedProgress:
         # Should have the initial message plus at least one timed update
         timed_calls = [c for c in calls if "(" in c[1]]
         assert len(timed_calls) >= 1
-        # Check format: "Importing torch… (1s)" / "(2s)" — possibly extended with
+        # Check format: "Importing torch… (1s)" / "(2s)" - possibly extended with
         # ", N modules" when sys.modules grew during the block.
         assert any("(1s" in c[1] or "(2s" in c[1] for c in timed_calls)
         # All calls should preserve status, current, total

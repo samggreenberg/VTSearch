@@ -149,7 +149,7 @@ describe('ThemeService', () => {
     httpMock.expectOne('/api/settings').flush({});
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     media._fireChange(true);
-    // Still dark — user picked dark explicitly.
+    // Still dark - user picked dark explicitly.
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 

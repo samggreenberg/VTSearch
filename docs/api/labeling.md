@@ -77,7 +77,7 @@ Each metric has a `status` of `"red"`, `"yellow"`, or `"green"`.
 GET /api/indicator-score-history
 ```
 
-**Query params:** `metric` — one of `"smart"`, `"stable"`, `"diverse"`.
+**Query params:** `metric` - one of `"smart"`, `"stable"`, `"diverse"`.
 
 → `{"metric": "smart", "history": [...]}`
 

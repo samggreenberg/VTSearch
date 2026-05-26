@@ -1,7 +1,7 @@
 # Embedding `vtscore` in Your Application
 
 Most readers reach for `vtscore` because they want to add VTSearch's
-detector workflow to an existing application — a Django app, a FastAPI
+detector workflow to an existing application - a Django app, a FastAPI
 backend, a Jupyter notebook pipeline, a CLI tool. This guide walks
 through what that looks like, what hooks the library expects you to
 install, and what the resulting code shape looks like.
@@ -24,7 +24,7 @@ describes the general pattern in less code than `vtsearch` does.
 
 ## What you need to install
 
-`vtscore` ships with reasonable defaults — out of the box, you can do
+`vtscore` ships with reasonable defaults - out of the box, you can do
 this from any Python process:
 
 ```python
@@ -34,7 +34,7 @@ from vtscore.training import train_model
 
 medias = {}
 load_dataset_from_folder("/path", media_type="audio", medias=medias)
-# train_model(...) works on raw arrays — no setup needed
+# train_model(...) works on raw arrays - no setup needed
 ```
 
 The library only requires explicit setup when you want to:
@@ -51,7 +51,7 @@ Each of these has a hook. Install only the ones you need.
 
 ### Hook 1: `register_core_config_builder`
 
-By default, `CoreConfig.from_settings()` raises `RuntimeError` — the
+By default, `CoreConfig.from_settings()` raises `RuntimeError` - the
 library refuses to silently fall back to a guess. Install a builder that
 constructs a `CoreConfig` from your config source:
 
@@ -60,7 +60,7 @@ from pathlib import Path
 from vtscore.config import CoreConfig, register_core_config_builder
 
 def _build_core_config() -> CoreConfig:
-    # Your config source — env vars, settings JSON, database row, …
+    # Your config source - env vars, settings JSON, database row, …
     return CoreConfig(
         data_dir=Path("/var/lib/myapp/data"),
         saved_datasets_dir=Path("/var/lib/myapp/data/datasets"),
@@ -117,8 +117,8 @@ Then your request middleware sets the `ContextVar`s on each incoming
 request, and library calls in handlers see the right context
 automatically.
 
-If your application **isn't** request-oriented — say it's a worker that
-processes one dataset at a time — skip this hook entirely and use
+If your application **isn't** request-oriented - say it's a worker that
+processes one dataset at a time - skip this hook entirely and use
 `set_thread_dataset_context()` / `set_thread_detector_context()` (or
 the `override_*_context()` context managers) directly.
 
@@ -143,7 +143,7 @@ register_setting_persister("safe_thresholds", _persist_safe_thresholds)
 ```
 
 If you don't install persisters, library code can still call
-`set_inclusion(5)` — the value just won't survive a process restart.
+`set_inclusion(5)` - the value just won't survive a process restart.
 That's a fine choice for many apps.
 
 ## Minimal integration: a script
@@ -156,7 +156,7 @@ from pathlib import Path
 import numpy as np, torch
 
 from vtscore.config import CoreConfig, register_core_config_builder
-from vtscore.media import audio  # noqa: F401 — registers MediaType + embedders
+from vtscore.media import audio  # noqa: F401 - registers MediaType + embedders
 from vtscore.datasets.loader import load_dataset_from_folder
 from vtscore.training import train_model, calculate_cross_calibration_threshold
 
@@ -179,7 +179,7 @@ load_dataset_from_folder(Path("/data/audio"), media_type="audio", medias=medias)
 # train, score, export, …
 ```
 
-No context resolver, no persister — for a one-shot script there's
+No context resolver, no persister - for a one-shot script there's
 nothing to persist between processes anyway.
 
 ## Multi-request integration: a web app
@@ -255,7 +255,7 @@ def list_medias():
     return snapshot_medias()        # operates on the resolved DatasetContext
 ```
 
-The pattern is the same for Django, Flask, Starlette, aiohttp, etc. —
+The pattern is the same for Django, Flask, Starlette, aiohttp, etc. -
 only the middleware mechanics differ.
 
 ## Multi-thread integration: a worker pool
@@ -278,7 +278,7 @@ def score_one(dataset_ctx: DatasetContext, detector_ctx: DetectorContext) -> dic
     set_thread_detector_context(detector_ctx)
     # Re-derive the detector's MLP from its saved origins. Pass
     # detector_ctx.embedder so the re-embedded vectors match the embedder
-    # the detector was originally trained with — never the media type's
+    # the detector was originally trained with - never the media type's
     # default, which may have changed since save.
     good_origins, bad_origins = origins_from_labelset(detector_ctx.labelset)
     train_detector_from_origins(
@@ -298,20 +298,20 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
 
 Notes on the multi-thread story:
 
-- `train_model` is thread-safe — it uses `torch.random.fork_rng()` to
+- `train_model` is thread-safe - it uses `torch.random.fork_rng()` to
   isolate its RNG and a local `torch.Generator` for the model weights.
 - The state lock (`_state_lock` in `vtscore/state/core.py`) is an
   `RLock`, so one public function can call another while holding the
   lock without deadlock.
 - Per-thread progress callbacks are available via
-  `vtscore.concurrency.progress.set_thread_progress(cb)` — set one in
+  `vtscore.concurrency.progress.set_thread_progress(cb)` - set one in
   each worker and the long-running ops report to that callback only,
   not a shared global.
 
 What the library does **not** do is supply a job manager. If you want a
 single-slot pending-job system, look at `vtscore.concurrency.JobManager`
 (used by the app's learned-sort and eval routes). If you want
-something fancier — a Celery integration, a Kubernetes operator —
+something fancier - a Celery integration, a Kubernetes operator -
 that's your code.
 
 ## Persistent storage
@@ -321,12 +321,12 @@ that's your code.
 
 | What | Where | Format |
 |------|-------|--------|
-| Saved dataset pickles | `CoreConfig.saved_datasets_dir` | `pickle.dump((medias, embeddings))` — the **only** sanctioned vector store |
+| Saved dataset pickles | `CoreConfig.saved_datasets_dir` | `pickle.dump((medias, embeddings))` - the **only** sanctioned vector store |
 | Detector labelsets | `CoreConfig.detectors_dir / "<name>.json"` | JSON; origins + labels only, never weights |
 | Embedder model cache | `CoreConfig.data_dir / "models"` | HuggingFace / torch cache layout |
 
-If you want a different layout — say, store detectors in your database
-instead of on disk — you have two options:
+If you want a different layout - say, store detectors in your database
+instead of on disk - you have two options:
 
 1. **Implement a `LabelsetSource` plugin.** Sources sync detector
    labels bidirectionally with an external store (see
@@ -338,7 +338,7 @@ instead of on disk — you have two options:
    your DB equivalent is straightforward. This is more invasive but
    gives full control.
 
-For datasets, the analogous plugin is `MediaSource` — implement one
+For datasets, the analogous plugin is `MediaSource` - implement one
 that resolves an `Origin` back to a file pulled from your storage layer
 (S3, GCS, HDFS, …). See [extending/media-types.md](extending/media-types.md).
 
@@ -361,12 +361,12 @@ To port this idea to your own app:
 - Replace `flask.g` with your request-local store (a `ContextVar`,
   request-scoped dependency injection, etc.).
 - Build a per-user `CoreConfig` in your `register_core_config_builder`
-  callback — point `data_dir` / `saved_datasets_dir` / `detectors_dir`
+  callback - point `data_dir` / `saved_datasets_dir` / `detectors_dir`
   at the per-user paths.
 - Build a per-user `DatasetContext` / `DetectorContext` in your
   resolver hooks.
 
-The library doesn't care that the contexts are per-user — they're just
+The library doesn't care that the contexts are per-user - they're just
 keyed by ID strings.
 
 ## Things you don't need to install
@@ -374,12 +374,12 @@ keyed by ID strings.
 The library has no required hooks. If you're writing a one-shot script,
 you can ignore all of the above and just import what you need:
 
-- `from vtscore.training import train_model` — works directly on numpy
+- `from vtscore.training import train_model` - works directly on numpy
   arrays, no setup required.
-- `from vtscore.embedding.helpers import embed_text_query, embed_image_file` —
+- `from vtscore.embedding.helpers import embed_text_query, embed_image_file` -
   works as long as the relevant `MediaType` has been imported (which
   registers the default embedder).
-- `from vtscore.datasets.loader import load_dataset_from_folder` —
+- `from vtscore.datasets.loader import load_dataset_from_folder` -
   works if you don't call `CoreConfig.from_settings()` anywhere.
 
 The library is designed to scale from "one-line numpy operation" to "a

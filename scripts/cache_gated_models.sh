@@ -5,10 +5,10 @@
 #
 # Two embedders need a host-side cache step:
 #
-#   * DINOv3  (facebook/dinov3-vitb16-pretrain-lvd1689m) — gated under Meta's
+#   * DINOv3  (facebook/dinov3-vitb16-pretrain-lvd1689m) - gated under Meta's
 #     research licence; you must accept it on HF and provide an HF token here.
 #   * EUPE    (facebookresearch/EUPE, ViT-B/16 LVD-1689M weights mirrored on
-#     facebook/EUPE-ViT-B) — the HF mirror is ungated and needs no token, but
+#     facebook/EUPE-ViT-B) - the HF mirror is ungated and needs no token, but
 #     loading still requires cloning the EUPE repo via ``torch.hub`` and
 #     downloading the .pt weights file. Doing that once on the host means
 #     ``docker build`` can run fully offline.
@@ -40,7 +40,7 @@
 # ``SKIP_DINOV3=1``:
 #   SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
 #
-# The cache directory is ``./model_cache/`` by default and is gitignored —
+# The cache directory is ``./model_cache/`` by default and is gitignored -
 # weights never end up in the repo or in a Docker image layer except via the
 # explicit COPY in docker/Dockerfile.image-embedders.
 
@@ -57,7 +57,7 @@ SKIP_DINOV3="${SKIP_DINOV3:-0}"
 if [[ "$SKIP_DINOV3" != "1" ]]; then
     # Resolve a token from the env, but don't echo it. If HF_TOKEN isn't
     # set, huggingface_hub falls back to the credential saved by
-    # ``huggingface-cli login`` — both paths use the same underlying loader.
+    # ``huggingface-cli login`` - both paths use the same underlying loader.
     if [[ -n "${HF_TOKEN:-}" ]]; then
         echo "Using HF token from \$HF_TOKEN env var (DINOv3)."
     elif [[ -f "$HOME/.cache/huggingface/token" ]] || [[ -f "$HOME/.huggingface/token" ]]; then
@@ -146,5 +146,5 @@ print("  EUPE cached.", flush=True)
 PYEOF
 
 echo
-echo "Done. Now rebuild the image — no HF token needed:"
+echo "Done. Now rebuild the image - no HF token needed:"
 echo "    docker build -f docker/Dockerfile.image-embedders -t vtsearch:image-embedders ."

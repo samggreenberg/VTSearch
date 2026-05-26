@@ -33,7 +33,7 @@ The word "progress" shows up in two unrelated parts of `vtscore`:
 
 | Layer | Module | What it tracks |
 |-------|--------|----------------|
-| Long-running operation progress | `vtscore.concurrency.progress` | Dataset load / sort / eval / find — coarse-grained `(current, total, status, message)` for UI bars and cancel buttons |
+| Long-running operation progress | `vtscore.concurrency.progress` | Dataset load / sort / eval / find - coarse-grained `(current, total, status, message)` for UI bars and cancel buttons |
 | Labeling-session analyzer | `vtscore.detectors.labeling_progress` | Per-step trained MLP cache + stopping-condition metrics |
 
 The labeling-session analyzer is **not** in this package. If you see
@@ -100,14 +100,14 @@ if job.status == "done":
 
 Result caching: the most recent successfully-completed job is kept by
 signature. `mgr.cached_for(signature)` returns it if its signature
-matches — the "re-sort without new votes is free" fast path.
+matches - the "re-sort without new votes is free" fast path.
 
 Cancellation: `job.cancel()` sets the event; the target must check
 `job.is_cancelled` cooperatively. If the target returns while the event
 is set, the manager records `status = "cancelled"`. If the target
-raises, `status = "error"` with `job.error` set — and the pending slot
+raises, `status = "error"` with `job.error` set - and the pending slot
 is still promoted so a queued follow-up runs. The manager is
-thread-safe (internal `RLock`) but **not** re-entrant — the target must
+thread-safe (internal `RLock`) but **not** re-entrant - the target must
 not call `mgr.start()` on the same manager.
 
 When a job spawns its daemon thread, the manager calls
@@ -166,7 +166,7 @@ snapshot = tracker.get()
 | `cancel()` | Set the cancel event |
 | `check_cancelled()` | Raise `CancelledError` if cancel event is set |
 | `is_cancelled` | Read the event |
-| `reset_cancel()` | Clear the event — call at the start of each new operation |
+| `reset_cancel()` | Clear the event - call at the start of each new operation |
 
 `extra_fields` declares keys `update()` will honour beyond the base
 `(status, message, current, total)` tuple. Unrecognised keys are
@@ -202,7 +202,7 @@ swallowed. This is what `events.py` uses.
 
 A bag of named `ProgressTracker`s, each with a creation timestamp
 (`progress.py:248`). Used to multiplex concurrent dataset / detector
-loads — the dashboard polls `list_tasks()` to show one row per loading
+loads - the dashboard polls `list_tasks()` to show one row per loading
 operation.
 
 ```python
@@ -250,9 +250,9 @@ callers don't have to import the tracker itself:
 | Tracker | Update | Get | Cancel |
 |---------|--------|-----|--------|
 | `dataset_progress` | `update_progress(...)` | `get_progress()` | `cancel_dataset_progress()` |
-| `sort_progress` | `update_sort_progress(...)` | `get_sort_progress()` | — |
-| `eval_progress` | `update_eval_progress(...)` | `get_eval_progress()` | — |
-| `find_progress` | `update_find_progress(...)` | `get_find_progress()` | — |
+| `sort_progress` | `update_sort_progress(...)` | `get_sort_progress()` | - |
+| `eval_progress` | `update_eval_progress(...)` | `get_eval_progress()` | - |
+| `find_progress` | `update_find_progress(...)` | `get_find_progress()` | - |
 
 ```python
 from vtscore.concurrency import update_progress, get_progress, check_dataset_cancelled
@@ -271,7 +271,7 @@ over the singleton when parallel loads are possible.
 
 The free functions honour a sentinel default (`_UNSET = object()`) for
 optional extras: only fields explicitly supplied by the caller are
-forwarded, so omitted fields are left unchanged — true update/merge
+forwarded, so omitted fields are left unchanged - true update/merge
 semantics rather than "every call clobbers every field".
 
 ---
@@ -335,7 +335,7 @@ immediately abort the next run.
 
 `cancel_dataset_progress()` is a convenience that cancels every active
 task in `loading_tasks` **and** the legacy `dataset_progress` singleton
-— staging operations write through both surfaces, so a clean abort
+- staging operations write through both surfaces, so a clean abort
 needs to touch both.
 
 ---
@@ -393,5 +393,5 @@ The generator subscribes to each tracker, drains a private bounded
 queue per client, and unsubscribes in a `finally` block on disconnect.
 Heartbeats every 5 seconds keep the connection alive and re-emit the
 task channels so clients see finished tasks vanish once the stale-prune
-window elapses. This module is thin wiring — most library consumers
+window elapses. This module is thin wiring - most library consumers
 don't need to touch it.

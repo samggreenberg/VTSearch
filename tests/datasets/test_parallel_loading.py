@@ -415,7 +415,7 @@ class TestErrorVisibility:
         """Errored tasks stay visible in list_tasks longer than success tasks."""
         pt = loading_tasks.create_task("err_vis", "ErrorDS")
         pt.update("idle", "", 0, 0, error="Something broke")
-        # Mark finished 10 seconds ago — non-error tasks would be cleaned up
+        # Mark finished 10 seconds ago - non-error tasks would be cleaned up
         with loading_tasks._lock:
             loading_tasks._tasks["err_vis"]["finished_at"] = time.time() - 10
         try:
@@ -486,7 +486,7 @@ class TestResetCancelSafety:
         assert dataset_progress.is_cancelled
 
         try:
-            # Start a new load — should NOT reset global cancel since a task is active
+            # Start a new load - should NOT reset global cancel since a task is active
             from unittest.mock import patch
 
             from vtscore.datasets.load_pipeline import _run_origin_load_in_background
@@ -533,7 +533,7 @@ class TestConcurrentModelLoading:
 
     def test_concurrent_load_models_only_loads_once(self):
         """Two threads calling load_models() on the same embedder must not
-        both execute _load_models_impl() concurrently — the lock should
+        both execute _load_models_impl() concurrently - the lock should
         serialise them so the second caller sees the model already loaded."""
         from vtscore.media.embedder import MediaEmbedder
 
@@ -572,7 +572,7 @@ class TestConcurrentModelLoading:
         t1.start()
         started.wait(timeout=5)
         # t1 is inside _load_models_impl holding the lock.
-        # Start t2 — it must block on the lock.
+        # Start t2 - it must block on the lock.
         t2.start()
         # Let t1 finish.
         proceed.set()
@@ -614,10 +614,10 @@ class TestLoadingGates:
 
         drain()
         assert _download_gate.active == 0, (
-            "Download gate not clean at test start — a prior test leaked a thread that is still holding the gate."
+            "Download gate not clean at test start - a prior test leaked a thread that is still holding the gate."
         )
         assert _embed_gate.active == 0, (
-            "Embed gate not clean at test start — a prior test leaked a thread that is still holding the gate."
+            "Embed gate not clean at test start - a prior test leaked a thread that is still holding the gate."
         )
         yield
         drain()
@@ -664,7 +664,7 @@ class TestLoadingGates:
                 name="Second",
             )
 
-            # Second load should be waiting — give it a moment to start its
+            # Second load should be waiting - give it a moment to start its
             # thread and hit the gate wait.
             time.sleep(0.3)
             assert not second_started.is_set(), "Second load should be queued, not running"
@@ -683,7 +683,7 @@ class TestLoadingGates:
             assert load_order[:2] == ["first_start", "first_end"]
             assert "second_start" in load_order
 
-            # Clean up — wait for tasks to finish.
+            # Clean up - wait for tasks to finish.
             deadline = time.time() + 10
             while loading_tasks.has_active_tasks() and time.time() < deadline:
                 time.sleep(0.1)
@@ -720,7 +720,7 @@ class TestLoadingGates:
             )
             assert first_started.wait(timeout=10)
 
-            # Start a second load — it will be queued on the download gate.
+            # Start a second load - it will be queued on the download gate.
             task2 = _run_origin_load_in_background(
                 lambda medias: None,
                 {"importer": "test2", "params": {}},
@@ -770,7 +770,7 @@ class TestLoadingGates:
         started = threading.Event()
 
         def minimalist_load(medias):
-            # Return immediately without firing any progress callback —
+            # Return immediately without firing any progress callback -
             # the callback-driven swap in stepped() never triggers.
             started.set()
 
@@ -794,7 +794,7 @@ class TestLoadingGates:
             time.sleep(0.05)
 
         assert _download_gate.active == 0, (
-            "Download gate leaked after a minimalist importer — the "
+            "Download gate leaked after a minimalist importer - the "
             "unconditional swap_to_embed() after the importer, or the "
             "finally-release in the task body, has regressed (audit C1)."
         )
@@ -850,7 +850,7 @@ class TestLoadingGates:
             name="Second",
         )
         assert second_started.wait(timeout=10), (
-            "Second load never started — download gate was not released after the swap"
+            "Second load never started - download gate was not released after the swap"
         )
         assert _download_gate.active == 1
 
@@ -903,7 +903,7 @@ class TestLoadingGates:
                 name="Second",
             )
             assert second_started.wait(timeout=10), (
-                "Second load did not start in parallel — limit change did not take effect"
+                "Second load did not start in parallel - limit change did not take effect"
             )
             assert _download_gate.active == 2
 
@@ -941,7 +941,7 @@ class TestConcurrencyGate:
         # Confirm it's actually blocked.
         assert not acquired.wait(timeout=0.3)
 
-        # Raise the limit and notify — the waiter should wake up.
+        # Raise the limit and notify - the waiter should wake up.
         with gate._cv:  # type: ignore[attr-defined]
             limit[0] = 2
             gate._cv.notify_all()  # type: ignore[attr-defined]
@@ -1054,7 +1054,7 @@ class TestBackgroundLoadThreadContext:
             )
             assert active_ctx is not None
             assert active_ctx is not _empty_dataset_context, (
-                "get_active_context() resolved to _empty_dataset_context inside the background load — C3 regression."
+                "get_active_context() resolved to _empty_dataset_context inside the background load - C3 regression."
             )
             assert thread_ctx is active_ctx, "Thread-local context and active context disagreed inside the load."
             # Mutation through the active context proxy must have hit the
@@ -1105,6 +1105,6 @@ class TestBackgroundLoadThreadContext:
         none_clears = [c for c in calls if c is None]
         assert non_none_pins, "Background task never pinned a dataset context"
         assert none_clears, (
-            "Background task never cleared its thread-local dataset context — "
+            "Background task never cleared its thread-local dataset context - "
             "a reused worker thread would leak the prior dataset to unrelated work."
         )

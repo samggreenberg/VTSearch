@@ -246,8 +246,8 @@ def load_dataset_from_pickle(
 
     If media bytes are not stored inline in the pickle, the function attempts to
     load them from the companion directory entry in the pickle. Medias for which
-    no bytes can be resolved — or whose ``embedding`` field is missing or
-    ``None`` — are silently skipped (a warning is printed to stdout after
+    no bytes can be resolved - or whose ``embedding`` field is missing or
+    ``None`` - are silently skipped (a warning is printed to stdout after
     loading).  Skipping ``None`` embeddings is important: ``np.array(None)``
     yields a 0-d ``dtype=object`` array that downstream consumers cannot
     distinguish from a real vector until they crash.
@@ -310,7 +310,7 @@ def load_dataset_from_pickle(
         )
 
     # Release the raw pickle data now that medias are built
-    del data  # noqa: F821 — ruff cannot see past `del data` in the except branch (which always re-raises)
+    del data  # noqa: F821 - ruff cannot see past `del data` in the except branch (which always re-raises)
     gc.collect()
 
     if missing_media > 0:

@@ -1,7 +1,7 @@
 """Detector input-spec helpers.
 
 A detector's ``input_spec`` describes the input format it was trained on
-— specifically the clipper that split source media into the clips its
+- specifically the clipper that split source media into the clips its
 MLP saw.  At inference time the CLI uses this to decide whether the
 loaded dataset matches the detector's expected granularity.
 
@@ -32,7 +32,7 @@ def extract_input_spec_from_medias(
     origin so the calling detector can record the input format it was
     trained on.
 
-    Returns ``None`` when no clipper info is present — including the case
+    Returns ``None`` when no clipper info is present - including the case
     where the dataset was loaded without any clipper, or with a ``*_default``
     clipper (which is a no-op pass-through and not worth persisting).
     """
@@ -46,7 +46,7 @@ def extract_input_spec_from_medias(
         clipper_name = params.get("clipper", "")
         if not clipper_name or clipper_name.endswith("_default"):
             # A media with no clipper (or the default pass-through) is
-            # uninformative — keep scanning in case a clipped media
+            # uninformative - keep scanning in case a clipped media
             # appears later in iteration order.
             continue
         clipper_params: dict[str, str] = {}
@@ -76,7 +76,7 @@ def build_detector_meta(
     Pulls ``media_type`` and ``input_spec`` straight from the detector
     JSON dict and folds in the supplied *threshold* (typically the active
     in-memory MLP's calibrated threshold).  Keys with empty/None values
-    are omitted so the block stays minimal — a detector with neither an
+    are omitted so the block stays minimal - a detector with neither an
     ``input_spec`` nor a current threshold produces a block containing
     only ``media_type``.
     """
@@ -101,7 +101,7 @@ def apply_detector_meta(
     Writes ``input_spec`` (and ``media_type`` when the receiver doesn't
     already have one) so the receiving detector picks up the originating
     detector's expected input format.  Does **not** persist ``threshold``
-    — the receiver retrains its own MLP from the imported labels, so the
+    - the receiver retrains its own MLP from the imported labels, so the
     threshold is rederived on the next load.
 
     Returns ``True`` when *detector_data* was modified.
@@ -143,7 +143,7 @@ def clipper_matches(
         return False
     detector_params = detector_spec.get("clipper_params") or {}
     dataset_params = (dataset_spec or {}).get("clipper_params") or {}
-    # Compare as string maps — load_pipeline stores effective values as
+    # Compare as string maps - load_pipeline stores effective values as
     # strings, so a detector saved from a sound_tiling(duration=2.0) load
     # records ``{"duration": "2.0"}`` and we want a downstream dataset
     # loaded with the same params to match.

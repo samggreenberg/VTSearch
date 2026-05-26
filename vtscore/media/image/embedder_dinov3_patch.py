@@ -1,4 +1,4 @@
-"""Image embedder — DINOv3 patch-region mode (``dinov3_patch``).
+"""Image embedder - DINOv3 patch-region mode (``dinov3_patch``).
 
 Produces a CLS vector **plus** a per-patch grid + HAC region tree per
 image.  ~30× slower per image and ~100× more storage than the
@@ -15,7 +15,7 @@ CLS→patch attention map (cleaner than DINOv2's thanks to Gram-anchored
 the 4 register tokens out of the token sequence before reshaping to the
 14 × 14 patch grid.
 
-DINOv3 weights are gated on Hugging Face — running this embedder requires
+DINOv3 weights are gated on Hugging Face - running this embedder requires
 the ``HF_TOKEN`` env var to be set to a user token that has accepted the
 DINOv3 licence at
 ``https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m``.

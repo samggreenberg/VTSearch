@@ -76,7 +76,7 @@
   background: var(--bg-hover);
   color: var(--text-muted);
 
-  // Tier colors are intentionally theme-agnostic — see `--tier-*` in `_variables.scss`.
+  // Tier colors are intentionally theme-agnostic - see `--tier-*` in `_variables.scss`.
   &[data-tier-idx="0"] { color: var(--tier-bronze); }
   &[data-tier-idx="1"] { color: var(--tier-silver); }
   &[data-tier-idx="2"] { color: var(--tier-gold); }

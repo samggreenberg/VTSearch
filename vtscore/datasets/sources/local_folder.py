@@ -1,4 +1,4 @@
-"""Local-folder media source — access media files in a directory on disk."""
+"""Local-folder media source - access media files in a directory on disk."""
 
 from __future__ import annotations
 

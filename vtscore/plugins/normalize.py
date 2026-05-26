@@ -7,9 +7,9 @@ behaviours that used to be plugin-author responsibility:
 1. **Whitespace strip** on every text-like value, so plugin bodies can
    trust ``field_values[key]`` is the trimmed form.
 2. **Template variable substitution** for fields that declare
-   :attr:`PluginField.template_vars`.  Recognised names —
+   :attr:`PluginField.template_vars`.  Recognised names -
    ``YYYYMMDD-HHMMSS``, ``detector_name``, ``detector_id``,
-   ``username`` — are resolved and run through
+   ``username`` - are resolved and run through
    :func:`~vtscore.security.path_validation.sanitize_template_value`
    so attacker-controlled values cannot escape the directory implied
    by an admin-configured template.
@@ -20,7 +20,7 @@ behaviours that used to be plugin-author responsibility:
    :func:`~vtscore.security.path_validation.validate_server_filepath`
    anchored at the per-user data dir.
 
-Plugin bodies are expected to trust the resulting dict — no more
+Plugin bodies are expected to trust the resulting dict - no more
 ``if not foo: raise ValueError`` boilerplate, no more manual
 ``validate_url`` / ``validate_server_filepath`` calls, no more bespoke
 ``str.replace("{detector_name}", ...)`` chains.
@@ -32,7 +32,7 @@ Wired into both ingress points:
 - CLI path: :meth:`PluginBase.validate_cli_field_values` calls this
   after the presence check.
 
-External plugins that still call the validators by hand keep working —
+External plugins that still call the validators by hand keep working -
 re-validation is idempotent on already-validated values, and
 ``sanitize_template_value`` is idempotent on already-sanitised strings.
 """
@@ -85,7 +85,7 @@ def _apply_templates(value: str, template_vars: tuple[str, ...]) -> str:
     if not template_vars:
         return value
 
-    # Local import — sanitize lives in the security package; keep the
+    # Local import - sanitize lives in the security package; keep the
     # module import light.
     from vtscore.security.path_validation import sanitize_template_value  # noqa: PLC0415
 
@@ -138,7 +138,7 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
             value = raw.strip()
         else:
             # Non-string value already present (e.g. tests passing an int)
-            # — leave it alone and let the plugin handle it.
+            # - leave it alone and let the plugin handle it.
             continue
 
         if not value and f.required:

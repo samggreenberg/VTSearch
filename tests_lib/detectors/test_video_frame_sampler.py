@@ -7,7 +7,7 @@ fix did not address:
 
 * The **single-frame video contract** (logical-bug-audit M20): a 1-frame
   source video must produce ``num_frames`` identical frames with no
-  warning — padding to fixed length is the only correct behaviour given
+  warning - padding to fixed length is the only correct behaviour given
   X-CLIP / LanguageBind / VideoMAE all require a fixed frame stack, and a
   single-frame video genuinely has no temporal variation to encode. This
   test locks in the contract so a future contributor can't accidentally
@@ -94,7 +94,7 @@ def fake_video(monkeypatch):
         captures: list[_FakeCapture] = []
 
         def _ctor(_path):
-            # Default: every read succeeds — fast path for tests that don't
+            # Default: every read succeeds - fast path for tests that don't
             # care about partial-read behaviour.
             results = read_results if read_results is not None else [True] * frame_count
             cap = _FakeCapture(frame_count=frame_count, fps=fps, read_results=list(results))

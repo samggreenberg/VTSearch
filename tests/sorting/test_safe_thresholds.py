@@ -146,7 +146,7 @@ class TestTrainAndScoreWithSafeThresholds:
             app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=True
         )
         # They CAN be equal but with 6 labels, safe thresholds should blend
-        # We just verify they're both valid — the blending is tested in unit tests
+        # We just verify they're both valid - the blending is tested in unit tests
         assert 0.0 <= thresh_on <= 1.0
 
 
@@ -237,7 +237,7 @@ class TestTrainingSettingsInvalidateLoadedDetector:
     def _loaded_ctx(self):
         from vtsearch.state import DetectorContext, register_detector_context
 
-        # Sentinel object stands in for a trained MLP — invalidation just
+        # Sentinel object stands in for a trained MLP - invalidation just
         # needs to drop the reference, it doesn't introspect the model.
         ctx = DetectorContext("det-m7", name="m7")
         ctx.model = object()
@@ -257,7 +257,7 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         from vtsearch.state import get_safe_thresholds, set_safe_thresholds
 
         ctx = self._loaded_ctx()
-        # Set to the current value — no-op, must not invalidate.
+        # Set to the current value - no-op, must not invalidate.
         set_safe_thresholds(get_safe_thresholds())
         assert ctx.model is not None
         assert ctx.threshold == 0.73

@@ -58,7 +58,7 @@ class TestImportLocalFolderEndpoint:
     """End-to-end shape of the new endpoint.
 
     The actual importer execution runs in a background thread, which the
-    tests intentionally don't trigger — we patch ``_run_origin_load_in_background``
+    tests intentionally don't trigger - we patch ``_run_origin_load_in_background``
     to verify that the endpoint sets up the temp dir and field values
     correctly without blocking on real embedding.
     """

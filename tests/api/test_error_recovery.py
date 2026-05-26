@@ -79,7 +79,7 @@ class TestInvalidRequestBodies:
 
     def test_settings_put_with_empty_body(self, client):
         resp = client.put("/api/settings", json={})
-        # Empty dict is a legitimate no-op PUT — schema declares every
+        # Empty dict is a legitimate no-op PUT - schema declares every
         # field optional, so the request succeeds and returns the
         # current settings dict.
         assert resp.status_code == 200
@@ -209,7 +209,7 @@ class TestTypeMismatches:
 
     def test_inclusion_boolean_value(self, client):
         # Marshmallow ``fields.Integer(strict=True)`` rejects booleans
-        # too — even though ``bool`` is a subclass of ``int`` in Python,
+        # too - even though ``bool`` is a subclass of ``int`` in Python,
         # strict mode treats the two as different JSON types.
         resp = client.post("/api/inclusion", json={"inclusion": True})
         assert resp.status_code == 422

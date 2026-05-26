@@ -1,11 +1,11 @@
 # Clipper chain
 
-*Status: Phase 1 in flight (PR open against `dev`) — the dataset-load
+*Status: Phase 1 in flight (PR open against `dev`) - the dataset-load
 pipeline accepts an ordered list of converter/clipper steps via a new
 `clipper_chain` field, stamps the resolved trail on every clip's
 `origin.params`, and the cross-dataset resolver replays the chain
 end-to-end. Frontend chooser, sidecar JSON, and detector `input_spec`
-migration are deferred — see Open follow-ups.*
+migration are deferred - see Open follow-ups.*
 
 This plan implements a `clipper_chain` abstraction so we can run e.g.
 `document_section → text_token_window` without writing a custom clipper.
@@ -15,19 +15,19 @@ This plan implements a `clipper_chain` abstraction so we can run e.g.
 Today the dataset-load pipeline runs **exactly one** `MediaClipper` per
 import. Real use cases want composition:
 
-- **`document_section → text_token_window`** — split a PDF/ePub into
+- **`document_section → text_token_window`** - split a PDF/ePub into
   chapters, then split each chapter into token-bounded windows. Today
   the only ways to do this are (a) write a one-off custom clipper that
   hard-codes both algorithms, or (b) load the dataset twice with two
   different settings, which loses the chapter→window provenance.
-- **`image_object → image_window`** — detect objects in an image, then
+- **`image_object → image_window`** - detect objects in an image, then
   sliding-window each detection. Same shape, same workaround tax.
-- **`sound_speech_activity → sound_tiling`** — VAD to find speech turns,
+- **`sound_speech_activity → sound_tiling`** - VAD to find speech turns,
   then tile each turn. Same.
 
 The headline case is cross-type composition (document → text). That
 can't be expressed by chaining
-`MediaClipper`s alone — a `MediaClipper` produces output of the same
+`MediaClipper`s alone - a `MediaClipper` produces output of the same
 media type by contract. It needs a `MediaConverter` step (the existing
 `Document2TextMediaConverter` already does document → text).
 
@@ -76,10 +76,10 @@ A chain is an ordered list of step dicts. Each step has the same shape:
 ]
 ```
 
-- `kind` — `"converter"` or `"clipper"`.
-- `name` — the plugin's registered name (`MediaConverter.name` or
+- `kind` - `"converter"` or `"clipper"`.
+- `name` - the plugin's registered name (`MediaConverter.name` or
   `MediaClipper.name`).
-- `params` — kwargs passed to `with_params()` (clippers) or `convert()`
+- `params` - kwargs passed to `with_params()` (clippers) or `convert()`
   (converters). Empty dict allowed.
 
 A single-clipper load is equivalent to a length-1 chain:
@@ -89,7 +89,7 @@ A single-clipper load is equivalent to a length-1 chain:
 ```
 
 Phase 1 builds this internally so the legacy `clipper_name + clipper_params`
-import field still works — there is no migration cost for existing
+import field still works - there is no migration cost for existing
 importers.
 
 ### Validation rules
@@ -110,7 +110,7 @@ can record the right `media_type` on the dataset registry entry.
 
 Each final clip gets, in addition to the existing single-clipper stamp:
 
-- `params["clipper_chain"]` — a JSON-encoded string containing the full
+- `params["clipper_chain"]` - a JSON-encoded string containing the full
   resolved trail. Each entry is:
   ```json
   {
@@ -133,9 +133,9 @@ Each final clip gets, in addition to the existing single-clipper stamp:
   also writes the legacy `params["clipper"]`, `params["clipper_<key>"]`,
   `params["clip_start"]`, `params["clip_end"]`, `params["clip_box"]`,
   `params["clip_index"]` keys exactly as before. This keeps existing
-  readers — `extract_input_spec_from_medias`, the legacy
+  readers - `extract_input_spec_from_medias`, the legacy
   `_apply_clip_and_embed` branch, the dataset registry's `clipper`
-  field, the `_write_clipper_sidecar` writer — working unmodified.
+  field, the `_write_clipper_sidecar` writer - working unmodified.
   These keys describe only the last clipper step; the full chain lives
   in `clipper_chain`.
 
@@ -160,33 +160,33 @@ resolver:
    type and the dataset's embedder.
 
 If the chain entry is missing or malformed, the resolver falls through
-to the legacy single-clipper code path — labels imported from
+to the legacy single-clipper code path - labels imported from
 pre-chain datasets keep working.
 
-## Phase 1 — Backend chain runner + origin encoding + resolver replay (shipped)
+## Phase 1 - Backend chain runner + origin encoding + resolver replay (shipped)
 
 ### Files
 
-- **New** `vtscore/datasets/clipper_chain.py` —
+- **New** `vtscore/datasets/clipper_chain.py` -
   - `ChainStep` typed dict.
   - `validate_chain(steps, source_media_type) → final_media_type`.
-  - `apply_chain_to_clips(clips_dict, steps, on_progress=...)` —
+  - `apply_chain_to_clips(clips_dict, steps, on_progress=...)` -
     iterates each step over the entire `clips_dict` and rebuilds it in
     place. Stamps `params["clipper_chain"]` (full trail) and the legacy
     single-clipper keys for the last clipper step.
   - `replay_chain_on_file(file_path, steps, target_media_type) →
-    media_dict` — used by the resolver replay path; walks the chain in
+    media_dict` - used by the resolver replay path; walks the chain in
     memory and returns the final clip dict.
-- **Modified** `vtscore/datasets/load_pipeline.py` —
+- **Modified** `vtscore/datasets/load_pipeline.py` -
   - `_apply_clipper` accepts optional `chain_steps` and dispatches to
     the chain runner when provided.
   - `_run_origin_load_in_background` / `_run_importer_in_background`
     accept and forward `chain_steps`. The importer field `clipper_chain`
     (JSON string) is parsed and passed through.
-- **Modified** `vtscore/detectors/resolver.py` —
+- **Modified** `vtscore/detectors/resolver.py` -
   - `_apply_clip_and_embed` checks for `params["clipper_chain"]` first;
     on hit, calls `replay_chain_on_file` and embeds the result.
-- **New** tests under `tests/detectors/test_clipper_chain.py` —
+- **New** tests under `tests/detectors/test_clipper_chain.py` -
   - Same-type chain (`text_paragraph → text_sentence`) end-to-end:
     clips appear, origins stamped, resolver replay reproduces the same
     embedding.
@@ -197,16 +197,16 @@ pre-chain datasets keep working.
 
 ### Limitations of Phase 1
 
-- **No frontend** — the importer modal still only lets the user pick
+- **No frontend** - the importer modal still only lets the user pick
   one clipper. To exercise a chain in Phase 1, callers pass a
   `clipper_chain` JSON field through the importer field values
   programmatically (CLI, test, scripted client).
-- **No sidecar JSON / dataset registry chain column** — the registry's
+- **No sidecar JSON / dataset registry chain column** - the registry's
   `clipper` column still records only the last clipper's name. The
   pickle sidecar (`_write_clipper_sidecar`) still writes a single
   clipper name. Replay relies on per-clip origin only; the registry
   fields are informational.
-- **Detector `input_spec` stays single-step** — `extract_input_spec_from_medias`
+- **Detector `input_spec` stays single-step** - `extract_input_spec_from_medias`
   reads the legacy `params["clipper"]` keys, so the spec describes the
   last clipper step only. A detector trained on a chained dataset still
   records the last step as its expected granularity; the chain is not
@@ -214,7 +214,7 @@ pre-chain datasets keep working.
   (resolver replay handles the full chain), but the spec mismatch check
   at autodetect time is coarser than it could be.
 
-## Phase 2 — Frontend chain chooser (deferred)
+## Phase 2 - Frontend chain chooser (deferred)
 
 Replace the single-tab `vt-clipper-chooser` with an ordered step list:
 
@@ -231,7 +231,7 @@ Replace the single-tab `vt-clipper-chooser` with an ordered step list:
 Existing single-clipper chooser stays as a "Simple mode" toggle so
 casual users don't see the step UI by default.
 
-## Phase 3 — Dataset registry + sidecar schema (deferred)
+## Phase 3 - Dataset registry + sidecar schema (deferred)
 
 - Add a `clipper_chain` (JSON string) column to the dataset registry
   entry alongside the existing `clipper` field. Registry UI shows the
@@ -241,7 +241,7 @@ casual users don't see the step UI by default.
   continue to be readable for backwards compatibility with pickles
   produced before Phase 3.
 
-## Phase 4 — Detector input_spec + detector_meta chain (deferred)
+## Phase 4 - Detector input_spec + detector_meta chain (deferred)
 
 - `extract_input_spec_from_medias` reads `params["clipper_chain"]` and
   returns `{"clipper_chain": [...]}` instead of (or alongside) the
@@ -258,7 +258,7 @@ casual users don't see the step UI by default.
 `resolver.py:_apply_clip_and_embed` has a hard-coded text sentence
 re-split (the same regex as `TextSentenceClipper`) at lines 513–537.
 Phase 1's chain-aware branch sidesteps it by calling
-`replay_chain_on_file`, which uses the registered clipper directly —
+`replay_chain_on_file`, which uses the registered clipper directly -
 but the legacy single-clipper path still has the duplicated regex.
 Worth deleting once Phase 4 lands and the legacy single-step encoding
 goes away.
@@ -266,7 +266,7 @@ goes away.
 ### Cancellation hooks in long chains
 
 `apply_chain_to_clips` reports progress per (step, media) pair but
-does not check `tracker.check_cancelled()` itself — that's left to the
+does not check `tracker.check_cancelled()` itself - that's left to the
 caller via `on_progress`. Long converter steps (e.g. PDF→text on a
 1000-document folder) won't respond to cancel mid-step. Fine for
 Phase 1 (one step per progress callback); revisit if step durations

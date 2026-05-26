@@ -247,7 +247,7 @@ export class LoadSortModalComponent implements OnInit {
     this.typedPathError = '';
   }
 
-  /** Back-arrow handler for the typed-path view — returns to the
+  /** Back-arrow handler for the typed-path view - returns to the
    *  source-listing step that opened it (demo list / saved-datasets
    *  list). */
   backFromFileBrowser(): void {

@@ -2,7 +2,7 @@
 
 Loads datasets from a directory tree of media files, with optional
 pre-computed embeddings/MD5s and custom metadata.  Loaders build the
-media dicts but do **not** call the embedder — items without a
+media dicts but do **not** call the embedder - items without a
 pre-computed embedding leave ``embedding=None`` for the framework
 embed stage (:func:`vtscore.datasets.load_pipeline.embed_missing`) to
 fill in.
@@ -333,7 +333,7 @@ def _build_folder_media_data(
     by the caller after this base is constructed.
 
     The *origin* dict is copied per-media so siblings never share the
-    same nested ``params`` dict — a later mutation on one media would
+    same nested ``params`` dict - a later mutation on one media would
     otherwise propagate to every other media built from the same call,
     and that aliasing also survives pickle round-trips via backrefs.
     """
@@ -457,7 +457,7 @@ def load_dataset_from_folder(
 
     Scans ``folder_path`` for all files matching the extensions for
     ``media_type`` and populates ``medias`` with one media dict per
-    file.  Loaders do **not** call the embedder — items leave with
+    file.  Loaders do **not** call the embedder - items leave with
     ``embedding=None`` unless a pre-computed vector is supplied through
     ``content_vectors`` or ``custom_metadata_map``.  The framework
     embed stage (:func:`vtscore.datasets.load_pipeline.embed_missing`)

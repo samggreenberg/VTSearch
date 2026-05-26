@@ -2,7 +2,7 @@
 
 Operates on the active :class:`DatasetContext` (for the tree itself) and the
 active :class:`DetectorContext` (for the labels that get replayed into it).
-Functions resolve the contexts themselves — no module-level proxy names are
+Functions resolve the contexts themselves - no module-level proxy names are
 imported.  See Phase 3 of ``../docs/architecture.md``.
 """
 
@@ -28,8 +28,8 @@ def resync_diversity_tree_to_detector(
 
     Clears the tree's ``seen`` / ``_labeled`` sets and replays every cid in
     ``det_ctx.good_votes`` / ``det_ctx.bad_votes`` whose leaf is known to the
-    tree.  Used when the labeled set is replaced wholesale — votes are
-    cleared, or the active detector is swapped on the same dataset — so the
+    tree.  Used when the labeled set is replaced wholesale - votes are
+    cleared, or the active detector is swapped on the same dataset - so the
     tree continues to reflect the *current* detector's labels instead of
     whatever it last observed.
 
@@ -93,7 +93,7 @@ def build_diversity_tree_for_context(
     """Build a diversity tree and store it on a specific context.
 
     Unlike :func:`build_diversity_tree` this does not touch the active
-    context — it operates entirely on *ctx*.  Used by parallel dataset
+    context - it operates entirely on *ctx*.  Used by parallel dataset
     loading where the new dataset is not yet active.
     """
     import numpy as np
@@ -112,7 +112,7 @@ def build_diversity_tree_for_context(
 
     tree = DiversityTree(vectors, k=3, on_progress=on_progress)
     ctx.diversity_tree = tree
-    # Fresh context has no votes — nothing to replay.
+    # Fresh context has no votes - nothing to replay.
 
 
 def get_diversity_tree():

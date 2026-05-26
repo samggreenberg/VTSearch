@@ -133,7 +133,7 @@ class TestSampleLabels:
         assert int(y.sum()) == 5  # n_labels // 2
 
     def test_caps_to_pool_size_when_imbalanced(self):
-        # Pool with only 3 positives in sim — asking for 50 labels should
+        # Pool with only 3 positives in sim - asking for 50 labels should
         # cap at 3 positives.
         clips = _synth_dataset(n_pos=6, n_neg=200)
         pool = _build_split_pool(clips, "target", seed=0, sim_fraction=0.5)
@@ -161,7 +161,7 @@ class TestSampleLabels:
 
 class TestCrossCalibratedThreshold:
     def test_returns_finite_threshold_with_balanced_labels(self):
-        # 10 labels, balanced — every fold should produce a valid threshold.
+        # 10 labels, balanced - every fold should produce a valid threshold.
         from vtscore.eval.label_curve import TRAINERS as T
 
         rng = np.random.default_rng(0)
@@ -244,7 +244,7 @@ class TestRunLabelCurveEval:
             seeds=(0, 1),
             progress=False,
         )
-        # 1 dataset * 1 category (sim_fraction filters out 'other' as target? no —
+        # 1 dataset * 1 category (sim_fraction filters out 'other' as target? no -
         # 'other' has 20 entries too so it's also a valid target).
         # Categories: {target, other} → 2 categories.
         # trainers x label_counts x seeds = 2 * 2 * 2 = 8 per category → 16 rows total.
@@ -328,7 +328,7 @@ class TestSummarise:
             progress=False,
         )
         summary = summarise(df)
-        # Brier and F1@0.5 are diagnostics — excluded from the default
+        # Brier and F1@0.5 are diagnostics - excluded from the default
         # summary because neither is meaningful for an uncalibrated
         # ranking model with a learnable threshold.
         for col in summary.columns:

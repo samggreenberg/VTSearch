@@ -1,8 +1,8 @@
-"""Audio embedder — AST (Audio Spectrogram Transformer).
+"""Audio embedder - AST (Audio Spectrogram Transformer).
 
 Wraps the AudioSet-finetuned ViT-style spectrogram transformer from MIT
-(``MIT/ast-finetuned-audioset-10-10-0.4593``).  AST is audio-only — there
-is no paired text encoder — so :attr:`supports_text` is ``False`` and the
+(``MIT/ast-finetuned-audioset-10-10-0.4593``).  AST is audio-only - there
+is no paired text encoder - so :attr:`supports_text` is ``False`` and the
 UI hides text-search affordances for datasets embedded with this model.
 """
 

@@ -28,7 +28,7 @@ def active_jobs():
 
     Used by the top-bar pulldown to render a spinner glyph on rows whose
     pair has background work in flight (learned-sort, eval, …). The endpoint
-    is intentionally cheap — it walks the in-memory ``JOB_MANAGERS`` map and
+    is intentionally cheap - it walks the in-memory ``JOB_MANAGERS`` map and
     reads each manager's current/pending slot under the manager's own lock,
     nothing else. Safe to poll on a 2–3 second interval.
     """

@@ -10,11 +10,11 @@ view (zero-copy) when they need a tensor.
 
 Cache invalidation is keyed on ``sorted(ctx.medias.keys())``: when that
 list differs from the cached one, the matrix is rebuilt.  Callers that
-mutate ``ctx.medias`` don't need to do anything — the next access will
+mutate ``ctx.medias`` don't need to do anything - the next access will
 detect the new key set and rebuild.
 
 Any media whose ``embedding`` is ``None`` causes the builder to raise
-``ValueError`` instead of silently filling the row with NaN — the bug
+``ValueError`` instead of silently filling the row with NaN - the bug
 described as M11 in ``docs/plans/logical-bug-audit.md``.  On numpy 2.x
 ``matrix[i] = None`` quietly stores ``nan`` and the resulting score
 propagates through every downstream consumer (always-False threshold

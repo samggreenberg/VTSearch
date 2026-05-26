@@ -291,15 +291,15 @@
   </div>
   </div>
 
-  <!-- Action Buttons — STABLE POSITIONING (read before changing!)
+  <!-- Action Buttons - STABLE POSITIONING (read before changing!)
        Label/Find buttons must stay in the EXACT same position whether their hint is
        visible or not, and regardless of hint text length. Three rules enforce this:
 
-       1. Each .action-btn-group has a FIXED WIDTH in SCSS — do NOT remove it.
+       1. Each .action-btn-group has a FIXED WIDTH in SCSS - do NOT remove it.
           Without it, different hint text lengths shift buttons horizontally.
-       2. Hints use [style.visibility] (NOT *ngIf or display:none) — do NOT change.
+       2. Hints use [style.visibility] (NOT *ngIf or display:none) - do NOT change.
           visibility:hidden still reserves vertical space; display:none does not.
-       3. .btn-disabled-reason has a fixed height in SCSS — do NOT remove it.
+       3. .btn-disabled-reason has a fixed height in SCSS - do NOT remove it.
           Without it, showing/hiding text causes vertical reflow.
 
        If you change any of these three things, the buttons WILL jump around. -->

@@ -195,7 +195,7 @@ class DiversityTree:
     def reset_seen(self) -> None:
         """Mark every node as un-seen and forget every labeled vector ID.
 
-        Used when the labeled set is replaced wholesale — e.g. votes are
+        Used when the labeled set is replaced wholesale - e.g. votes are
         cleared, or the active detector is swapped on the same dataset and
         the tree's per-leaf seen state needs to be rebuilt from the new
         detector's votes (see :func:`resync_diversity_tree_to_detector`).

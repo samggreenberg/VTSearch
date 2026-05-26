@@ -26,7 +26,7 @@ import {
   ClipperSelection,
 } from '../../../dashboard/clipper-chooser/clipper-chooser.component';
 
-/** Settings tab body for "Data Imports" — lets the user pick a
+/** Settings tab body for "Data Imports" - lets the user pick a
  *  per-mediaType default embedder, clipper, and converter-row set.
  *  Mirrors the Add Dataset modal's "Advanced ▾" block but standalone,
  *  always expanded, and not tied to a specific importer.  Whatever the
@@ -45,7 +45,7 @@ import {
   styleUrl: './import-defaults-settings.component.scss',
 })
 export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
-  /** All registered media types — drives the per-mediaType tab strip. */
+  /** All registered media types - drives the per-mediaType tab strip. */
   @Input() mediaTypes: MediaTypeInfo[] = [];
   /** Current per-mediaType defaults map (the saved value). */
   @Input() defaults: ImportDefaultsByMediaType = {};
@@ -61,7 +61,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
   activeType = '';
   clipperChooserOpen = false;
 
-  // Per-mediaType caches — populated on first tab switch.
+  // Per-mediaType caches - populated on first tab switch.
   embeddersByType: Record<string, EmbedderInfo[]> = {};
   clippersByType: Record<string, ClipperInfo[]> = {};
   convertersByType: Record<string, ConverterInfo[]> = {};
@@ -218,7 +218,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
     return this.activeEmbedders.filter((e) => !e.is_default);
   }
 
-  /** Built-in default embedder for the active mediaType — the first
+  /** Built-in default embedder for the active mediaType - the first
    *  ``is_default`` option, falling back to the first available embedder.
    *  Used to seed the dropdown when the user has no saved override. */
   get defaultEmbedderName(): string {
@@ -252,7 +252,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
   }
 
   /** True when the user has at least one saved override for the active
-   *  mediaType — used to gate the "Reset" button so it doesn't appear
+   *  mediaType - used to gate the "Reset" button so it doesn't appear
    *  when there's nothing to reset. */
   get hasOverridesForActiveType(): boolean {
     const d = this.defaults[this.activeType];

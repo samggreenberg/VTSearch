@@ -3,7 +3,7 @@
 Library-tier plugin bases (:class:`vtscore.datasets.importers.base.DatasetImporter`,
 :class:`vtscore.labels.importers.base.LabelImporter`) declare
 ``field_type="file"`` form inputs that historically arrived as a
-Werkzeug :class:`~werkzeug.datastructures.FileStorage` — a Flask-side
+Werkzeug :class:`~werkzeug.datastructures.FileStorage` - a Flask-side
 type that the library tier is not supposed to know about.
 
 This module provides :class:`UploadedFile`, a structural protocol that
@@ -11,7 +11,7 @@ both Flask's ``FileStorage`` and the CLI-side :class:`CliUploadedFile`
 adapter satisfy.  Plugin bodies can accept either source without
 importing any Flask / Werkzeug symbols:
 
-- The Flask request path passes the ``FileStorage`` straight through —
+- The Flask request path passes the ``FileStorage`` straight through -
   it already exposes ``.filename``, ``.read()`` / ``.stream``, and
   ``.save(dst)``.
 - The CLI path (:meth:`DatasetImporter.run_cli`) wraps the user's
@@ -104,7 +104,7 @@ class BytesIOUploadedFile:
 
     Used by the dataset-importer request path
     (``file_mode="bytesio"`` in :func:`validate_plugin_args`) so an
-    upload's bytes survive past the Flask request lifetime — the import
+    upload's bytes survive past the Flask request lifetime - the import
     body runs in a background thread that may outlive the request, by
     which time the underlying ``FileStorage`` is no longer readable.
 

@@ -1,5 +1,5 @@
 /**
- * Extended icon SVGs — split out of the initial bundle.
+ * Extended icon SVGs - split out of the initial bundle.
  *
  * Loaded lazily by `IconComponent` via `loadExtendedIconSvgs()` the
  * first time a non-shell icon is rendered. All callers live behind

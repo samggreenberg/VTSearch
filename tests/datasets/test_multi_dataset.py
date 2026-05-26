@@ -264,7 +264,7 @@ class TestMultiDatasetSwitching:
         assert 2 in medias
         assert 1 not in medias
 
-        # Switch back to A — medias preserved
+        # Switch back to A - medias preserved
         set_thread_dataset_context(ctx_a)
         assert 1 in medias
         assert 2 not in medias
@@ -292,12 +292,12 @@ class TestMultiDatasetSwitching:
         assert 2 in bad_votes
         assert len(good_votes) == 0
 
-        # Switch back to A — votes preserved
+        # Switch back to A - votes preserved
         set_thread_detector_context(det_a)
         assert 1 in good_votes
         assert len(bad_votes) == 0
 
-        # Switch to B again — still intact
+        # Switch to B again - still intact
         set_thread_detector_context(det_b)
         assert 2 in bad_votes
 
@@ -323,7 +323,7 @@ class TestMultiDatasetSwitching:
         assert len(label_history) == 1
         assert label_history[0][0] == 2
 
-        # Switch to A — A's history
+        # Switch to A - A's history
         set_thread_detector_context(det_a)
         assert len(label_history) == 1
         assert label_history[0][0] == 1
@@ -762,7 +762,7 @@ class TestSyncLabelsAcrossDatasets:
             saved_labels = saved["labelset"]["labels"]
             assert len(saved_labels) == original_label_count, (
                 f"Expected {original_label_count} training labels but load_model "
-                f"overwrote them — got {len(saved_labels)}"
+                f"overwrote them - got {len(saved_labels)}"
             )
         finally:
             set_detectors_dir(original_dir)

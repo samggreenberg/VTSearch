@@ -1,4 +1,4 @@
-"""Video embedder — X-CLIP (microsoft/xclip-base-patch32)."""
+"""Video embedder - X-CLIP (microsoft/xclip-base-patch32)."""
 
 from __future__ import annotations
 

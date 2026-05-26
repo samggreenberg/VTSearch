@@ -1,4 +1,4 @@
-"""Document clippers — pass-through document media."""
+"""Document clippers - pass-through document media."""
 
 from __future__ import annotations
 

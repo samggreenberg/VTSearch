@@ -17,12 +17,12 @@ import {
 } from '../models/api.models';
 
 /**
- * Regression spec for H25 — "Active dataset pair is set before load
+ * Regression spec for H25 - "Active dataset pair is set before load
  * completes" (see `docs/plans/logical-bug-audit.md`).
  *
  * The fix split `ActiveContextService` into two layers:
- *   - **intent** — flips immediately on switch entry (for UI affordances)
- *   - **active** — flips only after the dataset / detector load resolves
+ *   - **intent** - flips immediately on switch entry (for UI affordances)
+ *   - **active** - flips only after the dataset / detector load resolves
  *     AND the corresponding `loadingTasks` SSE channel goes idle.
  *
  * The HTTP interceptor (`activeContextInterceptor`) reads the *active*
@@ -30,11 +30,11 @@ import {
  * silently regress to flipping active up-front and re-introducing the
  * 409 `dataset_not_loaded` cascade.
  */
-describe('ContextSwitchService — H25 active/intent layering', () => {
+describe('ContextSwitchService - H25 active/intent layering', () => {
   let switcher: ContextSwitchService;
   let activeContext: ActiveContextService;
 
-  // Stub state — we drive these directly from each test instead of
+  // Stub state - we drive these directly from each test instead of
   // letting the real services do HTTP / SSE work.
   let datasets: DatasetRegistryEntry[];
   let detectors: DetectorRegistryEntry[];
@@ -163,7 +163,7 @@ describe('ContextSwitchService — H25 active/intent layering', () => {
     datasets = [makeDataset('d1', { loaded: false })]; // needs load
     detectors = [makeDetector('m1', { detector_loaded: true })];
     // Pre-populate a non-idle task so `waitForDatasetLoad`'s filter
-    // does NOT pass on its first emission — otherwise the empty initial
+    // does NOT pass on its first emission - otherwise the empty initial
     // BehaviorSubject value would satisfy "no task non-idle" trivially.
     loadingTasks$.next([makeLoadingTask({ dataset_id: 'd1', status: 'loading' })]);
 
@@ -177,14 +177,14 @@ describe('ContextSwitchService — H25 active/intent layering', () => {
     expect(activeContext.datasetId).toBe('old-ds');
     expect(activeContext.modelId).toBe('old-det');
 
-    // HTTP load endpoint resolves — but the loading task is still
+    // HTTP load endpoint resolves - but the loading task is still
     // non-idle, so active must stay pinned.
     loadRegisteredSubjects.get('d1')!.next({});
     loadRegisteredSubjects.get('d1')!.complete();
     expect(activeContext.datasetId).toBe('old-ds');
     expect(activeContext.modelId).toBe('old-det');
 
-    // SSE channel goes idle — only now does active flip.
+    // SSE channel goes idle - only now does active flip.
     loadingTasks$.next([]);
     expect(activeContext.datasetId).toBe('d1');
     expect(activeContext.modelId).toBe('m1');
@@ -250,11 +250,11 @@ describe('ContextSwitchService — H25 active/intent layering', () => {
     ];
     loadingTasks$.next([makeLoadingTask({ dataset_id: 'd1', status: 'loading' })]);
 
-    // First switch: d1/m1 — needs a dataset load that we'll never finish.
+    // First switch: d1/m1 - needs a dataset load that we'll never finish.
     switcher.applyActivePair('d1', 'm1').subscribe();
     expect(activeContext.intentDatasetId).toBe('d1');
 
-    // Second switch starts before d1 finishes loading — d2/m2 is already
+    // Second switch starts before d1 finishes loading - d2/m2 is already
     // loaded so no awaiting is needed.  This must replace the in-flight
     // switch: intent and active both end up on d2/m2, and a *late*
     // completion of the d1 load (next + idle tasks) must NOT roll

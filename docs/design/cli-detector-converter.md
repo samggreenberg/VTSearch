@@ -1,6 +1,6 @@
 # Design: CLI Autodetect with Converters and Clippers
 
-> **Status:** Phase 1 shipped (detector `input_spec` + LabelSet `detector_meta` round-trip + CLI skip-on-mismatch). The converter-routing and re-clipping pipeline described below is **not yet implemented** — see *What shipped* and *Open follow-ups* at the bottom.
+> **Status:** Phase 1 shipped (detector `input_spec` + LabelSet `detector_meta` round-trip + CLI skip-on-mismatch). The converter-routing and re-clipping pipeline described below is **not yet implemented** - see *What shipped* and *Open follow-ups* at the bottom.
 
 ## Problem
 
@@ -57,16 +57,16 @@ python app.py --autodetect --dataset videos.pkl \
 
 ### Option C: Detector stores its input spec (Recommended)
 
-The detector file already stores `media_type`. That field already tells the pipeline what embedding space the detector operates in. The missing piece is the *clipper* — how to split media before embedding.
+The detector file already stores `media_type`. That field already tells the pipeline what embedding space the detector operates in. The missing piece is the *clipper* - how to split media before embedding.
 
-**Converters are NOT part of the detector's spec.** The detector doesn't care *how* you got to its media type — it just needs the right type of embedding. The converter registry already knows all the routes (video→image, document→image, video→audio, etc.), so the pipeline can figure out conversion automatically.
+**Converters are NOT part of the detector's spec.** The detector doesn't care *how* you got to its media type - it just needs the right type of embedding. The converter registry already knows all the routes (video→image, document→image, video→audio, etc.), so the pipeline can figure out conversion automatically.
 
 This matters because **a dataset can contain mixed source types**. An image detector should score:
 - Native images → directly
 - Videos → via `video2image`
 - Documents → via `document2image`
 
-If the detector stored `converter: "video2image"`, it couldn't also handle documents. The detector shouldn't have to enumerate every possible source type — it just says "I need image embeddings" and the pipeline handles the rest.
+If the detector stored `converter: "video2image"`, it couldn't also handle documents. The detector shouldn't have to enumerate every possible source type - it just says "I need image embeddings" and the pipeline handles the rest.
 
 ```json
 {
@@ -106,7 +106,7 @@ Add one optional field to the detector data dict:
 |-------|------|---------|
 | `input_spec.clipper` | `str \| null` | Clipper name (e.g. `"sound_tiling_2s"`) used to split media into sub-clips before embedding. `null` means the default clipper (whole media). |
 
-The detector's existing `media_type` field already declares the target embedding space. **Converters are not stored on the detector** — the pipeline uses the converter registry (`list_converters_for_target(detector.media_type)`) to automatically find routes from any source type to the detector's target type. This means an image detector automatically handles video→image, document→image, and native images without enumerating converters.
+The detector's existing `media_type` field already declares the target embedding space. **Converters are not stored on the detector** - the pipeline uses the converter registry (`list_converters_for_target(detector.media_type)`) to automatically find routes from any source type to the detector's target type. This means an image detector automatically handles video→image, document→image, and native images without enumerating converters.
 
 The `clipper` field describes what the detector *expects*, not a user preference. It's captured automatically at training time from whatever clipper the user had active.
 
@@ -115,16 +115,16 @@ The `clipper` field describes what the detector *expects*, not a user preference
 When `export_detector_server` trains a detector, record:
 - The active clipper (if the current dataset was loaded with clipping)
 
-The converter is NOT recorded — it's handled automatically by the registry at inference time. Only the clipper matters because it affects the granularity of the embeddings the detector was trained on.
+The converter is NOT recorded - it's handled automatically by the registry at inference time. Only the clipper matters because it affects the granularity of the embeddings the detector was trained on.
 
-This is already implicit in the current training flow — the embeddings come from whatever pipeline produced the loaded medias. We just need to make the clipper explicit by storing its name.
+This is already implicit in the current training flow - the embeddings come from whatever pipeline produced the loaded medias. We just need to make the clipper explicit by storing its name.
 
 ### 3. CLI autodetect pipeline applies input specs
 
 The `_run_pipeline` function gains a new step between "load dataset" and "score":
 
 ```
-Load dataset (raw medias — may contain mixed types: video, document, image, etc.)
+Load dataset (raw medias - may contain mixed types: video, document, image, etc.)
   ↓
 For each detector:
   ↓
@@ -148,7 +148,7 @@ For each detector:
 
 Key points:
 - Each detector can trigger a *different* clipper. The pipeline handles this per-detector, not globally.
-- Conversion is driven by the converter registry, not the detector. A single image detector automatically handles video files (via `video2image`), documents (via `document2image`), and native images — all in the same dataset.
+- Conversion is driven by the converter registry, not the detector. A single image detector automatically handles video files (via `video2image`), documents (via `document2image`), and native images - all in the same dataset.
 - If a media item's source type has no converter route to the detector's target type, it's simply skipped for that detector (not an error).
 
 ### 4. Backwards compatibility
@@ -159,7 +159,7 @@ Key points:
 
 ### 5. Detector matching becomes richer
 
-Currently `get_autodetect_detectors_by_media("video")` only returns detectors with `media_type == "video"`. With converter-aware matching, a detector with `media_type: "audio"` should also match a video dataset — because `video2audio` exists in the converter registry.
+Currently `get_autodetect_detectors_by_media("video")` only returns detectors with `media_type == "video"`. With converter-aware matching, a detector with `media_type: "audio"` should also match a video dataset - because `video2audio` exists in the converter registry.
 
 New matching logic:
 
@@ -173,7 +173,7 @@ def get_autodetect_detectors_for_dataset(dataset_media_types: set[str]):
        source_type == source_type AND target_type == detector.media_type
        (converter match)
 
-    This is driven entirely by the converter registry — the detector
+    This is driven entirely by the converter registry - the detector
     doesn't need to know about converters. It just declares its
     media_type, and the registry provides the routes.
     """
@@ -194,7 +194,7 @@ When a clipper produces N clips from one media item, we get N scores. We need a 
 For the common case, nothing changes:
 
 ```bash
-# Dataset has videos — the pipeline auto-converts via video2audio, video2image, etc.
+# Dataset has videos - the pipeline auto-converts via video2audio, video2image, etc.
 # based on each detector's media_type. Clipper comes from detector's input_spec.
 python app.py --autodetect \
   --importer http_archive --url https://example.com/videos.zip --media-type video \
@@ -220,11 +220,11 @@ This is a niche escape hatch, not the primary interface.
 
 | Question | Answer |
 |----------|--------|
-| Should we specify converters in the CLI? | No — the converter registry handles this automatically. The pipeline looks up all converters that produce the detector's `media_type` and applies the right one per source media type. |
-| Should we specify clippers in the CLI? | No — the detector's `input_spec.clipper` drives it automatically. Optional `--override-clipper` flag for power users. |
-| Should a detector remember its training converter? | No — converters are a property of the source→target type pair, not the detector. The same image detector handles video→image, document→image, and native images via the converter registry. |
-| Should a detector remember its training clipper? | Yes — as `input_spec.clipper`, describing what granularity the detector expects. This *is* the right default for autodetect. |
-| Should we have per-detector settings for converter/clipper? | No — clipper lives in the detector itself (travels with the file). Converter is automatic from the registry. |
+| Should we specify converters in the CLI? | No - the converter registry handles this automatically. The pipeline looks up all converters that produce the detector's `media_type` and applies the right one per source media type. |
+| Should we specify clippers in the CLI? | No - the detector's `input_spec.clipper` drives it automatically. Optional `--override-clipper` flag for power users. |
+| Should a detector remember its training converter? | No - converters are a property of the source→target type pair, not the detector. The same image detector handles video→image, document→image, and native images via the converter registry. |
+| Should a detector remember its training clipper? | Yes - as `input_spec.clipper`, describing what granularity the detector expects. This *is* the right default for autodetect. |
+| Should we have per-detector settings for converter/clipper? | No - clipper lives in the detector itself (travels with the file). Converter is automatic from the registry. |
 | Per-detector settings for EACH detector‽ | No. Clipper is per-detector via `input_spec`. Converter is per-source-type via registry. No settings explosion. |
 
 ## What shipped (Phase 1)
@@ -233,7 +233,7 @@ This is a niche escape hatch, not the primary interface.
 - `save_detector_labels` captures the active dataset's clipper into `input_spec` automatically (and clears any stale value when re-saving from an unclipped dataset).
 - `LabelSet` gained an optional top-level `detector_meta` block (`media_type`, `input_spec`, `threshold`) so a round-trip through a `LabelsetSource` doesn't strip the training context. Legacy labelsets without the block still load.
 - `LabelsetSource` gained `load_full()` returning a full `LabelSet`. `server_json_file` overrides it; the default impl wraps the legacy `load()` so other sources keep working.
-- `sync_to_labelset_source` emits `detector_meta` (threshold only when an MLP is loaded). `sync_from_labelset_source` writes `input_spec` (and missing `media_type`) back onto the receiver — threshold is *not* persisted because the receiver retrains.
+- `sync_to_labelset_source` emits `detector_meta` (threshold only when an MLP is loaded). `sync_from_labelset_source` writes `input_spec` (and missing `media_type`) back onto the receiver - threshold is *not* persisted because the receiver retrains.
 - CLI `_load_and_train_detectors` skips detectors whose `input_spec.clipper` doesn't match the loaded dataset's clipper, with a clear progress message pointing the user at how to reload. Detectors without `input_spec` are unaffected.
 
 ## Open follow-ups
@@ -243,5 +243,5 @@ These were deliberately deferred to keep Phase 1 focused on the round-trip and t
 - **Converter routing across source types in CLI.** Today the CLI scores only the medias whose `media_type` already matches each detector's. The design above describes auto-routing via `list_converters_for_target(detector.media_type)` per source type (so one image detector handles native images, `video2image`, and `document2image` in the same run). Needs plumbing in `_run_pipeline`: group medias by source type → look up a converter route per detector → embed converted medias → score.
 - **Re-clipping the loaded dataset to match a detector's `input_spec.clipper`.** Today a mismatched detector is skipped with a message telling the user to reload. The more ergonomic flow is "auto-clip + re-embed at scoring time." Cheaper short-circuit: when first media's `origin.params.clipper` already equals the detector's, skip the work. Needs media bytes or a resolvable file path, so thin-loaded medias would have to go through `resolve_file_context` first.
 - **Converter-aware detector matching.** Replace direct `media_type` equality in `get_autodetect_detectors_by_media` with a `get_autodetect_detectors_for_dataset(source_types: set[str])` that accepts any detector reachable via a one-hop converter route. Required before the converter-routing item above is useful.
-- **`--override-clipper` CLI flag.** Power-user escape hatch to score with a different granularity than the detector was trained on. Not the primary interface — only worth shipping after the auto-clip path lands.
+- **`--override-clipper` CLI flag.** Power-user escape hatch to score with a different granularity than the detector was trained on. Not the primary interface - only worth shipping after the auto-clip path lands.
 - **Clip-score aggregation toggle.** When a clipper produces N clips per media, the aggregation is currently implicit (max). The design proposes an explicit `input_spec.clip_aggregation` (`"max"` | `"mean"`) field, useful once re-clipping is in place.

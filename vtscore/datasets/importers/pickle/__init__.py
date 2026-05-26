@@ -36,7 +36,7 @@ class PickleDatasetImporter(DatasetImporter):
     ui_mode = "file_upload"
     hidden_from_picker = True
     # Pickle imports carry a single embedded media type from the .pkl
-    # itself — there is no user-chosen output type and no converter rows.
+    # itself - there is no user-chosen output type and no converter rows.
     # The flag is set so the in-tree importer set is uniformly off the
     # legacy ``effective_source_specs()`` shim, not because the upload
     # flow has anything multi-media about it.

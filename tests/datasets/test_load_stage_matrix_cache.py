@@ -11,7 +11,7 @@ Both ``_apply_clipper_stage`` and ``_collapse_duplicates_stage`` mutate
   the next reader sees stale rows.
 
 - ``_collapse_duplicates_stage`` removes duplicate media items. The id
-  set changes, but only by removal — a cached matrix built before dedup
+  set changes, but only by removal - a cached matrix built before dedup
   still holds rows for the deleted ids that no longer correspond to any
   live media.
 
@@ -119,7 +119,7 @@ class TestDropNoneEmbeddingsStage:
     in negative_hits with a NaN score (and ``NaN`` in the JSON response).
     The drop stage in ``_run_origin_load_in_background`` ensures None
     embeddings never reach the matrix builder, dedup, diversity tree,
-    or registry — and surfaces the dropped count to the user via the
+    or registry - and surfaces the dropped count to the user via the
     progress tracker so the load row reflects the real N.
     """
 

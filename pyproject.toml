@@ -104,7 +104,7 @@ max-complexity = 10
 "tests_lib/**" = ["S108", "S301", "S314", "C901"]
 "scripts/**" = ["C901"]
 # safe_pickle_load is the centralized helper that calls pickle.load on
-# whitelisted bytes — flagging it would defeat the purpose of the wrapper.
+# whitelisted bytes - flagging it would defeat the purpose of the wrapper.
 "vtscore/security/pickle.py" = ["S301"]
 # Intentional `git` / `unrar` / `ffmpeg` invocations: arguments are
 # project-controlled paths, no shell expansion.
@@ -143,7 +143,7 @@ extend_exclude = [
 "sentence-transformers" = "sentence_transformers"
 
 [tool.deptry.per_rule_ignores]
-# DEP001 — imported but not declared. These are optional / opportunistic
+# DEP001 - imported but not declared. These are optional / opportunistic
 # imports that the codebase guards with try/except or pyright ignores;
 # users opt in by installing the extra package.
 DEP001 = [
@@ -156,7 +156,7 @@ DEP001 = [
     "safetensors",
     "huggingface_hub",
 ]
-# DEP003 — imported as a transitive of another declared dependency.
+# DEP003 - imported as a transitive of another declared dependency.
 # ``safetensors`` and ``torchvision`` ship with ``transformers`` / ``torch``
 # (so they are always present in our supported install paths) but we
 # import them directly for embedder weight-loading progress and EUPE
@@ -166,7 +166,7 @@ DEP003 = [
     "safetensors",
     "torchvision",
 ]
-# DEP002 — declared but not imported. Tools we run via their CLIs
+# DEP002 - declared but not imported. Tools we run via their CLIs
 # (pytest, ruff, …), runtime helpers loaded by name (gunicorn), or
 # tokenizer dependencies pulled in transitively by transformers
 # (sentencepiece, protobuf) that are needed at runtime even though

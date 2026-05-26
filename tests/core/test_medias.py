@@ -300,7 +300,7 @@ class TestCustomMetadataMapInLoader:
 class TestListMediaIds:
     """Tests for the lightweight ``GET /api/medias/ids`` listing.
 
-    This endpoint replaced the previous unpaginated ``GET /api/medias`` —
+    This endpoint replaced the previous unpaginated ``GET /api/medias`` -
     full per-item metadata now comes from ``POST /api/medias/batch`` for
     just the IDs the viewport needs.
     """
@@ -312,7 +312,7 @@ class TestListMediaIds:
         assert len(data) == app_module.NUM_MEDIAS
 
     def test_stub_fields_only(self, client):
-        """Each stub carries id + media_type and (optionally) embedder — nothing else."""
+        """Each stub carries id + media_type and (optionally) embedder - nothing else."""
         resp = client.get("/api/medias/ids")
         data = resp.get_json()
         allowed = {"id", "media_type", "embedder"}
@@ -463,7 +463,7 @@ class TestMediaAudio:
     def test_returns_404_for_invalid_id(self, client):
         # The global 404 handler in ``app.py`` normalises NotFound
         # exceptions on ``/api/`` paths to ``error_response(exc.name, 404)``
-        # — that's the JSON-for-SPA hook that overrides werkzeug's HTML
+        # - that's the JSON-for-SPA hook that overrides werkzeug's HTML
         # 404. The flask-smorest message passed to ``abort()`` is dropped
         # in favour of the canonical reason phrase.
         resp = client.get("/api/medias/9999/audio")
@@ -614,7 +614,7 @@ class TestAddToPile:
         The first MD5 lookup happens outside ``_state_lock`` and embedding
         takes the full unlocked window with it. Without a re-check inside
         the lock, two parallel requests both miss the existing-cid hit and
-        both insert — yielding two medias with identical md5/embedding.
+        both insert - yielding two medias with identical md5/embedding.
         The fix re-checks ``md5_lookup`` under ``_state_lock`` immediately
         before the insert and routes the loser into the existing-cid
         branch.
@@ -661,12 +661,12 @@ class TestAddToPile:
                 set_thread_detector_context(det_ctx)
                 # Each worker thread uses its own test client. The fixture
                 # ``client`` is opened in the main thread, and Flask's test
-                # client preserves request contexts on its own ExitStack —
+                # client preserves request contexts on its own ExitStack -
                 # invoking it from worker threads pushes contexts onto the
                 # workers' ContextVars and breaks the main-thread teardown.
                 # The conftest ``client`` fixture auto-injects context
                 # headers; freshly-built test clients don't, so we attach
-                # them explicitly here (H34 — vote/pile-add now requires
+                # them explicitly here (H34 - vote/pile-add now requires
                 # ``X-Dataset-Id`` / ``X-Detector-Id``).
                 with app_module.app.test_client() as c:
                     r = c.post(
@@ -697,7 +697,7 @@ class TestAddToPile:
 
         # Exactly one new media inserted (the regression: was 2 before fix).
         assert len(app_module.medias) == initial_count + 1, (
-            f"H32: duplicate insert — medias grew by {len(app_module.medias) - initial_count}, expected 1"
+            f"H32: duplicate insert - medias grew by {len(app_module.medias) - initial_count}, expected 1"
         )
 
         # Both requests succeed and report the same media id.
@@ -732,7 +732,7 @@ class TestAddToPile:
         return mid, name
 
     def test_existing_media_label_synced_to_disk(self, client):
-        """H33 regression — MD5-match branch.
+        """H33 regression - MD5-match branch.
 
         Without :func:`_sync_pile_label_to_storage` the vote applied to the
         existing media never reaches the detector's JSON file, so the next
@@ -762,7 +762,7 @@ class TestAddToPile:
         assert match.label == "good"
 
     def test_new_media_label_synced_to_disk(self, client):
-        """H33 regression — new-media branch.
+        """H33 regression - new-media branch.
 
         Newly inserted media items are session-only (not in the dataset
         pickle), so the only durable record of an add-to-pile vote on them
@@ -797,7 +797,7 @@ class TestAddToPile:
         assert match.label == "bad"
 
     def test_label_survives_rehydration(self, client):
-        """H33 regression — end-to-end symptom.
+        """H33 regression - end-to-end symptom.
 
         ``ensure_votes_match_active_dataset`` rehydrates from the detector
         file when the (dataset, detector) pair changes or the file's mtime
@@ -830,4 +830,4 @@ class TestAddToPile:
         det_ctx.votes_dataset_id = ""
 
         ensure_votes_match_active_dataset()
-        assert 2 in app_module.good_votes, "label vanished on rehydration — H33 regressed"
+        assert 2 in app_module.good_votes, "label vanished on rehydration - H33 regressed"

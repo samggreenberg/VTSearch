@@ -12,7 +12,7 @@ import numpy as np
 
 
 def _make_silent_wav(duration_s: float = 0.5, sample_rate: int = 16000) -> bytes:
-    """Build a tiny mono 16-bit PCM WAV — content doesn't matter (Whisper is mocked)."""
+    """Build a tiny mono 16-bit PCM WAV - content doesn't matter (Whisper is mocked)."""
     samples = np.zeros(int(duration_s * sample_rate), dtype=np.int16)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:

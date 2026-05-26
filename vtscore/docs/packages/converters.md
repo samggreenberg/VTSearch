@@ -27,7 +27,7 @@ shapes:
 | Document files (PDF) | Run an image embedder over each page     | `document2image`                      |
 | Document files | Embed extracted body text                      | `document2text`                       |
 
-Converters are not embedders — they don't produce vectors. They
+Converters are not embedders - they don't produce vectors. They
 produce media dicts, which then get embedded by the **target** media
 type's embedder. The runner handles that handoff.
 
@@ -35,7 +35,7 @@ type's embedder. The runner handles that handoff.
 
 ## `MediaConverter` ABC
 
-`vtscore/converters/base.py:11`. A `PluginBase` subclass — same
+`vtscore/converters/base.py:11`. A `PluginBase` subclass - same
 field-driven configuration system every other plugin family uses.
 
 ```python
@@ -67,14 +67,14 @@ class MediaConverter(PluginBase, ABC):
 The implementation contract:
 
 - `convert(media, params)` returns a **list** of new media dicts.
-  Empty list means "skipped — could not convert" (e.g. an empty
+  Empty list means "skipped - could not convert" (e.g. an empty
   document, an audio decode failure). The caller treats empty
   lists as "no output for this source".
 - Each returned dict must contain at minimum `"filename"` and the
   data fields expected by the target media type's
   `load_media_data` (e.g. `"media_bytes"` + `"duration"` for image,
   `"media_string"` for text). The dict does **not** include `"id"`,
-  `"embedding"`, or `"md5"` — the runner assigns those.
+  `"embedding"`, or `"md5"` - the runner assigns those.
 - `params` follows the same shape every plugin family uses:
   `{field.key: value}`. The default is `None`, meaning "use declared
   defaults". Implementations should always read params through
@@ -153,7 +153,7 @@ outputs = v2i.convert(media_dict, {"n_clips": "20"})
 
 `vtscore/converters/__init__.py:25`. The registry is a
 `PluginRegistry[MediaConverter]` built on the standard discovery
-machinery — exactly like importers, exporters, settings sources, etc.
+machinery - exactly like importers, exporters, settings sources, etc.
 
 ```python
 _registry: PluginRegistry[MediaConverter] = PluginRegistry(
@@ -235,10 +235,10 @@ in-tree and entry-point converter is already known.
 
 ---
 
-## Running a converter — the runner
+## Running a converter - the runner
 
 `vtscore/converters/runner.py:213`. Most callers don't invoke
-`converter.convert(...)` directly — they call
+`converter.convert(...)` directly - they call
 `run_converters_on_folder(...)`, which:
 
 1. Scans a folder for files matching the **source** media type's
@@ -266,9 +266,9 @@ def run_converters_on_folder(
 
 Two entry shapes:
 
-- **`converter_names`** — legacy, names only. Each converter runs
+- **`converter_names`** - legacy, names only. Each converter runs
   with its declared field defaults.
-- **`converter_specs`** — multi-media path. A list of
+- **`converter_specs`** - multi-media path. A list of
   `SourceSpec(converter, params, ...)` (or equivalent dicts) so the
   caller can pass per-converter params resolved from a UI form. This
   is what multi-media importers (`server_folder`, `server_files`,
@@ -333,7 +333,7 @@ recoverable.
 
 ## Implementing a new converter
 
-Sketch — the walk-through is in
+Sketch - the walk-through is in
 [../../docs/EXTENDING-plugins.md#adding-a-media-converter](../../../docs/EXTENDING-plugins.md#adding-a-media-converter).
 
 1. Create `vtscore/converters/<source>2<target>.py`.
@@ -342,7 +342,7 @@ Sketch — the walk-through is in
 3. Declare `display_name`, `description`, and any
    `fields` you need.
 4. At the bottom of the module, expose `CONVERTER = MyConverter()`.
-5. Restart the process — discovery picks it up on next import.
+5. Restart the process - discovery picks it up on next import.
 
 A minimal example:
 
@@ -408,7 +408,7 @@ CONVERTER = Text2EmojiMediaConverter()
   `video2image`, `pytesseract` for `image2text`, `pymupdf` for
   `document2*`, `openai-whisper` for `audio2text`). Each does the
   import inside `convert` and returns `[]` on `ImportError` rather
-  than crashing — install the relevant extras before relying on a
+  than crashing - install the relevant extras before relying on a
   converter.
 - **Temporary files.** Converters that need a file path (e.g.
   `audio2image` decoding via librosa) write `media_bytes` to a
@@ -418,12 +418,12 @@ CONVERTER = Text2EmojiMediaConverter()
   embedding pass. No persisted intermediates.
 - **`get_param` treats empty strings as unset.** A UI that submits
   empty inputs gets the field's `default`, not `""`. This is
-  intentional — fall through to the declared default when the user
+  intentional - fall through to the declared default when the user
   doesn't touch the field.
 - **`name` defaults to `f"{source}2{target}"`.** If two converters
   share the same source/target pair, override `name` on one of them
   or discovery will silently shadow the duplicate.
-- **`apply_converter_to_demo` mutates `medias` in place** —
+- **`apply_converter_to_demo` mutates `medias` in place** -
   `medias.clear()` followed by `medias.update(converted)`
   (`runner.py:462`). Callers that need the original around must
   snapshot first.
@@ -432,13 +432,13 @@ CONVERTER = Text2EmojiMediaConverter()
 
 ## Cross-references
 
-- [media](media.md) — the `MediaType` / `MediaEmbedder` / `MediaClipper`
+- [media](media.md) - the `MediaType` / `MediaEmbedder` / `MediaClipper`
   ABCs and registry; converters write into media dicts produced by
   those types.
-- [embedding](embedding.md) — the embedder façade the runner uses
+- [embedding](embedding.md) - the embedder façade the runner uses
   to vectorise converter outputs.
-- [plugins](plugins.md) — the `PluginField` / `PluginBase` /
+- [plugins](plugins.md) - the `PluginField` / `PluginBase` /
   `PluginRegistry` scaffolding converters share with every other
   plugin family.
-- [../../docs/EXTENDING-plugins.md](../../../docs/EXTENDING-plugins.md) —
+- [../../docs/EXTENDING-plugins.md](../../../docs/EXTENDING-plugins.md) -
   the full walkthrough for adding a converter.

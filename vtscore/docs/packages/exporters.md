@@ -1,7 +1,7 @@
 # `vtscore.exporters`
 
 Result/labelset exporters: plugins that take a labelset or an
-autodetect-results dict and deliver it somewhere — a file on disk, an
+autodetect-results dict and deliver it somewhere - a file on disk, an
 HTTP webhook, an email, a Holder package. Every exporter is one
 subclass of `LabelsetExporter` plus a module-level `EXPORTER` sentinel,
 discovered by the standard `vtscore.plugins` registry. The package
@@ -10,7 +10,7 @@ ships six built-ins (`server_json_file`, `server_csv_file`, `webhook`,
 dropping a module under `vtscore/exporters/<name>/` or declaring an
 entry point in the `vtscore.exporters` group.
 
-Label *importers* (the reverse direction — pulling labels in from an
+Label *importers* (the reverse direction - pulling labels in from an
 external source) are not here; they live in
 [`vtscore.labels.importers`](../../labels/importers/). Labelset
 *sources* (bidirectional sync) live in
@@ -43,7 +43,7 @@ get_exporter, list_exporters = make_plugin_registry(
 )
 ```
 
-Discovery is **eager** — by the time `from vtscore.exporters import
+Discovery is **eager** - by the time `from vtscore.exporters import
 list_exporters` returns, every sub-package under
 `vtscore/exporters/` exposing an `EXPORTER` attribute is registered,
 and the `vtscore.exporters` entry-point group has been scanned. Failed
@@ -59,13 +59,13 @@ print([e.name for e in list_exporters()])
 # ['email_smtp', 'gui', 'holder', 'server_csv_file', 'server_json_file', 'webhook']
 ```
 
-`get_exporter(name)` returns `None` when the name is unknown — it does
+`get_exporter(name)` returns `None` when the name is unknown - it does
 *not* raise `KeyError`. Callers that want a hard failure should check
 the result.
 
 ## `LabelsetExporter` ABC
 
-`vtscore/exporters/base.py:59` — abstract base class. Subclasses set
+`vtscore/exporters/base.py:59` - abstract base class. Subclasses set
 the standard `PluginBase` class attributes (`name`, `display_name`,
 `description`, `icon`, `fields`, optionally `ui_mode` and
 `hidden_from_picker`) and implement `export()`. The default `icon` is
@@ -98,7 +98,7 @@ for the inherited surface.
 exporter.export(results: dict, field_values: dict) -> dict
 ```
 
-`results` is one of two shapes — the exporter detects which:
+`results` is one of two shapes - the exporter detects which:
 
 - **Autodetect results** (from `/api/auto-detect` or the CLI
   `--autodetect` flow):
@@ -138,7 +138,7 @@ custom exporters that only target one of them should raise
 
 ### Return value
 
-`export()` returns a `dict` that **must** include a `"message"` key — a
+`export()` returns a `dict` that **must** include a `"message"` key - a
 short human-readable confirmation string. The exporter may also include
 arbitrary extra keys (`"filepath"` for file-based exporters,
 `"status_code"` and `"url"` for the webhook, `"holder_id"` for Holder,
@@ -149,7 +149,7 @@ keys are passed through unchanged.
 
 `LabelsetExporter.export_cli(results, field_values)` defaults to
 delegating to `export()`. Override it when CLI invocation needs a
-different behaviour — the GUI exporter does this so it can print to
+different behaviour - the GUI exporter does this so it can print to
 stdout instead of asking the (nonexistent) frontend to render.
 
 ## `ExporterField`
@@ -162,8 +162,8 @@ ExporterField = PluginField
 ```
 
 Use whichever name reads better at the call site; the two are
-literally identical. Field semantics — `field_type` literals,
-`dynamic_options`, `depends_on`, number-field type inference — are
+literally identical. Field semantics - `field_type` literals,
+`dynamic_options`, `depends_on`, number-field type inference - are
 documented in detail in [`plugins.md#pluginfield`](plugins.md#pluginfield).
 
 ## Built-in exporters
@@ -208,7 +208,7 @@ fields via `resolve_export_filepath`
 
 | Placeholder | Substituted with |
 |-------------|------------------|
-| `{YYYYMMDD-HHMMSS}` | Current UTC timestamp, e.g. `20260516-143022` — included in the default path so consecutive runs do not silently overwrite each other |
+| `{YYYYMMDD-HHMMSS}` | Current UTC timestamp, e.g. `20260516-143022` - included in the default path so consecutive runs do not silently overwrite each other |
 | `{detector_name}` | The active `DetectorContext.name`, sanitised by `vtscore.security.sanitize_template_value` |
 | `{username}` | The current request user (from `vtsearch.auth.get_current_user`), sanitised the same way; falls back to `"default"` |
 
@@ -235,7 +235,7 @@ invoking `export()`.
 ## Writing a custom exporter
 
 Drop a sub-package under `vtscore/exporters/<name>/` (or expose it as
-an entry point — see [`plugins.md`](plugins.md#entry-point-integration)
+an entry point - see [`plugins.md`](plugins.md#entry-point-integration)
 for the third-party path):
 
 ```python
@@ -295,7 +295,7 @@ EXPORTER = SftpLabelsetExporter()
 - For file destinations, use
   `vtscore.exporters._template.resolve_export_filepath` for template
   variables and default the path under `vtscore.config.DATA_DIR`.
-  Write atomically (tmp file + `os.replace`) — the two server-file
+  Write atomically (tmp file + `os.replace`) - the two server-file
   exporters have helpers worth copying.
 - For URL destinations, run the URL through
   `vtscore.security.validate_url` first (SSRF guard).
@@ -305,9 +305,9 @@ EXPORTER = SftpLabelsetExporter()
 
 ## Cross-references
 
-- [`plugins.md`](plugins.md) — registry mechanics, sentinels, entry
+- [`plugins.md`](plugins.md) - registry mechanics, sentinels, entry
   points, `PluginField` reference, schema helpers.
-- [`sync.md`](sync.md) — the `SyncSource` ABC behind labelset/settings
+- [`sync.md`](sync.md) - the `SyncSource` ABC behind labelset/settings
   sources, the bidirectional-sync counterparts to exporters.
 - Repo-level [`docs/EXTENDING-plugins.md`](../../../docs/EXTENDING-plugins.md)
   has the app-tier perspective and walks through the HTTP routes that

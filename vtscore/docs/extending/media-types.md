@@ -5,7 +5,7 @@ file extensions to scan for during folder imports, how to serve a clip
 over HTTP, which fields to surface in the labeling UI, and which
 demo datasets ship with it. Media types live as sub-packages under
 `vtscore.media.<type>/` and are auto-discovered by a sentinel scan at
-import time — drop a directory in, expose a `MEDIA_TYPE` sentinel from
+import time - drop a directory in, expose a `MEDIA_TYPE` sentinel from
 its `__init__.py`, and the rest of the system picks it up. Embedders
 and clippers for the type live alongside in the same sub-package.
 
@@ -25,8 +25,8 @@ library API and the per-type sub-package convention.
 
 ## Why add a media type vs. a converter
 
-Add a media type when the content is genuinely new — point clouds, 3D
-meshes, source code, MIDI — and you need its own embedder, its own
+Add a media type when the content is genuinely new - point clouds, 3D
+meshes, source code, MIDI - and you need its own embedder, its own
 HTTP serving, and its own UI viewer. Add a [converter](converters.md)
 instead when the content is just a different surface over an existing
 type: OCR text from an image, a spectrogram view of audio, a thumbnail
@@ -72,7 +72,7 @@ is an ABC. Required overrides:
 
 | Member | Type | Purpose |
 |--------|------|---------|
-| `type_id` (property) | `str` | Canonical identifier — `"audio"`, `"image"`, `"text"`, `"mesh3d"` |
+| `type_id` (property) | `str` | Canonical identifier - `"audio"`, `"image"`, `"text"`, `"mesh3d"` |
 | `name` (property) | `str` | Human-readable label |
 | `icon` (property) | `str` | SVG icon-type name resolved by the frontend |
 | `file_extensions` (property) | `list[str]` | Glob patterns like `["*.obj", "*.stl"]` |
@@ -117,8 +117,8 @@ After registration:
 ## Worked example
 
 A minimal `mesh3d` type that handles `.obj` and `.stl` files. No
-embedder yet — that lives in its own [embedder
-guide](embedders.md) — just enough to load files into a dataset and
+embedder yet - that lives in its own [embedder
+guide](embedders.md) - just enough to load files into a dataset and
 serve them over HTTP.
 
 ```python
@@ -235,7 +235,7 @@ class TestMesh3DLoad:
 ```
 
 Follow the pattern in [`tests_lib/core/`](../../../tests_lib/core/)
-for media-type tests — the autouse fixtures stub every embedder, so
+for media-type tests - the autouse fixtures stub every embedder, so
 your test only needs to exercise the `MediaType` itself. If your type
 needs a custom test medium, add a fixture under `tests_lib/fixtures/`
 mirroring the audio / image / video pattern in

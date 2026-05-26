@@ -1,7 +1,7 @@
 # Extending VTSearch
 
 This index points to the three topic-specific extension guides, plus the
-cross-cutting sections — authentication, dependencies, and a one-stop
+cross-cutting sections - authentication, dependencies, and a one-stop
 checklist for every extension type. Start here; open the child doc that
 matches what you want to build.
 
@@ -9,20 +9,20 @@ matches what you want to build.
 
 | Guide | What you build |
 |-------|----------------|
-| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources — eight auto-discovered plugin families that share a common registry-based architecture. |
-| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, converters, and media sources — anything in `vtscore/media/` or `vtscore/converters/`. |
-| [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors — the three kinds of `Processor`. |
+| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources - eight auto-discovered plugin families that share a common registry-based architecture. |
+| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, converters, and media sources - anything in `vtscore/media/` or `vtscore/converters/`. |
+| [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors - the three kinds of `Processor`. |
 
 Each guide explains the interface contract, where files go, how
 discovery/registration works, and includes a complete example.
 
 ## Cross-cutting reference
 
-- [Authentication Providers](#authentication-providers) — pluggable
+- [Authentication Providers](#authentication-providers) - pluggable
   `LoginProvider` ABC
-- [Dependency Management](#dependency-management) — pyproject.toml as
+- [Dependency Management](#dependency-management) - pyproject.toml as
   the single source of truth, with deptry guarding drift
-- [Quick Reference: Checklist for Each Extension Type](#quick-reference-checklist-for-each-extension-type) —
+- [Quick Reference: Checklist for Each Extension Type](#quick-reference-checklist-for-each-extension-type) -
   one checklist per extension family
 
 ---
@@ -77,13 +77,13 @@ isolated in `DatasetContext` objects, and per-detector state (votes,
 label history, click times, learned scores, inclusion, labelset source)
 is isolated in `DetectorContext` objects. The frontend sends
 `X-Dataset-Id` / `X-Detector-Id` headers, and a `before_request`
-middleware resolves the active contexts per request — so multiple users
+middleware resolves the active contexts per request - so multiple users
 can work with different datasets/models simultaneously.
 
 The auth infrastructure supports ownership tracking (`created_by` on
 datasets and detectors) and per-user data
 directories via `get_user_data_dir(username, base)`. **Settings remain
-globally shared** across all users — there is no per-user settings
+globally shared** across all users - there is no per-user settings
 isolation yet.
 
 ---
@@ -91,7 +91,7 @@ isolation yet.
 ## Dependency Management
 
 Runtime dependencies are declared in **`pyproject.toml`** under
-`[project.dependencies]` — that's the single source of truth, and deptry
+`[project.dependencies]` - that's the single source of truth, and deptry
 (wired into `lint.yml` and the pre-commit hook) verifies that every
 imported package is declared there. Dev tools (pytest, ruff,
 pre-commit, etc.) live under `[project.optional-dependencies].dev`.
@@ -114,7 +114,7 @@ Add the extra packages to `[project.dependencies]` in `pyproject.toml`
 (or to `[project.optional-dependencies].dev` if they're test/lint-only),
 then re-run `bash scripts/install-cpu.sh` (or any editable install).
 Failed imports of a plugin's sub-package emit a warning rather than
-crashing, so missing dependencies degrade gracefully — but deptry will
+crashing, so missing dependencies degrade gracefully - but deptry will
 flag any imported package missing from pyproject the next time `./run-tests.sh` runs.
 
 ---
@@ -129,7 +129,7 @@ See [EXTENDING-plugins.md § Adding a Data Importer](EXTENDING-plugins.md#adding
 
 - [ ] Create `vtscore/datasets/importers/<name>/__init__.py`
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `run(self, field_values, medias, thin=False)` — populate `medias` in-place
+- [ ] Implement `run(self, field_values, medias, thin=False)` - populate `medias` in-place
 - [ ] Expose `IMPORTER = YourImporter()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/dataset/all-importers` includes your importer
@@ -140,7 +140,7 @@ See [EXTENDING-plugins.md § Adding a Results Exporter](EXTENDING-plugins.md#add
 
 - [ ] Create `vtscore/exporters/<name>/__init__.py`
 - [ ] Subclass `LabelsetExporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `export(self, results, field_values)` — return a dict with a `"message"` key
+- [ ] Implement `export(self, results, field_values)` - return a dict with a `"message"` key
 - [ ] Expose `EXPORTER = YourExporter()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/exporters` includes your exporter
@@ -151,7 +151,7 @@ See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#addin
 
 - [ ] Create `vtscore/labels/importers/<name>/__init__.py`
 - [ ] Subclass `LabelImporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `run(self, field_values)` — return a list of `{"md5": ..., "label": ...}` dicts
+- [ ] Implement `run(self, field_values)` - return a list of `{"md5": ..., "label": ...}` dicts
 - [ ] Expose `LABEL_IMPORTER = YourImporter()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/label-importers` includes your importer
@@ -162,7 +162,7 @@ See [EXTENDING-plugins.md § Adding a Processor Importer](EXTENDING-plugins.md#a
 
 - [ ] Create `vtsearch/processors/importers/<name>/__init__.py`
 - [ ] Subclass `ProcessorImporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `run(self, field_values)` — return a dict with `media_type`, `weights`, `threshold`
+- [ ] Implement `run(self, field_values)` - return a dict with `media_type`, `weights`, `threshold`
 - [ ] Expose `PROCESSOR_IMPORTER = YourImporter()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/processor-importers` includes your importer
@@ -173,8 +173,8 @@ See [EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#addi
 
 - [ ] Create `vtsearch/settings_io/sources/<name>/__init__.py`
 - [ ] Subclass `SettingsSource`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `load(self, field_values)` — return a settings dict
-- [ ] Implement `save(self, settings_data, field_values)` — persist settings
+- [ ] Implement `load(self, field_values)` - return a settings dict
+- [ ] Implement `save(self, settings_data, field_values)` - persist settings
 - [ ] Expose `SETTINGS_SOURCE = YourSource()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/settings-sources` includes your source
@@ -185,8 +185,8 @@ See [EXTENDING-plugins.md § Adding a Labelset Source](EXTENDING-plugins.md#addi
 
 - [ ] Create `vtscore/labels/sources/<name>/__init__.py`
 - [ ] Subclass `LabelsetSource`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `load(self, field_values)` — return a list of label dicts
-- [ ] Implement `save(self, labelset, field_values)` — persist a `LabelSet`
+- [ ] Implement `load(self, field_values)` - return a list of label dicts
+- [ ] Implement `save(self, labelset, field_values)` - persist a `LabelSet`
 - [ ] Expose `LABELSET_SOURCE = YourSource()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/labelset-sources` includes your source
@@ -197,7 +197,7 @@ See [EXTENDING-plugins.md § Adding a Settings Importer](EXTENDING-plugins.md#ad
 
 - [ ] Create `vtsearch/settings_io/importers/<name>/__init__.py`
 - [ ] Subclass `SettingsImporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `run(self, field_values)` — return a settings dict
+- [ ] Implement `run(self, field_values)` - return a settings dict
 - [ ] Expose `SETTINGS_IMPORTER = YourImporter()` at module level
 - [ ] Test: start the app and check `GET /api/settings-importers` includes your importer
 
@@ -207,7 +207,7 @@ See [EXTENDING-plugins.md § Adding a Settings Exporter](EXTENDING-plugins.md#ad
 
 - [ ] Create `vtsearch/settings_io/exporters/<name>/__init__.py`
 - [ ] Subclass `SettingsExporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `export(self, settings_data, field_values)` — return dict with `"message"` key
+- [ ] Implement `export(self, settings_data, field_values)` - return dict with `"message"` key
 - [ ] Expose `SETTINGS_EXPORTER = YourExporter()` at module level
 - [ ] Test: start the app and check `GET /api/settings-exporters` includes your exporter
 
@@ -227,7 +227,7 @@ See [EXTENDING-media.md § Adding a Media Type](EXTENDING-media.md#adding-a-medi
 
 - [ ] Create `vtscore/media/<type>/` directory with `__init__.py`, `media_type.py`
 - [ ] Subclass `MediaType` and implement all abstract properties and methods
-- [ ] Expose `MEDIA_TYPE` and `CLIPPERS` sentinels in `__init__.py` (embedders are discovered per-module — see the embedder checklist below)
+- [ ] Expose `MEDIA_TYPE` and `CLIPPERS` sentinels in `__init__.py` (embedders are discovered per-module - see the embedder checklist below)
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Override `pickle_extra_fields` if you use custom clip keys
 - [ ] Test: import a folder of your media type, verify clips appear and are sortable
@@ -240,7 +240,7 @@ See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-
 - [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `_load_models_impl()`, `embed_media()`
 - [ ] Optionally implement `embed_text()` for text-query sorting
 - [ ] Optionally set `description_wrappers` for enriched text embedding
-- [ ] Expose `EMBEDDER = YourEmbedder()` at module level — auto-discovery picks it up, no `__init__.py` edits needed (symlinked files are supported)
+- [ ] Expose `EMBEDDER = YourEmbedder()` at module level - auto-discovery picks it up, no `__init__.py` edits needed (symlinked files are supported)
 - [ ] Test: load a dataset and verify embeddings are generated
 
 ### New Media Clipper Checklist
@@ -274,7 +274,7 @@ See [EXTENDING-processors.md](EXTENDING-processors.md).
 - [ ] Register as autorun via `POST /api/autorun-extractors` or
       `POST /api/autorun-localizers`
 
-For ML classifiers, create a detector instead — register it via
+For ML classifiers, create a detector instead - register it via
 `POST /api/detectors/registry`, label items in the right pane, and toggle
 its autorun flag with `PUT /api/detectors/registry/<id>/autorun`.
 

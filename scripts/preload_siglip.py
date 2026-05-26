@@ -2,7 +2,7 @@
 
 Used by ``docker/Dockerfile.labbench`` to bake weights into the image. Uses
 ``huggingface_hub.snapshot_download`` rather than
-``SiglipModel.from_pretrained`` so the build step only downloads files —
+``SiglipModel.from_pretrained`` so the build step only downloads files -
 it does not import torch, does not construct the model, and does not
 allocate a CPU copy of the weights. That makes the step substantially
 faster, uses far less RAM (the build no longer needs to hold the full

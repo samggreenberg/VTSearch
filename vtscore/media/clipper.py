@@ -20,19 +20,19 @@ class MediaClipper(ABC):
 
     Examples:
 
-    * ``SoundTilingClipper(2)`` — tiles a 9.5 s audio clip into five 2 s
+    * ``SoundTilingClipper(2)`` - tiles a 9.5 s audio clip into five 2 s
       clips equally spaced across the original duration.
-    * ``ImageTilingClipper()`` — covers a tall image with equidistant square
+    * ``ImageTilingClipper()`` - covers a tall image with equidistant square
       tiles using the shorter dimension as the tile size.
-    * ``TextSentenceClipper()`` — splits a paragraph into individual sentences.
-    * Any ``*DefaultClipper`` — returns the media unchanged (single-element
+    * ``TextSentenceClipper()`` - splits a paragraph into individual sentences.
+    * Any ``*DefaultClipper`` - returns the media unchanged (single-element
       list).
 
     Subclasses must implement:
 
-    * :attr:`name` — unique identifier for this clipper.
-    * :attr:`media_type` — which media ``type_id`` it works on.
-    * :meth:`clip` — split a single media dict into a list of media dicts.
+    * :attr:`name` - unique identifier for this clipper.
+    * :attr:`media_type` - which media ``type_id`` it works on.
+    * :meth:`clip` - split a single media dict into a list of media dicts.
     """
 
     # ------------------------------------------------------------------
@@ -76,7 +76,7 @@ class MediaClipper(ABC):
         The frontend substitutes each ``{key}`` with the current value of
         the parameter named ``key`` (see :attr:`parameters`) when rendering
         the import row preview.  Subclasses with configurable parameters
-        should override to surface the active values — e.g.
+        should override to surface the active values - e.g.
         ``"Cut each audio file into {duration}s tiles."``.  Defaults to
         :attr:`description` so static clippers don't have to override.
         """
@@ -92,11 +92,11 @@ class MediaClipper(ABC):
 
         Each descriptor is a dict with keys:
 
-        * ``key`` — parameter name (used in :meth:`with_params`).
-        * ``label`` — human-readable label for the UI.
-        * ``type`` — ``"number"`` or ``"string"``.
-        * ``default`` — current/default value.
-        * ``min`` / ``max`` / ``step`` — optional numeric constraints.
+        * ``key`` - parameter name (used in :meth:`with_params`).
+        * ``label`` - human-readable label for the UI.
+        * ``type`` - ``"number"`` or ``"string"``.
+        * ``default`` - current/default value.
+        * ``min`` / ``max`` / ``step`` - optional numeric constraints.
 
         Clippers with no configurable parameters return ``[]`` (the default).
         """
@@ -109,11 +109,11 @@ class MediaClipper(ABC):
         Each question is a dict with the same schema as :attr:`parameters`
         descriptors:
 
-        * ``key`` — parameter name (used in :meth:`with_params`).
-        * ``label`` — human-readable label / question for the UI.
-        * ``type`` — ``"number"`` or ``"string"``.
-        * ``default`` — current/default value.
-        * ``min`` / ``max`` / ``step`` — optional numeric constraints.
+        * ``key`` - parameter name (used in :meth:`with_params`).
+        * ``label`` - human-readable label / question for the UI.
+        * ``type`` - ``"number"`` or ``"string"``.
+        * ``default`` - current/default value.
+        * ``min`` / ``max`` / ``step`` - optional numeric constraints.
 
         By default this returns :attr:`parameters`, so any clipper that
         already declares parameters automatically exposes them as creation
@@ -173,7 +173,7 @@ class MediaClipper(ABC):
         :meth:`resolve_for_durations` and before :meth:`clip`.  Most
         clippers ignore *media* and return ``self``.  Auto-selecting
         clippers (e.g. ``SoundAutoClipper``) override this to pick a
-        different concrete clipper based on the item's own duration —
+        different concrete clipper based on the item's own duration -
         e.g. pass-through for short clips, tiling for longer ones.
 
         The resolved clipper's :attr:`name` and parameter values are what

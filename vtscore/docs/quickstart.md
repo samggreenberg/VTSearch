@@ -2,7 +2,7 @@
 
 This guide takes about 15 minutes. You'll load a folder of media, train a
 small detector from a handful of labels, and score a fresh folder against
-it — using only `vtscore` (no Flask, no Angular).
+it - using only `vtscore` (no Flask, no Angular).
 
 Five short examples follow, in order of increasing depth:
 
@@ -13,7 +13,7 @@ Five short examples follow, in order of increasing depth:
 5. [Persist and reload a detector](#5-persist-and-reload-a-detector)
 6. [Run a text query](#6-run-a-text-query-no-training-needed)
 
-If you haven't read [concepts.md](concepts.md), do that first — the
+If you haven't read [concepts.md](concepts.md), do that first - the
 vocabulary (`Media`, `Origin`, `LabelSet`, `Embedding`) is assumed below.
 
 ## 0. Install
@@ -62,11 +62,11 @@ Now `CoreConfig.from_settings()` works anywhere in the library.
 
 ## 2. Load a folder of audio files
 
-Folder loading happens in-place — `load_dataset_from_folder` populates the
+Folder loading happens in-place - `load_dataset_from_folder` populates the
 `medias` dict you pass in.
 
 ```python
-from vtscore.media import audio  # noqa: F401 — registers audio MediaType + embedders
+from vtscore.media import audio  # noqa: F401 - registers audio MediaType + embedders
 from vtscore.datasets.loader import load_dataset_from_folder
 
 medias: dict[int, dict] = {}
@@ -149,7 +149,7 @@ print(f"Trained MLP; calibrated threshold = {threshold:.3f}")
 ```
 
 `train_model` is deterministic given the default seed (42). Six labels is
-enough for the MLP to converge — the model is small (auto-sized to ~16
+enough for the MLP to converge - the model is small (auto-sized to ~16
 hidden units for this corpus) and the dropout regularises it.
 
 For a more idiomatic detector lifecycle (with persistence), see
@@ -190,12 +190,12 @@ for path, score in hits[:10]:
 ```
 
 For larger datasets, build the embedding matrix once on the
-`DatasetContext` cache instead of stacking every time — see
+`DatasetContext` cache instead of stacking every time - see
 [packages/embedding.md](packages/embedding.md#cached-embedding-matrix).
 
 ## 5. Persist and reload a detector
 
-Detectors persist as JSON labelsets — never as model weights. On reload,
+Detectors persist as JSON labelsets - never as model weights. On reload,
 the library re-derives embeddings from the labelset's origins and
 retrains the MLP.
 
@@ -227,14 +227,14 @@ labelset = LabelSet(
 # Save it. The on-disk path is CoreConfig.detectors_dir / "barks.json".
 save_detector("barks", labelset)
 
-# Later, in a different process — reload and train.
+# Later, in a different process - reload and train.
 ctx = DetectorContext(detector_id="barks", name="barks",
                       media_type="audio", embedder="audio_clap")
 register_detector_context(ctx)
 
 # Build (good_origins, bad_origins) from the saved labelset's elements,
 # then re-derive embeddings + retrain. Pass the same embedder the detector
-# was trained with so the re-embedded vectors line up with the saved ones —
+# was trained with so the re-embedded vectors line up with the saved ones -
 # otherwise the MLP trains on a mix of embedder outputs.
 good_origins = [
     {"origin": e.origin, "origin_name": e.origin_name,
@@ -275,7 +275,7 @@ What's on disk after `save_detector`:
 }
 ```
 
-No embeddings, no model weights — just origins. The library re-derives
+No embeddings, no model weights - just origins. The library re-derives
 everything else on load. This is the invariant described in
 [architecture.md](architecture.md#the-no-persisted-vectors-rule).
 
@@ -305,7 +305,7 @@ for media, score in ranked[:10]:
     print(f"  {score:0.3f}  {media['filename']}")
 ```
 
-`embed_text_query` is LRU-cached per `(query, media_type)` — calling it
+`embed_text_query` is LRU-cached per `(query, media_type)` - calling it
 twice with the same arguments is free. Clear the cache with
 `vtscore.embedding.clear_text_query_cache()` if you swap embedder
 backbones mid-process.
@@ -319,7 +319,7 @@ backbones mid-process.
   [architecture.md](architecture.md) for the resolution chain and the
   three hooks the app installs (`register_core_config_builder`,
   `register_*_context_resolver`, `register_plugin_family`).
-- **Bulk scoring without writing this script:** use the CLI —
+- **Bulk scoring without writing this script:** use the CLI -
   [packages/cli.md](packages/cli.md) shows the `autodetect` entry points.
 - **Evaluating your detector:** see [packages/eval.md](packages/eval.md)
   for the offline evaluation runner (precision/recall, voting iterations).

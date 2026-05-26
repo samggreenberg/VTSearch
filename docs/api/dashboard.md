@@ -112,7 +112,7 @@ high-level Find phases (prepare detectors, load data, score).
 POST /api/find-label
 ```
 
-**Body:** `{"detector_id": "abc123"}` — optionally include `"dataset_id"`
+**Body:** `{"detector_id": "abc123"}` - optionally include `"dataset_id"`
 to override the request-scoped dataset context.
 
 Resolves the detector from the registry, scores every loaded media using

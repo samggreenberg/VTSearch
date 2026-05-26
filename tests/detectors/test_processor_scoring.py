@@ -6,11 +6,11 @@ The error paths (no medias, bad type, mismatched media type) live in
 the *successful* execution branches in
 :mod:`vtsearch.routes.processors.scoring`:
 
-* ``/api/extract`` happy path — extractor produces hits, response has
+* ``/api/extract`` happy path - extractor produces hits, response has
   the expected per-media shape.
-* ``/api/localize`` happy path — localizer produces bounding boxes.
+* ``/api/localize`` happy path - localizer produces bounding boxes.
 * ``/api/auto-extract`` and ``/api/auto-localize`` parallel runner
-  (``_auto_run_processors``) — uses the worker-cap path.
+  (``_auto_run_processors``) - uses the worker-cap path.
 
 A stub extractor / localizer is patched into the route module so the
 tests do not depend on YOLO weights.

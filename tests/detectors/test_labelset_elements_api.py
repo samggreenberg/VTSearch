@@ -3,8 +3,8 @@
 These cover three concerns introduced together so that a detector loaded
 against a different dataset still shows its training labels on the right:
 
-* ``GET /api/detectors/<name>/labels-detail`` — read.
-* ``POST /api/detectors/<name>/labels/<id>/vote`` — toggle on a
+* ``GET /api/detectors/<name>/labels-detail`` - read.
+* ``POST /api/detectors/<name>/labels/<id>/vote`` - toggle on a
   saved labelset element (origin-keyed, dataset-agnostic).
 * ``sync_labels_to_loaded_detector`` is now non-destructive across datasets:
   a vote in dataset B no longer wipes labels saved from dataset A.
@@ -42,7 +42,7 @@ def _seed_cross_dataset_model(tm_name: str = "cross-ds-model", *, mark_loaded: b
     the test medias (which use importer ``"test"``).
 
     When *mark_loaded* is ``True`` (default), also registers a
-    :class:`DetectorContext` and marks the model as loaded — convenient for
+    :class:`DetectorContext` and marks the model as loaded - convenient for
     tests that exercise the labels-detail / vote APIs without running the
     real load task.  When ``False``, only the on-disk model + registry
     entry are created, so a subsequent ``POST /api/detectors/registry/load``
@@ -123,7 +123,7 @@ class TestLabelsDetail:
 
     def test_lists_saved_labels_independent_of_loaded_dataset(self, client):
         """Right-pane data source must surface labels that don't resolve into
-        the active dataset — the whole point of the labelset-driven pane."""
+        the active dataset - the whole point of the labelset-driven pane."""
         _seed_cross_dataset_model()
 
         res = client.get("/api/detectors/cross-ds-model/labels-detail")
@@ -226,7 +226,7 @@ class TestLabelElementThumbnail:
 
     def test_returns_404_when_file_unavailable_cross_dataset(self, client):
         """Cross-dataset elements with a fake importer can't be resolved on
-        disk — the route should 404 cleanly, not 500."""
+        disk - the route should 404 cleanly, not 500."""
         _seed_cross_dataset_model()
         detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         target = detail["good"][0]
@@ -282,7 +282,7 @@ class TestCrossDatasetMLPTraining:
     cached on the DetectorContext, and MLP training uses them.
 
     Without this, only labels that happen to resolve into the active
-    dataset would contribute — defeating the point of the labelset-driven
+    dataset would contribute - defeating the point of the labelset-driven
     pane (the user's labels would be invisible to the model)."""
 
     def _seed_with_resolvable_labelset(self, tmp_path, monkeypatch):
@@ -308,7 +308,7 @@ class TestCrossDatasetMLPTraining:
             yield files.get(origin_name) or files.get(filename)
 
         # labelset_training imports resolve_file_context inside _embed_one,
-        # so patching the resolver symbol is enough — the function-level
+        # so patching the resolver symbol is enough - the function-level
         # import picks the patched value.
         import vtscore.detectors.labelset_training as lt_mod
         import vtscore.detectors.resolver as resolver_mod
@@ -349,7 +349,7 @@ class TestCrossDatasetMLPTraining:
             assert stable_element_id(el) in det_ctx.label_embeddings
 
     def test_learned_sort_uses_cross_dataset_labels_with_zero_active_votes(self, client, tmp_path, monkeypatch):
-        """No active-dataset votes — yet learned-sort should still produce a
+        """No active-dataset votes - yet learned-sort should still produce a
         ranked list, because training uses the cross-dataset labelset."""
         detector_id = self._seed_with_resolvable_labelset(tmp_path, monkeypatch)
         _load_detector_and_wait_local(client, detector_id)

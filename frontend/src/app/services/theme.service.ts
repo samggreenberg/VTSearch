@@ -36,7 +36,7 @@ export class ThemeService implements OnDestroy {
         this.applyTheme(stored);
       },
       error: () => {
-        // Settings unavailable — keep the default 'system' theme.
+        // Settings unavailable - keep the default 'system' theme.
         this.applyTheme('system');
       },
     });
@@ -81,7 +81,7 @@ export class ThemeService implements OnDestroy {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
     this.osMedia = window.matchMedia(OS_MEDIA_QUERY);
     this.osListener = () => {
-      // Paranoia — only re-apply if still on 'system'. The listener is
+      // Paranoia - only re-apply if still on 'system'. The listener is
       // removed when the user leaves 'system', but a stale event could
       // theoretically fire between change and removal.
       if (this.currentTheme === 'system') {

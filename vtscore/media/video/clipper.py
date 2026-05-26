@@ -1,4 +1,4 @@
-"""Video clippers — tile, scene-detect, or pass-through video media."""
+"""Video clippers - tile, scene-detect, or pass-through video media."""
 
 from __future__ import annotations
 
@@ -261,7 +261,7 @@ def _detect_scene_boundaries(
     Scene changes are detected by comparing consecutive frames using
     normalised histogram correlation.  When the correlation drops below
     *threshold* (i.e. the frames look very different), a scene boundary is
-    recorded — provided at least *min_scene_duration* seconds have elapsed
+    recorded - provided at least *min_scene_duration* seconds have elapsed
     since the previous boundary.
 
     The function samples one frame per second to keep the cost manageable
@@ -335,7 +335,7 @@ class VideoSceneClipper(MediaClipper):
 
     Like :class:`VideoTilingClipper`, this clipper records boundaries as
     metadata (``clip_start``, ``clip_end``, ``clip_index``, ``scene_index``)
-    without transcoding the underlying bytes — downstream consumers use
+    without transcoding the underlying bytes - downstream consumers use
     these fields to seek or trim on playback.
 
     Parameters

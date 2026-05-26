@@ -46,11 +46,11 @@ vtsearch/_version.txt
 
 # Cached gated-model weights populated by scripts/cache_gated_models.sh.
 # Used by Dockerfile.image-embedders so the build doesn't need an HF token.
-# Never commit the weights themselves — they're large and licence-restricted.
+# Never commit the weights themselves - they're large and licence-restricted.
 # (model_cache/.gitkeep is tracked so the dir exists for the Dockerfile COPY.)
 model_cache/*
 !model_cache/.gitkeep
 
-# Per-user Claude Code settings overlay — holds secrets like HF_TOKEN.
+# Per-user Claude Code settings overlay - holds secrets like HF_TOKEN.
 # Must never be committed.
 .claude/settings.local.json

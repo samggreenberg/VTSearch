@@ -78,7 +78,7 @@ def get_settings_importers():
 # ---------------------------------------------------------------------------
 # POST /api/settings-importers/import/<importer_name>
 #
-# Plugin-field route — body shape depends on the importer plugin and isn't
+# Plugin-field route - body shape depends on the importer plugin and isn't
 # described in the OpenAPI spec.  Runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the importer's
 # :attr:`fields`), so missing required fields / invalid select values

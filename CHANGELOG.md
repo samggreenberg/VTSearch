@@ -1,4 +1,4 @@
-# Changelog — `vtsearch`
+# Changelog - `vtsearch`
 
 User-facing changes to the `vtsearch` Flask + Angular application. The
 companion `vtscore` library has its own CHANGELOG at
@@ -10,7 +10,7 @@ computed from git at import time in `vtsearch/__init__.py`. Every commit on
 `dev` is effectively a new release; there is no tracked version constant to
 bump and no per-release tag.
 
-This CHANGELOG is therefore a **curated** record of notable changes — it does
+This CHANGELOG is therefore a **curated** record of notable changes - it does
 not list every commit. Use `git log` for the full history.
 
 ## Unreleased
@@ -19,8 +19,8 @@ not list every commit. Use `git log` for the full history.
 
 - **Library extracted.** The reusable core of VTSearch was carved out into a
   separate `vtscore/` package. The application surface that users interact
-  with — the Flask app, the Angular SPA, the settings system, the auth
-  layer — is unchanged. Internally, every library-candidate import path
+  with - the Flask app, the Angular SPA, the settings system, the auth
+  layer - is unchanged. Internally, every library-candidate import path
   moved from `vtsearch.<lib>` to `vtscore.<lib>`; `vtsearch/state/__init__.py`
   is now a thin app-tier shim that re-exports `vtscore.state` and layers
   the proxy view (`medias`, `good_votes`, …) on top. See

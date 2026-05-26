@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------
-# VTSearch — CPU Docker image
+# VTSearch - CPU Docker image
 #
 # Build (from repo root):
 #   docker build -f docker/Dockerfile -t vtsearch .

@@ -1,6 +1,6 @@
 """Detector scoring routes.
 
-Implements the active-dataset scoring endpoints — find-label and auto-detect —
+Implements the active-dataset scoring endpoints - find-label and auto-detect -
 on top of the detector concept.  Detectors are loaded into ``DetectorContext``
 instances on demand; weights live exclusively in RAM.
 

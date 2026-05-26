@@ -154,7 +154,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.openMenu());
 
-    // Erase the column-type union to a plain `SortState` — the pulldown
+    // Erase the column-type union to a plain `SortState` - the pulldown
     // doesn't care which specific column-type union the source carries.
     const sortState$: Observable<SortState> = this.isDataset
       ? this.dashboardColumns.datasetCols.sortState$
@@ -165,7 +165,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     });
 
     // Subscribe to the running-jobs poller so a job starting on another
-    // pair lights up the spinner glyph here. The service polls lazily —
+    // pair lights up the spinner glyph here. The service polls lazily -
     // it only fires HTTP traffic while at least one component is
     // subscribed.
     this.runningJobs.busyPairs$.pipe(takeUntil(this.destroy$)).subscribe((pairs) => {
@@ -199,8 +199,8 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
   get fieldTitle(): string {
     return this.isDataset
-      ? 'Active dataset — click to switch'
-      : 'Active detector — click to switch';
+      ? 'Active dataset - click to switch'
+      : 'Active detector - click to switch';
   }
 
   toggle(): void {
@@ -212,7 +212,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
    * Open the dropdown and pre-focus the first compatible row (or the
    * active row if all rows are incompatible / there's no other-half
    * context yet). Scrolls the focused row into view on the next tick.
-   * Idempotent — calling on an already-open menu just re-focuses.
+   * Idempotent - calling on an already-open menu just re-focuses.
    */
   openMenu(): void {
     this.open = true;
@@ -410,7 +410,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     const datasets = this.datasetState.datasets;
     const detectors = this.datasetState.detectors;
     // Highlight rows by intent (what the user picked), not by what's
-    // currently loaded — picking a row should feel instant even when
+    // currently loaded - picking a row should feel instant even when
     // a dataset/detector load is still running behind the scenes.
     const activeDsId = this.activeContext.intentDatasetId;
     const activeDetId = this.activeContext.intentModelId;
@@ -449,7 +449,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     }
     // Per-pair busy check: a dataset row shows the spinner when paired
     // with the currently-active detector half has a running job. We
-    // never show a spinner on a row whose "other half" is empty — there
+    // never show a spinner on a row whose "other half" is empty - there
     // is no real pair to attach work to.
     const otherId = activeDetector?.id || '';
     const busyJobTypes = otherId ? this.busyPairs.get(pairKey(dataset.id, otherId)) || [] : [];

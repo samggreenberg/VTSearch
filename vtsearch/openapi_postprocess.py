@@ -84,7 +84,7 @@ def assign_operation_ids(app: Flask, spec: dict[str, Any]) -> None:
     under several routes, like ``/dashboard`` and ``/label`` sharing
     ``angular_routes``), we disambiguate by appending the HTTP method and,
     if that is still not unique, a 1-based index in sorted (path, method)
-    order — so the assignment is deterministic and snapshot-stable across
+    order - so the assignment is deterministic and snapshot-stable across
     runs.
     """
     paths = spec.get("paths")

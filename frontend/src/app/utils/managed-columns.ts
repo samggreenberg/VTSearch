@@ -206,7 +206,7 @@ export class ManagedColumns<TCol extends string = string> {
     // Collapse the host column to 0px under table-layout: fixed so body cells
     // (which have overflow: hidden) overflow with their content. scrollWidth
     // then reports the content's natural width rather than the cell's current
-    // client width — without this, repeated auto-fits drift right by the +2px
+    // client width - without this, repeated auto-fits drift right by the +2px
     // padding on every click because scrollWidth == clientWidth when the cell
     // has slack.
     const prevColWidth = ths[colIndex].style.width;

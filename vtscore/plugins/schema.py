@@ -7,7 +7,7 @@ The five plugin-field HTTP routes
 ``/api/detectors/registry/from-labelset/<importer>``) accept a request
 body whose shape depends on the named plugin's :attr:`PluginBase.fields`
 declaration. Static marshmallow schemas can't express that shape because
-each plugin has its own field list — so we build a schema *per plugin*
+each plugin has its own field list - so we build a schema *per plugin*
 at request time, cache it on the plugin instance, and validate the
 incoming body against it.
 
@@ -31,7 +31,7 @@ select       :class:`fields.String` + :class:`validate.OneOf`
              (static options); plain :class:`fields.String` for
              dynamic-options fields
 checkbox     :class:`fields.Boolean` (with string-coercion loader)
-file         skipped — file fields are populated from
+file         skipped - file fields are populated from
              ``request.files`` outside the schema
 ============ =====================================================
 
@@ -94,7 +94,7 @@ def _presence_kwargs(pf: PluginField) -> dict:
 
 def _build_checkbox(pf: PluginField, kwargs: dict) -> fields.Field:
     # Checkboxes always have a sensible default (``False`` if the plugin
-    # doesn't set one) — drop ``required`` to avoid the
+    # doesn't set one) - drop ``required`` to avoid the
     # ``required + load_default`` conflict marshmallow would raise.
     kwargs.pop("required", None)
     kwargs["load_default"] = str(pf.default).lower() == "true"
@@ -108,7 +108,7 @@ def _build_number(pf: PluginField, kwargs: dict) -> fields.Field:
         try:
             kwargs["load_default"] = cast(pf.default)
         except (TypeError, ValueError):
-            # Bad default — let marshmallow raise on missing input.
+            # Bad default - let marshmallow raise on missing input.
             kwargs.pop("load_default", None)
 
     range_kwargs: dict = {}
@@ -143,7 +143,7 @@ def _build_select(pf: PluginField, kwargs: dict) -> fields.Field:
 
 def _build_text(pf: PluginField, kwargs: dict) -> fields.Field:
     # text / url / email / password / folder / server_path
-    # Use ``fields.String`` for emails (not ``fields.Email``) — empty
+    # Use ``fields.String`` for emails (not ``fields.Email``) - empty
     # strings are acceptable for non-required fields, and the frontend /
     # plugin can tighten validation if it needs RFC compliance.
     if pf.required:
@@ -171,7 +171,7 @@ def _build_marshmallow_field(pf: PluginField) -> fields.Field | None:
 def make_plugin_arg_schema(plugin: PluginBase) -> type[Schema]:
     """Build a marshmallow ``Schema`` class for *plugin*'s declared fields.
 
-    Unknown keys are dropped (``Meta.unknown = "exclude"``) — the schema
+    Unknown keys are dropped (``Meta.unknown = "exclude"``) - the schema
     is a faithful description of the plugin's declared field set, not a
     free-form bag.  Route handlers that need to pass extra keys
     alongside the plugin-declared fields (e.g. ``converters``,

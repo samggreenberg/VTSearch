@@ -16,7 +16,7 @@ Lock ordering (audit M1)
 Every callsite that needs to invalidate or clear the cache after a
 state-lock'd mutation must release ``_state_lock`` before invoking a
 function in this module.  Conversely, code inside ``_progress_lock`` must
-not call into anything that acquires ``_state_lock`` — including helpers
+not call into anything that acquires ``_state_lock`` - including helpers
 on ``DatasetContext`` / ``DetectorContext`` that take the state lock,
 and any of the resolve-context-then-mutate functions in
 :mod:`vtscore.state.votes` / :mod:`vtscore.state.diversity`.  Holding
@@ -85,7 +85,7 @@ def invalidate_progress_cache_from(media_id: int) -> None:
     """Truncate the progress cache to just before *media_id* first appeared.
 
     Called when a vote switches polarity (good→bad or bad→good).  Steps
-    before the media was first labeled are still valid — their models never
+    before the media was first labeled are still valid - their models never
     included this media in training data.  Only steps from the first
     appearance onward are discarded so they can be retrained and their
     stability/evaluation metrics recomputed.
@@ -101,13 +101,13 @@ def invalidate_progress_cache_from(media_id: int) -> None:
 
         if truncate_at is None:
             # Media never appeared in any cached step.  Still need to clear
-            # live models — they may have been injected by learned-sort
+            # live models - they may have been injected by learned-sort
             # without building the progress cache.
             _live_models.clear()
             return
 
         if truncate_at == 0:
-            # Media was present from the very first step — full clear.
+            # Media was present from the very first step - full clear.
             clear_progress_cache()
             return
 
@@ -121,7 +121,7 @@ def invalidate_progress_cache_from(media_id: int) -> None:
         _cache_bad_ids.clear()
         _cache_bad_ids.update(last["bad_ids"])
 
-        # Reset the stability prediction chain — it will restart from the
+        # Reset the stability prediction chain - it will restart from the
         # truncation point when _ensure_cache replays the remaining history.
         _cache_prev_predictions = None
 
@@ -129,7 +129,7 @@ def invalidate_progress_cache_from(media_id: int) -> None:
         # state is re-synced from the truncation point forward.
         _cache_diversity_tree = None
 
-        # Clear live models — some may have been trained with the old label.
+        # Clear live models - some may have been trained with the old label.
         _live_models.clear()
 
 
@@ -263,7 +263,7 @@ def _compute_step_stability(
             "num_flips": num_flips,
             "num_unlabeled": len(unlabeled_ids),
         }
-    # else: no prior predictions to compare — leave stability as None.
+    # else: no prior predictions to compare - leave stability as None.
 
     _cache_prev_predictions = predictions
     return stability
@@ -284,7 +284,7 @@ def _train_step(
     global _cache_prev_predictions
 
     if not _cache_good_ids or not _cache_bad_ids:
-        # No model possible — clear prediction baseline so the first step
+        # No model possible - clear prediction baseline so the first step
         # after regaining a model doesn't produce a misleading flip count.
         _cache_prev_predictions = None
         return None, None, None
@@ -357,7 +357,7 @@ def _ensure_cache(  # noqa: C901
 
         # Check whether the training data actually changed compared to the
         # previous step.  If the good/bad ID sets are identical, the model
-        # would be the same — skip training and stability recording so the
+        # would be the same - skip training and stability recording so the
         # line graph and Stable indicator only reflect genuine model updates.
         prev = _cached_steps[-1] if _cached_steps else None
         training_data_changed = (
@@ -376,7 +376,7 @@ def _ensure_cache(  # noqa: C901
             else:
                 model, threshold, stability = _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
         else:
-            # Reuse previous model — no new training or stability entry.
+            # Reuse previous model - no new training or stability entry.
             model = prev["model"] if prev else None
             threshold = prev["threshold"] if prev else None
             stability = None
@@ -502,7 +502,7 @@ def recreate_model_at_time(
         inclusion_value: FPR/FNR trade-off in ``[-10, 10]``.
 
     Returns:
-        ``(model, threshold, good_ids, bad_ids)`` — same contract as before.
+        ``(model, threshold, good_ids, bad_ids)`` - same contract as before.
     """
     if time_index < 0 or time_index >= len(label_history):
         return None, None, [], []
@@ -523,7 +523,7 @@ def calculate_error_cost_over_time(
 ) -> list[dict[str, Any]]:
     """Calculate classification error cost at each labelling step.
 
-    Uses cached models — no retraining.
+    Uses cached models - no retraining.
     """
     with _progress_lock:
         _ensure_cache(clips_dict, label_history, inclusion_value)

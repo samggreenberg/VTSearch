@@ -23,7 +23,7 @@ export class SortBarComponent implements OnInit {
   @Input() learnedSortAvailable = false;
   /**
    * True when the active dataset's embedder supports text queries. ``false``
-   * for vision-only encoders (DINOv3, Perception Encoder) — disables the
+   * for vision-only encoders (DINOv3, Perception Encoder) - disables the
    * "Text" sort radio so users can't try a search that will always fail.
    */
   @Input() textSortAvailable = true;

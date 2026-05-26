@@ -219,7 +219,7 @@ def _media_extensions() -> set[str]:
         exts: set[str] = set()
         for mt in all_types():
             for pattern in mt.file_extensions:
-                # pattern looks like "*.wav" — extract ".wav"
+                # pattern looks like "*.wav" - extract ".wav"
                 ext = pattern.lstrip("*").lower()
                 exts.add(ext)
         _MEDIA_EXTENSIONS = exts
@@ -231,9 +231,9 @@ def _resolve_browse_root(source: str) -> Path | None:
 
     Supported source values:
 
-    * ``demo:<name>`` — the ``required_folder`` of the named demo dataset.
-    * ``folder`` — the configured ``saved_datasets_dir``.
-    * ``server_fs`` — the whole server filesystem (single-user mode) or the
+    * ``demo:<name>`` - the ``required_folder`` of the named demo dataset.
+    * ``folder`` - the configured ``saved_datasets_dir``.
+    * ``server_fs`` - the whole server filesystem (single-user mode) or the
       current user's data directory (multi-user mode). Matches the actual
       runtime scope of the ``server_folder``/``server_files`` importers,
       which accept any absolute path readable by the server process.
@@ -273,7 +273,7 @@ def _default_browse_path(source: str, root: Path) -> str:
     """Pick a sensible initial relative path for *source* under *root*.
 
     For ``server_fs`` in single-user mode (root == ``/``) we start the
-    picker at the server user's home directory if it exists — saves the
+    picker at the server user's home directory if it exists - saves the
     user three or four clicks to drill down from ``/``. Falls back to the
     root itself otherwise.
     """
@@ -302,8 +302,8 @@ def browse_media_files(query: dict):
 
     Query parameters:
 
-    * ``source`` — one of ``demo:<name>`` or ``folder``.
-    * ``path`` — relative sub-path within the root (default ``""``).
+    * ``source`` - one of ``demo:<name>`` or ``folder``.
+    * ``path`` - relative sub-path within the root (default ``""``).
 
     Returns::
 

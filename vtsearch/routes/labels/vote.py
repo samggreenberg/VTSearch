@@ -46,7 +46,7 @@ def _select_vote_pools(
 ) -> tuple[dict, dict]:
     """Pick the (goods, bads) dicts to feed into ``LabelSet.from_clips_and_votes``.
 
-    ``label_filter == "corrections"`` returns both pools — the corrections
+    ``label_filter == "corrections"`` returns both pools - the corrections
     filtering step happens after annotation, since "correction" depends on
     the find-initial labels, not on good vs bad.
 
@@ -95,7 +95,7 @@ def _annotate_corrections(result: dict, all_medias: dict) -> None:
 
 
 def _build_entry_metadata(media: dict) -> dict:
-    """Return the metadata blob for one labelled media — display + origin + custom."""
+    """Return the metadata blob for one labelled media - display + origin + custom."""
     from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     try:
@@ -149,7 +149,7 @@ def export_labels(query: dict):
 
     Each label entry includes the element's ``origin`` and ``origin_name``
     so consumers know exactly where each labeled element came from. The
-    format is a superset of the legacy export format — old consumers
+    format is a superset of the legacy export format - old consumers
     that only read ``md5`` and ``label`` keys continue to work unchanged.
     """
     from vtscore.datasets.labelset import LabelSet
@@ -157,7 +157,7 @@ def export_labels(query: dict):
     label_filter = query["label_filter"]
     # Atomic (medias, good_votes, bad_votes, vote_region_boxes) snapshot so
     # the votes we compose with ``all_medias`` are guaranteed to be keyed in
-    # the same dataset's cid space — even if a concurrent request rehydrates
+    # the same dataset's cid space - even if a concurrent request rehydrates
     # the detector against a different dataset before this route finishes.
     snap = validated_vote_snapshot()
     goods, bads = _select_vote_pools(label_filter, query["goods_only"], snap.good_votes, snap.bad_votes)
@@ -246,7 +246,7 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
     confirm = body["confirm"]
 
     # Atomic snapshot so the membership checks below use the same dataset's
-    # cid space as the medias dict — a concurrent rehydrate on the detector
+    # cid space as the medias dict - a concurrent rehydrate on the detector
     # against a different dataset can't make us think an A-cid is "already
     # voted" when in fact we're scoring against B's medias.
     vote_snap = validated_vote_snapshot()
@@ -294,7 +294,7 @@ def fill_labels_from_sort(body: dict):  # noqa: C901
 
     # Persist labels to disk BEFORE building the response.  Letting a
     # silent disk-write failure here fall through to ``return {...}`` is
-    # the C11 bug — the UI would treat the labels as committed while
+    # the C11 bug - the UI would treat the labels as committed while
     # ``detectors/<name>.json`` never received them.  ``sync_to_labelset_source``
     # is fire-and-forget by design (debounced background timer), so we
     # only guard against the unlikely synchronous scheduling failure.

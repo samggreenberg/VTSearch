@@ -18,7 +18,7 @@ GET  /api/achievements/docs/<doc_id>/raw
 
 Migrated to ``flask_smorest`` so the JSON routes are described in
 ``/api/openapi.json``. The raw-markdown route stays undecorated (it
-serves ``text/plain``, not JSON) — it's still attached to the same
+serves ``text/plain``, not JSON) - it's still attached to the same
 ``Blueprint`` and Flask routes it normally, just absent from the spec.
 See ``docs/plans/openapi-schema.md``.
 """
@@ -78,7 +78,7 @@ def check_phrase(body: dict):
 def get_doc_raw(doc_id: str):
     """Return the raw markdown for a Readme Reader doc.
 
-    Plain-text response — intentionally undecorated so it stays out of
+    Plain-text response - intentionally undecorated so it stays out of
     the OpenAPI spec (the spec is for JSON APIs).
     """
     doc = next((d for d in achievements.DOCS if d["id"] == doc_id), None)

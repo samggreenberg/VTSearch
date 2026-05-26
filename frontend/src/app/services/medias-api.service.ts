@@ -22,7 +22,7 @@ export class MediasApiService {
 
   /**
    * Lightweight listing of every media in the loaded dataset.  Returns
-   * only ``id``, ``type``, and (optionally) ``embedder`` — the rest of the
+   * only ``id``, ``type``, and (optionally) ``embedder`` - the rest of the
    * metadata is fetched on demand via {@link getMediasBatch}.
    */
   getMediaIds(): Observable<MediaIdsListResponse[]> {
@@ -40,7 +40,7 @@ export class MediasApiService {
   /**
    * Set the absolute vote state for a media item.
    *
-   * ``target`` is the post-call state, not a "click direction" — the server
+   * ``target`` is the post-call state, not a "click direction" - the server
    * applies it idempotently (so concurrent stale-view tabs no longer race
    * the achievement counter, logical-bug-audit H1).  Callers that want the
    * old "click good toggles good off" behaviour should compute the toggle
@@ -62,7 +62,7 @@ export class MediasApiService {
     );
   }
 
-  /** Multipart upload — stays on plain HttpClient because ng-openapi-gen
+  /** Multipart upload - stays on plain HttpClient because ng-openapi-gen
    *  doesn't model multipart bodies (the generated function's ``$Params``
    *  has no ``body`` field at all). */
   addToPile(file: File, label: 'good' | 'bad'): Observable<MediaAddToPileResponse> {

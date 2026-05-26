@@ -452,7 +452,7 @@ class TestVideoDemoDatasetRegistration:
 
 
 # ---------------------------------------------------------------------------
-# load_demo_source — video (hmdb51, ucf101_full, kth)
+# load_demo_source - video (hmdb51, ucf101_full, kth)
 # ---------------------------------------------------------------------------
 
 

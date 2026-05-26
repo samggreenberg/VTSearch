@@ -14,7 +14,7 @@ Subclasses override :meth:`_do_load` / :meth:`_do_save` (not
 ``load`` / ``save``).  The public methods are framework-owned
 wrappers that run
 :func:`~vtscore.plugins.normalize.normalize_field_values` on a copy
-of *field_values* before delegating — so subclass bodies trust the
+of *field_values* before delegating - so subclass bodies trust the
 dict they receive is whitespace-stripped, template-resolved, and
 URL- / path-validated, the same guarantees the HTTP route layer
 already provides.
@@ -41,7 +41,7 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
     (and optionally :meth:`_do_peek_version`).  The public
     :meth:`load` / :meth:`save` / :meth:`peek_version` methods are
     framework wrappers that normalize *field_values* before dispatching
-    — see this module's docstring.
+    - see this module's docstring.
     """
 
     icon: str = "\U0001f504"  # counterclockwise arrows (sync)
@@ -82,7 +82,7 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
             normalized = self._normalize(field_values)
         except Exception:
             # An unresolvable / invalid template should not crash the
-            # caller's freshness probe — match the previous "return
+            # caller's freshness probe - match the previous "return
             # None on error" contract.
             return None
         return self._do_peek_version(normalized)
@@ -115,7 +115,7 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
         Receives an already-normalized *field_values* dict.  Subclasses
         should return a cheap freshness probe (e.g. ``st_mtime_ns`` for
         a local file, ``ETag`` for an HTTP source).  The default returns
-        ``None``, which means *"I can't cheaply check"* — the caller
+        ``None``, which means *"I can't cheaply check"* - the caller
         falls back to explicit manual sync.
         """
         return None
@@ -125,7 +125,7 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
     def _normalize(self, field_values: dict[str, Any]) -> dict[str, Any]:
         """Return a normalized copy of *field_values*.
 
-        Caller's dict is not mutated — the copy carries the
+        Caller's dict is not mutated - the copy carries the
         whitespace-stripped, template-resolved, URL- / path-validated
         values.
         """

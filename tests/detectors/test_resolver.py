@@ -1,4 +1,4 @@
-"""Tests for vtscore.detectors.resolver — media file resolution from origin trails."""
+"""Tests for vtscore.detectors.resolver - media file resolution from origin trails."""
 
 from pathlib import Path
 from unittest.mock import patch
@@ -319,7 +319,7 @@ class TestAudioDemoDatasetSources:
         audio_demos = {k: v for k, v in DEMO_DATASETS.items() if v.get("media_type") == "audio"}
         for ds_id, info in audio_demos.items():
             assert "source" in info, (
-                f"Audio demo dataset {ds_id!r} is missing a 'source' field — "
+                f"Audio demo dataset {ds_id!r} is missing a 'source' field - "
                 f"resolve_file() won't be able to map it to a download directory"
             )
 
@@ -624,7 +624,7 @@ class TestMultiFindCrossDatasetFallback:
 
         assert resp.status_code == 200
         data = resp.get_json()
-        # The resolver should have kicked in — results should not all be N/A
+        # The resolver should have kicked in - results should not all be N/A
         assert "results" in data
         # Every media should have a verdict from the model
         # (either Good or Bad, not N/A since resolver found the files)
@@ -1007,7 +1007,7 @@ class TestFindCheckLabels:
 
         ds = register_dataset(name="cl_part_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
 
-        # Label folder — one file exists, one doesn't
+        # Label folder - one file exists, one doesn't
         label_folder = tmp_path / "part_labels"
         label_folder.mkdir()
         (label_folder / "good.wav").write_bytes(b"good_audio")
@@ -1192,7 +1192,7 @@ class TestResolveFileContextLifetime:
         assert not media.exists(), "temp file gone after context exit"
 
     def test_legacy_wrapper_runs_cleanup_immediately(self, tmp_path, monkeypatch):
-        """``resolve_file_from_origin`` is the non-CM wrapper — by design the
+        """``resolve_file_from_origin`` is the non-CM wrapper - by design the
         source is dropped (and its temp dir cleaned) as soon as the call
         returns.  Callers that hold the returned path past that point are
         responsible for using ``resolve_file_context`` instead.

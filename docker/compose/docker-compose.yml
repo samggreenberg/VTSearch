@@ -1,10 +1,10 @@
 # CPU deployment
 #
 # Run from the repo root:
-#   docker compose -f docker/compose/docker-compose.yml up              — build & run
-#   docker compose -f docker/compose/docker-compose.yml up -d           — detached
-#   docker compose -f docker/compose/docker-compose.yml down            — stop & remove
-#   docker compose -f docker/compose/docker-compose.yml build --no-cache — force rebuild
+#   docker compose -f docker/compose/docker-compose.yml up              - build & run
+#   docker compose -f docker/compose/docker-compose.yml up -d           - detached
+#   docker compose -f docker/compose/docker-compose.yml down            - stop & remove
+#   docker compose -f docker/compose/docker-compose.yml build --no-cache - force rebuild
 
 services:
   vtsearch:

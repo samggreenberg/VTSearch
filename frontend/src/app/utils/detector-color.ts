@@ -3,7 +3,7 @@
  *
  * The hue (0-359) feeds the `--detector-hue` CSS custom property; theme SCSS
  * picks saturation/lightness so the color renders well in dark and light
- * modes. Renaming a detector intentionally produces a new color — the hue
+ * modes. Renaming a detector intentionally produces a new color - the hue
  * tracks the user's mental label, not the opaque registry id.
  */
 export function detectorHue(name: string): number {

@@ -55,7 +55,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
   @ViewChild(CdkVirtualScrollViewport) virtualViewport?: CdkVirtualScrollViewport;
 
-  /** Cached ordered items — rebuilt only when inputs change, not on every CD cycle. */
+  /** Cached ordered items - rebuilt only when inputs change, not on every CD cycle. */
   cachedOrderedItems: { media: Media; score: number | null; showThreshold: boolean; bestRegion: number[] | null }[] = [];
 
   readonly listItemHeight = LIST_ITEM_HEIGHT;
@@ -256,7 +256,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
    *
    * When the list is short enough to skip virtual scrolling (or we're in
    * grid mode), every item is rendered into the DOM, so every item is
-   * "visible" — prefetch the lot. Without this, small datasets keep
+   * "visible" - prefetch the lot. Without this, small datasets keep
    * showing ``#284`` placeholders forever because the only other hydration
    * trigger is an explicit click via ``selectMedia()``.
    *

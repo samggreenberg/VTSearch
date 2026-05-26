@@ -156,7 +156,7 @@ def _abort_find(code: int, message: str) -> NoReturn:
     """Reset find_progress to idle and abort with *code* / *message*."""
     update_find_progress("idle", "", step=None, total_steps=None)
     abort(code, message=message)
-    raise RuntimeError("unreachable — abort() raises")  # for type narrowing
+    raise RuntimeError("unreachable - abort() raises")  # for type narrowing
 
 
 def _resolve_find_datasets(dataset_ids: list[str]) -> list[dict]:
@@ -193,7 +193,7 @@ def _build_detector_config(d: dict) -> dict:
 
     Multi-dataset Find loads each dataset's medias on demand, so the
     embedder check that decides live vs cold has to happen per (detector,
-    dataset) pair — not once at config-build time.  We therefore carry
+    dataset) pair - not once at config-build time.  We therefore carry
     *both* the live MLP (when one is cached on the detector context) and
     the on-disk labelset (when present) so the per-dataset dispatcher can
     pick safely (see :func:`_select_scorer`).
@@ -224,7 +224,7 @@ def _select_scorer(dc: dict, temp_medias: dict[int, dict]) -> str:
     """Pick ``"live"`` / ``"cold"`` / ``"na"`` for *dc* against *temp_medias*.
 
     The cached MLP can only be reused when its embedder matches the
-    dataset about to be scored — otherwise the cross-space output is
+    dataset about to be scored - otherwise the cross-space output is
     silent garbage at best and a ``nn.Linear`` size-mismatch crash at
     worst (H5).  When the embedders don't match, fall back to the cold
     path (which retrains from the labelset using *temp_medias*'s
@@ -598,7 +598,7 @@ def cancel_find():
     every scoring path (``/api/find``, ``/api/find-label``, and
     ``/api/auto-detect``) reports progress through. Long-running loops
     poll the flag between iterations and bail out by raising
-    :class:`CancelledError`. Always returns 200 — calling cancel when
+    :class:`CancelledError`. Always returns 200 - calling cancel when
     nothing is running is a no-op.
     """
     find_progress.cancel()

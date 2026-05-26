@@ -392,7 +392,7 @@ class TestRunConvertersOnFolder:
         """Converter exists but no source files in the folder."""
         from vtscore.converters.runner import run_converters_on_folder
 
-        # Create a folder with only text files — no videos.
+        # Create a folder with only text files - no videos.
         (tmp_path / "file.txt").write_text("hello")
 
         medias: dict = {}
@@ -410,7 +410,7 @@ class TestRunConvertersOnFolder:
 
     def test_converter_produces_output_with_origin(self, tmp_path):
         """Verify the runner emits one media per converter output with the
-        right origin.  The runner does not embed — outputs leave with
+        right origin.  The runner does not embed - outputs leave with
         ``embedding=None`` for the framework embed stage to fill in.
         """
         from vtscore.converters.runner import run_converters_on_folder
@@ -686,7 +686,7 @@ class TestFolderImporterWithConverters:
         """When only converter source files exist and no regular target files."""
         from vtscore.datasets.importers.server_folder import IMPORTER
 
-        # Create only a video file — no image files.
+        # Create only a video file - no image files.
         (tmp_path / "clip.mp4").write_bytes(b"fake-video")
 
         mock_converter_medias = {1: {"id": 1, "media_type": "image"}}
@@ -937,7 +937,7 @@ class TestMultiMediaEffectiveSourceSpecs:
 
     def test_rejects_target_mismatch(self):
         """A converter whose target_type doesn't match the output media_type
-        is rejected — e.g. video2audio applied to an image-output dataset."""
+        is rejected - e.g. video2audio applied to an image-output dataset."""
         import pytest
 
         from vtscore.datasets.importers.server_folder import IMPORTER
@@ -954,7 +954,7 @@ class TestMultiMediaEffectiveSourceSpecs:
 
     def test_rejects_direct_row_with_wrong_type(self):
         """A no-converter row whose source_type differs from the output type
-        is rejected — that's the form a stale UI submission would take."""
+        is rejected - that's the form a stale UI submission would take."""
         import pytest
 
         from vtscore.datasets.importers.server_folder import IMPORTER
@@ -1160,7 +1160,7 @@ class TestImportLocalFolderRouteForwardsSourceSpecs:
         )
 
         with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_bg:
-            # We don't care if the upload pipeline crashes after staging —
+            # We don't care if the upload pipeline crashes after staging -
             # we only assert source_specs makes it to the importer.
             mock_bg.return_value = "task-1"
             resp = client.post(

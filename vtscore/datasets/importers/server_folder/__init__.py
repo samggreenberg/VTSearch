@@ -6,7 +6,7 @@ type and an ordered list of :class:`~vtscore.datasets.importers.base.SourceSpec`
 rows that declare which media types to scan for.  Each row is either:
 
 * a "direct" row (``converter`` ``= None``) whose ``source_type`` equals
-  the chosen output media type — the scanner reads matching files and
+  the chosen output media type - the scanner reads matching files and
   embeds them with the target embedder, or
 * a converter row, where the scanner reads files of the converter's
   ``source_type`` and feeds them through the converter (with the
@@ -14,7 +14,7 @@ rows that declare which media types to scan for.  Each row is either:
 
 When the output type is ``"image"``, ``*.pdf`` files in the folder are
 also expanded as per-page images.  (PDFs participate independently of
-the explicit converter rows — they are tied to the "image" output type
+the explicit converter rows - they are tied to the "image" output type
 rather than to a converter.)
 """
 
@@ -158,7 +158,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
     name = "server_folder"
     display_name = "Folder"
     description = "Browse the server's filesystem and import media files from a directory"
-    icon = "\U0001f4c1"  # 📁 — frontend renders as a folder icon
+    icon = "\U0001f4c1"  # 📁 - frontend renders as a folder icon
     picker_view = "server_folder"
     category = "server"
     multi_media = True
@@ -326,7 +326,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
                     recursive=recursive,
                 )
             except ValueError:
-                # Empty folder for this source type — keep going; later
+                # Empty folder for this source type - keep going; later
                 # PDF / converter rows may still produce output.
                 pass
 

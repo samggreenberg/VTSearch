@@ -148,7 +148,7 @@ describe('AutopilotStateService', () => {
     service.checkPhaseTransition(12, 12);
     expect(service.state.phase).toBe('hard');
 
-    // Indicators recover — should go back to new
+    // Indicators recover - should go back to new
     service.updateFromLabelingStatus(
       makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
     );
@@ -167,7 +167,7 @@ describe('AutopilotStateService', () => {
     service.checkPhaseTransition(10, 10);
     expect(service.state.phase).toBe('new');
 
-    // Both still green — should stay in new
+    // Both still green - should stay in new
     service.updateFromLabelingStatus(
       makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
     );

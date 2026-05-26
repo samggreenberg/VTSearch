@@ -1,7 +1,7 @@
 """Dataset status / cancellation endpoints.
 
 Per-operation progress is streamed via the unified ``/api/events`` SSE
-endpoint — see ``vtsearch/routes/events.py``.
+endpoint - see ``vtsearch/routes/events.py``.
 
 Migrated to ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. Schema-level

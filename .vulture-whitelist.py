@@ -1,7 +1,7 @@
 """Whitelist for vulture's dead-code detector.
 
 Vulture finds defined-but-never-referenced names. This file lists symbols
-that VTSearch DOES use, but only reflectively — so static analysis can't
+that VTSearch DOES use, but only reflectively - so static analysis can't
 see the reference. Run vulture with this file as an extra argument:
 
     vulture vtsearch/ app.py tests/ .vulture-whitelist.py --min-confidence 60 \\
@@ -27,7 +27,7 @@ Why the excludes / ignores:
   certain weight keys when loading; the attribute is read by the base
   class via reflection.
 * Flask route handlers are decorated with ``@bp.route(...)`` etc., which
-  vulture doesn't follow back to a call site — the decorator filter
+  vulture doesn't follow back to a call site - the decorator filter
   covers ``@*.route``, ``@*.before_request``, ``@*.errorhandler``,
   ``@bp.*``, ``@app.*``, and the rest of the Flask lifecycle hooks.
 * Test-only names: ``test_*`` and ``Test*`` are pytest-discovered, the
@@ -35,7 +35,7 @@ Why the excludes / ignores:
   hooks are pytest fixture lifecycle, ``pytest_*`` and ``pytestmark`` are
   framework reserved.
 * Python protocol dunders (``__enter__``, ``__exit__``, ``__package__``)
-  are called by the runtime, not by user code — vulture sees the
+  are called by the runtime, not by user code - vulture sees the
   assignment (e.g. on a ``MagicMock`` instance for a context-manager
   test) but no read.
 
@@ -45,7 +45,7 @@ surface of a module.
 """
 
 # ---------------------------------------------------------------------------
-# Plugin sentinels — each ``<FAMILY> = SomeClass`` line at the bottom of a
+# Plugin sentinels - each ``<FAMILY> = SomeClass`` line at the bottom of a
 # plugin module is discovered by the ``PluginRegistry`` scanner via the
 # matching attribute name. Vulture sees the assignment but no reference;
 # discovery happens at import time through ``getattr``.
@@ -88,12 +88,12 @@ get_sort_progress  # noqa: F821
 get_find_progress  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# Public module constants — referenced by callers via ``module.NAME`` or
+# Public module constants - referenced by callers via ``module.NAME`` or
 # settings lookup, which vulture treats as the only assignment.
 # ---------------------------------------------------------------------------
-SAVED_DATASETS_DIR  # noqa: F821 — vtscore.datasets.registry default dir
-DETECTORS_DIR  # noqa: F821 — vtscore.detectors.store default dir
-SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB  # noqa: F821 — downloader size budget constant
+SAVED_DATASETS_DIR  # noqa: F821 - vtscore.datasets.registry default dir
+DETECTORS_DIR  # noqa: F821 - vtscore.detectors.store default dir
+SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB  # noqa: F821 - downloader size budget constant
 
 # ---------------------------------------------------------------------------
 # Hardware-derived defaults imported and called from the excluded
@@ -109,11 +109,11 @@ default_concurrent_embeddings  # noqa: F821
 # extension authors). Documented in CLAUDE.md but not currently called
 # from within vtsearch/ or tests/.
 # ---------------------------------------------------------------------------
-find_by_pkl_path  # noqa: F821 — vtscore.datasets.registry
-recreate_model_at_time  # noqa: F821 — vtscore.detectors.labeling_progress
-update_cache_for_cid  # noqa: F821 — vtscore.detectors.labelset_training
-collect_media_origins  # noqa: F821 — vtscore.detectors.training
-train_detector_from_origins  # noqa: F821 — vtscore.detectors.training
+find_by_pkl_path  # noqa: F821 - vtscore.datasets.registry
+recreate_model_at_time  # noqa: F821 - vtscore.detectors.labeling_progress
+update_cache_for_cid  # noqa: F821 - vtscore.detectors.labelset_training
+collect_media_origins  # noqa: F821 - vtscore.detectors.training
+train_detector_from_origins  # noqa: F821 - vtscore.detectors.training
 
 # ---------------------------------------------------------------------------
 # Public context managers exported from ``vtsearch.state`` for callers
@@ -139,7 +139,7 @@ get_autopilot_resort_interval  # noqa: F821
 # DetectorContext attributes written in ``vtsearch/routes/detectors/registry.py``
 # and read in ``vtscore/detectors/dataset_sync.py`` /
 # ``vtscore/detectors/label_sync.py``. The reader lives in ``vtscore/``,
-# which the standard vulture command does not scan — so the write sites in
+# which the standard vulture command does not scan - so the write sites in
 # ``vtsearch/`` look "unused" even though both attributes are real and
 # heavily used.
 # ---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ make_wav_file  # noqa: F821
 # ---------------------------------------------------------------------------
 # Stub / mock methods defined in test classes that override real abstract
 # methods on ``MediaEmbedder`` (``_load_models_impl``, ``_embed_media_impl``)
-# or mimic third-party API surfaces — ``PaddleOCR`` / ``ocr`` shadow
+# or mimic third-party API surfaces - ``PaddleOCR`` / ``ocr`` shadow
 # ``paddleocr.PaddleOCR``, ``transcribe`` shadows the Whisper / Faster-Whisper
 # API, ``_detect_speech_intervals`` shadows a VAD helper, ``_processor``
 # shadows a HuggingFace processor attribute. The framework / production
@@ -165,7 +165,7 @@ make_wav_file  # noqa: F821
 # ---------------------------------------------------------------------------
 _load_models_impl  # noqa: F821
 _embed_media_impl  # noqa: F821
-_do_peek_version  # noqa: F821 — SyncSource subclass hook called by base class
+_do_peek_version  # noqa: F821 - SyncSource subclass hook called by base class
 PaddleOCR  # noqa: F821
 ocr  # noqa: F821
 transcribe  # noqa: F821
@@ -207,7 +207,7 @@ learned_sort  # noqa: F821
 multi_media  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# Pytest fixture parameters whose side effects are the point — the body
+# Pytest fixture parameters whose side effects are the point - the body
 # never references the argument name, but the fixture must be requested
 # by name in the signature. Vulture flags each parameter at 100 %
 # confidence because the local name has no read.

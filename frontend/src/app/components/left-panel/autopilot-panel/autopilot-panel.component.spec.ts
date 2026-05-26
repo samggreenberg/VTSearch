@@ -207,7 +207,7 @@ describe('AutopilotPanelComponent', () => {
     autopilotState.checkPhaseTransition(3, 4);
     expect(component.state.phase).toBe('hard');
 
-    // Votes are cleared (e.g. new detector session) — phase should regress
+    // Votes are cleared (e.g. new detector session) - phase should regress
     component.goodVotes = new Set();
     component.badVotes = new Set();
     component.ngOnChanges({

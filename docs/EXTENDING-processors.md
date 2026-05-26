@@ -1,6 +1,6 @@
-# Extending VTSearch — Processor System
+# Extending VTSearch - Processor System
 
-How to add new detectors, localizers, and extractors — the three kinds
+How to add new detectors, localizers, and extractors - the three kinds
 of **Processor** in VTSearch. All three subclass `Processor` from
 `vtscore/media/base.py`.
 
@@ -11,10 +11,10 @@ types, embedders, clippers, converters).
 
 ## Contents
 
-- [Processor System](#processor-system) — shared `Processor` base
-- [Adding a Detector](#adding-a-detector) — "does this media match?" → bool
-- [Adding a Localizer](#adding-a-localizer) — "where inside this media?" → regions
-- [Adding an Extractor](#adding-an-extractor) — "what structured data can
+- [Processor System](#processor-system) - shared `Processor` base
+- [Adding a Detector](#adding-a-detector) - "does this media match?" → bool
+- [Adding a Localizer](#adding-a-localizer) - "where inside this media?" → regions
+- [Adding an Extractor](#adding-an-extractor) - "what structured data can
   we pull out?" → list of dicts
 
 ---
@@ -27,9 +27,9 @@ Processors analyze media items. The hierarchy has a common base
 
 ```
 Processor (ABC)
-├── Detector      — "does this media match?"      → bool
-├── Localizer     — "where in this media?"        → list[dict] (bounding boxes)
-└── Extractor     — "what details are inside?"    → list[dict] (structured results)
+├── Detector      - "does this media match?"      → bool
+├── Localizer     - "where in this media?"        → list[dict] (bounding boxes)
+└── Extractor     - "what details are inside?"    → list[dict] (structured results)
 ```
 
 Each processor operates on exactly one media type.
@@ -129,7 +129,7 @@ class ObjectExtractor(Extractor):
 
 ### Processor abstract interface reference
 
-**Processor (base class) — required:**
+**Processor (base class) - required:**
 
 | Member | Type | Description |
 |--------|------|-------------|
@@ -137,7 +137,7 @@ class ObjectExtractor(Extractor):
 | `media_type` | `str` (property) | Which media type it operates on |
 | `process(media)` | `(dict) -> Any` | Run the processor (delegates to subclass) |
 
-**Processor (base class) — optional:**
+**Processor (base class) - optional:**
 
 | Member | Type | Description |
 |--------|------|-------------|

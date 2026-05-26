@@ -8,7 +8,7 @@ importer-field-options) use the standard ``@arguments`` + ``@response``
 decorators; schema-level validation failures surface as 422.
 Multipart-upload routes (``stage-file``) and plugin-field routes
 (``stage-import/<importer>``, ``import/<importer>``) keep ``@arguments``
-omitted — the latter pair's body shape depends on the importer plugin
+omitted - the latter pair's body shape depends on the importer plugin
 and isn't described in the OpenAPI spec.  Runtime validation goes
 through :func:`validate_plugin_args` (per-plugin schema built from the
 importer's :attr:`fields`), so missing required fields / invalid select
@@ -112,7 +112,7 @@ def stage_file():
     staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
     file.save(staging_path)
 
-    # Peek the pkl's dict structure cheaply — embeddings and inline media
+    # Peek the pkl's dict structure cheaply - embeddings and inline media
     # bytes are skipped, so this stays light even on multi-GB uploads. The
     # response always returns 200 (so the client keeps the staged path and
     # can clean it up); peek failures are surfaced via the ``error`` field
@@ -152,7 +152,7 @@ def stage_file():
 # ---------------------------------------------------------------------------
 # POST /api/dataset/stage-import/<importer_name>
 #
-# Plugin-field route — body shape depends on the importer plugin.  Not
+# Plugin-field route - body shape depends on the importer plugin.  Not
 # described in the OpenAPI spec; runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the
 # importer's :attr:`fields`), so missing required fields / invalid
@@ -259,7 +259,7 @@ def importer_field_options(body: dict, importer_name: str):
         options = importer.get_field_options(field_key, values)
     except NotImplementedError as exc:
         abort(501, message=str(exc) or "Importer does not implement get_field_options")
-    except Exception as exc:  # noqa: BLE001 — surface remote-service errors verbatim
+    except Exception as exc:  # noqa: BLE001 - surface remote-service errors verbatim
         abort(502, message=str(exc) or type(exc).__name__)
 
     if not isinstance(options, list):
@@ -270,7 +270,7 @@ def importer_field_options(body: dict, importer_name: str):
 # ---------------------------------------------------------------------------
 # POST /api/dataset/import/<importer_name>
 #
-# Plugin-field route — same per-plugin validation pattern as
+# Plugin-field route - same per-plugin validation pattern as
 # ``stage-import``.  Body shape isn't in the OpenAPI spec, but
 # :func:`validate_plugin_args` enforces the per-plugin field types at
 # request time; pass-through keys (``converters``, ``source_specs``,
@@ -298,7 +298,7 @@ def import_dataset(importer_name: str):
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
     # importer has file fields; the per-plugin schema treats it as an
-    # opaque pass-through (string) — decode it here before handing off.
+    # opaque pass-through (string) - decode it here before handing off.
     file_keys = {f.key for f in importer.fields if f.field_type == "file"}
     clipper_params, params_err = _extract_clipper_params(bool(file_keys))
     if params_err:

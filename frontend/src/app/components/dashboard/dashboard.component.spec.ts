@@ -480,7 +480,7 @@ describe('DashboardComponent', () => {
     // Component should still be in loading state
     expect(component.loading).toBeTrue();
 
-    // Advance timer to trigger next poll — polling should survive the error
+    // Advance timer to trigger next poll - polling should survive the error
     tick(1000);
     const retryReq = httpMock.expectOne('/api/dataset/progress');
     retryReq.flush({ status: 'idle' });

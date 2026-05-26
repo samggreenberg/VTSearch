@@ -154,7 +154,7 @@ def simulate_voting_iterations(
     import torch  # noqa: PLC0415
 
     rng = np.random.RandomState(seed)
-    # Note: no torch.manual_seed() here — train_model handles its own
+    # Note: no torch.manual_seed() here - train_model handles its own
     # RNG seeding via fork_rng, keeping it thread-safe.
     start_time = time.monotonic()
 
@@ -170,7 +170,7 @@ def simulate_voting_iterations(
 
     # Pre-compute embeddings for safe-threshold GMM scoring.  Restrict to the
     # simulation set so the held-out ``test_ids`` never feed into the GMM that
-    # picks the threshold — otherwise the test scores leak into calibration
+    # picks the threshold - otherwise the test scores leak into calibration
     # and the reported metrics are biased upward.
     if safe_thresholds:
         gmm_media_ids = sorted(sim_ids)

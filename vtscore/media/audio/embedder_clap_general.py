@@ -1,4 +1,4 @@
-"""Audio embedder — CLAP General 2024 (laion/larger_clap_general)."""
+"""Audio embedder - CLAP General 2024 (laion/larger_clap_general)."""
 
 from __future__ import annotations
 

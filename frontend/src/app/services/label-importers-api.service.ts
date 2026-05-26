@@ -18,7 +18,7 @@ export class LabelImportersApiService {
     return getLabelImporters(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  /** Plugin-field route — request body shape is plugin-dependent and not
+  /** Plugin-field route - request body shape is plugin-dependent and not
    *  described in the OpenAPI spec, so this stays on plain HttpClient (same
    *  pattern as ``SettingsIoApiService.runImport``). See
    *  ``docs/plans/openapi-schema.md`` § Resolved questions / Plugin field
@@ -37,7 +37,7 @@ export class LabelImportersApiService {
     return this.http.post(`/api/label-importers/import/${encodeURIComponent(importerName)}`, params);
   }
 
-  /** Plugin-field route — see ``runImport`` above. */
+  /** Plugin-field route - see ``runImport`` above. */
   runModelImport(
     modelName: string,
     importerName: string,

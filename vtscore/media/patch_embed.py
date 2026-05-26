@@ -4,18 +4,18 @@ Patch-based image encoders (DINOv2, DINOv3, EUPE) return a vector per spatial
 patch plus a CLS token.  This module turns that raw output into a small,
 hierarchical region set per image:
 
-  * ``PatchEmbedOutput`` — the wire format the embedder hands us:
+  * ``PatchEmbedOutput`` - the wire format the embedder hands us:
     CLS vector + per-patch grid + per-patch saliency.
 
-  * ``propose_leaves`` — clusters the patch grid into K spatially-coherent
+  * ``propose_leaves`` - clusters the patch grid into K spatially-coherent
     region proposals, each carrying a bounding box (normalised image
     coordinates) and a saliency-weighted-mean vector.
 
-  * ``build_hac_tree`` — runs hierarchical agglomerative clustering over the
+  * ``build_hac_tree`` - runs hierarchical agglomerative clustering over the
     K leaves to add ``K - 1`` internal merge nodes.  The result is a strict
     binary tree with exactly ``2K - 1`` region nodes.
 
-  * ``build_region_tree`` — the top-level entry point.  Combines the CLS
+  * ``build_region_tree`` - the top-level entry point.  Combines the CLS
     full-image vector, the HAC leaves, and the HAC internals into the flat
     list that gets pickled as ``media["patch_regions"]``.
 
@@ -23,7 +23,7 @@ The HAC builder is intentionally vector-only (numpy / no torch dependency);
 the embedders run the model forward pass and hand us numpy arrays.
 
 This module does *not* score regions, store them on disk, or care about
-``MediaEmbedder`` registration — those concerns live in the loader pipeline
+``MediaEmbedder`` registration - those concerns live in the loader pipeline
 and in :mod:`vtscore.training.region_similarity`.
 """
 
@@ -84,7 +84,7 @@ class RegionVector:
     box: tuple[float, float, float, float]
     """Normalised image coordinates ``(x0, y0, x1, y1)``, each in ``[0, 1]``.
 
-    Bounding box of the underlying cells.  Lossy — an L-shaped cell set
+    Bounding box of the underlying cells.  Lossy - an L-shaped cell set
     has a bounding box strictly larger than the cell union.  Kept around
     as a cheap rectangular hint for UI rendering; the *true* region
     footprint is :attr:`cell_mask` (leaves) or the union of children's
@@ -95,7 +95,7 @@ class RegionVector:
     """L2-normalised vector for this region, shape ``(D,)``.
 
     For HAC nodes (leaves and internals) this is the L2-normalised
-    saliency-weighted mean of the underlying patch vectors — computed
+    saliency-weighted mean of the underlying patch vectors - computed
     additively from :attr:`weight` and the children's weighted sums, so
     every internal's vector equals what we would have gotten by
     re-pooling the patches inside its cell union from scratch.  Merge
@@ -121,7 +121,7 @@ class RegionVector:
 
     Set by :func:`propose_leaves` to the Voronoi-by-spatial-distance
     assignment for this leaf.  ``None`` on internals and on the CLS
-    full-image node — derive the internal cell mask on demand as the
+    full-image node - derive the internal cell mask on demand as the
     union of the children's masks (walk :attr:`children` until you hit
     leaves; their masks are disjoint by construction, so OR them).
     """
@@ -166,7 +166,7 @@ def hf_vit_to_patch_output(
     (``num_register_tokens=4``).  Expects the token layout
     ``[CLS, R1..R_k, P1..P_N]`` and a square spatial patch grid.
 
-    ``outputs`` must have ``last_hidden_state`` and ``attentions`` set —
+    ``outputs`` must have ``last_hidden_state`` and ``attentions`` set -
     pass ``output_attentions=True`` to the model forward call.
 
     *batch_index* selects which image in a batched forward to extract
@@ -178,7 +178,7 @@ def hf_vit_to_patch_output(
     import torch  # noqa: PLC0415
 
     hidden = outputs.last_hidden_state[batch_index]  # (T, D)
-    attn = outputs.attentions[-1][batch_index]  # (heads, T, T) — last block
+    attn = outputs.attentions[-1][batch_index]  # (heads, T, T) - last block
     skip = 1 + num_register_tokens
     cls_vec = hidden[0]
     patch_tokens = hidden[skip:]
@@ -214,7 +214,7 @@ def eupe_features_to_patch_output(
 
     EUPE's forward already separates CLS, storage tokens, and patch tokens
     into named keys (``x_norm_clstoken``, ``x_storage_tokens``,
-    ``x_norm_patchtokens``), so we don't need a register-token slice — the
+    ``x_norm_patchtokens``), so we don't need a register-token slice - the
     storage tokens are already absent from ``x_norm_patchtokens``.
 
     *batch_index* selects which image in a batched forward to extract
@@ -337,7 +337,7 @@ def propose_leaves(
         # cell with literally zero saliency still contributes its vector
         # (otherwise a flat-saliency image would produce a zero leaf vec).
         # The *floored* weight is what feeds into the HAC weighted-pool
-        # merger downstream — we also stash it on the leaf so internals
+        # merger downstream - we also stash it on the leaf so internals
         # can combine vectors additively without referring back to the
         # patch grid.
         weights = np.maximum(patch_saliency[mask], 1e-8).astype(np.float32)
@@ -419,12 +419,12 @@ def build_hac_tree(
     combine vectors **additively** (``new_weighted_sum =
     a.weighted_sum + b.weighted_sum``).  Because leaf cell sets are
     disjoint by construction, this is exactly the saliency-weighted mean
-    of the patches in the merged cell union — order-independent, and
+    of the patches in the merged cell union - order-independent, and
     equal to what we would get by re-pooling from the patch grid each
     merge.
 
     The merged node's box is the union of the two child boxes (loose
-    bounding rectangle — still kept for cheap UI hints, even though the
+    bounding rectangle - still kept for cheap UI hints, even though the
     true footprint is the union of cell masks).
 
     Complexity: ``O(K³)`` from the brute-force argmax inner loop.  For
@@ -505,7 +505,7 @@ def box_to_vote_vector(
 
     Selects the patch cells whose centers fall inside the normalised box,
     averages their vectors with equal weight, L2-normalises.  No saliency
-    weighting — every selected cell contributes equally.
+    weighting - every selected cell contributes equally.
 
     Same patch set → same vector, regardless of how the user assembled the
     box.  Two boxes that select the same cells produce the same result.
@@ -514,7 +514,7 @@ def box_to_vote_vector(
     would still pool consistently.
 
     Deliberately *not* an attempt to recover the vector of whatever HAC
-    region happens to span the same patches — v1's HAC builder re-L2-
+    region happens to span the same patches - v1's HAC builder re-L2-
     normalises at every internal merge, so no pooling rule can match a
     specific HAC node's vector without replicating its exact merge chain.
     See ``docs/plans/patch-embedder.md`` ("v2 → Backend semantics §1").
@@ -603,10 +603,10 @@ def build_region_tree(
 
     Layout of the returned list:
 
-    * index 0       — CLS-pooled full-image node, box ``(0, 0, 1, 1)``,
+    * index 0       - CLS-pooled full-image node, box ``(0, 0, 1, 1)``,
       ``children = None``.
-    * indices 1..K  — HAC leaves (saliency-peak clusters of patches).
-    * indices K+1.. — HAC internal merge nodes; each has ``children``
+    * indices 1..K  - HAC leaves (saliency-peak clusters of patches).
+    * indices K+1.. - HAC internal merge nodes; each has ``children``
       pointing at two earlier entries.
 
     Total length is ``2K`` (1 full-image + K leaves + K-1 internals).

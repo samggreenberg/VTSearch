@@ -1,4 +1,4 @@
-"""Embedding generation — delegates to the embedder registry.
+"""Embedding generation - delegates to the embedder registry.
 
 The actual embedding logic lives inside each
 :class:`~vtscore.media.base.MediaEmbedder` implementation.  This module keeps
@@ -55,7 +55,7 @@ def embed_paragraph_file(text_path: Path) -> Optional[np.ndarray]:
 # vector spaces. Caching avoids re-running the text encoder when the user
 # toggles sort modes or re-submits the same query on a different dataset
 # that shares the embedder. Vectors are never persisted (see CLAUDE.md
-# "No Persisted Vectors or MLPs") — this lives for the process lifetime.
+# "No Persisted Vectors or MLPs") - this lives for the process lifetime.
 _QUERY_CACHE_MAXSIZE = 32
 _query_cache: "OrderedDict[tuple[str, str, bool, str], np.ndarray]" = OrderedDict()
 _query_cache_lock = Lock()

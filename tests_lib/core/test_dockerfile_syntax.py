@@ -3,7 +3,7 @@
 Catches the class of bug fixed in PR #1282: try/except (and other compound
 statements) cannot be flattened into a single ``python -c "..."`` line with
 semicolons + backslash continuations. Without this test, a SyntaxError in
-embedded Python is invisible to ruff, pytest, and CI — it only surfaces
+embedded Python is invisible to ruff, pytest, and CI - it only surfaces
 when somebody actually runs ``docker build``, often after minutes of layer
 work.
 
@@ -59,7 +59,7 @@ def test_python_c_snippets_compile(dockerfile: Path) -> None:
                 f"{dockerfile.name}: python -c block #{idx} has a SyntaxError "
                 f"({exc.msg} at line {exc.lineno}, col {exc.offset}). Compound "
                 f"statements like try/except can't be flattened with semicolons "
-                f"in a single -c line — use `cmd || echo ...` at the shell level "
+                f"in a single -c line - use `cmd || echo ...` at the shell level "
                 f"or move the logic into a script file.\n"
                 f"--- offending snippet ---\n{src}\n---"
             )
@@ -102,5 +102,5 @@ def test_parser_skips_non_dash_c_python_invocations() -> None:
 
 
 def test_repo_actually_has_dockerfiles() -> None:
-    """Parametrize collects at runtime — make sure we found anything at all."""
+    """Parametrize collects at runtime - make sure we found anything at all."""
     assert _dockerfiles(), "expected at least one Dockerfile under docker/"

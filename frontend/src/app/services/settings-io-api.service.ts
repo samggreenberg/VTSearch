@@ -37,7 +37,7 @@ export class SettingsIoApiService {
     file?: File,
     fileFieldKey?: string,
   ): Observable<SettingsImportResponse> {
-    // Plugin-field route — body shape is plugin-dependent and not
+    // Plugin-field route - body shape is plugin-dependent and not
     // described in the OpenAPI spec (see plan "Open follow-ups /
     // Per-plugin schemas"), so this stays on plain HttpClient.
     const url = `/api/settings-importers/import/${encodeURIComponent(importerName)}`;

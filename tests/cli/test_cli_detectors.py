@@ -177,7 +177,7 @@ class TestAutorunDetectorsCLI:
                 },
             },
         )
-        # Plus a detector with no input_spec — so the pipeline has
+        # Plus a detector with no input_spec - so the pipeline has
         # *something* to score and doesn't error out empty-handed.
         _write_trainable_model("ds-a-detector", labelset)
 
@@ -325,7 +325,7 @@ class TestImportLabelsIntoDetectorCLI:
         """Calling import_labels_into_detector_from_file with a
         server_json_file label file appends new entries to the on-disk
         labelset and dedupes by (md5, label)."""
-        # Seed model with one existing entry — to verify dedup.
+        # Seed model with one existing entry - to verify dedup.
         existing = {
             "labels": [
                 {
@@ -342,7 +342,7 @@ class TestImportLabelsIntoDetectorCLI:
         # server_json_file label importer reads.
         new_labels = {
             "labels": [
-                {"md5": "a" * 32, "label": "good"},  # duplicate — should skip
+                {"md5": "a" * 32, "label": "good"},  # duplicate - should skip
                 {"md5": "b" * 32, "label": "good"},
                 {"md5": "c" * 32, "label": "bad"},
             ]

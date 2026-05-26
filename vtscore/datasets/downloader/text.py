@@ -379,7 +379,7 @@ def download_dbpedia(
 
     Both splits are concatenated so the caller can slice freely.  The
     abstract often begins with a leading space and an escaped ``\\n``
-    sequence from the upstream CSV — both are cleaned up before returning.
+    sequence from the upstream CSV - both are cleaned up before returning.
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
@@ -443,7 +443,7 @@ def download_dbpedia(
 # ---------------------------------------------------------------------------
 
 # Default arXiv subject categories spanning CS, math, physics, biology,
-# astrophysics, and statistics — enough variety to be a useful
+# astrophysics, and statistics - enough variety to be a useful
 # "multilingual scientific search" demo without an overwhelming download.
 ARXIV_DEFAULT_CATEGORIES = [
     "cs.AI",
@@ -483,7 +483,7 @@ def _parse_arxiv_feed(xml_bytes: bytes) -> list[str]:
         summary_el = entry.find("atom:summary", _ARXIV_ATOM_NS)
         title = (title_el.text or "").strip() if title_el is not None else ""
         summary = (summary_el.text or "").strip() if summary_el is not None else ""
-        # arXiv wraps abstracts to ~80 cols — collapse whitespace.
+        # arXiv wraps abstracts to ~80 cols - collapse whitespace.
         title = re.sub(r"\s+", " ", title)
         summary = re.sub(r"\s+", " ", summary)
         text = f"{title} {summary}".strip()
@@ -626,7 +626,7 @@ def download_reuters21578(
     ``<REUTERS>`` block carries one news story plus its ``<TOPICS>`` labels.
 
     A document is included once per TOPIC it carries.  Documents with no
-    ``<BODY>`` or no TOPICS labels are skipped — these are the original
+    ``<BODY>`` or no TOPICS labels are skipped - these are the original
     "ModApté" filtering rules.
 
     Args:

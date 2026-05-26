@@ -28,19 +28,19 @@ def _normalise_converter_specs(
 
     Accepts:
 
-    * ``converter_specs`` — list of :class:`~vtscore.datasets.importers.base.SourceSpec`
+    * ``converter_specs`` - list of :class:`~vtscore.datasets.importers.base.SourceSpec`
       objects or equivalent dicts with ``converter`` + ``params`` keys
       (the multi-media path).  Specs whose ``converter`` is ``None`` are
       skipped (those are the "include directly" rows, handled by the
       importer's own loader, not the converter runner).
-    * ``converter_names`` — list of converter name strings (the legacy
+    * ``converter_names`` - list of converter name strings (the legacy
       path).  Each name gets an empty params dict.
 
     Returns a list whose entries are guaranteed to be ``(converter, params)``
     with both fields populated.  Unknown converter names are silently
     dropped to match the runner's prior behaviour.
     """
-    from vtscore.converters import get_converter  # noqa: PLC0415 — deferred to avoid circular import during eager registry discovery
+    from vtscore.converters import get_converter  # noqa: PLC0415 - deferred to avoid circular import during eager registry discovery
 
     result: list[tuple[Any, dict[str, Any]]] = []
     if converter_specs:
@@ -121,7 +121,7 @@ def _build_converted_media_dict(
 ) -> dict[str, Any]:
     """Build the media dict for one converter output.
 
-    ``embedding`` is left at ``None`` — the framework
+    ``embedding`` is left at ``None`` - the framework
     :func:`~vtscore.datasets.load_pipeline.embed_missing` stage embeds
     converter outputs via ``media_bytes`` / ``media_string`` after the
     importer returns.
@@ -229,7 +229,7 @@ def run_converters_on_folder(
 
     Args:
         folder_path: Root directory to scan.
-        converter_names: Legacy entry point — a list of converter names
+        converter_names: Legacy entry point - a list of converter names
             (e.g. ``["video2image"]``) that run with their declared
             defaults.  Prefer *converter_specs* when per-converter params
             need to flow through.
@@ -244,7 +244,7 @@ def run_converters_on_folder(
         base_origin: The origin dict of the parent import (e.g.
             ``{"importer": "server_folder", "params": {"path": "..."}}``)
             used to record provenance.
-        converter_specs: Multi-media entry point — a list of
+        converter_specs: Multi-media entry point - a list of
             :class:`~vtscore.datasets.importers.base.SourceSpec`
             instances (or equivalent dicts) carrying both the converter
             name and the user-supplied params for that converter.  Specs
@@ -328,7 +328,7 @@ def apply_converter_to_demo(
     converter_name: str,
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
-    embedder_name: str = "",  # noqa: ARG001 — kept for call-site compatibility; framework picks the embedder now
+    embedder_name: str = "",  # noqa: ARG001 - kept for call-site compatibility; framework picks the embedder now
     on_progress: Optional[ProgressCallback] = None,
 ) -> None:
     """Convert all medias in-place using the named converter.
@@ -339,7 +339,7 @@ def apply_converter_to_demo(
     leave with ``embedding=None``; the framework embed stage fills them
     in.
     """
-    from vtscore.converters import get_converter  # noqa: PLC0415 — deferred to avoid circular import during eager registry discovery
+    from vtscore.converters import get_converter  # noqa: PLC0415 - deferred to avoid circular import during eager registry discovery
 
     converter = get_converter(converter_name)
     if converter is None:

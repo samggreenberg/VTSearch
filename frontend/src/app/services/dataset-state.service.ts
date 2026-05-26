@@ -18,7 +18,7 @@ export class DatasetStateService implements OnDestroy {
   /** Flips to `true` the first time the registry returns from the
    *  server, success or empty. Used by the active-context route guard
    *  to know when it's safe to validate a URL pair against the
-   *  registry — on a deep-link cold start, the guard may run before the
+   *  registry - on a deep-link cold start, the guard may run before the
    *  initial fetch lands. */
   private readonly loadedSubject = new BehaviorSubject<boolean>(false);
   private readonly destroy$ = new Subject<void>();

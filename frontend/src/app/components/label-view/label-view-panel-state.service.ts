@@ -16,7 +16,7 @@ type FocusMode = 'click' | 'hover';
  * the loaded `AppSettings` blob; `savePanelPx` persists a width change for
  * the active media type back through `SettingsStateService`.
  *
- * The component still owns the layout math and the CSS-var writes — this
+ * The component still owns the layout math and the CSS-var writes - this
  * service only owns the per-media-type lookup tables and the persistence
  * round-trip.
  */

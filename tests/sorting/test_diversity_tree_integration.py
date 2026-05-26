@@ -440,7 +440,7 @@ class TestDiversityLevelOverTime:
         """Switching a vote from bad→good must not cause a diversity dip in the progress cache."""
         tree = _build_tree()
 
-        # Label several medias to build up diversity — need both good and bad
+        # Label several medias to build up diversity - need both good and bad
         cids = sorted(tree.vector_to_leaf.keys())[:6]
         for i, cid in enumerate(cids):
             if i % 2 == 0:
@@ -459,7 +459,7 @@ class TestDiversityLevelOverTime:
         switch_cid = cids[1]  # was voted bad
         client.post(f"/api/medias/{switch_cid}/vote", json={"target": "good"})
 
-        # Fetch diversity history again — no entry should be below the pre-switch peak
+        # Fetch diversity history again - no entry should be below the pre-switch peak
         resp = client.post("/api/labeling-progress")
         data = resp.get_json()
         levels_after = [e["diversity_level"] for e in data["diversity_level_over_time"]]
@@ -486,7 +486,7 @@ class TestDiversityLevelOverTime:
 
 
 # ---------------------------------------------------------------------------
-# Audit M14 — `/api/dataset/clear` must not leave a stale diversity tree
+# Audit M14 - `/api/dataset/clear` must not leave a stale diversity tree
 # ---------------------------------------------------------------------------
 
 
@@ -538,7 +538,7 @@ class TestClearDatasetClearsTree:
 
 
 # ---------------------------------------------------------------------------
-# R1 — `/api/votes/clear` must reset the diversity tree's `seen` state
+# R1 - `/api/votes/clear` must reset the diversity tree's `seen` state
 # ---------------------------------------------------------------------------
 
 
@@ -591,7 +591,7 @@ class TestClearVotesResetsTree:
 
 
 # ---------------------------------------------------------------------------
-# R2 — Detector swap on the same dataset must re-derive the tree's seen set
+# R2 - Detector swap on the same dataset must re-derive the tree's seen set
 # ---------------------------------------------------------------------------
 
 
@@ -641,7 +641,7 @@ class TestDetectorSwapResyncsTree:
             for old_cid in ids[:2]:
                 assert old_cid not in tree.labeled_ids
         else:
-            # Tiny test corpus — at minimum, the reset half must have run.
+            # Tiny test corpus - at minimum, the reset half must have run.
             assert prev_seen  # was non-empty
             assert tree.labeled_ids == set()
 

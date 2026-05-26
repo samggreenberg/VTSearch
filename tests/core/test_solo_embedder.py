@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-import app as app_module  # noqa: F401 — triggers conftest media init
+import app as app_module  # noqa: F401 - triggers conftest media init
 from vtsearch import settings as settings_mod
 
 
@@ -70,9 +70,9 @@ class TestSoloEmbedderSettings:
         emb = _first_image_embedder()
         settings_mod.apply_user_solo_embedder_per_media_type({"image": emb, "audio": ""})
         # The empty entry is kept so it can override a CLI fallback for
-        # ``audio`` — see ``test_user_can_opt_out_of_cli_fallback_for_one_type``.
+        # ``audio`` - see ``test_user_can_opt_out_of_cli_fallback_for_one_type``.
         assert settings_mod.get_solo_embedder_per_media_type() == {"image": emb, "audio": ""}
-        # The effective resolver strips the empty entry — only non-empty
+        # The effective resolver strips the empty entry - only non-empty
         # values appear in the merged map.
         assert settings_mod.get_effective_solo_embedders() == {"image": emb}
 

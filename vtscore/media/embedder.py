@@ -116,7 +116,7 @@ def timed_progress(
     report incremental progress themselves.  The module-count delta
     against ``sys.modules`` at entry gives the user a concrete "still
     making progress" signal when a fresh import is grinding through
-    hundreds of submodules — a static elapsed counter doesn't distinguish
+    hundreds of submodules - a static elapsed counter doesn't distinguish
     a busy import from a stuck network call.
 
     The initial progress update is sent immediately (without a time suffix).
@@ -332,7 +332,7 @@ def _patch_set_module_tensor_to_device(counter: list[int], total: list[int], rep
     try:
         import transformers.modeling_utils as _tm  # noqa: PLC0415
 
-        # pyright: ignore[reportAttributeAccessIssue] — set_module_tensor_to_device
+        # pyright: ignore[reportAttributeAccessIssue] - set_module_tensor_to_device
         # is re-exported from accelerate at runtime but isn't in the transformers
         # stubs. The AttributeError catch handles missing-attribute drift.
         orig = _tm.set_module_tensor_to_device  # pyright: ignore[reportAttributeAccessIssue]
@@ -432,12 +432,12 @@ class MediaEmbedder(ABC):
 
     Subclasses must implement:
 
-    * :attr:`name` — unique human-readable identifier (also used as the
+    * :attr:`name` - unique human-readable identifier (also used as the
       registry key).
-    * :attr:`media_type_id` — which media type this embedder works with.
-    * :meth:`load_models` — load (and cache) the embedding model.
-    * :meth:`embed_media` — embed a media file from disk.
-    * :meth:`embed_text` — embed a text query in the same vector space.
+    * :attr:`media_type_id` - which media type this embedder works with.
+    * :meth:`load_models` - load (and cache) the embedding model.
+    * :meth:`embed_media` - embed a media file from disk.
+    * :meth:`embed_text` - embed a text query in the same vector space.
     """
 
     _model_load_lock: threading.Lock
@@ -494,7 +494,7 @@ class MediaEmbedder(ABC):
 
         Cross-modal embedders (CLIP, SigLIP, CLAP, X-CLIP) return ``True`` so
         features like text search and description-enrichment are offered.
-        Vision-only or patch-based encoders (DINOv3, EUPE) return ``False`` —
+        Vision-only or patch-based encoders (DINOv3, EUPE) return ``False`` -
         :meth:`embed_text` will not produce meaningful vectors and the UI
         should hide text-search affordances for datasets using them.
         """
@@ -518,7 +518,7 @@ class MediaEmbedder(ABC):
 
         Default reads :envvar:`VTSEARCH_EMBED_BATCH_SIZE` (falling back to
         :data:`DEFAULT_EMBED_BATCH_SIZE`).  Subclasses with tighter VRAM
-        budgets — typically video models that stack frames per clip —
+        budgets - typically video models that stack frames per clip -
         should override to pass a smaller default to
         :func:`resolve_embed_batch_size`.
         """
@@ -533,7 +533,7 @@ class MediaEmbedder(ABC):
         only or otherwise-restrictive licence (e.g. facebookresearch/EUPE under
         the FAIR Noncommercial Research Licence) return a short human-readable
         string the UI shows on the embedder picker so users know before they
-        produce any outputs.  This is *advisory* — there is no acceptance
+        produce any outputs.  This is *advisory* - there is no acceptance
         click; users who object pick a different embedder.
         """
         return None
@@ -546,7 +546,7 @@ class MediaEmbedder(ABC):
         """Load (and cache) the embedding model.
 
         Called lazily the first time this embedder needs to produce a vector.
-        Implementations must be idempotent — a second call should be a no-op.
+        Implementations must be idempotent - a second call should be a no-op.
 
         Subclasses should override :meth:`_load_models_impl` (not this method).
         This wrapper catches :class:`ImportError` and re-raises with an
@@ -564,7 +564,7 @@ class MediaEmbedder(ABC):
                 self._load_models_impl()
             except ImportError as exc:
                 raise ImportError(
-                    f"{exc} — required by the '{self.name}' embedder. "
+                    f"{exc} - required by the '{self.name}' embedder. "
                     f"Install dependencies with: pip install -e '.[cpu,dev]'"
                 ) from exc
 
@@ -614,8 +614,8 @@ class MediaEmbedder(ABC):
         Positions where an item could not be embedded contain ``None``.
 
         The default implementation dispatches to :meth:`embed_media` per
-        item — each call acquires :attr:`_embed_lock` individually so
-        concurrent callers can interleave — and emits per-item progress
+        item - each call acquires :attr:`_embed_lock` individually so
+        concurrent callers can interleave - and emits per-item progress
         via :attr:`_on_progress` so long runs stay visible in the UI.
 
         Subclasses backed by a service that natively accepts many items
@@ -645,7 +645,7 @@ class MediaEmbedder(ABC):
         """Bulk-embed an id→media dict; return id→vector (or ``None``) dict.
 
         Convenience wrapper around :meth:`embed_media_bulk` for callers that
-        already have medias keyed by ID — typically dataset importers that
+        already have medias keyed by ID - typically dataset importers that
         have built the medias dict before embedding.  IDs whose embedding
         failed map to ``None`` in the returned dict, mirroring the position-
         based ``None`` contract of :meth:`embed_media_bulk`.
@@ -700,7 +700,7 @@ class MediaEmbedder(ABC):
         Patch-capable embedders override :meth:`_patch_forward_bulk_impl`
         to batch the forward pass through their backbone. The default
         loops :meth:`patch_forward` per item and emits per-item progress
-        via :attr:`_on_progress` — matching the contract of
+        via :attr:`_on_progress` - matching the contract of
         :meth:`embed_media_bulk`.
 
         Positions where patch-forward returned ``None`` (failed decode,

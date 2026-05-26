@@ -1,7 +1,7 @@
 """Tests for the vtscore.eval evaluation framework.
 
 These tests exercise the metrics, config, and runner modules using
-synthetic data — no real model downloads or embeddings required.
+synthetic data - no real model downloads or embeddings required.
 """
 
 import json

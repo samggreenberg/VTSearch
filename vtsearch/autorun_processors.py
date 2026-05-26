@@ -8,7 +8,7 @@ applies them; the app owns the registry of "which ones are active".
 
 This module replaces the module-level dicts that previously lived in
 ``vtsearch/state/core.py`` and the CRUD that lived in
-``vtsearch/state/processors.py``.  Behaviour is unchanged — the storage
+``vtsearch/state/processors.py``.  Behaviour is unchanged - the storage
 is still process-global and thread-safe.
 """
 
@@ -24,7 +24,7 @@ from typing import Any
 # can call back in safely.
 _lock = threading.RLock()
 
-# Module-level singletons — same shape and semantics as the old
+# Module-level singletons - same shape and semantics as the old
 # ``vtscore.state.core.autorun_extractors`` / ``autorun_localizers`` dicts.
 autorun_extractors: dict[str, dict[str, Any]] = {}
 autorun_localizers: dict[str, dict[str, Any]] = {}

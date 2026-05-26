@@ -1,9 +1,9 @@
-"""Holder labelset exporter — export labels to a Holder package.
+"""Holder labelset exporter - export labels to a Holder package.
 
 This exporter creates a new Holder package, makes ``Good`` and ``Bad``
 folders, and writes the ``contentID`` of each labeled media into the
 appropriate folder.  Only media that have a ``contentID`` (i.e. those
-originally imported via ReCaller) are included — media from other origins
+originally imported via ReCaller) are included - media from other origins
 are silently skipped.
 
 For each stored contentID, the exporter also writes per-entry metadata:
@@ -13,7 +13,7 @@ Usage
 -----
 This exporter is invoked from the standard label-export flow:
 
-1. ``GET /api/labels/export?enrich=true`` — build enriched labels.
+1. ``GET /api/labels/export?enrich=true`` - build enriched labels.
 2. Select columns and exporter in the UI.
 3. ``POST /api/exporters/export`` with ``exporter_name="holder"``.
 
@@ -126,7 +126,7 @@ class HolderLabelsetExporter(LabelsetExporter):
     icon = "\U0001f4e6"  # package
     hidden_from_picker = True  # flip to False once API clients are implemented
     fields: list[ExporterField] = [
-        # No user-supplied fields — a new package is created automatically.
+        # No user-supplied fields - a new package is created automatically.
         # Add Holder auth/URL fields here when needed:
         # ExporterField(key="holder_url", label="Holder API URL", field_type="text"),
     ]

@@ -3,11 +3,11 @@
 The existing :mod:`tests/io/test_export_options.py` covers
 ``train_and_threshold`` happy path indirectly.  This file fills in:
 
-* :func:`validate_good_bad_split` — the small ABC-level guard.
-* :func:`collect_media_origins` — origin extraction from a media snapshot.
-* :func:`train_detector_from_origins` — the load-time origin → file →
+* :func:`validate_good_bad_split` - the small ABC-level guard.
+* :func:`collect_media_origins` - origin extraction from a media snapshot.
+* :func:`train_detector_from_origins` - the load-time origin → file →
   embedding → MLP pipeline, with file resolution and embedding stubbed.
-* :func:`train_and_score` — the empty-result and single-class branches
+* :func:`train_and_score` - the empty-result and single-class branches
   (the happy path is already exercised by the sort routes).
 """
 
@@ -189,7 +189,7 @@ class TestTrainDetectorFromOrigins:
 
         @contextmanager
         def _fake_ctx(origin, origin_name="", filename=""):
-            # Yield a sentinel "path" — we only use it to drive embed_file.
+            # Yield a sentinel "path" - we only use it to drive embed_file.
             yield ("PATH:" + origin_name) if origin_name else None
 
         def _fake_embed(path, media_type, embedder_name=""):

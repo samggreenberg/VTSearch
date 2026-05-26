@@ -2,20 +2,20 @@
 
 Covers:
 
-* ``GET  /api/settings-importers``        — :class:`SettingsImporterEntrySchema`
-* ``POST /api/settings-exporters/export`` — :class:`RunSettingsExportRequestSchema` →
+* ``GET  /api/settings-importers``        - :class:`SettingsImporterEntrySchema`
+* ``POST /api/settings-exporters/export`` - :class:`RunSettingsExportRequestSchema` →
                                              :class:`RunSettingsExportResponseSchema`
-* ``GET  /api/settings-exporters``        — :class:`SettingsExporterEntrySchema`
-* ``GET  /api/settings-sources``          — :class:`SyncSourceEntrySchema`
-* ``GET  /api/settings-sources/active``   — :class:`SyncSourceConfigSchema`
-* ``PUT  /api/settings-sources/active``   — :class:`SetSyncSourceRequestSchema` →
+* ``GET  /api/settings-exporters``        - :class:`SettingsExporterEntrySchema`
+* ``GET  /api/settings-sources``          - :class:`SyncSourceEntrySchema`
+* ``GET  /api/settings-sources/active``   - :class:`SyncSourceConfigSchema`
+* ``PUT  /api/settings-sources/active``   - :class:`SetSyncSourceRequestSchema` →
                                              :class:`OkMessageSchema`
-* ``POST /api/settings-sources/sync``     — :class:`SyncFromSourceResponseSchema`
-* ``GET  /api/labelset-sources``          — :class:`SyncSourceEntrySchema`
-* ``GET  /api/detectors/<n>/labelset-source``      — :class:`SyncSourceConfigSchema`
-* ``PUT  /api/detectors/<n>/labelset-source``      — :class:`SetSyncSourceRequestSchema` →
+* ``POST /api/settings-sources/sync``     - :class:`SyncFromSourceResponseSchema`
+* ``GET  /api/labelset-sources``          - :class:`SyncSourceEntrySchema`
+* ``GET  /api/detectors/<n>/labelset-source``      - :class:`SyncSourceConfigSchema`
+* ``PUT  /api/detectors/<n>/labelset-source``      - :class:`SetSyncSourceRequestSchema` →
                                                       :class:`OkMessageSchema`
-* ``POST /api/detectors/<n>/labelset-source/sync`` — :class:`SyncFromLabelsetSourceResponseSchema`
+* ``POST /api/detectors/<n>/labelset-source/sync`` - :class:`SyncFromLabelsetSourceResponseSchema`
 
 The per-plugin shape of ``field_values`` on ``POST
 /api/settings-exporters/export`` is intentionally declared as
@@ -23,7 +23,7 @@ The per-plugin shape of ``field_values`` on ``POST
 is validated inside the handler against the selected plugin's
 :attr:`fields` declaration.  The multipart-or-JSON ``POST
 /api/settings-importers/import/<importer_name>`` route stays on the
-legacy plain-Flask path (no decorator) for the same reason — see the
+legacy plain-Flask path (no decorator) for the same reason - see the
 *Resolved questions / Plugin field endpoints* section of
 ``docs/plans/openapi-schema.md``.
 """
@@ -141,7 +141,7 @@ class SetSyncSourceRequestSchema(Schema):
 
 
 class OkMessageSchema(Schema):
-    """``{ok: bool, message: str}`` — generic ack envelope."""
+    """``{ok: bool, message: str}`` - generic ack envelope."""
 
     ok = fields.Boolean(required=True)
     message = fields.String(required=True)
@@ -157,7 +157,7 @@ class SettingsImportResponseSchema(Schema):
 
     The route stays on the legacy plain-Flask path (request body is a
     plugin-field shape), but the success body shape is fixed.  Currently
-    *not* attached to the route via ``@response`` — kept here for the
+    *not* attached to the route via ``@response`` - kept here for the
     eventual unified plugin-field migration.
     """
 

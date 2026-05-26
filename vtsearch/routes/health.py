@@ -2,7 +2,7 @@
 
 These are the standard two-endpoint pattern popularised by Kubernetes:
 
-* ``/healthz`` answers *"is the process up?"* — cheap, dependency-free,
+* ``/healthz`` answers *"is the process up?"* - cheap, dependency-free,
   always 200 while Flask is serving. A failure means the orchestrator
   should restart the container.
 * ``/readyz`` answers *"can this process actually serve traffic right now?"*
@@ -37,7 +37,7 @@ health_bp = Blueprint(
 @health_bp.route("/healthz", methods=["GET"])
 @health_bp.response(200, HealthSchema)
 def healthz() -> dict:
-    """Liveness probe — 200 while the Flask process is serving.
+    """Liveness probe - 200 while the Flask process is serving.
 
     Intentionally does no work beyond returning a constant. Anything more
     expensive risks turning a slow dependency into a restart loop.
@@ -87,13 +87,13 @@ def _check_models() -> tuple[bool, str]:
 @health_bp.response(200, ReadinessSchema)
 @health_bp.alt_response(503, schema=ReadinessSchema, description="One or more readiness checks failed.")
 def readyz():
-    """Readiness probe — 200 when every sub-check passes, 503 otherwise.
+    """Readiness probe - 200 when every sub-check passes, 503 otherwise.
 
     Sub-checks:
 
-    * ``data_dir`` — :data:`vtscore.config.DATA_DIR` exists and is
+    * ``data_dir`` - :data:`vtscore.config.DATA_DIR` exists and is
       writable (the app needs this for embeddings, model cache, settings).
-    * ``models`` — every embedder implied by the dataset/detector
+    * ``models`` - every embedder implied by the dataset/detector
       registries is warm (``_model is not None``).
     """
     checks: dict[str, dict] = {}

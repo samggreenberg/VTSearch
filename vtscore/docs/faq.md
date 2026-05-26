@@ -53,7 +53,7 @@ import vtscore
 print(vtscore.__version__)  # '0.1.0'
 ```
 
-`vtscore` uses **independent semver** — the constant is manually bumped
+`vtscore` uses **independent semver** - the constant is manually bumped
 in `vtscore/__init__.py` per release. (`vtsearch.__version__` is
 different: it's the UTC timestamp of the git HEAD commit. Don't confuse
 the two.)
@@ -65,7 +65,7 @@ the two.)
 You probably forgot to import the media-type plugin:
 
 ```python
-# WRONG — KeyError: "audio"
+# WRONG - KeyError: "audio"
 from vtscore.datasets.loader import load_dataset_from_folder
 
 medias = {}
@@ -74,7 +74,7 @@ load_dataset_from_folder(Path("/data"), media_type="audio", medias=medias)
 
 ```python
 # RIGHT
-from vtscore.media import audio  # noqa: F401 — registers MediaType + embedders
+from vtscore.media import audio  # noqa: F401 - registers MediaType + embedders
 from vtscore.datasets.loader import load_dataset_from_folder
 
 medias = {}
@@ -83,7 +83,7 @@ load_dataset_from_folder(Path("/data"), media_type="audio", medias=medias)
 
 Importing `vtscore.media.audio` triggers the `MEDIA_TYPE`, `EMBEDDER`,
 and `CLIPPERS` sentinels. The library doesn't import every media-type
-plugin by default — you pay only for what you use.
+plugin by default - you pay only for what you use.
 
 ### Why doesn't `load_dataset_from_folder` return the medias dict?
 
@@ -113,7 +113,7 @@ See [concepts.md §1](concepts.md#1-media) for the full description.
 
 ### Can I load datasets from URLs?
 
-Use `vtscore.datasets.importers.http_archive` — it accepts a URL,
+Use `vtscore.datasets.importers.http_archive` - it accepts a URL,
 downloads the archive into the staging area, and runs a normal folder
 import on the extracted contents. The URL is recorded in the `origin`
 so the labelset can be re-resolved later.
@@ -146,7 +146,7 @@ Verify in your own code via `medias[1]["embedding"].shape[0]`.
 Depends on the embedder. LAION-CLAP and SigLIP return L2-normalised
 vectors out of the box; E5 doesn't (it requires explicit normalisation
 for cosine sim, which the helpers in `vtscore.training.region_similarity`
-do for you). Don't assume — check `np.linalg.norm(embedding)`.
+do for you). Don't assume - check `np.linalg.norm(embedding)`.
 
 ### How does `embed_text_query` know which model to use?
 
@@ -166,7 +166,7 @@ the relevant model IDs (see `vtscore/config.py` for the constants like
 ### Can I disable model downloads?
 
 Set `HF_HUB_OFFLINE=1` in your environment. Embedders will fail to load
-if their weights aren't already cached, but that's the point — you
+if their weights aren't already cached, but that's the point - you
 catch the missing-cache error explicitly instead of accidentally
 fetching at runtime.
 
@@ -202,7 +202,7 @@ false positives. See `vtscore/training/thresholds.py:calculate_safe_threshold`.
 
 ### Why is `train_and_threshold` calling `vtsearch.state`?
 
-It's not — that was a Phase-2 seam. Today `train_and_threshold` lives in
+It's not - that was a Phase-2 seam. Today `train_and_threshold` lives in
 `vtscore.detectors.training` and reads its knobs from `CoreConfig`. If
 you see an old reference somewhere, please update it.
 
@@ -216,15 +216,15 @@ contains:
 - Detector metadata (`name`, `media_type`, `embedder`).
 - The `LabelSet`: a list of `LabeledElement`s, each with `md5`, `label`,
   `origin_name`, `origin`, and optional `region_box` and `metadata`.
-- Nothing else — **no embeddings, no model weights**.
+- Nothing else - **no embeddings, no model weights**.
 
 On load, the library re-derives every embedding from the origin and
-re-trains the MLP. This is by design — see
+re-trains the MLP. This is by design - see
 [architecture.md §The no-persisted-vectors rule](architecture.md#the-no-persisted-vectors-rule).
 
 ### Doesn't re-deriving embeddings on every load take forever?
 
-For a few hundred labels, no — it's seconds. For thousands of labels
+For a few hundred labels, no - it's seconds. For thousands of labels
 across remote storage, yes. The hand-roll mitigations:
 
 1. **Cache files locally.** Don't pull from S3 on every load if you can
@@ -239,7 +239,7 @@ across remote storage, yes. The hand-roll mitigations:
 
 Convert it to the `LabelSet` JSON shape and call
 `vtscore.detectors.store.save_detector(name, labelset)`. Or implement a
-custom `LabelImporter` plugin — see
+custom `LabelImporter` plugin - see
 [extending/label-importers.md](extending/label-importers.md).
 
 ### How do I delete a detector?
@@ -251,7 +251,7 @@ from vtscore.detectors.registry import unregister_detector
 unregister_detector("detector_id")
 ```
 
-(The `_detector_path` underscore is mildly intentional — direct
+(The `_detector_path` underscore is mildly intentional - direct
 filesystem manipulation is escape-hatch territory. For app-style flows
 the route layer handles this.)
 
@@ -280,7 +280,7 @@ See [architecture.md §Resolution chain](architecture.md#resolution-chain-for-ac
 
 Thread-local context doesn't inherit. If you start a thread, you must
 call `set_thread_dataset_context(ctx)` / `set_thread_detector_context(ctx)`
-inside the thread function — the calling thread's binding doesn't
+inside the thread function - the calling thread's binding doesn't
 follow.
 
 The app's `vtsearch.shim` does this automatically when spawning
@@ -289,7 +289,7 @@ pool, you do it.
 
 ### Are `medias`, `good_votes`, etc. importable?
 
-Not from `vtscore`. Those proxy objects are app-tier — they live in
+Not from `vtscore`. Those proxy objects are app-tier - they live in
 `vtsearch.shim.state_proxies` and are re-exported by `vtsearch.state`.
 Library code uses `DatasetContext.medias` and `DetectorContext.good_votes`
 directly via a resolved context.
@@ -365,7 +365,7 @@ import.
 
 ### How do I parallelise dataset loading?
 
-The pipeline already does — `vtscore.datasets.load_pipeline` runs
+The pipeline already does - `vtscore.datasets.load_pipeline` runs
 embedding under a `ConcurrencyGate` capped by
 `CoreConfig.max_concurrent_dataset_embeddings`. Bumping that value lets
 multiple datasets embed in parallel.
@@ -396,6 +396,6 @@ Yes, with `vtscore.concurrency.progress.cancel_dataset_progress()`. The
 operation polls `check_dataset_cancelled()` at chunk boundaries and
 raises `CancelledError` when set. Worker functions that want to be
 cancellable should call `check_dataset_cancelled()` periodically
-themselves (not from inside a bounded loop — use a `while True` loop
+themselves (not from inside a bounded loop - use a `while True` loop
 with the cancel check at the top; bounded loops can run to completion
 before the cancel signal arrives in some race conditions).

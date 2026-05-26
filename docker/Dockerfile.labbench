@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------
-# VTSearch — LabBench CPU image (image search with SigLIP only)
+# VTSearch - LabBench CPU image (image search with SigLIP only)
 #
 # Streamlined for the LabBench environment: browsing/voting on an
 # image dataset using the SigLIP embedder. Bakes the SigLIP model
@@ -63,7 +63,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # /app/data. The app reads MODELS_CACHE_DIR from VTSEARCH_MODELS_DIR.
 #
 # scripts/preload_siglip.py uses huggingface_hub.snapshot_download so we
-# only fetch the repo files — torch is not imported and the model is not
+# only fetch the repo files - torch is not imported and the model is not
 # constructed during the build. That is much faster, uses far less RAM,
 # and emits per-file tqdm progress so the build never looks like a hang.
 # PYTHONUNBUFFERED + python -u keep those prints flowing to BuildKit.
@@ -103,20 +103,20 @@ RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_ver
 #   (omitted from ``requirements/labbench.txt``) and the demo importer
 #   needs outbound network access this container doesn't expect to have.
 #   Hidden plugins remain importable by name for any backend code that
-#   names them directly — this is a UI declutter, not a security gate.
+#   names them directly - this is a UI declutter, not a security gate.
 #
-# Per-user tier (``data/default/user_settings.json`` — the
+# Per-user tier (``data/default/user_settings.json`` - the
 # ``DefaultLoginProvider`` resolves to the ``default`` user):
 #
 # * ``solo_media_type=image`` + ``solo_media_type_explicit=true`` locks
-#   the dataset-importer and new-detector flows to image mediaType — the
+#   the dataset-importer and new-detector flows to image mediaType - the
 #   mediaType picker disappears entirely. ``_explicit=true`` is required
 #   because there's no ``--solo-media-type`` CLI flag in the
 #   gunicorn-launched server path; without it the resolver would
 #   treat the value as unset and fall back to "show everything".
 #
 # * ``solo_embedder_per_media_type={"image": "siglip"}`` hides the
-#   embedder dropdown for image flows and silently uses SigLIP — the
+#   embedder dropdown for image flows and silently uses SigLIP - the
 #   only image embedder we ship in this image.
 RUN mkdir -p /app/data /app/data/default && \
     printf '%s\n' \

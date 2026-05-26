@@ -1,4 +1,4 @@
-# VTSearch — All image embedders (GPU / CUDA)
+# VTSearch - All image embedders (GPU / CUDA)
 #
 # GPU twin of requirements/image-embedders.txt. Identical Python deps; the
 # only difference is that the CPU PyTorch extra-index-url is omitted so the
@@ -22,7 +22,7 @@ pandas
 matplotlib
 scipy
 
-# ── PyTorch (GPU — CUDA version set via --extra-index-url at install time)
+# ── PyTorch (GPU - CUDA version set via --extra-index-url at install time)
 torch>=2.0.0
 
 # ── Image media type ─────────────────────────────────────────────────

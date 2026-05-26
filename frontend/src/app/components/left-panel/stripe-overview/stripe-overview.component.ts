@@ -18,9 +18,9 @@ export class StripeOverviewComponent implements OnChanges {
   @Input() totalCount = 0;
   @Output() stripeClick = new EventEmitter<number>();
 
-  /** Cached dots — rebuilt only when inputs change. */
+  /** Cached dots - rebuilt only when inputs change. */
   cachedDots: { top: number; type: 'good' | 'bad' | 'selected' }[] = [];
-  /** Cached threshold position — rebuilt only when inputs change. */
+  /** Cached threshold position - rebuilt only when inputs change. */
   cachedThresholdPosition: number | null = null;
 
   onStripeKeyboard(): void {
