@@ -32,6 +32,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   audioSrc = '';
 
   private audioCtx: AudioContext | null = null;
+  private waveformAbort: AbortController | null = null;
   private viewReady = false;
   // See ImageViewerComponent.lastMediaId: the `media` input reference changes
   // whenever the metadata cache hydrates; without this guard, every cache
@@ -63,6 +64,8 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   ngOnDestroy(): void {
+    this.waveformAbort?.abort();
+    this.waveformAbort = null;
     const audio = this.audioRef?.nativeElement;
     if (audio) {
       audio.pause();
@@ -144,8 +147,17 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-surface').trim() || '#1a1d27';
     ctx.fillRect(0, 0, width, height);
 
+    this.waveformAbort?.abort();
+    const abort = new AbortController();
+    this.waveformAbort = abort;
+
     try {
-      const response = await fetch(this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`));
+      const response = await fetch(this.activeContext.mediaUrl(`/api/medias/${mediaId}/audio`), {
+        signal: abort.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} fetching audio for media ${mediaId}`);
+      }
       const arrayBuffer = await response.arrayBuffer();
 
       if (!this.audioCtx || this.audioCtx.state === 'closed') {
@@ -184,11 +196,19 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
       ctx.moveTo(0, height / 2);
       ctx.lineTo(width, height / 2);
       ctx.stroke();
-    } catch {
+    } catch (err) {
+      if (abort.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+        return;
+      }
+      console.warn('waveform render failed', err);
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-bad').trim() || '#f44336';
       ctx.font = '12px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Unable to load waveform', width / 2, height / 2);
+    } finally {
+      if (this.waveformAbort === abort) {
+        this.waveformAbort = null;
+      }
     }
   }
 }

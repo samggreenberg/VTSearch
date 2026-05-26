@@ -855,8 +855,12 @@ Cross-section interaction agents:
   `destroy$`; rapid switches leak polls.
 - **M27.** `progress-events.service` doesn't reconcile stale `task_id`s after
   backend restart.
-- **M28.** Audio waveform fetch's `catch {}` silently shows "Unable to load
-  waveform" with no UI state propagation.
+- ~~**M28.** Audio waveform fetch's `catch {}` silently shows "Unable to load
+  waveform" with no UI state propagation.~~ **Shipped.** `drawWaveform` now
+  uses an `AbortController` (cancelled on next load / `ngOnDestroy`), checks
+  `response.ok`, and logs the underlying error via `console.warn` instead of
+  swallowing it. `AbortError` is suppressed so rapid swiping doesn't spam the
+  console or overwrite the next media's canvas.
 - **M29.** `AudioContext` not cleaned up on rapid navigation → resource
   exhaustion.
 - **M30.** Autopilot phase transitions can oscillate
