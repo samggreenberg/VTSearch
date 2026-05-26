@@ -48,8 +48,8 @@ export class ImportAdvancedComponent {
    *  hide rule as :prop:`embedders`. */
   @Input() clippers: ClipperInfo[] = [];
   /** Whether the Include-media (source-specs) block should be offered
-   *  at all.  False for non-``multi_media`` generic-form importers; true
-   *  for the server-folder and local-folder/files flows. */
+   *  at all.  True for every importer that participates in the dataset
+   *  modal's form / server-folder / local-folder/files flows. */
   @Input() showSourceSpecs = false;
 
   /** Two-way bound source-spec list. */
@@ -141,7 +141,7 @@ export class ImportAdvancedComponent {
    *  would be redundant.  In every other case where the user should be
    *  able to reach the clipper chooser — Advanced collapsed but a
    *  non-default clipper is in effect, or importers with no
-   *  source-specs column at all (demo / non-multi-media form) — we
+   *  source-specs column at all (demo form) — we
    *  fall back to this standalone button so the override stays visible
    *  and the chooser stays reachable. */
   get showStandaloneClipperButton(): boolean {

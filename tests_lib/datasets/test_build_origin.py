@@ -6,8 +6,7 @@ These cover the four patterns the refactor consolidates:
 - ``PluginField.include_in_origin`` opts a field in/out.
 - ``PluginField.origin_serializer`` customises the string form.
 - ``extra_origin_keys`` copies non-PluginField keys into params,
-  including the automatic ``source_specs`` injection for multi-media
-  importers.
+  including the automatic ``source_specs`` injection.
 
 Plus the safety defaults: ``file`` and ``password`` field types are
 excluded from origin by default, and explicit subclass overrides still
@@ -25,7 +24,6 @@ def _make_importer(
     *,
     name: str = "fake",
     fields: list[ImporterField] | None = None,
-    multi_media: bool = False,
     extra_origin_keys: tuple[str, ...] = (),
     origin_suppressed: bool = False,
 ) -> DatasetImporter:
@@ -38,7 +36,6 @@ def _make_importer(
     _FakeImporter.display_name = name
     _FakeImporter.description = ""
     _FakeImporter.fields = fields or []
-    _FakeImporter.multi_media = multi_media
     _FakeImporter.extra_origin_keys = extra_origin_keys
     _FakeImporter.origin_suppressed = origin_suppressed
     return _FakeImporter()
@@ -146,21 +143,18 @@ class TestExtraOriginKeys:
         params = imp.build_origin({"specs": [{"x": 1}]})["params"]
         assert params == {"specs": '[{"x": 1}]'}
 
-    def test_multi_media_auto_adds_source_specs(self):
-        imp = _make_importer(multi_media=True)
+    def test_source_specs_auto_added(self):
+        imp = _make_importer()
         params = imp.build_origin({"source_specs": [{"source_type": "audio"}]})["params"]
         assert params == {"source_specs": '[{"source_type": "audio"}]'}
 
-    def test_multi_media_keeps_existing_extra_keys(self):
-        imp = _make_importer(
-            multi_media=True,
-            extra_origin_keys=("custom",),
-        )
+    def test_source_specs_kept_alongside_existing_extra_keys(self):
+        imp = _make_importer(extra_origin_keys=("custom",))
         params = imp.build_origin({"custom": "c", "source_specs": [{"source_type": "image"}]})["params"]
         assert params == {"custom": "c", "source_specs": '[{"source_type": "image"}]'}
 
-    def test_multi_media_no_op_when_source_specs_empty(self):
-        imp = _make_importer(multi_media=True)
+    def test_no_op_when_source_specs_empty(self):
+        imp = _make_importer()
         assert imp.build_origin({})["params"] == {}
 
 

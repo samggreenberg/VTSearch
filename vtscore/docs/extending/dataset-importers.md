@@ -154,10 +154,11 @@ from origins.
 
 ## Multi-media imports
 
-An importer that wants to pull in multiple source media types in one
-shot — e.g. images, plus videos converted to images, plus documents
-converted to images — sets the class attribute `multi_media = True`.
-Each `SourceSpec` ([`vtscore/datasets/importers/base.py:67`](../../datasets/importers/base.py))
+Every importer can pull in multiple source media types in one shot —
+e.g. images, plus videos converted to images, plus documents
+converted to images.  The user submits a list of `source_specs` in
+the dataset modal; the framework iterates them and dispatches
+converters.  Each `SourceSpec` ([`vtscore/datasets/importers/base.py:67`](../../datasets/importers/base.py))
 is `(source_type, converter, params)`:
 
 - `converter is None` means "include directly" — fetch files of
@@ -198,15 +199,9 @@ these (or from a custom `run()`) to inspect the resolved spec list.
 > **Heads-up:** `fetch_source_media()` and `fetch_all_source_media()`
 > only run when `effective_source_specs()` resolves to at least one
 > spec.  An importer that overrides one of those hooks but does
-> **not** declare a `media_type` field (or set `multi_media = True`
-> and accept a `source_specs` value) falls through to the
-> `list_records()` path and raises `NotImplementedError` at runtime.
-
-Legacy importers (`multi_media = False`) can still call
-`effective_source_specs()` — it synthesises an equivalent list from
-the classic `media_type` + comma-separated `converters` form fields,
-so you can migrate the body of `run()` before touching the form
-schema.
+> **not** declare a `media_type` field (declaring the output type)
+> falls through to the `list_records()` path and raises
+> `NotImplementedError` at runtime.
 
 ## Reporting progress
 
