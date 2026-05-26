@@ -61,13 +61,13 @@ describe('DatasetStateService', () => {
   });
 
   it('rapid refresh should cancel stale in-flight requests', fakeAsync(() => {
-    // First refresh - will be cancelled by the second
+    // First refresh; will be cancelled by the second
     service.refresh();
     tick();
     const staleDs = httpMock.expectOne('/api/datasets/registry');
     const staleDetectors = httpMock.expectOne('/api/detectors/registry');
 
-    // Second refresh - this one should win
+    // Second refresh; this one should win
     service.refresh();
     tick();
     const freshDs = httpMock.expectOne('/api/datasets/registry');
@@ -114,7 +114,7 @@ describe('DatasetStateService', () => {
     httpMock.expectOne('/api/detectors/registry').error(new ProgressEvent('Network error'));
     expect(service.error).toBe("Couldn't load datasets and detectors.");
 
-    // A second refresh after the failure should still work - the
+    // A second refresh after the failure should still work; the
     // pipeline survives errors via catchError().
     service.refresh();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [{ id: '1', name: 'ok' }] });

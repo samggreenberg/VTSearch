@@ -34,7 +34,7 @@ import { loadDemoDatasetRoute } from '../generated/api-client/fn/datasets-load/l
 import { stageDemo } from '../generated/api-client/fn/datasets-staging/stage-demo';
 
 /** The importer/clipper/embedder/converter listings return plugin
- *  ``to_dict()`` payloads - the generated types describe them as
+ *  ``to_dict()`` payloads; the generated types describe them as
  *  ``Array<{[key: string]: any}>`` because the inner shapes are
  *  plugin-dependent.  The richer ``ImporterInfo`` / ``ClipperInfo`` /
  *  ``EmbedderInfo`` / ``ConverterInfo`` interfaces in
@@ -81,7 +81,7 @@ export class DatasetsCrudApiService {
     return availableDatasetFiles(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  /** Plugin-field route - body shape is plugin-dependent, not described in
+  /** Plugin-field route: body shape is plugin-dependent, not described in
    *  the OpenAPI spec.  Stays on plain ``HttpClient``. */
   runImporter(importerName: string, params: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`/api/dataset/import/${encodeURIComponent(importerName)}`, params);
@@ -102,7 +102,7 @@ export class DatasetsCrudApiService {
     }).pipe(map((r) => r.body));
   }
 
-  /** Multipart upload - the caller builds the FormData with the files,
+  /** Multipart upload: the caller builds the FormData with the files,
    *  ``media_type``, optional ``embedder`` / ``clipper`` / ``clipper_params``.
    *  Stays on plain ``HttpClient`` because ng-openapi-gen doesn't model
    *  multipart bodies (the generated function's ``$Params`` has no ``body``
@@ -111,7 +111,7 @@ export class DatasetsCrudApiService {
     return this.http.post<DatasetLoadStartedResponse>('/api/dataset/import-local-folder', formData);
   }
 
-  /** Multipart upload - the caller builds the FormData with a single
+  /** Multipart upload: the caller builds the FormData with a single
    *  ``paths_file`` (txt list or npz archive), ``media_type``, optional
    *  ``embedder`` / ``clipper`` / ``clipper_params`` / ``source_specs``.
    *  See {@link importLocalFolder} for why this stays on plain HttpClient. */
@@ -124,21 +124,21 @@ export class DatasetsCrudApiService {
     return loadDemoDatasetRoute(this.http, this.config.rootUrl, { body }).pipe(map((r) => r.body));
   }
 
-  /** Multipart upload - see {@link importLocalFolder}. */
+  /** Multipart upload; see {@link importLocalFolder}. */
   loadFile(file: File): Observable<DatasetLoadStartedResponse> {
     const formData = new FormData();
     formData.append('file', file);
     return this.http.post<DatasetLoadStartedResponse>('/api/dataset/load-file', formData);
   }
 
-  /** Multipart upload - see {@link importLocalFolder}. */
+  /** Multipart upload; see {@link importLocalFolder}. */
   stageFile(file: File): Observable<DatasetStageFileResponse> {
     const formData = new FormData();
     formData.append('file', file);
     return this.http.post<DatasetStageFileResponse>('/api/dataset/stage-file', formData);
   }
 
-  /** Plugin-field route - body shape is plugin-dependent, not described in
+  /** Plugin-field route: body shape is plugin-dependent, not described in
    *  the OpenAPI spec.  Stays on plain ``HttpClient``. */
   stageImport(importerName: string, params: Record<string, unknown>): Observable<unknown> {
     return this.http.post(`/api/dataset/stage-import/${encodeURIComponent(importerName)}`, params);
@@ -165,7 +165,7 @@ export class DatasetsCrudApiService {
     return clearDatasetRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  /** Binary stream - stays on plain ``HttpClient`` so ``responseType: 'blob'``
+  /** Binary stream; stays on plain ``HttpClient`` so ``responseType: 'blob'``
    *  produces a ``Blob`` (the generated function declares the success body as
    *  ``Error`` because the spec only carries error responses for this route). */
   exportDataset(): Observable<Blob> {

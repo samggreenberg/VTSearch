@@ -15,7 +15,7 @@ export interface AutopilotState {
   /**
    * True when autopilot started against a detector that already has labels
    * (e.g. trained on DatasetA, now continuing on DatasetB).  In retrain mode
-   * every phase uses learned sort - the initial "good"/"bad" phases use
+   * every phase uses learned sort; the initial "good"/"bad" phases use
    * Learned-Good and Learned-Hard against the existing model instead of
    * falling back to text/example sort.
    */

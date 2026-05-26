@@ -26,7 +26,7 @@ export interface ThingCreatedEvent {
   kind: 'dataset' | 'detector';
   /** Empty when the creator did not return an ID (e.g. the dataset
    *  importer kicks off a background load and the new ID isn't known
-   *  until the load completes - callers should listen to the registry
+   *  until the load completes; callers should listen to the registry
    *  for new entries in that case). */
   id: string;
 }

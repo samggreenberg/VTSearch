@@ -9,17 +9,17 @@ import { distinctUntilChanged, map } from 'rxjs/operators';
  * would otherwise tag outgoing requests with an id the backend hadn't
  * finished loading (cascade of 409 `dataset_not_loaded`):
  *
- *  - **intent** - what the user has selected (pulldown click, deep-link
+ *  - **intent**: what the user has selected (pulldown click, deep-link
  *    URL).  Updates immediately so UI affordances like the pulldown
  *    highlight reflect the selection without delay.
- *  - **active** - the pair currently loaded into the backend, against
+ *  - **active**: the pair currently loaded into the backend, against
  *    which API requests are dispatched.  The HTTP interceptor
  *    (`activeContextInterceptor`) attaches `X-Dataset-Id` /
  *    `X-Detector-Id` from this layer, so it lags `intent` until
  *    `ContextSwitchService` has finished any required dataset / detector
  *    load and explicitly promotes the pair via `setActive()`.
  *
- * `setActivePair()` writes BOTH layers - used by cleanup paths (the
+ * `setActivePair()` writes BOTH layers; used by cleanup paths (the
  * registry watcher, `clear()`) where there is nothing to wait for.  UI
  * code that wants to *change* the pair should go through
  * `ContextSwitchService.switchTo()` so loads run first.
@@ -63,7 +63,7 @@ export class ActiveContextService {
   );
 
   /**
-   * Emits whenever either half of the user's *intent* changes - i.e.
+   * Emits whenever either half of the user's *intent* changes, i.e.
    * the moment a pulldown row is clicked, before any load has run.
    * Use this for UI affordances that should reflect the user's pick
    * without waiting (pulldown highlight, "you picked X" labels).
@@ -121,8 +121,8 @@ export class ActiveContextService {
   }
 
   /**
-   * Promote a pair to active - what the HTTP interceptor will tag onto
-   * outgoing requests.  Called by `ContextSwitchService` once required
+   * Promote a pair to active (what the HTTP interceptor will tag onto
+   * outgoing requests).  Called by `ContextSwitchService` once required
    * loads have finished (or by `setActivePair`/cleanup paths).
    */
   setActive(datasetId: string, modelId: string): void {
@@ -172,7 +172,7 @@ export class ActiveContextService {
    * (`<img src>`, `<audio src>`, `<video src>`) resolve the correct dataset.
    *
    * Uses the *active* pair so the id matches what the backend has
-   * loaded - falling back to intent would point at an in-flight,
+   * loaded; falling back to intent would point at an in-flight,
    * not-yet-resolved id.
    *
    * Angular HttpClient requests use the interceptor to send headers, but

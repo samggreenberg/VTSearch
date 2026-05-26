@@ -97,7 +97,7 @@ export class DetectorsCrudApiService {
     }).pipe(map((r) => r.body));
   }
 
-  /** Preview/thumbnail URLs are binary streams - kept as direct URLs so the
+  /** Preview/thumbnail URLs are binary streams; kept as direct URLs so the
    *  active-context query params reach the backend (the generated function
    *  for these declares the success body as ``Error`` because the spec only
    *  carries error responses). */

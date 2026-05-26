@@ -20,7 +20,7 @@ const EMPTY_STATE: AchievementState = {
 };
 
 /**
- * AchievementsService - polls /api/achievements, exposes the current state
+ * AchievementsService: polls /api/achievements, exposes the current state
  * as an observable, and queues unlock notifications one at a time so the
  * consumer (a global host component) can render dialogs sequentially.
  *
@@ -45,7 +45,7 @@ export class AchievementsService {
       const flipped = next && !this.disabled;
       this.disabled = next;
       if (flipped) {
-        // Disabled - drop the cached state so the UI doesn't show
+        // Disabled: drop the cached state so the UI doesn't show
         // counters/unlocks from before the toggle.
         this.state$.next(EMPTY_STATE);
       }

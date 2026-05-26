@@ -12,7 +12,7 @@ import { ProgressEventsService } from './progress-events.service';
  * Owns the Dashboard's per-task loading-row state and the bookkeeping
  * that drives the "poll until everything settles, then refresh"
  * behaviour. Lifted out of `DashboardComponent` so the dashboard is a
- * thinner layout/wiring shell - it reads the published lists, listens
+ * thinner layout/wiring shell; it reads the published lists, listens
  * for completion side effects, and forwards user clicks (cancel /
  * dismiss) here.
  *
@@ -54,7 +54,7 @@ export class DashboardLoadingTasksService {
     private achievements: AchievementsService,
   ) {
     // SSE pushes the initial snapshot on connect, so the first event on
-    // each channel tells us whether there's anything in flight - auto-
+    // each channel tells us whether there's anything in flight; auto-
     // resume polling without the dashboard having to coordinate it.
     this.progressEvents.loadingTasks$
       .pipe(filter((tasks) => tasks.some((t) => t.status !== 'idle')))
@@ -104,7 +104,7 @@ export class DashboardLoadingTasksService {
     if (awaitTaskId) {
       this.awaitedTaskIds.add(awaitTaskId);
     }
-    // If polling is already active, don't restart - the existing loop
+    // If polling is already active, don't restart; the existing loop
     // already covers all tasks.  This avoids clearing completedTaskIds
     // and losing track of tasks that just finished.
     if (this.datasetPollingActive) {
@@ -118,7 +118,7 @@ export class DashboardLoadingTasksService {
       .subscribe({
         next: (tasks: LoadingTask[]) => {
           // Any task we were waiting for has now shown up in the SSE
-          // stream - drop it from the awaited set so the bail-out check
+          // stream; drop it from the awaited set so the bail-out check
           // below can fire as soon as the stream goes quiet.
           for (const t of tasks) {
             this.awaitedTaskIds.delete(t.task_id);
@@ -150,7 +150,7 @@ export class DashboardLoadingTasksService {
           this.datasetState.setLoading(active.length > 0);
 
           if (active.length === 0 && this.awaitedTaskIds.size === 0) {
-            // No more active tasks and no awaited task pending - stop
+            // No more active tasks and no awaited task pending; stop
             // polling.
             this.polling$.next();
             this.datasetPollingActive = false;

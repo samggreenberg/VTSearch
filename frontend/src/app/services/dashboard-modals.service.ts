@@ -36,13 +36,13 @@ export interface StatsState {
 /**
  * Singleton owner of the Dashboard's row-action and selection-action
  * modal states. Lifting these out of `DashboardComponent` keeps the
- * dashboard a thinner layout/wiring shell - opening any of these modals
+ * dashboard a thinner layout/wiring shell; opening any of these modals
  * is `modals.openX(...)`, closing is `modals.closeX()`, and the modal
  * `@if` blocks in the template read directly off `modals.x.open`.
  *
  * The dataset-importer and new-detector flows stay on
  * `NewThingFlowsService` (they're opened from places other than the
- * dashboard too - e.g. the top-bar context pulldowns).
+ * dashboard too, e.g. the top-bar context pulldowns).
  */
 @Injectable({ providedIn: 'root' })
 export class DashboardModalsService {

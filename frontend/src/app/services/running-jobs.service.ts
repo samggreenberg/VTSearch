@@ -30,7 +30,7 @@ export function pairKey(datasetId: string, detectorId: string): string {
  * pending background job.
  *
  * Consumed by the top-bar pulldown to render a spinner glyph on rows
- * whose pair has work in flight - the spinner is **per-pair**, not
+ * whose pair has work in flight; the spinner is **per-pair**, not
  * per-half.
  *
  * The service starts polling lazily on the first observer of
@@ -102,7 +102,7 @@ export class RunningJobsService implements OnDestroy {
           this.http.get<ActiveJobsResponse>('/api/jobs/active').pipe(
             catchError(() => {
               // A transient registry-fetch failure should not tear the
-              // polling pipeline down - the next tick will retry. Emit
+              // polling pipeline down; the next tick will retry. Emit
               // an empty payload so the UI clears any stale spinners.
               return [{ busy_pairs: [] } as ActiveJobsResponse];
             }),

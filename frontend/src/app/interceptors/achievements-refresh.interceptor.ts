@@ -14,7 +14,7 @@ import { AchievementsService } from '../services/achievements.service';
  * - POST /api/find-label                      (find_media)
  * - POST /api/auto-detect                     (find_media)
  * - POST /api/label-importers/import/:name    (detectors_imported)
- * - POST /api/datasets/registry/:id/load      (datasets_loaded - fires when the load completes)
+ * - POST /api/datasets/registry/:id/load      (datasets_loaded, fires when the load completes)
  */
 const WATCHED_PATTERNS: RegExp[] = [
   /^\/api\/medias\/[^/]+\/vote$/,

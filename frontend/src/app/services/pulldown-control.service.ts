@@ -13,8 +13,8 @@ type PulldownKind = 'dataset' | 'detector';
  * explainer's "Pick a compatible detector/dataset" button fires
  * `requestOpen(kind)`.
  *
- * Kept intentionally tiny - no state, no behaviour beyond signal
- * dispatch - so it's safe to inject anywhere without coupling to
+ * Kept intentionally tiny (no state, no behaviour beyond signal
+ * dispatch), so it's safe to inject anywhere without coupling to
  * pulldown internals.
  */
 @Injectable({ providedIn: 'root' })

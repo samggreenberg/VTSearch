@@ -10,7 +10,7 @@ import { ErrorContext, ToastService } from '../services/toast.service';
  * Use when the caller handles the failure itself (e.g. a probe that
  * expects 404, a retry loop, or a form that renders inline validation).
  * The error still propagates through ``catchError``/``error:`` handlers
- * exactly as before - only the global UI toast is suppressed.
+ * exactly as before; only the global UI toast is suppressed.
  *
  * Example::
  *
@@ -83,7 +83,7 @@ interface ParsedBody {
 
 function parseErrorBody(err: HttpErrorResponse): ParsedBody {
   const body = err.error;
-  // String body - usually a non-JSON error page (HTML or plain text).
+  // String body: usually a non-JSON error page (HTML or plain text).
   if (typeof body === 'string') {
     return { rawBody: body.length > 4000 ? body.slice(0, 4000) + '…' : body };
   }
@@ -126,7 +126,7 @@ function pickString(obj: Record<string, unknown>, key: string): string | undefin
 }
 
 function defaultMessage(err: HttpErrorResponse): string {
-  if (err.status === 0) return 'Network error - could not reach the server.';
+  if (err.status === 0) return 'Network error: could not reach the server.';
   return `Request failed (${err.status}${err.statusText ? ` ${err.statusText}` : ''}).`;
 }
 

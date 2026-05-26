@@ -10,7 +10,7 @@ interface DialogButton {
 }
 
 /**
- * VtDialogService - Angular replacement for dialogs.js.
+ * VtDialogService: Angular replacement for dialogs.js.
  * Provides confirm() and prompt() returning Promises. Pure
  * informational notifications go through ToastService instead of a
  * modal alert.
@@ -20,7 +20,7 @@ export class VtDialogService {
   private activeResolve: ((value: unknown) => void) | null = null;
   private modalRef: ComponentRef<ModalComponent> | null = null;
 
-  // State for the current dialog - consumed by a dialog host component.
+  // State for the current dialog, consumed by a dialog host component.
   dialogOpen = false;
   dialogTitle = '';
   dialogMessage = '';

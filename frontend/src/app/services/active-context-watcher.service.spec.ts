@@ -46,7 +46,7 @@ describe('ActiveContextWatcherService', () => {
 
   it('does not toast when the registry is empty (initial-load state)', () => {
     activeContext.setActivePair('d1', 'm1');
-    // Registry still empty - could just be loading.
+    // Registry still empty; could just be loading.
     expect(toast.toasts.length).toBe(0);
     expect(activeContext.datasetId).toBe('d1');
     expect(activeContext.modelId).toBe('m1');
@@ -91,7 +91,7 @@ describe('ActiveContextWatcherService', () => {
     expect(activeContext.datasetId).toBe('d2');
   });
 
-  it('is idempotent - calling start() twice does not double-subscribe', () => {
+  it('is idempotent: calling start() twice does not double-subscribe', () => {
     watcher.start();
     setDatasets([makeDataset('d1', 'X')]);
     setDetectors([]);

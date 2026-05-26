@@ -76,7 +76,7 @@ export class ToastContainerComponent implements OnInit, OnDestroy {
         document.execCommand('copy');
         this.markCopied(t.id);
       } catch {
-        // give up silently - details still visible in the toast
+        // give up silently; details still visible in the toast
       }
       document.body.removeChild(ta);
     }
