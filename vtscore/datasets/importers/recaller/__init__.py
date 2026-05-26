@@ -7,9 +7,9 @@ hashes come straight from ReCaller — no local recalculation.
 
 Multi-media imports
 -------------------
-ReCaller is a :attr:`~DatasetImporter.multi_media` importer: a single
-import can pull in **multiple source types** in one go and let the
-framework convert each to the dataset's output type.  The user picks
+ReCaller is a multi-source-type importer: a single import can pull in
+**multiple source types** in one go and let the framework convert each
+to the dataset's output type.  The user picks
 the output media type plus a list of :class:`SourceSpec` rows in the
 modal, e.g.::
 
@@ -182,7 +182,6 @@ class ReCallerDatasetImporter(DatasetImporter):
     icon = "\U0001f50d"  # magnifying glass
     hidden_from_picker = True  # flip to False once API clients are implemented
     category = "services"
-    multi_media = True
     # Useful per-media origins are built in ``_build_media`` (keyed by
     # contentID); the dataset-level origin carries no actionable identity.
     origin_suppressed = True

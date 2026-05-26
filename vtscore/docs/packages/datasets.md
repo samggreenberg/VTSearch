@@ -262,22 +262,22 @@ entry-point group; built-ins win on name clashes. See
 
 | Name               | Display name           | Notes                                                                             |
 |--------------------|------------------------|-----------------------------------------------------------------------------------|
-| `server_folder`    | Server                 | `multi_media=True`. Server-side folder scan.                                      |
-| `server_files`     | Files                  | `multi_media=True`, hidden from picker. Server-side file list.                    |
-| `local`            | Local                  | `multi_media=True`. Browser-upload placeholder; re-enters `server_folder`.        |
-| `pickle`           | Upload Saved Dataset   | `multi_media=True`, hidden. `.pkl` round-trip path.                               |
-| `http_archive`     | Import from URL        | `multi_media=True`, hidden. Downloads + extracts an archive.                      |
-| `demo`             | Downloaded Media       | `multi_media=True`. Wraps `load_demo_dataset`.                                    |
-| `synthetic`        | Synthetic Media        | `multi_media=True`. Generates deterministic media via `vtscore.utils.synthetic`.  |
-| `combine_datasets` | Combined Datasets      | `multi_media=True`, hidden. Internal: merges two loaded datasets.                 |
-| `recaller`         | ReCaller Query         | `multi_media=True`, hidden. Scaffold for the ReCaller external API.               |
+| `server_folder`    | Server                 | Server-side folder scan.                                                          |
+| `server_files`     | Files                  | Hidden from picker. Server-side file list.                                        |
+| `local`            | Local                  | Browser-upload placeholder; re-enters `server_folder`.                            |
+| `pickle`           | Upload Saved Dataset   | Hidden. `.pkl` round-trip path.                                                   |
+| `http_archive`     | Import from URL        | Hidden. Downloads + extracts an archive.                                          |
+| `demo`             | Downloaded Media       | Wraps `load_demo_dataset`.                                                        |
+| `synthetic`        | Synthetic Media        | Generates deterministic media via `vtscore.utils.synthetic`.                      |
+| `combine_datasets` | Combined Datasets      | Hidden. Internal: merges two loaded datasets.                                     |
+| `recaller`         | ReCaller Query         | Hidden. Scaffold for the ReCaller external API.                                   |
 
-**Multi-media imports.** Importers with `multi_media = True` accept a
-`source_specs` form value: a list of
-`SourceSpec(source_type, converter, params)` rows that fan one import
-out across several source media types, each optionally run through a
-named `MediaConverter`. The framework owns conversion and ingestion —
-subclasses never call `get_converter()` themselves.
+**Multi-media imports.** Every importer accepts a `source_specs` form
+value: a list of `SourceSpec(source_type, converter, params)` rows
+that fan one import out across several source media types, each
+optionally run through a named `MediaConverter`. The framework owns
+conversion and ingestion — subclasses never call `get_converter()`
+themselves.
 
 **Importer override points** (pick one, simplest first):
 
@@ -302,12 +302,6 @@ converter on the yielded raw media before storing the result.
 **Per-record hooks (`list_records` / `fetch_record`).** Hook 1's
 bulk variant `_fetch_records_bulk_impl` lets you replace the per-item
 loop with batched / concurrent I/O.
-
-For legacy (`multi_media = False`) importers,
-`effective_source_specs()` synthesises an equivalent spec list from
-the legacy `media_type` + comma-separated `converters` form fields,
-so a legacy `run()` can migrate to the new iteration style before
-touching its form schema.
 
 **Resolving back to a file.** Importers whose media is reachable on
 disk **must** override `resolve_file(origin, origin_name, filename) ->
