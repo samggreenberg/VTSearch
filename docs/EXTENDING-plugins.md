@@ -1,6 +1,6 @@
 # Extending VTSearch — Plugin Systems
 
-Eight auto-discovered plugin families share a common registry-based
+Nine auto-discovered plugin families share a common registry-based
 architecture. Subclass the relevant base class, expose a sentinel
 attribute, drop the module in the right directory, and the route/UI
 wiring happens automatically.
@@ -19,7 +19,6 @@ extractors).
 - [Adding a Media Converter](#adding-a-media-converter)
 - [Adding a Results Exporter](#adding-a-results-exporter)
 - [Adding a Label Importer](#adding-a-label-importer)
-- [Adding a Processor Importer](#adding-a-processor-importer)
 - [Adding a Settings Importer](#adding-a-settings-importer)
 - [Adding a Settings Exporter](#adding-a-settings-exporter)
 - [Adding a Settings Source](#adding-a-settings-source)
@@ -29,17 +28,16 @@ extractors).
 
 ## Shared Plugin Architecture
 
-Ten plugin systems — data importers, results exporters, label
-importers, processor importers, settings importers, settings exporters,
-settings sources, labelset sources, media converters, and media
-sources — share the same architecture built on two base classes in
-`vtscore/plugins/__init__.py`:
+Nine plugin systems — data importers, results exporters, label
+importers, settings importers, settings exporters, settings sources,
+labelset sources, media converters, and media sources — share the same
+architecture built on two base classes in `vtscore/plugins/__init__.py`:
 
 ### PluginField
 
 A dataclass describing a single user-configurable input. All plugin
 families use the same field type (aliased as `ImporterField`,
-`ExporterField`, `LabelImporterField`, `ProcessorImporterField`, etc.).
+`ExporterField`, `LabelImporterField`, `SettingsImporterField`, etc.).
 
 | Parameter     | Type        | Default  | Description                                             |
 |---------------|-------------|----------|---------------------------------------------------------|
@@ -105,7 +103,6 @@ Most plugin families use sub-packages, which pair well with per-plugin
 | Data Importers      | `vtscore.datasets.importers`      | `IMPORTER`            | `DatasetImporter`   | `vtscore.importers`            |
 | Results Exporters   | `vtscore.exporters`               | `EXPORTER`            | `LabelsetExporter`  | `vtscore.exporters`            |
 | Label Importers     | `vtscore.labels.importers`        | `LABEL_IMPORTER`      | `LabelImporter`     | `vtscore.label_importers`      |
-| Processor Importers | `vtsearch.processors.importers`    | `PROCESSOR_IMPORTER`  | `ProcessorImporter` | —                              |
 | Settings Importers  | `vtsearch.settings_io.importers`   | `SETTINGS_IMPORTER`   | `SettingsImporter`  | `vtsearch.settings_importers`  |
 | Settings Exporters  | `vtsearch.settings_io.exporters`   | `SETTINGS_EXPORTER`   | `SettingsExporter`  | `vtsearch.settings_exporters`  |
 | Settings Sources    | `vtsearch.settings_io.sources`     | `SETTINGS_SOURCE`     | `SettingsSource`    | `vtsearch.settings_sources`    |
@@ -1028,10 +1025,11 @@ LABEL_IMPORTER = PostgresLabelImporter()
 
 ---
 
-## Adding a detector from external labels
+## Sharing and deploying classifiers
 
-The detector and processor-importer plugin systems were removed.  To
-publish or share a classifier:
+VTSearch detectors are not plugin-based — they live as JSON labelset
+files and are trained on demand from origins.  To publish or share a
+classifier:
 
 1. Use `POST /api/detectors` (or
    `POST /api/detectors/registry/from-labelset/<importer>`) to create a

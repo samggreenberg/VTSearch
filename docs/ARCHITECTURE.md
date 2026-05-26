@@ -38,214 +38,174 @@ imported/loaded from disk and applied as-is. The architecture combines:
   available (CLAP Music, BGE). Used to seed a detector during the
   training loop, or as a quick stand-alone search.
 - **Flask web UI** — Angular SPA frontend with a REST API.
-- **Plugin systems** — auto-discovered dataset importers, results
-  exporters, label importers, and processor importers.
+- **Plugin systems** — nine auto-discovered plugin families: dataset
+  importers, results exporters, label importers, settings importers/
+  exporters/sources, labelset sources, media converters, and media
+  sources.
 
 ---
 
 ## Directory map
 
+The codebase is split into two top-level Python packages: **`vtscore/`**
+(the Flask-free library tier — everything ML, media, dataset, and
+plugin-related) and **`vtsearch/`** (the Flask app tier — routes,
+settings, auth, and the app-side state shim).
+
 ```
 VTSearch/
-├── app.py                          Flask entry point, CLI, startup
+├── app.py                          Flask entry point, CLI arg parsing, startup
 │
-├── vtsearch/
-│   ├── config.py                   Constants (paths, model IDs, rates)
-│   ├── medias.py                   Test media generation & embedding cache
+├── vtscore/                        Library tier — no Flask dependency
+│   ├── config.py                   Constants (sample rates, paths, model IDs)
 │   ├── cli.py                      CLI autodetect workflow
-│   ├── settings.py                 Persistent settings & autorun processors
+│   ├── cli_pipeline.py             Pipeline YAML loader
+│   ├── cli_progress.py             CLI progress bars
 │   │
-│   ├── auth/                       Authentication & user management
-│   │   └── __init__.py             LoginProvider ABC, DefaultLoginProvider, get_current_user(), get_user_data_dir()
+│   ├── media/                      Media type, embedder, clipper + processor ABCs
+│   │   ├── base.py                 MediaType, MediaEmbedder, MediaClipper ABCs
+│   │   ├── processors.py           Processor, Detector, Localizer, Extractor ABCs
+│   │   ├── embedder.py             MediaEmbedder shared helpers (media_from_path, etc.)
+│   │   ├── clipper.py              Shared clipper logic
+│   │   ├── audio/                  Audio media type, embedders (CLAP, CLAP-Music, CLAP-General,
+│   │   │                           AST, Whisper), clippers, SpeechExtractor
+│   │   ├── image/                  Image media type, embedders (SigLIP default; SigLIP2, CLIP,
+│   │   │                           DINOv2, DINOv3, EUPE — each with single + patch variants),
+│   │   │                           clippers, ImageClassExtractor, FaceLocalizer, OCRExtractor
+│   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers
+│   │   ├── video/                  Video media type, embedders (X-CLIP default, LanguageBind,
+│   │   │                           VideoMAE), clippers
+│   │   └── document/               Document media type (no embedder — convert first), clipper
 │   │
-│   ├── media/                      Media type, embedder, and clipper registries + plugins
-│   │   ├── base.py                 MediaType, MediaEmbedder, MediaClipper, Processor, Detector, Localizer, Extractor ABCs
-│   │   ├── __init__.py             Three registries: register/register_embedder/register_clipper
-│   │   ├── audio/media_type.py     Audio media type (WAV serving, folder import)
-│   │   ├── audio/embedder_clap.py  AudioClapEmbedder (LAION CLAP, 512-d, default)
-│   │   ├── audio/embedder_clap_music.py  AudioClapMusicEmbedder (CLAP Music, 512-d)
-│   │   ├── audio/clipper.py        SoundDefaultClipper, SoundTilingClipper
-│   │   ├── audio/speech_extractor.py  SpeechExtractor processor
-│   │   ├── image/media_type.py     Image media type (JPEG/PNG serving)
-│   │   ├── image/embedder_siglip.py  ImageSiglipEmbedder (SigLIP, 768-d, default)
-│   │   ├── image/clipper.py        ImageDefaultClipper, ImageTilingClipper
-│   │   ├── image/extractor.py      ImageClassExtractor (YOLO-based)
-│   │   ├── image/face_localizer.py FaceLocalizer (MediaPipe-based)
-│   │   ├── image/ocr_extractor.py  OCRExtractor
-│   │   ├── text/media_type.py      Text media type (JSON serving, type_id="text")
-│   │   ├── text/embedder_bge.py    TextBGEEmbedder (BGE-base-en-v1.5, 768-d)
-│   │   ├── text/embedder_e5.py     TextE5Embedder (E5-base-v2, 768-d, default)
-│   │   ├── text/clipper.py         TextDefaultClipper, TextSentenceClipper
-│   │   ├── video/media_type.py     Video media type (MP4/WebM serving)
-│   │   ├── video/embedder_languagebind.py  VideoLanguageBindEmbedder (LanguageBind, 768-d)
-│   │   ├── video/embedder_videomae.py  VideoVideoMAEEmbedder (VideoMAE v2, 768-d, vision-only)
-│   │   ├── video/embedder_xclip.py VideoXClipEmbedder (X-CLIP, 768-d, default)
-│   │   ├── video/clipper.py        VideoDefaultClipper, VideoTilingClipper
-│   │   ├── document/media_type.py  Document handling (no embedder; convert first)
-│   │   └── document/clipper.py     DocumentDefaultClipper
+│   ├── converters/                 Media type converters (auto-discovered via CONVERTER sentinel)
+│   │   ├── audio2image.py          Mel/CQT spectrogram rendering
+│   │   ├── audio2text.py           Whisper ASR transcription
+│   │   ├── document2image.py       PDF page rendering
+│   │   ├── document2text.py        Text extraction from documents
+│   │   ├── image2text.py           OCR (PaddleOCR)
+│   │   ├── video2audio.py          Audio track extraction
+│   │   └── video2image.py          Frame sampling
 │   │
-│   ├── converters/                 Media type converters
-│   │   ├── base.py                 MediaConverter ABC
-│   │   ├── runner.py               Converter orchestration (run_converters_on_folder)
-│   │   ├── audio2image.py          Render audio as a mel/CQT spectrogram image
-│   │   ├── audio2text.py           Transcribe audio to text via Whisper ASR
-│   │   ├── document2image.py       Render document pages as images
-│   │   ├── document2text.py        Extract text from documents
-│   │   ├── image2text.py           Extract text from images via OCR (PaddleOCR)
-│   │   ├── video2audio.py          Extract audio track from video
-│   │   └── video2image.py          Sample frames from video as images
-│   │
-│   ├── training/                   Generic learned-sort primitives
-│   │   ├── mlp.py                  MLP build/train (pure PyTorch)
-│   │   ├── thresholds.py           Cross-cal/GMM/safe threshold helpers
+│   ├── training/                   Generic learned-sort primitives (no Flask, no state)
+│   │   ├── mlp.py                  build_model, train_model (pure PyTorch)
+│   │   ├── thresholds.py           GMM / cross-calibration / safe-threshold helpers
 │   │   ├── svm.py                  SVM trainer prototype
 │   │   └── region_similarity.py    Region-aware cosine similarity scoring
 │   │
 │   ├── embedding/                  Embedder façades and torch runtime
-│   │   ├── helpers.py              Thin wrappers around media-type embed()
-│   │   ├── matrix.py               Cached contiguous embedding matrix
-│   │   └── loader.py               Model initialisation (delegates to media)
+│   │   ├── helpers.py              embed_audio_file / embed_image_file / embed_text_query / …
+│   │   ├── matrix.py               Cached contiguous (N, D) embedding matrix on DatasetContext
+│   │   └── loader.py               initialize_models, smart_preload_in_background
 │   │
-│   ├── detectors/                  Detector lifecycle + resolve→embed→train
+│   ├── detectors/                  Detector lifecycle — resolve→embed→train pipeline
 │   │   ├── registry.py             In-memory detector registry
 │   │   ├── store.py                On-disk labelset/query store
 │   │   ├── training.py             Vote-aware training, origin-based training
-│   │   ├── workflow.py             apply-labels-and-retrain orchestration
-│   │   ├── resolver.py             Label resolution by following origin trails
+│   │   ├── workflow.py             apply-labels-and-retrain orchestration (uses flask.g)
+│   │   ├── resolver.py             Origin → file + embedding resolution
 │   │   ├── label_sync.py           Sync labels to loaded detector
 │   │   ├── label_restoration.py    Label restoration
 │   │   ├── labelset_elements.py    Labelset element materialisation
 │   │   ├── labelset_training.py    Cross-dataset MLP training
-│   │   ├── dataset_sync.py         Dataset/detector sync on load
+│   │   ├── dataset_sync.py         Sync detectors when a dataset loads
 │   │   ├── media_seeding.py        Media seeding utilities
-│   │   └── labeling_progress.py    Labelling-progress cache & stability analysis
+│   │   └── labeling_progress.py    Per-step MLP cache + stability analysis
 │   │
-│   ├── datasets/                   Dataset loading & downloading
+│   ├── datasets/                   Dataset loading, downloading, ingestion
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
 │   │   ├── labelset.py             LabelSet / LabeledElement (labeled data with origins)
-│   │   ├── loader.py               Public façade: shared helpers, export, re-exports
+│   │   ├── loader.py               Public façade + re-exports
 │   │   ├── loader_folder.py        load_dataset_from_folder + chunked variant
 │   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
 │   │   ├── load_pipeline.py        Background-task orchestration, ConcurrencyGate, clip fix-up
-│   │   ├── downloader/             HTTP download + demo dataset downloaders
-│   │   │   ├── __init__.py         Re-exports all symbols for backward compat
-│   │   │   ├── core.py             URLs, sizes, progress, archive validation/extraction
-│   │   │   ├── audio.py            ESC-50, GTZAN, Speech Commands v2, UrbanSound8K
-│   │   │   ├── images.py           CIFAR-10, Caltech-101/256, Flowers, Food-101, EuroSAT, Dogs
-│   │   │   ├── video.py            UCF-101 subset
-│   │   │   ├── text.py             20 Newsgroups, BBC News, AG News, IMDB
-│   │   │   └── documents.py        UCSF Industry Documents
 │   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
-│   │   ├── pickle_security.py      Restricted pickle unpickler (RCE prevention)
-│   │   ├── metadata.py             Metadata extraction (CSV, MAT, CIFAR, folders)
-│   │   ├── pdf.py                  PDF rendering (render_pdf_pages)
-│   │   ├── ingest.py               Clip ingestion (file → clip dict)
-│   │   ├── config.py               Demo dataset catalogue
-│   │   ├── split.py                Train/test splitting
-│   │   ├── sources/                MediaSource abstraction for resolving media files
-│   │   │   ├── base.py             MediaSource ABC (list_items, fetch_item, resolve_path)
-│   │   │   ├── local_folder.py     LocalFolderSource implementation
-│   │   │   ├── http_archive.py     HTTP archive source implementation
-│   │   │   └── pullwrest.py        PullWrestSource — fetch media via PullWrest (scaffold)
-│   │   └── importers/              Plugin system for data sources
-│   │       ├── base.py             DatasetImporter ABC + ImporterField
-│   │       ├── folder/             Local directory importer
-│   │       ├── pickle/             .pkl file importer
-│   │       ├── http_archive/       HTTP archive importer
-│   │       ├── combine_datasets/   Merge multiple pickle datasets
-│   │       ├── demo/               Demo dataset importer (pre-configured catalogues)
-│   │       └── recaller/           ReCaller importer (scaffold — hidden from picker)
+│   │   ├── downloader/             Demo dataset downloaders (audio, image, video, text, docs)
+│   │   ├── sources/                MediaSource abstraction (local_folder, http_archive, pullwrest)
+│   │   └── importers/              Plugin importers (server_folder, server_files, local_folder,
+│   │                               local_files, pickle, http_archive, combine_datasets,
+│   │                               demo, synthetic, recaller)
 │   │
-│   ├── exporters/                  Plugin system for output destinations
-│   │   ├── base.py                 LabelsetExporter ABC + ExporterField
-│   │   ├── server_json_file/       JSON file on server
-│   │   ├── server_csv_file/        CSV file on server
-│   │   ├── email_smtp/             SMTP email sender
-│   │   ├── webhook/                HTTP POST webhook
-│   │   ├── gui/                    In-browser / console display
-│   │   └── holder/                 Holder labelset exporter (scaffold — hidden from picker)
+│   ├── exporters/                  Results exporters (server_json_file, server_csv_file,
+│   │                               email_smtp, webhook, gui, holder)
 │   │
-│   ├── settings_io/                Settings import/export/sync plugins
-│   │   ├── importers/              One-shot settings importers
-│   │   │   ├── base.py             SettingsImporter ABC
-│   │   │   ├── local_json_file/    Browser file upload
-│   │   │   └── server_json_file/   Server filesystem JSON
-│   │   ├── exporters/              One-shot settings exporters
-│   │   │   ├── base.py             SettingsExporter ABC
-│   │   │   ├── local_json_file/    Browser file download
-│   │   │   └── server_json_file/   Server filesystem JSON
-│   │   └── sources/                Bidirectional settings sync sources
-│   │       ├── base.py             SettingsSource ABC
-│   │       └── server_json_file/   Sync with server JSON file ({username} template)
-│   │
-│   ├── labels/                     Label importers and sync sources
-│   │   ├── importers/              Plugin system for one-shot label import
-│   │   │   ├── base.py             LabelImporter ABC + LabelImporterField
-│   │   │   ├── server_json_file/   JSON label file on server
-│   │   │   ├── server_csv_file/    CSV label file on server
-│   │   │   └── holder/             Holder label importer (scaffold — hidden from picker)
-│   │   ├── sources/                Bidirectional label sync sources
-│   │   │   ├── base.py             LabelsetSource ABC + LabelsetSourceField
-│   │   │   └── server_json_file/   Sync labels with server JSON file
+│   ├── labels/                     Label importers, sync sources, sync utilities
+│   │   ├── importers/              server_json_file, server_csv_file, holder
+│   │   ├── sources/                server_json_file (bidirectional label sync)
 │   │   └── sync.py                 sync_to/from_labelset_source utilities
 │   │
 │   ├── eval/                       Evaluation framework
 │   │   ├── __main__.py             CLI entry point (python -m vtscore.eval)
-│   │   ├── config.py               Eval dataset catalogue
 │   │   ├── runner.py               run_eval() orchestrator
 │   │   ├── metrics.py              mAP, P@k, R@k, F1 calculations
 │   │   ├── visualize.py            Matplotlib chart generation
 │   │   └── voting_iterations.py    Voting-iteration simulation
 │   │
-│   ├── routes/                     Flask blueprints (HTTP layer)
-│   │   ├── auth.py                 Authentication status endpoint (/api/auth/status)
-│   │   ├── helpers.py              Shared route helpers (get_json_or_400)
-│   │   ├── main.py                 Root route, favicon, logo
-│   │   ├── medias.py               Media listing, serving, voting
-│   │   ├── sorting.py              Text/learned/example sort, labels, diversity
-│   │   ├── processors.py           Extractor/localizer/pregen-processor blueprint
-│   │   ├── processors_crud.py      Extractor/localizer CRUD + pregen processors
-│   │   ├── processors_scoring.py   /api/extract, /api/auto-extract, /api/localize, /api/auto-localize
-│   │   ├── detector_scoring.py        /api/auto-detect, /api/find-label (detectors)
-│   │   ├── detector_find.py           Multi-dataset / multi-model Find subsystem
-│   │   ├── datasets.py             Media-type/clipper/converter listings, import, demos
-│   │   ├── datasets_ui.py          Dataset UI helpers and demo listing
-│   │   ├── datasets_registry.py    Dataset registry CRUD (/api/datasets/registry/*)
-│   │   ├── labels.py               Label export, import, fill-from-sort
-│   │   ├── eval.py                 Evaluation and labeling progress routes
-│   │   ├── media_server.py         Server media file management, example-sort by origin
-│   │   ├── exporters.py            Exporter registry & execution
-│   │   ├── label_importers.py      Label importer registry & execution
-│   │   ├── processor_importers.py  Processor importer registry & execution
-│   │   ├── settings.py             Settings persistence (volume, theme, etc.)
-│   │   ├── settings_io.py          Settings import/export plugin routes
-│   │   ├── sync_sources.py         Sync source management (settings + labelset sources)
-│   │   ├── file_browser.py         File browser API for directory navigation
-│   │   ├── detectors.py     Persistent detector store (/api/detectors/*)
-│   │   └── detectors_registry.py      In-memory model registry (/api/detectors/registry/*)
+│   ├── concurrency/                Async jobs, memory budgeting, progress tracking
+│   │   ├── async_jobs.py           AsyncJob, JobManager, eval_jobs, learned_sort_jobs
+│   │   ├── memory_budget.py        cap_workers_by_memory
+│   │   └── progress.py             ProgressTracker, update_progress, cancel_dataset_progress
 │   │
-│   ├── settings_factory.py         Accessor factories used by settings.py
+│   ├── state/                      Multi-dataset / multi-detector global state (library tier)
+│   │   ├── core.py                 DatasetContext, DetectorContext, _state_lock, context registries
+│   │   ├── votes.py                toggle_vote / apply_label / clear_votes
+│   │   ├── clicks.py               Vote click-time tracking
+│   │   ├── diversity.py            Diversity tree construction and sampling
+│   │   └── media_lookup.py         Origin-keyed lookup, collapse_duplicates
 │   │
-│   └── utils/
-│       ├── state.py                Re-export facade over state_*.py submodules
-│       ├── state_core.py           Core variables (medias, votes, inclusion) and _state_lock
-│       ├── state_votes.py          Vote operations, label history, learned scores
-│       ├── state_clicks.py         Click-time tracking for vote sequence analysis
-│       ├── state_processors.py     Autorun detector/extractor/localizer CRUD
-│       ├── state_diversity.py      Diversity tree construction and sampling
-│       ├── state_media_lookup.py   Media ID resolution, duplicate collapsing, origins
-│       ├── progress.py             Thread-safe progress tracking
-│       ├── registry.py             PluginBase, PluginField, PluginRegistry (shared plugin infra)
-│       ├── sync_source.py          SyncSource[LoadT, SaveT] generic base for SettingsSource/LabelsetSource
-│       ├── audio_generator.py      WAV/tone generation utility
-│       ├── ffmpeg.py               ffmpeg wrappers
-│       ├── hits.py                 Helpers for building media hit dicts
-│       ├── paths.py                Path utilities
-│       └── url_validation.py       SSRF URL validation
+│   ├── plugins/                    PluginBase, PluginField, PluginRegistry (shared plugin infra)
+│   ├── security/                   Path/URL/pickle safety (path_validation, url_validation, pickle)
+│   ├── sync/                       SyncSource[LoadT, SaveT] generic base class
+│   └── utils/                      Shared helpers: hits.py (build_media_hit), synthetic/
+│
+├── vtsearch/                       Flask app tier (imports Flask — not library-safe)
+│   ├── settings.py                 Persistent settings (server tier + per-user tier)
+│   ├── settings_factory.py         Accessor factories for settings.py
+│   ├── settings_models.py          Marshmallow schema helpers for settings
+│   ├── achievements.py             Achievement state management
+│   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
+│   ├── logging_config.py           Logging setup
+│   ├── openapi_postprocess.py      OpenAPI schema post-processing
+│   │
+│   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_current_user(),
+│   │                               get_user_data_dir()
+│   │
+│   ├── state/                      App-tier state shim — re-exports vtscore.state.* and adds
+│   │                               proxy view (medias, good_votes, bad_votes, …) from shim/
+│   │
+│   ├── shim/                       state_proxies.py — _ProxyDict / _ProxyList per-request
+│   │                               resolution (checks flask.g, falls back to thread-local)
+│   │
+│   ├── schemas/                    Marshmallow schemas for API serialisation
+│   │
+│   ├── settings_io/                Settings import/export/sync plugins (vtsearch-tier)
+│   │   ├── importers/              local_json_file, server_json_file
+│   │   ├── exporters/              local_json_file, server_json_file
+│   │   └── sources/                server_json_file (bidirectional settings sync)
+│   │
+│   └── routes/                     Flask blueprints — all HTTP request handling
+│       ├── _shared.py              Shared route helpers (request parsing, JSON safety)
+│       ├── auth.py                 /api/auth/status
+│       ├── main.py                 Root route, favicon, logo
+│       ├── sorting.py              Text/learned/example sort, diversity
+│       ├── eval.py                 Evaluation and labeling progress routes
+│       ├── events.py               SSE event stream (/api/events)
+│       ├── file_browser.py         File browser API (/api/file-browser/*)
+│       ├── health.py               Health check (/api/health)
+│       ├── jobs.py                 Job management (/api/jobs/*)
+│       ├── sessions.py             Session management (/api/sessions/*)
+│       ├── achievements.py         Achievement routes (/api/achievements/*)
+│       ├── datasets/               Dataset routes — listings, load, staging, registry, status, ui
+│       ├── detectors/              Detector routes — crud, labels, registry, scoring, find
+│       ├── processors/             Processor routes — crud, scoring (extractors/localizers)
+│       ├── media/                  Media routes — list, server, embed
+│       ├── labels/                 Label routes — vote, importers, exporters
+│       └── settings/               Settings routes — api, io, sources
 │
 ├── static/                         Angular build output (HTML + CSS + JS)
-└── tests/                          Comprehensive test suite
+├── frontend/                       Angular SPA source (components, services, SCSS)
+├── tests/                          App-tier test suite (uses Flask client, vtsearch.*)
+└── tests_lib/                      Library-tier test suite (Flask-import-clean, vtscore.*)
 ```
 
 ---
@@ -259,64 +219,63 @@ modules on the right.
 ┌────────────────────────────────────────────────────────────┐
 │                     Flask / HTTP layer                     │
 │                                                            │
-│  app.py ──► auth, routes/* ──► utils/state, utils/progress │
-│                │                                           │
-│                ├──► embedding/, training/, detectors/      │
-│                ├──► datasets/loader, datasets/load_pipeline │
-│                ├──► exporters (registry)                   │
-│                ├──► labels/importers (registry)            │
-│                ├──► processors/importers (registry)        │
-│                └──► settings                               │
+│  app.py ──► vtsearch/auth, routes/* ──► vtscore/state,     │
+│                │                         vtscore/concurrency │
+│                ├──► vtscore/embedding/, training/, detectors/ │
+│                ├──► vtscore/datasets/loader, load_pipeline  │
+│                ├──► vtscore/exporters (registry)            │
+│                ├──► vtscore/labels/importers (registry)     │
+│                └──► vtsearch/settings                       │
 └────────────────────────────────────────────────────────────┘
         │               │                   │
         ▼               ▼                   ▼
 ┌──────────────┐ ┌────────────┐ ┌────────────────────┐
-│ media/*      │ │ training/  │ │ datasets/          │
-│              │ │ embedding/ │ │                    │
-│ audio    ─┐  │ │ detectors/ │ │ loader ──► media/* │
-│ image    ─┤  │ │            │ │ downloader/        │
-│ text     ─┤  │ │ mlp        │ │ importers/*        │
-│ video    ─┤  │ │ thresholds │ │                    │
-│ document ─┘  │ │ loader     │ │                    │
-│   │          │ │   │        │ │                    │
-│   ▼          │ │   ▼        │ └────────────────────┘
+│ vtscore/     │ │ vtscore/   │ │ vtscore/datasets/  │
+│ media/*      │ │ training/  │ │                    │
+│              │ │ embedding/ │ │ loader ──► media/* │
+│ audio    ─┐  │ │ detectors/ │ │ downloader/        │
+│ image    ─┤  │ │            │ │ importers/*        │
+│ text     ─┤  │ │ mlp        │ │                    │
+│ video    ─┤  │ │ thresholds │ └────────────────────┘
+│ document ─┘  │ │ loader     │
+│   │          │ │   │        │
+│   ▼          │ │   ▼        │
 │ config.py    │ │ media/*    │
 │ torch/HF     │ │ config.py  │
 │ (NO Flask)   │ │ (NO Flask) │
 └──────────────┘ └────────────┘
 
 ┌──────────────────────────┐  ┌────────────────────────┐
-│ exporters/*              │  │ labels/importers/*     │
+│ vtscore/exporters/*      │  │ vtscore/labels/        │
+│                          │  │ importers/*            │
+│ base.py (ABC)            │  │                        │
+│ server_json, server_csv  │  │ base.py (ABC)          │
+│ email_smtp, webhook, gui │  │ server_json, server_csv│
 │                          │  │                        │
-│ base.py (ABC)            │  │ base.py (ABC)          │
-│ server_json, server_csv  │  │ server_json, server_csv│
-│ email_smtp, webhook, gui │  │                        │
-│                          │  │ (NO Flask, NO state,   │
-│ (NO Flask, NO state,     │  │  pure data processing) │
-│  pure data in/out)       │  │                        │
-│                          │  │                        │
+│ (NO Flask, NO state,     │  │ (NO Flask, NO state,   │
+│  pure data in/out)       │  │  pure data processing) │
 └──────────────────────────┘  └────────────────────────┘
 
                           ┌──────────────────────────┐
-                          │ utils/sync_source.py     │
+                          │ vtscore/sync/            │
                           │                          │
                           │ SyncSource[LoadT, SaveT] │
                           │  (generic ABC,           │
-                          │   shared icon + signature│
-                          │   for load() / save())   │
+                          │   shared load() / save() │
+                          │   signature)             │
                           └────────────┬─────────────┘
                                        │
               ┌────────────────────────┴────────────────────────┐
               ▼                                                 ▼
 ┌─────────────────────────────┐            ┌─────────────────────────────┐
-│ settings_io/sources/*       │            │ labels/sources/*            │
-│                             │            │ labels/sync.py              │
-│ base.py (SettingsSource)    │            │                             │
-│ server_json_file            │            │ base.py (LabelsetSource)    │
-│                             │            │ server_json_file            │
-│ (NO Flask; reads/writes     │            │                             │
-│  settings via file I/O)     │            │ (NO Flask; reads/writes     │
-│                             │            │  labelsets via file I/O)    │
+│ vtsearch/settings_io/       │            │ vtscore/labels/sources/*    │
+│ sources/*                   │            │ vtscore/labels/sync.py      │
+│                             │            │                             │
+│ base.py (SettingsSource)    │            │ base.py (LabelsetSource)    │
+│ server_json_file            │            │ server_json_file            │
+│                             │            │                             │
+│ (NO Flask; reads/writes     │            │ (NO Flask; reads/writes     │
+│  settings via file I/O)     │            │  labelsets via file I/O)    │
 └─────────────────────────────┘            └─────────────────────────────┘
 ```
 
@@ -329,13 +288,13 @@ modules on the right.
   `embedding/helpers.py` accept parameters only.  The exception is
   `detectors/workflow.py`, which imports `flask.g` for request-scoped
   context resolution.
-- **exporters, label importers, processor importers, and sync sources
-  are fully standalone.**  They receive a plain dict and return a plain
-  dict/list.  Zero framework coupling.  Sync sources (`SettingsSource`
-  for settings, `LabelsetSource` for detector labels) both inherit from
-  the generic `SyncSource[LoadT, SaveT]` in `utils/sync_source.py`,
-  which captures the shared `load()`/`save()` shape; each concrete
-  source plugin is still pure I/O.
+- **exporters, label importers, and sync sources are fully standalone.**
+  They receive a plain dict and return a plain dict/list.  Zero framework
+  coupling.  Sync sources (`SettingsSource` for settings, `LabelsetSource`
+  for detector labels) both inherit from the generic
+  `SyncSource[LoadT, SaveT]` in `vtscore/sync/`, which captures the
+  shared `load()`/`save()` shape; each concrete source plugin is still
+  pure I/O.
 - **datasets/ functions accept an optional `on_progress` callback.**
   When `None`, they lazily resolve the app's `update_progress`; when
   provided, they use the caller's callback.
@@ -350,27 +309,26 @@ modules on the right.
 
 | Module | Flask? | Global state? | Can extract standalone? |
 |--------|--------|---------------|-------------------------|
-| `training/mlp.py` + `training/thresholds.py` | No | No (params) | **Yes** — pure PyTorch/sklearn |
-| `detectors/labeling_progress.py` | No | No (params) | **Yes** — pure torch/numpy |
-| `exporters/base.py` + all exporters | No | No | **Yes** — pure data processing |
-| `labels/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
-| `processors/importers/base.py` + all importers | No | No | **Yes** — pure data processing |
-| `settings_io/sources/base.py` + all sources | No | No | **Yes** — pure file I/O |
-| `labels/sources/base.py` + all sources | No | No | **Yes** — pure file I/O |
-| `labels/sync.py` | No | Yes (reads votes) | Partially — needs state for vote export |
-| `datasets/downloader/` | No | No (callback) | **Yes** — requests only |
-| `datasets/loader.py` | No | No (callback + params) | **Yes** — needs media registry |
-| `datasets/importers/base.py` + all importers | No | No (callback) | **Yes** — each self-contained |
-| `eval/*` | No | No | **Yes** — needs media + datasets |
-| `settings.py` | No | No | **Yes** — JSON file I/O |
-| `media/base.py` | No | No | **Yes** — abstract only |
-| `media/audio,image,text,video,document` | No | No | **Yes** — torch + HF models |
-| `converters/*` | No | No | **Yes** — pure media conversion |
-| `utils/progress.py` | No | No | **Yes** — threading only |
-| `utils/state.py` | No | N/A (IS the state) | **Yes** — plain Python dicts |
-| `config.py` | No | No | **Yes** — just constants |
-| `auth/` | No | No | **Yes** — ABC + default provider |
-| `routes/*` | **Yes** | **Yes** | No — Flask-specific |
+| `vtscore/training/mlp.py` + `thresholds.py` | No | No (params) | **Yes** — pure PyTorch/sklearn |
+| `vtscore/detectors/labeling_progress.py` | No | No (params) | **Yes** — pure torch/numpy |
+| `vtscore/exporters/` (base + all) | No | No | **Yes** — pure data processing |
+| `vtscore/labels/importers/` (base + all) | No | No | **Yes** — pure data processing |
+| `vtsearch/settings_io/sources/` | No | No | **Yes** — pure file I/O |
+| `vtscore/labels/sources/` | No | No | **Yes** — pure file I/O |
+| `vtscore/labels/sync.py` | No | Yes (reads votes) | Partially — needs state for vote export |
+| `vtscore/datasets/downloader/` | No | No (callback) | **Yes** — requests only |
+| `vtscore/datasets/loader.py` | No | No (callback + params) | **Yes** — needs media registry |
+| `vtscore/datasets/importers/` (base + all) | No | No (callback) | **Yes** — each self-contained |
+| `vtscore/eval/` | No | No | **Yes** — needs media + datasets |
+| `vtsearch/settings.py` | No | No | **Yes** — JSON file I/O |
+| `vtscore/media/base.py` | No | No | **Yes** — abstract only |
+| `vtscore/media/{audio,image,text,video,document}` | No | No | **Yes** — torch + HF models |
+| `vtscore/converters/` | No | No | **Yes** — pure media conversion |
+| `vtscore/concurrency/progress.py` | No | No | **Yes** — threading only |
+| `vtscore/state/` | No | N/A (IS the state) | **Yes** — plain Python dicts |
+| `vtscore/config.py` | No | No | **Yes** — just constants |
+| `vtsearch/auth/` | No | No | **Yes** — ABC + default provider |
+| `vtsearch/routes/` | **Yes** | **Yes** | No — Flask-specific |
 | `app.py` | **Yes** | **Yes** | No — application entry point |
 
 ---
@@ -398,9 +356,9 @@ model = train_model(X_train, y_train, input_dim=512, inclusion_value=0)
 threshold = find_optimal_threshold(scores, labels, inclusion_value=0)
 ```
 
-### Embedding models (CLAP, CLIP, E5, X-CLIP)
+### Embedding models (CLAP, SigLIP, E5, X-CLIP, and more)
 
-**Files:** `vtscore/media/{audio,image,text,video}/embedder.py`
+**Files:** `vtscore/media/{audio,image,text,video}/embedder_*.py`
 
 **Dependencies:** `torch`, `transformers`, `librosa` (audio), `PIL`
 (image/video), `sentence-transformers` (text)
@@ -444,9 +402,8 @@ embedder.load_models()
    `run()`/`export()`/`load()`/`save()` method.
 2. Auto-discovery via `PluginRegistry` using direct filesystem scanning
    (`Path.iterdir()`) for a sentinel attribute (`EXPORTER`, `IMPORTER`,
-   `LABEL_IMPORTER`, `PROCESSOR_IMPORTER`, `SETTINGS_IMPORTER`,
-   `SETTINGS_EXPORTER`, `SETTINGS_SOURCE`, `LABELSET_SOURCE`, `CONVERTER`,
-   `SOURCE`).
+   `LABEL_IMPORTER`, `SETTINGS_IMPORTER`, `SETTINGS_EXPORTER`,
+   `SETTINGS_SOURCE`, `LABELSET_SOURCE`, `CONVERTER`, `SOURCE`).
 3. CLI support auto-derived from field definitions.
 
 To use an exporter standalone:
@@ -489,24 +446,22 @@ application as-is.
 
 ### Auto-discovered plugins (importers / exporters)
 
-All plugin systems (dataset importers, exporters, label importers,
-processor importers, settings importers/exporters/sources, labelset
-sources, media converters, and media sources) share a common
-`PluginBase` / `PluginField` / `PluginRegistry` architecture in
-`vtscore/plugins/__init__.py`:
+All nine plugin systems (dataset importers, exporters, label importers,
+settings importers/exporters/sources, labelset sources, media converters,
+and media sources) share a common `PluginBase` / `PluginField` /
+`PluginRegistry` architecture in `vtscore/plugins/__init__.py`:
 
 1. **Base class** (`PluginBase`) defines `name`, `display_name`, `fields`,
    and an abstract `run()`/`export()`/`load()`/`save()` method.
 2. **Field dataclass** (`PluginField`, aliased as `ImporterField`,
-   `ExporterField`, `LabelImporterField`, `ProcessorImporterField`)
+   `ExporterField`, `LabelImporterField`, `SettingsImporterField`, etc.)
    describes each user-configurable input with type, label, default,
    validation, and placeholder.
 3. **Auto-discovery** via `PluginRegistry` scans sub-packages using
    direct filesystem scanning for a sentinel attribute (`IMPORTER`,
-   `EXPORTER`, `LABEL_IMPORTER`, `PROCESSOR_IMPORTER`,
-   `SETTINGS_IMPORTER`, `SETTINGS_EXPORTER`, `SETTINGS_SOURCE`,
-   `LABELSET_SOURCE`, `CONVERTER`, `SOURCE`) and registers them lazily
-   on first access.
+   `EXPORTER`, `LABEL_IMPORTER`, `SETTINGS_IMPORTER`, `SETTINGS_EXPORTER`,
+   `SETTINGS_SOURCE`, `LABELSET_SOURCE`, `CONVERTER`, `SOURCE`) and
+   registers them lazily on first access.
 4. **CLI support** auto-generates `argparse` flags from field
    definitions.  Override `add_cli_arguments()` for custom handling.
 5. **Graceful degradation** — if a plugin's optional dependency is
@@ -540,12 +495,14 @@ register function.  See `EXTENDING.md` (in this directory) for full examples.
 
 ## State management
 
-Application state is exposed through `vtsearch/state/__init__.py` (a
-re-export facade over the `state_*.py` submodules). The module-level
-names below are **proxy objects** that delegate to a per-request
-`DatasetContext` or `DetectorContext` — see
-[Multi-dataset support](#multi-dataset-support). All mutable access is
-protected by `_state_lock` (a `threading.RLock`):
+Application state is split across two packages: **`vtscore/state/`**
+owns `DatasetContext`, `DetectorContext`, `_state_lock`, and all context
+operations; **`vtsearch/state/__init__.py`** is the app-tier shim that
+re-exports everything from `vtscore.state` and adds the proxy view.  The
+module-level names below are **proxy objects** (from `vtsearch/shim/state_proxies.py`)
+that delegate to a per-request `DatasetContext` or `DetectorContext` —
+see [Multi-dataset support](#multi-dataset-support). All mutable access
+is protected by `_state_lock` (a `threading.RLock`):
 
 | Variable | Type | Purpose |
 |----------|------|---------|
@@ -569,18 +526,16 @@ global (shared across all loaded datasets). The rest are per-dataset
 suggestions) and resolve via the active `DatasetContext` /
 `DetectorContext`.
 
-Persistent settings live separately in `vtsearch/settings.py` and are
-auto-saved to `data/settings.json`.  Keys include: `volume`, `theme`,
-`inclusion`, `enrich_descriptions`, `safe_thresholds`, `calibrate_count`,
-`calibration_fraction`, `audio_playing`, `swipe_animation`,
+Persistent settings live in `vtsearch/settings.py`, split across two
+tiers.  **Server tier** (shared, `data/settings.json`): `saved_datasets_dir`,
+`detectors_dir`, `max_concurrent_*`, `autorun_detectors`, `hidden_plugins`.
+**Per-user tier** (`<user_data_dir>/user_settings.json`): everything else —
+`volume`, `theme`, `inclusion`, `enrich_descriptions`, `safe_thresholds`,
+`calibrate_count`, `calibration_fraction`, `audio_playing`, `swipe_animation`,
 `show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
-`panel_pct_*` (per-media-type layout),
-`autopilot_enabled`, `hide_autopilot`, `autopilot_top_greens`,
-`autopilot_hard_reds`, `autopilot_goal_diversity`,
-`autorun_detectors`, and infrastructure directories
-`saved_datasets_dir`, `detectors_dir`.
-See `_DEFAULTS` in `settings.py` for the full list.
-Theme supports three modes: `dark`, `light`, and `highviz` (high-contrast).
+`panel_pct_*`, `autopilot_*`, `solo_media_type`, `settings_source`,
+`achievement_state`.  Theme supports three modes: `dark`, `light`, and
+`highviz` (high-contrast).
 
 Detectors are persisted as JSON files in `data/detectors/`
 via the `detectors_crud_bp` / `detectors_labels_bp` route blueprints.
@@ -589,30 +544,31 @@ Each stores a name, text query, media type, examples list, and labelset.
 **Primarily Flask routes mutate this state.**  Most ML and dataset
 functions accept state as parameters — so you can use the ML code in a
 script or notebook by passing your own dicts. A few modules (notably
-`training_workflow.py` and `labels/sync.py`) import specific helpers
-and resolve the active context via Flask's `g` or thread-local storage,
-but these are the exceptions rather than the rule.
+`vtscore/detectors/workflow.py` and `vtscore/labels/sync.py`) import
+specific helpers and resolve the active context via Flask's `g` or
+thread-local storage, but these are the exceptions rather than the rule.
 
 ### State submodule organisation
 
-`state.py` is a re-export facade over split-out submodules:
+`vtscore/state/` is split into focused submodules; `vtsearch/state/__init__.py`
+re-exports all of them for app-tier call-sites:
 
-| Submodule | Responsibility |
-|-----------|----------------|
-| `state_core.py` | Core variables (medias, votes, inclusion, diversity tree, display name) and `_state_lock` |
-| `state_votes.py` | Vote operations, label history, text-sort suggestions, learned scores |
-| `state_clicks.py` | Click-time tracking for vote sequence analysis |
-| `state_processors.py` | Autorun detector/extractor/localizer configuration CRUD |
-| `state_diversity.py` | Diversity tree construction and sampling |
-| `state_media_lookup.py` | Media ID resolution, duplicate collapsing, origin tracking |
+| Submodule (`vtscore/state/`) | Responsibility |
+|------------------------------|----------------|
+| `core.py` | `DatasetContext`, `DetectorContext`, context registries, `_state_lock` |
+| `votes.py` | Vote operations, label history, text-sort suggestions, learned scores |
+| `clicks.py` | Click-time tracking for vote sequence analysis |
+| `diversity.py` | Diversity tree construction and sampling |
+| `media_lookup.py` | Media ID resolution, duplicate collapsing, origin tracking |
 
-All are imported and re-exported by `state.py` so call-sites remain unchanged.
+Global (non-per-context) state lives in `vtsearch/autorun_processors.py`:
+`autorun_extractors` and `autorun_localizers` dicts and their CRUD.
 
 ### Multi-dataset support
 
 Multiple datasets can be loaded simultaneously. Per-dataset state is
-bundled in `DatasetContext` objects (`state_core.py`), and per-detector
-state in `DetectorContext` objects:
+bundled in `DatasetContext` objects (`vtscore/state/core.py`), and
+per-detector state in `DetectorContext` objects:
 
 | Context | Key state |
 |---------|-----------|
@@ -634,7 +590,7 @@ There is no single global "active" pointer. Key functions:
 `register_context()`, `unregister_context()`, `get_context()`,
 `list_loaded_dataset_ids()`.
 
-**Dataset registry** (`datasets/registry.py`) maintains a persistent
+**Dataset registry** (`vtscore/datasets/registry.py`) maintains a persistent
 JSON manifest at `data/dataset_registry.json` tracking which datasets
 are available and which are currently loaded in memory (`_loaded_ids`).
 
