@@ -416,14 +416,21 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
         _record_vote_locked()
 
 
-def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all: bool = False) -> None:
+def apply_labels_bulk_with_click_time(
+    labels: list[tuple[int, str]],
+    replace_all: bool = False,
+    *,
+    record_achievement: bool = True,
+) -> None:
     """Apply many labels in a single lock acquisition (for find-label scoring).
 
     Each entry is ``(media_id, label)`` where *label* is ``"good"`` or
     ``"bad"``.  All labels are applied atomically with click-time ordinals
-    assigned in order.  Each entry credits one vote in the active detector's
-    achievement counters — bulk find-label flows are user vote actions and
-    must show up in ``votes_cast`` etc. (audit finding C8).
+    assigned in order.
+
+    Set *record_achievement* to ``False`` when the labels are system-generated
+    (e.g. Find-mode auto-scoring) rather than explicit user votes, so those
+    labels do not count toward ``votes_cast`` or ``vote_streak`` achievements.
 
     When *replace_all* is True, any pre-existing votes/click-times for IDs
     outside *labels* are cleared first.  This is what ``/api/find-label``
@@ -469,5 +476,5 @@ def apply_labels_bulk_with_click_time(labels: list[tuple[int, str]], replace_all
             vote_click_times[media_id] = ctx.click_counter
             if tree is not None and media_id in tree.vector_to_leaf:
                 tree.label(media_id)
-            if not already:
+            if not already and record_achievement:
                 _record_vote_locked()
