@@ -173,7 +173,7 @@ class TestLegacyMigration:
 
     def test_server_rewrite_failure_keeps_cache_and_disk_consistent(self, tmp_path, monkeypatch):
         """If the server-file rewrite fails after the user write succeeds,
-        the in-memory ``_server_cache`` must not have legacy keys popped; 
+        the in-memory ``_server_cache`` must not have legacy keys popped;
         otherwise it would silently disagree with the on-disk server file."""
         from vtsearch import settings as settings_mod
 

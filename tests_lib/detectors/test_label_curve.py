@@ -244,7 +244,7 @@ class TestRunLabelCurveEval:
             seeds=(0, 1),
             progress=False,
         )
-        # 1 dataset * 1 category (sim_fraction filters out 'other' as target? no; 
+        # 1 dataset * 1 category (sim_fraction filters out 'other' as target? no;
         # 'other' has 20 entries too so it's also a valid target).
         # Categories: {target, other} → 2 categories.
         # trainers x label_counts x seeds = 2 * 2 * 2 = 8 per category → 16 rows total.

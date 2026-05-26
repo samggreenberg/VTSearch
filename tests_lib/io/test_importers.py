@@ -378,7 +378,7 @@ class TestImporterDatasetName:
         assert d["fields"][-1]["field_type"] == "text"
 
     def test_class_fields_attribute_unchanged_by_to_dict(self):
-        """to_dict() appends dataset_name only on the serialised payload; 
+        """to_dict() appends dataset_name only on the serialised payload;
         the class-level ``fields`` attribute remains as the developer wrote it."""
         from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
@@ -468,7 +468,7 @@ class TestImporterDefaultDisplayName:
         assert IMPORTER.default_display_name({"paths_file": "/tmp/audio_list.txt"}) == "audio_list"
 
     def test_origin_does_not_include_dataset_name(self):
-        """The user-typed display name is UI metadata, not provenance; 
+        """The user-typed display name is UI metadata, not provenance;
         it must NOT leak into origin params (which feed Detector reload)."""
         from vtscore.datasets.importers.server_folder import IMPORTER
 

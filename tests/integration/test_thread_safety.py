@@ -597,7 +597,7 @@ class TestPluginRegistryLock:
     def test_concurrent_first_access_discovers_once(self):
         """Concurrent .list() calls should trigger _discover exactly once.
 
-        Uses ``eager=False`` so we can observe the deferred-discovery path; 
+        Uses ``eager=False`` so we can observe the deferred-discovery path;
         the default eager construction skips :meth:`_ensure_discovered` work
         on subsequent calls entirely, so the lock is uninteresting there.
         """

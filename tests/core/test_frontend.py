@@ -54,7 +54,7 @@ def _ensure_angular_bundle() -> None:
             allow_module_level=True,
         )
     try:
-        subprocess.run(  # noqa: S603; npm resolved via shutil.which, args constant
+        subprocess.run(  # noqa: S603  # npm resolved via shutil.which, args are constant
             [npm, "run", "build:prod"],
             cwd=_FRONTEND_DIR,
             check=True,

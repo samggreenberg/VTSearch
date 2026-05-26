@@ -94,7 +94,7 @@ class TestSettingsAPI:
             data="",
             content_type="application/json",
         )
-        # Empty body is a legitimate no-op PUT under the new schema; 
+        # Empty body is a legitimate no-op PUT under the new schema;
         # every key is optional, so nothing to apply. Returns 200 with
         # the current settings dict.
         assert res.status_code == 200

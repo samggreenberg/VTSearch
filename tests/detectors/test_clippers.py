@@ -2699,7 +2699,7 @@ class TestImageFaceClipper:
         assert (x2 - x1) >= 96 and (y2 - y1) >= 96
 
     def test_clip_drops_inherited_embedding_and_md5(self):
-        """Cropped faces must not keep the parent's embedding / md5; 
+        """Cropped faces must not keep the parent's embedding / md5;
         otherwise the load-pipeline fixup won't re-embed single-face crops."""
         from vtscore.media.image.clipper import ImageFaceClipper
         import numpy as np

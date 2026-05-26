@@ -128,7 +128,7 @@ class TestScoreAllMediaNaNSafety:
 
 
 class TestLabelsetTrainAndScoreNaNSafety:
-    """``labelset_train_and_score`` was the primary M13 leak site; 
+    """``labelset_train_and_score`` was the primary M13 leak site;
     sigmoid outputs flowed straight to results with no finite filter.
 
     We pre-populate ``det_ctx.label_embeddings`` and patch out

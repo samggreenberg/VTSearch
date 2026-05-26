@@ -7,7 +7,7 @@ Three pieces:
    so chunks (which each restart at 1) don't collide.
 2. ``auto_chunk_size``; picks a chunk size from the media type so the
    user is never asked for one.
-3. The two web import routes; 
+3. The two web import routes;
    ``POST /api/dataset/import/<importer_name>`` and
    ``POST /api/dataset/import-local-folder``; must dispatch to
    ``run_chunked`` automatically when the importer supports it, with the
@@ -217,7 +217,7 @@ class TestRunImporterChunkedDispatch:
 
 
 class TestImportRouteAutoChunked:
-    """The public API no longer accepts a user-supplied ``chunk_size``; 
+    """The public API no longer accepts a user-supplied ``chunk_size``;
     the load pipeline picks one from the media type.  These tests verify
     the route still wires through to the pipeline correctly.
     """

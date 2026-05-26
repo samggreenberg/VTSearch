@@ -42,8 +42,8 @@ class TestEvalMainList:
 
 
 class TestEvalMainRun:
-    plot generation; exercised with ``run_eval`` stubbed."""
-    plot generation - exercised with ``run_eval`` stubbed."""
+    """The body of ``main`` after argument parsing: printing, JSON write,
+    and plot generation. Exercised with ``run_eval`` stubbed."""
 
     @pytest.fixture
     def stub_run_eval(self, monkeypatch):

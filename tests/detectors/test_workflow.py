@@ -228,7 +228,7 @@ class TestPersistenceFailureIsTransactional:
         assert det_ctx.training_medias == {}
 
     def test_sync_failure_preserves_prior_votes(self, det_ctx, monkeypatch):
-        """A pre-existing vote on the context must survive the rollback; 
+        """A pre-existing vote on the context must survive the rollback;
         the snapshot restores the state at apply_and_retrain entry, not an
         unconditional clear.
         """

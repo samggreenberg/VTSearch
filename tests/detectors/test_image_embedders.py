@@ -539,7 +539,7 @@ class TestApiEmbeddersResponseShape:
             "eupe_single",
         ):
             assert entries[name]["supports_patch_regions"] is False
-        # Only EUPE carries a licence warning today (FAIR Noncommercial); 
+        # Only EUPE carries a licence warning today (FAIR Noncommercial);
         # on both variants.
         for name in (
             "siglip",

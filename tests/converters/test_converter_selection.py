@@ -1160,7 +1160,7 @@ class TestImportLocalFolderRouteForwardsSourceSpecs:
         )
 
         with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_bg:
-            # We don't care if the upload pipeline crashes after staging; 
+            # We don't care if the upload pipeline crashes after staging;
             # we only assert source_specs makes it to the importer.
             mock_bg.return_value = "task-1"
             resp = client.post(

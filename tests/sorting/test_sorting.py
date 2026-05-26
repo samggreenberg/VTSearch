@@ -131,7 +131,7 @@ class TestBuildModel:
         """build_model should NOT include sigmoid; output can be outside [0,1]."""
         from vtscore.training.mlp import build_model
 
-        # Use a seeded generator so the random weights are deterministic; 
+        # Use a seeded generator so the random weights are deterministic;
         # without this, the test is flaky because random initialisation can
         # occasionally produce weights that map extreme input into [0, 1].
         gen = torch.Generator().manual_seed(42)
@@ -647,7 +647,7 @@ class TestLearnedSortAsync:
         assert first["status"] == "done"
         first_job_id = first["job_id"]
 
-        # Second call with the same signature should reuse the cached result; 
+        # Second call with the same signature should reuse the cached result;
         # job_id is the original job's id and we get back done immediately
         # without ``wait=true``.
         second = client.post("/api/learned-sort", json={}).get_json()

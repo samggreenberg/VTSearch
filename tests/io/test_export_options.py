@@ -261,7 +261,7 @@ class TestFillFromSortConfirm:
     def test_disk_sync_failure_surfaces_as_500(self, client, monkeypatch):
         """C11 regression: a sync failure must not be silently swallowed.
 
-        Before the fix the route logged the failure and still returned 200; 
+        Before the fix the route logged the failure and still returned 200;
         the UI then treated the labels as committed while the detector JSON
         on disk had never been updated. After the fix the request fails
         with a 5xx so the client can react.

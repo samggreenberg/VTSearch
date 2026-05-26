@@ -394,7 +394,7 @@ class TestInterceptWeightLoadingProgress:
         calls = []
 
         with intercept_weight_loading_progress(lambda *a: calls.append(a), "test"):
-            x = torch.zeros(3, 3)  # noqa: F841; no model loading, just tensor creation
+            x = torch.zeros(3, 3)  # noqa: F841  # no model loading, just tensor creation
 
         assert len(calls) == 0
 

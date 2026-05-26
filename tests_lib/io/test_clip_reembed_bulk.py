@@ -118,7 +118,7 @@ class TestBulkClipReembed:
         )
         sent = emb.embed_media_bulk.call_args.args[0]
         assert len(sent) == len(clips_dict)
-        # Every dict carries the in-memory content the embedder needs; 
+        # Every dict carries the in-memory content the embedder needs;
         # and **never** a ``media_path``, which would mean the loader was
         # still routing through a tempfile.
         for media in sent:
@@ -145,8 +145,8 @@ class TestBulkClipReembed:
 
 
 class TestBulkClipReembedFailureFallback:
-    whole call raises; the affected clip keeps the parent embedding it
-    whole call raises - the affected clip keeps the parent embedding it
+    """When ``embed_media_bulk`` returns ``None`` for a clip, or the
+    whole call raises, the affected clip keeps the parent embedding it
     inherited from the clipper, matching the legacy ``except: pass``
     contract in the pre-refactor ``_reembed_clip`` helper."""
 
