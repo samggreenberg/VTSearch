@@ -825,9 +825,26 @@ Cross-section interaction agents:
 
 ### Auth / context
 
-- **M22.** `set_thread_user()` cleanup relies on every caller's `finally`; a
+- ~~**M22.** `set_thread_user()` cleanup relies on every caller's `finally`; a
   future `ThreadPoolExecutor` reuse would leak user identity across
-  requests.
+  requests.~~ — fixed by adding `thread_user(name)` (in
+  `vtsearch/auth/__init__.py`) and matching `thread_dataset_context(ctx)`
+  / `thread_detector_context(ctx)` context managers (in
+  `vtscore/state/core.py`).  Each scope snapshots the prior thread-local
+  on entry and restores it on exit, so a pooled / reused worker thread
+  cannot leak identity or context across jobs even if the body raises.
+  All production call sites (`vtscore/concurrency/async_jobs.py`,
+  `vtscore/datasets/load_pipeline.py`,
+  `vtsearch/routes/datasets/registry.py`,
+  `vtsearch/routes/detectors/registry.py`,
+  `vtsearch/routes/eval.py`, `vtsearch/routes/sorting.py`,
+  `vtscore/labels/sync.py`) migrated.  Tests in
+  `tests/core/test_thread_context_scopes.py` cover restore-on-exit,
+  restore-on-exception, nested scopes, per-thread isolation, and the
+  simulated-pool-reuse case the audit flagged.  The bare
+  `set_thread_user` / `set_thread_dataset_context` /
+  `set_thread_detector_context` setters remain available for tests and
+  for the rare call site that genuinely wants the unscoped form.
 - ~~**M23.** `setup_logging` re-running can leave duplicate handlers on
   non-root loggers.~~ — closed as not-a-bug.
   `vtsearch/logging_config.py:setup_logging` only attaches a

@@ -358,8 +358,10 @@ theme, volume, view/focus/panel modes, autopilot config, achievements
 state, and the per-user `settings_source` — lives in
 `<get_user_data_dir(user)>/user_settings.json` and is isolated per
 user. Background threads spawned from a request handler propagate the
-user via `vtsearch.auth.set_thread_user()` so per-user writes (e.g.
-autopilot toggles, sync-source exports) land in the right file. Legacy
+user via the `vtsearch.auth.thread_user(...)` context manager (which
+snapshots and restores the prior thread-local automatically) so per-user
+writes (e.g. autopilot toggles, sync-source exports) land in the right
+file. Legacy
 single-file `data/settings.json` files that pre-date the split are
 migrated to the default user's file on first load.
 
