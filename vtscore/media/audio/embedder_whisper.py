@@ -133,7 +133,11 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
             import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
-            source = io.BytesIO(bytes(audio_bytes)) if audio_bytes is not None else file_path
+            if audio_bytes is not None:
+                source: io.BytesIO | Path = io.BytesIO(bytes(audio_bytes))
+            else:
+                assert file_path is not None  # narrowed by the path_str check above
+                source = file_path
             audio_data, _sr = librosa.load(source, sr=WHISPER_SAMPLE_RATE, mono=True)
             inputs = self._processor(audio_data, sampling_rate=WHISPER_SAMPLE_RATE, return_tensors="pt")
             device = next(self._model.parameters()).device
