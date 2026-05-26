@@ -40,6 +40,31 @@ def _stamp_demo_origin(
         media["origin"] = {"importer": "demo", "params": dict(demo_origin_params)}
 
 
+def _stamp_media_type(
+    medias: dict[int, dict[str, Any]],
+    source_type_id: str,
+    converter_name: str = "",
+) -> None:
+    """Fill in missing ``media_type`` on cached medias.
+
+    Old pkl files may have been created before ``media_type`` was stored
+    per-media, causing ``load_dataset_from_pickle`` to fall back to the
+    ``"audio"`` default for every item.  This corrects any media whose
+    ``media_type`` is absent or empty so the dataset registers with the
+    right type.
+    """
+    expected = source_type_id
+    if converter_name:
+        from vtscore.converters import get_converter  # noqa: PLC0415
+
+        conv = get_converter(converter_name)
+        if conv is not None:
+            expected = conv.target_type
+    for media in medias.values():
+        if not media.get("media_type"):
+            media["media_type"] = expected
+
+
 def load_demo_dataset(  # noqa: C901
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
@@ -130,6 +155,11 @@ def load_demo_dataset(  # noqa: C901
                 # Old pickles (created before origin stamping) may have empty
                 # params — this ensures they are corrected on load.
                 _stamp_demo_origin(medias, dataset_name, converter_name)
+                # Fill in missing media_type: old pkls may lack the field,
+                # causing every item to fall back to the "audio" default in
+                # load_dataset_from_pickle and the dataset to register with
+                # the wrong type.
+                _stamp_media_type(medias, media_type_id, converter_name)
                 on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)
                 return
 
