@@ -26,7 +26,6 @@ GET    /api/datasets/registry/<id>/stats            Return ingest statistics.
 from __future__ import annotations
 
 import gc
-import threading
 from pathlib import Path
 
 from flask_smorest import Blueprint, abort
@@ -247,8 +246,9 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 clear_thread_progress()
                 _loading_tasks.mark_finished(task_id)
 
-    thread = threading.Thread(target=load_task, daemon=True)
-    thread.start()
+    from vtsearch.threading import spawn
+
+    spawn(load_task, name=f"ds-load-{dataset_id[:8]}")
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 

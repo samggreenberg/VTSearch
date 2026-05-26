@@ -220,9 +220,147 @@ class PluginField:
 # ---------------------------------------------------------------------------
 
 
+#: Class-name suffixes stripped before snake-casing for the default
+#: :attr:`PluginBase.name`.  Order matters; longer / more-specific
+#: suffixes come first so ``HolderLabelsetExporter`` strips
+#: ``LabelsetExporter`` rather than just ``Exporter``.
+_PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
+    "DatasetImporter",
+    "LabelsetExporter",
+    "LabelImporter",
+    "LabelsetSource",
+    "SettingsImporter",
+    "SettingsExporter",
+    "SettingsSource",
+    "MediaConverter",
+    "MediaSource",
+    "Importer",
+    "Exporter",
+    "Source",
+    "Converter",
+)
+
+
+#: Framework-level abstract plugin bases that should never get
+#: auto-derived metadata stamped onto them.  Setting a derived
+#: ``name`` on, say, :class:`LabelImporter` itself would pollute every
+#: concrete subclass that doesn't declare its own ``name``; concrete
+#: subclasses inherit the polluted value from the MRO before the
+#: per-subclass auto-default can fire.  Third-party intermediates that
+#: should behave the same way can opt out by setting
+#: ``_is_plugin_family_base = True`` in their own ``__dict__``.
+_PLUGIN_FAMILY_BASE_NAMES: frozenset[str] = frozenset(
+    {
+        "DatasetImporter",
+        "LabelsetExporter",
+        "LabelImporter",
+        "LabelsetSource",
+        "SettingsImporter",
+        "SettingsExporter",
+        "SettingsSource",
+        "MediaConverter",
+        "MediaSource",
+        "SyncSource",
+    }
+)
+
+
+def _snake_case(name: str) -> str:
+    """Convert a CamelCase / PascalCase identifier to snake_case."""
+    out: list[str] = []
+    for i, ch in enumerate(name):
+        if ch.isupper() and i > 0 and (not name[i - 1].isupper() or (i + 1 < len(name) and name[i + 1].islower())):
+            out.append("_")
+        out.append(ch.lower())
+    return "".join(out)
+
+
+def _default_plugin_name(cls: type) -> str:
+    raw = cls.__name__
+    for suffix in _PLUGIN_NAME_SUFFIXES:
+        if raw.endswith(suffix) and raw != suffix:
+            raw = raw[: -len(suffix)]
+            break
+    return _snake_case(raw)
+
+
+def _default_plugin_display_name(name: str) -> str:
+    return " ".join(word.capitalize() for word in name.split("_") if word)
+
+
+def _default_plugin_description(cls: type) -> str:
+    doc = (cls.__doc__ or "").strip()
+    if not doc:
+        return ""
+    return doc.splitlines()[0].strip()
+
+
+def _mro_provides(cls: type, attr: str) -> bool:
+    """Return True if any ancestor (above *cls*) already provides *attr*
+    as a non-empty string or a descriptor (e.g. a ``property``).
+
+    Used to decide whether the auto-default should fire; we never
+    overwrite an inherited descriptor or a concrete string supplied by
+    a parent (e.g. :class:`MediaConverter.name`, which is a property).
+    """
+    for base in cls.__mro__[1:]:
+        if attr in base.__dict__:
+            val = base.__dict__[attr]
+            if isinstance(val, str):
+                if val:
+                    return True
+            elif hasattr(val, "__get__"):
+                return True
+    return False
+
+
+def _autoderive_plugin_metadata(cls: type) -> None:
+    """Fill in default :attr:`name` / :attr:`display_name` /
+    :attr:`description` on *cls* when neither *cls* itself nor any
+    ancestor already provides them.
+
+    Called from :meth:`PluginBase.__init_subclass__`.  Framework-level
+    abstract bases (named in :data:`_PLUGIN_FAMILY_BASE_NAMES`) and
+    third-party intermediates that set
+    ``_is_plugin_family_base = True`` skip auto-derivation entirely so
+    they don't leak a derived name down to their concrete subclasses.
+    """
+    if cls.__name__ in _PLUGIN_FAMILY_BASE_NAMES:
+        return
+    if cls.__dict__.get("_is_plugin_family_base", False):
+        return
+    if "name" not in cls.__dict__ and not _mro_provides(cls, "name"):
+        cls.name = _default_plugin_name(cls)
+    if "display_name" not in cls.__dict__ and not _mro_provides(cls, "display_name"):
+        derived_name = getattr(cls, "name", None)
+        cls.display_name = _default_plugin_display_name(derived_name) if isinstance(derived_name, str) else ""
+    if "description" not in cls.__dict__ and not _mro_provides(cls, "description"):
+        cls.description = _default_plugin_description(cls)
+
+
 class PluginBase:
     """Mixin providing the CLI-argument, validation, and serialisation helpers
-    that are identical across all four plugin families."""
+    that are identical across all four plugin families.
+
+    Default metadata
+    ----------------
+    Subclasses that don't declare :attr:`name`, :attr:`display_name`, or
+    :attr:`description` get auto-derived defaults via
+    :meth:`__init_subclass__`:
+
+    - :attr:`name`: class name with the trailing family suffix
+      (``DatasetImporter`` / ``LabelsetExporter`` / ``MediaConverter`` /
+      etc.) stripped and the remainder snake-cased.  E.g.
+      ``MyShinyExporter`` → ``"my_shiny"``.
+    - :attr:`display_name`: title-cased :attr:`name`.
+    - :attr:`description`: first line of the class docstring.
+
+    Explicit declarations always win.  The defaults only fire when
+    nothing further up the MRO already provides a string value or a
+    descriptor (e.g. :class:`~vtscore.converters.base.MediaConverter`
+    declares ``name`` as a property, so concrete converter subclasses
+    inherit the property rather than getting a stomped string).
+    """
 
     #: Internal snake_case identifier used in API routes.
     name: str
@@ -247,6 +385,10 @@ class PluginBase:
     #: in the frontend.  Useful for plugins that are always invoked through
     #: a dedicated code path (e.g. the GUI exporter).
     hidden_from_picker: bool = False
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _autoderive_plugin_metadata(cls)
 
     def resolve_display_name(self, field_values: dict[str, Any] | None) -> str:
         """Return a human-readable name for a dataset loaded with *field_values*.
