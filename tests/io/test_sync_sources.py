@@ -647,7 +647,7 @@ class TestStartupAutoImport:
 
 
 # ---------------------------------------------------------------------------
-# M16 regression tests; lazy auto-sync semantics (race, retry, freshness)
+# M16 regression tests: lazy auto-sync semantics (race, retry, freshness)
 # ---------------------------------------------------------------------------
 
 

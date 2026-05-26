@@ -598,7 +598,7 @@
         "properties": {
           "default_path": {
             "default": "",
-            "description": "Suggested initial relative sub-path for this source - for example the server user's home directory when ``source=server_fs``. Empty for sources where the root is already the right starting point.",
+            "description": "Suggested initial relative sub-path for this source, for example the server user's home directory when ``source=server_fs``. Empty for sources where the root is already the right starting point.",
             "type": "string"
           },
           "directories": {

@@ -37,12 +37,12 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 |------|-------------|
 | **caltech101_s** | ~500 photographs across 25 Caltech-101 categories: animals, vehicles, household objects, and nature |
 | **caltech101_m** | ~1,000 photographs across 25 Caltech-101 categories |
-| **caltech256_l** | ~2,000 photographs across 25 Caltech-256 categories - animals, landmarks, vehicles, and everyday objects |
+| **caltech256_l** | ~2,000 photographs across 25 Caltech-256 categories: animals, landmarks, vehicles, and everyday objects |
 | **oxford_flowers_102_a** | Close-up flower photography across 102 Oxford Flowers species |
 | **food101_s** | Crowd-sourced food photos across Food-101 categories (small) |
 | **food101_m** | Crowd-sourced food photos across Food-101 categories (medium) |
 | **food101_l** | Crowd-sourced food photos across Food-101 categories (large) |
-| **food101_a** | Crowd-sourced food photos across 101 Food-101 categories - a deliberately noisy benchmark (all) |
+| **food101_a** | Crowd-sourced food photos across 101 Food-101 categories, a deliberately noisy benchmark (all) |
 | **eurosat_s** | Sentinel-2 satellite imagery across EuroSAT land use categories (small) |
 | **eurosat_m** | Sentinel-2 satellite imagery across EuroSAT land use categories (medium) |
 | **eurosat_l** | Sentinel-2 satellite imagery across EuroSAT land use categories (large) |
@@ -54,7 +54,7 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **places365_s** | Scene photos across 365 Places365 categories (small) |
 | **places365_m** | Scene photos across 365 Places365 categories (medium) |
 | **places365_l** | Scene photos across 365 Places365 categories (large) |
-| **places365_a** | Scene photos across 365 Places365 categories - indoor, outdoor natural, and outdoor man-made environments (all) |
+| **places365_a** | Scene photos across 365 Places365 categories: indoor, outdoor natural, and outdoor man-made environments (all) |
 | **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library - tobacco, food, drug, chemical, fossil fuel, and opioids |
 
 ## Text

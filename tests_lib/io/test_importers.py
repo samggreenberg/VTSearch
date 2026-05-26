@@ -330,7 +330,7 @@ class TestFolderImporterMetadata:
 
 
 # ---------------------------------------------------------------------------
-# DatasetImporter base class; user-typed dataset name
+# DatasetImporter base class: user-typed dataset name
 # ---------------------------------------------------------------------------
 
 

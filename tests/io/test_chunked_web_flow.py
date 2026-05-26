@@ -212,7 +212,7 @@ class TestRunImporterChunkedDispatch:
 
 
 # ===========================================================================
-# Route plumbing; POST /api/dataset/import/<importer_name>
+# Route plumbing: POST /api/dataset/import/<importer_name>
 # ===========================================================================
 
 
@@ -296,7 +296,7 @@ class TestImportRouteClipperParams:
 
 
 # ===========================================================================
-# Route plumbing; POST /api/dataset/import-local-folder
+# Route plumbing: POST /api/dataset/import-local-folder
 # ===========================================================================
 
 

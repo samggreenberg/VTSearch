@@ -133,7 +133,7 @@ class TestValidateChain:
 
 
 # ---------------------------------------------------------------------------
-# Apply chain; origin stamping + final clips
+# Apply chain: origin stamping + final clips
 # ---------------------------------------------------------------------------
 
 

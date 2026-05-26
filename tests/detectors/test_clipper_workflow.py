@@ -560,7 +560,7 @@ class TestCrossDatasetClipEmbedding:
 
 
 # ---------------------------------------------------------------------------
-# API endpoint; clip metadata exposure
+# API endpoint: clip metadata exposure
 # ---------------------------------------------------------------------------
 
 

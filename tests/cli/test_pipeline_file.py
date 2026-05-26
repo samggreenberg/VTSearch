@@ -250,7 +250,7 @@ class TestLoadPipelineFile:
 
 
 # ---------------------------------------------------------------------------
-# Dispatch; end-to-end with a real dataset + detector
+# Dispatch: end-to-end with a real dataset + detector
 # ---------------------------------------------------------------------------
 
 

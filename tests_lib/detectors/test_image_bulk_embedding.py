@@ -218,7 +218,7 @@ class TestBulkEmbedImageFilesHelper:
 
 
 # ---------------------------------------------------------------------------
-# Concrete embedder overrides; wired up but model-free.
+# Concrete embedder overrides: wired up but model-free.
 # ---------------------------------------------------------------------------
 
 

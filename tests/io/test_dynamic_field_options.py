@@ -234,7 +234,7 @@ class TestImporterMetadataExposes:
 
 
 # ---------------------------------------------------------------------------
-# ReCaller scaffold; exercises the importer-level wiring
+# ReCaller scaffold: exercises the importer-level wiring
 # ---------------------------------------------------------------------------
 
 

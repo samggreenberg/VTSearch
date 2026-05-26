@@ -27,7 +27,7 @@ from vtsearch.settings import get_detectors_dir
 
 
 # ---------------------------------------------------------------------------
-# Unit tests; emitter module
+# Unit tests: emitter module
 # ---------------------------------------------------------------------------
 
 
