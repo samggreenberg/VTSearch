@@ -1,9 +1,9 @@
 # Logical-Bug Audit: 2026-05
 
 **Status:** Mostly resolved; C1–C12 (critical) and H1–H34 (high) are
-shipped; ~14 medium/low items remain open (M21–M25, M27–M34, L1–L9;
-M26 was a false positive). Resolved findings are marked as
-struck-through headings.
+shipped; ~13 medium/low items remain open (M21–M24, M27–M34, L1–L9;
+M25 shipped, M26 was a false positive). Resolved findings are marked
+as struck-through headings.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on
@@ -868,8 +868,16 @@ Cross-section interaction agents:
 
 ### Frontend
 
-- **M25.** `LeftPanelComponent` lacks `OnDestroy` / `takeUntil` on init
-  subscriptions; subscriptions leak across dataset switches.
+- ~~**M25.** `LeftPanelComponent` lacks `OnDestroy` / `takeUntil` on init
+  subscriptions; subscriptions leak across dataset switches.~~ Code-style
+  alignment, not a real leak. The two `ngOnInit` subscriptions go through
+  Angular `HttpClient`, which emits once and completes, so memory was never
+  retained; and `LeftPanelComponent` is mounted once by `label-view` /
+  `find-view` and reused across dataset switches via `@Input`, so `ngOnInit`
+  doesn't re-fire per switch either. Still added the standard
+  `destroy$` + `takeUntil(this.destroy$)` pattern plus `OnDestroy` so an
+  in-flight HTTP response can't fire `.next` on a destroyed component during
+  a route teardown, matching the convention used elsewhere in the frontend.
 - ~~**M26.** `labelset-state.service` `startPolling()` is not tied to
   `destroy$`; rapid switches leak polls.~~ **False positive.** The
   service is `providedIn: 'root'` (singleton; `destroy$` effectively
