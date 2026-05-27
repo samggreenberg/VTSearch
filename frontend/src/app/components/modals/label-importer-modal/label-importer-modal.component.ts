@@ -1,4 +1,13 @@
-import { Component, ElementRef, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  EventEmitter,
+  Input,
+  OnDestroy,
+  OnInit,
+  Output,
+  ViewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -19,7 +28,7 @@ type ModalView = 'picker' | 'form';
   templateUrl: './label-importer-modal.component.html',
   styleUrl: './label-importer-modal.component.scss',
 })
-export class LabelImporterModalComponent implements OnInit {
+export class LabelImporterModalComponent implements OnInit, OnDestroy {
   /** When set, labels are imported directly into this trainable model
    *  instead of into the active dataset's vote state. */
   @Input() targetModelName: string | null = null;
@@ -42,6 +51,7 @@ export class LabelImporterModalComponent implements OnInit {
   successMessage = '';
   addingGood = false;
   addingBad = false;
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private labelImportersApi: LabelImportersApiService,
@@ -152,7 +162,7 @@ export class LabelImporterModalComponent implements OnInit {
           this.error = `${res.failed_count} element(s) failed to apply. The remaining labels were applied successfully.`;
         }
         const hasIssue = res.missing_count > 0 || res.failed_count > 0;
-        setTimeout(() => this.close(), hasIssue ? 3000 : 1500);
+        this.closeTimer = setTimeout(() => this.close(), hasIssue ? 3000 : 1500);
       },
       error: (err) => {
         this.submitting = false;
@@ -208,6 +218,17 @@ export class LabelImporterModalComponent implements OnInit {
   }
 
   close(): void {
+    if (this.closeTimer !== null) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
     this.closed.emit();
+  }
+
+  ngOnDestroy(): void {
+    if (this.closeTimer !== null) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
   }
 }

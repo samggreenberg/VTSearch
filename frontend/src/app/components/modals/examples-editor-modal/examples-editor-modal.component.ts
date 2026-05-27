@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
@@ -17,7 +17,7 @@ interface Example {
   templateUrl: './examples-editor-modal.component.html',
   styleUrl: './examples-editor-modal.component.scss',
 })
-export class ExamplesEditorModalComponent implements OnInit {
+export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
   @Input() modelName = '';
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<void>();
@@ -27,6 +27,7 @@ export class ExamplesEditorModalComponent implements OnInit {
   saving = false;
   error = '';
   status = '';
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private detectorsCrudApi: DetectorsCrudApiService) {}
 
@@ -79,7 +80,7 @@ export class ExamplesEditorModalComponent implements OnInit {
         this.saving = false;
         this.status = 'Saved.';
         this.saved.emit();
-        setTimeout(() => this.close(), 600);
+        this.closeTimer = setTimeout(() => this.close(), 600);
       },
       error: (err) => {
         this.saving = false;
@@ -89,6 +90,17 @@ export class ExamplesEditorModalComponent implements OnInit {
   }
 
   close(): void {
+    if (this.closeTimer !== null) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
     this.closed.emit();
+  }
+
+  ngOnDestroy(): void {
+    if (this.closeTimer !== null) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
   }
 }

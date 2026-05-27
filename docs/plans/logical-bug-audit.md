@@ -883,8 +883,17 @@ Cross-section interaction agents:
   exhaustion.
 - **M30.** Autopilot phase transitions can oscillate
   (`hard → new → hard → new`) when smart/stable status flickers.
-- **M31.** `settings-importer-modal` auto-closes after 1.5s timeout regardless
-  of operation duration.
+- ~~**M31.** `settings-importer-modal` auto-closes after 1.5s timeout
+  regardless of operation duration.~~; resolved. The 1.5s timer fires only
+  after the server returns success (not mid-operation), so the original
+  framing was inaccurate; behavior was a minor UX choice, not a correctness
+  bug. The latent hygiene issue — `setTimeout` not cleared when the user
+  dismisses the modal manually, letting a zombie `close()` fire on a
+  destroyed component — was fixed by tracking the handle and clearing it in
+  `close()` / `ngOnDestroy` across all four auto-closing modals
+  (`settings-importer-modal`, `settings-exporter-modal`,
+  `label-importer-modal`, `examples-editor-modal`). The 1.5s / 600ms /
+  3000ms delays themselves are unchanged.
 
 ### Security
 
