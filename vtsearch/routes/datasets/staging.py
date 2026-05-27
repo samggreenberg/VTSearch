@@ -30,7 +30,7 @@ from vtscore.datasets.load_pipeline import (
     _run_importer_in_background,
     _stage_importer_in_background,
 )
-from vtsearch.routes._shared import get_plugin_or_404, validate_plugin_args
+from vtsearch.routes._shared import get_plugin_or_404, register_plugin_typed_routes, validate_plugin_args
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
 from vtsearch.schemas.datasets import (
     ClearStagingResponseSchema,
@@ -308,3 +308,32 @@ def import_dataset(importer_name: str):
 
     task_id = _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+
+
+# ---------------------------------------------------------------------------
+# Per-plugin typed routes for /api/dataset/import/<name> and /api/dataset/
+# stage-import/<name>.  Registered at module-import time by iterating the
+# importer registry, so each known importer gets a static URL whose body
+# schema is described in /api/openapi.json with real per-field types.
+# Unknown importer names fall through to the parameterized routes above
+# (preserving the legacy 404 message that names the unknown importer).
+# Plugins with file fields stay on the parameterized fallback (multipart
+# bodies aren't usefully described by the generic plugin schema).
+# ---------------------------------------------------------------------------
+
+register_plugin_typed_routes(
+    datasets_staging_bp,
+    list_plugins=list_importers,
+    path_template="/api/dataset/import/{plugin_name}",
+    endpoint_prefix="import_dataset",
+    delegate=import_dataset,
+    extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "clipper_params"),
+)
+register_plugin_typed_routes(
+    datasets_staging_bp,
+    list_plugins=list_importers,
+    path_template="/api/dataset/stage-import/{plugin_name}",
+    endpoint_prefix="stage_import",
+    delegate=stage_import,
+    extra_keys=("source_specs", "dataset_name"),
+)

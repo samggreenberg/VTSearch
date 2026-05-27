@@ -98,7 +98,10 @@ def _build_checkbox(pf: PluginField, kwargs: dict) -> fields.Field:
     # ``required + load_default`` conflict marshmallow would raise.
     kwargs.pop("required", None)
     kwargs["load_default"] = str(pf.default).lower() == "true"
-    return fields.Function(deserialize=_coerce_checkbox, **kwargs)
+    # ``fields.Function`` needs a paired serializer for apispec to
+    # describe the field in the OpenAPI spec; identity is fine since
+    # these schemas are only ever ``.load()``-ed (request bodies).
+    return fields.Function(deserialize=_coerce_checkbox, serialize=lambda v: v, **kwargs)
 
 
 def _build_number(pf: PluginField, kwargs: dict) -> fields.Field:
@@ -204,3 +207,34 @@ def get_plugin_arg_schema(plugin: PluginBase) -> Schema:
     instance = schema_cls()
     plugin._arg_schema_instance = instance  # type: ignore[attr-defined]
     return instance
+
+
+def make_plugin_route_schema(
+    plugin: PluginBase,
+    *,
+    extra_keys: tuple[str, ...] = (),
+    route_id: str,
+) -> type[Schema]:
+    """Build a marshmallow ``Schema`` class for a per-(plugin, route) pair.
+
+    Like :func:`make_plugin_arg_schema`, but also declares any
+    ``extra_keys`` (pass-through keys the route accepts alongside the
+    plugin-declared fields) as :class:`fields.Raw`, and uses
+    ``Meta.unknown = "include"`` so any other unknown keys (which the
+    fallback parameterized route would have accepted) survive the
+    ``schema.load()`` round trip.  The class name is namespaced by
+    *route_id* so two routes that target the same plugin don't collide
+    as OpenAPI components.
+    """
+    attrs: dict = {}
+    for pf in plugin.fields:
+        mf = _build_marshmallow_field(pf)
+        if mf is not None:
+            attrs[pf.key] = mf
+    for key in extra_keys:
+        if key not in attrs:
+            attrs[key] = fields.Raw(load_default=None)
+
+    attrs["Meta"] = type("Meta", (), {"unknown": "include"})
+    cls_name = f"{route_id}_{type(plugin).__name__}_Args"
+    return type(cls_name, (Schema,), attrs)
