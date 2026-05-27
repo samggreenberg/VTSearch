@@ -331,7 +331,7 @@ class TestRenameLabelsetSourceCleanup:
 
     def test_rename_no_pending_when_template_has_no_name_var(self, client, tmp_path):
         detector_id = self._create_registered_detector(client)
-        # Template without {detector_name} — old and new resolve to same path.
+        # Template without {detector_name}; old and new resolve to same path.
         template = str(tmp_path / "shared.labels.json")
         self._attach_labelset_source(detector_id, template)
 
@@ -446,7 +446,7 @@ class TestRenameLabelsetSourceCleanup:
 
 class TestSaveLabels:
     def test_save_labels_empty(self, client):
-        """Save labels when there are no votes — should produce empty labelset."""
+        """Save labels when there are no votes: should produce empty labelset."""
         client.post(
             "/api/detectors",
             json={"name": "Labeler", "media_type": "audio", "text_query": "test"},
@@ -458,7 +458,7 @@ class TestSaveLabels:
         assert data["num_labels"] == 0
 
     def test_save_labels_with_votes(self, client):
-        """Save labels after casting votes — labelset should contain the voted medias."""
+        """Save labels after casting votes: labelset should contain the voted medias."""
         from vtsearch.state import medias
 
         if not medias:
@@ -505,7 +505,7 @@ class TestSaveLabels:
         if not medias:
             pytest.skip("No medias loaded for this test")
 
-        # Stamp every media's origin with the same clipper config — the
+        # Stamp every media's origin with the same clipper config; the
         # extractor scans the dict order until it finds a clipped media,
         # so doing it everywhere matches what the loader does in real life
         # and removes any iteration-order flakiness.
@@ -557,7 +557,7 @@ class TestSaveLabels:
         data["input_spec"] = {"clipper": "sound_tiling"}
         _write_detector(det_path, data)
 
-        # Re-save from a clean dataset — fixture medias have no clipper.
+        # Re-save from a clean dataset; fixture medias have no clipper.
         res = client.post("/api/detectors/DropSpec/labels")
         assert res.status_code == 200
 
@@ -647,7 +647,7 @@ class TestLabelVoteIsolation:
         assert len(good_votes) == 0
         assert len(bad_votes) == 0
 
-        # Model B has no labels, so import is a no-op — votes should remain empty
+        # Model B has no labels, so import is a no-op; votes should remain empty
         model_b = client.get("/api/detectors/Model%20B").get_json()
         assert len(model_b["labelset"]["labels"]) == 0
 
@@ -817,7 +817,7 @@ class TestLoadModelEndpoint:
         assert ids[0] in good_votes
         assert ids[1] in bad_votes
 
-        # Now load model B — votes from A must be gone.
+        # Now load model B; votes from A must be gone.
         _load_detector_and_wait(client, mid_b)
         assert ids[0] not in good_votes, "good vote from model A leaked into model B"
         assert ids[1] not in bad_votes, "bad vote from model A leaked into model B"
@@ -848,7 +848,7 @@ class TestLoadModelEndpoint:
         client.post(f"/api/medias/{ids[0]}/vote", json={"target": "good"})
         # Labels auto-sync on vote, so the detector file now has 1 label.
 
-        # Unload to clear votes, then reload — label should be restored.
+        # Unload to clear votes, then reload; label should be restored.
         client.post("/api/detectors/registry/load", json={"detector_id": None})
         assert ids[0] not in good_votes
 
@@ -936,7 +936,7 @@ class TestLoadModelEndpoint:
 class TestEmbedderMismatchInvalidatesStaleModel:
     """H5: a detector's cached MLP is trained against a specific embedder
     space (``DetectorContext.embedder``).  When the active dataset uses a
-    different embedder, the cached MLP must be invalidated — otherwise
+    different embedder, the cached MLP must be invalidated; otherwise
     scoring with a cross-space MLP either crashes (different dim) or
     silently produces garbage labels (same dim).
     """
@@ -1074,7 +1074,7 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         register_context(ctx_b)
         set_thread_dataset_context(ctx_b)
 
-        # Fire a no-op request — the before_request hook should run and
+        # Fire a no-op request; the before_request hook should run and
         # invalidate the stale MLP because the embedders no longer match.
         client.get("/healthz", headers={"X-Dataset-Id": "ds_b_for_h5", "X-Detector-Id": mid})
 
@@ -1082,7 +1082,7 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         assert det_ctx.threshold == 0.5
         # The embedder marker stays at the old value so the load endpoint
         # can still detect the mismatch and schedule a progress-tracked
-        # re-embed task — the next training pass restamps it.
+        # re-embed task; the next training pass restamps it.
         assert det_ctx.embedder == "ye-olde-embedder"
 
 
@@ -1188,7 +1188,7 @@ class TestValidatedVoteSnapshot:
         # Now corrupt votes_dataset_id and re-export.  The route's
         # ``ensure_votes_match_active_dataset`` will try to rehydrate but the
         # detector file has been written to disk, so it'll match the active
-        # dataset again — verify by going around the rehydrate's mtime cache.
+        # dataset again; verify by going around the rehydrate's mtime cache.
         # Simplest: directly corrupt the detector's vote dicts to simulate a
         # post-rehydrate mismatch (e.g. another thread re-flipped them).
         det_ctx = get_active_detector_context()
@@ -1204,7 +1204,7 @@ class TestValidatedVoteSnapshot:
             resp = client.get("/api/labels/export")
             assert resp.status_code == 200
             # safe=False degrades the vote dicts to empty, so no labels
-            # are composed — no cross-dataset cid leakage.
+            # are composed with no cross-dataset cid leakage.
             assert resp.get_json()["labels"] == []
         finally:
             _ds_sync.ensure_votes_match_active_dataset = original
@@ -1231,7 +1231,7 @@ class TestValidatedVoteSnapshot:
         # the rehydrate hook is bypassed (so the mismatch survives).  Without
         # the safe=False guard, ``_merge_labelsets_across_datasets`` would
         # drop the active dataset's existing entries and replace them with an
-        # empty composition — erasing labels from disk.
+        # empty composition, erasing labels from disk.
         original = _ds_sync.ensure_votes_match_active_dataset
         _ds_sync.ensure_votes_match_active_dataset = lambda: None
         try:
@@ -1606,7 +1606,7 @@ class TestSeedVotesFromExamples:
         client.post(f"/api/medias/{target_id}/vote", json={"target": "bad"})
         assert len(bad_votes) >= 1
 
-        # Learned sort should work — it accesses the embedding from the inserted media
+        # Learned sort should work; it accesses the embedding from the inserted media
         res = client.post("/api/learned-sort", json={"wait": True})
         assert res.status_code == 200
         data = res.get_json()
@@ -1654,7 +1654,7 @@ class TestSeedVotesFromExamples:
         client.post("/api/votes/clear")
         assert len(good_votes) == 0
 
-        # Load model — should auto-seed
+        # Load model; should auto-seed
         res = _load_detector_and_wait(client, detector_id)
         assert res.status_code == 200
         assert first_id in good_votes, "example media should be seeded as good vote"
@@ -1982,7 +1982,7 @@ class TestRegisterModelFromLabelset:
     created.  The frontend then calls the load endpoint to resolve origins
     and train the MLP.
 
-    Media type is inferred from the labels' origins — no ``media_type``
+    Media type is inferred from the labels' origins; no ``media_type``
     request field is accepted.
     """
 
@@ -2049,7 +2049,7 @@ class TestRegisterModelFromLabelset:
         assert "name" in res.get_json().get("errors", {}).get("json", {})
 
     def test_md5_only_labelset_returns_400(self, client, tmp_path):
-        """Legacy md5-only labels have no origin — media type cannot be inferred."""
+        """Legacy md5-only labels have no origin; media type cannot be inferred."""
         import app as app_module
 
         md5 = app_module.medias[1]["md5"]

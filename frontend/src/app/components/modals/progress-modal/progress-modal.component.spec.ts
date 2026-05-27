@@ -48,7 +48,7 @@ describe('ProgressModalComponent', () => {
     const iterReq = httpMock.expectOne('/api/eval/voting-iterations');
     iterReq.flush({ progress: 0, total: 10, done: false });
 
-    // Flush train-and-score — the endpoint now returns a job envelope
+    // Flush train-and-score; the endpoint now returns a job envelope
     // and the component returns the data inline on cache hit (status=done).
     const trainReq = httpMock.expectOne('/api/eval/train-and-score');
     trainReq.flush({

@@ -23,7 +23,7 @@ interface SourceRow {
 export class CombineDetectorsModalComponent implements OnInit {
   /** Trainable models the user has selected on the dashboard. */
   @Input() sources: DetectorRegistryEntry[] = [];
-  /** All registered model names — used for inline name-collision check. */
+  /** All registered model names; used for inline name-collision check. */
   @Input() existingNames: string[] = [];
 
   @Output() closed = new EventEmitter<void>();
@@ -96,7 +96,7 @@ export class CombineDetectorsModalComponent implements OnInit {
         if (status === 422) {
           this.error =
             serverMsg ||
-            'Every label was a conflict — no detector was created. Try fewer or more aligned sources.';
+            'Every label was a conflict; no detector was created. Try fewer or more aligned sources.';
         } else if (status === 409) {
           this.error = serverMsg || `A detector named "${trimmed}" already exists.`;
         } else if (status === 404) {

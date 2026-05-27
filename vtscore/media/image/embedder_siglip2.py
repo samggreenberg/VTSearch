@@ -1,4 +1,4 @@
-"""Image embedder — SigLIP 2 (google/siglip2-base-patch16-224).
+"""Image embedder - SigLIP 2 (google/siglip2-base-patch16-224).
 
 Uses :class:`~transformers.AutoModel` / :class:`~transformers.AutoProcessor` so
 the embedder loads on any ``transformers`` version that ships SigLIP 2 support

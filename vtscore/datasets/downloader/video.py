@@ -65,7 +65,7 @@ def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Pa
     video_dir = _core.VIDEO_DIR / "ucf101"
     _core.VIDEO_DIR.mkdir(exist_ok=True, parents=True)
 
-    # Already downloaded and extracted — nothing to do.
+    # Already downloaded and extracted - nothing to do.
     if video_dir.exists() and any(video_dir.glob("*/*.avi")):
         return video_dir
 

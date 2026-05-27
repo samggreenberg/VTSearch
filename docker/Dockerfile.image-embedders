@@ -1,19 +1,19 @@
 # -----------------------------------------------------------------
-# VTSearch — All-image-embedders CPU image
+# VTSearch: All-image-embedders CPU image
 #
-# For the GPU/CUDA variant see Dockerfile.image-embedders.gpu — same
+# For the GPU/CUDA variant see Dockerfile.image-embedders.gpu; same
 # six embedders, baked the same way, but on nvidia/cuda + cu121 wheels.
 #
 # Bundles every supported image embedder and bakes their weights into the
 # image at build time so the container is ready to serve immediately on
 # first run:
 #
-#   * SigLIP   (google/siglip-base-patch16-224)         — default, text-capable
-#   * SigLIP 2 (google/siglip2-base-patch16-224)        — text-capable
-#   * CLIP     (openai/clip-vit-base-patch32)           — text-capable
-#   * DINOv2   (facebook/dinov2-base)                     — image-only, ungated
-#   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) — image-only, gated
-#   * EUPE     (facebookresearch/EUPE, ViT-B/16)          — image-only, ungated
+#   * SigLIP   (google/siglip-base-patch16-224)         - default, text-capable
+#   * SigLIP 2 (google/siglip2-base-patch16-224)        - text-capable
+#   * CLIP     (openai/clip-vit-base-patch32)           - text-capable
+#   * DINOv2   (facebook/dinov2-base)                     - image-only, ungated
+#   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) - image-only, gated
+#   * EUPE     (facebookresearch/EUPE, ViT-B/16)          - image-only, ungated
 #                                                          (FAIR Noncommercial
 #                                                          Research Licence on
 #                                                          *outputs*, not on
@@ -26,7 +26,7 @@
 # HF token through ``docker build``, we expect the user to run
 # ``scripts/cache_gated_models.sh`` **once** on the host (with their HF
 # credentials), which populates ``./model_cache/``. This Dockerfile then
-# COPYs that local cache into the image — no token ever touches the
+# COPYs that local cache into the image; no token ever touches the
 # build, the codebase, or any image layer.
 #
 # EUPE no longer needs an HF token (its weights mirror at
@@ -42,12 +42,12 @@
 # runtime to download it lazily into the persistent /app/data volume
 # on first use.
 #
-# SigLIP stays the default — it's marked is_default=True on the embedder
+# SigLIP stays the default; it's marked is_default=True on the embedder
 # class and is the only entry in `autoload_media_embedders` seeded into
 # the default settings below. The other five sit on disk and only warm
 # when explicitly selected.
 #
-# DINOv2 / DINOv3 / EUPE are vision-only — they do not embed text, so
+# DINOv2 / DINOv3 / EUPE are vision-only; they do not embed text, so
 # the UI hides the "Text sort" affordance for datasets embedded with
 # them (see MediaEmbedder.supports_text).
 #
@@ -59,13 +59,13 @@
 #   #   …or, EUPE only (no token needed):
 #   SKIP_DINOV3=1 ./scripts/cache_gated_models.sh
 #
-#   # 2. Build the image (from repo root) — no token, no secrets:
+#   # 2. Build the image (from repo root); no token, no secrets:
 #   docker build -f docker/Dockerfile.image-embedders -t vtsearch:image-embedders .
 #
 # Run:    docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:image-embedders
 #
 # Build args:
-#   * VTSEARCH_VERSION  — bake a version string into the image
+#   * VTSEARCH_VERSION: bake a version string into the image
 # -----------------------------------------------------------------
 
 # ---------- frontend build stage ----------
@@ -103,7 +103,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # pre-download blocks below would hit ImportError once we call
 # ``.from_pretrained``. Transformers loads optional backends lazily via
 # ``requires_backends``, so touching ``.from_pretrained`` on each class
-# is what triggers the check — `from transformers import X` alone only
+# is what triggers the check; `from transformers import X` alone only
 # returns a placeholder. Adding new pre-download blocks below? Add the
 # class here too. (See PR #1282 for the bug this guards against:
 # AutoImageProcessor required torchvision but the requirements file
@@ -169,7 +169,7 @@ CLIPModel.from_pretrained(CLIP_MODEL_ID, cache_dir=cache); \
 CLIPProcessor.from_pretrained(CLIP_MODEL_ID, cache_dir=cache); \
 print('CLIP weights cached.', flush=True)"
 
-# DINOv2 (ungated — anyone can download these).
+# DINOv2 (ungated; anyone can download these).
 RUN python -u -c "import os; \
 from vtsearch.config import DINOV2_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
@@ -185,7 +185,7 @@ print('DINOv2 weights cached.', flush=True)"
 # when the user did neither ran the cache script nor accepted that
 # DINOv3 will be unavailable. The `|| echo` swallows that failure at the
 # shell level so the build still produces a usable image with the other
-# five embedders — we can't use Python try/except here because the body
+# five embedders; we can't use Python try/except here because the body
 # is a single ``python -c`` line and try/except is a compound statement
 # that can't be flattened with semicolons.
 RUN python -u -c "import os; \
@@ -202,7 +202,7 @@ print('DINOv3 weights loaded from local cache.', flush=True)" \
 # $TORCH_HOME/hub/. We point TORCH_HOME at the same dir the COPY above
 # seeded from ./model_cache/ so a host-cache run skips both the clone
 # and the weights download. If neither is present we still attempt the
-# fetch (EUPE's HF mirror is ungated — no token required) and fall back
+# fetch (EUPE's HF mirror is ungated; no token required) and fall back
 # to skipping EUPE if the build host has no network access.
 ENV TORCH_HOME=${VTSEARCH_MODELS_DIR}
 RUN python -u -c "import os; \
@@ -226,7 +226,7 @@ ARG VTSEARCH_VERSION=
 RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi
 
 # Seed default settings so SigLIP is preloaded at startup (the other
-# embedders stay cold until explicitly selected — they all live on
+# embedders stay cold until explicitly selected; they all live on
 # disk thanks to the RUNs above, so first selection is a from-cache
 # load rather than a HF download).
 RUN mkdir -p /app/data && \

@@ -21,7 +21,7 @@ class TestSingleClassGuard:
     """``train_model`` must refuse single-class ``y`` instead of silently
     training a degenerate model (bug H6 in the logical-bug audit).
 
-    BCE has no discriminative signal when every label is the same — the
+    BCE has no discriminative signal when every label is the same; the
     model would saturate to a single constant for every input.  The guard
     raises ``ValueError`` so callers can't accidentally produce a useless
     model.

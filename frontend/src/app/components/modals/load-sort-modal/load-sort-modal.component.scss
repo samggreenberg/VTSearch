@@ -70,7 +70,7 @@
 }
 
 // `.back-btn` from `_components.scss`. The bottom margin here is the
-// gap between the back button and the source list below it — the
+// gap between the back button and the source list below it; the
 // parent isn't a flex column with a `gap`, so we set it explicitly.
 :host {
   .back-btn { margin-bottom: var(--space-lg); }

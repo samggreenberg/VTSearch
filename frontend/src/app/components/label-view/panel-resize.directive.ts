@@ -16,16 +16,16 @@ import {
  * The parent owns the panel widths; this directive translates mouse motion on
  * the divider into a stream of width values for the side it is bound to,
  * clamped to the available space. Listeners run outside Angular while the user
- * is dragging — only the per-move emission re-enters the zone — so the
+ * is dragging; only the per-move emission re-enters the zone, so the
  * mousemove handler does not trigger a full change-detection pass on every
  * pixel.
  *
  * Inputs:
- *   - `[vtPanelResize]` — `'left'` or `'right'`; controls which edge of the
+ *   - `[vtPanelResize]`: `'left'` or `'right'`; controls which edge of the
  *     layout the new width is measured from.
- *   - `[layoutEl]` — the layout container whose bounding rect defines the
+ *   - `[layoutEl]`: the layout container whose bounding rect defines the
  *     drag bounds.
- *   - `[minWidth]` / `[opposingWidth]` / `[centerMin]` / `[dividerTotal]` —
+ *   - `[minWidth]` / `[opposingWidth]` / `[centerMin]` / `[dividerTotal]`:
  *     clamping inputs. Width is constrained to
  *     `[minWidth, layoutWidth - dividerTotal - centerMin - opposingWidth]`.
  *

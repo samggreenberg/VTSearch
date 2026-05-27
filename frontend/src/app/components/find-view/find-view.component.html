@@ -38,7 +38,7 @@
     @if (sortState.sortBusy) {
       <div class="find-wait-overlay">
         <div class="find-wait-content">
-          <p class="find-wait-message">Please wait — scoring dataset with detector…</p>
+          <p class="find-wait-message">Please wait: scoring dataset with detector…</p>
           <vt-progress-bar
             [indeterminate]="sortState.sortProgressTotal <= 0"
             [value]="sortState.sortProgress"

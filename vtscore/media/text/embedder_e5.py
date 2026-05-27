@@ -1,4 +1,4 @@
-"""Text embedder — E5-base-v2 (sentence-transformers)."""
+"""Text embedder - E5-base-v2 (sentence-transformers)."""
 
 from __future__ import annotations
 
@@ -137,7 +137,7 @@ class TextE5Embedder(MediaEmbedder):
         """Batch-encode every text file through sentence-transformers in one call.
 
         Sentence-Transformers' ``encode`` natively chunks long input lists
-        through the model in ``batch_size`` groups — we feed the whole
+        through the model in ``batch_size`` groups - we feed the whole
         ready set in at once and let it do the GPU batching.
         """
         if self._model is None:

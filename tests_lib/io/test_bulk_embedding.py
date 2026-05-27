@@ -217,6 +217,26 @@ class TestEmbedMissingRoutesToBulk:
 
         emb.embed_media_bulk.assert_not_called()
 
+    def test_no_op_when_media_type_absent(self):
+        """embed_missing silently skips all items when media_type is missing.
+
+        This is the regression contract for the converter-ingestion bug:
+        if _ingest_spec_stream forgets to stamp media_type, embed_missing
+        returns early and leaves all embeddings as None.
+        """
+        from vtscore.datasets.load_pipeline import embed_missing
+
+        emb = _make_bulk_embedder()
+        # Mimic what a converter output looked like before the fix:
+        # media_type absent, embedding still None.
+        medias = {i: {"embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
+
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            embed_missing(medias)
+
+        emb.embed_media_bulk.assert_not_called()
+        assert all(m["embedding"] is None for m in medias.values())
+
     def test_routes_progress_to_caller(self):
         from vtscore.datasets.load_pipeline import embed_missing
 
@@ -336,7 +356,7 @@ class TestEmbedMediasDictWrapper:
 
     def test_propagates_none_for_failed_embeddings(self):
         """A None vector from the underlying bulk call surfaces as None
-        at the matching key — no silent dropping like the loader does."""
+        at the matching key; no silent dropping like the loader does."""
         from vtscore.media.embedder import MediaEmbedder
 
         class _Stub(MediaEmbedder):

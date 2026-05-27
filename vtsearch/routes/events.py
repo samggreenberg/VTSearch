@@ -18,9 +18,10 @@ def progress_events() -> Response:
     """Stream progress updates for every channel as Server-Sent Events.
 
     The client connects with ``new EventSource('/api/events')`` and listens
-    for ``dataset``, ``sort``, ``find``, ``eval``, ``loading-tasks``, and
+    for ``server`` (per-connect identity frame carrying ``boot_id``),
+    ``dataset``, ``sort``, ``find``, ``eval``, ``loading-tasks``, and
     ``detector-loading-tasks`` events. The first frame on every channel is
-    the current snapshot — clients do not need a separate REST call to
+    the current snapshot; clients do not need a separate REST call to
     bootstrap state.
     """
     response = Response(

@@ -7,7 +7,7 @@ stays up-to-date without an explicit save.
 The sync is *non-destructive across datasets*: entries in the on-disk
 labelset whose origin does not match anything in the currently-loaded
 dataset are left untouched.  Entries whose origin matches a current-dataset
-media item are reconciled against the active votes — replaced with the new
+media item are reconciled against the active votes - replaced with the new
 label, or removed when the user has untoggled the vote.
 """
 
@@ -59,7 +59,7 @@ def _merge_labelsets_across_datasets(
     """Merge a fresh per-dataset labelset into a cross-dataset existing one.
 
     Existing entries owned by the active dataset (key in ``current_dataset_keys``)
-    are dropped — they get replaced by ``current_ls``. Other entries are kept
+    are dropped - they get replaced by ``current_ls``. Other entries are kept
     verbatim. Duplicate keys across the resulting list are collapsed
     (first occurrence wins).
     """
@@ -133,7 +133,7 @@ def sync_labels_to_loaded_detector() -> None:
         # (concurrent dataset switch on the same detector, missing
         # ``X-Dataset-Id`` header, or no registry entry).  Writing now with
         # an empty composition would erase the active dataset's on-disk
-        # labels — drop this sync; the next vote will trigger another that
+        # labels - drop this sync; the next vote will trigger another that
         # runs against a consistent snapshot.
         return
     snap = vote_snap.medias

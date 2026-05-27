@@ -1,4 +1,4 @@
-"""Synthetic audio generation — tones, chords, drums, rain, wind, birds.
+"""Synthetic audio generation - tones, chords, drums, rain, wind, birds.
 
 Each generator writes a 16-bit mono PCM WAV file at 48 kHz. Variety across
 six "ideas" is enough for CLAP and similar audio embedders to produce
@@ -67,7 +67,7 @@ def _chord(rng: np.random.Generator, duration: float) -> tuple[np.ndarray, dict]
 
 
 def _drum(rng: np.random.Generator, duration: float) -> tuple[np.ndarray, dict]:
-    """Series of enveloped noise hits — kick / snare / hihat patterns."""
+    """Series of enveloped noise hits - kick / snare / hihat patterns."""
     n = int(SAMPLE_RATE * duration)
     out = np.zeros(n, dtype=np.float32)
     bpm = float(rng.uniform(80, 160))
@@ -101,7 +101,7 @@ def _drum(rng: np.random.Generator, duration: float) -> tuple[np.ndarray, dict]:
 
 
 def _rain(rng: np.random.Generator, duration: float) -> tuple[np.ndarray, dict]:
-    """Pink-ish filtered noise — broadband hiss with occasional droplets."""
+    """Pink-ish filtered noise - broadband hiss with occasional droplets."""
     n = int(SAMPLE_RATE * duration)
     noise = rng.standard_normal(n).astype(np.float32)
     # Cheap low-pass via cumulative average.

@@ -1,7 +1,7 @@
 """Helpers for handling labelset source files when a detector is renamed.
 
 When a detector with a labelset source whose ``filepath`` template uses
-``{detector_name}`` is renamed, the old on-disk file becomes orphaned —
+``{detector_name}`` is renamed, the old on-disk file becomes orphaned -
 the next sync writes to the NEW resolved path, leaving the OLD file
 behind as garbage.  These helpers detect the orphaned-file situation
 and perform an atomic move when the user confirms.
@@ -50,7 +50,7 @@ def detect_pending_labelset_move(
         old_resolved = resolve_filepath_for(field_values, detector_id=detector_id, detector_name=old_name)
         new_resolved = resolve_filepath_for(field_values, detector_id=detector_id, detector_name=new_name)
     except ValueError:
-        # Empty / malformed template — nothing to move.
+        # Empty / malformed template - nothing to move.
         return None
 
     if old_resolved == new_resolved:
@@ -72,7 +72,7 @@ def move_labelset_file(old_path: str, new_path: str) -> bool:
 
     Both paths are validated against the file-access base directory to
     prevent path traversal.  Returns ``True`` if the move happened,
-    ``False`` if *old_path* doesn't exist (idempotent — a repeated click
+    ``False`` if *old_path* doesn't exist (idempotent - a repeated click
     after a successful move is a no-op, not an error).
 
     Raises ``ValueError`` for invalid paths and ``FileExistsError`` if

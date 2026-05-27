@@ -38,6 +38,7 @@ from flask_smorest import Blueprint, abort
 from vtsearch import settings
 from vtsearch.routes._shared import (
     get_plugin_or_404,
+    register_plugin_typed_routes,
     run_plugin_or_error,
     validate_exporter_field_values,
     validate_plugin_args,
@@ -78,7 +79,7 @@ def get_settings_importers():
 # ---------------------------------------------------------------------------
 # POST /api/settings-importers/import/<importer_name>
 #
-# Plugin-field route — body shape depends on the importer plugin and isn't
+# Plugin-field route: body shape depends on the importer plugin and isn't
 # described in the OpenAPI spec.  Runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the importer's
 # :attr:`fields`), so missing required fields / invalid select values
@@ -180,3 +181,20 @@ def run_settings_export(body: dict):
 
 # Re-export from settings module for backward compatibility and local use.
 from vtsearch.settings import _apply_settings  # noqa: F401, E402
+
+
+# ---------------------------------------------------------------------------
+# Per-plugin typed routes for /api/settings-importers/import/<name>.
+# Registered at module-import time by iterating the settings-importer
+# registry, so each known importer gets a static URL whose body schema
+# is described in /api/openapi.json with real per-field types.  Unknown
+# importer names fall through to the parameterized route above.
+# ---------------------------------------------------------------------------
+
+register_plugin_typed_routes(
+    settings_io_bp,
+    list_plugins=list_settings_importers,
+    path_template="/api/settings-importers/import/{plugin_name}",
+    endpoint_prefix="run_settings_import",
+    delegate=run_settings_import,
+)

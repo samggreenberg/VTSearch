@@ -79,7 +79,7 @@ def resolve_media_ids(
     cross-dataset label transfer from CSV files that lack the full origin
     dict.  The fallback is intentionally NOT triggered when the entry has
     provenance fields that simply don't match anything in the current
-    dataset — in that case the entry refers to content that isn't here, and
+    dataset - in that case the entry refers to content that isn't here, and
     matching by basename alone would silently mislabel any colliding
     filename (a real bug when re-using a detector across datasets).
     """
@@ -100,7 +100,7 @@ def resolve_media_ids(
             matched[cid] = None
 
     # Fallback: match by origin_name alone (or filename) only when the entry
-    # has no provenance to begin with — i.e. neither an origin+name pair nor
+    # has no provenance to begin with - i.e. neither an origin+name pair nor
     # an md5.  Entries with provenance that failed to match represent content
     # not present in the current dataset; falling back to basename would
     # produce false positives on filename collisions.

@@ -4,7 +4,7 @@ Tests for load_dataset_from_folder: content_vectors, content_md5s,
 relative paths, archive extraction directory isolation, and the
 resolve_file contract.
 
-The loader does **not** call any embedder — items leave with
+The loader does **not** call any embedder; items leave with
 ``embedding=None`` unless a pre-computed vector is supplied via
 ``content_vectors`` or ``custom_metadata_map``.  The framework
 ``embed_missing`` stage fills the rest in.
@@ -156,7 +156,7 @@ class TestLoadDatasetContentVectors:
 
     def test_content_vector_file_has_empty_embedder_id(self, tmp_path):
         """Files whose vectors came from content_vectors should not be stamped
-        with any embedder name — the external vector may be a different
+        with any embedder name; the external vector may be a different
         dimension.  Files without an override also get ``embedder=""`` (the
         framework embed stage stamps the live embedder later).
         """

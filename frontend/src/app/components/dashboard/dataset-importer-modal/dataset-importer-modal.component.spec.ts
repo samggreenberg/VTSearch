@@ -469,7 +469,7 @@ describe('DatasetImporterModalComponent', () => {
     openAndFlushDemoPicker();
 
     expect(component.demoTabs).toEqual(['audio', 'image']);
-    // No media-type tab is auto-selected — the demo table area stays
+    // No media-type tab is auto-selected; the demo table area stays
     // blank until the user clicks one.
     expect(component.activeTab).toBe('');
     expect(component.filteredDemos.length).toBe(0);
@@ -543,7 +543,7 @@ describe('DatasetImporterModalComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     // The inner media-type tabs are replaced by a <vt-import-config>
-    // dropdown — so no .demo-tab buttons render in this modal anymore.
+    // dropdown, so no .demo-tab buttons render in this modal anymore.
     expect(el.querySelectorAll('.demo-tab').length).toBe(0);
 
     // No media type picked yet → no rows.
@@ -771,7 +771,7 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
     httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
 
-    // No requests fire yet — the user hasn't picked a media-type tab.
+    // No requests fire yet; the user hasn't picked a media-type tab.
     httpMock.expectNone(req => req.url === '/api/embedders');
 
     // Picking a media-type tab loads its embedders + clippers and then

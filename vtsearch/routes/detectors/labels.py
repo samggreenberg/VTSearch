@@ -1,7 +1,7 @@
 """Blueprint for detector label routes.
 
 Each detector has an associated labelset persisted on disk alongside its
-JSON file.  These routes manage that labelset — saving votes, importing
+JSON file.  These routes manage that labelset: saving votes, importing
 external labels, listing the labels for the right pane, and serving
 per-label previews / thumbnails / toggle-vote actions.
 
@@ -27,7 +27,7 @@ POST /api/detectors/<name>/labels/<element_id>/vote
 
 Migrated to ``flask_smorest`` for the JSON-shaped routes (save, labels-detail,
 vote). ``import-labels`` keeps its plain-Flask route on the same smorest
-blueprint — its body shape depends on the importer plugin and isn't
+blueprint; its body shape depends on the importer plugin and isn't
 described in the OpenAPI spec, but runtime validation goes through
 :func:`validate_plugin_args` so the per-plugin field types are enforced
 and schema-level failures surface as 422.  See *Resolved questions /
@@ -170,7 +170,7 @@ def save_detector_labels(name: str):
 # ---------------------------------------------------------------------------
 # POST /api/detectors/<name>/import-labels/<importer_name>
 #
-# Plugin-field route — body shape depends on the importer plugin and isn't
+# Plugin-field route: body shape depends on the importer plugin and isn't
 # described in the OpenAPI spec.  Runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the importer's
 # :attr:`fields`), so missing required fields / invalid select values
@@ -194,7 +194,7 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
 
     When the detector is loaded into memory, the new labels are also resolved
     against the loaded dataset's medias, applied to the detector's votes, and
-    a fresh MLP is trained with a cross-validated threshold — all inside the
+    a fresh MLP is trained with a cross-validated threshold, all inside the
     loaded detector context.
 
     Plugin-dependent body shape: not described in the OpenAPI spec.
@@ -312,8 +312,8 @@ def get_detector_labels_detail(name: str):
     """Return the detector's saved labelset elements with right-pane render data.
 
     Each element gets a stable ``id`` (derived from its origin/md5 identity)
-    plus ``label``, ``media_type``, display ``name``, and — when the
-    element resolves into the active dataset — its current ``cid``,
+    plus ``label``, ``media_type``, display ``name``, and (when the
+    element resolves into the active dataset) its current ``cid``,
     ``time`` (click time), and ``score`` (last learned-sort score).
 
     This is the right pane's data source in label/train mode.  Unlike
@@ -604,3 +604,24 @@ def vote_detector_label(body: dict, name: str, element_id: str):
         update_detector(reg_entry["id"], num_training=new_count, last_trained_at=time.time())
 
     return {"ok": True, "action": action}
+
+
+# ---------------------------------------------------------------------------
+# Per-plugin typed routes for /api/detectors/<name>/import-labels/<importer>.
+# The detector ``<name>`` stays dynamic; only the importer segment is
+# specialized per plugin so its body schema appears in /api/openapi.json
+# with real per-field types.  Unknown importer names fall through to the
+# parameterized route above (preserving the legacy 404 message).
+# Plugins with file fields stay on the parameterized fallback.
+# ---------------------------------------------------------------------------
+
+from vtscore.labels.importers import list_label_importers as _list_label_importers  # noqa: E402
+from vtsearch.routes._shared import register_plugin_typed_routes as _register_plugin_typed_routes  # noqa: E402
+
+_register_plugin_typed_routes(
+    detectors_labels_bp,
+    list_plugins=_list_label_importers,
+    path_template="/api/detectors/<name>/import-labels/{plugin_name}",
+    endpoint_prefix="import_labels_into_detector",
+    delegate=import_labels_into_detector,
+)

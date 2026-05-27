@@ -1,7 +1,7 @@
 """Flask routes for the server file browser.
 
 Provides a generic file-browser API so the frontend can let users navigate
-the server filesystem and pick files — instead of having to type paths
+the server filesystem and pick files instead of having to type paths
 by hand.
 
 Migrated to ``flask_smorest`` so the route is described in

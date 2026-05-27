@@ -14,10 +14,10 @@ deterministic behaviour is needed (tests, graceful shutdown).  An
 ``atexit`` hook calls ``flush_pending_label_syncs`` so the most recent
 vote's push survives normal interpreter exit (Ctrl-C, gunicorn SIGQUIT,
 ``sys.exit``).  Hard kills (SIGKILL, ``os._exit``) bypass atexit and
-still drop the last 200ms of work — accept that as the cost of debounce.
+still drop the last 200ms of work - accept that as the cost of debounce.
 
 A module-level (NOT thread-local) flag, coordinated by ``_sync_lock``,
-prevents re-exporting during an import pass — including from concurrent
+prevents re-exporting during an import pass - including from concurrent
 ``_push_to_labelset_source`` calls running on other threads.
 """
 
@@ -161,7 +161,7 @@ def reset_label_sync_for_tests() -> None:
     """Cancel every pending sync and drop captured contexts (for conftest).
 
     Unlike :func:`flush_pending_label_syncs`, this does **not** run the
-    pending pushes — it discards them, which is what the autouse
+    pending pushes - it discards them, which is what the autouse
     ``reset_state`` fixture wants between tests so a sync scheduled by
     one test's contexts can't fire after those contexts are gone.
     """
@@ -179,7 +179,7 @@ def reset_label_sync_for_tests() -> None:
 # Drain any pending debounced push at interpreter exit so the most recent
 # vote isn't dropped on Ctrl-C / SIGQUIT / sys.exit.  Fires once per
 # process; no-op when the queue is empty.  SIGKILL / os._exit bypass
-# atexit and still lose the last 200ms — unavoidable for any debounce.
+# atexit and still lose the last 200ms - unavoidable for any debounce.
 atexit.register(flush_pending_label_syncs)
 
 
@@ -187,7 +187,7 @@ def _push_to_labelset_source() -> None:
     """Synchronously push current detector labels to the linked source.
 
     Reads the active detector and dataset contexts via the standard
-    resolution chain — callers running on a background thread must arrange
+    resolution chain - callers running on a background thread must arrange
     thread-local context propagation before invoking this.
     """
     from vtscore.state.core import get_active_detector_context
@@ -231,7 +231,7 @@ def _push_to_labelset_source() -> None:
         try:
             # Atomic snapshot so the votes we serialise are guaranteed to be
             # keyed in the same dataset's cid space as the medias they're
-            # composed with — even under concurrent dataset-switch requests
+            # composed with - even under concurrent dataset-switch requests
             # on the same detector.  ``safe=False`` means we couldn't prove
             # consistency; pushing an empty labelset would clobber whatever
             # the external source has, so we skip this push and let the next
@@ -297,7 +297,7 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
     # If the source carried a detector_meta block, fold its input_spec
     # (and media_type, when the receiver is missing one) into the
     # receiving detector's on-disk JSON.  threshold is intentionally
-    # *not* persisted — the receiver will retrain its MLP from the
+    # *not* persisted - the receiver will retrain its MLP from the
     # imported labels and recompute its own threshold.
     if labelset.detector_meta:
         from vtscore.detectors.input_spec import apply_detector_meta

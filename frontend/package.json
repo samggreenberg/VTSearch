@@ -11,7 +11,7 @@
     "watch": "ng build --watch --configuration development",
     "generate-api-client": "ng-openapi-gen",
     "regenerate-openapi-snapshot": "cd .. && python scripts/dump_openapi.py > frontend/openapi.json",
-    "test": "echo 'Karma removed — no browser-based test runner configured. Run backend tests via ./run-tests.sh'"
+    "test": "echo 'Karma removed - no browser-based test runner configured. Run backend tests via ./run-tests.sh'"
   },
   "private": true,
   "dependencies": {

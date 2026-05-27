@@ -8,7 +8,7 @@ from vtscore.plugins import PluginBase, PluginField
 
 class _FakeDatasetImporter(PluginBase):
     """An abstract intermediate that mimics the in-tree
-    DatasetImporter shape — concrete subclasses below verify the
+    DatasetImporter shape; concrete subclasses below verify the
     default-derivation walks past it cleanly."""
 
     _is_plugin_family_base = True

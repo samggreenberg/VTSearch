@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ClipperInfo, ConverterInfo, EmbedderInfo, SourceSpec } from '../../../../models/api.models';
 import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-picker.component';
 
-/** "Advanced ▾" block of the Add Dataset modal — Include media (source
+/** "Advanced ▾" block of the Add Dataset modal: Include media (source
  *  specs), Embedder, Clipper.  Pulled out of the parent component
  *  because the same block was inlined three times (server-folder,
  *  local-folder/files, generic form), with `sf*` / `lf*` / `form*`
@@ -13,14 +13,14 @@ import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-
  *
  *  The block lives behind an "Advanced ▾" toggle but the embedder and
  *  clipper pickers can stay visible even when the toggle is collapsed
- *  if the user has chosen a non-default value — otherwise their
+ *  if the user has chosen a non-default value; otherwise their
  *  override would be hidden until they opened Advanced again.  The
  *  Include media picker is gated strictly by the toggle.
  *
  *  The clipper chooser modal lives at the parent level (one instance
  *  shared across all flows), so clicking the clipper "Details" button
- *  — either the native row's button inside the source-specs column, or
- *  the standalone fallback button rendered below the Advanced block —
+ *  (either the native row's button inside the source-specs column, or
+ *  the standalone fallback button rendered below the Advanced block)
  *  emits :prop:`clipperChooserRequested` and the parent opens it.
  */
 @Component({
@@ -31,17 +31,17 @@ import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-
   styleUrl: './import-advanced.component.scss',
 })
 export class ImportAdvancedComponent {
-  /** Converters available for the current native type — feeds the
+  /** Converters available for the current native type; feeds the
    *  source-specs picker.  Computed by the parent from the importer's
    *  ``available_converters_by_media_type``. */
   @Input() availableConverters: ConverterInfo[] = [];
-  /** Native (output) type id of the dataset — e.g. ``"image"``.  Drives
+  /** Native (output) type id of the dataset (e.g. ``"image"``). Drives
    *  the "include directly" row inside the source-specs picker. */
   @Input() nativeType = '';
   /** Map of ``type_id`` → human label for the source-specs picker. */
   @Input() typeLabels: Record<string, string> = {};
   /** Embedders available for the current media type.  When fewer than
-   *  two are available the picker stays hidden — there is nothing to
+   *  two are available the picker stays hidden; there is nothing to
    *  choose between. */
   @Input() embedders: EmbedderInfo[] = [];
   /** Clippers available for the current media type.  Same single-option
@@ -64,12 +64,12 @@ export class ImportAdvancedComponent {
    *  set a Solo mediaEmbedder for the current mediaType in settings (or
    *  via ``--solo-embedder``). The parent is responsible for resolving
    *  the lock against the live embedder list and only passing a value
-   *  here when the locked embedder actually exists for the type — a
+   *  here when the locked embedder actually exists for the type; a
    *  stale or removed embedder falls back to the normal picker. */
   @Input() lockedEmbedder = '';
 
   /** Current clipper selection (one-way).  Changes flow through the
-   *  parent's clipper chooser modal — clicking either the native row's
+   *  parent's clipper chooser modal; clicking either the native row's
    *  Details button or the standalone fallback Details button emits
    *  :prop:`clipperChooserRequested` and the parent updates this input
    *  after the chooser settles. */
@@ -83,12 +83,12 @@ export class ImportAdvancedComponent {
 
   /** Fired when the user clicks either the native row's Details
    *  button (inside the source-specs column) or the standalone
-   *  Details fallback below the Advanced block — parent opens its
+   *  Details fallback below the Advanced block and the parent opens its
    *  shared clipper chooser modal. */
   @Output() clipperChooserRequested = new EventEmitter<void>();
 
   /** Whether the Advanced section is currently expanded.  Local state
-   *  per instance — opening Advanced in one flow does not carry over
+   *  per instance; opening Advanced in one flow does not carry over
    *  to another (the user only ever sees one flow at a time). */
   advancedOpen = false;
 
@@ -120,7 +120,7 @@ export class ImportAdvancedComponent {
   }
 
   /** Embedder picker is visible when Advanced is open OR when the user
-   *  has picked a non-default embedder — and never when a Solo
+   *  has picked a non-default embedder, and never when a Solo
    *  mediaEmbedder is locked for the current mediaType (then the user
    *  has explicitly opted out of seeing the picker for this type). */
   get showEmbedderPicker(): boolean {
@@ -139,9 +139,9 @@ export class ImportAdvancedComponent {
    *  (Advanced open AND ``showSourceSpecs`` true), the native row in
    *  the column hosts its own Details button, so the standalone one
    *  would be redundant.  In every other case where the user should be
-   *  able to reach the clipper chooser — Advanced collapsed but a
+   *  able to reach the clipper chooser (Advanced collapsed but a
    *  non-default clipper is in effect, or importers with no
-   *  source-specs column at all (demo form) — we
+   *  source-specs column at all (demo form)), we
    *  fall back to this standalone button so the override stays visible
    *  and the chooser stays reachable. */
   get showStandaloneClipperButton(): boolean {
@@ -150,13 +150,13 @@ export class ImportAdvancedComponent {
     return !(this.advancedOpen && this.showSourceSpecs);
   }
 
-  /** Embedders flagged ``is_default`` for the active media type — shown
+  /** Embedders flagged ``is_default`` for the active media type; shown
    *  in the Recommended optgroup. */
   get recommendedEmbedders(): EmbedderInfo[] {
     return this.embedders.filter((e) => e.is_default);
   }
 
-  /** Non-default embedders — shown in the Advanced optgroup inside the
+  /** Non-default embedders; shown in the Advanced optgroup inside the
    *  embedder select. */
   get advancedEmbedderOptions(): EmbedderInfo[] {
     return this.embedders.filter((e) => !e.is_default);

@@ -1,4 +1,4 @@
-"""Text embedder — BGE-base-en-v1.5 (sentence-transformers)."""
+"""Text embedder - BGE-base-en-v1.5 (sentence-transformers)."""
 
 from __future__ import annotations
 

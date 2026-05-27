@@ -28,7 +28,7 @@ bash .claude/hooks/ensure-test-deps.sh
 # vtscore-clean: run only the library-tier tests with Flask blocked.
 # Skips the linter / frontend stages because the goal of this mode is
 # specifically to verify that the library tier can run independent of
-# Flask — not to re-run the linting we already do in the main path.
+# Flask; we do not re-run the linting we already do in the main path.
 if [[ "${1:-}" == "vtscore-clean" ]]; then
     shift
     exec python scripts/check-vtscore-clean.py "$@"
@@ -72,12 +72,12 @@ if ! python -m deptry . ; then
     exit 1
 fi
 
-# pip-audit — scans installed Python packages against the PyPI advisory
+# pip-audit: scans installed Python packages against the PyPI advisory
 # database. Auditing the resolved venv (not requirements files) catches
 # transitive vulnerabilities and matches what production will actually run.
 #
 # `PIP_AUDIT_IGNORE` lists advisory IDs that pip-audit currently reports
-# with no fix version available — pinning a "fixed" release isn't an
+# with no fix version available; pinning a "fixed" release isn't an
 # option, so the gate would otherwise block indefinitely on upstream
 # CVEs that have nothing to do with VTSearch code.  Re-audit the list
 # whenever upstream ships a patched release; remove the entry and let
@@ -106,7 +106,7 @@ if ! pip-audit "${PIP_AUDIT_IGNORE[@]}" ; then
     exit 1
 fi
 
-# Pyright — full static type check across vtsearch/ and tests/
+# Pyright: full static type check across vtsearch/ and tests/
 # (see `pyrightconfig.json` for the gated scope). The PYRIGHT_PYTHON_FORCE_VERSION
 # pin keeps everyone on the same underlying pyright binary regardless of
 # what the `pyright` PyPI wrapper would otherwise pull.
@@ -119,7 +119,7 @@ if ! PYRIGHT_PYTHON_FORCE_VERSION=1.1.408 pyright ; then
     exit 1
 fi
 
-# OpenAPI snapshot drift check — regenerate the flask-smorest spec from
+# OpenAPI snapshot drift check: regenerate the flask-smorest spec from
 # the live app and diff against the checked-in snapshot at
 # frontend/openapi.json. The frontend's generated TS client is built
 # from this snapshot, so a stale file means the generated client lags
@@ -256,10 +256,10 @@ if [[ "${VTSEARCH_COVERAGE:-}" == "1" ]]; then
 fi
 
 # Run pytest with:
-#   --tb=short  — brief tracebacks (enough to diagnose, not overwhelming)
-#   --no-header — skip the platform/plugin header noise
-#   -q          — quiet mode (dots instead of full test names)
-#   -n auto     — parallel execution via pytest-xdist (one worker per CPU)
+#   --tb=short: brief tracebacks (enough to diagnose, not overwhelming)
+#   --no-header: skip the platform/plugin header noise
+#   -q:         quiet mode (dots instead of full test names)
+#   -n auto:    parallel execution via pytest-xdist (one worker per CPU)
 #
 # Both tests/ (app tier) and tests_lib/ (library tier) are passed in.
 # The two trees have independent conftests; pytest's auto-merge picks

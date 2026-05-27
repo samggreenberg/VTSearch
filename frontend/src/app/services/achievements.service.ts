@@ -20,7 +20,7 @@ const EMPTY_STATE: AchievementState = {
 };
 
 /**
- * AchievementsService — polls /api/achievements, exposes the current state
+ * AchievementsService: polls /api/achievements, exposes the current state
  * as an observable, and queues unlock notifications one at a time so the
  * consumer (a global host component) can render dialogs sequentially.
  *
@@ -36,6 +36,9 @@ export class AchievementsService {
 
   private readonly state$ = new BehaviorSubject<AchievementState>(EMPTY_STATE);
   private readonly unlock$ = new Subject<PendingAnnouncement>();
+  private readonly openPanel$ = new Subject<void>();
+  readonly hasPending$ = this.state$.pipe(map((s) => s.pending_announcements.length > 0));
+  readonly openPanelRequest$ = this.openPanel$.asObservable();
   private inFlight = false;
   private disabled = false;
 
@@ -45,7 +48,7 @@ export class AchievementsService {
       const flipped = next && !this.disabled;
       this.disabled = next;
       if (flipped) {
-        // Disabled — drop the cached state so the UI doesn't show
+        // Disabled: drop the cached state so the UI doesn't show
         // counters/unlocks from before the toggle.
         this.state$.next(EMPTY_STATE);
       }
@@ -131,6 +134,18 @@ export class AchievementsService {
           subscriber.complete();
         });
     });
+  }
+
+  /** Request the achievements panel to open (e.g. from a toast action button). */
+  requestOpenPanel(): void {
+    this.openPanel$.next();
+  }
+
+  /** Acknowledge all pending announcements so the notification dot clears. */
+  acknowledgeAll(): void {
+    for (const p of this.state$.value.pending_announcements) {
+      this.acknowledge(p.id, p.tier_idx);
+    }
   }
 
   /** Absolute URL to the raw markdown for a doc. */

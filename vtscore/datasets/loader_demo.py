@@ -133,7 +133,7 @@ def load_demo_dataset(  # noqa: C901
         # (meaning "use default"), accept whatever is cached.
         cached_embedder = _loader.read_pkl_embedder(pkl_file)
         if embedder_name and cached_embedder and embedder_name != cached_embedder:
-            # Embedder mismatch — discard stale cache and re-embed below.
+            # Embedder mismatch - discard stale cache and re-embed below.
             on_progress("loading", f"Re-embedding {dataset_name} with {embedder_name}...", 0, 0)
             pkl_file.unlink()
             pkl_file.with_suffix(".embedder").unlink(missing_ok=True)
@@ -153,7 +153,7 @@ def load_demo_dataset(  # noqa: C901
                 # Stamp demo origin on cached medias so that cross-dataset
                 # resolution always has the dataset name in the origin params.
                 # Old pickles (created before origin stamping) may have empty
-                # params — this ensures they are corrected on load.
+                # params - this ensures they are corrected on load.
                 _stamp_demo_origin(medias, dataset_name, converter_name)
                 # Fill in missing media_type: old pkls may lack the field,
                 # causing every item to fall back to the "audio" default in

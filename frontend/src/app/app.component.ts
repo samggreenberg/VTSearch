@@ -13,7 +13,7 @@ import { LoginComponent } from './components/login/login.component';
 import { ContextPulldownComponent } from './components/context-pulldown/context-pulldown.component';
 import { IncompatiblePairExplainerComponent } from './components/context-pulldown/incompatible-pair-explainer.component';
 // Importer / new-detector modals are imported here AND used exclusively
-// inside `@defer` blocks in the template — Angular splits them into
+// inside `@defer` blocks in the template; Angular splits them into
 // lazy chunks (they drag in the file browser, crop modal, etc., which
 // together push the initial bundle over budget when eagerly loaded).
 import { DatasetImporterModalComponent } from './components/dashboard/dataset-importer-modal/dataset-importer-modal.component';
@@ -68,7 +68,7 @@ export class AppComponent {
   isOnLabelView = false;
   settingsViewTab = '';
   /** True when the current route consumes the active pair (label / find)
-   *  and the pair is not compatible — the explainer takes over the
+   *  and the pair is not compatible, so the explainer takes over the
    *  router-outlet area in that state. */
   showIncompatibleExplainer = false;
 
@@ -91,7 +91,7 @@ export class AppComponent {
     private activeContext: ActiveContextService,
     private recent: RecentSessionsService,
     public auth: AuthService,
-    private achievements: AchievementsService,
+    public achievements: AchievementsService,
     private settingsState: SettingsStateService,
     private themeService: ThemeService,
     private newThingFlows: NewThingFlowsService,
@@ -104,6 +104,10 @@ export class AppComponent {
       this.achievementsDisabled = !!s?.disable_achievements;
     });
     this.achievements.refresh();
+    this.achievements.openPanelRequest$.subscribe(() => {
+      this.showAchievements = true;
+      this.achievements.acknowledgeAll();
+    });
     this.themeService.loadFromSettings();
     activeContextWatcher.start();
     this.recent.refresh().subscribe();
@@ -267,6 +271,7 @@ export class AppComponent {
   onAchievements(): void {
     this.menuOpen = false;
     this.showAchievements = true;
+    this.achievements.acknowledgeAll();
   }
 
   onAchievementsClosed(): void {

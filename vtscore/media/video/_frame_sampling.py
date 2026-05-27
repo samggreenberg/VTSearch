@@ -6,7 +6,7 @@ would call ``np.linspace(0, frame_count - 1, num_frames)`` against the full
 parent video and produce identical embeddings.
 
 Also accepts ``media_bytes`` (round-tripped through a tempfile) when the
-caller cannot supply a local ``media_path`` — matches the audio embedder's
+caller cannot supply a local ``media_path`` - matches the audio embedder's
 two-source convention so re-embedding works from in-memory dataset bytes.
 """
 
@@ -69,7 +69,7 @@ def sample_video_frames(media: dict, num_frames: int) -> list[Any]:
     """Return up to *num_frames* PIL Images sampled from *media*'s video.
 
     When ``media`` carries ``clip_start`` and ``clip_end``, sampling is
-    restricted to that interval — distinct tiles of the same parent video
+    restricted to that interval - distinct tiles of the same parent video
     produce distinct frame sets (and therefore distinct embeddings).
     Otherwise the whole video is sampled.
 
@@ -116,7 +116,7 @@ def sample_video_frames(media: dict, num_frames: int) -> list[Any]:
     # requested indices (corrupted middle frames, VFR videos where
     # CAP_PROP_POS_FRAMES doesn't actually seek, codec quirks). The
     # remaining pad step will repeat the last successful frame, which
-    # biases the embedding toward the readable portion of the file —
+    # biases the embedding toward the readable portion of the file -
     # warn so the failure is visible in logs instead of silent.
     if len(frames) < len(indices):
         _logger.warning(

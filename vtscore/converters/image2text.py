@@ -78,7 +78,7 @@ class Image2TextMediaConverter(MediaConverter):
 
     Uses PaddleOCR (the same backend as the built-in OCR extractor processor),
     but flattens its per-region output into a single newline-joined string so
-    the result composes cleanly with text embedders (E5, BGE, etc.) — letting
+    the result composes cleanly with text embedders (E5, BGE, etc.) - letting
     you treat scanned pages, screenshots, infographics, and comics as text.
 
     User-configurable parameters

@@ -1,6 +1,6 @@
 """Tests for the vtscore.eval.visualize module.
 
-All tests use synthetic data structures — no real model downloads or
+All tests use synthetic data structures; no real model downloads or
 embeddings required.  Charts are written to a temporary directory and
 verified for existence, correct filenames, and basic file validity.
 """

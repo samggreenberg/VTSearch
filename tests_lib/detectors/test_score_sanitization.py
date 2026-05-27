@@ -1,4 +1,4 @@
-"""Tests for ``vtscore.utils.scores`` — NaN/Inf cannot leak into JSON scores.
+"""Tests for ``vtscore.utils.scores``; NaN/Inf cannot leak into JSON scores.
 
 Logical-bug audit M13: ``learned_scores`` in ``/api/votes`` (and the cousin
 endpoints ``/api/learned-sort``, ``/api/find-label``, ``/api/find``,
@@ -65,7 +65,7 @@ class TestSigmoidToFiniteScores:
         assert all(math.isfinite(s) for s in scores)
 
     def test_pos_inf_logits_produce_finite_scores(self):
-        # ``sigmoid(+inf) == 1.0`` already, no sentinel needed — but assert
+        # ``sigmoid(+inf) == 1.0`` already, no sentinel needed; but assert
         # the result is finite so a numerical edge can't sneak through.
         scores = sigmoid_to_finite_scores(torch.tensor([[float("inf")]]))
         assert math.isfinite(scores[0])
@@ -116,7 +116,7 @@ class TestScoreAllMediaNaNSafety:
         model = _NaNProducingModel(input_dim=8).eval()
 
         # ``_score_all_media`` is typed as ``nn.Sequential``, but its body only
-        # calls the model and reads ``.parameters()`` — both ``nn.Module`` APIs.
+        # calls the model and reads ``.parameters()``; both ``nn.Module`` APIs.
         # ``cast`` quiets pyright without changing runtime behaviour.
         all_ids, scores, _best = _score_all_media(cast(nn.Sequential, model), clips)
 
@@ -128,7 +128,7 @@ class TestScoreAllMediaNaNSafety:
 
 
 class TestLabelsetTrainAndScoreNaNSafety:
-    """``labelset_train_and_score`` was the primary M13 leak site —
+    """``labelset_train_and_score`` was the primary M13 leak site;
     sigmoid outputs flowed straight to results with no finite filter.
 
     We pre-populate ``det_ctx.label_embeddings`` and patch out
@@ -155,13 +155,13 @@ class TestLabelsetTrainAndScoreNaNSafety:
             return _NaNProducingModel(input_dim).eval()
 
         # ``labelset_train_and_score`` does a local ``from vtscore.training.mlp
-        # import train_model`` — patch the source module so the local import
+        # import train_model``; patch the source module so the local import
         # resolves to our fake.
         monkeypatch.setattr(mlp_mod, "train_model", fake_train_model)
 
         # Bypass embedding resolution: we've pre-populated the cache below.
         monkeypatch.setattr(labelset_training, "populate_label_embeddings", lambda *a, **kw: 0)
-        # Avoid registry disk writes — irrelevant for this test.
+        # Avoid registry disk writes; irrelevant for this test.
         monkeypatch.setattr(det_registry, "record_detector_embedder", lambda *a, **kw: None)
 
         det_ctx = DetectorContext(detector_id="test-det", media_type="audio")

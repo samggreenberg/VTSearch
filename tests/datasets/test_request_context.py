@@ -98,7 +98,7 @@ class TestRequestScopedDataset:
         from vtscore.state.core import DatasetNotLoadedError
 
         _make_dataset("req_fallback", [300])
-        # Thread-local set to a *real* dataset — the resolver must still
+        # Thread-local set to a *real* dataset; the resolver must still
         # raise because the request explicitly named an unloaded id.
         set_thread_dataset_context(get_context("req_fallback"))
 
@@ -129,7 +129,7 @@ class TestRequestScopedDataset:
 
         The registry-listing endpoint operates on the global context store,
         not on the active ``medias``, so an unloaded ``X-Dataset-Id``
-        header must not break it — clients need this endpoint precisely
+        header must not break it; clients need this endpoint precisely
         to discover which datasets *are* loaded.
         """
         resp = client.get("/api/datasets/registry", headers={"X-Dataset-Id": "nope"})
@@ -257,7 +257,7 @@ class TestRequestScopedBoth:
 
 
 # ---------------------------------------------------------------------------
-# Tests: Request isolation — sequential requests don't interfere
+# Tests: Request isolation; sequential requests don't interfere
 # ---------------------------------------------------------------------------
 
 
@@ -371,7 +371,7 @@ class TestQueryParamContext:
 class TestRequestMissingSentinel:
     """When a Flask request can't identify a dataset/detector (header
     dropped *and* no thread-local pin), the proxy chain returns a frozen
-    sentinel — reads see an empty context but every mutation raises
+    sentinel; reads see an empty context but every mutation raises
     ``RequestMissingContextError``.  This prevents silent-mistarget bugs
     where a vote (or label, pile-add, …) accumulates on the global empty
     context because the client dropped the header (H13).
@@ -386,7 +386,7 @@ class TestRequestMissingSentinel:
         ``get_active_context()`` returns the dataset sentinel."""
         from vtscore.state.core import is_request_missing_dataset_context, set_thread_dataset_context
 
-        # Drop the test fixture's thread-local default — we want the
+        # Drop the test fixture's thread-local default; we want the
         # "production-like" path where the request thread has nothing
         # cached.
         set_thread_dataset_context(None)
@@ -397,7 +397,7 @@ class TestRequestMissingSentinel:
             app.preprocess_request()
             ctx = get_active_context()
             assert is_request_missing_dataset_context(ctx)
-            # Reads work — empty container, not a crash.
+            # Reads work; empty container, not a crash.
             assert len(medias) == 0
 
     def test_no_header_and_no_thread_local_returns_detector_sentinel(self, client):
@@ -438,7 +438,7 @@ class TestRequestMissingSentinel:
 
     def test_detector_sentinel_mutation_raises(self, client):
         """Writing into the sentinel's vote dicts raises
-        ``RequestMissingContextError`` — closes the H14-style empty-detector
+        ``RequestMissingContextError``; closes the H14-style empty-detector
         pollution path where votes accumulated on the global fallback."""
         import pytest
 
@@ -465,7 +465,7 @@ class TestRequestMissingSentinel:
         request didn't identify a dataset/detector and nothing's pinned
         on the thread.
 
-        The route looks up ``get_media(id)`` first — that resolves to the
+        The route looks up ``get_media(id)`` first; that resolves to the
         sentinel's empty ``medias`` and returns ``None``, so the route's
         own ``abort(404, "not found")`` actually fires before any
         mutation happens.  This test pins the safe-fail contract so a
@@ -480,18 +480,18 @@ class TestRequestMissingSentinel:
         set_thread_dataset_context(None)
         set_thread_detector_context(None)
 
-        # Absolute-target vote API (H1) — body is {"target": ...}, not
+        # Absolute-target vote API (H1); body is {"target": ...}, not
         # {"vote": ...}.
         resp = client.post("/api/medias/42/vote", json={"target": "good"})
         # Either the get_media-is-None branch (404) or the
-        # RequestMissingContextError errorhandler (400) — both are
+        # RequestMissingContextError errorhandler (400); both are
         # acceptable safe-fail behaviour.  What matters is that we did
         # not silently apply the vote (which would be 200).
         assert resp.status_code in (400, 404)
 
 
 # ---------------------------------------------------------------------------
-# Tests: H34 — vote-mutating endpoints require explicit context headers
+# Tests: H34; vote-mutating endpoints require explicit context headers
 # ---------------------------------------------------------------------------
 
 
@@ -499,7 +499,7 @@ class TestVoteMutatingEndpointsRequireHeaders:
     """logical-bug-audit H34: every endpoint that writes vote / pile state
     rejects with 400 when the ``X-Dataset-Id`` / ``X-Detector-Id`` header
     (or its ``?dataset_id=`` / ``?detector_id=`` query-param fallback) is
-    absent — even when a thread-local context is pinned. This rules out
+    absent; even when a thread-local context is pinned. This rules out
     silent-mistarget bugs on Flask threaded-server workers where a stale
     thread-local from a previous request could otherwise absorb the
     write.
@@ -507,7 +507,7 @@ class TestVoteMutatingEndpointsRequireHeaders:
     Tests bypass the conftest test-client wrapper (which auto-injects
     the headers from thread-local to mimic Angular's
     ``activeContextInterceptor``) by passing an explicit empty-string
-    value for each header — the wrapper only fills in keys that are
+    value for each header; the wrapper only fills in keys that are
     absent from the request, and an empty string still fails the
     decorator's ``bool(...)`` check.
     """
@@ -585,7 +585,7 @@ class TestVoteMutatingEndpointsRequireHeaders:
 
     def test_thread_local_does_not_bypass_header_requirement(self, client):
         """Even with the test fixture's default thread-local pin, the
-        explicit empty-string headers still cause a 400 — the decorator
+        explicit empty-string headers still cause a 400; the decorator
         runs *before* any context resolution, so a leaked thread-local
         on a Flask worker can never substitute for the absent header.
         This is the precise H34 surface: the route mustn't trust whatever

@@ -1,4 +1,4 @@
-# VTSearch — core dependencies for local development (CPU)
+# VTSearch: core dependencies for local development (CPU)
 #
 # Install:  pip install -r requirements/base.txt
 #

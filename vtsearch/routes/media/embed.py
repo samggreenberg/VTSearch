@@ -4,10 +4,10 @@ Exposes a single endpoint, ``POST /api/embed``, that turns a media file
 or a text snippet into a vector using a caller-chosen embedder.  Two
 input modes share the route:
 
-* ``multipart/form-data`` with ``embedder=<name>`` and ``file=<binary>``
-  — runs :meth:`MediaEmbedder.embed_media` on the upload.
-* ``application/json`` with ``{"embedder": "<name>", "text": "..."}``
-  — runs :meth:`MediaEmbedder.embed_text`.
+* ``multipart/form-data`` with ``embedder=<name>`` and ``file=<binary>``:
+  runs :meth:`MediaEmbedder.embed_media` on the upload.
+* ``application/json`` with ``{"embedder": "<name>", "text": "..."}``:
+  runs :meth:`MediaEmbedder.embed_text`.
 
 The user does not pass a ``media_type``: every embedder declares its
 ``media_type_id``, so picking the embedder already determines the
@@ -19,7 +19,7 @@ This blueprint lives on the ``flask_smorest`` ``Api`` for registration
 consistency, but the dual-mode dispatcher does not lend itself to a
 single marshmallow schema, so the route is left undecorated and is
 intentionally absent from ``/api/openapi.json`` (same pattern as the
-SPA-serving and plugin-field routes — see ``docs/plans/openapi-schema.md``).
+SPA-serving and plugin-field routes; see ``docs/plans/openapi-schema.md``).
 """
 
 from __future__ import annotations

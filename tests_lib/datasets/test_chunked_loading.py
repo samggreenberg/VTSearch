@@ -123,7 +123,7 @@ class TestFolderChunked:
         assert media["media_bytes"] is not None
 
     def test_embedding_is_none_until_framework_stage_runs(self, tmp_path):
-        """The folder loader does not embed — items leave with embedding=None
+        """The folder loader does not embed; items leave with embedding=None
         for the framework ``embed_missing`` stage to fill in.
         """
         _make_wav_file(tmp_path, "test.wav")
@@ -309,7 +309,7 @@ class TestPickleChunked:
         with open(pkl_path, "wb") as f:
             pickle.dump({"medias": medias_data}, f)
 
-        # Full mode — was silently skipped before registry fix
+        # Full mode; was silently skipped before registry fix
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         assert len(chunks) == 1
         media = chunks[0][1]
@@ -367,14 +367,14 @@ class TestPickleChunked:
         with open(pkl_path, "wb") as f:
             pickle.dump({"medias": medias_data, "document_dir": str(doc_dir)}, f)
 
-        # Full mode — loads bytes from the external document_dir
+        # Full mode; loads bytes from the external document_dir
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         assert len(chunks) == 1
         media = chunks[0][1]
         assert media["media_type"] == "document"
         assert media["media_bytes"] == b"%PDF fake content"
 
-        # Thin mode — resolves media_path from document_dir
+        # Thin mode; resolves media_path from document_dir
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=True))
         assert len(chunks) == 1
         media = chunks[0][1]

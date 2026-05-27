@@ -26,7 +26,7 @@ class SettingsSource(SyncSource[dict[str, Any], dict[str, Any]]):
 
     Subclass this, set the class-level attributes, implement
     :meth:`load` and :meth:`save`, and expose a module-level
-    ``SETTINGS_SOURCE = YourSource()`` — the registry picks it up
+    ``SETTINGS_SOURCE = YourSource()`` - the registry picks it up
     automatically.
 
     ``load(field_values)`` returns a dict of settings key-value pairs

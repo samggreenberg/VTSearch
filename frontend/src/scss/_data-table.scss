@@ -4,7 +4,7 @@
 // rules are unencapsulated and per-component CSS stays small.
 //
 // The picker tables in `_picker-shared.scss` use `.demo-table` with a
-// near-identical ruleset — a future cleanup could collapse them, but
+// near-identical ruleset; a future cleanup could collapse them, but
 // `.dash-table` keeps a few dashboard-specific bits (pinned select/actions
 // columns, `selected` row state) that don't belong in the picker.
 
@@ -26,7 +26,7 @@
   }
 
   // Body cells truncate with ellipsis when the column is narrower than
-  // their content. Header cells must NOT clip — they host the resize
+  // their content. Header cells must NOT clip: they host the resize
   // handle which pokes 6px to the left of the cell's edge.
   td {
     padding: var(--space-sm) var(--space-md);
@@ -50,7 +50,7 @@
     text-align: center;
   }
 
-  // The select header isn't sortable or draggable — neutralise the inherited
+  // The select header isn't sortable or draggable; neutralise the inherited
   // grab cursor and dim the master checkbox toward --text-secondary so it
   // reads as a header-row control rather than a clickable label.
   th.select-col {
@@ -107,7 +107,7 @@
       }
     }
 
-    // Visual drop indicator: highlight the target cell — the dragged column
+    // Visual drop indicator: highlight the target cell. The dragged column
     // will land in this slot, displacing the target toward the dragged
     // column's original position.
     &.col-drop-target {
@@ -142,7 +142,7 @@
     // gets covered by cell N+1's background; a handle that overflows from
     // cell N+1 to the left paints over cell N and stays clickable. Do not
     // change to `right: -6px` (covered) or `right: 0` (off-center, sits
-    // entirely on one side of the divider) — both have shipped before and
+    // entirely on one side of the divider); both have shipped before and
     // both are bugs. See tests/test_resize_handle_centering.py.
     .col-resize-handle {
       position: absolute;

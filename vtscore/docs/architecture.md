@@ -3,7 +3,7 @@
 This document explains how `vtscore` is structured, why each piece exists,
 and how the boundary between library and application is drawn. Read
 [concepts.md](concepts.md) first if the words *Media*, *Origin*, *LabelSet*,
-or *Context* are unfamiliar — this doc assumes them.
+or *Context* are unfamiliar - this doc assumes them.
 
 ## Contents
 
@@ -74,7 +74,7 @@ extract-library commits.
 
 The library is multi-context: many `DatasetContext`s and `DetectorContext`s
 can be loaded at once, and any given call needs to know which one to
-operate on. There is **no implicit global default** — that's the point of
+operate on. There is **no implicit global default** - that's the point of
 the resolution chain.
 
 For each of dataset and detector context, the resolution order is (highest
@@ -87,18 +87,18 @@ precedence first):
    request-scoped state.
 2. **Installed resolver hook** via `register_dataset_context_resolver(fn)`
    / `register_detector_context_resolver(fn)`. The Flask shim installs
-   resolvers that read from `flask.g` — these are how route handlers see
+   resolvers that read from `flask.g` - these are how route handlers see
    the dataset / detector implied by the `X-Dataset-Id` / `X-Detector-Id`
    request headers.
 3. **Thread-local** set via `set_thread_dataset_context(ctx)` /
    `set_thread_detector_context(ctx)`. Used by background threads spawned
    from a request handler (so per-thread state doesn't collide).
-4. **`None`** — no context available. Library code is expected to either
+4. **`None`** - no context available. Library code is expected to either
    error explicitly or no-op; it must not silently fall back to "the first
    loaded one".
 
 ```python
-# Library consumer with no Flask, no threads — just call the API directly.
+# Library consumer with no Flask, no threads - just call the API directly.
 from vtscore.state import (
     DatasetContext,
     register_context,
@@ -120,7 +120,7 @@ def _resolve_context() -> None:
 ```
 
 ```python
-# Override scope — beats both resolver and thread-local for the duration
+# Override scope - beats both resolver and thread-local for the duration
 # of the block.
 from vtscore.state import override_detector_context
 
@@ -167,7 +167,7 @@ config = CoreConfig(
 
 If a library consumer calls `CoreConfig.from_settings()` without first
 installing a builder, the method raises a clear `RuntimeError`. That's
-intentional — silent fallback to "some default" would mask integration
+intentional - silent fallback to "some default" would mask integration
 bugs.
 
 ## Plugin discovery
@@ -180,7 +180,7 @@ Every plugin family in `vtscore` follows the same shape:
 4. An optional `importlib.metadata` entry-point group (`vtscore.<family>`)
    that third-party packages can register under
 
-Discovery happens at registry-construction time — by the time
+Discovery happens at registry-construction time - by the time
 `vtscore.datasets.importers.__init__` returns, every importer module in
 the package has been imported, every `IMPORTER` sentinel harvested, and
 every `vtscore.importers` entry point loaded. Built-ins win on name clash;
@@ -197,7 +197,7 @@ ground rules:
 - **All mutable state is RLock-protected.** The single `_state_lock` in
   `vtscore/state/core.py` covers `DatasetContext` and `DetectorContext`
   mutation. Using an RLock (not a plain Lock) lets one public function
-  call another safely — for example `clear_all()` calls `clear_medias()`
+  call another safely - for example `clear_all()` calls `clear_medias()`
   and `clear_votes()` while holding the lock.
 - **Thread-local progress callbacks.** Both `vtscore.media` (per-thread
   via `set_thread_progress_callback`) and `vtscore.concurrency.progress`
@@ -213,7 +213,7 @@ ground rules:
   parallel training calls don't race on the global RNG.
 
 What the library **doesn't** do is take responsibility for serialising
-your job queue. If you want to train two detectors at once, you can — but
+your job queue. If you want to train two detectors at once, you can - but
 you allocate the threads and supply the contexts.
 
 ## The no-persisted-vectors rule
@@ -242,7 +242,7 @@ The reasoning:
   rebuilt on demand).
 
 The single exception is **dataset pickle files**, which are by design a
-`(medias, embeddings)` snapshot — they *are* the dataset, not a cache.
+`(medias, embeddings)` snapshot - they *are* the dataset, not a cache.
 They round-trip through `pickle.dump` / `safe_pickle_load`, with the
 unpickler's allowlist preventing any non-numpy class reference.
 
@@ -332,16 +332,16 @@ never the reverse.
 The app uses three categories of hooks to inject app-side behaviour into
 the library without the library knowing:
 
-1. **Context resolvers** — `register_dataset_context_resolver`,
+1. **Context resolvers** - `register_dataset_context_resolver`,
    `register_detector_context_resolver`. Wired in `vtsearch/shim/`.
-2. **`CoreConfig` builder** — `register_core_config_builder`. Maps
+2. **`CoreConfig` builder** - `register_core_config_builder`. Maps
    `vtsearch.settings` to `CoreConfig`. Wired in `vtsearch/shim/`.
-3. **Plugin families** — `register_plugin_family(name, provider)`. Lets
+3. **Plugin families** - `register_plugin_family(name, provider)`. Lets
    the app contribute `settings_importers`, `settings_exporters`,
    `settings_sources` to the registry that library tools (like
    `python app.py --list-plugins`) enumerate. Wired in `vtsearch/shim/`.
 
 If you're embedding `vtscore` in your own application, you'll typically
-install your own variants of these three hooks. None of them is required —
+install your own variants of these three hooks. None of them is required -
 the library has working defaults for all three (no context, no
 `from_settings()` builder, no app-side plugin families).

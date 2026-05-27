@@ -1,7 +1,7 @@
 # Writing a `LabelImporter`
 
 A label importer pulls `(md5, label)` pairs from somewhere and applies
-them to the active dataset / detector — one-shot, no ongoing sync. Use
+them to the active dataset / detector - one-shot, no ongoing sync. Use
 it when you have a list of pre-existing labels (a CSV from an
 analyst, a database query, a JSON file from a teammate) and want to
 seed the detector's good / bad votes from that. For ongoing
@@ -32,11 +32,11 @@ This guide focuses on the library API.
 
 | You want… | Build a… |
 |-----------|---------|
-| One-shot import of an existing label file / query | **`LabelImporter`** — `run()` returns a list of label dicts; the user triggers it manually |
-| Auto-export on every vote, auto-import on detector load | **`LabelsetSource`** — `load()` / `save()` for bidirectional sync; can also surface detector metadata |
-| Both — manual one-shot import AND ongoing sync from the same backend | Two classes that share helpers, or just a `LabelsetSource` (manual sync is `POST /api/detectors/<name>/labelset-source/sync`) |
+| One-shot import of an existing label file / query | **`LabelImporter`** - `run()` returns a list of label dicts; the user triggers it manually |
+| Auto-export on every vote, auto-import on detector load | **`LabelsetSource`** - `load()` / `save()` for bidirectional sync; can also surface detector metadata |
+| Both - manual one-shot import AND ongoing sync from the same backend | Two classes that share helpers, or just a `LabelsetSource` (manual sync is `POST /api/detectors/<name>/labelset-source/sync`) |
 
-Importers are simpler — no sync-loop coordination, no `_syncing` guard,
+Importers are simpler - no sync-loop coordination, no `_syncing` guard,
 no atexit flush. Reach for the source only when ongoing sync is the
 actual requirement.
 
@@ -76,14 +76,14 @@ Expose `LABEL_IMPORTER = YourImporter()` at module level.
 Labels must be `"good"` or `"bad"`; any other value is silently
 skipped by the route handler. The route looks up media by MD5 hash in
 the active dataset, so labels for media not present in the loaded
-dataset are dropped — that's by design. A label-importer's job is to
+dataset are dropped - that's by design. A label-importer's job is to
 hand the route a list; the route's job is to apply what fits.
 
 The dict may carry extra keys (`filename`, `category`,
 `custom_metadata`, …) and they're preserved through the new
 labelset-import path which builds `LabeledElement`s
 ([`vtscore/datasets/labelset.py`](../../datasets/labelset.py)).
-Keep them — they round-trip cleanly through labelset export.
+Keep them - they round-trip cleanly through labelset export.
 
 ## Entry-point registration
 
@@ -110,7 +110,7 @@ the `/api/label-importers` endpoint, and the inventory.
 
 ## Worked example
 
-A label importer that pulls labels from a Redis stream — each entry is
+A label importer that pulls labels from a Redis stream - each entry is
 a small JSON blob `{"md5": "...", "label": "good", "annotator": "..."}`.
 
 ```python

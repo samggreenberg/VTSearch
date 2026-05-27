@@ -99,7 +99,7 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
     patch regions, the resolved file is patch-forwarded and the box is
     pooled via :func:`box_to_vote_vector` so the user's region-level
     training intent survives a dataset switch.  Logs a warning and falls
-    back to a full-file embedding when the patch path is unavailable —
+    back to a full-file embedding when the patch path is unavailable -
     legacy single-vector embedders, an origin carrying a clipper we'd
     have to replay against an unknown patch grid, or a failed forward
     pass.
@@ -161,7 +161,7 @@ def _pool_box_from_media(
     pool the box on-the-fly via
     :func:`vtscore.media.patch_embed.box_to_vote_vector` and return that
     vector.  Otherwise return ``None`` so the caller can fall back to
-    ``media["embedding"]`` — i.e. the legacy image-level training vector for
+    ``media["embedding"]`` - i.e. the legacy image-level training vector for
     image-level votes, single-vector embedders, and patch datasets that
     haven't been re-loaded under the v1 storage scheme.  Patch-embedder v2.
     """
@@ -199,7 +199,7 @@ def _resolve_uncached_embedding(
     Tries the in-dataset path first: when *elem* resolves to a cid in the
     active *snap*, reuse the stored embedding (region-pooling from
     ``patch_grid`` when the element has a ``region_box`` and a patch grid
-    is available).  Falls back to the cross-dataset path — resolve via the
+    is available).  Falls back to the cross-dataset path - resolve via the
     importer and embed freshly.  Returns ``None`` when neither path
     produces a vector.
     """
@@ -220,7 +220,7 @@ def _resolve_uncached_embedding(
     # region votes survive a dataset switch.  When the patch path isn't
     # available (legacy single-vector embedder, clipper-bearing origin,
     # failed forward pass) it logs a warning and returns the image-level
-    # embedding — the only signal we have left to offer training.
+    # embedding - the only signal we have left to offer training.
     emb = _embed_one(elem, media_type=media_type, embedder_name=embedder_name)
     return np.asarray(emb) if emb is not None else None
 
@@ -242,7 +242,7 @@ def populate_label_embeddings(
     2. Element's origin can be resolved to a file via its importer → embed
        the file with the active dataset's embedder (or the media type's
        default).
-    3. Otherwise the element is skipped — it won't contribute to training
+    3. Otherwise the element is skipped - it won't contribute to training
        this session.
 
     Returns the number of elements that have a cached vector after this
@@ -264,7 +264,7 @@ def populate_label_embeddings(
         # elements (``region_box is not None``) always fall through so the
         # patch grid is re-pooled with the latest box.  Image-level
         # elements use the cache only when the cached vector was *also*
-        # built image-level — otherwise we'd return a stale region-pooled
+        # built image-level - otherwise we'd return a stale region-pooled
         # vector after a region→none transition (e.g. good→bad on a
         # previously region-voted media; or un-vote / re-vote without a
         # region).  See ``logical-bug-audit.md`` finding M4.
@@ -387,7 +387,7 @@ def labelset_train_and_score(
     hidden_dim = _auto_hidden_dim(len(X_list))
 
     # Skip cross-cal trainings below the ``calculate_safe_threshold`` ramp
-    # floor — they're expensive and the result is discarded by the blend
+    # floor - they're expensive and the result is discarded by the blend
     # (label_weight=0 → pure GMM) or unreliable with so few labels.
     if len(X_list) < 6:
         threshold = 0.5

@@ -81,32 +81,9 @@
   cursor: pointer;
 }
 
-.solo-embedder-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.solo-embedder-row {
-  display: grid;
-  grid-template-columns: 110px 1fr;
-  align-items: center;
-  gap: var(--space-md);
-
-  .form-hint {
-    grid-column: 2;
-    margin: 0;
-  }
-}
-
-.solo-embedder-label {
-  font-size: var(--font-md);
-  color: var(--text-secondary);
-}
-
 // Scroll Style's two-side layout sits inside the shared `.view-tab-content`
 // panel (base styling in `_components.scss`). Encapsulation scopes this
-// grid override to ScrollStyle's tab content only — other consumers
+// grid override to ScrollStyle's tab content only; other consumers
 // (e.g. Data Imports) keep their own inner layout.
 .view-tab-content {
   display: grid;
@@ -119,7 +96,7 @@
   flex-direction: column;
   gap: var(--space-md);
 
-  // `<h4 class="subhead">` divider — global `.subhead` handles font
+  // `<h4 class="subhead">` divider: global `.subhead` handles font
   // identity; the border-bottom + padding-bottom are this site's
   // contextual divider styling.
   h4 {

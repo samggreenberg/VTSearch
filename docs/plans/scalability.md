@@ -1,6 +1,6 @@
 # VTSearch Scalability Brainstorm
 
-**Status:** Brainstorm / open — no fixes shipped yet.
+**Status:** Brainstorm / open; no fixes shipped yet.
 
 **Scope:** What breaks, slows, or explodes in memory as datasets grow to
 100 k / 1 M / 10 M items, and as LabelSets grow to 1 k / 10 k / 100 k labels.
@@ -16,7 +16,7 @@ Line references are approximate; they will drift as the codebase evolves.
 - Items are grouped by the *resource* they exhaust: **RAM**, **CPU/time**,
   or **network/JSON**.
 - Each item has a stable ID (`S#`) for reference from PRs.
-- A sub-section at the bottom collects the **recurring root causes** — fixing
+- A sub-section at the bottom collects the **recurring root causes**: fixing
   a pattern fixes many items at once.
 - "At N" estimates are back-of-envelope with SigLIP/E5 embedding dim ~384
   (float32 = 4 B), sorted-list cost at ~1 µs/item, and JSON encoding at
@@ -26,7 +26,7 @@ Line references are approximate; they will drift as the codebase evolves.
 
 ## RAM explosions
 
-### S1 — Embedding matrix: one giant contiguous array per loaded dataset
+### S1: Embedding matrix: one giant contiguous array per loaded dataset
 
 **File:** `vtscore/embedding/matrix.py`
 
@@ -56,7 +56,7 @@ Scoring and sorting never mutate the matrix, so read-only mmap is safe.
 
 ---
 
-### S2 — Diversity tree lives entirely in RAM
+### S2: Diversity tree lives entirely in RAM
 
 **File:** `vtscore/state/diversity_tree.py`, `vtscore/state/diversity.py`
 
@@ -86,7 +86,7 @@ cluster" query but can be stored mmap'd.
 
 ---
 
-### S3 — Sort-result payload: one `{id, score, bestRegion}` per item
+### S3: Sort-result payload: one `{id, score, bestRegion}` per item
 
 **File:** `vtsearch/routes/sorting.py`, `frontend/src/app/services/sort-state.service.ts`
 
@@ -102,7 +102,7 @@ entire dataset in one JSON response.
 
 The frontend keeps a full `SortedItem[]` array in `SortStateService`.
 `media-list.component.ts:rebuildOrderedItems` iterates this array on every
-sort result, building `cachedOrderedItems` — an O(N) JS loop.  At 1 M items
+sort result, building `cachedOrderedItems`; an O(N) JS loop.  At 1 M items
 this will freeze the browser tab.
 
 **Fix direction:** The sort API should return only the IDs the frontend
@@ -114,7 +114,7 @@ view of the sorted order rather than a full in-memory array.
 
 ---
 
-### S4 — `medias` dict: one Python dict entry per item
+### S4: `medias` dict: one Python dict entry per item
 
 **File:** `vtscore/state/core.py` (`DatasetContext.medias`)
 
@@ -136,7 +136,7 @@ row-index pointer.  This alone reduces per-item dict size by ~60–70% at
 
 ---
 
-### S5 — Threshold cache key contains full training vectors as bytes
+### S5: Threshold cache key contains full training vectors as bytes
 
 **File:** `vtscore/training/thresholds.py:88–89` (`_calibration_cache_key`)
 
@@ -163,7 +163,7 @@ the same key would be a cosmic coincidence).
 
 ## CPU / time explosions
 
-### S6 — Embedding matrix cache invalidation: O(N log N) on every scoring call
+### S6: Embedding matrix cache invalidation: O(N log N) on every scoring call
 
 **File:** `vtscore/embedding/matrix.py:59–62`
 
@@ -193,7 +193,7 @@ remove).  The matrix caches the epoch at build time; validation is O(1).  The
 
 ---
 
-### S7 — Learned-sort signature: O(N log N) for each sort invocation
+### S7: Learned-sort signature: O(N log N) for each sort invocation
 
 **File:** `vtsearch/routes/sorting.py:345,350`
 
@@ -216,7 +216,7 @@ vote hash) in the signature instead of sorting all keys.
 
 ---
 
-### S8 — Diversity tree rebuild: full k-means across all items
+### S8: Diversity tree rebuild: full k-means across all items
 
 **File:** `vtscore/state/diversity.py:82`, `vtscore/state/diversity_tree.py`
 
@@ -235,7 +235,7 @@ requested.
 
 ---
 
-### S9 — GMM threshold: sklearn on N scores
+### S9: GMM threshold: sklearn on N scores
 
 **File:** `vtscore/training/thresholds.py:24–68`
 
@@ -250,7 +250,7 @@ Add a `max_gmm_samples: int = 50_000` parameter (default capped).
 
 ---
 
-### S10 — MLP forward pass: O(N) inference on every retrain
+### S10: MLP forward pass: O(N) inference on every retrain
 
 **File:** `vtscore/detectors/training.py` (`_score_all_media`)
 
@@ -263,12 +263,12 @@ takes ~1 s per retrain.
 
 **Fix direction:** For very large datasets, **score only the items near the
 threshold** (confidence-weighted sampling) and return approximate results.
-Alternatively, debounce retraining so it does not fire on every single vote —
+Alternatively, debounce retraining so it does not fire on every single vote;
 accumulate a few votes and retrain once.
 
 ---
 
-### S11 — Cross-dataset label population: serial I/O, O(N_labels)
+### S11: Cross-dataset label population: serial I/O, O(N_labels)
 
 **File:** `vtscore/detectors/labelset_training.py` (~line 260)
 
@@ -290,7 +290,7 @@ into a single pass.
 
 ---
 
-### S12 — Label sync: full JSON rewrite on every vote
+### S12: Label sync: full JSON rewrite on every vote
 
 **File:** `vtscore/detectors/label_sync.py`, `vtscore/labels/sync.py`
 
@@ -299,18 +299,18 @@ entire `LabelSet` to JSON and writes to disk.  At 100 k labels, the
 serialised labelset JSON is ~50–100 MB.  Writing this on every single vote
 makes the vote handler stall for seconds.
 
-**Fix direction:** Debounce the sync write — accumulate votes for e.g. 2 s
+**Fix direction:** Debounce the sync write; accumulate votes for e.g. 2 s
 then flush once.  For disk-local sources, an **append-only journal** (one
 `{id, label}` line per vote) would make the per-vote write O(1) regardless
 of labelset size; a compaction step on load reconstructs the full labelset.
 
 ---
 
-### S13 — Label export: full JSON in memory
+### S13: Label export: full JSON in memory
 
 **File:** `vtsearch/routes/labels/vote.py:172`, `vtscore/datasets/labelset.py:259`
 
-`LabelSet.to_dict()` builds `[e.to_dict() for e in self.elements]` — a fully
+`LabelSet.to_dict()` builds `[e.to_dict() for e in self.elements]`; a fully
 materialised Python list of dicts, then Flask JSON-encodes it into a string
 and returns it.  At 100 k labels, the in-memory representation is ~50 MB
 before JSON encoding.
@@ -321,7 +321,7 @@ the full payload is never in memory at once.
 
 ---
 
-### S14 — `snapshot_medias()` full-dict copies
+### S14: `snapshot_medias()` full-dict copies
 
 **File:** `vtscore/state/core.py`
 
@@ -338,12 +338,12 @@ are loaded.  Most routes today rebuild these indexes on every request.
 
 ---
 
-### S15 — Dataset pickle loading: everything into RAM at once
+### S15: Dataset pickle loading: everything into RAM at once
 
 **File:** `vtscore/datasets/loader_pickle.py`
 
 Pickle files are loaded with `torch.load` / `pickle.load` in one shot.  At
-10 M items with 384-dim float32 embeddings, the pickle file is ~15 GB —
+10 M items with 384-dim float32 embeddings, the pickle file is ~15 GB;
 loading it in one shot is not feasible on typical hardware.
 
 **Fix direction:** Pickle datasets > some threshold (e.g. 100 k items) should
@@ -354,7 +354,7 @@ mmap'd `.npy` (see S1) instead of stored inline in the pickle.
 
 ## Frontend / rendering
 
-### S16 — Grid mode: no virtual scrolling, renders all DOM nodes
+### S16: Grid mode: no virtual scrolling, renders all DOM nodes
 
 **File:** `frontend/src/app/components/left-panel/media-list/media-list.component.ts:98–101`
 
@@ -371,7 +371,7 @@ item height) and swap item data as the user scrolls.
 
 ---
 
-### S17 — `rebuildOrderedItems`: O(N) JS on every sort result
+### S17: `rebuildOrderedItems`: O(N) JS on every sort result
 
 **File:** `frontend/src/app/components/left-panel/media-list/media-list.component.ts:127–164`
 
@@ -383,13 +383,13 @@ the array allocation and the `for … of sortOrder` loop will stall the main
 thread.
 
 **Fix direction:** Lazy-evaluate `cachedOrderedItems` as a virtual view over
-`sortOrder` — only materialise the window of items the viewport requests.
+`sortOrder`; only materialise the window of items the viewport requests.
 Combined with S3 (sparse sort results from the API), the array never needs
 to be large.
 
 ---
 
-### S18 — `prefetchVisibleMetadata` fetches all IDs when virtual scroll is off
+### S18: `prefetchVisibleMetadata` fetches all IDs when virtual scroll is off
 
 **File:** `frontend/src/app/components/left-panel/media-list/media-list.component.ts:267–274`
 
@@ -403,7 +403,7 @@ if (!this.useVirtualScroll || !this.virtualViewport) {
 
 When virtual scroll is disabled (list mode < 500 items, or grid mode at any
 size), this sends **all IDs** to `ensureLoaded` in one shot.  At 10 k items
-that is a single `POST /api/medias/batch` with 10 k IDs — the server must
+that is a single `POST /api/medias/batch` with 10 k IDs; the server must
 then pull 10 k rows of metadata, and the response will be large.
 
 `ensureLoaded` does de-duplicate already-cached IDs so this is only expensive
@@ -415,7 +415,7 @@ the component should trust it and not force an eager full-dataset prefetch.
 
 ---
 
-### S19 — `SortStateService` holds full in-memory `SortedItem[]`
+### S19: `SortStateService` holds full in-memory `SortedItem[]`
 
 **File:** `frontend/src/app/services/sort-state.service.ts:20,50–51`
 
@@ -432,7 +432,7 @@ should expose a paginated query interface: "give me sort positions X–Y".
 
 ## CLI-specific issues
 
-### S20 — CLI autodetect scores every item, serial per detector
+### S20: CLI autodetect scores every item, serial per detector
 
 **File:** `vtscore/cli.py` (autodetect), `vtsearch/routes/detectors/scoring.py`
 
@@ -448,7 +448,7 @@ labels from the same embedder.
 
 ---
 
-### S21 — CLI progress bars: O(N) string formatting per update
+### S21: CLI progress bars: O(N) string formatting per update
 
 Not a bottleneck today but worth noting: some progress-reporting paths call
 `str.format` with the full medias dict size on every update tick.  At 1 M
@@ -476,25 +476,25 @@ every 100 ms by wall clock).
 
 ## Suggested fix order (max-leverage first)
 
-1. **S6 + S7** (epoch counter) — trivial code change, eliminates O(N log N)
+1. **S6 + S7** (epoch counter); trivial code change, eliminates O(N log N)
    hot path from every sort and retrain.  Low risk, high gain.
-2. **S1** (mmap embedding matrix) — unblocks 1 M+ datasets without OOM.
+2. **S1** (mmap embedding matrix); unblocks 1 M+ datasets without OOM.
    Moderate effort.
-3. **S5** (hash-based threshold cache key) — trivial, eliminates fat cache
+3. **S5** (hash-based threshold cache key); trivial, eliminates fat cache
    key before it becomes a memory landmine.
-4. **S9** (subsample GMM) — two-line fix, eliminates a growing cost on every
+4. **S9** (subsample GMM); two-line fix, eliminates a growing cost on every
    retrain.
-5. **S2 + S8** (cap/defer diversity tree) — makes 100 k+ datasets load
+5. **S2 + S8** (cap/defer diversity tree); makes 100 k+ datasets load
    usably fast; tree can remain available but opt-in.
-6. **S3 + S17 + S19** (sparse sort results, lazy ordered items) — must be
+6. **S3 + S17 + S19** (sparse sort results, lazy ordered items); must be
    done together; unblocks 1 M+ in the frontend.
-7. **S12** (debounce label sync) — makes voting with large labelsets not
+7. **S12** (debounce label sync); makes voting with large labelsets not
    stall the UI.
-8. **S16** (virtual grid) — significant frontend work but required for grid
+8. **S16** (virtual grid); significant frontend work but required for grid
    mode at any large scale.
-9. **S11** (parallel label resolution) — required for cross-dataset detectors
+9. **S11** (parallel label resolution); required for cross-dataset detectors
    with 10 k+ labels.
-10. **S15** (streaming pickle load) — required for 10 M+ datasets.
+10. **S15** (streaming pickle load); required for 10 M+ datasets.
 
 ---
 

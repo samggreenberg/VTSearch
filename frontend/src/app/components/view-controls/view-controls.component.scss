@@ -1,11 +1,13 @@
 :host {
   display: inline-flex;
+  min-width: 0;
 }
 
 .view-controls {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: var(--space-md);
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
 }
 
 .vc-group {

@@ -1,6 +1,6 @@
 """Tests for the new image embedders: CLIP, SigLIP 2, DINOv3, Perception Encoder.
 
-Mirrors the patterns in ``test_new_embedders.py`` — verifies class properties,
+Mirrors the patterns in ``test_new_embedders.py``; verifies class properties,
 registration, ``to_dict`` shape, and ``supports_text`` reporting without
 downloading any model weights. The Dockerfile (``docker/Dockerfile.image-embedders``)
 exercises the real weight downloads.
@@ -202,7 +202,7 @@ class TestImageDinov2SingleEmbedder:
         assert emb.name == "dinov2_single"
 
     def test_uses_correct_model_id(self):
-        """DINOv2's HF repo is ungated — any builder can download it without
+        """DINOv2's HF repo is ungated; any builder can download it without
         an account, which is the whole reason it's bundled in the Docker
         image alongside the gated DINOv3."""
         from vtscore.config import DINOV2_MODEL_ID
@@ -273,7 +273,7 @@ class TestImageDinov3SingleEmbedder:
         assert ImageDinov3SingleEmbedder().is_default is False
 
     def test_supports_text_false(self):
-        """DINOv3 has no text encoder — supports_text must be False."""
+        """DINOv3 has no text encoder; supports_text must be False."""
         from vtscore.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
 
         assert ImageDinov3SingleEmbedder().supports_text is False
@@ -393,7 +393,7 @@ class TestImageEupeSingleEmbedder:
         assert ImageEupeSingleEmbedder().supports_patch_regions is False
 
     def test_license_notice_set(self):
-        """EUPE outputs are bound by FAIR Noncommercial — surface that on
+        """EUPE outputs are bound by FAIR Noncommercial; surface that on
         both variants."""
         from vtscore.media.image.embedder_eupe_single import ImageEupeSingleEmbedder
 
@@ -494,7 +494,7 @@ class TestApiEmbeddersResponseShape:
         assert resp.status_code == 200
         body = resp.get_json()
         entries = {e["name"]: e for e in body["embedders"]}
-        # All ten image embedders must be present — three CLIP-family
+        # All ten image embedders must be present; three CLIP-family
         # bimodal models, single/patch pairs for DINOv2/DINOv3/EUPE, and
         # the FaceNet face-identity embedder.
         assert set(entries) == {
@@ -539,7 +539,7 @@ class TestApiEmbeddersResponseShape:
             "eupe_single",
         ):
             assert entries[name]["supports_patch_regions"] is False
-        # Only EUPE carries a licence warning today (FAIR Noncommercial) —
+        # Only EUPE carries a licence warning today (FAIR Noncommercial);
         # on both variants.
         for name in (
             "siglip",
@@ -566,7 +566,7 @@ class TestSortRouteRejectsTextWhenUnsupported:
         from vtsearch.state import medias
 
         # Seed a fake DINOv3-embedded media so the sort route picks up the
-        # active embedder name. We don't need real vectors — the route
+        # active embedder name. We don't need real vectors; the route
         # exits at the embed_text_query None-check before touching them.
         saved = dict(medias)
         medias.clear()
@@ -609,7 +609,7 @@ class TestImageFaceEmbedder:
         assert ImageFaceEmbedder().is_default is False
 
     def test_does_not_support_text(self):
-        """FaceNet has no text branch — face-identity space has no
+        """FaceNet has no text branch; face-identity space has no
         analogue of 'a photo of a cat', so text queries must be hidden
         in the UI for face-embedder datasets."""
         from vtscore.media.image.embedder_face import ImageFaceEmbedder
@@ -642,7 +642,7 @@ class TestImageFaceEmbedder:
         assert emb.media_type_id == "image"
 
     def test_embed_text_returns_none(self):
-        """FaceNet's text branch should always yield ``None`` — there is no
+        """FaceNet's text branch should always yield ``None``; there is no
         text encoder in face-identity space."""
         from vtscore.media.image.embedder_face import ImageFaceEmbedder
 

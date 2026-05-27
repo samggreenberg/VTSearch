@@ -33,15 +33,15 @@ import { ManagedColumns } from '../../../../utils/managed-columns';
  *  parent projects those into named content slots so the visual order
  *  on each flow stays unchanged:
  *
- *  - ``[demoBefore]`` — sits between the demo media-type tabs and the
+ *  - ``[demoBefore]`` - sits between the demo media-type tabs and the
  *    demo table (Add Dataset uses it to project a media-type dropdown
  *    that replaces the inner tabs; New Detector leaves it empty).
- *  - ``[demoAfter]`` — sits below the demo table (Add Dataset uses it
+ *  - ``[demoAfter]`` - sits below the demo table (Add Dataset uses it
  *    for the Dataset Name + Advanced block; New Detector leaves it
  *    empty).
- *  - ``[sfBefore]`` / ``[sfAfter]`` — sit above/below the typed path
+ *  - ``[sfBefore]`` / ``[sfAfter]`` - sit above/below the typed path
  *    input on the server-folder flow.
- *  - ``[lfBefore]`` / ``[lfAfter]`` — sit above/below the dropzone on
+ *  - ``[lfBefore]`` / ``[lfAfter]`` - sit above/below the dropzone on
  *    the local-folder / local-files flows.
  */
 @Component({
@@ -86,7 +86,7 @@ export class SourcePickerComponent {
   @Input() emptyCategoryText = 'No importers in this category.';
 
   /** When ``false`` (default), the sub-tab row is suppressed when the
-   *  active category has exactly one importer — the parent is expected
+   *  active category has exactly one importer - the parent is expected
    *  to auto-select the lone importer and the redundant sub-tab adds
    *  no information.  Callers that always want the sub-tab visible
    *  (e.g. the New Detector media picker, where every category is a
@@ -114,7 +114,7 @@ export class SourcePickerComponent {
   /** Optional predicate run on every demo row.  When provided and it
    *  returns ``true``, the row gets a ``disabled`` class for visual
    *  styling.  Source picker still emits ``demoSelected`` for clicks
-   *  — the parent is responsible for treating disabled rows as
+   *  - the parent is responsible for treating disabled rows as
    *  no-ops. */
   @Input() demoRowDisabledFn: ((demo: DemoDataset) => boolean) | null = null;
   /** Optional formatter for the ``title`` attribute on each demo row. */

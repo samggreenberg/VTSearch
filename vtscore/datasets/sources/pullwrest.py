@@ -1,4 +1,4 @@
-"""PullWrest media source — resolve media files via the PullWrest service.
+"""PullWrest media source - resolve media files via the PullWrest service.
 
 This source handles media items whose origin is ``"recaller"``.  When
 VTSearch needs to resolve a file (e.g. for cross-dataset label matching
@@ -40,7 +40,7 @@ __all__ = ["PullWrestSource"]
 def _pw_fetch_media(media_url: str) -> bytes:
     """Call PullWrest to download the raw media bytes for *media_url*.
 
-    This is the same function as in the ReCaller importer — consider
+    This is the same function as in the ReCaller importer - consider
     extracting a shared ``pullwrest_client`` module that both use.
     """
     raise NotImplementedError("TODO: implement PullWrest API client")

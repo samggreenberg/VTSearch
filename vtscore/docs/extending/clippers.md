@@ -5,7 +5,7 @@ A media clipper splits a single media into one or more media of the
 into fifteen 2-second segments; the text-sentence clipper splits a
 paragraph into per-sentence clips; the scene clipper splits a video at
 detected scene changes. Default clippers return the media unchanged
-(one-element list) — they're the no-op that lets the framework
+(one-element list) - they're the no-op that lets the framework
 uniformly route everything through a clipper. Subclass
 [`MediaClipper`](../../media/clipper.py)
 ([`vtscore/media/clipper.py:9`](../../media/clipper.py)), declare
@@ -46,7 +46,7 @@ Optional overrides:
 | `creation_questions` (property) | `parameters` | Questions shown when the user first picks this clipper (defaults to `parameters`) |
 | `with_params(params)` | returns `self` | Return a new clipper instance with overridden parameters |
 | `resolve_for_durations(durations)` | returns `self` | Per-dataset hook called once at load time |
-| `resolve_for_media(media)` | returns `self` | Per-media hook called per item — used by auto-selecting clippers (e.g. tile when long, pass-through when short) |
+| `resolve_for_media(media)` | returns `self` | Per-media hook called per item - used by auto-selecting clippers (e.g. tile when long, pass-through when short) |
 
 Each dict returned by `clip()` must preserve the original's structure
 (`id`, `type`, `category`, `origin`, `origin_name`, …) and update only
@@ -71,12 +71,12 @@ splitting." for the description. Existing default clippers:
 | `DocumentDefaultClipper` (`document_default`) | document |
 
 **Tiling** clippers actually split. The convention is
-`<type>_tiling[_<param>]` — e.g. `sound_tiling_2.0s` for 2-second
+`<type>_tiling[_<param>]` - e.g. `sound_tiling_2.0s` for 2-second
 audio tiles, `video_tiling_2.0s` for 2-second video tiles. They are
 usually parameterised (window size, overlap, stride) so the same class
 ships multiple registered instances with different param values.
 
-Scene-based or content-aware clippers get their own names —
+Scene-based or content-aware clippers get their own names -
 `VideoSceneClipper` is `video_scene`. There's no "tiling" suffix when
 the split isn't grid-based.
 
@@ -128,7 +128,7 @@ def parameters(self) -> list[dict[str, Any]]:
 ```
 
 When the user changes a value in the clipper chooser, the framework
-calls `with_params({"duration": 3.0})` — return a **new instance**
+calls `with_params({"duration": 3.0})` - return a **new instance**
 with the updated value; never mutate `self`. The default implementation
 returns `self` unchanged, which is correct for parameter-less
 clippers.

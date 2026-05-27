@@ -1,7 +1,7 @@
 """Eval dataset configurations built from demo datasets.
 
 Each eval dataset wraps a demo dataset and adds per-category text
-descriptions — the queries a user would type in the Text Sort box.
+descriptions - the queries a user would type in the Text Sort box.
 
 The ``EVAL_DATASETS`` dict is keyed by demo dataset ID.  Each value is
 a dict with:
@@ -27,7 +27,7 @@ class EvalQuery:
 
 
 # ------------------------------------------------------------------
-# Audio eval queries  (ESC-50 — all 50 categories)
+# Audio eval queries  (ESC-50 - all 50 categories)
 # All S/M/L share the same categories; queries are identical.
 # ------------------------------------------------------------------
 
@@ -90,7 +90,7 @@ _SOUNDS_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
-# Image eval queries  (Caltech-101 — 25 categories for S/M)
+# Image eval queries  (Caltech-101 - 25 categories for S/M)
 # ------------------------------------------------------------------
 
 _IMAGES_QUERIES = [
@@ -122,7 +122,7 @@ _IMAGES_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
-# Image eval queries  (Caltech-256 — 25 categories for L)
+# Image eval queries  (Caltech-256 - 25 categories for L)
 # ------------------------------------------------------------------
 
 _IMAGES_L_QUERIES = [
@@ -154,7 +154,7 @@ _IMAGES_L_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
-# Text / paragraph eval queries  (20 Newsgroups — 15 categories)
+# Text / paragraph eval queries  (20 Newsgroups - 15 categories)
 # All S/M/L share the same categories; queries are identical.
 # ------------------------------------------------------------------
 
@@ -177,7 +177,7 @@ _PARAGRAPHS_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
-# Video eval queries  (UCF-101 — 10 shared categories for S/M/L)
+# Video eval queries  (UCF-101 - 10 shared categories for S/M/L)
 # ------------------------------------------------------------------
 
 _VIDEO_QUERIES = [
@@ -194,7 +194,7 @@ _VIDEO_QUERIES = [
 ]
 
 # ------------------------------------------------------------------
-# Registry — keyed by demo dataset ID
+# Registry - keyed by demo dataset ID
 # ------------------------------------------------------------------
 
 EVAL_DATASETS: dict[str, dict] = {

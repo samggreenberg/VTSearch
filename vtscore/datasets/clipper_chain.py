@@ -76,7 +76,7 @@ def normalise_chain(steps: list[ChainStep] | None) -> list[ChainStep]:
         params = raw.get("params") or {}
         if not isinstance(params, dict):
             raise ValueError(f"chain step {i}: 'params' must be a dict, got {type(params).__name__}")
-        # Drop pure pass-through clipper steps — same convention used
+        # Drop pure pass-through clipper steps; same convention used
         # elsewhere in the codebase (`*_default` is a no-op).
         if kind == "clipper" and isinstance(name, str) and name.endswith("_default"):
             continue
@@ -242,7 +242,7 @@ def _stamp_origin(  # noqa: C901
     # readers (input_spec, the legacy _apply_clip_and_embed branches, the
     # registry's `clipper` column) keep working. If the chain has no
     # clipper steps (converter-only chain), we leave the legacy keys
-    # unstamped — the chain field is the only record.
+    # unstamped; the chain field is the only record.
     last_clipper: ChainStep | None = None
     for entry in reversed(chain_trail):
         if entry["kind"] == "clipper":
@@ -284,7 +284,7 @@ def apply_chain_to_clips(  # noqa: C901
     pre-chain readers keep working.
 
     Like the legacy single-clipper path, this **does not** recompute MD5s,
-    thumbnails, or embeddings — the caller (``_apply_clipper`` in
+    thumbnails, or embeddings; the caller (``_apply_clipper`` in
     ``load_pipeline.py``) handles those in a single batched pass over the
     final clip list.
     """
@@ -341,7 +341,7 @@ def apply_chain_to_clips(  # noqa: C901
         from vtscore.converters import get_converter
 
         conv = get_converter(last_step["name"])
-        # `conv` is guaranteed non-None — the chain ran successfully.
+        # `conv` is guaranteed non-None; the chain ran successfully.
         assert conv is not None
         final_type = conv.target_type
 
@@ -396,7 +396,7 @@ def _load_source_as_media(file_path: Path, source_media_type: str) -> dict[str, 
 def _output_matches_entry(out: dict[str, Any], entry: ChainStep) -> bool:
     """Return True iff every recorded disambiguator on *entry* matches *out*.
 
-    Only fields actually recorded in *entry* are checked — missing fields
+    Only fields actually recorded in *entry* are checked; missing fields
     don't constrain the match. Returns True when no disambiguators are
     recorded (the caller must decide what to do with an empty constraint
     set, since that case can't distinguish siblings).
@@ -434,7 +434,7 @@ def _select_chain_output(  # noqa: C901
     ``content_hash``) over positional matching, because ``out_index`` is only
     meaningful when the clipper/converter produces the same outputs in the
     same order at replay time. Returns ``None`` rather than silently
-    selecting an arbitrary output when nothing matches — the caller treats
+    selecting an arbitrary output when nothing matches; the caller treats
     that as an embed failure, which is strictly better than training on
     the wrong sub-clip's embedding.
     """
@@ -450,7 +450,7 @@ def _select_chain_output(  # noqa: C901
     drift = isinstance(n_out_recorded, int) and n_out_recorded != n_out_now
     if drift:
         log.warning(
-            "clipper_chain: replay output count drift for %r (recorded=%d, now=%d) — falling back to content matching",
+            "clipper_chain: replay output count drift for %r (recorded=%d, now=%d); falling back to content matching",
             name,
             n_out_recorded,
             n_out_now,
@@ -478,18 +478,18 @@ def _select_chain_output(  # noqa: C901
             )
             return None
         log.warning(
-            "clipper_chain: %d replay outputs match recorded disambiguators for %r — ambiguous, refusing to guess",
+            "clipper_chain: %d replay outputs match recorded disambiguators for %r; ambiguous, refusing to guess",
             len(candidates),
             name,
         )
         return None
 
-    # No disambiguators recorded — the only handle we have is out_index.
+    # No disambiguators recorded; the only handle we have is out_index.
     if isinstance(idx, int) and 0 <= idx < n_out_now and not drift:
         return outputs[idx]
 
     log.warning(
-        "clipper_chain: cannot select replay output for %r — no disambiguators recorded and "
+        "clipper_chain: cannot select replay output for %r; no disambiguators recorded and "
         "positional index unusable (idx=%r, n_out=%r→%d)",
         name,
         idx,
@@ -524,7 +524,7 @@ def replay_chain_on_file(  # noqa: C901
     ``content_bytes`` is ``None`` when the final chain step is a *video*
     clipper, because video clippers are metadata-only (they record
     ``clip_start`` / ``clip_end`` but do not slice the underlying bytes,
-    so the clip's bytes equal the parent's bytes — caller should switch
+    so the clip's bytes equal the parent's bytes; caller should switch
     to a boundary-tag MD5 scheme for those clips).
 
     The chain must start with a step whose input type matches the source
@@ -583,7 +583,7 @@ def replay_chain_on_file(  # noqa: C901
         embedding = embed_file(Path(tmp), current_type, embedder_name)
         if embedding is None:
             return None
-        # Video clippers are metadata-only — the clip's bytes equal the
+        # Video clippers are metadata-only; the clip's bytes equal the
         # parent's, so a caller hashing ``content`` would collide across
         # distinct clips of the same parent.  Signal metadata-only by
         # returning ``None`` for content_bytes; the caller falls back to
@@ -608,7 +608,7 @@ def parse_trail(raw: Any) -> list[ChainStep] | None:
 
     Accepts a JSON string (the on-disk encoding) or a list (when callers
     construct one in memory). Returns ``None`` on malformed input rather
-    than raising — the resolver falls back to the legacy single-clipper
+    than raising; the resolver falls back to the legacy single-clipper
     path on miss.
     """
     if raw is None:

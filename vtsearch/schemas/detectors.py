@@ -2,54 +2,54 @@
 
 CRUD endpoints (``vtsearch/routes/detectors/crud.py``):
 
-* ``GET    /api/detectors``                 — :class:`DetectorsListResponseSchema`
-* ``POST   /api/detectors``                 — :class:`DetectorCreateRequestSchema` →
+* ``GET    /api/detectors``                 -> :class:`DetectorsListResponseSchema`
+* ``POST   /api/detectors``                 -> :class:`DetectorCreateRequestSchema` ->
                                               :class:`DetectorCreateResponseSchema`
-* ``GET    /api/detectors/<name>``          — :class:`DetectorDetailSchema`
-* ``DELETE /api/detectors/<name>``          — :class:`DetectorDeleteResponseSchema`
-* ``PUT    /api/detectors/<name>/rename``   — :class:`DetectorRenameRequestSchema` →
+* ``GET    /api/detectors/<name>``          -> :class:`DetectorDetailSchema`
+* ``DELETE /api/detectors/<name>``          -> :class:`DetectorDeleteResponseSchema`
+* ``PUT    /api/detectors/<name>/rename``   -> :class:`DetectorRenameRequestSchema` ->
                                               :class:`DetectorRenameResponseSchema`
-* ``PUT    /api/detectors/<name>/examples`` — :class:`DetectorExamplesRequestSchema` →
+* ``PUT    /api/detectors/<name>/examples`` -> :class:`DetectorExamplesRequestSchema` ->
                                               :class:`DetectorExamplesResponseSchema`
-* ``POST   /api/detectors/combine``         — :class:`DetectorCombineRequestSchema` →
+* ``POST   /api/detectors/combine``         -> :class:`DetectorCombineRequestSchema` ->
                                               :class:`DetectorCombineResponseSchema`
 
 Registry endpoints (``vtsearch/routes/detectors/registry.py``):
 
-* ``GET    /api/detectors/registry``                   — :class:`DetectorRegistryListResponseSchema`
-* ``POST   /api/detectors/registry``                   — :class:`DetectorRegistryCreateRequestSchema` →
+* ``GET    /api/detectors/registry``                   -> :class:`DetectorRegistryListResponseSchema`
+* ``POST   /api/detectors/registry``                   -> :class:`DetectorRegistryCreateRequestSchema` ->
                                                          :class:`DetectorRegistryCreateResponseSchema`
-* ``POST   /api/detectors/registry/load``              — :class:`DetectorRegistryLoadRequestSchema` →
+* ``POST   /api/detectors/registry/load``              -> :class:`DetectorRegistryLoadRequestSchema` ->
                                                          :class:`DetectorRegistryLoadResponseSchema`
-* ``POST   /api/detectors/registry/<id>/unload``       — :class:`DetectorRegistryUnloadResponseSchema`
-* ``DELETE /api/detectors/registry/<id>``              — :class:`DetectorRegistryDeleteResponseSchema`
-* ``PUT    /api/detectors/registry/<id>/rename``       — :class:`DetectorRegistryRenameRequestSchema` →
+* ``POST   /api/detectors/registry/<id>/unload``       -> :class:`DetectorRegistryUnloadResponseSchema`
+* ``DELETE /api/detectors/registry/<id>``              -> :class:`DetectorRegistryDeleteResponseSchema`
+* ``PUT    /api/detectors/registry/<id>/rename``       -> :class:`DetectorRegistryRenameRequestSchema` ->
                                                          :class:`DetectorRegistryRenameResponseSchema`
-* ``PUT    /api/detectors/registry/<id>/autorun``      — :class:`DetectorRegistryAutorunRequestSchema` →
+* ``PUT    /api/detectors/registry/<id>/autorun``      -> :class:`DetectorRegistryAutorunRequestSchema` ->
                                                          :class:`DetectorRegistryAutorunResponseSchema`
-* ``POST   /api/detectors/cancel/<task_id>``           — :class:`DetectorCancelResponseSchema`
+* ``POST   /api/detectors/cancel/<task_id>``           -> :class:`DetectorCancelResponseSchema`
 
 Scoring endpoints (``vtsearch/routes/detectors/scoring.py``):
 
-* ``POST /api/find-label`` — :class:`FindLabelRequestSchema` →
+* ``POST /api/find-label`` -> :class:`FindLabelRequestSchema` ->
                               :class:`FindLabelResponseSchema`
-* ``POST /api/auto-detect`` — :class:`AutoDetectRequestSchema` →
+* ``POST /api/auto-detect`` -> :class:`AutoDetectRequestSchema` ->
                               :class:`AutoDetectResponseSchema`
 
 Find endpoints (``vtsearch/routes/detectors/find.py``):
 
-* ``POST /api/find/check-labels`` — :class:`FindCheckLabelsRequestSchema` →
+* ``POST /api/find/check-labels`` -> :class:`FindCheckLabelsRequestSchema` ->
                                     :class:`FindCheckLabelsResponseSchema`
-* ``POST /api/find`` — :class:`FindRequestSchema` →
+* ``POST /api/find`` -> :class:`FindRequestSchema` ->
                       :class:`FindResponseSchema`
-* ``POST /api/find/cancel`` — :class:`FindCancelResponseSchema`
+* ``POST /api/find/cancel`` -> :class:`FindCancelResponseSchema`
 
 Label endpoints (``vtsearch/routes/detectors/labels.py``):
 
-* ``POST /api/detectors/<name>/labels`` — :class:`DetectorSaveLabelsResponseSchema`
-* ``GET  /api/detectors/<name>/labels-detail`` — :class:`DetectorLabelsDetailResponseSchema`
-* ``POST /api/detectors/<name>/labels/<element_id>/vote`` —
-        :class:`DetectorLabelVoteRequestSchema` → :class:`DetectorLabelVoteResponseSchema`
+* ``POST /api/detectors/<name>/labels`` -> :class:`DetectorSaveLabelsResponseSchema`
+* ``GET  /api/detectors/<name>/labels-detail`` -> :class:`DetectorLabelsDetailResponseSchema`
+* ``POST /api/detectors/<name>/labels/<element_id>/vote`` ->
+        :class:`DetectorLabelVoteRequestSchema` -> :class:`DetectorLabelVoteResponseSchema`
 * ``GET  /api/detectors/<name>/labels/<element_id>/preview`` and
   ``GET  /api/detectors/<name>/labels/<element_id>/thumbnail`` serve binary
   responses (or a text-content JSON for text media). These routes declare
@@ -78,7 +78,7 @@ class _ExampleSchema(Schema):
 
     ``type`` is ``"text"`` (the value is a query string) or ``"media"``
     (the value is a filename in ``data/example_media/``). The shape is
-    intentionally permissive — the route does not validate inner keys
+    intentionally permissive; the route does not validate inner keys
     today, and unknown keys round-trip through.
     """
 
@@ -142,7 +142,7 @@ class DetectorCreateRequestSchema(Schema):
 
     The route requires ``name`` and ``media_type``; at least one of
     ``text_query``, ``media_example``, or ``examples`` must be present
-    (enforced inside the handler — marshmallow can't express
+    (enforced inside the handler; marshmallow can't express
     "at least one of these three" as a single declaration).
     """
 
@@ -312,7 +312,7 @@ class DetectorRegistryCreateResponseSchema(Schema):
 class DetectorRegistryLoadRequestSchema(Schema):
     """Body for ``POST /api/detectors/registry/load``.
 
-    ``detector_id`` is optional and may be ``null`` — passing ``null`` (or
+    ``detector_id`` is optional and may be ``null``; passing ``null`` (or
     omitting the field) unloads the currently-active detector instead of
     loading a new one.
     """
@@ -357,7 +357,7 @@ class DetectorRegistryRenameRequestSchema(Schema):
     """Body for ``PUT /api/detectors/registry/<id>/rename``.
 
     Note the field name: the registry rename uses ``name`` (matching the
-    frontend's call site) — not ``new_name`` as in the CRUD rename route.
+    frontend's call site, not ``new_name`` as in the CRUD rename route.
     Renaming both endpoints would be a frontend-visible breaking change,
     so the discrepancy is deliberate.
     """
@@ -426,7 +426,7 @@ class FindLabelRequestSchema(Schema):
     The dataset to score against comes from the request-scoped context
     set by ``before_request`` from the ``X-Dataset-Id`` header (or the
     ``dataset_id`` query param for browser-native requests). The body
-    intentionally does not carry a dataset selector — letting the body
+    intentionally does not carry a dataset selector; letting the body
     override the header allowed a confused client to score one dataset
     while ``replace_all=True`` wiped a different detector's votes.
     """
@@ -450,7 +450,7 @@ class _HitSchema(Schema):
 
     The shape is a media dict (filename, type, md5, origin, ...) augmented
     with a ``score`` (and, for ``/api/find``, a ``verdict``). The set of
-    media-dict fields is intentionally open — different importers
+    media-dict fields is intentionally open; different importers
     populate different keys.
     """
 
@@ -477,7 +477,7 @@ class AutoDetectRequestSchema(Schema):
     The body is optional; omitting ``detector_name`` runs every autorun
     detector for the active dataset's media type. Passing a name restricts
     the run to that one detector (which must already be flagged for
-    autorun — otherwise the handler returns 404).
+    autorun; otherwise the handler returns 404).
     """
 
     detector_name = fields.String(load_default="")
@@ -507,7 +507,7 @@ class AutoDetectResponseSchema(Schema):
 class FindCheckLabelsRequestSchema(Schema):
     """Body for ``POST /api/find/check-labels``.
 
-    Both arrays default to empty — the route returns an empty
+    Both arrays default to empty; the route returns an empty
     ``warnings`` list when either is missing.
     """
 
@@ -533,7 +533,7 @@ class FindCheckLabelsResponseSchema(Schema):
 class FindRequestSchema(Schema):
     """Body for ``POST /api/find``.
 
-    Empty arrays are accepted at the schema layer — the handler rejects
+    Empty arrays are accepted at the schema layer; the handler rejects
     them with a 400 + ``message`` so it can reset ``find_progress`` to
     idle on the way out (schema-level validation skips the handler
     entirely, leaving the tracker stale).
@@ -585,8 +585,8 @@ class FindResponseSchema(Schema):
 class FindCancelResponseSchema(Schema):
     """Response for ``POST /api/find/cancel``.
 
-    Signals every in-flight scoring path that reads ``find_progress`` —
-    ``/api/find``, ``/api/find-label``, and ``/api/auto-detect`` — to stop
+    Signals every in-flight scoring path that reads ``find_progress``
+    (``/api/find``, ``/api/find-label``, and ``/api/auto-detect``) to stop
     cooperatively. The progress tracker holds a single cancel event that
     long-running loops poll between iterations.
     """

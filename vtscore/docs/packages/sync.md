@@ -7,13 +7,13 @@ plugin that knows how to both pull data **in** from an external target
 like an exporter), so applications can keep external storage and
 in-memory state automatically aligned.
 
-The package is intentionally minimal — it owns only the contract.
+The package is intentionally minimal - it owns only the contract.
 Concrete subclasses live wherever the data domain does:
 
-- [`vtscore.labels.sources.LabelsetSource`](../../labels/sources/base.py) —
+- [`vtscore.labels.sources.LabelsetSource`](../../labels/sources/base.py) -
   round-trips detector labels (library tier, documented in
   [`labels`](labels.md)).
-- `vtsearch.settings_io.sources.SettingsSource` — round-trips app
+- `vtsearch.settings_io.sources.SettingsSource` - round-trips app
   settings (app tier; not part of `vtscore`). It lives outside the
   library because per-user settings persistence is an app concern, but
   it inherits the same `SyncSource` shape.
@@ -25,7 +25,7 @@ methods, configurable via `PluginField`s, discoverable via the standard
 plugin registry." Both library-tier (labelsets) and app-tier (settings)
 sources implement exactly that contract, so the abstract base lives at
 the lowest tier that can host it. The concrete subclasses then live
-wherever their data domain does — labels in `vtscore.labels`, settings
+wherever their data domain does - labels in `vtscore.labels`, settings
 in `vtsearch.settings_io`.
 
 ## The class
@@ -69,7 +69,7 @@ parameter so subclasses can rename it according to what they save
 def save(self, labelset: LabelSet, /, field_values: dict[str, Any]) -> None: ...
 ```
 
-Both `load` and `save` raise `NotImplementedError` by default — a
+Both `load` and `save` raise `NotImplementedError` by default - a
 subclass must override them.
 
 ## Discovery and registration
@@ -89,7 +89,7 @@ to register a third-party source via `importlib.metadata` entry points.
 ## Implementing a sync source
 
 A minimal labelset source. The same shape applies to settings sources
-— only the base class and sentinel change.
+- only the base class and sentinel change.
 
 ```python
 # my_pkg/sources/sqlite_labelset.py
@@ -134,7 +134,7 @@ LABELSET_SOURCE = SqliteLabelsetSource()
 ```
 
 Drop the module under `vtscore/labels/sources/sqlite/` or expose it as
-an entry point — see [`plugins.md`](plugins.md) — and the standard
+an entry point - see [`plugins.md`](plugins.md) - and the standard
 `get_labelset_source("sqlite")` / `list_labelset_sources()` accessors
 pick it up.
 
@@ -143,26 +143,26 @@ pick it up.
 - **It does not auto-sync.** The ABC defines `load` and `save`. The
   caller (a route handler, an app-side hook, a CLI driver) decides
   when to call them. App-side wiring for the two existing source
-  families — auto-export on vote change, auto-import on first load,
-  circular-trigger prevention via thread-local guards — lives in
+  families - auto-export on vote change, auto-import on first load,
+  circular-trigger prevention via thread-local guards - lives in
   `vtscore/labels/sync.py` and `vtsearch/settings.py`, not here.
 - **It does not persist anything.** `SyncSource` is a contract;
   storage is whatever the subclass implements. The standard caveats
-  about persistence still apply — embeddings and trained MLP weights
+  about persistence still apply - embeddings and trained MLP weights
   are in-memory artefacts, not labels. See `CLAUDE.md` "No Persisted
   Vectors or MLPs" if you're tempted to round-trip more than label
   identifiers + their `good`/`bad` flag.
 - **It does not impose a transport.** `load` / `save` can talk to a
-  filesystem, an HTTP API, a database, a message queue — anything the
+  filesystem, an HTTP API, a database, a message queue - anything the
   subclass cares to wire up. The framework only requires that the two
   methods exist.
 
 ## Cross-references
 
-- [`plugins.md`](plugins.md) — registries, sentinels, entry points,
+- [`plugins.md`](plugins.md) - registries, sentinels, entry points,
   inventory.
-- [`labels.md`](labels.md) — the `LabelsetSource` subclass and the
+- [`labels.md`](labels.md) - the `LabelsetSource` subclass and the
   auto-sync helpers in `vtscore/labels/sync.py`.
-- `vtsearch.settings_io.sources` (app tier) — the `SettingsSource`
+- `vtsearch.settings_io.sources` (app tier) - the `SettingsSource`
   subclass with per-user template variables (`{username}`) and
   startup-time auto-import.

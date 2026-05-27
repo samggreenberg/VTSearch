@@ -48,7 +48,7 @@ class _StubImporter(DatasetImporter):
             return [f"{mt}-q1", f"{mt}-q2"]
         return super().get_field_options(field_key, current_values)
 
-    def run(self, field_values, medias, thin=False):  # pragma: no cover — unused here
+    def run(self, field_values, medias, thin=False):  # pragma: no cover; unused here
         return None
 
 
@@ -69,7 +69,7 @@ def registered_stub():
 
 
 # ---------------------------------------------------------------------------
-# PluginField — dataclass attributes & serialisation
+# PluginField: dataclass attributes & serialisation
 # ---------------------------------------------------------------------------
 
 
@@ -153,7 +153,7 @@ class TestImporterFieldOptionsRoute:
         assert "Unknown field" in resp.get_json()["message"]
 
     def test_static_field_returns_400(self, client, registered_stub):
-        # ``media_type`` is static, not dynamic — calling options on it is rejected.
+        # ``media_type`` is static, not dynamic; calling options on it is rejected.
         resp = client.post(
             self.URL_TEMPLATE.format(name=registered_stub.name),
             json={"field_key": "media_type", "values": {}},
@@ -234,7 +234,7 @@ class TestImporterMetadataExposes:
 
 
 # ---------------------------------------------------------------------------
-# ReCaller scaffold — exercises the importer-level wiring
+# ReCaller scaffold: exercises the importer-level wiring
 # ---------------------------------------------------------------------------
 
 

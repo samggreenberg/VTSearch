@@ -1,5 +1,5 @@
 import { Injectable, OnDestroy, NgZone } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import {
   LoadingTask,
   ProgressEvent,
@@ -17,6 +17,10 @@ import {
  *
  * Channels carried over `/api/events`:
  *
+ *  - `server` -> { boot_id } (per-connect identity frame; a change in
+ *    `boot_id` between connects means the backend restarted, which fires
+ *    `serverReset$` so consumers can drop any state keyed on stale
+ *    `task_id`s from the previous process)
  *  - `dataset` -> ProgressEvent (singleton tracker; staging operations)
  *  - `loading-tasks` -> LoadingTask[] (per-task progress for dataset loads)
  *  - `detector-loading-tasks` -> LoadingTask[]
@@ -40,8 +44,19 @@ export class ProgressEventsService implements OnDestroy {
   readonly find$ = this.findSubject.asObservable();
   readonly eval$ = this.evalSubject.asObservable();
 
+  /**
+   * Fires whenever the backend's `boot_id` changes between successive
+   * SSE connects (i.e. the backend restarted). Consumers that hold
+   * `task_id`-keyed bookkeeping should drop it on this signal — those
+   * ids no longer exist on the restarted backend. Does NOT fire on the
+   * very first connect.
+   */
+  private readonly serverResetSubject = new Subject<void>();
+  readonly serverReset$ = this.serverResetSubject.asObservable();
+
   private source: EventSource | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastBootId: string | null = null;
 
   constructor(private zone: NgZone) {
     this.connect();
@@ -96,6 +111,9 @@ export class ProgressEventsService implements OnDestroy {
     const es = new EventSource('/api/events');
     this.source = es;
 
+    es.addEventListener('server', (e) =>
+      this.zone.run(() => this.handleServerFrame(e)),
+    );
     es.addEventListener('dataset', (e) =>
       this.zone.run(() => this.datasetSubject.next(this.parse<ProgressEvent>(e, {}))),
     );
@@ -153,5 +171,14 @@ export class ProgressEventsService implements OnDestroy {
     } catch {
       return fallback;
     }
+  }
+
+  private handleServerFrame(e: Event): void {
+    const { boot_id } = this.parse<{ boot_id?: string }>(e, {});
+    if (!boot_id) return;
+    if (this.lastBootId !== null && this.lastBootId !== boot_id) {
+      this.serverResetSubject.next();
+    }
+    this.lastBootId = boot_id;
   }
 }

@@ -222,7 +222,7 @@ class TestSimulateVotingIterations:
 
     def test_empty_when_no_test_positives(self):
         """If all medias of target category land in sim, test set has no positives -> empty."""
-        # Only 1 media of target category — likely all end up in sim with 50% split
+        # Only 1 media of target category; likely all end up in sim with 50% split
         medias = {
             1: {"id": 1, "embedding": np.ones(8, dtype=np.float32), "category": "rare"},
             2: {"id": 2, "embedding": -np.ones(8, dtype=np.float32), "category": "common"},
@@ -230,7 +230,7 @@ class TestSimulateVotingIterations:
             4: {"id": 4, "embedding": -np.ones(8, dtype=np.float32) * 0.8, "category": "common"},
         }
         rows = simulate_voting_iterations(medias, "rare", seed=42, sim_fraction=0.5)
-        # Might be empty or not depending on split — just shouldn't crash
+        # Might be empty or not depending on split; just shouldn't crash
         assert isinstance(rows, list)
 
     def test_inclusion_affects_cost(self):

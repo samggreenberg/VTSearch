@@ -1,4 +1,4 @@
-"""Video embedder — LanguageBind Video (LanguageBind/LanguageBind_Video_V1.5_FT)."""
+"""Video embedder - LanguageBind Video (LanguageBind/LanguageBind_Video_V1.5_FT)."""
 
 from __future__ import annotations
 

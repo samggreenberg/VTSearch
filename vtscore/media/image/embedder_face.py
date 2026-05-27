@@ -1,9 +1,9 @@
-"""Image embedder — FaceNet face-identity space (facenet-pytorch).
+"""Image embedder - FaceNet face-identity space (facenet-pytorch).
 
 Embeds (cropped) face images into a 512-dim identity space using
 ``facenet-pytorch``'s ``InceptionResnetV1`` with VGGFace2 weights. The
 output vector lives in **face-identity space**, not generic content
-space — two photos of the same person score close together regardless
+space - two photos of the same person score close together regardless
 of pose / lighting / clothing, while two photos of different people in
 similar scenes score far apart.
 
@@ -87,7 +87,7 @@ class ImageFaceEmbedder(MediaEmbedder):
     def _preprocess(self, image: "Image.Image") -> np.ndarray:
         """Resize to 160×160 RGB and normalise to ``(x − 127.5) / 128``.
 
-        Returns a ``(3, 160, 160)`` ``float32`` array — caller stacks into
+        Returns a ``(3, 160, 160)`` ``float32`` array - caller stacks into
         a batch dimension before passing to the model.
         """
         rgb = image.convert("RGB").resize((_INPUT_SIZE, _INPUT_SIZE))

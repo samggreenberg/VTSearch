@@ -232,7 +232,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     if (!this.media || this.isVoting) return;
 
     // Region annotations only attach to yes-votes (salient-area semantics).
-    // A no-vote with a box drawn arms a sticky discard-confirm state — the first
+    // A no-vote with a box drawn arms a sticky discard-confirm state; the first
     // ← shake-pulses the box and surfaces a hint; only a second ← while armed
     // throws the box away and votes no. The state has no timeout: a time-based
     // modal would expire silently and surprise the user. Esc, mouse-on-box, a
@@ -274,7 +274,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   onRegionBoxChange(box: RegionBox | null): void {
     this.currentRegionBox = box;
-    // Clearing the box also clears any pending bad-vote confirmation —
+    // Clearing the box also clears any pending bad-vote confirmation;
     // there's nothing left to confirm against.
     if (!box) this.pendingBadConfirm = false;
   }

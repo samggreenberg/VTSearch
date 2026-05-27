@@ -1,9 +1,9 @@
-"""ReCaller dataset importer — import media from a ReCaller query.
+"""ReCaller dataset importer - import media from a ReCaller query.
 
 Given a ReCaller *queryID* and an output media type, this importer pulls
 the matching results from ReCaller, downloads their bytes via PullWrest
 (PW), and fetches their pre-computed embeddings via DataWrest (DW).  MD5
-hashes come straight from ReCaller — no local recalculation.
+hashes come straight from ReCaller - no local recalculation.
 
 Multi-media imports
 -------------------
@@ -20,8 +20,8 @@ modal, e.g.::
         {"source_type": "document", "converter": "document2image", "params": {}},
     ]
 
-The importer's job is to yield raw source-type media — one dict per
-ReCaller record matching ``spec.source_type`` — from
+The importer's job is to yield raw source-type media - one dict per
+ReCaller record matching ``spec.source_type`` - from
 :meth:`~ReCallerDatasetImporter.fetch_source_media`.  The framework
 loops the spec list and, when the spec has a converter, runs
 ``converter.convert(raw, spec.params)`` on every yielded media before

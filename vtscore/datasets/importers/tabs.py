@@ -36,7 +36,7 @@ def register_picker_tab(tab: dict[str, Any]) -> None:
     Args:
         tab: A dict with at least ``id`` (matching importer ``category``
             values) and ``label``.  Optional fields: ``icon`` (vt-icon type
-            name), ``order`` (int — lower values render first).
+            name), ``order`` (int - lower values render first).
     """
     tab_id = tab.get("id")
     if not tab_id:

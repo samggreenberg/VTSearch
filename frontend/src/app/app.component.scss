@@ -159,7 +159,7 @@ header {
   border-radius: var(--radius-md);
   color: var(--header-text);
   font-size: var(--font-sm);
-  padding: var(--space-xs) 0.625rem;  // 4px 10px — off-scale horizontal kept exact
+  padding: var(--space-xs) 0.625rem;  // 4px 10px (off-scale horizontal, kept exact)
   cursor: pointer;
   transition: background var(--transition-base), border-color var(--transition-base);
   white-space: nowrap;
@@ -206,6 +206,22 @@ header {
     svg {
       color: var(--header-text);
     }
+  }
+}
+
+.achievements-btn {
+  position: relative;
+
+  .notif-dot {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 1.5px solid var(--header-bg);
+    pointer-events: none;
   }
 }
 

@@ -32,7 +32,7 @@ class LabelsetSource(SyncSource[list[dict[str, str]], "LabelSet"]):
 
     Subclass this, set the class-level attributes, implement
     :meth:`_do_load` and :meth:`_do_save`, and expose a module-level
-    ``LABELSET_SOURCE = YourSource()`` — the registry picks it up
+    ``LABELSET_SOURCE = YourSource()`` - the registry picks it up
     automatically.  Public :meth:`load` / :meth:`save` are framework
     wrappers that normalize *field_values* before dispatching; see
     :mod:`vtscore.sync`.

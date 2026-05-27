@@ -44,7 +44,7 @@ export class DetectorsRegistryApiService {
     );
   }
 
-  /** Plugin-field route — stays on plain ``HttpClient`` because the body
+  /** Plugin-field route: stays on plain ``HttpClient`` because the body
    *  shape is plugin-dependent and not described in the OpenAPI spec.
    *  Same pattern as ``LabelImportersApiService.runImport``. */
   registerDetectorFromLabelset(

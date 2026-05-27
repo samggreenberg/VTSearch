@@ -225,11 +225,11 @@ def clear_thread_progress() -> None:
 # Shared progress extras
 # ---------------------------------------------------------------------------
 #: Extras shared by every long-running operation: an optional sub-step counter
-#: (``step``/``total_steps`` — used when a single operation has multiple phases
+#: (``step``/``total_steps`` - used when a single operation has multiple phases
 #: like load→embed→stage), an ``error`` string, and a smoothed ``eta_seconds``
 #: filled in automatically by :meth:`ProgressTracker._compute_eta`. Every
-#: singleton tracker — and every per-task tracker created by
-#: :class:`LoadingTasksTracker` — exposes these so the frontend can render any
+#: singleton tracker - and every per-task tracker created by
+#: :class:`LoadingTasksTracker` - exposes these so the frontend can render any
 #: progress payload with the same ``ProgressEvent`` interface (see
 #: ``frontend/src/app/models/api.models.ts``).
 _PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
@@ -241,7 +241,7 @@ _PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
 
 
 # ---------------------------------------------------------------------------
-# Loading tasks tracker — manages multiple concurrent loading operations
+# Loading tasks tracker - manages multiple concurrent loading operations
 # ---------------------------------------------------------------------------
 
 

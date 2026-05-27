@@ -1,4 +1,4 @@
-"""Media converters — transform media of one type into media of another type.
+"""Media converters - transform media of one type into media of another type.
 
 A :class:`~vtscore.converters.base.MediaConverter` takes a single media dict
 of one :class:`~vtscore.media.base.MediaType` and returns one or more media

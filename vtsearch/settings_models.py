@@ -7,9 +7,9 @@ schema is available for free via :meth:`pydantic.BaseModel.model_json_schema`.
 
 Two models, mirroring the two storage tiers:
 
-* :class:`ServerSettings` — keys persisted to ``data/settings.json``
+* :class:`ServerSettings` - keys persisted to ``data/settings.json``
   (shared across users; loaded once at startup).
-* :class:`UserSettings` — keys persisted to
+* :class:`UserSettings` - keys persisted to
   ``<get_user_data_dir(user)>/user_settings.json`` (per-user; resolved
   per-request via :func:`vtsearch.auth.get_current_user`).
 
@@ -120,13 +120,13 @@ class ServerSettings(BaseModel):
     autorun_detectors: list[str] = Field(default_factory=list)
 
     # Admin-side plugin hiding. Maps a plugin-family id (e.g.
-    # ``"converters"``, ``"embedders"``, ``"importers"`` — the keys used by
+    # ``"converters"``, ``"embedders"``, ``"importers"`` - the keys used by
     # :mod:`vtscore.plugins.inventory`) to a list of plugin ``name``s that
     # should be omitted from picker / listing API responses for this
     # deployment. Hidden plugins remain importable and callable by name
     # via execution endpoints; this is a UI-declutter setting, not a
     # security boundary. Merged at read time with any
-    # ``--hide-plugin family:name`` flags passed on the CLI — see
+    # ``--hide-plugin family:name`` flags passed on the CLI - see
     # :func:`vtsearch.settings.get_effective_hidden_plugins`.
     hidden_plugins: dict[str, list[str]] = Field(default_factory=dict)
 
@@ -184,7 +184,7 @@ class UserSettings(BaseModel):
     # Keys are canonical media-type ids (e.g. ``"image"``, ``"audio"``).
     last_embedder_per_media_type: dict[str, str] = Field(default_factory=dict)
 
-    # Per-media-type default settings for the Add Dataset advanced panel —
+    # Per-media-type default settings for the Add Dataset advanced panel -
     # the embedder, clipper (+ params), and source-spec converter rows the
     # user wants applied automatically every time they import a dataset of
     # that output mediaType. Set from the Settings > Data Imports tab and
@@ -211,7 +211,7 @@ class UserSettings(BaseModel):
     # ``solo_media_type_explicit`` is True, else the process-level CLI
     # fallback (``settings.set_cli_solo_media_type``), else None. The
     # ``explicit`` flag is set to True whenever the user changes the value
-    # through the settings UI — so once a user opts out (sets it to None),
+    # through the settings UI - so once a user opts out (sets it to None),
     # the CLI flag no longer reapplies on future launches for that user.
     solo_media_type: str | None = None
     solo_media_type_explicit: bool = False
@@ -224,7 +224,7 @@ class UserSettings(BaseModel):
     #
     # Resolution at read time layers ``solo_embedder_per_media_type``
     # (user explicit) over the process-level CLI fallback set by
-    # :func:`vtsearch.settings.set_cli_solo_embedder` — user entries win
+    # :func:`vtsearch.settings.set_cli_solo_embedder` - user entries win
     # per-key, missing keys fall through to the CLI value. The full merged
     # view is exposed at ``/api/settings`` as
     # ``effective_solo_embedder_per_media_type``. A stored embedder id

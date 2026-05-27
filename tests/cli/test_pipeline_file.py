@@ -103,7 +103,7 @@ def _trained_labelset() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# load_pipeline_file — schema validation
+# load_pipeline_file: schema validation
 # ---------------------------------------------------------------------------
 
 
@@ -250,7 +250,7 @@ class TestLoadPipelineFile:
 
 
 # ---------------------------------------------------------------------------
-# Dispatch — end-to-end with a real dataset + detector
+# Dispatch: end-to-end with a real dataset + detector
 # ---------------------------------------------------------------------------
 
 
@@ -290,13 +290,13 @@ class TestRunPipelineFile:
 
     def test_detectors_override_ignores_settings_autorun_list(self, client, tmp_path, monkeypatch):
         """`detectors:` in the YAML overrides the settings file's autorun
-        list for that run only — the file on disk must NOT be touched."""
+        list for that run only; the file on disk must NOT be touched."""
         files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
         _stub_resolve(monkeypatch, files)
 
         _write_detector("from-yaml", _trained_labelset())
         # The settings file points at a *different* detector that doesn't
-        # exist on disk — if the override isn't honoured the run will fail.
+        # exist on disk; if the override isn't honoured the run will fail.
 
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         settings_path = _settings_file(tmp_path, ["nonexistent-detector"])

@@ -46,7 +46,7 @@ describe('ActiveContextWatcherService', () => {
 
   it('does not toast when the registry is empty (initial-load state)', () => {
     activeContext.setActivePair('d1', 'm1');
-    // Registry still empty — could just be loading.
+    // Registry still empty; could just be loading.
     expect(toast.toasts.length).toBe(0);
     expect(activeContext.datasetId).toBe('d1');
     expect(activeContext.modelId).toBe('m1');
@@ -75,7 +75,7 @@ describe('ActiveContextWatcherService', () => {
     setDetectors([makeDetector('m1', 'CatDet'), makeDetector('m2', 'Other')]);
     activeContext.setActivePair('d1', 'm1');
 
-    // m1 deleted; m2 still present — registry confirmed loaded via datasets.length > 0.
+    // m1 deleted; m2 still present (registry confirmed loaded via datasets.length > 0).
     setDetectors([makeDetector('m2', 'Other')]);
 
     expect(activeContext.modelId).toBe('');
@@ -122,7 +122,7 @@ describe('ActiveContextWatcherService', () => {
     // Registry arrives: m1 gone, m2 present.
     setDetectors([makeDetector('m2', 'NewDet')]);
 
-    // Must NOT fire — user already moved on.
+    // Must NOT fire: user already moved on.
     expect(toast.toasts.length).toBe(0);
     expect(activeContext.modelId).toBe('m1'); // active unchanged; route guard promotes it
   });
@@ -143,8 +143,8 @@ describe('ActiveContextWatcherService', () => {
     expect(activeContext.datasetId).toBe('d1'); // active unchanged
   });
 
-  it('is idempotent — calling start() twice does not double-subscribe', () => {
-    watcher.start(); // second call — should be a no-op
+  it('is idempotent: calling start() twice does not double-subscribe', () => {
+    watcher.start(); // second call, should be a no-op
     setDatasets([makeDataset('d1', 'X')]);
     setDetectors([makeDetector('m1', 'Det')]);
     activeContext.setActivePair('d1', 'm1');

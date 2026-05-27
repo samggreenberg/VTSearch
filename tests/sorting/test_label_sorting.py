@@ -46,7 +46,7 @@ class TestClickTimeTracking:
         assert vote_click_times[1] == 1
         # Un-vote (does not increment counter)
         client.post("/api/medias/1/vote", json={"target": "none"})
-        # Vote again — should get a new, higher click time
+        # Vote again; should get a new, higher click time
         client.post("/api/medias/1/vote", json={"target": "good"})
         assert vote_click_times[1] == 2
 

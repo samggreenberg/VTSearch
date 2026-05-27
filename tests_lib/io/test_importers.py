@@ -302,7 +302,7 @@ class TestFolderImporterMetadata:
         assert self._get_importer().name == "server_folder"
 
     def test_icon_is_folder_emoji(self):
-        # 📁 — frontend renders this as a "folder" icon, matching the
+        # 📁; frontend renders this as a "folder" icon, matching the
         # browser-side Local Folder card.  The Server tab makes the
         # server-vs-local distinction.
         assert self._get_importer().icon == "📁"
@@ -330,7 +330,7 @@ class TestFolderImporterMetadata:
 
 
 # ---------------------------------------------------------------------------
-# DatasetImporter base class — user-typed dataset name
+# DatasetImporter base class: user-typed dataset name
 # ---------------------------------------------------------------------------
 
 
@@ -378,7 +378,7 @@ class TestImporterDatasetName:
         assert d["fields"][-1]["field_type"] == "text"
 
     def test_class_fields_attribute_unchanged_by_to_dict(self):
-        """to_dict() appends dataset_name only on the serialised payload —
+        """to_dict() appends dataset_name only on the serialised payload;
         the class-level ``fields`` attribute remains as the developer wrote it."""
         from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
@@ -408,7 +408,7 @@ class TestImporterDatasetName:
 
     def test_resolve_display_name_strips_whitespace(self):
         imp = self._make_importer()
-        # An all-whitespace name is treated as empty — the default wins.
+        # An all-whitespace name is treated as empty; the default wins.
         assert imp.resolve_display_name({"dataset_name": "   "}) == imp.display_name
 
     def test_resolve_display_name_empty_field_values(self):
@@ -468,7 +468,7 @@ class TestImporterDefaultDisplayName:
         assert IMPORTER.default_display_name({"paths_file": "/tmp/audio_list.txt"}) == "audio_list"
 
     def test_origin_does_not_include_dataset_name(self):
-        """The user-typed display name is UI metadata, not provenance —
+        """The user-typed display name is UI metadata, not provenance;
         it must NOT leak into origin params (which feed Detector reload)."""
         from vtscore.datasets.importers.server_folder import IMPORTER
 
@@ -713,7 +713,7 @@ class TestImporterBulkHooks:
         records = [{"name": "x"}]
 
         def fetch_one(record, _fv, _thin):
-            # fetch_record may omit origin / origin_name — run() fills them in.
+            # fetch_record may omit origin / origin_name; run() fills them in.
             return {"media_type": "audio", "filename": record["name"], "embedding": None}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
@@ -756,7 +756,7 @@ class TestImporterBulkHooks:
 
     def test_bulk_override_used_when_implemented(self):
         # When a subclass overrides _fetch_records_bulk_impl, fetch_record must
-        # NOT be called — the bulk path takes over completely.
+        # NOT be called; the bulk path takes over completely.
         per_item_calls: list = []
 
         def fetch_one(record, _fv, _thin):
@@ -945,6 +945,157 @@ class TestReCallerMultiMedia:
         # schema, so ``n_clips`` arrives at ``convert`` as the coerced
         # ``int`` rather than the raw string the spec carried.
         assert observed_params == [{"n_clips": 2}]
+
+
+# ---------------------------------------------------------------------------
+# _ingest_spec_stream: media_type stamping
+# ---------------------------------------------------------------------------
+#
+# These tests guard the regression where _ingest_spec_stream never stamped
+# media_type on converter outputs, causing embed_missing to silently skip
+# every converter-derived item because it reads m.get("media_type") to pick
+# the right embedder.
+#
+# The fake converter in TestReCaller above returned media_type explicitly;
+# masking the bug.  The tests below use a converter that omits media_type,
+# matching the real converter contract.
+
+
+class TestIngestSpecStreamMediaType:
+    """_ingest_spec_stream stamps media_type on all outputs."""
+
+    # ------------------------------------------------------------------
+    # Minimal DatasetImporter that yields (spec, raw) pairs via
+    # fetch_source_media so the base class _ingest_spec_stream drives it.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_importer(records: list[dict]):
+        """Return a DatasetImporter subclass that yields *records* for any spec."""
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+
+        class _Imp(DatasetImporter):
+            name = "test_stamp"
+            display_name = "Test"
+            description = "Test importer."
+            fields = [
+                ImporterField(
+                    "media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"
+                ),
+            ]
+
+            def fetch_source_media(self, spec: SourceSpec, field_values: dict, thin: bool = False):
+                yield from iter(records)
+
+        return _Imp()
+
+    def test_converter_output_gets_media_type_stamped(self, monkeypatch):
+        """Converter outputs that omit media_type get it stamped by _ingest_spec_stream."""
+        import json
+
+        from vtscore.converters import get_converter
+
+        v2i = get_converter("video2image")
+        assert v2i is not None
+
+        def fake_convert(media, params):
+            # Real converters return bytes without media_type; mirror that here.
+            return [{"filename": "frame_0.png", "media_bytes": b"PNG", "duration": 0}]
+
+        monkeypatch.setattr(v2i, "convert", fake_convert)
+
+        imp = self._make_importer([{"filename": "clip.mp4", "media_bytes": b"VID"}])
+        medias: dict = {}
+        source_specs = json.dumps([{"source_type": "video", "converter": "video2image", "params": {}}])
+        imp.run({"media_type": "image", "source_specs": source_specs}, medias)
+
+        assert len(medias) == 1
+        assert medias[1]["media_type"] == "image"
+
+    def test_direct_spec_gets_media_type_stamped(self):
+        """Pass-through (no-converter) specs get source_type stamped as media_type."""
+        import json
+
+        imp = self._make_importer([{"filename": "photo.png", "media_bytes": b"PNG"}])
+        medias: dict = {}
+        source_specs = json.dumps([{"source_type": "image", "converter": None, "params": {}}])
+        imp.run({"media_type": "image", "source_specs": source_specs}, medias)
+
+        assert len(medias) == 1
+        assert medias[1]["media_type"] == "image"
+
+    def test_existing_media_type_not_overwritten(self, monkeypatch):
+        """setdefault: if an importer already stamps media_type, it is preserved."""
+        import json
+
+        from vtscore.converters import get_converter
+
+        v2i = get_converter("video2image")
+        assert v2i is not None
+
+        def fake_convert(media, params):
+            return [{"filename": "frame.png", "media_bytes": b"PNG", "media_type": "image", "duration": 0}]
+
+        monkeypatch.setattr(v2i, "convert", fake_convert)
+
+        imp = self._make_importer([{"filename": "clip.mp4", "media_bytes": b"VID"}])
+        medias: dict = {}
+        source_specs = json.dumps([{"source_type": "video", "converter": "video2image", "params": {}}])
+        imp.run({"media_type": "image", "source_specs": source_specs}, medias)
+
+        assert medias[1]["media_type"] == "image"
+
+    def test_embed_missing_uses_stamped_media_type(self, monkeypatch):
+        """End-to-end: converter → _ingest_spec_stream → embed_missing populates embeddings.
+
+        This is the regression test for the full bug.  Before the fix,
+        embed_missing returned early (no media_type → no embedder found)
+        and every converter-derived item stayed at embedding=None.
+        """
+        import json
+        import unittest.mock as mock
+
+        import numpy as np
+
+        from vtscore.converters import get_converter
+        from vtscore.datasets.load_pipeline import embed_missing
+
+        v2i = get_converter("video2image")
+        assert v2i is not None
+
+        def fake_convert(media, params):
+            return [{"filename": "frame_0.png", "media_bytes": b"PNG", "duration": 0}]
+
+        monkeypatch.setattr(v2i, "convert", fake_convert)
+
+        imp = self._make_importer(
+            [
+                {"filename": "clip1.mp4", "media_bytes": b"VID1"},
+                {"filename": "clip2.mp4", "media_bytes": b"VID2"},
+            ]
+        )
+        medias: dict = {}
+        source_specs = json.dumps([{"source_type": "video", "converter": "video2image", "params": {}}])
+        imp.run({"media_type": "image", "source_specs": source_specs}, medias)
+
+        assert len(medias) == 2
+        assert all(m["media_type"] == "image" for m in medias.values())
+        assert all(m.get("embedding") is None for m in medias.values())
+
+        fake_emb = mock.MagicMock()
+        fake_emb.name = "fake_image_emb"
+        fake_emb._model = True
+        fake_emb._on_progress = lambda *a, **kw: None
+        fake_emb.embed_media_bulk.return_value = [
+            np.array([1.0, 2.0], dtype=np.float32),
+            np.array([3.0, 4.0], dtype=np.float32),
+        ]
+
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[fake_emb]):
+            embed_missing(medias)
+
+        fake_emb.embed_media_bulk.assert_called_once()
+        assert all(m["embedding"] is not None for m in medias.values())
 
 
 # ---------------------------------------------------------------------------

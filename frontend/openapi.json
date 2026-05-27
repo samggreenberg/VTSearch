@@ -598,7 +598,7 @@
         "properties": {
           "default_path": {
             "default": "",
-            "description": "Suggested initial relative sub-path for this source \u2014 for example the server user's home directory when ``source=server_fs``. Empty for sources where the root is already the right starting point.",
+            "description": "Suggested initial relative sub-path for this source, for example the server user's home directory when ``source=server_fs``. Empty for sources where the root is already the right starting point.",
             "type": "string"
           },
           "directories": {
@@ -2626,7 +2626,7 @@
         "additionalProperties": false,
         "properties": {
           "status": {
-            "description": "Always 'ok' \u2014 the process is running and serving requests.",
+            "description": "Always 'ok'; the process is running and serving requests.",
             "type": "string"
           }
         },
@@ -4771,6 +4771,886 @@
           "similarity"
         ],
         "type": "object"
+      },
+      "import_dataset_CombineDatasetsImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "datasets": {
+            "type": "string"
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "datasets"
+        ],
+        "type": "object"
+      },
+      "import_dataset_DemoDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "converter": {
+            "default": "",
+            "type": "string"
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "enum": [
+              "esc50_s",
+              "esc50_m",
+              "esc50_l",
+              "esc50_a",
+              "gtzan_a",
+              "speech_commands_v2_s",
+              "speech_commands_v2_m",
+              "speech_commands_v2_l",
+              "speech_commands_v2_a",
+              "urbansound8k_s",
+              "urbansound8k_m",
+              "urbansound8k_l",
+              "urbansound8k_a",
+              "caltech101_s",
+              "caltech101_m",
+              "caltech101_l",
+              "caltech101_a",
+              "caltech256_a",
+              "oxford_flowers_102_a",
+              "food101_s",
+              "food101_m",
+              "food101_l",
+              "food101_a",
+              "eurosat_s",
+              "eurosat_m",
+              "eurosat_l",
+              "eurosat_a",
+              "stanford_dogs_s",
+              "stanford_dogs_m",
+              "stanford_dogs_l",
+              "stanford_dogs_a",
+              "places365_s",
+              "places365_m",
+              "places365_l",
+              "places365_a",
+              "ucsf_documents_a",
+              "20newsgroups_s",
+              "20newsgroups_m",
+              "20newsgroups_l",
+              "20newsgroups_a",
+              "ag_news_s",
+              "ag_news_m",
+              "ag_news_l",
+              "ag_news_a",
+              "bbc_news_a",
+              "imdb_s",
+              "imdb_m",
+              "imdb_l",
+              "imdb_a",
+              "wikipedia_topics_s",
+              "wikipedia_topics_m",
+              "wikipedia_topics_l",
+              "wikipedia_topics_a",
+              "arxiv_abstracts_s",
+              "arxiv_abstracts_m",
+              "arxiv_abstracts_l",
+              "arxiv_abstracts_a",
+              "reuters21578_s",
+              "reuters21578_m",
+              "reuters21578_l",
+              "reuters21578_a",
+              "ucf101_s",
+              "ucf101_m",
+              "ucf101_l",
+              "ucf101_a",
+              "hmdb51_s",
+              "hmdb51_m",
+              "hmdb51_l",
+              "hmdb51_a",
+              "ucf101_full_s",
+              "ucf101_full_m",
+              "ucf101_full_l",
+              "ucf101_full_a",
+              "kth_s",
+              "kth_m",
+              "kth_l",
+              "kth_a"
+            ],
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "import_dataset_HttpArchiveDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "audio",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "import_dataset_LocalFilesDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "type": "object"
+      },
+      "import_dataset_LocalFolderDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "recursive": {
+            "default": null
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "type": "object"
+      },
+      "import_dataset_ReCallerDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "audio",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "query_id": {
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "query_id"
+        ],
+        "type": "object"
+      },
+      "import_dataset_ServerFilesDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "audio",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "paths_file": {
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "paths_file"
+        ],
+        "type": "object"
+      },
+      "import_dataset_ServerFolderDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "audio",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "recursive": {
+            "default": null
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "import_dataset_SyntheticDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "clipper": {
+            "default": null,
+            "nullable": true
+          },
+          "clipper_params": {
+            "default": null,
+            "nullable": true
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "image",
+            "enum": [
+              "image",
+              "audio",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "size": {
+            "default": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "type": "object"
+      },
+      "import_labels_into_detector_HolderLabelImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "holder_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "holder_id"
+        ],
+        "type": "object"
+      },
+      "import_labels_into_detector_ServerCsvLabelImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "filepath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filepath"
+        ],
+        "type": "object"
+      },
+      "import_labels_into_detector_ServerJsonLabelImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "filepath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filepath"
+        ],
+        "type": "object"
+      },
+      "register_detector_from_labelset_HolderLabelImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "holder_id": {
+            "type": "string"
+          },
+          "name": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "holder_id"
+        ],
+        "type": "object"
+      },
+      "register_detector_from_labelset_ServerCsvLabelImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "filepath": {
+            "type": "string"
+          },
+          "name": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "filepath"
+        ],
+        "type": "object"
+      },
+      "register_detector_from_labelset_ServerJsonLabelImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "filepath": {
+            "type": "string"
+          },
+          "name": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "filepath"
+        ],
+        "type": "object"
+      },
+      "run_label_import_HolderLabelImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "holder_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "holder_id"
+        ],
+        "type": "object"
+      },
+      "run_label_import_ServerCsvLabelImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "filepath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filepath"
+        ],
+        "type": "object"
+      },
+      "run_label_import_ServerJsonLabelImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "filepath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filepath"
+        ],
+        "type": "object"
+      },
+      "run_settings_import_ServerFileSettingsImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "filepath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filepath"
+        ],
+        "type": "object"
+      },
+      "stage_import_CombineDatasetsImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "datasets": {
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "datasets"
+        ],
+        "type": "object"
+      },
+      "stage_import_DemoDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "converter": {
+            "default": "",
+            "type": "string"
+          },
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "embedder": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "enum": [
+              "esc50_s",
+              "esc50_m",
+              "esc50_l",
+              "esc50_a",
+              "gtzan_a",
+              "speech_commands_v2_s",
+              "speech_commands_v2_m",
+              "speech_commands_v2_l",
+              "speech_commands_v2_a",
+              "urbansound8k_s",
+              "urbansound8k_m",
+              "urbansound8k_l",
+              "urbansound8k_a",
+              "caltech101_s",
+              "caltech101_m",
+              "caltech101_l",
+              "caltech101_a",
+              "caltech256_a",
+              "oxford_flowers_102_a",
+              "food101_s",
+              "food101_m",
+              "food101_l",
+              "food101_a",
+              "eurosat_s",
+              "eurosat_m",
+              "eurosat_l",
+              "eurosat_a",
+              "stanford_dogs_s",
+              "stanford_dogs_m",
+              "stanford_dogs_l",
+              "stanford_dogs_a",
+              "places365_s",
+              "places365_m",
+              "places365_l",
+              "places365_a",
+              "ucsf_documents_a",
+              "20newsgroups_s",
+              "20newsgroups_m",
+              "20newsgroups_l",
+              "20newsgroups_a",
+              "ag_news_s",
+              "ag_news_m",
+              "ag_news_l",
+              "ag_news_a",
+              "bbc_news_a",
+              "imdb_s",
+              "imdb_m",
+              "imdb_l",
+              "imdb_a",
+              "wikipedia_topics_s",
+              "wikipedia_topics_m",
+              "wikipedia_topics_l",
+              "wikipedia_topics_a",
+              "arxiv_abstracts_s",
+              "arxiv_abstracts_m",
+              "arxiv_abstracts_l",
+              "arxiv_abstracts_a",
+              "reuters21578_s",
+              "reuters21578_m",
+              "reuters21578_l",
+              "reuters21578_a",
+              "ucf101_s",
+              "ucf101_m",
+              "ucf101_l",
+              "ucf101_a",
+              "hmdb51_s",
+              "hmdb51_m",
+              "hmdb51_l",
+              "hmdb51_a",
+              "ucf101_full_s",
+              "ucf101_full_m",
+              "ucf101_full_l",
+              "ucf101_full_a",
+              "kth_s",
+              "kth_m",
+              "kth_l",
+              "kth_a"
+            ],
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "stage_import_HttpArchiveDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "audio",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "stage_import_LocalFilesDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "type": "object"
+      },
+      "stage_import_LocalFolderDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "recursive": {
+            "default": null
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "type": "object"
+      },
+      "stage_import_ReCallerDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "audio",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "query_id": {
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "query_id"
+        ],
+        "type": "object"
+      },
+      "stage_import_ServerFilesDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "audio",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "paths_file": {
+            "type": "string"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "paths_file"
+        ],
+        "type": "object"
+      },
+      "stage_import_ServerFolderDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "audio",
+            "enum": [
+              "audio",
+              "document",
+              "image",
+              "text",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "recursive": {
+            "default": null
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "stage_import_SyntheticDatasetImporter_Args": {
+        "additionalProperties": true,
+        "properties": {
+          "dataset_name": {
+            "default": null,
+            "nullable": true
+          },
+          "media_type": {
+            "default": "image",
+            "enum": [
+              "image",
+              "audio",
+              "video",
+              ""
+            ],
+            "type": "string"
+          },
+          "size": {
+            "default": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "source_specs": {
+            "default": null,
+            "nullable": true
+          }
+        },
+        "type": "object"
       }
     }
   },
@@ -4857,7 +5737,7 @@
     },
     "/api/achievements/docs/{doc_id}/raw": {
       "get": {
-        "description": "Plain-text response \u2014 intentionally undecorated so it stays out of\nthe OpenAPI spec (the spec is for JSON APIs).",
+        "description": "Plain-text response, intentionally undecorated so it stays out of\nthe OpenAPI spec (the spec is for JSON APIs).",
         "operationId": "get_doc_raw",
         "responses": {
           "default": {
@@ -5481,7 +6361,7 @@
     },
     "/api/browse-media-files": {
       "get": {
-        "description": "Query parameters:\n\n* ``source`` \u2014 one of ``demo:<name>`` or ``folder``.\n* ``path`` \u2014 relative sub-path within the root (default ``\"\"``).\n\nReturns::\n\n    {\n        \"directories\": [{\"name\": \"dog\"}, {\"name\": \"cat\"}, ...],\n        \"files\": [\n            {\"name\": \"bark.wav\", \"path\": \"dog/bark.wav\", \"size_bytes\": 12345},\n            ...\n        ]\n    }",
+        "description": "Query parameters:\n\n* ``source``: one of ``demo:<name>`` or ``folder``.\n* ``path``: relative sub-path within the root (default ``\"\"``).\n\nReturns::\n\n    {\n        \"directories\": [{\"name\": \"dog\"}, {\"name\": \"cat\"}, ...],\n        \"files\": [\n            {\"name\": \"bark.wav\", \"path\": \"dog/bark.wav\", \"size_bytes\": 12345},\n            ...\n        ]\n    }",
         "operationId": "browse_media_files",
         "parameters": [
           {
@@ -6203,6 +7083,258 @@
         ]
       }
     },
+    "/api/dataset/import/combine_datasets": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__combine_datasets",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_CombineDatasetsImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/import/demo": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__demo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_DemoDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/import/http_archive": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__http_archive",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_HttpArchiveDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/import/local_files": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__local_files",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_LocalFilesDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/import/local_folder": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__local_folder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_LocalFolderDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/import/recaller": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__recaller",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_ReCallerDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/import/server_files": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__server_files",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_ServerFilesDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/import/server_folder": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__server_folder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_ServerFolderDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/import/synthetic": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_dataset__synthetic",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_dataset_SyntheticDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer by name in a background thread.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
     "/api/dataset/import/{importer_name}": {
       "parameters": [
         {
@@ -6544,6 +7676,258 @@
           }
         },
         "summary": "Upload a ``.pkl`` file and save it to the staging directory.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/combine_datasets": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__combine_datasets",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_CombineDatasetsImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/demo": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__demo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_DemoDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/http_archive": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__http_archive",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_HttpArchiveDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/local_files": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__local_files",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_LocalFilesDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/local_folder": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__local_folder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_LocalFolderDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/recaller": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__recaller",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_ReCallerDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/server_files": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__server_files",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_ServerFilesDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/server_folder": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__server_folder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_ServerFolderDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/stage-import/synthetic": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "stage_import__synthetic",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/stage_import_SyntheticDatasetImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a registered importer in staging mode.",
         "tags": [
           "datasets_staging"
         ]
@@ -7068,7 +8452,7 @@
     },
     "/api/detectors/combine": {
       "post": {
-        "description": "All source detectors must share the same ``media_type``.  The new\ndetector's labelset is the merge of all source labelsets, keyed by\n``Origin`` (importer + params + origin_name) and falling back to\n``md5`` for legacy entries.  Per ``conflict_policy=\"drop\"`` (the only\nsupported policy today), any element key that appears with disagreeing\nlabels across the sources is removed entirely.\n\nThe combined detector is *purely a labelset entry* \u2014 no\nlabelset-source is inherited from the sources, and the threshold/MLP\nare computed later when the detector is activated against a dataset.",
+        "description": "All source detectors must share the same ``media_type``.  The new\ndetector's labelset is the merge of all source labelsets, keyed by\n``Origin`` (importer + params + origin_name) and falling back to\n``md5`` for legacy entries.  Per ``conflict_policy=\"drop\"`` (the only\nsupported policy today), any element key that appears with disagreeing\nlabels across the sources is removed entirely.\n\nThe combined detector is *purely a labelset entry*; no\nlabelset-source is inherited from the sources, and the threshold/MLP\nare computed later when the detector is activated against a dataset.",
         "operationId": "combine_detectors",
         "requestBody": {
           "content": {
@@ -7170,6 +8554,90 @@
           }
         },
         "summary": "Register a new detector in the detector registry.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
+    "/api/detectors/registry/from-labelset/holder": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "register_detector_from_labelset__holder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/register_detector_from_labelset_HolderLabelImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Create a detector seeded with labels from a label importer.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
+    "/api/detectors/registry/from-labelset/server_csv_file": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "register_detector_from_labelset__server_csv_file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/register_detector_from_labelset_ServerCsvLabelImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Create a detector seeded with labels from a label importer.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
+    "/api/detectors/registry/from-labelset/server_json_file": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "register_detector_from_labelset__server_json_file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/register_detector_from_labelset_ServerJsonLabelImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Create a detector seeded with labels from a label importer.",
         "tags": [
           "detectors_registry"
         ]
@@ -7714,6 +9182,123 @@
         ]
       }
     },
+    "/api/detectors/{name}/import-labels/holder": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_labels_into_detector__holder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_labels_into_detector_HolderLabelImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a label importer and merge results into this detector's labelset.",
+        "tags": [
+          "detectors_labels"
+        ]
+      }
+    },
+    "/api/detectors/{name}/import-labels/server_csv_file": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_labels_into_detector__server_csv_file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_labels_into_detector_ServerCsvLabelImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a label importer and merge results into this detector's labelset.",
+        "tags": [
+          "detectors_labels"
+        ]
+      }
+    },
+    "/api/detectors/{name}/import-labels/server_json_file": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "import_labels_into_detector__server_json_file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/import_labels_into_detector_ServerJsonLabelImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run a label importer and merge results into this detector's labelset.",
+        "tags": [
+          "detectors_labels"
+        ]
+      }
+    },
     "/api/detectors/{name}/import-labels/{importer_name}": {
       "parameters": [
         {
@@ -7736,7 +9321,7 @@
         }
       ],
       "post": {
-        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold \u2014 all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
+        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
         "operationId": "import_labels_into_detector",
         "responses": {
           "default": {
@@ -7793,7 +9378,7 @@
     },
     "/api/detectors/{name}/labels-detail": {
       "get": {
-        "description": "Each element gets a stable ``id`` (derived from its origin/md5 identity)\nplus ``label``, ``media_type``, display ``name``, and \u2014 when the\nelement resolves into the active dataset \u2014 its current ``cid``,\n``time`` (click time), and ``score`` (last learned-sort score).\n\nThis is the right pane's data source in label/train mode.  Unlike\n``/api/votes`` it is *not* gated on the loaded dataset, so detector\nlabels survive across dataset switches.",
+        "description": "Each element gets a stable ``id`` (derived from its origin/md5 identity)\nplus ``label``, ``media_type``, display ``name``, and (when the\nelement resolves into the active dataset) its current ``cid``,\n``time`` (click time), and ``score`` (last learned-sort score).\n\nThis is the right pane's data source in label/train mode.  Unlike\n``/api/votes`` it is *not* gated on the loaded dataset, so detector\nlabels survive across dataset switches.",
         "operationId": "get_detector_labels_detail",
         "responses": {
           "200": {
@@ -8186,7 +9771,7 @@
         }
       ],
       "post": {
-        "description": "Sets the cancel flag on the :class:`AsyncJob`; the per-step retrain\nloop polls it cooperatively. Returns 200 even when the job has\nalready finished \u2014 see ``cancel_learned_sort`` for the rationale.",
+        "description": "Sets the cancel flag on the :class:`AsyncJob`; the per-step retrain\nloop polls it cooperatively. Returns 200 even when the job has\nalready finished; see ``cancel_learned_sort`` for the rationale.",
         "operationId": "cancel_eval_train_and_score",
         "responses": {
           "200": {
@@ -8288,7 +9873,7 @@
     },
     "/api/example-sort-by-id": {
       "post": {
-        "description": "When ``crop_params`` is absent the existing ``media[\"embedding\"]``\nis reused \u2014 no fetch, no re-embed.  When set, the media's bytes are\nmaterialised, cropped, and re-embedded before sorting.",
+        "description": "When ``crop_params`` is absent the existing ``media[\"embedding\"]``\nis reused (no fetch, no re-embed).  When set, the media's bytes are\nmaterialised, cropped, and re-embedded before sorting.",
         "operationId": "example_sort_by_id",
         "requestBody": {
           "content": {
@@ -8633,7 +10218,7 @@
     },
     "/api/find/cancel": {
       "post": {
-        "description": "Sets the cancel flag on the shared ``find_progress`` tracker, which\nevery scoring path (``/api/find``, ``/api/find-label``, and\n``/api/auto-detect``) reports progress through. Long-running loops\npoll the flag between iterations and bail out by raising\n:class:`CancelledError`. Always returns 200 \u2014 calling cancel when\nnothing is running is a no-op.",
+        "description": "Sets the cancel flag on the shared ``find_progress`` tracker, which\nevery scoring path (``/api/find``, ``/api/find-label``, and\n``/api/auto-detect``) reports progress through. Long-running loops\npoll the flag between iterations and bail out by raising\n:class:`CancelledError`. Always returns 200; calling cancel when\nnothing is running is a no-op.",
         "operationId": "cancel_find",
         "responses": {
           "200": {
@@ -8755,7 +10340,7 @@
     },
     "/api/indicator-score-history": {
       "get": {
-        "description": "Reads only the per-step cache populated by the labeling-status\npolling \u2014 no models are retrained.",
+        "description": "Reads only the per-step cache populated by the labeling-status\npolling; no models are retrained.",
         "operationId": "indicator_score_history",
         "parameters": [
           {
@@ -8802,7 +10387,7 @@
     },
     "/api/jobs/active": {
       "get": {
-        "description": "Used by the top-bar pulldown to render a spinner glyph on rows whose\npair has background work in flight (learned-sort, eval, \u2026). The endpoint\nis intentionally cheap \u2014 it walks the in-memory ``JOB_MANAGERS`` map and\nreads each manager's current/pending slot under the manager's own lock,\nnothing else. Safe to poll on a 2\u20133 second interval.",
+        "description": "Used by the top-bar pulldown to render a spinner glyph on rows whose\npair has background work in flight (learned-sort, eval, \u2026). The endpoint\nis intentionally cheap; it walks the in-memory ``JOB_MANAGERS`` map and\nreads each manager's current/pending slot under the manager's own lock,\nnothing else. Safe to poll on a 2\u20133 second interval.",
         "operationId": "active_jobs",
         "responses": {
           "200": {
@@ -8877,6 +10462,90 @@
           }
         },
         "summary": "Return a list of all registered label importers.",
+        "tags": [
+          "label_importers"
+        ]
+      }
+    },
+    "/api/label-importers/import/holder": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "run_label_import__holder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/run_label_import_HolderLabelImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run the named label importer and apply the resulting labels.",
+        "tags": [
+          "label_importers"
+        ]
+      }
+    },
+    "/api/label-importers/import/server_csv_file": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "run_label_import__server_csv_file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/run_label_import_ServerCsvLabelImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run the named label importer and apply the resulting labels.",
+        "tags": [
+          "label_importers"
+        ]
+      }
+    },
+    "/api/label-importers/import/server_json_file": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "run_label_import__server_json_file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/run_label_import_ServerJsonLabelImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run the named label importer and apply the resulting labels.",
         "tags": [
           "label_importers"
         ]
@@ -9005,7 +10674,7 @@
     },
     "/api/labels/export": {
       "get": {
-        "description": "Each label entry includes the element's ``origin`` and ``origin_name``\nso consumers know exactly where each labeled element came from. The\nformat is a superset of the legacy export format \u2014 old consumers\nthat only read ``md5`` and ``label`` keys continue to work unchanged.",
+        "description": "Each label entry includes the element's ``origin`` and ``origin_name``\nso consumers know exactly where each labeled element came from. The\nformat is a superset of the legacy export format; old consumers\nthat only read ``md5`` and ``label`` keys continue to work unchanged.",
         "operationId": "export_labels",
         "parameters": [
           {
@@ -9174,7 +10843,7 @@
     },
     "/api/learned-sort": {
       "post": {
-        "description": "Training is GIL-bound and ran inline used to stall every other request\nserved by the small ``gthread`` pool \u2014 votes polls, thumbnails, even\nmedia bytes.  The endpoint now hands the work off to a background daemon\nthread and returns immediately with a ``job_id``; clients poll\n:func:`learned_sort_result` until ``status == \"done\"``.\n\nA small signature cache short-circuits the no-op case: when the votes,\ndetector, inclusion and thresholding settings are unchanged from the\nmost recent successful run, the previous result is returned directly.\n\nTests can pass ``{\"wait\": true}`` in the body to block until the job\ncompletes and receive the result inline.  The frontend leaves it false.",
+        "description": "Training is GIL-bound and ran inline used to stall every other request\nserved by the small ``gthread`` pool (votes polls, thumbnails, and even\nmedia bytes).  The endpoint now hands the work off to a background daemon\nthread and returns immediately with a ``job_id``; clients poll\n:func:`learned_sort_result` until ``status == \"done\"``.\n\nA small signature cache short-circuits the no-op case: when the votes,\ndetector, inclusion and thresholding settings are unchanged from the\nmost recent successful run, the previous result is returned directly.\n\nTests can pass ``{\"wait\": true}`` in the body to block until the job\ncompletes and receive the result inline.  The frontend leaves it false.",
         "operationId": "learned_sort",
         "requestBody": {
           "content": {
@@ -9229,7 +10898,7 @@
         }
       ],
       "post": {
-        "description": "Sets the cancel flag on the :class:`AsyncJob`; the training loop\npolls it cooperatively. Returns 200 even when the job has already\nfinished \u2014 the caller's contract is \"make sure it's no longer\nrunning\", which also holds for done / errored / already-cancelled\njobs.",
+        "description": "Sets the cancel flag on the :class:`AsyncJob`; the training loop\npolls it cooperatively. Returns 200 even when the job has already\nfinished; the caller's contract is \"make sure it's no longer\nrunning\", which also holds for done / errored / already-cancelled\njobs.",
         "operationId": "cancel_learned_sort",
         "responses": {
           "200": {
@@ -9444,7 +11113,7 @@
     },
     "/api/medias/ids": {
       "get": {
-        "description": "Each item contains only the fields the frontend needs to build virtual\nscrollers and to inspect the dataset's media type / embedder *before*\nany item becomes visible: ``id``, ``type``, and ``embedder`` (when set).\nDisplay-worthy metadata (``filename``, ``md5``, ``custom_metadata``,\n``origin_name``, ``description``, ``clip_*``) is fetched on demand for\nthe items currently in the viewport via ``POST /api/medias/batch``.\n\nThis replaces the previous unpaginated ``GET /api/medias`` endpoint,\nwhich serialised the full metadata for every media in the dataset on\nevery call \u2014 a 10-20\u00d7 larger payload that the cache + batch pattern\nmakes unnecessary.",
+        "description": "Each item contains only the fields the frontend needs to build virtual\nscrollers and to inspect the dataset's media type / embedder *before*\nany item becomes visible: ``id``, ``type``, and ``embedder`` (when set).\nDisplay-worthy metadata (``filename``, ``md5``, ``custom_metadata``,\n``origin_name``, ``description``, ``clip_*``) is fetched on demand for\nthe items currently in the viewport via ``POST /api/medias/batch``.\n\nThis replaces the previous unpaginated ``GET /api/medias`` endpoint,\nwhich serialised the full metadata for every media in the dataset on\nevery call; a 10-20x larger payload that the cache + batch pattern\nmakes unnecessary.",
         "operationId": "list_media_ids",
         "responses": {
           "200": {
@@ -9693,7 +11362,7 @@
         }
       ],
       "post": {
-        "description": "``target`` is one of:\n\n- ``\"good\"`` \u2014 set to good (overrides ``bad`` if present).\n- ``\"bad\"`` \u2014 set to bad (overrides ``good`` if present).\n- ``\"none\"`` \u2014 un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1 \u2014 two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box`` \u2014 by\ndesign no-votes are image-level always (patch-embedder v2).\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
+        "description": "``target`` is one of:\n\n- ``\"good\"``: set to good (overrides ``bad`` if present).\n- ``\"bad\"``: set to bad (overrides ``good`` if present).\n- ``\"none\"``: un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1; two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box``; by\ndesign no-votes are image-level always (patch-embedder v2).\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
         "operationId": "vote_media",
         "requestBody": {
           "content": {
@@ -9913,7 +11582,7 @@
     },
     "/api/server-media-files/upload": {
       "post": {
-        "description": "Optional form fields:\n\n* ``media_type`` \u2014 required when ``crop_params`` is present (``\"audio\"``\n  or ``\"image\"``); identifies which bounded clipper to apply.\n* ``crop_params`` \u2014 JSON object with the user-cropped bounds.  When set,\n  the file is cropped server-side before being saved, so the persisted\n  example is the cropped sub-region (and downstream code that reads\n  the saved file by name does not need any changes).",
+        "description": "Optional form fields:\n\n* ``media_type``: required when ``crop_params`` is present (``\"audio\"``\n  or ``\"image\"``); identifies which bounded clipper to apply.\n* ``crop_params``: JSON object with the user-cropped bounds.  When set,\n  the file is cropped server-side before being saved, so the persisted\n  example is the cropped sub-region (and downstream code that reads\n  the saved file by name does not need any changes).",
         "operationId": "upload_server_media_file",
         "responses": {
           "201": {
@@ -10036,7 +11705,7 @@
     },
     "/api/settings": {
       "get": {
-        "description": "Augments the persisted dict with ``effective_solo_media_type`` \u2014 the\nresolver's view of the per-user value plus the CLI fallback. The\nfrontend reads only this key when deciding whether to hide mediaType\npickers; the raw ``solo_media_type`` / ``solo_media_type_explicit``\npair is still exposed for the settings UI to render the current state.",
+        "description": "Augments the persisted dict with ``effective_solo_media_type``, which is\nthe resolver's view of the per-user value plus the CLI fallback. The\nfrontend reads only this key when deciding whether to hide mediaType\npickers; the raw ``solo_media_type`` / ``solo_media_type_explicit``\npair is still exposed for the settings UI to render the current state.",
         "operationId": "get_settings",
         "responses": {
           "200": {
@@ -10193,6 +11862,34 @@
           }
         },
         "summary": "Return a list of all registered settings importers.",
+        "tags": [
+          "settings_io"
+        ]
+      }
+    },
+    "/api/settings-importers/import/server_json_file": {
+      "post": {
+        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "operationId": "run_settings_import__server_json_file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/run_settings_import_ServerFileSettingsImporter_Args"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run the named settings importer and apply imported settings.",
         "tags": [
           "settings_io"
         ]
@@ -10542,7 +12239,7 @@
     },
     "/api/votes/seed-from-examples": {
       "post": {
-        "description": "For each ``type: \"media\"`` example, reads the file from\n``data/example_media/``, computes its MD5, and either marks the\nmatching loaded media as Good, or \u2014 if the example is new \u2014\nembeds it, inserts it into the ``medias`` dict, and votes it Good.\n\nReturns::\n\n    {\"seeded\": 2, \"skipped\": 1}",
+        "description": "For each ``type: \"media\"`` example, reads the file from\n``data/example_media/``, computes its MD5, and either marks the\nmatching loaded media as Good, or (if the example is new)\nembeds it, inserts it into the ``medias`` dict, and votes it Good.\n\nReturns::\n\n    {\"seeded\": 2, \"skipped\": 1}",
         "operationId": "seed_votes_from_examples",
         "requestBody": {
           "content": {
@@ -10652,7 +12349,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Liveness probe \u2014 200 while the Flask process is serving.",
+        "summary": "Liveness probe: 200 while the Flask process is serving.",
         "tags": [
           "health"
         ]
@@ -10690,7 +12387,7 @@
     },
     "/readyz": {
       "get": {
-        "description": "Sub-checks:\n\n* ``data_dir`` \u2014 :data:`vtscore.config.DATA_DIR` exists and is\n  writable (the app needs this for embeddings, model cache, settings).\n* ``models`` \u2014 every embedder implied by the dataset/detector\n  registries is warm (``_model is not None``).",
+        "description": "Sub-checks:\n\n* ``data_dir``: :data:`vtscore.config.DATA_DIR` exists and is\n  writable (the app needs this for embeddings, model cache, settings).\n* ``models``: every embedder implied by the dataset/detector\n  registries is warm (``_model is not None``).",
         "operationId": "readyz",
         "responses": {
           "200": {
@@ -10717,7 +12414,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Readiness probe \u2014 200 when every sub-check passes, 503 otherwise.",
+        "summary": "Readiness probe: 200 when every sub-check passes, 503 otherwise.",
         "tags": [
           "health"
         ]
@@ -10725,7 +12422,7 @@
     },
     "/{path}": {
       "get": {
-        "description": "The Angular build output (main.js, polyfills.js, styles.css, etc.) is\nreferenced from index.html with ``<base href=\"/\">``, so the browser\nrequests them at ``/main.js`` rather than ``/static/main.js``.  This\nroute serves those files when they exist, and falls back to\n``index.html`` for any other path so that Angular Router can handle\nclient-side navigation.\n\nPaths under ``/api/`` are excluded \u2014 unmatched API routes should\nreturn 404, not the SPA page.",
+        "description": "The Angular build output (main.js, polyfills.js, styles.css, etc.) is\nreferenced from index.html with ``<base href=\"/\">``, so the browser\nrequests them at ``/main.js`` rather than ``/static/main.js``.  This\nroute serves those files when they exist, and falls back to\n``index.html`` for any other path so that Angular Router can handle\nclient-side navigation.\n\nPaths under ``/api/`` are excluded; unmatched API routes should\nreturn 404, not the SPA page.",
         "operationId": "catch_all",
         "responses": {
           "default": {

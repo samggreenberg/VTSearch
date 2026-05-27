@@ -5,7 +5,7 @@ to prevent directory traversal, URL validation to block SSRF, and an
 allowlist-based pickle unpickler so loading a `.pkl` dataset can't lead
 to arbitrary code execution. The three modules
 (`path_validation.py`, `url_validation.py`, `pickle.py`) have no app
-coupling — they take their inputs explicitly and operate on bytes and
+coupling - they take their inputs explicitly and operate on bytes and
 strings, not request objects or settings.
 
 Related docs: [`state.md`](state.md) for the contexts that hold the
@@ -39,7 +39,7 @@ form.
 
 In single-user mode (`DefaultLoginProvider`) it returns `None`, which
 causes `validate_server_filepath` to fall back to
-`vtscore.config.SERVER_ROOTS[0]` — typically `Path.cwd()`, configurable
+`vtscore.config.SERVER_ROOTS[0]` - typically `Path.cwd()`, configurable
 via `VTSEARCH_SERVER_ROOTS`. In multi-user mode it returns the current
 user's data directory so each user is confined to their own
 `data/<username>/` subtree. This is the only function in the package
@@ -56,7 +56,7 @@ resolved = validate_server_filepath(user_supplied_path, get_file_access_base_dir
 
 Contract: relative paths resolve against `base_dir`, absolute are used
 as-is, `Path.resolve()` is called (follows symlinks, normalises `..`),
-and `resolved.relative_to(base_resolved)` is checked — if it raises
+and `resolved.relative_to(base_resolved)` is checked - if it raises
 `ValueError`, the path escaped and we re-raise. Symlinks are followed
 during resolution, so a symlinked file inside `base_dir` whose target
 is outside is rejected.
@@ -79,18 +79,18 @@ sanitize_template_value("")                  # "_"
 sanitize_template_value("..")                # "_"
 ```
 
-Defence-in-depth — the template engine should still call
+Defence-in-depth - the template engine should still call
 `validate_server_filepath` on the final substituted path.
 
 ### `rglob_follow_symlinks` and `glob_top_level`
 
-`Path.rglob()` does **not** descend into symlinked directories — media
+`Path.rglob()` does **not** descend into symlinked directories - media
 files inside symlinked sub-folders are silently skipped during dataset
 import. `rglob_follow_symlinks(root, pattern)` uses
 `os.walk(followlinks=True)` to traverse symlinked directory trees;
 `glob_top_level(root, pattern)` is the non-recursive variant (direct
 children only, file symlinks followed). Neither applies containment
-itself — if you need it after a glob, pass each result through
+itself - if you need it after a glob, pass each result through
 `validate_server_filepath`.
 
 ---
@@ -122,7 +122,7 @@ hold:
 | `is_unspecified` | `0.0.0.0`, `::` |
 
 This blocks SSRF attacks targeting AWS metadata, internal admin
-endpoints, etc. An unparseable IP is also treated as unsafe — defensive
+endpoints, etc. An unparseable IP is also treated as unsafe - defensive
 `True` rather than silently allowing the address through.
 
 ```python
@@ -166,8 +166,8 @@ primitives (`int`, `float`, `str`, `None`, `bool`, `dict`, `list`,
 | `numpy._core.multiarray._reconstruct`, `scalar` | Same helpers under numpy's post-1.25 module rename |
 | `numpy.core.numeric._frombuffer`, `numpy._core.numeric._frombuffer` | Used by numpy's pickle protocol for some dtypes |
 
-Anything else — `os.system`, `subprocess.Popen`, `builtins.eval`,
-`vtsearch.routes.something` — is refused with
+Anything else - `os.system`, `subprocess.Popen`, `builtins.eval`,
+`vtsearch.routes.something` - is refused with
 `pickle.UnpicklingError`.
 
 ### `RestrictedUnpickler` and `safe_pickle_load`
@@ -240,13 +240,13 @@ and numpy arrays (see the "No Persisted Vectors or MLPs" rule in
 `CLAUDE.md`: embeddings are persisted as numpy arrays inside the media
 dicts, never as `vtsearch.*` objects). If a pickle contains a reference
 to any `vtsearch.*` or `vtscore.*` class, that pickle was not produced
-by a sanctioned code path — the right behaviour is to refuse it, not
+by a sanctioned code path - the right behaviour is to refuse it, not
 to silently rewrite the class name.
 
 This invariant means renaming, moving, or deleting a `vtscore.*` class
 **cannot break** on-disk pickles, because no on-disk pickle ever held
 one. An attacker who crafts a pickle referencing `vtsearch.cli.system`
-gets the same `UnpicklingError` as one trying to inject `os.system` —
+gets the same `UnpicklingError` as one trying to inject `os.system` -
 no fast path lets internal classes through.
 
 If you find yourself wanting to add a `vtsearch.*` or `vtscore.*` class

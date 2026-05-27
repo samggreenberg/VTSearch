@@ -1,4 +1,4 @@
-"""Dataset configurations — built from the media type registry.
+"""Dataset configurations - built from the media type registry.
 
 ``DEMO_DATASETS`` is assembled at import time from every registered
 :class:`~vtscore.media.base.MediaType`'s

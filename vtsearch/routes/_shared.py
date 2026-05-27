@@ -37,8 +37,8 @@ def require_detector_header(fn: Callable) -> Callable:
     are absent, but if any future code path sets the thread-local on a
     Flask request thread, a header-absent request would land on a stale
     detector. This guard rejects header-absent requests *before* the
-    resolver chain runs, regardless of thread-local state — defence in
-    depth.
+    resolver chain runs, regardless of thread-local state (defence in
+    depth).
 
     Apply to any endpoint that mutates ``DetectorContext`` state
     (``good_votes`` / ``bad_votes`` / ``label_history`` / ``vote_*`` /
@@ -61,7 +61,7 @@ def require_detector_header(fn: Callable) -> Callable:
 def require_dataset_header(fn: Callable) -> Callable:
     """Route decorator: reject 400 if no ``X-Dataset-Id`` is identified.
 
-    Sister of :func:`require_detector_header` — closes the dataset-side
+    Sister of :func:`require_detector_header`; closes the dataset-side
     analog of H34. Apply to any endpoint that mutates ``DatasetContext``
     state (``medias`` insertions, ``diversity_tree`` rebuilds) or whose
     correctness depends on knowing which dataset's cid-keyed votes are
@@ -105,11 +105,116 @@ def error_response(error: str, status: int, detail: Any | None = None, **extra: 
 def get_json_safe() -> dict:
     """Parse the request body as JSON, returning ``{}`` on missing or invalid input.
 
-    Unlike :func:`get_json_or_400`, this never returns an error tuple — it
-    silently falls back to an empty dict.  Use this when the JSON body is
+    Unlike :func:`get_json_or_400`, this never returns an error tuple;
+    it silently falls back to an empty dict.  Use this when the JSON body is
     entirely optional (e.g. endpoints that accept both GET and POST).
     """
     return request.get_json(force=True, silent=True) or {}
+
+
+def register_plugin_typed_routes(
+    blueprint,
+    *,
+    list_plugins,
+    path_template: str,
+    endpoint_prefix: str,
+    delegate,
+    plugin_kwarg: str = "importer_name",
+    extra_keys: tuple[str, ...] = (),
+    extra_decorators: tuple[Callable, ...] = (),
+    skip_file_plugins: bool = True,
+) -> None:
+    """Register per-plugin typed routes for a plugin-field endpoint.
+
+    Each plugin-field route (e.g. ``POST /api/dataset/import/<importer_name>``)
+    has a single parameterized URL rule whose request body shape depends
+    on the named plugin's :attr:`fields` declaration.  This helper
+    additionally registers one *static* URL rule per known plugin (e.g.
+    ``POST /api/dataset/import/server_folder``,
+    ``POST /api/dataset/import/pickle``) decorated with
+    ``@blp.arguments(SchemaClass)``, where ``SchemaClass`` is built from
+    that plugin's declared fields.  Werkzeug matches static URL rules
+    before dynamic ones, so requests for known plugins land on the typed
+    route (and surface in the OpenAPI spec with real per-field types);
+    requests for unknown plugin names fall through to the parameterized
+    fallback (preserving the legacy 404 error message that names the
+    unknown plugin).
+
+    Plugins with ``file`` fields are skipped by default (the fallback
+    handles them as multipart/form-data); ``skip_file_plugins=False``
+    will register them too but the spec won't describe the file body.
+
+    Parameters
+    ----------
+    blueprint:
+        The :class:`flask_smorest.Blueprint` to register on.
+    list_plugins:
+        Callable returning the list of plugins for this family (e.g.
+        :func:`vtscore.datasets.list_importers`).  Called once at
+        registration time.
+    path_template:
+        URL template containing ``{plugin_name}`` (e.g.
+        ``"/api/dataset/import/{plugin_name}"``).  Other ``<...>``-style
+        Flask path variables can appear elsewhere in the template (e.g.
+        ``"/api/detectors/<name>/import-labels/{plugin_name}"``).
+    endpoint_prefix:
+        Flask endpoint name prefix; the per-plugin endpoint is
+        ``f"{endpoint_prefix}__{plugin.name}"``.  Also used as the
+        ``route_id`` argument to :func:`make_plugin_route_schema` for
+        namespacing the generated schema class.
+    delegate:
+        The parameterized fallback view function (e.g. ``import_dataset``).
+        The typed wrapper calls it with the plugin's name passed via
+        *plugin_kwarg*; the fallback re-validates the request via
+        :func:`validate_plugin_args`, so the typed wrapper itself does
+        nothing with the validated body (its only purpose is to attach
+        ``@arguments`` for spec generation).
+    plugin_kwarg:
+        Name of the keyword argument *delegate* expects to receive the
+        plugin name as (matches the original ``<importer_name>``-style
+        path variable name).
+    extra_keys:
+        Pass-through keys the route accepts alongside the plugin-declared
+        fields (e.g. ``("source_specs", "clipper", "embedder",
+        "dataset_name")``).  Declared as :class:`fields.Raw` on the
+        generated schema so they appear in the OpenAPI spec.
+    extra_decorators:
+        Additional view-function decorators to apply *outside* of
+        ``@arguments`` (e.g. :func:`require_dataset_header`).  Applied in
+        order; the outermost decorator is last.
+    skip_file_plugins:
+        When True (default), plugins with at least one ``file``-typed
+        field are not registered as typed routes (they continue to use
+        the parameterized fallback).
+    """
+    from vtscore.plugins.schema import make_plugin_route_schema  # noqa: PLC0415
+
+    for plugin in list_plugins():
+        if skip_file_plugins and any(f.field_type == "file" for f in plugin.fields):
+            continue
+        schema_cls = make_plugin_route_schema(
+            plugin,
+            extra_keys=extra_keys,
+            route_id=endpoint_prefix,
+        )
+        path = path_template.format(plugin_name=plugin.name)
+        endpoint = f"{endpoint_prefix}__{plugin.name}"
+        plugin_name = plugin.name
+
+        def _make_view(_plugin_name: str):
+            def _typed_view(body, **kwargs):  # noqa: ARG001 (body is validated for spec; delegate re-reads request)
+                kwargs[plugin_kwarg] = _plugin_name
+                return delegate(**kwargs)
+
+            _typed_view.__name__ = endpoint
+            _typed_view.__doc__ = delegate.__doc__
+            return _typed_view
+
+        view = _make_view(plugin_name)
+        view = blueprint.arguments(schema_cls)(view)
+        for dec in extra_decorators:
+            view = dec(view)
+        blueprint.route(path, methods=["POST"], endpoint=endpoint)(view)
 
 
 def get_plugin_or_404(get_fn, list_fn, name: str, type_label: str):
@@ -124,7 +229,7 @@ def get_plugin_or_404(get_fn, list_fn, name: str, type_label: str):
 
     Returns:
         ``(plugin, None)`` on success, or ``(None, (response, 404))`` on
-        failure — the caller returns the error tuple directly.
+        failure; the caller returns the error tuple directly.
     """
     plugin = get_fn(name)
     if plugin is not None:
@@ -181,9 +286,9 @@ def validate_plugin_args(
 
     Schema-level rejects (missing required field, invalid select value,
     unparseable number) surface as ``422`` with the standard
-    ``errors`` envelope — matching the validation behaviour of routes
+    ``errors`` envelope, matching the validation behaviour of routes
     using ``@blp.arguments(...)``.  Keys the schema doesn't recognise
-    are dropped (the schema uses ``Meta.unknown = "exclude"``) — pass
+    are dropped (the schema uses ``Meta.unknown = "exclude"``); pass
     *extra_keys* to allow specific extra body fields through to the
     returned dict (e.g. ``"converters"``, ``"clipper"``, ``"name"``).
 
@@ -195,18 +300,18 @@ def validate_plugin_args(
         How to surface file uploads.  Both modes satisfy the
         :class:`~vtscore.plugins.uploads.UploadedFile` protocol.
         ``"filestorage"`` (default) keeps the Werkzeug
-        :class:`~werkzeug.datastructures.FileStorage` object — used by
+        :class:`~werkzeug.datastructures.FileStorage` object; used by
         label-importer routes where the file is consumed synchronously.
         ``"bytesio"`` wraps the upload bytes in a
         :class:`~vtscore.plugins.uploads.BytesIOUploadedFile` carrying
-        the original filename — used by dataset-importer routes that
+        the original filename; used by dataset-importer routes that
         hand the file off to a background thread (the request context,
         and the underlying ``FileStorage``, are torn down before the
         thread reads).
     extra_keys:
         Pass-through keys whose values should ride along on the
         returned dict if present in the request body.  Each is copied
-        verbatim — type / shape validation is the route handler's
+        verbatim; type / shape validation is the route handler's
         responsibility.
     """
     from vtscore.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415

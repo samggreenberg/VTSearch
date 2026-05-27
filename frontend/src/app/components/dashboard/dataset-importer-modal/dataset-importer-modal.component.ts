@@ -100,11 +100,11 @@ export class DatasetImporterModalComponent implements OnInit {
 
   /** Source-specs editor state for the local-folder / local-files
    *  views.  These uploads go through ``/api/dataset/import-local-folder``,
-   *  which delegates to server_folder — so the same multi-media flow
+   *  which delegates to server_folder, so the same multi-media flow
    *  applies. */
   lfSourceSpecs: SourceSpec[] = [];
 
-  // Local folder upload state — files come from the browser machine
+  // Local folder upload state (files come from the browser machine):
   lfFiles: File[] = [];
   lfMediaType = '';
   lfMediaTypeOptions: string[] = [];
@@ -150,7 +150,7 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Whether the user has manually edited :prop:`sfDatasetName`. */
   private sfDatasetNameDirty = false;
   /** Multi-media import rows for the server_folder picker.  Each row is a
-   *  ``(source_type, converter|null, params)`` triple — see
+   *  ``(source_type, converter|null, params)`` triple; see
    *  ``docs/plans/multi-media-import.md``. */
   sfSourceSpecs: SourceSpec[] = [];
 
@@ -447,14 +447,14 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Pick the initial embedder for a picker view.  Priority:
    *  1. Solo mediaEmbedder lock for this mediaType (per-user setting or
    *     ``--solo-embedder`` CLI fallback). When set and present in the
-   *     embedder list it wins over every other source — the picker is
+   *     embedder list it wins over every other source; the picker is
    *     also hidden in that case (see :prop:`lockedEmbedderFor`), so the
    *     selected value is the only one the user can see.
    *  2. ``guessedMediaEmbedder`` (computed from currently loaded datasets)
    *  3. the user's last pick for this media type (per-user setting)
    *  4. first option, or empty when the list is empty.
    *
-   *  ``mediaTypeFolderOrTypeId`` accepts either form — the importer form
+   *  ``mediaTypeFolderOrTypeId`` accepts either form; the importer form
    *  values use the folder name (e.g. ``"images"``) while the settings
    *  map is keyed by canonical type_id (e.g. ``"image"``).  We resolve to
    *  type_id before looking up the saved setting. */
@@ -480,8 +480,8 @@ export class DatasetImporterModalComponent implements OnInit {
    *  embedder name when a lock is set AND that embedder is currently
    *  registered for the type (verified against *embedders*, or the live
    *  ``allEmbedders`` list when no per-tab list is supplied). A stale
-   *  entry — embedder renamed, removed, or now belongs to a different
-   *  mediaType — returns ``''`` so the normal picker reappears. */
+   *  entry (embedder renamed, removed, or now belonging to a different
+   *  mediaType) returns ``''`` so the normal picker reappears. */
   lockedEmbedderFor(mediaTypeFolderOrTypeId: string, embedders?: EmbedderInfo[]): string {
     if (!mediaTypeFolderOrTypeId) return '';
     const typeId = this.toTypeId(mediaTypeFolderOrTypeId) || mediaTypeFolderOrTypeId;
@@ -538,7 +538,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
   /** Picker tabs to display.  All tabs declared by the backend render in
    *  their declared order, regardless of whether any importers populate
-   *  them — so categories like "Services" remain visible even when no
+   *  them - so categories like "Services" remain visible even when no
    *  extension importers are installed.  Categories used by importers but
    *  never declared get appended at the end with a title-cased label and
    *  no icon. */
@@ -580,7 +580,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.activeImporterTab = tabId;
     this.selectedImporter = null;
     // When the tab has exactly one importer, the inner sub-tab row is
-    // redundant — clicking the outer tab already declared the intent.
+    // redundant; clicking the outer tab already declared the intent.
     // Auto-select the lone importer so the user lands directly on its
     // form instead of having to click a single-option card.
     const importers = this.importersForActiveTab;
@@ -804,7 +804,7 @@ export class DatasetImporterModalComponent implements OnInit {
       });
   }
 
-  /** Effective option list for a select field — dynamic options when set,
+  /** Effective option list for a select field - dynamic options when set,
    *  otherwise the static options declared on the field. */
   optionsFor(field: ImporterField): string[] {
     if (field.dynamic_options) {
@@ -1256,7 +1256,7 @@ export class DatasetImporterModalComponent implements OnInit {
       return;
     }
     // Local Files uploads a single paths file (not media), so type detection
-    // doesn't apply — the user picks the media type explicitly.
+    // doesn't apply - the user picks the media type explicitly.
     if (this.lfPickerKind === 'files') {
       this.lfFiles = [files[0]];
       this.lfDetection = null;
@@ -1544,7 +1544,7 @@ export class DatasetImporterModalComponent implements OnInit {
   sfPathInputValue = '';
 
   /** Apply the value typed into the absolute-path input. The path is not
-   *  verified here — the server validates it on submit. */
+   *  verified here - the server validates it on submit. */
   sfApplyPathInput(): void {
     const raw = (this.sfPathInputValue || '').trim();
     if (!raw) {
@@ -1641,7 +1641,7 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   // -------------------------------------------------------------------
-  // Source-specs editor — shared logic across the three picker views.
+  // Source-specs editor - shared logic across the three picker views.
   //
   // Each view ("sf" / "lf" / "form") owns its own SourceSpec[] and its
   // own "output media-type" form value.  The helpers below take that
@@ -1666,7 +1666,7 @@ export class DatasetImporterModalComponent implements OnInit {
   // Once a detection result is available we (a) pre-fill the output
   // media-type dropdown with the dominant type and (b) auto-populate
   // multi-media SourceSpec rows for every non-dominant type present in
-  // the sample that has a converter to the dominant type — so a folder
+  // the sample that has a converter to the dominant type - so a folder
   // of "47 images + 3 videos" opens with "include images directly" plus
   // a "video → image" converter row pre-added.
   // -------------------------------------------------------------------
@@ -1752,7 +1752,7 @@ export class DatasetImporterModalComponent implements OnInit {
    *  it's a valid option, then rebuilds the source-spec list: one direct
    *  row for the dominant type plus one converter row per non-dominant
    *  recognised type that has at least one matching converter to the
-   *  dominant type.  Returns the new ``(mediaType, sourceSpecs)`` pair —
+   *  dominant type.  Returns the new ``(mediaType, sourceSpecs)`` pair -
    *  the caller decides which view's state to update.
    */
   private autofillFromDetection(
@@ -1808,7 +1808,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
   // Per-view native-type ids and converter lists fed to
   // ``<vt-source-specs-picker>``.  Local uploads stream to the
-  // server-side temp dir and re-enter ``server_folder.run()`` — so
+  // server-side temp dir and re-enter ``server_folder.run()`` - so
   // ``lf`` uses the same converter list as ``sf``.
 
   get sfOutputTypeId(): string { return this.toTypeId(this.sfMediaType); }
@@ -2051,7 +2051,7 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 }
 
-/** Shallow-equality check for clipper-param dicts — both are flat
+/** Shallow-equality check for clipper-param dicts - both are flat
  *  ``{string: string|number}`` maps. */
 function shallowParamsEqual(
   a: Record<string, string | number> | undefined,
@@ -2068,7 +2068,7 @@ function shallowParamsEqual(
   return true;
 }
 
-/** Order-insensitive deep-ish equality for source-spec lists — compares
+/** Order-insensitive deep-ish equality for source-spec lists - compares
  *  each row by ``source_type`` + ``converter`` + params. Used to suppress
  *  the post-import "save as default" toast when the user's submitted
  *  config already matches what they saved. */

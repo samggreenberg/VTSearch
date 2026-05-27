@@ -123,7 +123,7 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
       const nextTierName = TIER_NAMES[a.tier_idx + 1] ?? 'Next';
       progressLabel = `${a.counter.toLocaleString()} / ${a.next_threshold.toLocaleString()} → ${nextTierName}`;
     } else {
-      progressLabel = `${a.counter.toLocaleString()} — maxed out`;
+      progressLabel = `${a.counter.toLocaleString()} (maxed out)`;
     }
     return {
       ...a,
@@ -137,10 +137,10 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
 
   private lockReason(a: AchievementEntry): string {
     if (this.disableAchievements) {
-      return 'Achievements are disabled in Settings — counters are frozen at zero.';
+      return 'Achievements are disabled in Settings; counters are frozen at zero.';
     }
     const firstTier = a.tiers[0];
-    const base = `${a.counter.toLocaleString()} so far — reach ${firstTier.toLocaleString()} to unlock Bronze.`;
+    const base = `${a.counter.toLocaleString()} so far. Reach ${firstTier.toLocaleString()} to unlock Bronze.`;
     if (a.id === 'datasets_loaded' && a.counter === 0) {
       return `${base} Demo and synthetic dataset loads don't count.`;
     }

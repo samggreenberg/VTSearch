@@ -261,7 +261,7 @@ class TestFillFromSortConfirm:
     def test_disk_sync_failure_surfaces_as_500(self, client, monkeypatch):
         """C11 regression: a sync failure must not be silently swallowed.
 
-        Before the fix the route logged the failure and still returned 200 —
+        Before the fix the route logged the failure and still returned 200;
         the UI then treated the labels as committed while the detector JSON
         on disk had never been updated. After the fix the request fails
         with a 5xx so the client can react.
@@ -318,7 +318,7 @@ class TestCliScoringNegativeHits:
 
         # Stub the matrix builder so it claims 2 ids but only 1 row of
         # embeddings.  ``scores`` ends up length 1, ``all_ids`` length
-        # 2 — exactly the mismatch the strict zip guards against.
+        # 2; exactly the mismatch the strict zip guards against.
         extra_id = max(medias) + 1
 
         def _mismatched(_snap):
@@ -392,7 +392,7 @@ class TestCliScoringNegativeHits:
         def _truncating_matrix(snap_arg):
             ids, mat = real_get(snap_arg)
             # Drop the last id but keep the full matrix so scores stays
-            # longer than ids — exactly the silent-truncation failure mode.
+            # longer than ids; exactly the silent-truncation failure mode.
             return ids[:-1], mat
 
         monkeypatch.setattr(matrix_module, "get_embedding_matrix_for_snap", _truncating_matrix)
@@ -419,8 +419,8 @@ class TestCliScoringNegativeHits:
         y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
         mlp, threshold = train_and_threshold(X, y, snap=snap)
 
-        # Build a broken snap that doesn't share the active ctx's key set
-        # — that forces the fresh-build path in
+        # Build a broken snap that doesn't share the active ctx's key set;
+        # that forces the fresh-build path in
         # ``get_embedding_matrix_for_snap`` where the M11 guard lives.
         # (The cached-matrix fast path would return the still-valid
         # matrix built from the active ctx, masking the bug.)
@@ -435,7 +435,7 @@ class TestCliScoringNegativeHits:
         with pytest.raises(ValueError, match=r"has no embedding"):
             _score_medias_with_detectors(broken, detector_mlps)
 
-        # Untouched global state stays scorable — the broken dict was a
+        # Untouched global state stays scorable; the broken dict was a
         # local snapshot, ``medias`` is intact.
         invalidate_embedding_matrix(get_active_context())
         det_results = _score_medias_with_detectors(snapshot_medias(), detector_mlps)

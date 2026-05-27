@@ -159,11 +159,13 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
         throw new Error(`HTTP ${response.status} fetching audio for media ${mediaId}`);
       }
       const arrayBuffer = await response.arrayBuffer();
+      if (abort.signal.aborted) return;
 
       if (!this.audioCtx || this.audioCtx.state === 'closed') {
         this.audioCtx = new AudioContext();
       }
       const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+      if (abort.signal.aborted) return;
 
       const channelData = audioBuffer.getChannelData(0);
       const step = Math.ceil(channelData.length / width);

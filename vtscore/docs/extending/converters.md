@@ -3,9 +3,9 @@
 A media converter transforms a media of one type into one or more
 media of a **different** type: video → image (sampled frames), audio →
 image (spectrogram), audio → text (ASR), image → text (OCR), document
-→ image (rendered pages). Converters unlock cross-format access —
+→ image (rendered pages). Converters unlock cross-format access -
 running an image embedder over audio via a spectrogram, surfacing
-searchable text behind a scanned document — without requiring new
+searchable text behind a scanned document - without requiring new
 embedders. Subclass [`MediaConverter`](../../converters/base.py)
 ([`vtscore/converters/base.py:11`](../../converters/base.py)),
 implement `source_type`, `target_type`, and `convert()`, optionally
@@ -58,7 +58,7 @@ encoder for the same kind, write an [embedder](embedders.md).
 | `target_type` (property) | `str` | The `type_id` of the output media type |
 | `convert(media, params)` | `(dict, dict\|None) -> list[dict]` | Convert one media into one or more target-type dicts |
 
-`name` is auto-derived as `f"{source_type}2{target_type}"` — don't
+`name` is auto-derived as `f"{source_type}2{target_type}"` - don't
 override it. Two converters with the same source / target would clash;
 keep the pairing unique.
 
@@ -75,20 +75,20 @@ Optional overrides:
 A list of dicts (empty list if conversion fails or produces no
 output). Each dict must contain at minimum:
 
-- `"filename"` — a descriptive name (e.g. `f"{source_stem}_page1.png"`);
+- `"filename"` - a descriptive name (e.g. `f"{source_stem}_page1.png"`);
 - the data fields expected by the target media type (`media_bytes` +
   `duration` for image/audio/video; `media_string` for text);
 - any extras the target media type's `pickle_extra_fields` declares
   (e.g. `width`, `height` for images).
 
-`convert()` does **not** populate `id`, `embedding`, or `md5` — those
+`convert()` does **not** populate `id`, `embedding`, or `md5` - those
 are filled in by the caller. Don't compute embeddings inside
 `convert()`; the loader pipeline embeds the produced media afterwards.
 
 ### Reading parameters
 
 User-supplied parameters arrive in the `params` dict. Always read them
-via `self.get_param(params, key)` — it returns the field's declared
+via `self.get_param(params, key)` - it returns the field's declared
 `default` when the key is missing or empty, and treats empty strings
 as "unset" so a UI submitting blank inputs still gets the default.
 Coerce types explicitly (`int(value)`, `float(value)`) since web
@@ -105,8 +105,8 @@ vtscore/converters/<source>2<target>.py
 The registry ([`vtscore/converters/__init__.py:25`](../../converters/__init__.py))
 scans this directory for `.py` files (excluding `__init__.py` and
 `base.py`) and registers any module-level `CONVERTER` sentinel. No
-`__init__.py` edits are needed for the discovery itself — it's
-filesystem-driven — but the package's existing `__init__.py` imports
+`__init__.py` edits are needed for the discovery itself - it's
+filesystem-driven - but the package's existing `__init__.py` imports
 all built-in converter classes for legacy `from vtscore.converters
 import Audio2ImageMediaConverter` users.
 
@@ -116,7 +116,7 @@ entry point (see below).
 ## Parameters
 
 Converters declare user-configurable knobs the same way every other
-plugin family does — a list of `PluginField`s
+plugin family does - a list of `PluginField`s
 ([`vtscore/plugins/__init__.py:71`](../../plugins/__init__.py)) on the
 class. The audio→image spectrogram converter is a good reference for
 the spread of field types (select, number with min/max/step) it can
@@ -249,7 +249,7 @@ The `pyproject.toml`:
 audio2text_whisper = "my_pkg.audio2text_whisper:CONVERTER"
 ```
 
-This name collides with the built-in `audio2text` — to ship both, give
+This name collides with the built-in `audio2text` - to ship both, give
 the third-party one a distinct source/target pair (e.g. add an
 `audio2text_whisper` source-type alias) or contribute the model-size
 parameter upstream.
@@ -257,7 +257,7 @@ parameter upstream.
 ## Testing pattern
 
 Converter tests live in `tests/converters/` (app-tier) and
-`tests_lib/` doesn't currently have a converters folder — most
+`tests_lib/` doesn't currently have a converters folder - most
 converter tests are app-tier because they exercise the
 post-load-conversion pipeline. For library-only smoke tests, drop a
 file in `tests_lib/core/` or `tests_lib/datasets/`:
@@ -314,6 +314,6 @@ def _has_module(name: str) -> bool:
 ```
 
 The built-in [`tests/converters/`](../../../tests/converters/) tests
-are the long-form reference — they wire converters into a full dataset
+are the long-form reference - they wire converters into a full dataset
 load and assert the resulting media types end up correctly in
 `medias`.

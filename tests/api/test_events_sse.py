@@ -7,6 +7,7 @@ import time
 from vtscore.concurrency.events import (
     _TASK_CHANNELS,
     _TRACKER_CHANNELS,
+    BOOT_ID,
     initial_snapshot,
     stream_progress_events,
 )
@@ -80,7 +81,7 @@ class TestProgressTrackerEta:
     """``ProgressTracker`` should fill in a smoothed ``eta_seconds`` once a
     bar has been running >5s, reset its phase clock when the status or total
     changes, and stay silent otherwise. We patch :func:`time.monotonic` for
-    determinism — the clock advance values matter, not wall time."""
+    determinism; the clock advance values matter, not wall time."""
 
     def _make_tracker(self) -> ProgressTracker:
         return ProgressTracker(extra_fields={"eta_seconds": None})
@@ -172,7 +173,7 @@ class TestProgressTrackerEta:
         assert tracker.get()["eta_seconds"] is None
 
     def test_eta_field_absent_when_extra_not_declared(self):
-        """Trackers created without an ``eta_seconds`` extra get no key —
+        """Trackers created without an ``eta_seconds`` extra get no key;
         the feature is opt-in via :data:`_PROGRESS_COMMON_EXTRAS`."""
         tracker = ProgressTracker()
         tracker.update("loading", "", 1, 2)
@@ -224,10 +225,18 @@ class TestLoadingTasksTrackerSubscriptions:
 class TestEventsRoute:
     def test_initial_snapshot_includes_every_channel(self):
         frames = initial_snapshot()
-        # One frame per known channel.
+        # One frame per known channel plus the leading `server` identity
+        # frame carrying boot_id.
         names = {f.split("\n", 1)[0].replace("event: ", "") for f in frames}
-        expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys())
+        expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys()) | {"server"}
         assert names == expected
+
+    def test_initial_snapshot_first_frame_is_server_boot_id(self):
+        frames = initial_snapshot()
+        assert frames[0].startswith("event: server\n")
+        data_line = [ln for ln in frames[0].splitlines() if ln.startswith("data: ")][0]
+        payload = json.loads(data_line.removeprefix("data: "))
+        assert payload == {"boot_id": BOOT_ID}
 
     def test_endpoint_returns_sse_mimetype(self, client):
         # We can't keep the generator open easily through the test client,
@@ -247,7 +256,7 @@ class TestEventsRoute:
             # Drain initial connect comment + the snapshot frames so the
             # generator is parked on the queue.get() call.
             seen_channels: set[str] = set()
-            expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys())
+            expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys()) | {"server"}
             deadline = time.monotonic() + 2.0
             while seen_channels != expected and time.monotonic() < deadline:
                 chunk = next(gen)

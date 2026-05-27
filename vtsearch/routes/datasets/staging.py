@@ -8,7 +8,7 @@ importer-field-options) use the standard ``@arguments`` + ``@response``
 decorators; schema-level validation failures surface as 422.
 Multipart-upload routes (``stage-file``) and plugin-field routes
 (``stage-import/<importer>``, ``import/<importer>``) keep ``@arguments``
-omitted — the latter pair's body shape depends on the importer plugin
+omitted; the latter pair's body shape depends on the importer plugin
 and isn't described in the OpenAPI spec.  Runtime validation goes
 through :func:`validate_plugin_args` (per-plugin schema built from the
 importer's :attr:`fields`), so missing required fields / invalid select
@@ -30,7 +30,7 @@ from vtscore.datasets.load_pipeline import (
     _run_importer_in_background,
     _stage_importer_in_background,
 )
-from vtsearch.routes._shared import get_plugin_or_404, validate_plugin_args
+from vtsearch.routes._shared import get_plugin_or_404, register_plugin_typed_routes, validate_plugin_args
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
 from vtsearch.schemas.datasets import (
     ClearStagingResponseSchema,
@@ -112,7 +112,7 @@ def stage_file():
     staging_path = STAGING_DIR / f"stage_{uuid4().hex}.pkl"
     file.save(staging_path)
 
-    # Peek the pkl's dict structure cheaply — embeddings and inline media
+    # Peek the pkl's dict structure cheaply; embeddings and inline media
     # bytes are skipped, so this stays light even on multi-GB uploads. The
     # response always returns 200 (so the client keeps the staged path and
     # can clean it up); peek failures are surfaced via the ``error`` field
@@ -152,7 +152,7 @@ def stage_file():
 # ---------------------------------------------------------------------------
 # POST /api/dataset/stage-import/<importer_name>
 #
-# Plugin-field route — body shape depends on the importer plugin.  Not
+# Plugin-field route: body shape depends on the importer plugin.  Not
 # described in the OpenAPI spec; runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the
 # importer's :attr:`fields`), so missing required fields / invalid
@@ -259,7 +259,7 @@ def importer_field_options(body: dict, importer_name: str):
         options = importer.get_field_options(field_key, values)
     except NotImplementedError as exc:
         abort(501, message=str(exc) or "Importer does not implement get_field_options")
-    except Exception as exc:  # noqa: BLE001 — surface remote-service errors verbatim
+    except Exception as exc:  # noqa: BLE001 (surface remote-service errors verbatim)
         abort(502, message=str(exc) or type(exc).__name__)
 
     if not isinstance(options, list):
@@ -270,7 +270,7 @@ def importer_field_options(body: dict, importer_name: str):
 # ---------------------------------------------------------------------------
 # POST /api/dataset/import/<importer_name>
 #
-# Plugin-field route — same per-plugin validation pattern as
+# Plugin-field route: same per-plugin validation pattern as
 # ``stage-import``.  Body shape isn't in the OpenAPI spec, but
 # :func:`validate_plugin_args` enforces the per-plugin field types at
 # request time; pass-through keys (``source_specs``, ``clipper``,
@@ -298,7 +298,7 @@ def import_dataset(importer_name: str):
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
     # importer has file fields; the per-plugin schema treats it as an
-    # opaque pass-through (string) — decode it here before handing off.
+    # opaque pass-through (string); decode it here before handing off.
     file_keys = {f.key for f in importer.fields if f.field_type == "file"}
     clipper_params, params_err = _extract_clipper_params(bool(file_keys))
     if params_err:
@@ -308,3 +308,32 @@ def import_dataset(importer_name: str):
 
     task_id = _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
+
+
+# ---------------------------------------------------------------------------
+# Per-plugin typed routes for /api/dataset/import/<name> and /api/dataset/
+# stage-import/<name>.  Registered at module-import time by iterating the
+# importer registry, so each known importer gets a static URL whose body
+# schema is described in /api/openapi.json with real per-field types.
+# Unknown importer names fall through to the parameterized routes above
+# (preserving the legacy 404 message that names the unknown importer).
+# Plugins with file fields stay on the parameterized fallback (multipart
+# bodies aren't usefully described by the generic plugin schema).
+# ---------------------------------------------------------------------------
+
+register_plugin_typed_routes(
+    datasets_staging_bp,
+    list_plugins=list_importers,
+    path_template="/api/dataset/import/{plugin_name}",
+    endpoint_prefix="import_dataset",
+    delegate=import_dataset,
+    extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "clipper_params"),
+)
+register_plugin_typed_routes(
+    datasets_staging_bp,
+    list_plugins=list_importers,
+    path_template="/api/dataset/stage-import/{plugin_name}",
+    endpoint_prefix="stage_import",
+    delegate=stage_import,
+    extra_keys=("source_specs", "dataset_name"),
+)

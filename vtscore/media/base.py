@@ -74,7 +74,7 @@ class MediaResponse:
     ``flask.Response`` via :func:`media_response_to_flask`.
 
     Attributes:
-        data: The payload — ``bytes`` for binary media, ``dict`` for JSON.
+        data: The payload - ``bytes`` for binary media, ``dict`` for JSON.
         mimetype: MIME type string (e.g. ``"audio/wav"``, ``"application/json"``).
         download_name: Suggested filename for the ``Content-Disposition`` header.
     """
@@ -286,7 +286,7 @@ class MediaType(ABC):
         fs = media.get("file_size")
         if fs:
             result["File Size"] = fs
-        # Clip boundary fields — present only on clipped sub-medias.
+        # Clip boundary fields - present only on clipped sub-medias.
         cs = media.get("clip_start")
         if cs is not None:
             result["Clip Start"] = cs
@@ -420,9 +420,9 @@ class MediaType(ABC):
 
         Resolution order:
 
-        1. ``media_bytes`` — already in memory.
-        2. ``media_path`` — local file on disk (thin mode).
-        3. ``media_url`` — remote URL (URL-backed media, e.g. PullWrest).
+        1. ``media_bytes`` - already in memory.
+        2. ``media_path`` - local file on disk (thin mode).
+        3. ``media_url`` - remote URL (URL-backed media, e.g. PullWrest).
         """
         media_bytes = media.get("media_bytes")
         if media_bytes is not None:

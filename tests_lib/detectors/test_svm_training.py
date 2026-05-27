@@ -44,7 +44,7 @@ class TestEffectiveCalibration:
         assert _effective_calibration("auto", n_pos=20, n_neg=20) == "isotonic"
 
     def test_explicit_mode_downgrades_when_unfittable(self):
-        # User asked for isotonic with only 1 positive — must downgrade.
+        # User asked for isotonic with only 1 positive; must downgrade.
         assert _effective_calibration("isotonic", n_pos=1, n_neg=10) == "decision_sigmoid"
 
     def test_explicit_mode_honoured_when_fittable(self):
@@ -119,7 +119,7 @@ class TestDeterminism:
 
 
 class TestDefaultCalibration:
-    """The default is ``decision_sigmoid`` — no CV calibration."""
+    """The default is ``decision_sigmoid``; no CV calibration."""
 
     def test_default_is_decision_sigmoid(self):
         X, y = _separable(n_per_class=20)
@@ -173,7 +173,7 @@ def _overlapping(n_per_class: int = 40, dim: int = 8, seed: int = 0) -> tuple[np
 
     Class weights have to actually move the decision boundary for the
     inclusion tests to be observable, which means the trainer needs to
-    face genuine ambiguity.  ``_separable`` is too easy — both inclusion
+    face genuine ambiguity.  ``_separable`` is too easy; both inclusion
     values learn essentially the same boundary.
     """
     rng = np.random.default_rng(seed)
@@ -192,7 +192,7 @@ class TestInclusionWeights:
 
     Note that with CV-based probability calibration (Platt / isotonic) the
     effect of class weights is largely cancelled out at the probability
-    layer — the calibrator maps decision scores back to the true base
+    layer; the calibrator maps decision scores back to the true base
     rate of the training data.  Inclusion bias only shows up if the
     caller picks a non-default threshold (analogous to the MLP path
     where ``find_optimal_threshold`` consumes the same inclusion value).
@@ -208,7 +208,7 @@ class TestInclusionWeights:
         cw = clf.base.get_params().get("class_weight")
         if isinstance(cw, dict):
             return {int(k): float(v) for k, v in cw.items()}
-        # ``"balanced"`` for inclusion_value == 0 — represent as ratio 1.0.
+        # ``"balanced"`` for inclusion_value == 0; represent as ratio 1.0.
         return {0: 1.0, 1: 1.0}
 
     def test_positive_inclusion_upweights_positives(self):

@@ -1,4 +1,4 @@
-"""Server JSON settings source — bidirectional sync with a JSON file on the server.
+"""Server JSON settings source - bidirectional sync with a JSON file on the server.
 
 Loads settings from, and saves settings to, a JSON file on the server
 filesystem.  The ``filepath`` field supports a ``{username}`` template
@@ -51,7 +51,7 @@ class ServerFileSettingsSource(SettingsSource):
 
         A change in the returned value signals the file has been
         rewritten since the last sync.  Returns ``None`` if the file
-        doesn't exist (or can't be statted) — the settings layer
+        doesn't exist (or can't be statted) - the settings layer
         interprets that as "skip the auto re-sync until the file
         appears."
         """

@@ -100,7 +100,7 @@ class Video2AudioMediaConverter(MediaConverter):
                     check=True,
                 )
             except FileNotFoundError:
-                print("Video2AudioMediaConverter requires ffmpeg — install it or 'pip install imageio-ffmpeg'")
+                print("Video2AudioMediaConverter requires ffmpeg - install it or 'pip install imageio-ffmpeg'")
                 return []
             except subprocess.CalledProcessError as e:
                 stderr_text = (

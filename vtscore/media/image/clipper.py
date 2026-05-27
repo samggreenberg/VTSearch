@@ -1,4 +1,4 @@
-"""Image clippers — tile, crop, face-detect, or pass-through image media."""
+"""Image clippers - tile, crop, face-detect, or pass-through image media."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ class ImageTilingClipper(MediaClipper):
 
         tile_size = min(width, height)
 
-        # Already square — return unchanged.
+        # Already square - return unchanged.
         if width == tile_size and height == tile_size:
             return [media]
 
@@ -118,7 +118,7 @@ class ImageBboxClipper(MediaClipper):
     equally-spaced square crops, ``ImageBboxClipper`` returns exactly one
     crop bounded by the ``[x1, y1, x2, y2]`` box the caller provides
     (in pixel coordinates of the original image).  The intended use is
-    user-driven cropping — e.g. picking a sub-region of an example image
+    user-driven cropping - e.g. picking a sub-region of an example image
     to drive a similarity search or a training example.
 
     The returned media dict carries the same ``clip_box`` / ``width`` /
@@ -447,7 +447,7 @@ class ImageFaceClipper(MediaClipper):
     configured confidence threshold, then crops each face with optional
     padding so the embedder receives some context around the face.
     Detections smaller than ``min_size`` pixels (on either axis after
-    padding) are dropped — these are usually noisy background hits.
+    padding) are dropped - these are usually noisy background hits.
 
     Images with **no** detected faces yield zero clips and are dropped
     from the dataset; that is the intended semantic for a face-only

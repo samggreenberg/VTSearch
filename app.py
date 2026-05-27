@@ -5,7 +5,7 @@ import warnings
 
 # Limit threads to reduce memory overhead in constrained environments.  Native
 # math libraries read these env vars during *their* import, which happens the
-# moment torch / numpy / scipy are imported — so they have to be set before
+# moment torch / numpy / scipy are imported, so they have to be set before
 # anything triggers that.  Mirrors ``vtscore.config.TORCH_THREADS`` but
 # resolved inline to avoid importing ``vtscore.config`` (and therefore
 # everything it transitively imports) this early.
@@ -13,15 +13,15 @@ _torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
 os.environ["OMP_NUM_THREADS"] = _torch_threads
 os.environ["MKL_NUM_THREADS"] = _torch_threads
 
-# Configure structured logging — JSON lines by default with per-record
+# Configure structured logging: JSON lines by default with per-record
 # request_id / dataset_id / detector_id / user fields. Override via:
 #   VTSEARCH_LOG_LEVEL=INFO   (default WARNING)
-#   VTSEARCH_LOG_FORMAT=text  (default json — switch to text for local dev)
+#   VTSEARCH_LOG_FORMAT=text  (default json; switch to text for local dev)
 from vtsearch.logging_config import new_request_id, setup_logging  # noqa: E402
 
 setup_logging()
 
-# All HF models we use are public — no token needed.  Each from_pretrained()
+# All HF models we use are public, so no token is needed.  Each from_pretrained()
 # call passes token=False to signal this explicitly.  The env var + warnings
 # filter below are belt-and-suspenders in case any transitive HF code still
 # warns about missing tokens.
@@ -40,6 +40,32 @@ from werkzeug.exceptions import MethodNotAllowed, NotFound
 from vtscore.state.core import DatasetNotLoadedError, DetectorNotLoadedError  # noqa: E402
 from vtsearch.auth import get_login_provider  # noqa: E402
 from vtscore.embedding import initialize_models, preload_predicted_embedders  # noqa: E402
+
+# Install Flask-aware request-context resolvers on the (library-candidate)
+# ``vtsearch.state`` core so its ``get_active_*_context()`` helpers can read
+# the per-request dataset/detector context from ``flask.g`` without
+# ``vtscore.state.core`` itself having to import Flask.  Also wire the
+# library's "persist this" hooks (currently just last-embedder-per-media-
+# type) to ``vtsearch.settings`` and install the app-side builder for
+# ``CoreConfig.from_settings()``.  See ``vtscore/docs/architecture.md`` for
+# the seam.
+#
+# This block runs BEFORE blueprint modules are imported so that any
+# module-level code in a route that calls ``CoreConfig.from_settings()``
+# (or any other shim-backed hook) finds the builder already installed.
+# See logical-bug-audit M24.
+from vtsearch.shim import (  # noqa: E402
+    register_app_config_builder,
+    register_app_persistence_hooks,
+    register_app_plugin_families,
+    register_flask_context_resolvers,
+)
+
+register_flask_context_resolvers()
+register_app_persistence_hooks()
+register_app_config_builder()
+register_app_plugin_families()
+
 from vtsearch.routes import (  # noqa: E402
     achievements_bp,
     auth_bp,
@@ -88,25 +114,6 @@ app = Flask(__name__)
 # deployments should always set the env var.
 app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-in-production")
 
-# Install Flask-aware request-context resolvers on the (library-candidate)
-# ``vtsearch.state`` core so its ``get_active_*_context()`` helpers can read
-# the per-request dataset/detector context from ``flask.g`` without
-# ``vtscore.state.core`` itself having to import Flask.  Also wire the
-# library's "persist this" hooks (currently just last-embedder-per-media-
-# type) to ``vtsearch.settings``.  See ``vtscore/docs/architecture.md`` for
-# the seam.
-from vtsearch.shim import (  # noqa: E402
-    register_app_config_builder,
-    register_app_persistence_hooks,
-    register_app_plugin_families,
-    register_flask_context_resolvers,
-)
-
-register_flask_context_resolvers()
-register_app_persistence_hooks()
-register_app_config_builder()
-register_app_plugin_families()
-
 # Optional cap on request body size (uploads).  ``MAX_UPLOAD_MB == 0`` leaves
 # Flask's default of no limit in place; a positive value rejects oversized
 # requests with HTTP 413 before they consume disk.
@@ -147,7 +154,7 @@ api = Api(app)
 # (``apiDetectorsRegistryDatasetIdRenamePut`` etc.). Wrap ``spec.to_dict``
 # so both the live ``/api/openapi.json`` endpoint and ``dump_openapi.py``
 # see operations tagged with their Flask view function name. The patch is
-# safe to apply now because ``to_dict`` is only called lazily — blueprints
+# safe to apply now because ``to_dict`` is only called lazily; blueprints
 # registered later in this module are picked up automatically.
 _apispec_to_dict = api.spec.to_dict
 
@@ -167,7 +174,7 @@ api.spec.to_dict = _to_dict_with_operation_ids
 # ``tests/conftest.py`` attaches a handful of helpers and proxies to this
 # module so tests can use ``import app as app_module; app_module.medias`` etc.
 # Declaring them here in a ``TYPE_CHECKING`` block lets pyright resolve the
-# attribute accesses without changing runtime behaviour — the values are still
+# attribute accesses without changing runtime behaviour; the values are still
 # only set by conftest and are absent in production. Same pattern as
 # ``vtsearch/settings.py``'s dynamically generated accessors.
 from typing import TYPE_CHECKING  # noqa: E402
@@ -233,16 +240,16 @@ def _set_request_context():
     If the frontend sends ``X-Dataset-Id`` or ``X-Detector-Id``, the
     corresponding context is stashed on ``g`` so that proxy objects
     (``medias``, ``good_votes``, etc.) resolve to it for the duration of
-    this request — without mutating global "active" state.
+    this request, without mutating global "active" state.
 
     When a header is absent the proxies fall back to the thread-local /
     empty context. When a header is **present but names an unloaded id**,
     the unloaded id is stashed on ``g`` so the resolver raises
     ``DatasetNotLoadedError`` / ``DetectorNotLoadedError`` on proxy
     access (mapped to 409). Routes that never touch the proxies still
-    respond normally — see logical-bug-audit H16.
+    respond normally (see logical-bug-audit H16).
 
-    Any failure here must not 500 every subsequent request — fall back to
+    Any failure here must not 500 every subsequent request; fall back to
     the default (empty) context.
     """
     from flask import request
@@ -269,7 +276,7 @@ def _set_request_context():
             else:
                 # Header refers to a dataset that isn't loaded.  Stash the id
                 # so the resolver raises DatasetNotLoadedError at proxy
-                # access — silent fallback to the empty context hid stale
+                # access; silent fallback to the empty context hid stale
                 # results from the client (logical-bug-audit H16).  Routes
                 # that never touch the dataset proxies (registry listings,
                 # auth, file browser, etc.) still respond normally.
@@ -293,7 +300,7 @@ def _set_request_context():
     #
     # Also drop the detector's cached MLP / per-label embedding cache when
     # the active dataset's embedder differs from the one the MLP was
-    # trained on — scoring with a cross-space MLP either crashes (different
+    # trained on; scoring with a cross-space MLP either crashes (different
     # dim) or silently produces garbage labels (same dim).  See H5 in
     # docs/plans/logical-bug-audit.md.
     try:
@@ -361,7 +368,7 @@ def _echo_request_id(response):
 def _handle_404(exc):
     """JSON 404 for unknown ``/api/`` paths.
 
-    Werkzeug's default 404 renders as HTML — awful for an SPA. The
+    Werkzeug's default 404 renders as HTML, which is awful for an SPA. The
     frontend ``ErrorService`` needs JSON to show a useful banner with the
     request_id. Non-API paths fall through to the SPA's catch-all route
     (which serves index.html for client-side routing).
@@ -369,7 +376,7 @@ def _handle_404(exc):
     Scoped to ``NotFound`` specifically so flask-smorest's own
     ``HTTPException`` handler (which renders ``{message, errors}`` for
     marshmallow validation failures and custom ``abort()`` calls) keeps
-    handling 400/422/etc. — Flask resolves the most specific exception
+    handling 400/422/etc.; Flask resolves the most specific exception
     class first.
     """
     from flask import request as _req
@@ -453,7 +460,7 @@ def _handle_uncaught_exception(exc):
     """Return a standardized JSON 500 for any uncaught exception on /api/.
 
     Without this, an unhandled exception in a route renders Flask's HTML
-    debug page (in dev) or a plain 500 (in prod) — neither carries the
+    debug page (in dev) or a plain 500 (in prod), neither of which carries the
     request_id the user needs to file a bug. ``HTTPException`` is
     excluded so flask-smorest's own handler (and the 404/405 handlers
     above) keep their semantics.
@@ -533,7 +540,7 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     settings access (see
     :func:`vtsearch.settings._run_sync_from_source`) and re-fires
     whenever the source's ``peek_version`` token changes, not at
-    server boot — there is no server-wide user to sync for.
+    server boot; there is no server-wide user to sync for.
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
     initialize_models()
@@ -601,7 +608,7 @@ if __name__ == "__main__":
         help=(
             "List every auto-discovered plugin (importers, exporters, embedders, "
             "converters, clippers, …) and exit. Useful for shell completion. "
-            "Per-family shortcuts are also available — see --list-importers, "
+            "Per-family shortcuts are also available; see --list-importers, "
             "--list-exporters, etc."
         ),
     )
@@ -723,7 +730,7 @@ if __name__ == "__main__":
             "settings_exporters, settings_sources); NAME is the plugin's "
             "registered name. Hidden plugins remain importable and callable "
             "by name via execution endpoints (e.g. autodetect, label "
-            "import) — this is a UI flag, not a security boundary. Merges "
+            "import). This is a UI flag, not a security boundary. Merges "
             "with the persisted ``hidden_plugins`` key in the server "
             "settings file. Use ``--list-plugins --format names`` to see "
             "the available family:name pairs."
@@ -739,7 +746,7 @@ if __name__ == "__main__":
             "in the dataset-importer and new-detector flows, locks them to the "
             "given type, filters converter offerings to converters whose output "
             "is this type, and preloads that type's default embedder at startup. "
-            "Acts as a per-process fallback only — any user who explicitly sets "
+            "Acts as a per-process fallback only. Any user who explicitly sets "
             "their own solo mediaType (including 'show everything') via the "
             "settings UI overrides this flag for themselves. Valid values are "
             "the registered media-type ids (e.g. audio, image, video, text, "
@@ -759,7 +766,7 @@ if __name__ == "__main__":
             "(e.g. --solo-embedder image=siglip --solo-embedder audio=clap). "
             "Format is TYPE=EMBEDDER, where TYPE is a registered media-type id "
             "and EMBEDDER is a registered embedder name for that type. Acts as "
-            "a per-process fallback — any user who sets their own value via "
+            "a per-process fallback. Any user who sets their own value via "
             "the settings UI overrides this flag per-mediaType for themselves. "
             "Other mediaTypes still show the normal embedder picker."
         ),
@@ -874,7 +881,7 @@ if __name__ == "__main__":
             parser.error(f"Unknown --solo-media-type: {args.solo_media_type!r}. Valid values: {sorted(valid)}")
         set_cli_solo_media_type(args.solo_media_type)
 
-    # --hide-plugin family:name (repeatable) — stash before any listing
+    # --hide-plugin family:name (repeatable): stash before any listing
     # endpoint is served so hidden plugins are filtered from API responses.
     # ``register_app_plugin_families`` ran at module load (top of app.py),
     # so the settings_io families are already in ``FAMILIES``.
@@ -899,7 +906,7 @@ if __name__ == "__main__":
             add_cli_hidden_plugin(family, plugin_name)
 
     # --solo-embedder is repeatable; each value is TYPE=EMBEDDER. Validate
-    # both halves against the live registry before stashing — a typo here
+    # both halves against the live registry before stashing; a typo here
     # would silently no-op the lock and the user would only notice when
     # the picker reappeared.
     raw_solo_embedders = getattr(args, "solo_embedders", None) or []
@@ -970,7 +977,7 @@ if __name__ == "__main__":
                 cli_progress.emit(
                     "labels_import_dry_run",
                     text=(
-                        f"DRY RUN — would import labels from {args.label_importer_file!r} "
+                        f"DRY RUN: would import labels from {args.label_importer_file!r} "
                         f"via importer {args.label_importer!r} into detector "
                         f"{args.import_labels_into!r}."
                     ),

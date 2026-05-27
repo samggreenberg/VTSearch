@@ -118,6 +118,7 @@
   margin: 0;
   color: var(--text-secondary);
   font-weight: var(--weight-regular);
+  flex-shrink: 0;
 }
 
 .view-controls-slot {

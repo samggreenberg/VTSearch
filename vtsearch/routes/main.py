@@ -3,7 +3,7 @@
 ``/api/version`` is the only JSON API exposed here and is described via
 ``flask_smorest`` decorators so it appears in ``/api/openapi.json``.
 The other routes serve static files / the Angular SPA shell and stay
-plain Flask routes (no schema, no spec presence) — they share the same
+plain Flask routes (no schema, no spec presence); they share the same
 ``flask_smorest.Blueprint`` object since that class is a regular Flask
 ``Blueprint`` subclass and only decorated routes contribute to the
 spec.
@@ -112,7 +112,7 @@ def catch_all(path: str) -> Response:
     ``index.html`` for any other path so that Angular Router can handle
     client-side navigation.
 
-    Paths under ``/api/`` are excluded — unmatched API routes should
+    Paths under ``/api/`` are excluded; unmatched API routes should
     return 404, not the SPA page.
     """
     # Don't intercept API routes; let Flask return its default 404.

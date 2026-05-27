@@ -2,7 +2,7 @@
 
 Connects directly to the recipient's mail server (via DNS MX record lookup)
 so no SMTP credentials or server configuration are needed.  The sender
-address is supplied by the caller — a real domain you control is required,
+address is supplied by the caller - a real domain you control is required,
 because most MX hosts reject mail whose sender domain has no DNS records.
 
 Requires the ``dnspython`` package for MX record resolution.
@@ -84,7 +84,7 @@ def _resolve_mx(domain: str) -> str:
 class EmailLabelsetExporter(LabelsetExporter):
     """Send auto-detect results by e-mail via direct MX delivery.
 
-    Looks up the recipient domain's MX record and connects directly — no
+    Looks up the recipient domain's MX record and connects directly - no
     SMTP credentials or server configuration required.  The caller must
     supply a sender address on a domain they control; receiving MX hosts
     reject mail whose sender domain has no DNS records.
@@ -100,7 +100,7 @@ class EmailLabelsetExporter(LabelsetExporter):
             label="Sender Email",
             field_type="email",
             description="The email address the results will be sent from.",
-            hint=("Must be on a domain you control — most MX hosts reject mail from non-existent domains."),
+            hint=("Must be on a domain you control - most MX hosts reject mail from non-existent domains."),
             placeholder="vtsearch@your-domain.example",
         ),
         ExporterField(

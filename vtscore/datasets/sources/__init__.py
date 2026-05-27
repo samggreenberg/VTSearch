@@ -1,4 +1,4 @@
-"""Media source abstraction — low-level access to media at a location.
+"""Media source abstraction - low-level access to media at a location.
 
 ``MediaSource`` is an optional composition layer that sits *below*
 ``DatasetImporter``.  Importers that access file-like sources (folder,
@@ -9,7 +9,7 @@ working without one.
 Use :func:`get_source_for_origin` to instantiate the right source for a
 given origin dict.  Sources are **stateful** (e.g. an archive source may
 download and extract on first access), so each call returns a fresh
-instance — callers should call :meth:`~MediaSource.cleanup` when done.
+instance - callers should call :meth:`~MediaSource.cleanup` when done.
 
 Source factories are auto-discovered via the ``SOURCE`` sentinel attribute,
 just like exporters and importers.

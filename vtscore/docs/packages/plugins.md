@@ -37,9 +37,9 @@ end-to-end example per family.
 
 ## Architecture in one paragraph
 
-Every plugin family — dataset importers, results exporters, label
+Every plugin family - dataset importers, results exporters, label
 importers, labelset sources, media sources, media converters,
-processor importers, settings importers/exporters/sources — is one
+processor importers, settings importers/exporters/sources - is one
 `PluginRegistry` instance over a Python package. The registry scans the
 package directory at construction time (eager, by default), imports
 each sub-package or flat module, and registers any module-level
@@ -53,7 +53,7 @@ standard `(get, list)` accessor pair every family re-exports.
 
 ## `PluginField`
 
-`vtscore/plugins/__init__.py:71` — a dataclass that describes one
+`vtscore/plugins/__init__.py:71` - a dataclass that describes one
 user-configurable input on a plugin. Each plugin declares its inputs as
 `fields: list[PluginField]` on the class; the frontend renders a form
 from those, the CLI derives flags from those, and the marshmallow
@@ -66,9 +66,9 @@ alias (`ImporterField`, `ExporterField`, `LabelImporterField`,
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `key` | `str` | — | Dict key used in `field_values` payloads and as the CLI flag stem |
-| `label` | `str` | — | Display label shown next to the input in the UI |
-| `field_type` | `FieldType` | — | One of the literals listed below |
+| `key` | `str` | - | Dict key used in `field_values` payloads and as the CLI flag stem |
+| `label` | `str` | - | Display label shown next to the input in the UI |
+| `field_type` | `FieldType` | - | One of the literals listed below |
 | `description` | `str` | `""` | Helper text under the field (also fed into the placeholder for CLI `--help`) |
 | `accept` | `str` | `""` | For `"file"` fields: comma-separated extensions, e.g. `".pkl,.json"` |
 | `options` | `list[str]` | `[]` | For `"select"` fields: allowed dropdown values |
@@ -106,7 +106,7 @@ Defined as `Literal[...]` at `vtscore/plugins/__init__.py:44`:
 whether the auto-generated CLI argument is parsed as `int` or `float`
 and whether the marshmallow schema yields `fields.Integer` or
 `fields.Float`. If you want a float field, give any one of those values
-a decimal — e.g. `step="0.1"` or `default="1.0"`.
+a decimal - e.g. `step="0.1"` or `default="1.0"`.
 
 ### Dynamic-options fields
 
@@ -121,7 +121,7 @@ listing endpoint; the keys mirror the dataclass attributes 1-to-1.
 
 ## `PluginBase`
 
-`vtscore/plugins/__init__.py:188` — the mixin every plugin class
+`vtscore/plugins/__init__.py:188` - the mixin every plugin class
 inherits from (directly or via a family-specific ABC like
 `LabelsetExporter`). It supplies the CLI-flag, JSON-serialisation, and
 field-validation glue that's identical across families.
@@ -142,7 +142,7 @@ field-validation glue that's identical across families.
 from `fields`. `"file_upload"` skips the form and uses the native file
 picker (e.g. the local-folder importer). `"custom"` declares that the
 frontend has a dedicated UI block. `"none"` means the plugin has no
-user-facing UI at all — the GUI exporter uses this because the
+user-facing UI at all - the GUI exporter uses this because the
 frontend handles its result-display directly.
 
 ### Inherited methods
@@ -160,7 +160,7 @@ family-specific metadata (e.g. converters expose `source_type` /
 
 ## `PluginRegistry`
 
-`vtscore/plugins/__init__.py:287` — generic auto-discovering registry.
+`vtscore/plugins/__init__.py:287` - generic auto-discovering registry.
 One instance per plugin family.
 
 ### Constructor
@@ -184,7 +184,7 @@ PluginRegistry(
 | `label` | Human-readable noun used in warning messages, e.g. `"labelset exporter"`. |
 | `discover_modules` | When `True`, scan flat `.py` files in addition to sub-packages. Used by families where each plugin is a single module (media sources, converters). |
 | `entry_point_group` | Optional `importlib.metadata` group name for third-party plugins. See [Entry-point integration](#entry-point-integration). |
-| `eager` | `True` (default) runs discovery at construction time. `False` defers until the first `get()` / `list()` call — only needed by tests that want to inspect the pre-discovery state or simulate concurrent first access. |
+| `eager` | `True` (default) runs discovery at construction time. `False` defers until the first `get()` / `list()` call - only needed by tests that want to inspect the pre-discovery state or simulate concurrent first access. |
 
 ### Public API
 
@@ -218,7 +218,7 @@ pre-discovery state.
 
 ## `make_plugin_registry()` factory
 
-`vtscore/plugins/__init__.py:513` — collapses the per-family
+`vtscore/plugins/__init__.py:513` - collapses the per-family
 boilerplate. Returns the `(get, list)` accessor pair every plugin
 family re-exports.
 
@@ -258,7 +258,7 @@ EXPORTER = SftpExporter()
 ```
 
 The convention is one plugin per module. The sentinel attribute is the
-single source of truth — the registry doesn't inspect class names or
+single source of truth - the registry doesn't inspect class names or
 walk module contents, it just reads `getattr(module, sentinel, None)`.
 This means a single module can host multiple classes (a helper, a base
 class, the plugin) without confusing the registry, and you can swap
@@ -275,14 +275,14 @@ path.
 | Label importers | `vtscore.labels.importers` | `LABEL_IMPORTER` | `LabelImporter` | `vtscore.label_importers` |
 | Labelset sources | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | `vtscore.labelset_sources` |
 | Media sources | `vtscore.datasets.sources` | `SOURCE` | `MediaSource` | `vtscore.media_sources` |
-| Media types | `vtscore.media` | — (registered via `register_media_type`) | `MediaType` | `vtscore.media_types` |
-| Media embedders | `vtscore.media` | — (registered via `register_embedder`) | `MediaEmbedder` | `vtscore.embedders` |
-| Media clippers | `vtscore.media` | — (registered via `register_clipper`) | `MediaClipper` | `vtscore.clippers` |
+| Media types | `vtscore.media` | - (registered via `register_media_type`) | `MediaType` | `vtscore.media_types` |
+| Media embedders | `vtscore.media` | - (registered via `register_embedder`) | `MediaEmbedder` | `vtscore.embedders` |
+| Media clippers | `vtscore.media` | - (registered via `register_clipper`) | `MediaClipper` | `vtscore.clippers` |
 | Media converters | `vtscore.converters` | `CONVERTER` | `MediaConverter` | `vtscore.converters` |
 
 App-tier families keep their own entry-point group prefix, e.g.
 `vtsearch.settings_importers`, `vtsearch.settings_exporters`,
-`vtsearch.settings_sources` — those plugins live in `vtsearch/` and are
+`vtsearch.settings_sources` - those plugins live in `vtsearch/` and are
 not part of the library tier.
 
 ## Entry-point integration
@@ -290,7 +290,7 @@ not part of the library tier.
 Third-party packages register plugins by declaring an
 `importlib.metadata` entry point in the family's group. The value must
 resolve to an already-instantiated plugin object (the same object the
-in-tree sentinel attribute holds) — typically you point directly at
+in-tree sentinel attribute holds) - typically you point directly at
 the sentinel.
 
 ```toml
@@ -320,7 +320,7 @@ to `vtscore`. The discovery routine is `_discover_entry_points()` at
   skipped. One broken third-party plugin cannot block discovery of the
   rest of the registry.
 - **No name attribute → rejected.** Entry-point objects without a
-  truthy `.name` attribute warn and skip — there's no fallback to the
+  truthy `.name` attribute warn and skip - there's no fallback to the
   entry-point name on the registry side.
 
 If you need to verify your entry point is registering correctly, the
@@ -331,7 +331,7 @@ python -W default -c "from vtscore.exporters import list_exporters; \
   print([e.name for e in list_exporters()])"
 ```
 
-`-W default` is important — `UserWarning` is what surfaces a
+`-W default` is important - `UserWarning` is what surfaces a
 malformed entry point.
 
 ## Inventory
@@ -368,7 +368,7 @@ families (settings importers/exporters/sources) are registered by
 ### `FAMILIES`, `gather_plugins()`, formatters
 
 `FAMILIES` is exposed via a module-level `__getattr__` so importers
-see a live tuple snapshot at access time — including app-only families
+see a live tuple snapshot at access time - including app-only families
 that the shim installs after `vtscore` imports. `gather_plugins()`
 runs each family's loader inside `_safe_list()`, swallowing
 `ImportError` / `ModuleNotFoundError` so missing optional deps in one
@@ -377,7 +377,7 @@ family can't block the rest. Three formatters (`format_plain`,
 completion scripts, and tooling respectively.
 
 `register_family_shortcuts(parser)` adds `--list-<family>` flags to
-an `argparse.ArgumentParser`, one per registered family — each
+an `argparse.ArgumentParser`, one per registered family - each
 equivalent to `--list-plugins --plugin-family <family>`.
 
 ## Schema helpers
@@ -409,7 +409,7 @@ library consumers don't typically interact with it directly.
 
 A complete example of a third-party labelset exporter shipped as a
 separate distribution. The same shape (sentinel constant + entry
-point) applies to every family — substitute `IMPORTER` /
+point) applies to every family - substitute `IMPORTER` /
 `LABEL_IMPORTER` / `CONVERTER` / `LABELSET_SOURCE` / `SOURCE` as
 appropriate.
 
@@ -484,7 +484,7 @@ route is built the first time the plugin is invoked, then cached.
   sentinel, None)`. `EXPORTER = MyExporter()` works; `exporter =
   MyExporter()` does not.
 - **Module-level import errors.** Failures emit a `UserWarning` and
-  are skipped — run Python with `-W default` to surface them.
+  are skipped - run Python with `-W default` to surface them.
 - **Name collision with a built-in.** Third-party entry points lose
   on name clash; pick a unique `name` (e.g. prefix with your package
   name).
@@ -496,9 +496,9 @@ route is built the first time the plugin is invoked, then cached.
 
 ## Cross-references
 
-- [`vtscore.exporters`](exporters.md) — the labelset-exporter family
+- [`vtscore.exporters`](exporters.md) - the labelset-exporter family
   built on this framework.
-- [`vtscore.sync`](sync.md) — the bidirectional-sync ABC that
+- [`vtscore.sync`](sync.md) - the bidirectional-sync ABC that
   `LabelsetSource` (in `vtscore.labels.sources`) and `SettingsSource`
   (app-tier) inherit from.
 - The repo-level

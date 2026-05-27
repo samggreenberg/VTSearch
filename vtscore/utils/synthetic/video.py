@@ -1,4 +1,4 @@
-"""Synthetic video generation — bouncing ball, walking smiley, rotating shape, scrolling text.
+"""Synthetic video generation - bouncing ball, walking smiley, rotating shape, scrolling text.
 
 Each generator renders frames with PIL and encodes them to mp4 via
 ``imageio_ffmpeg`` (the bundled static ffmpeg binary already required by the

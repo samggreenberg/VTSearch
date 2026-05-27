@@ -13,7 +13,7 @@ POST /api/label-importers/import/<importer_name>
     Run the named label importer. Accepts ``multipart/form-data`` (when
     the importer has a ``"file"`` field) or JSON (for text-only
     importers). The request body shape is plugin-dependent and not
-    described in the OpenAPI spec — instead, the body is validated at
+    described in the OpenAPI spec; instead, the body is validated at
     request time via :func:`validate_plugin_args`, which builds a
     marshmallow schema from the named importer's :attr:`fields`
     declaration. Schema-level rejects (missing required field, invalid
@@ -25,14 +25,14 @@ POST /api/label-importers/import/<importer_name>
 
 POST /api/label-importers/ingest-missing
     Accept a list of missing label entries, re-ingest them from their
-    origins, and apply the labels. JSON-only — fully spec'd.
+    origins, and apply the labels. JSON-only and fully spec'd.
 
 Partial-failure semantics
 -------------------------
 :func:`_apply_labels` isolates each entry with a per-entry try/except.
 If ``apply_label`` raises mid-loop, that entry is recorded in the
 ``failed`` return list and the loop continues with the remaining
-entries.  This addresses logical-bug-audit H31 — a single bad entry no
+entries.  This addresses logical-bug-audit H31: a single bad entry no
 longer aborts the whole import and silently strands the already-applied
 labels behind a 500 response.  The handler still runs the downstream
 sync block (``sync_labels_to_loaded_detector``,
@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.routes._shared import (
     get_plugin_or_404,
+    register_plugin_typed_routes,
     require_dataset_header,
     require_detector_header,
     run_plugin_or_error,
@@ -88,7 +89,7 @@ def _apply_labels(
     """Apply label entries to the global vote state.
 
     Returns ``(applied, skipped, failed)``.  ``failed`` is a list of
-    ``{"entry": <original entry>, "error": <message>}`` dicts — one per
+    ``{"entry": <original entry>, "error": <message>}`` dicts, one per
     entry whose ``apply_label`` call raised.  A single bad entry never
     aborts the loop (logical-bug-audit H31); the caller is expected to
     surface the ``failed`` list to the user so they can retry just those
@@ -137,7 +138,7 @@ def get_label_importers():
 # ---------------------------------------------------------------------------
 # POST /api/label-importers/import/<importer_name>
 #
-# Plugin-field route — the request body is the importer's declared ``fields``
+# Plugin-field route: the request body is the importer's declared ``fields``
 # (file uploads, free-form params).  Static marshmallow schemas can't
 # describe the shape because each importer has its own field list, so the
 # OpenAPI spec doesn't list a request body for this route.  Runtime
@@ -286,3 +287,22 @@ def ingest_missing(body: dict):
         "failed": failed,
         "message": message,
     }
+
+
+# ---------------------------------------------------------------------------
+# Per-plugin typed routes for /api/label-importers/import/<name>.
+# Registered at module-import time by iterating the label-importer
+# registry, so each known importer gets a static URL whose body schema
+# is described in /api/openapi.json with real per-field types.  Unknown
+# importer names fall through to the parameterized route above.
+# Plugins with file fields stay on the parameterized fallback.
+# ---------------------------------------------------------------------------
+
+register_plugin_typed_routes(
+    label_importers_bp,
+    list_plugins=list_label_importers,
+    path_template="/api/label-importers/import/{plugin_name}",
+    endpoint_prefix="run_label_import",
+    delegate=run_label_import,
+    extra_decorators=(require_detector_header, require_dataset_header),
+)

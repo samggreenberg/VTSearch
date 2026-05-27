@@ -6,7 +6,7 @@ coordinate across vote dicts, click tracking, and the diversity tree.
 All functions operate on the *active* :class:`DetectorContext` (and the
 active :class:`DatasetContext` for the diversity tree side-effects).  They
 resolve the context themselves via :func:`get_active_detector_context` /
-:func:`get_active_context` — no module-level proxy names are imported, so
+:func:`get_active_context` - no module-level proxy names are imported, so
 the library has no implicit dependency on the app-side proxy view.  See
 Phase 3 of ``../docs/architecture.md``.
 """
@@ -29,7 +29,7 @@ def clear_votes() -> None:
     ``label_history`` in place on the active detector context. Does not affect
     any dataset's ``medias`` dict.  Also clears the progress model cache,
     click-time / score tracking, and the active dataset's diversity tree
-    ``seen`` state — otherwise ``diversity_tree_next_sample`` would keep
+    ``seen`` state - otherwise ``diversity_tree_next_sample`` would keep
     skipping nodes that the just-cleared votes had marked seen, and the
     UI's diversity-level chip would stay elevated despite zero labels.
     """
@@ -165,7 +165,7 @@ def _set_vote_locked(
     Does **not** acquire ``_progress_lock``.  The public wrappers
     (:func:`set_vote`, :func:`toggle_vote`) decide whether to invalidate the
     progress cache *after* releasing ``_state_lock`` based on the returned
-    ``old_label`` — see the lock-ordering note on those wrappers (audit M1).
+    ``old_label`` - see the lock-ordering note on those wrappers (audit M1).
     """
     if target not in ("good", "bad", "none"):
         raise ValueError(f"target must be 'good', 'bad', or 'none' (got {target!r})")
@@ -173,14 +173,14 @@ def _set_vote_locked(
     ctx = get_active_detector_context()
     old = _current_label_locked(ctx, media_id)
     if old == target:
-        # Idempotent — no history append, no cache churn, no achievement
+        # Idempotent - no history append, no cache churn, no achievement
         # credit.  This is the key change that closes the H1 counter-inflation
         # race: concurrent tabs sending the same target on a media that's
         # already in that state no longer increment counters.  The one
         # exception is an explicit ``region_box`` on a ``"good"`` re-vote,
         # which lets the user replace the recorded annotation without first
         # un-voting (drawing a new box on an already-good media is an
-        # intentional user action — the stale-tab race the idempotency rule
+        # intentional user action - the stale-tab race the idempotency rule
         # closes was about counters, not region updates).  An absent
         # ``region_box`` on an idempotent call leaves the existing one alone.
         if target == "good" and region_box is not None:
@@ -229,8 +229,8 @@ def _needs_progress_invalidate(old_label: str, new_label: str) -> bool:
     membership change for it.  The old ``toggle_vote`` only invalidated on
     polarity flips, which left the cache stale on good→none / bad→none.  The
     rule is now: invalidate iff the media was previously labeled *and* the
-    new label is different (idempotent re-applies — including a re-vote with
-    a new region box — do not invalidate, matching the pre-M1 behaviour
+    new label is different (idempotent re-applies - including a re-vote with
+    a new region box - do not invalidate, matching the pre-M1 behaviour
     where the idempotent path returned early before the invalidate site).
     """
     return old_label != "none" and old_label != new_label
@@ -255,7 +255,7 @@ def set_vote(
 
     Concurrent rapid-toggle from multiple tabs no longer inflates counters,
     because each client sends an absolute target rather than a "toggle"
-    intent — stale-view duplicates collapse into idempotent no-ops on the
+    intent - stale-view duplicates collapse into idempotent no-ops on the
     server (logical-bug-audit H1).
 
     Args:
@@ -294,12 +294,12 @@ def toggle_vote(
     correctness rules (idempotent semantics, cache invalidation on
     membership change, achievement-credit gating) are shared.  Kept for
     in-process callers that want the old "same vote toggles off" affordance
-    (the HTTP ``/api/medias/<id>/vote`` endpoint no longer uses it — see
+    (the HTTP ``/api/medias/<id>/vote`` endpoint no longer uses it - see
     :func:`set_vote`).
 
     Args:
         media_id: Integer ID of the media to vote on.
-        vote: ``"good"`` or ``"bad"`` — the clicked direction.  Toggles off
+        vote: ``"good"`` or ``"bad"`` - the clicked direction.  Toggles off
             when *media_id* is already in that polarity, otherwise sets to
             *vote* (overriding any opposite vote).
         region_box: Optional normalised good-vote region; honoured only when
@@ -340,7 +340,7 @@ def apply_label(
     No click-time is assigned (imported labels have no click-time).
 
     When *silent* is True, the label is recorded in ``good_votes``/``bad_votes``
-    only — ``label_history`` is not appended, the diversity tree is not
+    only - ``label_history`` is not appended, the diversity tree is not
     marked, and achievement counters are not credited.  This is used when
     restoring a detector's saved labels into a new dataset: those labels are
     seeded so autopilot's good/bad-count gates are satisfied, but they should
@@ -391,7 +391,7 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
 
     Same as :func:`apply_label` but also assigns a click-time ordinal so the
     label appears in the frontend's click-time timeline.  Credits one vote in
-    the active detector's achievement counters — bulk fill-from-sort flows
+    the active detector's achievement counters - bulk fill-from-sort flows
     are user vote actions and must show up in ``votes_cast`` etc. (audit
     finding C8).
 

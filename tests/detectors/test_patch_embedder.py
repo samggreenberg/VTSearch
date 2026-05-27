@@ -4,7 +4,7 @@ Covers the pure-numpy parts end-to-end (no model weights / no GPU
 required) and verifies the integration shapes that the loader,
 similarity helper, and MLP scoring code rely on.
 
-The DINOv3 / EUPE forward passes are not exercised here — those need
+The DINOv3 / EUPE forward passes are not exercised here; those need
 real weights and live in tests/test_gpu.py.  This file focuses on
 the algorithmic + integration layers that are reachable without a
 model load.
@@ -218,8 +218,8 @@ class TestBuildHacTree:
     def test_internal_vector_is_weighted_pool_of_underlying_patches(self):
         """An internal HAC node's vector equals the L2-normalised
         saliency-weighted mean of the patch vectors inside the union of
-        its children's cell masks — i.e., the merge is order-independent
-        and corresponds to re-pooling from scratch."""
+        its children's cell masks (i.e., the merge is order-independent
+        and corresponds to re-pooling from scratch)."""
         out = _make_output(h=6, w=6, d=12, seed=3)
         leaves = propose_leaves(out.patch_grid, out.patch_saliency, k=5)
         tree = build_hac_tree(
@@ -251,8 +251,8 @@ class TestBuildHacTree:
             np.testing.assert_allclose(node.vec, expected, atol=1e-5)
 
     def test_merge_order_independence_via_weights(self):
-        """The merged node's vector and weight are sums of the children's —
-        not flat 50/50 averages — so re-ordering merges of *equivalent*
+        """The merged node's vector and weight are sums of the children's
+        (not flat 50/50 averages), so re-ordering merges of *equivalent*
         partitions produces the same numerical result.  Concretely:
         a 3-leaf tree merged left-first vs right-first matches when both
         partitions cover the same cells."""
@@ -347,7 +347,7 @@ def _make_region_batch(
 ) -> dict[int, dict]:
     """Build a batch of media dicts with fp32-stored ``patch_regions``.
 
-    Each region vector is a fresh L2-normalised draw — no shared structure
+    Each region vector is a fresh L2-normalised draw with no shared structure
     between media or regions, which is the worst case for cosine ranking
     stability (no built-in margin between competing regions).
     """
@@ -385,7 +385,7 @@ class TestFp16Fp32RankStability:
     Per the patch-embedder design (Open Questions §1): region vectors are
     pickled as fp16 to keep dataset size manageable, but cast back to fp32
     at compute time inside ``score_against_query``.  This test pins the
-    claim that the fp16 round-trip is cheap *and* faithful — the cosine
+    claim that the fp16 round-trip is cheap *and* faithful: the cosine
     ranking under fp16 storage matches fp32 storage outside of a tiny
     quantization-noise tie band.
     """
@@ -421,7 +421,7 @@ class TestFp16Fp32RankStability:
 
         assert max_diff < 1e-2, (
             f"fp16 vs fp32 region-max score diff = {max_diff:.4g}; "
-            "expected < 1e-2 — investigate whether fp16 storage is dropping "
+            "expected < 1e-2; investigate whether fp16 storage is dropping "
             "normalisation or vectors are no longer near-unit-norm"
         )
 
@@ -429,7 +429,7 @@ class TestFp16Fp32RankStability:
         """Pairs of media whose fp32 scores differ by more than the fp16 noise
         floor keep the same relative order under fp16 storage.
 
-        Pairs *inside* the noise band (|Δscore| ≤ 5e-3) are allowed to swap —
+        Pairs *inside* the noise band (|Δscore| ≤ 5e-3) are allowed to swap;
         that's an unavoidable consequence of fp16 quantization and matches
         what "rank doesn't flip in any meaningful sense" means in practice.
         """
@@ -463,7 +463,7 @@ class TestFp16Fp32RankStability:
 
     def test_top_result_preserved(self):
         """The #1 result under fp32 storage is also the #1 result under fp16,
-        across every random query — this is the assertion users actually feel."""
+        across every random query; this is the assertion users actually feel."""
         snap_fp32 = _make_region_batch(self._NUM_MEDIA, self._REGIONS_PER_IMAGE, self._DIM, seed=2)
         snap_fp16 = _to_fp16_batch(snap_fp32)
         rng = np.random.default_rng(99)
@@ -698,7 +698,7 @@ class TestCosineSortWithBoxes:
         }
         q = np.array([1.0, 0.0], dtype=np.float32)
         results, _ = cosine_sort_with_boxes(snap, q)
-        # Mixed snapshot with at least one patch-region media — region path
+        # Mixed snapshot with at least one patch-region media; region path
         # taken for the whole snapshot, every result gets best_region.
         for r in results:
             assert "best_region" in r
@@ -712,7 +712,7 @@ class TestCosineSortWithBoxes:
 class TestRegionBoxOnLabeledElement:
     """v2 region voting attaches a normalised ``(x0, y0, x1, y1)`` box to a
     yes-vote when the user drew a region.  This class pins the data-model
-    contract — the field exists, defaults to ``None`` (image-level), and
+    contract: the field exists, defaults to ``None`` (image-level), and
     round-trips through dict serialisation including JSON's tuple→list
     coercion.
 
@@ -776,7 +776,7 @@ class TestRegionBoxOnLabeledElement:
 
     def test_region_box_survives_merge(self):
         """A region_box on the first occurrence of a key is preserved through
-        ``LabelSet.merge`` — the merge already keeps the first entry's
+        ``LabelSet.merge``; the merge already keeps the first entry's
         position, so its region annotation should ride along with it."""
         from vtscore.datasets.labelset import LabeledElement, LabelSet
 
@@ -849,7 +849,7 @@ class TestBoxToVoteVector:
 
     def test_pooling_two_cells_uniform_mean(self):
         """A 4×4 one-hot grid; a 2-cell selection should give a vector with
-        two entries at 1/√2 and zeros elsewhere — verifies uniform (not
+        two entries at 1/√2 and zeros elsewhere; verifies uniform (not
         saliency-) weighting."""
         grid = self._grid_with_distinct_unit_vecs(4, 4, 16)
         # Box spans the left two columns of the top row: centers (0.125, 0.125)
@@ -870,7 +870,7 @@ class TestBoxToVoteVector:
     def test_two_boxes_selecting_same_cells_give_same_vector(self):
         """Set-determinism: shrinking the box slightly while still capturing
         the same set of cell *centers* leaves the result identical.  This is
-        the property the design doc calls out — same patch set → same vector,
+        the property the design doc calls out: same patch set → same vector,
         regardless of how the user drew the rectangle."""
         grid = _make_output(h=4, w=4, d=8).patch_grid
         big = box_to_vote_vector(grid, (0.0, 0.0, 0.5, 0.5))  # 2×2 = 4 cells
@@ -1042,7 +1042,7 @@ class TestVoteEndpointRegionBox:
 
     def test_malformed_region_box_rejected(self, client):
         # The marshmallow schema only declares ``region_box`` as a List of
-        # Floats — the length check (==4) is done by ``_parse_region_box``
+        # Floats; the length check (==4) is done by ``_parse_region_box``
         # in the handler, so a 3-element list passes the schema and is
         # rejected by the handler with a 400 + standard ``message`` envelope.
         resp = client.post(
@@ -1089,7 +1089,7 @@ class TestVoteEndpointRegionBox:
 
     def test_idempotent_re_vote_preserves_region_box(self, client):
         """Re-sending target=good without region_box on an already-good media
-        is idempotent — region_box stays unchanged.  This is intentional: an
+        is idempotent; region_box stays unchanged.  This is intentional: an
         absent ``region_box`` on an idempotent call must not silently wipe a
         previously-recorded one (H1 idempotency rule)."""
         from vtsearch.state import vote_region_boxes
@@ -1142,7 +1142,7 @@ class TestVoteEndpointRegionBox:
         annotation without going through un-vote, since the user explicitly
         sent a new ``region_box``.  An idempotent re-vote *without* a
         region_box leaves the existing one alone (so a stale-view tab can't
-        wipe a region a different tab just set — H1 idempotency)."""
+        wipe a region a different tab just set (H1 idempotency)."""
         from vtsearch.state import vote_region_boxes
 
         client.post(
@@ -1401,7 +1401,7 @@ class TestRegionAwareTraining:
         assert not np.allclose(first, second)
 
     def test_populate_label_embeddings_keeps_cached_when_no_region_box(self):
-        """Plain image-level elements stay cached across calls — the fast
+        """Plain image-level elements stay cached across calls; the fast
         path for non-region datasets is preserved."""
         from vtscore.datasets.labelset import LabeledElement, LabelSet
         from vtscore.detectors.labelset_elements import stable_element_id
@@ -1495,7 +1495,7 @@ class TestRegionAwareTrainingCrossDataset:
     """Cross-dataset region-vote path: when a labelset element carries a
     ``region_box`` and its source file is not in the active dataset's snap,
     ``_embed_one`` should resolve the file, run ``patch_forward`` on it,
-    and pool the box via :func:`box_to_vote_vector` — so the user's region
+    and pool the box via :func:`box_to_vote_vector`; the user's region
     intent isn't silently downgraded to a full-image embedding (bug H2).
 
     Falls back (with a warning) to the image-level embedding only when the
@@ -1627,7 +1627,7 @@ class TestRegionAwareTrainingCrossDataset:
 
     def test_cross_dataset_region_vote_box_change_reflects_in_pooled_vector(self, monkeypatch, tmp_path):
         """Two boxes selecting disjoint quadrants of the same patch grid
-        must produce two visibly different cached vectors — proves the
+        must produce two visibly different cached vectors; proves the
         region intent really threads through the cross-dataset path."""
         from vtscore.datasets.labelset import LabelSet
         from vtscore.detectors.labelset_elements import stable_element_id
@@ -1690,7 +1690,7 @@ class TestRegionAwareTrainingCrossDataset:
     def test_cross_dataset_region_vote_returns_none_when_embedder_patch_forward_fails(self, monkeypatch, tmp_path):
         """``patch_forward`` returning ``None`` (failed decode, etc.)
         downgrades to the image-level fallback rather than skipping the
-        element entirely — keeping the vote in the training set."""
+        element entirely, keeping the vote in the training set."""
         from vtscore.datasets.labelset import LabelSet
         from vtscore.detectors.labelset_elements import stable_element_id
         from vtscore.detectors.labelset_training import populate_label_embeddings
@@ -1721,7 +1721,7 @@ class TestRegionAwareTrainingCrossDataset:
 
     def test_cross_dataset_no_region_box_unchanged(self, monkeypatch, tmp_path):
         """Image-level cross-dataset elements (no ``region_box``) must hit
-        the existing ``embed_file`` path — patch_forward should not even
+        the existing ``embed_file`` path; patch_forward should not even
         be called.  Guards against the new path firing spuriously."""
         from vtscore.datasets.labelset import LabelSet
         from vtscore.detectors.labelset_elements import stable_element_id

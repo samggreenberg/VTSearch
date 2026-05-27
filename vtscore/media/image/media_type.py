@@ -1,4 +1,4 @@
-"""Image media type — JPEG/PNG/GIF/BMP/WEBP files."""
+"""Image media type - JPEG/PNG/GIF/BMP/WEBP files."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ _IMAGE_MIME_TYPES: dict[str, str] = {
 
 
 class ImageMediaType(MediaType):
-    """Handles image medias — file import, HTTP serving, and demo datasets.
+    """Handles image medias - file import, HTTP serving, and demo datasets.
 
     Embedding is handled by :class:`~vtscore.media.image.embedder_siglip.ImageSiglipEmbedder`.
     """

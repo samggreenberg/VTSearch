@@ -55,11 +55,17 @@
     animation: region-box-shake 0.45s ease-in-out;
   }
 
-  // The bad-vote-with-box discard is armed — pulse a red glow so it's
+  // The bad-vote-with-box discard is armed; pulse a red glow so it's
   // unmistakable that the next ArrowLeft will throw the box away. The state
   // has no timeout; the user backs out via Esc or by touching the box.
+  // box-shadow is static (painted once); the pulse runs via opacity so it stays
+  // on the compositor thread and doesn't trigger per-frame repaints.
   &.armed {
     border-color: rgba(255, 110, 110, 0.95);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.45) inset,
+      0 0 0 1px rgba(0, 0, 0, 0.35),
+      0 0 14px 4px rgba(255, 110, 110, 0.7);
     animation: region-box-armed-pulse 1.4s ease-in-out infinite;
   }
 }
@@ -74,18 +80,8 @@
 }
 
 @keyframes region-box-armed-pulse {
-  0%, 100% {
-    box-shadow:
-      0 0 0 1px rgba(0, 0, 0, 0.45) inset,
-      0 0 0 1px rgba(0, 0, 0, 0.35),
-      0 0 8px 2px rgba(255, 110, 110, 0.35);
-  }
-  50% {
-    box-shadow:
-      0 0 0 1px rgba(0, 0, 0, 0.45) inset,
-      0 0 0 1px rgba(0, 0, 0, 0.35),
-      0 0 14px 4px rgba(255, 110, 110, 0.7);
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .region-handle {

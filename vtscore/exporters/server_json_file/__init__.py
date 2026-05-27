@@ -58,7 +58,7 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         filepath = Path(field_values["filepath"])
 
-        # Labels format (from the export modal UI) — filter to selected columns
+        # Labels format (from the export modal UI) - filter to selected columns
         if "labels" in results:
             return self._export_labels(results, filepath)
 

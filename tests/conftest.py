@@ -11,7 +11,7 @@ import vtscore.config as config
 # Auto-assign test group markers based on the test file's parent directory,
 # so tests can be run by area: pytest -m core, pytest -m sorting, etc.
 #
-# Layout: tests/<group>/test_*.py — the folder name IS the group. New test
+# Layout: tests/<group>/test_*.py; the folder name IS the group. New test
 # files automatically inherit their group from where they live, so the old
 # registry-drift bug class (a file added without an entry in _TEST_GROUPS
 # was silently excluded from `./run-tests.sh <group>`) is gone.
@@ -36,7 +36,7 @@ config.TRAIN_EPOCHS = 30
 # ---------------------------------------------------------------------------
 # Stub out heavy embedding models BEFORE importing the app.
 #
-# Tests don't need semantically meaningful embeddings — they just need
+# Tests don't need semantically meaningful embeddings; they just need
 # deterministic vectors of the correct dimension (512 for CLAP audio).
 # By patching embed_audio_file and the AudioMediaType's embed_text, we
 # avoid loading the ~600 MB CLAP model, the ~100-200 MB librosa/numba
@@ -139,7 +139,7 @@ from vtscore.media import (
 _audio_mt = _media_get("audio")
 _audio_emb = _embedders_for_type("audio")[0]
 
-# Every registered media type and embedder gets stubbed below — not just
+# Every registered media type and embedder gets stubbed below, not just
 # audio.  Tests that accidentally touch image/video/text/document embedders
 # (e.g. via ``/api/sort`` on an image dataset) would otherwise try to
 # download real CLIP / X-CLIP / E5 / SigLIP weights.
@@ -184,7 +184,7 @@ def _stub_embedding_models():
     Session-scoped: the 40 patches are applied once and held for the entire
     run instead of being torn down and re-applied for each of the ~2900 tests.
     Tests that need different stub behavior can layer their own ``patch.object``
-    on top — it will override the session-level patch and restore it on exit.
+    on top; it will override the session-level patch and restore it on exit.
     """
     from contextlib import ExitStack
 
@@ -287,10 +287,10 @@ class _MergedSettingsPath:
     in ``users/default/user_settings.json`` while server-tier keys stay
     in ``settings.json``. This wrapper preserves the legacy API by:
 
-    * ``read_text()`` — returns the merged JSON of both files (per-user
+    * ``read_text()``: returns the merged JSON of both files (per-user
       values win over server values on key collisions, which matches the
       runtime behaviour of ``settings.get_all()``).
-    * ``write_text(text)`` — parses *text* as JSON, splits the keys by
+    * ``write_text(text)``: parses *text* as JSON, splits the keys by
       tier, and writes each subset to the right file. Non-JSON text is
       treated as a "corrupt the file" probe and goes to the server file
       so the existing corruption tests still see invalid JSON on load.
@@ -401,7 +401,7 @@ def _active_id_for_tests(thread_local_getter, registry_getter) -> str | None:
 
     Reads the *thread-local* context directly rather than going through
     ``get_active_*_context()``. The high-level resolver also consults
-    Flask's per-request ``g._*_context`` — which only returns a sensible
+    Flask's per-request ``g._*_context``, which only returns a sensible
     value while a request handler is actively running (the resolver
     gates on ``g._vts_in_request_handler``). Between requests in a
     ``with app.test_client() as c:`` block, ``g`` exists but is no
@@ -413,13 +413,13 @@ def _active_id_for_tests(thread_local_getter, registry_getter) -> str | None:
 
     - ``None`` contexts and ones whose id is an empty string or a
       ``__sentinel__`` marker.
-    - Ids whose entry has been removed from the registry — e.g. a
+    - Ids whose entry has been removed from the registry (e.g. a
       previous request unloaded the detector but the test thread's
       thread-local still points to the now-orphaned object. Injecting
       a stale id would cause ``before_request`` to stash
       ``_unloaded_detector_id`` and turn every proxy access into a
       409, which is exactly the silent-mistarget surface H34 is
-      trying to avoid in *production* — but in the test wrapper we
+      trying to avoid in *production*; in the test wrapper we
       want a clean "no header sent" so the route hits the proper
       no-active-context path instead.
     """
@@ -523,7 +523,7 @@ def pytest_unconfigure(config):
 
     We use ``pytest_unconfigure`` (the very last hook) instead of
     ``pytest_sessionfinish`` so that ``pytest_terminal_summary`` still runs
-    first — ensuring failure tracebacks and the short test summary are fully
+    first so that failure tracebacks and the short test summary are fully
     printed before we force-exit.
 
     Prints an additional PASS/FAIL summary right before exiting for clarity.

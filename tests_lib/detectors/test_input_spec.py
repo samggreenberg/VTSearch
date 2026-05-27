@@ -120,7 +120,7 @@ class TestBuildDetectorMeta:
         meta = build_detector_meta(det)
         assert meta["media_type"] == "audio"
         assert meta["input_spec"] == det["input_spec"]
-        # Defensive copy — mutating the meta dict must not affect the source.
+        # Defensive copy; mutating the meta dict must not affect the source.
         meta["input_spec"]["clipper"] = "changed"
         assert det["input_spec"]["clipper"] == "sound_tiling"
 

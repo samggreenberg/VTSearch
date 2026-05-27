@@ -11,14 +11,14 @@ from vtscore.converters.base import MediaConverter
 class Document2TextMediaConverter(MediaConverter):
     """Extract the embedded text content from a PDF/DOC/PPT document.
 
-    No OCR is performed — only text that is already encoded in the
+    No OCR is performed - only text that is already encoded in the
     document structure is extracted.
 
     Supported formats:
 
-    * **.pdf** — text extracted via PyMuPDF (``fitz``).
-    * **.doc** — text extracted via PyMuPDF (``fitz``).
-    * **.ppt** — text extracted via PyMuPDF (``fitz``).
+    * **.pdf** - text extracted via PyMuPDF (``fitz``).
+    * **.doc** - text extracted via PyMuPDF (``fitz``).
+    * **.ppt** - text extracted via PyMuPDF (``fitz``).
 
     Returns a single-element list containing the concatenated text of
     all pages/slides, or an empty list if no text could be extracted.
@@ -52,7 +52,7 @@ class Document2TextMediaConverter(MediaConverter):
             return []
 
         try:
-            import fitz  # noqa: PLC0415 — PyMuPDF
+            import fitz  # noqa: PLC0415 - PyMuPDF
         except ImportError:
             print("Document2TextMediaConverter requires PyMuPDF: pip install PyMuPDF")
             return []

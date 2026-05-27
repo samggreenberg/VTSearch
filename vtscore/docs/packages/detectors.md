@@ -1,4 +1,4 @@
-# `vtscore.detectors` — Detector lifecycle, training, and labelset materialisation
+# `vtscore.detectors` - Detector lifecycle, training, and labelset materialisation
 
 A **detector** in vtscore is the trained classifier you search with: a
 small MLP plus a calibrated threshold plus a `LabelSet`. This package
@@ -20,7 +20,7 @@ origins into vectors live in `vtscore.embedding`.
 | `vtscore/detectors/registry.py`              | Persistent registry of detector entries (one JSON manifest)         |
 | `vtscore/detectors/store.py`                 | Per-detector on-disk JSON labelset file I/O                         |
 | `vtscore/detectors/training.py`              | `train_and_threshold`, `train_and_score`, `train_detector_from_origins` |
-| `vtscore/detectors/workflow.py`              | `apply_and_retrain` — combined "apply labels + retrain MLP" entry   |
+| `vtscore/detectors/workflow.py`              | `apply_and_retrain` - combined "apply labels + retrain MLP" entry   |
 | `vtscore/detectors/resolver.py`              | Origin → file → embedding pipeline + pluggable resolvers            |
 | `vtscore/detectors/labelset_training.py`     | Train from the saved labelset (cross-dataset)                       |
 | `vtscore/detectors/labelset_elements.py`     | Stable element IDs, per-element views                               |
@@ -31,7 +31,7 @@ origins into vectors live in `vtscore.embedding`.
 | `vtscore/detectors/labeling_progress.py`     | Per-step model cache + stopping-condition metrics                   |
 | `vtscore/detectors/input_spec.py`            | Clipper input-spec extraction and matching                          |
 
-The package `__init__.py` is intentionally minimal — every public name
+The package `__init__.py` is intentionally minimal - every public name
 is imported from the submodule it lives in.
 
 ---
@@ -71,7 +71,7 @@ type's embedder, and the resulting `(X_list, y_list)` is fed into
 labelset changes. This is the invariant the
 [CLAUDE.md "No Persisted Vectors or MLPs"](../../../CLAUDE.md) rule
 enforces, and it's why `_PICKLE_SAFE_CLASSES` in
-`vtscore.security.pickle` does not include any torch types — the only
+`vtscore.security.pickle` does not include any torch types - the only
 sanctioned persisted form is the labelset.
 
 ---
@@ -115,7 +115,7 @@ detector's saved training data is not overwritten.
 
 `vtscore/detectors/store.py` is the low-level file I/O layer.
 `get_detectors_dir()` reads `CoreConfig.from_settings().detectors_dir`
-(Phase 2 seam — library callers will pass a `CoreConfig` directly after
+(Phase 2 seam - library callers will pass a `CoreConfig` directly after
 Phase 8). `_detector_path(name)` slugifies via
 `re.sub(r"[^a-z0-9_-]+", "_", name.lower())` and appends `.json`.
 `_read_detector(path)` returns the parsed dict or `None`.
@@ -145,7 +145,7 @@ every detector route:
 
 Returns `(model, threshold)`. Today this function consults
 `vtsearch.state` to read `get_inclusion`, `get_calibrate_count`,
-`get_calibration_fraction`, and `get_safe_thresholds` — a Phase 3 seam.
+`get_calibration_fraction`, and `get_safe_thresholds` - a Phase 3 seam.
 Library consumers running outside an app should pass these via
 `CoreConfig` (the existing `state` shims read from there already).
 
@@ -156,10 +156,10 @@ the current `clips_dict`, `good_votes` / `bad_votes`, threshold-
 related settings, and an optional `vote_region_boxes` map and returns
 `(results, threshold, model)`:
 
-- `results` — list of `{"id": cid, "score": rounded_float, "best_region": [...]?}`
+- `results` - list of `{"id": cid, "score": rounded_float, "best_region": [...]?}`
   dicts, sorted by raw score descending.
-- `threshold` — the operating point (cross-cal or safe-blended).
-- `model` — the trained `nn.Sequential` (or `None` when training was
+- `threshold` - the operating point (cross-cal or safe-blended).
+- `model` - the trained `nn.Sequential` (or `None` when training was
   not possible).
 
 The function is the per-vote hot path:
@@ -168,7 +168,7 @@ The function is the per-vote hot path:
   `good_votes` / `bad_votes`. When a vote on an image has a `region_box`
   and the source media has a stored `patch_grid`, the training vector
   is pooled on the fly via
-  `vtscore.media.patch_embed.box_to_vote_vector` — image-level voting
+  `vtscore.media.patch_embed.box_to_vote_vector` - image-level voting
   on a patch-aware media gets the same vector as in v1.
 - Below 6 labels the cross-cal trainings are skipped (threshold defaults
   to 0.5) because the safe-threshold blend would discard the result
@@ -198,7 +198,7 @@ results, threshold, model = train_and_score(
 
 | Function                                                  | Behaviour                                                            |
 |-----------------------------------------------------------|----------------------------------------------------------------------|
-| `train_detector_from_origins(good_origins, bad_origins, inclusion, media_type, embedder_name, ...)` (line 405) | Resolve every entry to a file, embed with the named embedder, train. `embedder_name` is required — pass the embedder the detector was originally trained with so re-derived vectors don't drift onto the media type's default. Returns `(weights_dict, threshold)` or `(None, 0.5)` on insufficient data. |
+| `train_detector_from_origins(good_origins, bad_origins, inclusion, media_type, embedder_name, ...)` (line 405) | Resolve every entry to a file, embed with the named embedder, train. `embedder_name` is required - pass the embedder the detector was originally trained with so re-derived vectors don't drift onto the media type's default. Returns `(weights_dict, threshold)` or `(None, 0.5)` on insufficient data. |
 | `collect_media_origins(media_ids, snap)` (line 373) | Extract `origin / origin_name / filename / md5` for every cid that appears in `snap`. |
 | `serialize_weights(model)` (line 111) | Pickle-safe `state_dict` dump via `tensor.tolist()`. Round-trips through `build_model_from_weights`. |
 | `validate_good_bad_split(y_list)` (line 24) | Precondition; raises `ValueError` when either class is empty. |
@@ -224,7 +224,7 @@ sync flow:
 
 1. Resolves every label entry against the current dataset's medias
    (via `build_media_lookup` + `resolve_media_ids`).
-2. Calls `apply_label(cid, label)` for each match — votes show up in
+2. Calls `apply_label(cid, label)` for each match - votes show up in
    the UI like the user just cast them.
 3. Calls `sync_labels_to_loaded_detector()` so the on-disk labelset
    captures the new votes.
@@ -249,7 +249,7 @@ duration of the block. Inside, every call that reads the "active"
 detector context (the `good_votes` / `bad_votes` proxies, the label-
 sync helpers) sees `det_ctx`, regardless of whether the caller is
 inside a Flask request, a background thread, or a test. Library
-consumers that don't have Flask installed get this for free — the
+consumers that don't have Flask installed get this for free - the
 proxies fall through to the context-override stack before they look at
 `flask.g`.
 
@@ -298,7 +298,7 @@ with resolve_file_context(origin, origin_name, filename) as path:
 
 | Function                                                             | Behaviour                                                          |
 |----------------------------------------------------------------------|--------------------------------------------------------------------|
-| `resolve_file_context(origin, origin_name, filename)` (line 195)     | **Context manager** — must wrap any code that reads the file. Some sources (PullWrest, http_archive cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
+| `resolve_file_context(origin, origin_name, filename)` (line 195)     | **Context manager** - must wrap any code that reads the file. Some sources (PullWrest, http_archive cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
 | `resolve_file_from_origin(origin, origin_name, filename)` (line 223) | One-shot convenience. Safe for `path.exists()` checks; unsafe for any call that may garbage-collect the source. |
 | `embed_file(file_path, media_type, embedder_name="")` (line 376)     | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`. |
 | `resolve_label_embeddings(labels, media_type, progress_callback=None)` (line 691) | Batch entry point. Returns `ResolvedLabels`.            |
@@ -310,8 +310,8 @@ with resolve_file_context(origin, origin_name, filename) as path:
 Two synthetic origin types are special-cased: `dupe_set` (tries each
 member origin in turn) and `converter` (reconstructs a parent origin
 from `parent_importer` / `parent_path` / `parent_url` params and
-recurses). Clipped origins — audio `clip_start`/`clip_end`, image
-`clip_box`, text `clip_index`, and origin-stored clipper chains — are
+recurses). Clipped origins - audio `clip_start`/`clip_end`, image
+`clip_box`, text `clip_index`, and origin-stored clipper chains - are
 handled transparently: the chain is replayed on the resolved source
 file via `vtscore.datasets.clipper_chain.replay_chain_on_file` before
 embedding.
@@ -320,7 +320,7 @@ embedding.
 
 ## Labelset materialisation
 
-The detector's saved labelset is dataset-agnostic — every element is
+The detector's saved labelset is dataset-agnostic - every element is
 keyed by origin / md5. At load time, the labelset has to be resolved
 into a concrete embedding cache so the MLP can train. This is what
 `labelset_training.py` does, and it's why one labelset trained on
@@ -334,7 +334,7 @@ populated:
 
 1. If the element resolves to a cid in the active `snap`, reuse
    `snap[cid]["embedding"]` (zero I/O). Region-voted elements re-pool
-   from the source `patch_grid` every pass — the cache is keyed by
+   from the source `patch_grid` every pass - the cache is keyed by
    stable element id (origin/md5), intentionally stable across region
    edits.
 2. Otherwise, resolve the element's origin to a file via
@@ -343,7 +343,7 @@ populated:
 3. Cache the result on `det_ctx.label_embeddings`.
 
 If the active dataset's embedder name differs from
-`det_ctx.embedder`, the cache is cleared first — mixing vectors from
+`det_ctx.embedder`, the cache is cleared first - mixing vectors from
 two embedders into one MLP produces garbage.
 
 ### `build_xy_from_labelset(det_ctx, labelset)`
@@ -380,8 +380,8 @@ training vector tracks the live embedding.
 
 `vtscore/detectors/labelset_elements.py` handles per-element identity
 in the labelset detail view. The right pane in label/train mode is
-*labelset-driven* — each row is a `LabeledElement` from the JSON
-file, not a cid — so the frontend needs a stable id per element plus
+*labelset-driven* - each row is a `LabeledElement` from the JSON
+file, not a cid - so the frontend needs a stable id per element plus
 a way to map elements back to the currently-loaded dataset.
 
 | Function                                                       | Behaviour                                                            |
@@ -406,7 +406,7 @@ across datasets**: existing labelset entries whose origin doesn't
 match anything in the current dataset are preserved verbatim;
 entries matching current-dataset media are reconciled against the
 active votes (replaced, flipped, or removed). Skipped entirely when
-`is_find_mode()` is True — find-mode votes are scoring hits on a
+`is_find_mode()` is True - find-mode votes are scoring hits on a
 different dataset and don't belong in the training set.
 
 ### `label_restoration.restore_labels_from_detector(det_data)` (line 11)
@@ -415,9 +415,9 @@ Take a detector-JSON dict, resolve every labelset element against the
 active dataset, and apply matching votes silently
 (`apply_label(..., silent=True)`). Two-pass matching:
 
-1. **Fast** — `(origin, origin_name)`, then md5, then origin_name
+1. **Fast** - `(origin, origin_name)`, then md5, then origin_name
    fallback (via `build_media_lookup` + `resolve_media_ids`).
-2. **Slow** — for unresolved entries, materialise the origin file via
+2. **Slow** - for unresolved entries, materialise the origin file via
    `resolve_file_context`, compute its md5, and check the md5 lookup
    again. This is what makes cross-dataset label restore work: a
    detector trained on dataset A still restores labels when you load
@@ -452,10 +452,10 @@ in place, non-matching files are embedded, inserted with an
 `progress.py` filename; this one was renamed to make the distinction
 obvious.
 
-- **`vtscore.concurrency.progress`** — long-running-operation
+- **`vtscore.concurrency.progress`** - long-running-operation
   progress and cancellation (`ProgressTracker`, `dataset_progress`,
   `sort_progress`, etc.).
-- **`vtscore.detectors.labeling_progress`** — per-step MLP cache and
+- **`vtscore.detectors.labeling_progress`** - per-step MLP cache and
   stopping-condition metrics. Used by the labeling-progress UI to
   answer "should I keep voting?" without retraining.
 
@@ -486,13 +486,13 @@ per label-history step with `model` / `threshold` / `good_ids` /
 
 `compute_labeling_status` returns three indicators:
 
-- **Smart** — fits a linear regression slope over the most recent 10
+- **Smart** - fits a linear regression slope over the most recent 10
   error-cost values; green when the relative slope is above
   `-0.015` (cost has leveled off).
-- **Stable** — fraction of unlabeled predictions that flipped between
+- **Stable** - fraction of unlabeled predictions that flipped between
   successive steps; green when the recent 10-step average is below
   0.5% and no single step exceeded 1%.
-- **Span** — diversity-tree coverage; green at
+- **Span** - diversity-tree coverage; green at
   `CoreConfig.from_settings().autopilot_goal_diversity` nodes (default
   40), yellow at 10, red below.
 
@@ -504,7 +504,7 @@ Each color comes with a `reason` string the UI displays as a tooltip.
 
 `vtscore/detectors/input_spec.py` is a small helper module that
 records, exports, and compares the clipper a detector was trained on
-— so the CLI can warn when a dataset's clipping doesn't match.
+- so the CLI can warn when a dataset's clipping doesn't match.
 
 ```python
 def extract_input_spec_from_medias(medias) -> dict | None: ...

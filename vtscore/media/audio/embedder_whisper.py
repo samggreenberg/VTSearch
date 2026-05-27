@@ -1,8 +1,8 @@
-"""Audio embedder — Whisper encoder (speech-rich datasets).
+"""Audio embedder - Whisper encoder (speech-rich datasets).
 
 Uses the encoder half of OpenAI's Whisper model (``openai/whisper-base``)
 and time-averages the last hidden states into a fixed-size vector.  The
-decoder (text generation) is never invoked — this is purely a speech-
+decoder (text generation) is never invoked - this is purely a speech-
 aware audio embedder, not a transcription pipeline.
 
 There is no paired text encoder in the same vector space, so
@@ -14,6 +14,7 @@ transcript with a text embedder instead.
 
 from __future__ import annotations
 
+import io
 import logging
 from pathlib import Path
 from typing import Any, Optional
@@ -88,7 +89,7 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
                 cache_dir=cache_dir,
                 token=False,
             )
-        # Encoder only — drop the decoder so we don't keep ~half the
+        # Encoder only - drop the decoder so we don't keep ~half the
         # weights in RSS for no benefit (we never invoke it).
         full_model = full_model.to("cpu")
         self._model = full_model.encoder
@@ -119,12 +120,25 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
             self.load_models()
         if self._model is None or self._processor is None:
             return None
-        file_path = Path(media["media_path"])
+        audio_bytes = media.get("media_bytes")
+        file_path: Optional[Path] = None
+        if not isinstance(audio_bytes, (bytes, bytearray)) or not audio_bytes:
+            audio_bytes = None
+            path_str = media.get("media_path")
+            if not path_str:
+                return None
+            file_path = Path(path_str)
+        source_repr = file_path if file_path is not None else "<bytes>"
         try:
             import librosa  # noqa: PLC0415
             import torch  # noqa: PLC0415
 
-            audio_data, _sr = librosa.load(file_path, sr=WHISPER_SAMPLE_RATE, mono=True)
+            if audio_bytes is not None:
+                source: io.BytesIO | Path = io.BytesIO(bytes(audio_bytes))
+            else:
+                assert file_path is not None  # narrowed by the path_str check above
+                source = file_path
+            audio_data, _sr = librosa.load(source, sr=WHISPER_SAMPLE_RATE, mono=True)
             inputs = self._processor(audio_data, sampling_rate=WHISPER_SAMPLE_RATE, return_tensors="pt")
             device = next(self._model.parameters()).device
             input_features = inputs.input_features.to(device)
@@ -137,7 +151,7 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
                 pooled = hidden.mean(dim=1).detach().cpu().numpy()
             return pooled[0]
         except Exception:
-            logging.getLogger(__name__).exception("Error embedding %s", file_path)
+            logging.getLogger(__name__).exception("Error embedding %s", source_repr)
             return None
 
 

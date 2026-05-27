@@ -2,14 +2,14 @@
 
 Three pieces:
 
-1. ``consume_chunks_into`` — the helper that drains an importer's
+1. ``consume_chunks_into``; the helper that drains an importer's
    ``run_chunked()`` iterator into a target medias dict, renumbering IDs
    so chunks (which each restart at 1) don't collide.
-2. ``auto_chunk_size`` — picks a chunk size from the media type so the
+2. ``auto_chunk_size``; picks a chunk size from the media type so the
    user is never asked for one.
-3. The two web import routes —
+3. The two web import routes;
    ``POST /api/dataset/import/<importer_name>`` and
-   ``POST /api/dataset/import-local-folder`` — must dispatch to
+   ``POST /api/dataset/import-local-folder``; must dispatch to
    ``run_chunked`` automatically when the importer supports it, with the
    chunk size derived from the field's ``media_type``.
 """
@@ -79,7 +79,7 @@ class TestAutoChunkSize:
 
 
 # ===========================================================================
-# _DummyChunkedImporter — supports_chunked=True, no real I/O
+# _DummyChunkedImporter: supports_chunked=True, no real I/O
 # ===========================================================================
 
 
@@ -147,7 +147,7 @@ class _DummyNonChunkedImporter(DatasetImporter):
 
 
 # ===========================================================================
-# _run_importer_in_background — chunked-vs-whole dispatch
+# _run_importer_in_background: chunked-vs-whole dispatch
 # ===========================================================================
 
 
@@ -212,12 +212,12 @@ class TestRunImporterChunkedDispatch:
 
 
 # ===========================================================================
-# Route plumbing — POST /api/dataset/import/<importer_name>
+# Route plumbing: POST /api/dataset/import/<importer_name>
 # ===========================================================================
 
 
 class TestImportRouteAutoChunked:
-    """The public API no longer accepts a user-supplied ``chunk_size`` —
+    """The public API no longer accepts a user-supplied ``chunk_size``;
     the load pipeline picks one from the media type.  These tests verify
     the route still wires through to the pipeline correctly.
     """
@@ -230,7 +230,7 @@ class TestImportRouteAutoChunked:
             )
             assert resp.status_code == 200
             mock_run.assert_called_once()
-            # The pipeline takes (importer, field_values) — no chunk_size kwarg.
+            # The pipeline takes (importer, field_values); no chunk_size kwarg.
             assert "chunk_size" not in mock_run.call_args.kwargs
 
     def test_user_supplied_chunk_size_is_ignored(self, client):
@@ -252,7 +252,7 @@ class TestImportRouteClipperParams:
     user-tuned values (e.g. tiling duration) override the clipper's
     registry default.  Regression: the route used to drop them silently,
     leaving e.g. a 1s tiling clip selection running with the registered
-    default of 2s — a no-op for 2s synthetic videos.
+    default of 2s; a no-op for 2s synthetic videos.
     """
 
     def test_clipper_params_passed_through_json(self, client):
@@ -296,7 +296,7 @@ class TestImportRouteClipperParams:
 
 
 # ===========================================================================
-# Route plumbing — POST /api/dataset/import-local-folder
+# Route plumbing: POST /api/dataset/import-local-folder
 # ===========================================================================
 
 

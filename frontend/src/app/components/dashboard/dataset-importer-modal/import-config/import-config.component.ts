@@ -6,8 +6,8 @@ import { IconComponent } from '../../../icon/icon.component';
 /** Output-media-type select + auto-detection hint chip shared by the
  *  server-folder (``sf``) and local-folder/local-files (``lf``) flows
  *  of the Add Dataset modal.  The two flows had identical markup for
- *  this block — same label text, same widget shape, same hint
- *  rendering — with only the bound state and field id differing.
+ *  this block (same label text, same widget shape, same hint
+ *  rendering) with only the bound state and field id differing.
  *
  *  The dataset-name input, the source-side widget (folder path /
  *  dropzone), the recursive checkbox, and the Advanced ▾ block stay
@@ -19,7 +19,7 @@ import { IconComponent } from '../../../icon/icon.component';
  *
  *  The "select" is implemented as a custom button + popup listbox so
  *  each option can show the media type's SVG icon (rendered via
- *  ``<vt-icon>``) alongside its label — native ``<option>`` elements
+ *  ``<vt-icon>``) alongside its label; native ``<option>`` elements
  *  cannot host markup.
  */
 @Component({
@@ -41,8 +41,8 @@ export class ImportConfigComponent {
   @Input() mediaType = '';
   @Output() mediaTypeChange = new EventEmitter<string>();
 
-  /** ``folder_import_name`` values to show in the dropdown — same list
-   *  the importer's ``media_type`` field declares as ``options``. */
+  /** ``folder_import_name`` values to show in the dropdown (same list
+   *  the importer's ``media_type`` field declares as ``options``). */
   @Input() mediaTypeOptions: string[] = [];
 
   /** Map of ``folder_import_name`` → human label.  Parent computes this

@@ -79,7 +79,7 @@ class TestExampleSort:
         assert ids == set(medias.keys())
 
     def test_with_audio_crop_params_sorts_using_clip(self, client):
-        # 1s WAV cropped to a 0.05s sub-region — request still succeeds and
+        # 1s WAV cropped to a 0.05s sub-region; request still succeeds and
         # returns a fully ranked result list.  Server-side cropping is the
         # only path that keeps the sub-region distinguishable from the full
         # clip when both have the same content hash.
@@ -106,7 +106,7 @@ class TestExampleSort:
             },
             content_type="multipart/form-data",
         )
-        # Invalid JSON is silently ignored — request still succeeds.
+        # Invalid JSON is silently ignored; request still succeeds.
         assert resp.status_code == 200
 
 
@@ -264,7 +264,7 @@ class TestExampleSortServer:
         assert resp.status_code in (400, 404)
 
     def test_sort_with_audio_crop_params(self, client):
-        # 1s WAV — request a sub-region.  The server crops into a temp
+        # 1s WAV; request a sub-region.  The server crops into a temp
         # file and returns ranked results.
         sample_rate = 16000
         num_samples = sample_rate
@@ -285,7 +285,7 @@ class TestExampleSortServer:
         assert len(data["results"]) == app_module.NUM_MEDIAS
 
     def test_upload_with_crop_params_persists_cropped_bytes(self, client):
-        # Upload a 1s WAV with crop_params — the saved file should be the
+        # Upload a 1s WAV with crop_params; the saved file should be the
         # cropped sub-region (so seeding/sorting/etc. read the crop directly).
         sample_rate = 16000
         num_samples = sample_rate
@@ -360,7 +360,7 @@ class TestExampleSortOrigin:
         assert "key" in resp.get_json()["errors"]["json"]
 
     def test_invalid_origin_type_returns_422(self, client):
-        # ``origin`` is declared as ``fields.Dict`` — a non-dict value
+        # ``origin`` is declared as ``fields.Dict``; a non-dict value
         # fails type coercion at the schema layer → 422.
         resp = client.post("/api/example-sort-origin", json={"origin": "not_a_dict", "key": "test.wav"})
         assert resp.status_code == 422

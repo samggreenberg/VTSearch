@@ -13,7 +13,7 @@ We just split **embedding** and **converting** out of `DatasetImporter`.
 Before: every importer had to call the embedder, run converters, and
 populate a single combined media dict. After: importers yield raw
 source-type media records; the framework owns the rest. The win wasn't
-"less typing" — it was that *importers stopped mixing what they do with
+"less typing"; it was that *importers stopped mixing what they do with
 what the framework does*.
 
 This document is the result of asking "where else does that pattern still
@@ -31,13 +31,13 @@ exist?" across every plugin family in the tree:
 | Media converters | `vtscore/converters/base.py` | 7 |
 | Media sources | `vtscore/datasets/sources/base.py` | 3 |
 
-## The recurring pattern — what counts as a candidate
+## The recurring pattern: what counts as a candidate
 
 A simplification belongs here when it satisfies all three of:
 
 1. The behavior is **identical across implementations** (or at least
    uniformly defaulted).
-2. The behavior is a **framework concern, not a plugin concern** — the
+2. The behavior is a **framework concern, not a plugin concern**; the
    plugin author has no business knowing about it.
 3. Forgetting it is a **silent footgun** (security gap, wrong path
    produced, missing user context, etc.) rather than a loud error.
@@ -48,7 +48,7 @@ do too.
 ## Candidates
 
 Each candidate names the **leak**, where it shows up, the **fix**, and a
-short evaluation. Numbering is for cross-reference only — see "Priority"
+short evaluation. Numbering is for cross-reference only; see "Priority"
 at the bottom for ordering.
 
 ### 1. Origin construction (`DatasetImporter.build_origin`)
@@ -67,11 +67,11 @@ entirely; the few with renames live as one-line `_RENAMES = {"old":
 
 **Eval.** High win. ~6 method overrides deleted. Same shape as the
 embedding extraction: a framework-uniform serialization currently
-expressed as plugin code. Low risk — the default already does the right
+expressed as plugin code. Low risk; the default already does the right
 thing for new fields; the overrides exist only because the data model
 didn't have an "omit me" knob.
 
-**Shim.** Trivial — `build_origin()` stays a hook on the base class. If a
+**Shim.** Trivial; `build_origin()` stays a hook on the base class. If a
 subclass overrides it, the override wins (called as today). If a subclass
 doesn't override it, the new default consults `omit_from_origin` /
 `_RENAMES` and produces the same dict the old hand-written overrides
@@ -90,7 +90,7 @@ metadata per file). Then they hand all three to
 
 **Fix.** Replace the three dicts with one `yield_precomputed(filename,
 *, embedding=None, md5=None, metadata=None)` helper on the base class,
-or — cleaner — let importers yield a `RawMedia(filename, bytes_or_path,
+or, cleaner: let importers yield a `RawMedia(filename, bytes_or_path,
 precomputed=...)` dataclass that carries it all together. The framework
 unpacks it.
 
@@ -115,15 +115,15 @@ EXTENDING.md.
 `validate_server_filepath()`, and `sanitize_template_value()` from
 `vtscore/security/`. Grep finds 14+ scattered call sites across
 importers, exporters, sources, and even `vtsearch/routes/_shared.py`
-(`validate_filepath_field` — which is hard-coded to the literal key
+(`validate_filepath_field`; which is hard-coded to the literal key
 `"filepath"` rather than driven by the field schema). The webhook
-exporter calls `validate_url(url)` in its `export()` body — the
+exporter calls `validate_url(url)` in its `export()` body; the
 labelset/settings sources sprinkle `sanitize_template_value` over
 `{detector_name}` / `{username}` substitutions one by one.
 
 **Fix.** Make the field schema carry the validator. We already have
 `field_type="server_path"` and `field_type="url"` as declared types but
-they're cosmetic — the framework doesn't enforce anything based on
+they're cosmetic; the framework doesn't enforce anything based on
 them. Promote them to *enforced* types: before `run()` / `export()` is
 called, the framework walks the field schema and applies
 `validate_server_filepath` to every `server_path`, `validate_url` to
@@ -135,10 +135,10 @@ extraction: a uniform safety/security concern currently expressed as
 plugin-author imperative code. Forgetting a validator is a silent
 security gap, which is exactly the "silent footgun" trigger from the
 pattern definition. Also: it would let `routes/_shared.py` stop
-special-casing the literal key `"filepath"` — every field carries its
+special-casing the literal key `"filepath"`; every field carries its
 own validation rule.
 
-**Shim.** Purely additive — the existing `validate_url`,
+**Shim.** Purely additive; the existing `validate_url`,
 `validate_server_filepath`, and `sanitize_template_value` helpers stay
 exported from `vtscore.security` with the same signatures. A third-party
 plugin that calls them by hand inside `run()` keeps working: by the time
@@ -159,7 +159,7 @@ if not filepath:
 ```
 
 Counted 6+ times verbatim. `PluginField` already has a `required: bool`
-flag but the framework doesn't enforce it consistently — plugins still
+flag but the framework doesn't enforce it consistently; plugins still
 check by hand.
 
 **Fix.** When `required=True`, the framework treats `""`, whitespace,
@@ -173,7 +173,7 @@ becomes a 500 in some plugins, a 400 in others).
 
 **Shim.** Purely additive at the plugin-source level: a third-party
 plugin's manual `if not foo: raise ValueError(...)` check still compiles
-and runs — it just never fires, because the framework rejected the empty
+and runs; it just never fires, because the framework rejected the empty
 value before `run()` was called. The plugin's bespoke error message is
 preempted by the framework's 422, which is a *behavior* change in error
 text but not a *code* change the author has to make. No source edits
@@ -198,7 +198,7 @@ slightly different error messages each time.
 "framework-prepares-the-input" pattern. (b) is a smaller refactor.
 Probably (b) first, (a) later if it pulls weight.
 
-**Shim.** Option (b) is intrinsically backwards-compatible — it's a new
+**Shim.** Option (b) is intrinsically backwards-compatible; it's a new
 helper that old plugins can ignore. Option (a) needs more care: a new
 `field_type="server_json"` is a *new* field type, so existing plugins
 that declare `field_type="server_path"` keep receiving a path string
@@ -223,7 +223,7 @@ fsync + rename + parent-mkdir.
 **Eval.** Small/medium win, but it's a real bug risk every time someone
 writes a new file-writing plugin and forgets.
 
-**Shim.** Purely additive — `vtscore.io.atomic_write_text` /
+**Shim.** Purely additive; `vtscore.io.atomic_write_text` /
 `atomic_write_json` are new public helpers. Existing in-tree call sites
 (the two `server_json_file` exporters) get migrated when the helper
 lands; third-party plugins that ship their own atomic-write logic keep
@@ -248,10 +248,10 @@ resolved.
 
 **Eval.** Medium win. Removes a class of bug where one plugin
 substitutes `{detector_name}` but forgets `{username}` (or vice versa).
-Same shape as #3 — declarative replaces imperative.
+Same shape as #3; declarative replaces imperative.
 
 **Shim.** Default `template_vars=None` on `PluginField` means "framework
-does no substitution" — i.e. existing fields keep receiving the raw
+does no substitution"; i.e. existing fields keep receiving the raw
 template string and the plugin keeps doing its own substitution as
 today. Only fields that explicitly declare `template_vars=[...]` opt
 into framework substitution. Migration is per-field and per-plugin, on
@@ -278,13 +278,13 @@ scopes inside the new thread. Plugin / route code uses `spawn()` instead
 of `threading.Thread(target=...).start()`; the context plumbing
 disappears from sight.
 
-**Eval.** Medium win. Lower volume than #1–#3 but high consequence —
+**Eval.** Medium win. Lower volume than #1–#3 but high consequence;
 when this leak fires it silently writes per-user settings to the wrong
 user or crashes on a missing context. The "logical-bug-audit.md" plan
 already calls out context-propagation gaps as a recurring root-cause
 pattern; this would close most of them.
 
-**Shim.** Purely additive — `vtsearch.threading.spawn(...)` is a new
+**Shim.** Purely additive; `vtsearch.threading.spawn(...)` is a new
 helper. The `thread_user()` / `thread_dataset_context()` /
 `thread_detector_context()` context managers and the bare
 `set_thread_*` setters stay exported with the same signatures. A
@@ -308,16 +308,16 @@ non-`None`, every key declared in `fields` is present, every value is
 range-valid. `get_param()` and `validate_params()` move from the
 converter API to internal helpers the framework owns.
 
-**Eval.** Solid win. Same as #4 — converts an opt-in helper plugin
+**Eval.** Solid win. Same as #4; converts an opt-in helper plugin
 authors might forget into a framework-guaranteed input shape.
 
-**Shim.** Keep `get_param()` as a method on `MediaConverter` — once the
+**Shim.** Keep `get_param()` as a method on `MediaConverter`; once the
 framework has pre-populated `params`, `get_param(params, key)` collapses
 to a plain `params[key]` lookup, so old converters that route through it
 keep working. Converters that did `params["key"]` directly *start*
 working (they previously crashed on `None`), which is a strict
 improvement. Keep `validate_params()` as a hook the framework calls
-before normalizing — if a third-party converter overrode it for custom
+before normalizing; if a third-party converter overrode it for custom
 checks, the override still runs. The `params: dict | None` type
 annotation stays `dict | None` for source compatibility even though
 the framework now always passes a non-None dict.
@@ -332,7 +332,7 @@ but the rest of the codebase doesn't have that collision.
 
 **Fix.** Rename `converter_description` → `description` and resolve
 the collision (it appears `PluginBase` doesn't actually claim
-`description` — check). One-line change per converter.
+`description`; check). One-line change per converter.
 
 **Eval.** Tiny win, but it's the kind of inconsistency that creates a
 small mental tax every time someone writes a new converter and has to
@@ -357,9 +357,9 @@ class name, a title-cased variant, and the docstring's first line.
 Override remains explicit and wins.
 
 **Eval.** Modest win. Saves boilerplate but doesn't remove a *concern*
-— just typing. Lowest priority of the candidates.
+:  just typing. Lowest priority of the candidates.
 
-**Shim.** Purely additive — the defaults only fire when the class attr
+**Shim.** Purely additive; the defaults only fire when the class attr
 is missing. Existing plugins that explicitly declare `name` /
 `display_name` / `description` keep using their explicit values
 verbatim. Use a sentinel (or `getattr(cls, "name", None)`) rather than
@@ -379,21 +379,21 @@ cancellation API at all.
 
 **Eval.** Solid win if #2 lands; not really separable from it.
 
-**Shim.** Tracks #2 — if the importer uses the old non-generator `run()`
+**Shim.** Tracks #2; if the importer uses the old non-generator `run()`
 shape, the framework can't insert cancellation points between yields, so
 those importers keep relying on their hand-placed
 `check_dataset_cancelled()` calls (which stay exported and functional).
 Only importers that opt into the generator/`RawMedia` shape get free
 between-yield cancellation. Third-party importers that mix both
-(generator yields + explicit `check_dataset_cancelled()`) are fine —
+(generator yields + explicit `check_dataset_cancelled()`) are fine;
 the explicit call is a no-op redundant check.
 
 ### 13. `field_type="file"` returns Werkzeug `FileStorage`
 
 **Leak.** Library-tier plugin bases (`vtscore/labels/importers/base.py`,
 `vtscore/datasets/importers/base.py`) document that
-`field_type="file"` *receives a Werkzeug FileStorage* — a Flask/app-tier
-type — but the module is library-tier and supposedly Flask-clean.
+`field_type="file"` *receives a Werkzeug FileStorage*; a Flask/app-tier
+type; but the module is library-tier and supposedly Flask-clean.
 `run_cli()` exists explicitly to paper over this by handing in a path
 string instead.
 
@@ -407,7 +407,7 @@ codebase and removes an entire CLI-vs-API method pair from every
 file-accepting plugin.
 
 **Shim.** Pick the normalized type to be *structurally compatible* with
-the FileStorage attrs old plugins already use — `.filename` (str) and
+the FileStorage attrs old plugins already use; `.filename` (str) and
 `.read()` / `.stream` (binary IO). Werkzeug's `FileStorage` already
 satisfies this shape, so on the Flask side we can pass `FileStorage`
 through unchanged (or wrap it in a thin adapter that preserves those
@@ -438,27 +438,27 @@ that's already ready to use.**
 
 ## Priority
 
-**P0 — uniform safety + the field-schema collapse**
+**P0; uniform safety + the field-schema collapse**
 - #3 Declarative path/URL/template validation (security; highest
   consequence; unblocks #7)
 - #4 Framework-enforced `required` (consistency; low risk)
 - #7 Declarative template variables (couples to #3)
 
-**P1 — uniform shape**
+**P1; uniform shape**
 - #1 Origin construction default (deletes overrides)
 - #2 Content optimization dicts → `RawMedia` (eliminates parallel-dict
   bug class; enables #12)
 - #9 Converter param normalization (closes the `get_param` hole)
 - #13 Drop Werkzeug from library-tier plugin bases
 
-**P2 — quality of life**
+**P2; quality of life**
 - #5 Server-JSON read helper
 - #6 Promote `atomic_write_text` / `atomic_write_json`
 - #8 `spawn()` for thread context propagation (touches a different
   axis; can land independently)
 - #12 Implicit cancellation (depends on #2)
 
-**P3 — boilerplate trim**
+**P3; boilerplate trim**
 - #10 Converter metadata naming
 - #11 Plugin metadata defaults
 
@@ -475,15 +475,15 @@ that's already ready to use.**
   describing the specific backwards-compatibility hook (override
   fallback, additive-only API, structural type compatibility, etc.).
   Serialized objects (old detector JSON, cached pickles, etc.) are
-  *not* under this protection — those can change shape as needed.
+  *not* under this protection; those can change shape as needed.
 - Not unifying base classes across families into a single
-  super-base — they have legitimately different return shapes
+  super-base; they have legitimately different return shapes
   (`run` vs `export` vs `convert`). The unification proposed here is
   *behind* the bases, in the framework that calls them.
 
 ## Next: scheduled work
 
-### Phase A — Candidate #1: declarative origin construction
+### Phase A: Candidate #1: declarative origin construction
 
 **Status:** **shipped.** All six in-tree `build_origin` overrides
 deleted; new declarative knobs (`include_in_origin`, `origin_serializer`,
@@ -501,7 +501,7 @@ the more invasive validation work.
 #### What the existing overrides actually do
 
 A grep + read of every override exposes four distinct patterns, not
-just one. The Shim note in §1 above understated this — `_RENAMES` alone
+just one. The Shim note in §1 above understated this; `_RENAMES` alone
 doesn't cover any of them. The patterns are:
 
 | Importer | Override pattern | Phase A handles via |
@@ -511,7 +511,7 @@ doesn't cover any of them. The patterns are:
 | `server_files` | Include only `paths_file` and `media_type`; nothing else from `fields` | `include_in_origin=False` on the unwanted fields |
 | `demo` | Include only `name` and `converter`; emit `name` even when empty (the default skips empties) | `include_in_origin=False` on the unwanted fields; accept losing the empty-`name` edge case |
 | `combine_datasets` | Custom serializer for the `datasets` field (list-or-string → comma-joined string) | `origin_serializer` callable on `PluginField` |
-| `recaller` | Return empty params — dataset-level origin is meaningless; per-media origins are built in `_build_media` | `origin_suppressed = True` class attr |
+| `recaller` | Return empty params: dataset-level origin is meaningless; per-media origins are built in `_build_media` | `origin_suppressed = True` class attr |
 
 A latent footgun the override-by-override approach is hiding: **the
 current default `build_origin` does not exclude `field_type="password"`
@@ -552,11 +552,11 @@ The framework's new `build_origin` body becomes:
 The list→JSON coercion for `source_specs` moves from the importer to
 the framework because every multi-media importer needs it. New
 multi-media importers (third-party `recaller`-style) get this for free
-by declaring `extra_origin_keys = ("source_specs",)` — or, even better,
+by declaring `extra_origin_keys = ("source_specs",)`; or, even better,
 the framework auto-adds `"source_specs"` to `extra_origin_keys` when
 `multi_media = True` on the class.
 
-#### Migration impact — in-tree
+#### Migration impact: in-tree
 
 All six overrides get deleted. Concrete diffs:
 
@@ -565,7 +565,7 @@ All six overrides get deleted. Concrete diffs:
 - `server_files`: delete override; add `include_in_origin=False` to any
   field other than `paths_file` / `media_type` (today the field list is
   already just those two plus `source_specs` for multi-media, so the
-  override is largely vestigial — deleting it is a near-no-op).
+  override is largely vestigial; deleting it is a near-no-op).
 - `demo`: delete override; add `include_in_origin=False` to whatever
   fields aren't `name`/`converter`. Loses the "emit empty `name`" edge
   case; verify no test asserts on the empty-name behavior.
@@ -578,11 +578,11 @@ All six overrides get deleted. Concrete diffs:
 LOC delta: roughly -50 (six overrides averaging ~8 lines) +12 (new
 class attrs and PluginField args).
 
-#### Migration impact — external plugins (the four families you named)
+#### Migration impact: external plugins (the four families you named)
 
 **`DatasetImporter` (external; the in-repo `recaller` scaffold is the
 template).** Migration cost: **zero required edits.** External
-importers that override `build_origin` keep working unchanged — the
+importers that override `build_origin` keep working unchanged; the
 new framework default only fires when the subclass doesn't override.
 Optional cleanup: delete the override after declaring the equivalent
 class attrs. Concretely for a recaller-style importer, the migration
@@ -599,12 +599,12 @@ origin_suppressed = True
 
 **`MediaSource` (external; `pullwrest`).** Migration cost: **none.**
 `MediaSource` doesn't participate in field-schema-driven origin
-construction at all — sources are factoried from an existing origin
+construction at all; sources are factoried from an existing origin
 dict via `create_from_origin(origin)`, they don't build origins.
 Phase A doesn't touch sources.
 
 **`LabelImporter` (external; `holder`).** Migration cost: **none.**
-Label importers don't have a `build_origin` concept — they return label
+Label importers don't have a `build_origin` concept; they return label
 dicts keyed by md5 / origin. Phase A doesn't touch label importers.
 
 **`LabelsetExporter` (external; `holder`).** Migration cost: **none.**
@@ -655,16 +655,16 @@ hypothesis before Phase B raises the stakes.
   need cross-field access. Keep the API single-value to start; widen
   later if a real use case appears.
 - **Phase A or Phase B owns the `validate_filepath_field` deletion.**
-  Phase A doesn't strictly need it — it's a separate route-layer
-  concern — but if Phase B drags, it might be worth pulling the
+  Phase A doesn't strictly need it; it's a separate route-layer
+  concern; but if Phase B drags, it might be worth pulling the
   declarative-`server_path`-validation slice forward into Phase A. Park
   this until Phase A is in flight.
 
-### Phase C — Candidates #2 + #9 + #13: shape unification (P1)
+### Phase C: Candidates #2 + #9 + #13: shape unification (P1)
 
 **Status:** **shipped.** Three independent surfaces landed in one PR:
 
-- **#9 — converter param normalization.**
+- **#9: converter param normalization.**
   :meth:`MediaConverter.convert_normalized` is the new framework entry
   point.  It pre-strips empty-string values whose field declares a
   default, runs the per-converter marshmallow schema (validating
@@ -682,7 +682,7 @@ hypothesis before Phase B raises the stakes.
   :meth:`~MediaConverter.get_param` stays as a back-compat shim for
   third-party converters whose call sites bypass the framework
   wrapper.
-- **#13 — drop Werkzeug from library tier.**  New module
+- **#13: drop Werkzeug from library tier.**  New module
   :mod:`vtscore.plugins.uploads` defines :class:`UploadedFile` (a
   ``runtime_checkable`` :class:`typing.Protocol` with ``filename`` /
   ``read`` / ``save``), :class:`CliUploadedFile` (adapter wrapping a
@@ -710,7 +710,7 @@ hypothesis before Phase B raises the stakes.
   ``"file"`` description) stopped referencing
   :class:`~werkzeug.datastructures.FileStorage` and point at
   :class:`UploadedFile`.
-- **#2 — yield_precomputed helper.**  New method
+- **#2: yield_precomputed helper.**  New method
   :meth:`DatasetImporter.yield_precomputed(filename, *, embedding,
   md5, metadata)` routes to the three legacy precomputed dicts
   (:attr:`content_vectors`, :attr:`content_md5s`,
@@ -720,27 +720,27 @@ hypothesis before Phase B raises the stakes.
   parallel maps.  The three dicts stay public and continue to work for
   third-party importers that write to them directly.  The full
   generator-based :class:`RawMedia` shape proposed in the original
-  candidate is deferred — it isn't separable from #12 (implicit
+  candidate is deferred; it isn't separable from #12 (implicit
   between-yield cancellation), which has no scheduled work yet.
 
 Coverage in :file:`tests_lib/datasets/test_phase_c.py` (22 tests).
 4277 in-suite tests pass.
 
-#### Migration impact — external plugins
+#### Migration impact: external plugins
 
 | Family | Cost |
 |---|---|
-| `DatasetImporter` (e.g. `recaller`) | None required.  CLI invocations of plugins with ``file`` fields now receive an :class:`UploadedFile` instead of a raw path string — plugin bodies that read ``.filename`` / ``.read()`` / ``.save(dst)`` continue to work, and the pre-existing ``isinstance(value, str)`` fallback in :meth:`PickleDatasetImporter.default_display_name` is no longer needed.  Multi-source-type importers can call :meth:`yield_precomputed` per file instead of writing to the three dicts. |
+| `DatasetImporter` (e.g. `recaller`) | None required.  CLI invocations of plugins with ``file`` fields now receive an :class:`UploadedFile` instead of a raw path string: plugin bodies that read ``.filename`` / ``.read()`` / ``.save(dst)`` continue to work, and the pre-existing ``isinstance(value, str)`` fallback in :meth:`PickleDatasetImporter.default_display_name` is no longer needed.  Multi-source-type importers can call :meth:`yield_precomputed` per file instead of writing to the three dicts. |
 | `MediaSource` (e.g. `pullwrest`) | None.  Sources do not participate in this candidate. |
 | `LabelImporter` (e.g. `holder`) | None required.  Same UploadedFile change as DatasetImporter: ``run`` now receives a wrapped path on the CLI path. |
 | `LabelsetExporter` (e.g. `holder`) | None.  Exporters do not participate. |
-| Third-party converters | None required.  Plugins called via the framework path now receive validated + default-filled ``params``; subclasses that route reads through :meth:`get_param` keep working; subclasses that index ``params[key]`` directly start working for the cases that previously crashed on missing keys.  Third-party call sites that invoke ``convert()`` directly (rather than ``convert_normalized()``) keep getting raw, un-validated params — the shim is intentional. |
+| Third-party converters | None required.  Plugins called via the framework path now receive validated + default-filled ``params``; subclasses that route reads through :meth:`get_param` keep working; subclasses that index ``params[key]`` directly start working for the cases that previously crashed on missing keys.  Third-party call sites that invoke ``convert()`` directly (rather than ``convert_normalized()``) keep getting raw, un-validated params: the shim is intentional. |
 
 #### Open follow-ups
 
 - The full generator-based :class:`RawMedia` flow (candidate #2's
   ambitious form) plus implicit cancellation (#12) remain unscheduled.
-  Worth revisiting only when a concrete importer wants both — the
+  Worth revisiting only when a concrete importer wants both; the
   cancellation win doesn't materialise without it.
 - :meth:`PickleDatasetImporter.run_chunked_cli` still expects a bare
   path string (its own override, untouched by Phase C); consolidating
@@ -749,7 +749,7 @@ Coverage in :file:`tests_lib/datasets/test_phase_c.py` (22 tests).
 - The :meth:`MediaConverter.get_param` shim can be removed once a
   soak period confirms no third-party converters rely on it.
 
-### Phase B — Candidates #3 + #4 + #7: declarative validation & templates
+### Phase B: Candidates #3 + #4 + #7: declarative validation & templates
 
 **Status:** **shipped.** One central
 `normalize_field_values(plugin, field_values)` pass runs after
@@ -764,32 +764,32 @@ the labelset + settings `server_json_file` sources, `server_csv_file`
 exporter, `server_csv_file` label importer, `email_smtp`, `http_archive`)
 shed their manual strip+`raise ValueError` checks and their hand-rolled
 template + validator calls. The hard-coded `validate_filepath_field` in
-`vtsearch/routes/_shared.py` is gone — `server_path` fields validate
+`vtsearch/routes/_shared.py` is gone; `server_path` fields validate
 themselves regardless of key name. 4227 tests pass.
 
 #### What changed
 
 Two new public surfaces in `vtscore/plugins`:
 
-- `PluginField.template_vars: tuple[str, ...] = ()` — opt-in list of
+- `PluginField.template_vars: tuple[str, ...] = ()`: opt-in list of
   variable names the framework should substitute before the plugin
   receives the value. Currently recognised vars: `YYYYMMDD-HHMMSS`,
   `detector_name`, `detector_id`, `username`. Unknown names raise at
   normalize-time, so a typo in a plugin schema fails fast.
 - `vtscore.plugins.normalize.normalize_field_values(plugin, field_values)`
-  — the central pass. For each field, strips text-like values,
+ ; the central pass. For each field, strips text-like values,
   substitutes any declared template vars (sanitised through
   `sanitize_template_value`), then runs the field-type-driven security
   validator if the value is non-empty. Returns the mutated dict;
   re-raises `validate_url` / `validate_server_filepath`'s `ValueError`.
 
-Wired in two places — these are the only ingress points for plugin
+Wired in two places; these are the only ingress points for plugin
 field values:
 
-- `vtsearch/routes/_shared.py:validate_plugin_args` — after marshmallow
+- `vtsearch/routes/_shared.py:validate_plugin_args`: after marshmallow
   loads and file uploads are populated, the normalize pass runs. A
   validation `ValueError` becomes a 400 with the standard envelope.
-- `vtscore/plugins/__init__.py:PluginBase.validate_cli_field_values` —
+- `vtscore/plugins/__init__.py:PluginBase.validate_cli_field_values`:
   the CLI presence check now also runs the normalize pass, so CLI
   invocations get the same validation guarantees the HTTP path does.
 
@@ -817,20 +817,20 @@ appropriate. Their hand-written "missing required" loops and inline
 | `vtsearch/settings_io/importers/server_json_file` | Same |
 | `vtsearch/settings_io/exporters/server_json_file` | Same |
 | `vtscore/datasets/importers/http_archive` | `validate_url(url)` in both `run()` and `_download_and_extract()`; the `run_cli` URL-prefix check (subsumed by `validate_url`); the now-unused `validate_url` import |
-| `vtscore/datasets/importers/server_folder` | No body changes (display-name strip kept — still needed for the UI label); already accessed values directly |
+| `vtscore/datasets/importers/server_folder` | No body changes (display-name strip kept: still needed for the UI label); already accessed values directly |
 | `vtscore/datasets/importers/server_files` | No body changes (already accessed values directly) |
 
 The `resolve_export_filepath` helper in
 `vtscore/exporters/_template.py` is kept as a no-op compatibility
-shim — any third-party exporter that still imports it sees its
+shim; any third-party exporter that still imports it sees its
 templates resolved twice (once by the framework, once by this helper),
 which is idempotent.
 
-#### Migration impact — external plugins
+#### Migration impact: external plugins
 
 | Family | Cost |
 |---|---|
-| `DatasetImporter` (e.g. `recaller`) | None required. Plugins that hand-call `validate_url` / `validate_server_filepath` keep working — the framework validates first, the plugin's call is an idempotent no-op. To clean up: declare `template_vars=[...]` on templated fields and delete the manual call. |
+| `DatasetImporter` (e.g. `recaller`) | None required. Plugins that hand-call `validate_url` / `validate_server_filepath` keep working: the framework validates first, the plugin's call is an idempotent no-op. To clean up: declare `template_vars=[...]` on templated fields and delete the manual call. |
 | `MediaSource` (e.g. `pullwrest`) | None. Sources don't participate in field-driven invocation. |
 | `LabelImporter` (e.g. `holder`) | None required. Plugins that strip+check `field_values["filepath"]` keep working; the framework rejects empty values earlier with a 422. |
 | `LabelsetExporter` (e.g. `holder`) | None required. Same shim as label importers. |
@@ -845,7 +845,7 @@ which is idempotent.
   for now. Once a soak period confirms no third-party imports remain,
   delete it (the in-tree migration removes all the in-tree call sites).
 - ~~Sync sources still call `_normalized(source, field_values)` at the
-  top of each method body~~ — **shipped as part of Phase B**.
+  top of each method body~~; **shipped as part of Phase B**.
   `SyncSource` now wraps `load` / `save` / `load_full` / `peek_version`
   to normalize *field_values* before dispatching to the new
   underscored template methods (`_do_load` / `_do_save` /
@@ -853,11 +853,11 @@ which is idempotent.
   for any third-party `SyncSource` subclass: rename your overrides to
   the `_do_*` form.
 
-### Phase D — Candidates #5 + #6 + #8 (P2 quality of life)
+### Phase D: Candidates #5 + #6 + #8 (P2 quality of life)
 
 **Status:** **shipped.** Three small but recurring footguns closed:
 
-- **#5 — shared JSON read helper.** New :func:`vtscore.io.read_server_json`
+- **#5: shared JSON read helper.** New :func:`vtscore.io.read_server_json`
   collapses the
   ``Path.exists()`` / ``is_file()`` / ``read_bytes()`` / ``json.loads()``
   dance into one call.  ``missing_ok=True`` lets sync sources opt into
@@ -869,7 +869,7 @@ which is idempotent.
   :class:`~vtscore.labels.sources.server_json_file.ServerFileLabelsetSource`,
   and the settings source
   :class:`~vtsearch.settings_io.sources.server_json_file.ServerFileSettingsSource`.
-- **#6 — shared atomic-write helpers.** New
+- **#6: shared atomic-write helpers.** New
   :func:`vtscore.io.atomic_write_text` and
   :func:`vtscore.io.atomic_write_json` hoist the tmp + ``fsync`` +
   :func:`os.replace` ritual into one place.  Per-writer unique tmp
@@ -886,7 +886,7 @@ which is idempotent.
   ``vtscore.exporters.server_json_file._atomic_write_text`` private
   name is re-exported as a shim so any third-party exporter that
   imported it directly keeps working.
-- **#8 — :func:`vtsearch.threading.spawn`.** New helper that
+- **#8: :func:`vtsearch.threading.spawn`.** New helper that
   snapshots the caller's ``(user, dataset_ctx, detector_ctx)`` at spawn
   time and re-installs them inside the new daemon thread.  Snapshot
   rules: an explicit ``set_thread_user`` wins, else Flask ``g.user``,
@@ -899,14 +899,14 @@ which is idempotent.
   (``_maybe_reembed_for_active_dataset`` /
   ``load_detector_route``).  Each call site lost ~5 lines of boilerplate
   per task.  :class:`~vtscore.concurrency.async_jobs.JobManager` keeps
-  its own context replay path — it already handles a richer job/cancel
+  its own context replay path; it already handles a richer job/cancel
   surface and isn't a 1:1 fit for ``spawn``.
 
 Coverage in :file:`tests_lib/io/test_io_helpers.py` (concurrent-write
 race tests included) and :file:`tests/integration/test_spawn.py`.
 4334 in-suite tests pass.
 
-#### Migration impact — external plugins
+#### Migration impact: external plugins
 
 | Family | Cost |
 |---|---|
@@ -919,17 +919,17 @@ race tests included) and :file:`tests/integration/test_spawn.py`.
   shim re-export.  After a soak period confirms no third-party
   exporter imports it directly, delete the alias.
 
-### Phase E — Candidates #10 + #11 (P3 boilerplate trim)
+### Phase E: Candidates #10 + #11 (P3 boilerplate trim)
 
 **Status:** **shipped (#11 only; #10 was already done).**
 
-- **#10 — converter metadata naming.** No work needed.  A pre-existing
+- **#10: converter metadata naming.** No work needed.  A pre-existing
   rename had already collapsed ``converter_description`` →
   ``description`` on :class:`~vtscore.converters.base.MediaConverter`;
   every in-tree converter and the docs reference the unified name.
   This entry stays in the plan as a record that the candidate was
   closed, not because anything shipped in Phase E.
-- **#11 — plugin metadata defaults.** :meth:`PluginBase.__init_subclass__`
+- **#11: plugin metadata defaults.** :meth:`PluginBase.__init_subclass__`
   now auto-derives :attr:`name` / :attr:`display_name` /
   :attr:`description` for any concrete subclass that doesn't declare
   them.  Derivation rules:
@@ -953,18 +953,18 @@ race tests included) and :file:`tests/integration/test_spawn.py`.
   that should behave the same way opt out via
   ``_is_plugin_family_base = True`` in their own ``__dict__``.
   :class:`~vtscore.converters.base.MediaConverter.name` (a
-  :func:`property`) is also untouched — the MRO-descriptor check in
+  :func:`property`) is also untouched; the MRO-descriptor check in
   ``_autoderive_plugin_metadata`` skips any attr already provided by
   an ancestor as a descriptor or non-empty string.
 
 Coverage in :file:`tests_lib/core/test_plugin_metadata_defaults.py`.
-No in-tree plugins were migrated to rely on the defaults — every
+No in-tree plugins were migrated to rely on the defaults; every
 in-tree plugin already declares ``name``, ``display_name``, and
 ``description`` explicitly, and rewriting that to use derivation would
 make the source less self-documenting.  The helper is for
 third-party plugins that don't want to type the boilerplate.
 
-#### Migration impact — external plugins
+#### Migration impact: external plugins
 
 | Family | Cost |
 |---|---|
@@ -972,7 +972,7 @@ third-party plugins that don't want to type the boilerplate.
 
 ## What shipped
 
-- **Phase E — Candidate #11 (plugin metadata defaults).**
+- **Phase E: Candidate #11 (plugin metadata defaults).**
   :meth:`PluginBase.__init_subclass__` auto-derives :attr:`name`,
   :attr:`display_name`, and :attr:`description` from the class name +
   docstring for any concrete subclass that doesn't declare them.
@@ -982,7 +982,7 @@ third-party plugins that don't want to type the boilerplate.
   MRO inheritance.  Candidate #10
   (``converter_description`` → ``description``) was already done by
   an earlier rename; no Phase E work was needed there.
-- **Phase D — Candidates #5 + #6 + #8 (quality-of-life helpers).**
+- **Phase D: Candidates #5 + #6 + #8 (quality-of-life helpers).**
   :func:`vtscore.io.read_server_json` collapses the
   exists/is_file/read/parse/dict-check ritual into one call;
   :func:`vtscore.io.atomic_write_text` /
@@ -991,7 +991,7 @@ third-party plugins that don't want to type the boilerplate.
   suffixes so concurrent writers don't fight over the same in-flight
   file).  :func:`vtsearch.threading.spawn` snapshots the caller's
   ``(user, dataset_ctx, detector_ctx)`` and replays them in a new
-  daemon thread — closing the recurring "background thread forgot to
+  daemon thread; closing the recurring "background thread forgot to
   call ``set_thread_user``" footgun for new code.  Migrated in-tree:
   the two ``server_json_file`` exporters, the ``server_csv_file``
   exporter, the two ``server_json_file`` importers, the labelset and
@@ -999,7 +999,7 @@ third-party plugins that don't want to type the boilerplate.
   :mod:`vtsearch.routes`.  External plugins keep working unchanged
   (helpers are additive; raw ``threading.Thread`` and inline JSON
   reads still work).
-- **Phase C — Candidates #2 + #9 + #13 (shape unification).**
+- **Phase C: Candidates #2 + #9 + #13 (shape unification).**
   :meth:`MediaConverter.convert_normalized` is the new framework
   entry-point: validation + default-fill runs once before
   :meth:`convert` is reached, so subclass bodies (and clipper-chain /
@@ -1016,7 +1016,7 @@ third-party plugins that don't want to type the boilerplate.
   remains as a shim; the three precomputed dicts still accept direct
   writes).  Generator-based `RawMedia` (#2's ambitious form) and
   implicit cancellation (#12) are explicitly deferred.
-- **Phase A — Candidate #1 (declarative origin construction).** Six
+- **Phase A: Candidate #1 (declarative origin construction).** Six
   in-tree `build_origin` overrides deleted; framework default driven by
   `PluginField.include_in_origin` / `origin_serializer` and
   `DatasetImporter.extra_origin_keys` / `origin_suppressed`. Password
@@ -1024,7 +1024,7 @@ third-party plugins that don't want to type the boilerplate.
   leak). External `DatasetImporter` plugins keep working unchanged
   (override-wins shim); other plugin families (`MediaSource`,
   `LabelImporter`, `LabelsetExporter`) untouched.
-- **Phase B — Candidates #3 + #4 + #7 (declarative validation &
+- **Phase B: Candidates #3 + #4 + #7 (declarative validation &
   templates).** New `vtscore.plugins.normalize.normalize_field_values`
   pass; `PluginField.template_vars` opt-in; `field_type="url"` /
   `"server_path"` fields auto-validated; in-tree plugins shed their
@@ -1032,7 +1032,7 @@ third-party plugins that don't want to type the boilerplate.
   `validate_filepath_field` and its hardcoded `"filepath"` key deleted.
   `SyncSource` (settings + labelset) now wraps its public methods
   around new underscored template hooks (`_do_load` / `_do_save` /
-  `_do_load_full` / `_do_peek_version`) — breaking change for
+  `_do_load_full` / `_do_peek_version`); breaking change for
   third-party sync source subclasses, which must rename their
   overrides to the `_do_*` form. Other external plugin families
   (`DatasetImporter`, `LabelImporter`, `LabelsetExporter`,

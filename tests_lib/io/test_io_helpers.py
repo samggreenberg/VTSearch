@@ -1,4 +1,4 @@
-"""Tests for ``vtscore.io`` — the shared JSON read / atomic-write helpers."""
+"""Tests for ``vtscore.io``: the shared JSON read / atomic-write helpers."""
 
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ class TestAtomicWriteJson:
 class TestConcurrentAtomicWrites:
     def test_no_partial_writes_under_concurrent_overwrite(self, tmp_path):
         """A reader that opens *path* at any moment sees a fully-formed
-        file — never partial bytes left behind by a tmp file."""
+        file; never partial bytes left behind by a tmp file."""
         p = tmp_path / "out.json"
         p.write_text("{}")  # initialise
 
@@ -159,7 +159,7 @@ class TestConcurrentAtomicWrites:
 
     def test_replace_is_atomic_marker(self, tmp_path):
         """Smoke-test that the destination file is never deleted between
-        writes — overwrite goes through ``os.replace``, not ``unlink`` +
+        writes; overwrite goes through ``os.replace``, not ``unlink`` +
         ``open``."""
         p = tmp_path / "out.txt"
         atomic_write_text(p, "first")

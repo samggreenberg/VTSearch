@@ -4,7 +4,7 @@ converters, and dataset importers.
 Migrated to ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. The plugin
 ``to_dict()`` payloads are declared as ``fields.Dict()`` rather than
-nested schemas — see the module docstring in ``vtsearch/schemas/datasets.py``.
+nested schemas; see the module docstring in ``vtsearch/schemas/datasets.py``.
 """
 
 from collections import Counter

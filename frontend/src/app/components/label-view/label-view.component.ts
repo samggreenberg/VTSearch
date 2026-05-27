@@ -63,7 +63,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   datasetName = '';
   /** Name of the trainable model owning the labels shown on the right pane.
-   *  Empty when no trainable model is active — the right pane then falls
+   *  Empty when no trainable model is active; the right pane then falls
    *  back to cid-based vote display. */
   trainableModelName: string | null = null;
   labelingStatus: LabelingStatusResponse | null = null;
@@ -153,7 +153,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.refreshTrainableModelName(this.activeContext.modelId);
 
     // Reload data when the active pair changes via the top-bar switcher.
-    // Skip the first emission — `ngOnInit` above already triggered the
+    // Skip the first emission; `ngOnInit` above already triggered the
     // initial loads.
     let firstPair = true;
     this.activeContext.pair$
@@ -226,7 +226,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  reloaded labelset has both classes, fire one `onLearnedSort` call
    *  after votes land. The server's signature cache short-circuits the
    *  re-fire when the pair has been trained recently (free re-entry),
-   *  and starts a fresh job otherwise — either way the user lands on
+   *  and starts a fresh job otherwise; either way the user lands on
    *  learned-sorted content without a manual mode toggle. */
   private reloadForNewPair(): void {
     this.rehydrateLearnedSub?.unsubscribe();
@@ -264,8 +264,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Divider drag ---
 
-  /** Min width the left panel can shrink to right now — autopilot-collapsed
-   *  state lets the user drag down to a thin sliver. */
+  /** Min width the left panel can shrink to right now (autopilot-collapsed
+   *  state lets the user drag down to a thin sliver). */
   get leftMin(): number {
     return this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
   }
@@ -470,7 +470,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  - Learned sort: targets the active ``AsyncJob`` by id.
    *  - Load-sort (find-label): trips the shared ``find_progress`` cancel
    *    flag, which the scoring loop polls.
-   *  - Text / example sort: no cancellation endpoint — those calls run
+   *  - Text / example sort: no cancellation endpoint; those calls run
    *    synchronously and complete before the user can usefully cancel.
    */
   onSortCancel(): void {
@@ -974,7 +974,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const phase = state.phase;
     const isMediaBased = !!this.labelSession.mediaExample && !this.labelSession.textQuery;
     // Retrain mode never used text/example sort, so stopping shouldn't switch
-    // the UI back to it — keep learned sort selected for every phase.
+    // the UI back to it; keep learned sort selected for every phase.
     const earlySortMode: SortMode = state.retrainMode
       ? 'learned'
       : (isMediaBased ? 'load' : 'text');

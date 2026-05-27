@@ -16,7 +16,7 @@ import type { RecentSession } from '../generated/api-client/models/recent-sessio
  * submenu; the active-context route guard calls ``bump()`` whenever
  * the user enters ``/label/:ds/:det`` or ``/find/:ds/:det``.
  *
- * Bump failures are swallowed — the "recent" surface is a convenience,
+ * Bump failures are swallowed; the "recent" surface is a convenience,
  * not a correctness signal, so a transient backend error shouldn't
  * block route activation.
  */

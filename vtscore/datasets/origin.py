@@ -1,6 +1,6 @@
 """Origin tracking for dataset elements.
 
-An :class:`Origin` records *where* a data element came from — the importer
+An :class:`Origin` records *where* a data element came from - the importer
 that produced it and the parameters that were used.  Each element in a
 dataset carries its own ``Origin`` so that:
 

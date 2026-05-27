@@ -2,7 +2,7 @@
 
 These are the hardcoded category label sets used by the image demo
 datasets exposed in :class:`vtscore.media.image.media_type.ImageMediaType`.
-They are pure data — kept here to keep ``media_type.py`` focused on the
+They are pure data - kept here to keep ``media_type.py`` focused on the
 ``MediaType`` contract.
 """
 

@@ -1,12 +1,12 @@
-"""Server-files importer — embed media files listed in a server-side file.
+"""Server-files importer - embed media files listed in a server-side file.
 
 The user supplies the absolute path of a file on the server that
 identifies the media files to import.  Two file formats are accepted:
 
-- **Text** (``.txt`` / ``.list``) — a UTF-8 text file with one media
+- **Text** (``.txt`` / ``.list``) - a UTF-8 text file with one media
   path per non-empty, non-comment line.  Lines beginning with ``#`` are
   comments.  The listed files are embedded by the server.
-- **NumPy archive** (``.npz``) — a ``.npz`` file holding both the media
+- **NumPy archive** (``.npz``) - a ``.npz`` file holding both the media
   paths and their pre-computed embedding vectors.  See
   :mod:`vtscore.datasets.importers._npz_vectors` for the supported
   array layouts.  When supplied, the importer **skips re-embedding** for
@@ -193,7 +193,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         "OR a .npz archive that also supplies pre-computed embedding vectors) "
         "and embed every listed file"
     )
-    icon = "\U0001f5c2"  # 🗂 — falls back to a generic file icon
+    icon = "\U0001f5c2"  # 🗂 - falls back to a generic file icon
     picker_view = "form"
     category = "server"
     fields = [
@@ -216,8 +216,8 @@ class ServerFilesDatasetImporter(DatasetImporter):
             description="A file that lists the media files (or folders) to pull into the dataset.",
             hint=(
                 "Accepted formats:\n"
-                " • .txt / .list — UTF-8 text, one path per line (lines starting with # are comments).\n"
-                " • .npz — NumPy archive of paths plus pre-computed embedding vectors;\n"
+                " • .txt / .list - UTF-8 text, one path per line (lines starting with # are comments).\n"
+                " • .npz - NumPy archive of paths plus pre-computed embedding vectors;\n"
                 "   listed files skip re-embedding and use the supplied vectors.\n"
                 "Symlinks are followed; directory entries are scanned recursively for media files."
             ),
@@ -412,7 +412,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                         self._rewrite_origins(chunk, name_to_source, origin)
                         yield chunk
                 except ValueError:
-                    # Empty for this source type — keep going; converter
+                    # Empty for this source type - keep going; converter
                     # rows may still produce output.
                     pass
 
@@ -434,7 +434,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 )
                 if converter_chunk:
                     # Converter-origin medias keep their converter origin
-                    # (don't rewrite to the server_files origin — the
+                    # (don't rewrite to the server_files origin - the
                     # converted output isn't a directly-listed source
                     # file).
                     yield converter_chunk

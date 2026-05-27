@@ -98,7 +98,7 @@ describe('MediaListComponent', () => {
   });
 
   // Regression: small datasets used to never prefetch metadata, so the list
-  // displayed ``#284`` placeholders forever — names only filled in when the
+  // displayed ``#284`` placeholders forever; names only filled in when the
   // user clicked an item. Without virtual scroll active, every row is in the
   // DOM, so every row is visible and should hydrate eagerly.
   it('eagerly prefetches metadata for every row when virtual scroll is off', () => {

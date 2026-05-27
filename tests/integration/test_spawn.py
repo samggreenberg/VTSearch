@@ -1,4 +1,4 @@
-"""Tests for ``vtsearch.threading.spawn`` — background thread that
+"""Tests for ``vtsearch.threading.spawn``: background thread that
 replays the calling thread's user / dataset / detector context."""
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ class TestSpawnUserContext:
     def test_replays_thread_user(self):
         # ``set_thread_user`` writes the thread-local that
         # ``get_current_user`` falls back to outside a Flask request
-        # context — perfect for verifying spawn's snapshot/replay
+        # context; perfect for verifying spawn's snapshot/replay
         # without standing up a multi-user login provider.
         set_thread_user("alice")
         captured: list[str] = []
@@ -66,7 +66,7 @@ class TestSpawnUserContext:
         # Spawn a second job from a thread where no user is set; the
         # cleanup in the first spawn's ``finally`` ran on its own
         # daemon thread (already dead), so this just verifies the
-        # snapshot captured from *this* thread is None — proving the
+        # snapshot captured from *this* thread is None, proving the
         # caller-side ``set_thread_user(None)`` below propagates
         # correctly.
         set_thread_user(None)

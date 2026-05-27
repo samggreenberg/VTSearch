@@ -1,6 +1,6 @@
 # VTSearch Frontend Style Guide
 
-This is the canonical reference for visual styling in the Angular frontend. **All component SCSS must use the tokens and classes defined here** — raw `px`/`rem` values for padding, margins, gaps, font sizes, border radii, and transition durations are not allowed. Hex color literals are not allowed. The shared classes in `frontend/src/scss/_components.scss` are the source of truth for buttons, form fields, modals, and typography; one-off restyling of these elements is not allowed.
+This is the canonical reference for visual styling in the Angular frontend. **All component SCSS must use the tokens and classes defined here** - raw `px`/`rem` values for padding, margins, gaps, font sizes, border radii, and transition durations are not allowed. Hex color literals are not allowed. The shared classes in `frontend/src/scss/_components.scss` are the source of truth for buttons, form fields, modals, and typography; one-off restyling of these elements is not allowed.
 
 The frontend is **desktop-only**. There are no responsive breakpoints, touch-targeted controls, or mobile layouts to design for.
 
@@ -10,7 +10,7 @@ The frontend is **desktop-only**. There are no responsive breakpoints, touch-tar
 
 Tokens live in `frontend/src/scss/_variables.scss` as CSS custom properties on `:root` (with overrides on `[data-theme="light"]` and `[data-theme="highviz"]`). Reference them with `var(--name)`. **Never hardcode a value that has a token.**
 
-### 1.1 Spacing — `--space-*`
+### 1.1 Spacing - `--space-*`
 
 Use the spacing scale for `padding`, `margin`, `gap`, and similar layout offsets. The scale is sized so each step roughly doubles, giving clear visual rhythm without dozens of arbitrary increments.
 
@@ -26,7 +26,7 @@ Use the spacing scale for `padding`, `margin`, `gap`, and similar layout offsets
 
 **Rounding rule:** any hardcoded `5px`/`7px`/`10px`/`14px`/`20px` value not produced by a token is a smell. Round to the nearest token; tiny visual shifts (1–3px) are acceptable in exchange for a consistent rhythm.
 
-### 1.2 Font sizes — `--font-*`
+### 1.2 Font sizes - `--font-*`
 
 | Token         | Value      | When to use |
 |---------------|------------|-------------|
@@ -39,9 +39,9 @@ Use the spacing scale for `padding`, `margin`, `gap`, and similar layout offsets
 | `--font-2xl`  | 1.1rem     | `<h2>`, modal titles |
 | `--font-3xl`  | 1.4rem     | `<h1>`, page-level header, modal-close glyph |
 
-There are no other font sizes. `0.78rem`, `0.83rem`, `0.95rem`, `12px`, `13px`, etc. are all violations — they collapse into the table above.
+There are no other font sizes. `0.78rem`, `0.83rem`, `0.95rem`, `12px`, `13px`, etc. are all violations - they collapse into the table above.
 
-### 1.3 Font weights — `--weight-*`
+### 1.3 Font weights - `--weight-*`
 
 Use these named weights, not raw numbers. The semantic mapping is enforced so a casual reader can tell *what role* an element has just from its weight.
 
@@ -53,7 +53,7 @@ Use these named weights, not raw numbers. The semantic mapping is enforced so a 
 
 There is no `--weight-bold` (700). If you find yourself wanting `font-weight: 700`, you're either reaching for size (use a larger heading) or you're styling around the layout (fix the layout). The one exception is the `<strong>` tag itself, which the browser styles bold by default.
 
-### 1.4 Border radius — `--radius-*`
+### 1.4 Border radius - `--radius-*`
 
 | Token          | Value  | When to use |
 |----------------|--------|-------------|
@@ -67,7 +67,7 @@ There is no `--weight-bold` (700). If you find yourself wanting `font-weight: 70
 
 ### 1.5 Colors
 
-All colors are theme-aware CSS variables defined in `_variables.scss`. There are dark (default), light, and high-contrast themes. **Hex literals in component SCSS are not allowed** — using one means the component will not respond to theme changes, which is a bug.
+All colors are theme-aware CSS variables defined in `_variables.scss`. There are dark (default), light, and high-contrast themes. **Hex literals in component SCSS are not allowed** - using one means the component will not respond to theme changes, which is a bug.
 
 Canonical roles:
 
@@ -79,9 +79,9 @@ Canonical roles:
 - **Status rows (red/yellow/green sets):** `--status-{color}-{border|dot|label|sub}`
 - **Per-detector accent:** `--detector-accent`, `--detector-accent-bg` (driven by `--detector-hue` set inline on the component)
 
-If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` — don't introduce a hex literal "just this once."
+If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` - don't introduce a hex literal "just this once."
 
-### 1.6 Transitions — `--transition-*`
+### 1.6 Transitions - `--transition-*`
 
 | Token               | Value  | When to use |
 |---------------------|--------|-------------|
@@ -91,7 +91,7 @@ If you need a color that does not exist, add it to all three theme blocks in `_v
 
 `0.2s`, `0.4s`, and other ad-hoc durations should be rounded to one of these. `prefers-reduced-motion` overrides all three globally (see `styles.scss`).
 
-### 1.7 Shadows — `--shadow-*`
+### 1.7 Shadows - `--shadow-*`
 
 | Token         | When to use |
 |---------------|-------------|
@@ -101,7 +101,7 @@ If you need a color that does not exist, add it to all three theme blocks in `_v
 
 All three resolve through `--shadow-dropdown` so they auto-tint per theme.
 
-### 1.8 Z-index — `--z-*`
+### 1.8 Z-index - `--z-*`
 
 | Token                | Value  | Used by |
 |----------------------|--------|---------|
@@ -120,7 +120,7 @@ Never use a raw z-index. If you need a new layer, add a token.
 
 ## 2. Shared component classes
 
-All these live in `frontend/src/scss/_components.scss` and are global. Apply them via `class="..."` in templates. **Do not redeclare these styles in component SCSS** — extend with a child selector if needed (e.g. `.progress-row .btn--cancel { ... }` to scope a specific layout).
+All these live in `frontend/src/scss/_components.scss` and are global. Apply them via `class="..."` in templates. **Do not redeclare these styles in component SCSS** - extend with a child selector if needed (e.g. `.progress-row .btn--cancel { ... }` to scope a specific layout).
 
 ### 2.1 Typography
 
@@ -139,7 +139,7 @@ Text utility classes (use directly on `<p>` / `<span>`):
 
 | Class           | What it is |
 |-----------------|------------|
-| `.info-text`    | Body helper text — secondary color, default font-size |
+| `.info-text`    | Body helper text - secondary color, default font-size |
 | `.error-text`   | Red error message |
 | `.success-text` | Green success message |
 | `.status-text`  | Inline status / secondary message |
@@ -180,7 +180,7 @@ Rules:
 ```
 
 - `.form-input` and `.form-select` share padding, border, focus state. They sit on `--bg-subtle` so they read as "input wells."
-- `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` — sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
+- `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` - sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
 - `.form-hint` (used for plugin-field `hint` strings) is muted monospace.
 - `.required` marks required fields with `--color-bad`.
 
@@ -209,8 +209,8 @@ The modal framework is the standard markup pattern; copy it.
 ```
 
 Spacing inside modals:
-- `.modal-content` already has `padding: var(--space-2xl)` — **do not** add a wrapping `padding` div.
-- `.modal-header`, `.modal-body` already have `margin-bottom: var(--space-xl)` — **do not** add it again.
+- `.modal-content` already has `padding: var(--space-2xl)` - **do not** add a wrapping `padding` div.
+- `.modal-header`, `.modal-body` already have `margin-bottom: var(--space-xl)` - **do not** add it again.
 - `.modal-footer` has `gap: var(--space-md)` between buttons.
 - The modal-content uses `--shadow-lg` and `--radius-xl`.
 
@@ -218,8 +218,8 @@ Spacing inside modals:
 
 This pattern is **mandatory** for any modal with an outer→inner view (importer picker → importer form, exporter picker → exporter form, new-detector → media picker, etc.). See CLAUDE.md for the canonical writeup. Short version:
 
-- **`← Back`** (top-left of inner view, `.back-btn`) — navigates to the previous view without committing the step. Use it any time the user is "going back" to a parent view, including from a child modal.
-- **`Cancel`** (footer, `.btn`) — abandons the whole dialog. Use it only at the leaves of a flow.
+- **`← Back`** (top-left of inner view, `.back-btn`) - navigates to the previous view without committing the step. Use it any time the user is "going back" to a parent view, including from a child modal.
+- **`Cancel`** (footer, `.btn`) - abandons the whole dialog. Use it only at the leaves of a flow.
 
 The canonical back-button markup:
 
@@ -231,7 +231,7 @@ The canonical back-button markup:
 
 ### 2.5 Importer / exporter pickers
 
-The shared classes `.importer-picker` / `.importer-card` / `.importer-name` / `.importer-desc` / `.importer-form` / `.form-group` / `.required` cover the dataset importer modal, label importer modal, settings importer/exporter modals, exporter modal, and new-detector picker. **Don't duplicate the card/tile look** — apply the shared classes and the cards will pick up consistent padding, gap, hover, and radius.
+The shared classes `.importer-picker` / `.importer-card` / `.importer-name` / `.importer-desc` / `.importer-form` / `.form-group` / `.required` cover the dataset importer modal, label importer modal, settings importer/exporter modals, exporter modal, and new-detector picker. **Don't duplicate the card/tile look** - apply the shared classes and the cards will pick up consistent padding, gap, hover, and radius.
 
 ### 2.6 Tabs (`.importer-tab-bar` / `.importer-tab`)
 
@@ -241,10 +241,10 @@ Tab strips inside modals use the shared classes in `_picker-shared.scss`. Subcla
 
 Two near-identical table classes share most styling:
 
-- **`.dash-table`** (`_data-table.scss`) — dashboard grids, with pinned select/actions columns.
-- **`.demo-table`** (`_picker-shared.scss`) — picker tables (demo, labels, etc.).
+- **`.dash-table`** (`_data-table.scss`) - dashboard grids, with pinned select/actions columns.
+- **`.demo-table`** (`_picker-shared.scss`) - picker tables (demo, labels, etc.).
 
-Both use `--font-md` cells, `--font-xs` uppercase headers, `--space-sm var(--space-md)` cell padding. **Do not invent a new table class** — extend one of these with a row state if needed.
+Both use `--font-md` cells, `--font-xs` uppercase headers, `--space-sm var(--space-md)` cell padding. **Do not invent a new table class** - extend one of these with a row state if needed.
 
 ### 2.8 Badges
 
@@ -258,24 +258,24 @@ The 3-panel grid lives in `_layout.scss`. Panels have `padding: var(--space-xl)`
 
 ## 3. Patterns and conventions
 
-### 3.0 Vertical rhythm — titles belong to the content BELOW them
+### 3.0 Vertical rhythm - titles belong to the content BELOW them
 
 When a panel or modal stacks multiple labelled sections, the gap between a section's title and its content must be **smaller** than the gap between that content and the next section's title. Equal-spaced gaps make titles look like they belong to the section above:
 
 ```
 WRONG                            RIGHT
 Section A                        Section A
-[24px gap — equal]               [8px gap — small]
+[24px gap - equal]               [8px gap - small]
 content A content A              content A content A
-[24px gap — equal]               [24px gap — LARGER]
+[24px gap - equal]               [24px gap - LARGER]
 Section B                        Section B
-[24px gap — equal]               [8px gap — small]
+[24px gap - equal]               [8px gap - small]
 content B content B              content B content B
 ```
 
 How to achieve the right rhythm:
 
-- **Asymmetric heading margins.** Inside a section container, give the section title (h3/h4 or a `.section-title` element) `margin-top: var(--space-2xl)` and `margin-bottom: var(--space-sm)`, with `:first-child { margin-top: 0 }`. The shared `.section-title` utility class in `_components.scss` does exactly this — use it when you have a panel that stacks sections (no extra flex gap needed).
+- **Asymmetric heading margins.** Inside a section container, give the section title (h3/h4 or a `.section-title` element) `margin-top: var(--space-2xl)` and `margin-bottom: var(--space-sm)`, with `:first-child { margin-top: 0 }`. The shared `.section-title` utility class in `_components.scss` does exactly this - use it when you have a panel that stacks sections (no extra flex gap needed).
 - **Or use container padding + flex gap.** If each section lives in its own bordered panel (like the dashboard sections or `.vote-section` in the label list), the panel padding plus container `gap` already produces the right rhythm; no heading margin needed.
 - **Do not** use a flex container's `gap` to do all the spacing and leave headings with `margin: 0`. That produces equal gaps everywhere and breaks the hierarchy.
 
@@ -308,9 +308,9 @@ Within one feature, **use the same gap for the same visual pattern**. If a heade
 
 `align-items: center` is the default in horizontal flex rows. Justify-content choices:
 
-- `justify-content: flex-end` — button rows, modal footers, action columns.
-- `justify-content: space-between` — title + close/action header pairs.
-- `justify-content: center` — empty states, single-item centered layouts.
+- `justify-content: flex-end` - button rows, modal footers, action columns.
+- `justify-content: space-between` - title + close/action header pairs.
+- `justify-content: center` - empty states, single-item centered layouts.
 
 ### 3.3 Focus and disabled states
 
@@ -330,7 +330,7 @@ Components that should tint themselves by detector identity bind an inline style
 </div>
 ```
 
-Then reference `var(--detector-accent)` and `var(--detector-accent-bg)` in the SCSS. The hue is theme-resolved — in highviz it falls back to the global accent so the high-contrast yellow isn't diluted.
+Then reference `var(--detector-accent)` and `var(--detector-accent-bg)` in the SCSS. The hue is theme-resolved - in highviz it falls back to the global accent so the high-contrast yellow isn't diluted.
 
 ### 3.5 Theme overrides inside a component
 
@@ -352,9 +352,9 @@ Avoid them. The right answer is almost always "use a theme variable." If a compo
 10. **`transition: all <duration>` with a custom duration.** Use `var(--transition-base)`.
 11. **Cancel as a Back button (or vice versa).** See §2.4.
 12. **Designing for mobile.** Desktop only.
-13. **`font: inherit` on a class that combines with `.form-input` / `.form-select`** (or any shared element class whose font-size is set globally). Angular's view-encapsulated component selectors get an attribute-selector specificity bump that beats the global `.form-input` rule, so a component-scoped `font: inherit` silently drops `var(--font-md)` and renders the page-root `1rem` instead — which is why a custom dropdown trigger can render its content larger than the `.form-label` above it. If you need the button to inherit something from the parent, be explicit: `font-family: inherit; font-size: var(--font-md);`. The same trap applies to any shorthand that sets `font-size` (raw `font: 14px ...`, `font: bold 1rem`, etc.) under a component-scoped selector.
-14. **`flex-direction: column` without an explicit `gap`** (and no per-child margins). A stacked-column container has to own its inter-row spacing — either set `gap: var(--space-*)` on the parent, or commit to a child class (`.form-group`, `.section-title`) that carries its own margins. Mixing the two ad-hoc produces uneven rhythms like "no space between drop zone and the input below it, but huge space between the section header and its description." Pick one mechanism per container.
-15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file — even with the same property values — causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing — UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
+13. **`font: inherit` on a class that combines with `.form-input` / `.form-select`** (or any shared element class whose font-size is set globally). Angular's view-encapsulated component selectors get an attribute-selector specificity bump that beats the global `.form-input` rule, so a component-scoped `font: inherit` silently drops `var(--font-md)` and renders the page-root `1rem` instead - which is why a custom dropdown trigger can render its content larger than the `.form-label` above it. If you need the button to inherit something from the parent, be explicit: `font-family: inherit; font-size: var(--font-md);`. The same trap applies to any shorthand that sets `font-size` (raw `font: 14px ...`, `font: bold 1rem`, etc.) under a component-scoped selector.
+14. **`flex-direction: column` without an explicit `gap`** (and no per-child margins). A stacked-column container has to own its inter-row spacing - either set `gap: var(--space-*)` on the parent, or commit to a child class (`.form-group`, `.section-title`) that carries its own margins. Mixing the two ad-hoc produces uneven rhythms like "no space between drop zone and the input below it, but huge space between the section header and its description." Pick one mechanism per container.
+15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file - even with the same property values - causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing - UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
 
 > A static scan for items 1-3, 6-7, 10, 13-15 lives at
 > `.claude/scripts/style-check.py` (invoked via the `/style-check`
@@ -365,7 +365,7 @@ Avoid them. The right answer is almost always "use a theme variable." If a compo
 
 ## 5. Adding new shared styles
 
-When you have a pattern that recurs (the third time you copy similar SCSS from one component to another), promote it to `_components.scss` (general shared) or `_picker-shared.scss` (importer/exporter/picker domain) or `_data-table.scss` (tables). Don't let the same "kind of thing" diverge across components — that's how the codebase ends up with three "small buttons" that all look slightly different.
+When you have a pattern that recurs (the third time you copy similar SCSS from one component to another), promote it to `_components.scss` (general shared) or `_picker-shared.scss` (importer/exporter/picker domain) or `_data-table.scss` (tables). Don't let the same "kind of thing" diverge across components - that's how the codebase ends up with three "small buttons" that all look slightly different.
 
 When you add a new token:
 - Add it under the matching scale in `_variables.scss` (all three theme blocks if it's color-bearing).
@@ -376,10 +376,10 @@ When you add a new token:
 
 ## 6. References
 
-- `frontend/src/scss/_variables.scss` — every design token.
-- `frontend/src/scss/_components.scss` — buttons, forms, modals, headings, info/error/success text.
-- `frontend/src/scss/_picker-shared.scss` — importer/exporter tabs, picker table, badges.
-- `frontend/src/scss/_data-table.scss` — dashboard table.
-- `frontend/src/scss/_layout.scss` — 3-panel grid.
-- `CLAUDE.md` — Back vs Cancel rules, desktop-only scope.
-- `.claude/scripts/style-check.py` — static SCSS audit (invoked via the `/style-check` skill).
+- `frontend/src/scss/_variables.scss` - every design token.
+- `frontend/src/scss/_components.scss` - buttons, forms, modals, headings, info/error/success text.
+- `frontend/src/scss/_picker-shared.scss` - importer/exporter tabs, picker table, badges.
+- `frontend/src/scss/_data-table.scss` - dashboard table.
+- `frontend/src/scss/_layout.scss` - 3-panel grid.
+- `CLAUDE.md` - Back vs Cancel rules, desktop-only scope.
+- `.claude/scripts/style-check.py` - static SCSS audit (invoked via the `/style-check` skill).

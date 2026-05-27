@@ -2,12 +2,12 @@
 
 Settings are split across two tiers:
 
-* **Server tier** — shared, single-file settings used to bring the
+* **Server tier** - shared, single-file settings used to bring the
   process up: dataset/detector directories, concurrency limits, the
   autoload-embedder / autorun-detector lists. Stored in
   ``data/settings.json`` (path = :data:`SETTINGS_PATH`). Loaded once at
   startup, before any user has logged in.
-* **Per-user tier** — every other key (preferences, autopilot config,
+* **Per-user tier** - every other key (preferences, autopilot config,
   per-side view modes, the ``settings_source`` sync target). Stored in
   ``<get_user_data_dir(user)>/user_settings.json``. Resolved per-request
   via :func:`~vtsearch.auth.get_current_user`.
@@ -149,14 +149,14 @@ SETTINGS_PATH: Path = DATA_DIR / "settings.json"
 #: ``solo_media_type_explicit=False`` will see this value (or ``None``) as
 #: their effective solo mediaType. A user who has explicitly set their own
 #: value (including explicitly ``None`` for "show everything") overrides
-#: this fallback — see :func:`get_effective_solo_media_type`.
+#: this fallback - see :func:`get_effective_solo_media_type`.
 _cli_solo_media_type: str | None = None
 
 #: Process-level fallback for the ``hidden_plugins`` server setting, set
 #: by :func:`set_cli_hidden_plugins` / :func:`add_cli_hidden_plugin` from
 #: the repeatable ``--hide-plugin family:name`` flag in :mod:`app`. Maps
 #: a plugin-family id to the set of plugin ``name``s to hide. Merged with
-#: the persisted ``hidden_plugins`` server setting at read time — see
+#: the persisted ``hidden_plugins`` server setting at read time - see
 #: :func:`get_effective_hidden_plugins`. Empty dict means "no CLI hides".
 _cli_hidden_plugins: dict[str, set[str]] = {}
 
@@ -188,7 +188,7 @@ _USER_DATA_DIR_OVERRIDE: Path | None = None
 #: Lazy caches for the model-derived defaults dicts.  Instantiating
 #: :class:`ServerSettings` fires its pydantic ``default_factory`` callbacks
 #: (notably the GPU-aware default for ``max_concurrent_dataset_embeddings``),
-#: and that probe imports torch — ~870ms at startup just to pick an int.
+#: and that probe imports torch - ~870ms at startup just to pick an int.
 #: Defer the instantiation to first read so ``import vtsearch.settings``
 #: stays torch-free.
 _SERVER_DEFAULTS_CACHE: dict[str, Any] | None = None
@@ -214,7 +214,7 @@ def _all_defaults() -> dict[str, Any]:
 
 
 def __getattr__(name: str) -> Any:
-    # PEP 562 — expose ``_SERVER_DEFAULTS`` / ``_USER_DEFAULTS`` / ``_DEFAULTS``
+    # PEP 562 - expose ``_SERVER_DEFAULTS`` / ``_USER_DEFAULTS`` / ``_DEFAULTS``
     # as attributes for external readers (tests, future callers) without
     # forcing the eager pydantic instantiation at module load.
     if name == "_SERVER_DEFAULTS":
@@ -269,7 +269,7 @@ class _UserSyncState:
     - ``last_sync_succeeded``: ``False`` means the user has never been
       successfully synced this process lifetime (or the last attempt
       failed).  A transient source failure no longer permanently locks
-      the user out of sync — the slow-path retries (rate-limited) until
+      the user out of sync - the slow-path retries (rate-limited) until
       it succeeds.
     - ``dirty_keys``: keys the user has set locally since the last
       successful :func:`_sync_to_source`.  An auto re-sync (from a
@@ -417,7 +417,7 @@ def _file_lock(path: Path):
 
     The lock is taken on a sibling ``<path>.lock`` file rather than on
     the data file itself, because ``_atomic_write`` replaces the data
-    file's inode via ``os.replace`` — any fd held against the old inode
+    file's inode via ``os.replace`` - any fd held against the old inode
     would be useless. The sibling lock file's inode is stable.
 
     The lock is released automatically if the process exits (POSIX
@@ -534,7 +534,7 @@ def _needs_sync_from_source(username: str) -> bool:
     1. We've never attempted one this process lifetime, OR
     2. The last attempt failed and the rate-limit window has elapsed
        (so a transient source outage no longer permanently locks
-       the user out of sync — old ``_synced_users`` did exactly that), OR
+       the user out of sync - old ``_synced_users`` did exactly that), OR
     3. A previous attempt succeeded but the source's
        :meth:`SettingsSource.peek_version` token has changed since
        (source file rewritten by another process, hand-edited, etc.).
@@ -567,7 +567,7 @@ def _needs_sync_from_source(username: str) -> bool:
     if (now - state.last_check_monotonic) < _FRESHNESS_CHECK_INTERVAL:
         return False
 
-    # Window elapsed — cheap probe to detect upstream changes.
+    # Window elapsed - cheap probe to detect upstream changes.
     from vtsearch.settings_io.sources import get_settings_source
 
     source = get_settings_source(cache_cfg["source_name"])
@@ -577,7 +577,7 @@ def _needs_sync_from_source(username: str) -> bool:
     try:
         current_version = source.peek_version(field_values)
     except Exception:
-        # Transient peek failure — back off until next window, keep
+        # Transient peek failure - back off until next window, keep
         # serving the local cache.
         with _settings_lock:
             s = _sync_state.get(username)
@@ -657,7 +657,7 @@ def _run_sync_from_source(username: str) -> None:
         state.last_version = new_version
         state.last_check_monotonic = time.monotonic()
         state.last_sync_succeeded = True
-        # dirty_keys preserved across an auto re-sync — the user's local
+        # dirty_keys preserved across an auto re-sync - the user's local
         # edits stay protected until an explicit ``_sync_to_source`` push
         # confirms the source matches local (which clears them) or a
         # manual POST sync clears them on purpose.
@@ -685,7 +685,7 @@ def _maybe_migrate_legacy_settings_locked() -> None:
     user_path = _user_settings_path(default_user)
     if user_path.exists():
         existing = _load_path(user_path)
-        # Existing per-user values win — never clobber a real user file.
+        # Existing per-user values win - never clobber a real user file.
         merged: dict[str, Any] = {**legacy_user_entries, **existing}
     else:
         merged = dict(legacy_user_entries)
@@ -733,14 +733,14 @@ def _mutate_server_locked(mutator) -> None:
     mutate a multi-writer settings file from a Python process.
 
     The legacy migration is left to ``_ensure_server_loaded`` and never
-    fires from inside the lock — by the time any setter runs the cache
+    fires from inside the lock - by the time any setter runs the cache
     has been loaded at least once.
 
     File I/O (``_load_path``, ``_atomic_write``) runs under the
     cross-process file lock only; ``_settings_lock`` is acquired briefly
     at the end just to swap the in-memory cache, so a slow local fsync
     (NFS, full disk, hung disk controller) can't stall unrelated
-    settings reads — see H29 in ``docs/plans/logical-bug-audit.md``.
+    settings reads - see H29 in ``docs/plans/logical-bug-audit.md``.
     """
     global _server_cache
     path = _server_settings_path()
@@ -784,7 +784,7 @@ def mutate_user(mutator) -> None:
     The on-disk file is locked across processes, re-read fresh,
     *mutator(cache)* runs to mutate the loaded dict in place, and the
     result is written back atomically. Use this whenever you need to
-    update a nested structure (counters, list appends, dict merges) —
+    update a nested structure (counters, list appends, dict merges) -
     a plain ``set_*`` call only round-trips the top-level key correctly
     if you replace it wholesale, but ``mutate_user`` is correct for
     any in-place change.
@@ -845,7 +845,7 @@ def _write_value(key: str, value: Any) -> None:
     if sync_data is not None:
         # User-initiated write (not from an in-progress import).  Mark
         # this key dirty so an auto re-sync running between now and the
-        # ``_sync_to_source`` push leaves it alone — the source push
+        # ``_sync_to_source`` push leaves it alone - the source push
         # below clears the dirty flag again once it succeeds.
         if key not in _EXCLUDE_FROM_SOURCE_EXPORT:
             _mark_user_keys_dirty(username, [key])
@@ -885,7 +885,7 @@ def get_user_settings() -> dict[str, Any]:
     """Return the current user's per-user settings (with defaults filled in).
 
     Used by the settings-export route and the per-user sync source so an
-    export only carries this user's preferences — not the shared
+    export only carries this user's preferences - not the shared
     server-tier infrastructure keys (``saved_datasets_dir``,
     ``autoload_media_embedders`` etc.) and not other users' files.
     """
@@ -959,7 +959,7 @@ def _validate_field(model: type, key: str, value: Any) -> Any:
     Uses ``model_validate`` with a single-key dict so per-field
     ``BeforeValidator`` clamps and enum checks fire as if the value had
     been loaded from disk. A :class:`pydantic.ValidationError` is
-    surfaced as :class:`ValueError` with a compact message — matches the
+    surfaced as :class:`ValueError` with a compact message - matches the
     error shape callers expect from the legacy spec-driven setters.
     """
     try:
@@ -977,7 +977,7 @@ def _make_scalar_accessors(model: type, key: str):
         try:
             return _validate_field(model, key, raw)
         except ValueError:
-            # Corrupt disk value — fall back to the default so callers
+            # Corrupt disk value - fall back to the default so callers
             # never see partially-typed garbage.
             return model.model_fields[key].get_default(call_default_factory=True)
 
@@ -1238,7 +1238,7 @@ def get_effective_solo_media_type() -> str | None:
        ``None`` for "show everything".
     2. The process-level CLI fallback set by
        :func:`set_cli_solo_media_type`.
-    3. ``None`` (no streamlining — show every mediaType).
+    3. ``None`` (no streamlining - show every mediaType).
 
     Returns ``None`` to mean "no solo mode active"; any other return
     value is a mediaType id (e.g. ``"image"``) that the UI should lock
@@ -1297,14 +1297,14 @@ def get_effective_solo_embedders() -> dict[str, str]:
     (user explicit) with the process-level
     :data:`_cli_solo_embedders` (CLI fallback). User entries win per-key;
     missing user keys fall through to the CLI value. An **empty-string
-    value** in the user map is a per-type opt-out sentinel — it removes
+    value** in the user map is a per-type opt-out sentinel - it removes
     that type from the merged map even if the CLI fallback has a
     value for it. This is the analog of setting ``solo_media_type=null``
     with ``solo_media_type_explicit=True`` to override
     ``--solo-media-type``.
 
     Validity (does the embedder still exist for this type?) is *not*
-    checked here — the frontend resolves it against the live embedder
+    checked here - the frontend resolves it against the live embedder
     registry on its end and falls back to the normal picker for any
     entry that no longer matches. Keeping validation client-side means a
     rename or removal never blocks the settings UI from rendering.
@@ -1321,7 +1321,7 @@ def get_effective_solo_embedders() -> dict[str, str]:
             if isinstance(emb, str) and emb.strip():
                 merged[mt] = emb.strip()
             else:
-                # Empty-string sentinel — user explicitly opted out for
+                # Empty-string sentinel - user explicitly opted out for
                 # this type, so drop the CLI fallback too.
                 merged.pop(mt, None)
     return merged
@@ -1340,7 +1340,7 @@ def apply_user_solo_embedder_per_media_type(value: dict[str, str] | None) -> Non
     Used by the settings PUT route. ``None`` clears every entry. Keys
     are stripped and skipped if empty. Values are stripped; an
     empty-string value is preserved as a **per-type opt-out sentinel**
-    (overrides the CLI fallback for that type — see
+    (overrides the CLI fallback for that type - see
     :func:`get_effective_solo_embedders`). The route layer is
     responsible for validating non-empty ``(media_type, embedder)``
     pairs against the live registries before calling this.
@@ -1355,7 +1355,7 @@ def apply_user_solo_embedder_per_media_type(value: dict[str, str] | None) -> Non
         if isinstance(emb, str) and emb.strip():
             cleaned[mt.strip()] = emb.strip()
         elif isinstance(emb, str):
-            # Empty-string sentinel — preserve as opt-out marker.
+            # Empty-string sentinel - preserve as opt-out marker.
             cleaned[mt.strip()] = ""
     set_solo_embedder_per_media_type(cleaned)  # type: ignore[name-defined]  # autogen'd accessor
 
@@ -1497,7 +1497,7 @@ def is_plugin_hidden(family: str, name: str) -> bool:
     """Return True if *name* is hidden in *family* by the effective hide map.
 
     Static ``hidden_from_picker=True`` on a plugin class is **not**
-    consulted here — that flag is already serialised on the plugin's
+    consulted here - that flag is already serialised on the plugin's
     ``to_dict()`` and filtered client-side. This function only answers
     "is the admin hiding this in this deployment?"
     """
@@ -1517,7 +1517,7 @@ def filter_visible_plugins(family: str, plugins: Iterable[Any], *, id_attr: str 
     """Drop plugins whose id-attribute is hidden in *family*.
 
     The single chokepoint for the listing routes. *id_attr* names the
-    attribute that carries the plugin's registry id — ``"name"`` for the
+    attribute that carries the plugin's registry id - ``"name"`` for the
     PluginBase families, ``"type_id"`` for :class:`MediaType` (whose
     registry key is the type id, not its human-readable name).
     """
@@ -1584,7 +1584,7 @@ def set_settings_path(path: str | Path) -> None:
     """Override the server-tier settings file path and reset its cache.
 
     Used by the CLI to point at a project- or run-specific settings file.
-    Does not affect per-user settings files — those still live under
+    Does not affect per-user settings files - those still live under
     :func:`vtsearch.auth.get_user_data_dir`.
     """
     global SETTINGS_PATH, _server_cache, _legacy_migrated
@@ -1661,7 +1661,7 @@ def set_settings_source_config(config: dict[str, Any] | None) -> None:
 
     sync_data = _mutate_user_locked(username, _apply)
     if config is None:
-        # Source cleared — drop any cached sync state so a future
+        # Source cleared - drop any cached sync state so a future
         # configure-then-read doesn't believe it's still "synced" to
         # the previously-configured target.
         with _settings_lock:
@@ -1697,7 +1697,7 @@ def _apply_settings(imported: dict, skip_keys: set[str] | None = None) -> None:
     """Apply a dict of settings via this module's ``set_*`` functions.
 
     Unknown keys or values that fail validation are silently skipped.
-    Keys in *skip_keys* are also skipped — used by the auto re-sync
+    Keys in *skip_keys* are also skipped - used by the auto re-sync
     path so an upstream value doesn't silently overwrite a key the
     user has just edited locally.  Used by :func:`sync_from_settings_source`
     and by the settings-import route in ``routes/settings/io.py``.
@@ -1764,7 +1764,7 @@ def sync_from_settings_source() -> dict[str, Any] | None:
     username = get_current_user()
     # The setters invoked by ``_apply_settings`` acquire ``_file_lock``
     # and then ``_settings_lock``. Holding ``_settings_lock`` here would
-    # invert the canonical order — take the lock only to mutate
+    # invert the canonical order - take the lock only to mutate
     # ``_syncing``, then drop it for the actual apply.
     with _settings_lock:
         _syncing.add(username)
@@ -1796,7 +1796,7 @@ def _sync_to_source(username: str, data: dict[str, Any]) -> None:
 
     On successful save the user is stamped as freshly synced
     (``last_version`` refreshed from the post-save ``peek_version``,
-    ``dirty_keys`` cleared) — source now matches local, so the next
+    ``dirty_keys`` cleared) - source now matches local, so the next
     :func:`_ensure_user_loaded` short-circuits via the fast path
     instead of pulling back the values we just pushed.
     """
@@ -1819,7 +1819,7 @@ def _sync_to_source(username: str, data: dict[str, Any]) -> None:
         logger.exception("Failed to sync settings to source for %s: %s", username, exc)
         return
 
-    # Source now matches local for every exported key — clear the dirty
+    # Source now matches local for every exported key - clear the dirty
     # set and refresh the version token so an auto re-sync doesn't fire
     # for the change we just exported.
     new_version: Any = None

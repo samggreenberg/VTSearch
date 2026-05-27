@@ -12,8 +12,8 @@ will have:
 7. Scored a held-out folder against the detector.
 8. Evaluated detector quality using `vtscore.eval`.
 
-The scenario: you have a corpus of mixed audio — barks, music, speech,
-environmental sound — and you want a binary detector for "is this a
+The scenario: you have a corpus of mixed audio - barks, music, speech,
+environmental sound - and you want a binary detector for "is this a
 dog bark?". Six labels is enough to get the MLP off the ground; a few
 dozen will make it good.
 
@@ -55,7 +55,7 @@ print(f"Library data dir: {CoreConfig.from_settings().data_dir}")
 ```
 
 That's the only setup `vtscore` requires. The library refuses to guess
-where to put data — by setting up the config builder, you've answered.
+where to put data - by setting up the config builder, you've answered.
 
 ## Step 1: Load a folder
 
@@ -65,7 +65,7 @@ which is "dog"). If you don't want to download ESC-50, swap in your
 own folder of `.wav` files.
 
 ```python
-from vtscore.media import audio  # noqa: F401 — register MediaType + embedders
+from vtscore.media import audio  # noqa: F401 - register MediaType + embedders
 from vtscore.datasets.loader import load_dataset_from_folder
 
 # Replace with your folder of audio files.
@@ -116,7 +116,7 @@ In a real workflow you'd use the VTSearch UI for this. For the tutorial,
 hard-code labels by filename:
 
 ```python
-# Pick six examples — three barks, three not-barks.
+# Pick six examples - three barks, three not-barks.
 labels = {
     "1-100032-A-0.wav": "good",      # dog
     "1-110389-A-0.wav": "good",      # dog
@@ -135,7 +135,7 @@ print(f"Labelled {len(labelled)} items.")
 
 ESC-50 uses `<fold>-<clip_id>-A-<category_id>.wav`; category 0 is "dog",
 category 7 is "rooster", etc. Replace these filenames with whatever you
-actually have. Six labels is enough — the MLP is small.
+actually have. Six labels is enough - the MLP is small.
 
 ## Step 3: Train the MLP
 
@@ -188,13 +188,13 @@ for cid, score in ranked[:10]:
     print(f"  {score:0.3f}  {fn}")
 ```
 
-You should see other dog clips bubble to the top — even ones you didn't
+You should see other dog clips bubble to the top - even ones you didn't
 label, because CLAP's embedding space is good at clustering similar
 sounds.
 
 ## Step 5: Save the detector
 
-Detectors persist as JSON labelsets — never as model weights. On
+Detectors persist as JSON labelsets - never as model weights. On
 reload, the library re-derives weights from the labelset's origins.
 
 ```python
@@ -250,7 +250,7 @@ No embeddings. No weights. Six origins. That's the whole detector.
 
 ## Step 6: Reload in a fresh process
 
-Open a new Python session — or just re-run the rest of the script after
+Open a new Python session - or just re-run the rest of the script after
 setting `model = None; threshold = None` to prove the point.
 
 ```python
@@ -272,7 +272,7 @@ register_detector_context(ctx)
 # Build (good_origins, bad_origins) from the saved JSON's labelset, then
 # resolve every origin to a file, embed each file *with the same embedder
 # the detector was trained with* (here: "audio_clap"), and train. Passing
-# ctx.embedder is critical — using "" would silently fall back to whatever
+# ctx.embedder is critical - using "" would silently fall back to whatever
 # the media type's default embedder is, mixing model outputs.
 good_origins = [
     {"origin": e.origin, "origin_name": e.origin_name,
@@ -332,7 +332,7 @@ for path, score in hits[:10]:
     print(f"  {score:0.3f}  {path}")
 ```
 
-This is what an autodetect job does — the CLI wraps the same calls in
+This is what an autodetect job does - the CLI wraps the same calls in
 [`vtscore.cli.autodetect_main`](../packages/cli.md).
 
 ## Step 8: Evaluate the detector
@@ -363,11 +363,11 @@ classification + ranking metrics. See
 
 By the end of the tutorial:
 
-- **`/tmp/vtscore-tutorial/detectors/dog-barks.json`** — your detector,
+- **`/tmp/vtscore-tutorial/detectors/dog-barks.json`** - your detector,
   six origins, no weights. ~1 KB.
-- **`/tmp/vtscore-tutorial/models/`** — cached LAION-CLAP weights. Reused
+- **`/tmp/vtscore-tutorial/models/`** - cached LAION-CLAP weights. Reused
   by every future detector with `embedder="audio_clap"`. ~600 MB.
-- **`ctx.model`** + **`ctx.threshold`** — in-memory trained MLP, ready
+- **`ctx.model`** + **`ctx.threshold`** - in-memory trained MLP, ready
   to score anything.
 
 The same shape generalises to:
@@ -382,11 +382,11 @@ Mix media types by combining datasets via the
 
 ## Where to next
 
-- [packages/detectors.md](../packages/detectors.md) — deeper on the
+- [packages/detectors.md](../packages/detectors.md) - deeper on the
   detector lifecycle (cross-dataset labels, labelset sync, region boxes).
-- [packages/eval.md](../packages/eval.md) — the full evaluation framework
+- [packages/eval.md](../packages/eval.md) - the full evaluation framework
   (voting iterations, label curves, plotting).
-- [extending/](../extending/) — write your own media type, embedder,
+- [extending/](../extending/) - write your own media type, embedder,
   importer, or exporter.
-- [integration.md](../integration.md) — embed `vtscore` in your own
+- [integration.md](../integration.md) - embed `vtscore` in your own
   application.

@@ -41,7 +41,7 @@ export class VoteStateService implements OnDestroy {
   /**
    * Optimistic post-vote state per media, used to preserve the user's click
    * across a polling response that raced ahead of the vote POST.  Cleared
-   * deterministically on every vote POST response — the server's reply IS
+   * deterministically on every vote POST response; the server's reply IS
    * the authoritative state, so there is no longer a "permanently stuck"
    * desync if our prediction disagreed with the server (the persistent-desync
    * half of logical-bug-audit H1).
@@ -107,7 +107,7 @@ export class VoteStateService implements OnDestroy {
 
   /**
    * True when the active detector has at least one good and one bad label
-   * available for training — i.e. `/api/learned-sort` would succeed.
+   * available for training (i.e. `/api/learned-sort` would succeed).
    */
   get learnedSortAvailable(): boolean {
     return this.labelsetGoodCount > 0 && this.labelsetBadCount > 0;
@@ -123,7 +123,7 @@ export class VoteStateService implements OnDestroy {
   /**
    * Translate a clicked direction into an absolute target by the local
    * toggle rule (clicking the current polarity un-votes; anything else sets
-   * to the clicked polarity).  Pure — does not mutate local state.
+   * to the clicked polarity).  Pure; does not mutate local state.
    */
   toggleTargetFor(id: number, clickedDirection: 'good' | 'bad'): VoteState {
     return this.currentState(id) === clickedDirection ? 'none' : clickedDirection;
@@ -155,7 +155,7 @@ export class VoteStateService implements OnDestroy {
 
   /**
    * Like {@link submitToggleVote}, but also records an undo entry on the
-   * past stack — **only after the server confirms the vote**.  Production
+   * past stack, **only after the server confirms the vote**.  Production
    * callers (centre / find / label views) should use this rather than
    * pairing {@link submitToggleVote} with a separate {@link recordVote},
    * because the latter ordering racks an undo entry that may not be
@@ -164,7 +164,7 @@ export class VoteStateService implements OnDestroy {
    * a vote that never happened.
    *
    * `previousPolarity` is captured here, synchronously, **before** the
-   * optimistic flip — that snapshot is the only piece of state that has to
+   * optimistic flip; that snapshot is the only piece of state that has to
    * exist pre-POST.  The undo entry itself is only pushed if the POST
    * resolves successfully.
    */
@@ -229,7 +229,7 @@ export class VoteStateService implements OnDestroy {
   /**
    * Apply the absolute state the server confirmed in its vote response,
    * regardless of what the optimistic prediction was.  Pending optimism is
-   * cleared deterministically here — even if our prediction was wrong, the
+   * cleared deterministically here; even if our prediction was wrong, the
    * server's reply replaces it so the desync cannot persist.
    */
   reconcileVoteResponse(id: number, resp: MediaVoteResponse): void {
@@ -268,7 +268,7 @@ export class VoteStateService implements OnDestroy {
       .pipe(
         takeUntil(this.stopPolling$),
         takeUntil(this.destroy$),
-        // catchError inside switchMap scopes errors to a single tick — a
+        // catchError inside switchMap scopes errors to a single tick; a
         // transient /api/votes failure (502, offline blip, stale
         // X-Dataset-Id after a context switch) would otherwise tear the
         // whole chain down, freeze votes indefinitely, and leave `polling`
@@ -334,7 +334,7 @@ export class VoteStateService implements OnDestroy {
    *   - ``'none'`` when previousPolarity was null (un-votes).
    *
    * Side effects that aren't reversible (achievements, label_history append,
-   * click_counter monotonicity) are accepted — the user really did make the
+   * click_counter monotonicity) are accepted; the user really did make the
    * click; we just put the item back where it was.
    */
   undo(): void {
@@ -350,7 +350,7 @@ export class VoteStateService implements OnDestroy {
     this.toastSubject.next({ action: 'undo', mediaName: entry.mediaName });
   }
 
-  /** Re-apply the most recently undone vote — POST the toggled-from-prior target. */
+  /** Re-apply the most recently undone vote: POST the toggled-from-prior target. */
   redo(): void {
     const entry = this.future.pop();
     if (!entry) return;
@@ -376,7 +376,7 @@ export class VoteStateService implements OnDestroy {
 
     // Preserve optimistic votes whose POSTs haven't returned yet.  Once a
     // POST resolves, reconcileVoteResponse() clears the pending entry and
-    // applies the server's authoritative state — so any preserved entry
+    // applies the server's authoritative state; so any preserved entry
     // here is genuinely in-flight, not a permanent prediction-vs-server
     // desync (the H1 stuck-prediction case is gone).
     for (const [id, opt] of this.pendingOptimistic) {

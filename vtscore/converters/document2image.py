@@ -21,10 +21,10 @@ class Document2ImageMediaConverter(MediaConverter):
 
     Supported formats:
 
-    * **.pdf** — rendered via PyMuPDF (``fitz``).
-    * **.doc** — rendered via PyMuPDF (``fitz``), which can open legacy
+    * **.pdf** - rendered via PyMuPDF (``fitz``).
+    * **.doc** - rendered via PyMuPDF (``fitz``), which can open legacy
       Word files on most platforms.
-    * **.ppt** — rendered via PyMuPDF (``fitz``), which can open legacy
+    * **.ppt** - rendered via PyMuPDF (``fitz``), which can open legacy
       PowerPoint files on most platforms.
 
     Each page becomes one item in the returned list.
@@ -58,7 +58,7 @@ class Document2ImageMediaConverter(MediaConverter):
             return []
 
         try:
-            import fitz  # noqa: PLC0415 — PyMuPDF
+            import fitz  # noqa: PLC0415 - PyMuPDF
         except ImportError:
             print("Document2ImageMediaConverter requires PyMuPDF: pip install PyMuPDF")
             return []

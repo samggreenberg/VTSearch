@@ -3,7 +3,7 @@
 Consolidates the repeated train → calibrate → safe-threshold → serialise
 pipeline used by detector route handlers and test helpers.
 
-This module also holds the vote-aware detector training entry points —
+This module also holds the vote-aware detector training entry points -
 :func:`train_and_score` (online, called every time the user toggles a
 vote) and :func:`train_detector_from_origins` (load-time, called when
 re-deriving an MLP from a saved labelset). Both build on the generic
@@ -130,7 +130,7 @@ def _training_vec_for_vote(
     When *region_box* is set **and** *media* has a stored ``patch_grid``,
     pool the box on-the-fly via
     :func:`vtscore.media.patch_embed.box_to_vote_vector`.  Otherwise
-    fall back to ``media["embedding"]`` — the v1/legacy image-level vector.
+    fall back to ``media["embedding"]`` - the v1/legacy image-level vector.
     Patch-embedder v2.
     """
     if region_box is not None:
@@ -156,7 +156,7 @@ def _build_vote_tensors(
     empty result.
 
     ``hidden_dim`` is sized from the *full* label count so that fold
-    models use the same architecture as the final model — making cross-
+    models use the same architecture as the final model - making cross-
     calibration thresholds directly comparable to final-model scores.
     """
     import torch  # noqa: PLC0415
@@ -194,7 +194,7 @@ def _score_all_media(
 
     Region-aware datasets (those whose media expose ``patch_regions``)
     are scored by flattening all (media, region) vectors into one tensor,
-    running a single forward pass, then max-pooling per media — so the
+    running a single forward pass, then max-pooling per media - so the
     winning region's index can be surfaced for UI overlays.  Plain
     datasets fall back to the cached embedding matrix.
 
@@ -360,7 +360,7 @@ def train_and_score(
             det_ctx=det_ctx,
         )
 
-    # Training is image-level in v1 — the MLP only ever sees one vector
+    # Training is image-level in v1 - the MLP only ever sees one vector
     # per voted media, mirroring the "vote on whole images" rule.
     model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
 
@@ -385,7 +385,7 @@ def collect_media_origins(
     """Collect origin info for a set of media IDs from a medias snapshot.
 
     Each returned dict contains ``origin``, ``origin_name``, ``filename``,
-    and ``md5`` — enough to re-resolve the original file later.
+    and ``md5`` - enough to re-resolve the original file later.
 
     Args:
         media_ids: Media IDs (keys of a votes dict, or a plain list).
@@ -433,7 +433,7 @@ def train_detector_from_origins(
         embedder_name: Name of the embedder the detector was originally
             trained with. Passed through to :func:`embed_file` so every
             re-embedded media is encoded by the same model that produced
-            the saved vectors — otherwise the MLP trains on a mix of
+            the saved vectors - otherwise the MLP trains on a mix of
             embedder outputs and learns garbage. Pass ``""`` only when you
             genuinely want the media type's default embedder (e.g. a
             brand-new detector with no recorded embedder yet).

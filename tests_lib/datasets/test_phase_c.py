@@ -1,17 +1,17 @@
-"""Phase C plugin-interface streamlines — coverage for the three landed surfaces.
+"""Phase C plugin-interface streamlines; coverage for the three landed surfaces.
 
 Three independent candidates:
 
-#9 — :meth:`MediaConverter.convert_normalized` validates and default-fills
+#9; :meth:`MediaConverter.convert_normalized` validates and default-fills
 ``params`` before dispatch, so :meth:`convert` receives a fully-populated
 non-``None`` dict.
 
-#13 — :mod:`vtscore.plugins.uploads` defines :class:`UploadedFile` plus the
+#13; :mod:`vtscore.plugins.uploads` defines :class:`UploadedFile` plus the
 :class:`CliUploadedFile` / :class:`BytesIOUploadedFile` adapters; the
 ``DatasetImporter`` / ``LabelImporter`` base classes' default ``run_cli``
 wraps path strings so plugin bodies see one shape regardless of ingress.
 
-#2 — :meth:`DatasetImporter.yield_precomputed` collapses the three
+#2; :meth:`DatasetImporter.yield_precomputed` collapses the three
 precomputed-dict writes into one helper call so a single miskeyed entry
 cannot land in only one or two of the parallel dicts.
 """
@@ -34,7 +34,7 @@ from vtscore.plugins.uploads import (
 
 
 # ---------------------------------------------------------------------------
-# #9 — convert_normalized
+# #9: convert_normalized
 # ---------------------------------------------------------------------------
 
 
@@ -113,7 +113,7 @@ class TestConvertNormalized:
 
 
 # ---------------------------------------------------------------------------
-# #13 — UploadedFile + CLI wrapping
+# #13: UploadedFile + CLI wrapping
 # ---------------------------------------------------------------------------
 
 
@@ -135,7 +135,7 @@ class TestUploadedFileAdapters:
     def test_bytesio_uploaded_file_exposes_filename_and_name(self):
         u = BytesIOUploadedFile(b"abc", filename="upload.pkl")
         assert u.filename == "upload.pkl"
-        # Legacy ``.name`` shim — pre-Phase-C readers expected it.
+        # Legacy ``.name`` shim; pre-Phase-C readers expected it.
         assert u.name == "upload.pkl"
         assert u.read() == b"abc"
 
@@ -218,7 +218,7 @@ class TestRunCliWrapsFileFields:
 
 
 # ---------------------------------------------------------------------------
-# #2 — yield_precomputed
+# #2: yield_precomputed
 # ---------------------------------------------------------------------------
 
 

@@ -35,7 +35,7 @@ class ActiveJobPairSchema(Schema):
 
 
 class ActiveJobsResponseSchema(Schema):
-    """Response for ``GET /api/jobs/active`` — one entry per busy pair."""
+    """Response for ``GET /api/jobs/active``: one entry per busy pair."""
 
     busy_pairs = fields.List(
         fields.Nested(ActiveJobPairSchema),
