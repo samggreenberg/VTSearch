@@ -4,7 +4,7 @@ Angular SPA for the VTSearch media explorer. Built with Angular CLI 19.2 and Typ
 
 ## Prerequisites
 
-- **Node.js 18+** (LTS recommended)
+- **Node.js 22+** (LTS recommended)
 - **npm** (bundled with Node.js)
 
 ## Development server
