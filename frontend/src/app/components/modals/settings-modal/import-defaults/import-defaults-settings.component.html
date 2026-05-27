@@ -21,9 +21,11 @@
     @if (isLoading) {
       <p class="empty-state">Loading options for {{ activeTypeLabel }}…</p>
     } @else {
-      <!-- Source specs (converters per source mediaType) -->
-      @if (activeConverters.length > 0) {
-        <label class="form-label" title="Pick which other media types should be pulled in and converted whenever you import a {{ activeTypeLabel }} dataset. The native row is always included.">Include media</label>
+      <!-- Source specs (converters per source mediaType + native clipper) -->
+      @if (activeConverters.length > 0 || activeClippers.length > 1) {
+        @if (activeConverters.length > 0) {
+          <label class="form-label" title="Pick which other media types should be pulled in and converted whenever you import a {{ activeTypeLabel }} dataset. The native row is always included.">Include media</label>
+        }
         <vt-source-specs-picker
           [availableConverters]="activeConverters"
           [nativeType]="activeType"
@@ -63,18 +65,6 @@
         @if (licenseNotice; as notice) {
           <div class="license-warning" role="note">⚠ {{ notice }}</div>
         }
-      }
-
-      <!-- Clipper (only shown when there's a real choice to make) -->
-      @if (activeClippers.length > 1) {
-        <label class="form-label" title="Pre-processing applied to each {{ activeTypeLabel }} item before embedding (e.g. clip into shorter segments)">Clipper</label>
-        <button
-          class="btn btn--secondary clipper-btn"
-          type="button"
-          (click)="openClipperChooser()"
-          title="Choose how to pre-process media before embedding">
-          Details: {{ clipperDisplayName }}
-        </button>
       }
 
       <div class="import-defaults-footer">
