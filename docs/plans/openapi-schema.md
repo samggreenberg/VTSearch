@@ -1,6 +1,6 @@
 # OpenAPI schema + generated TS client
 
-Status: every blueprint migrated; per-plugin runtime validation in place for the six plugin-field routes; one cosmetic follow-up (real spec types for plugin-field bodies) is deferred - see *Open follow-ups*.
+Status: every blueprint migrated; per-plugin runtime validation in place for the six plugin-field routes; per-plugin static URL rules with typed bodies now appear in `/api/openapi.json` for every JSON-shaped plugin (file-upload plugins continue to use the parameterized fallback). No remaining follow-ups.
 
 ## The problem
 
@@ -1006,8 +1006,28 @@ checks off this follow-up.
       declared per call site via ``extra_keys=(...)``. Legacy helpers
       ``extract_plugin_fields`` / ``validate_required_fields`` /
       ``get_request_field`` / ``_extract_importer_fields`` deleted.
-      Spec-side per-plugin types are still loose - see *Open
-      follow-ups / OpenAPI spec types for plugin-field route bodies*.
+- [x] **OpenAPI spec types for plugin-field route bodies.** Each of
+      the six plugin-field routes now also registers a *static* URL
+      rule per known plugin at module-import time (``/api/dataset/
+      import/server_folder``, ``/api/dataset/import/pickle``, ...)
+      decorated with ``@blp.arguments(SchemaClass)``, where
+      ``SchemaClass`` is built from that plugin's :attr:`fields`
+      declaration via :func:`vtscore.plugins.schema.make_plugin_route_schema`.
+      The generated schema names are namespaced by route id (e.g.
+      ``import_dataset_ServerFolderDatasetImporter_Args``) so the six
+      routes can target the same plugin without OpenAPI component
+      collisions. Werkzeug matches static URL rules before dynamic
+      ones, so requests for known plugins land on the typed route
+      (and surface in ``/api/openapi.json`` with real per-field types);
+      requests for unknown plugin names fall through to the
+      parameterized fallback (preserving the legacy 404 message that
+      names the unknown plugin). Plugins with ``file``-typed fields
+      continue to use the parameterized fallback because the generic
+      plugin schema doesn't describe multipart bodies usefully (this is
+      a small minority: ``local_folder`` / ``local_files`` / ``pickle``).
+      Implementation lives in
+      :func:`vtsearch.routes._shared.register_plugin_typed_routes`,
+      invoked from each of the six route modules.
 
 ## What shipped
 
@@ -1033,22 +1053,34 @@ checks off this follow-up.
   ``_extract_importer_fields`` in ``vtsearch/routes/datasets/_helpers.py``
   are deleted.
 
+- **Per-plugin static URL rules with typed bodies in the spec.** Each
+  of the six plugin-field routes now also registers one *static* URL
+  rule per known plugin at module-import time (``/api/dataset/import/
+  server_folder``, ``/api/label-importers/import/server_json_file``,
+  ...), decorated with ``@blp.arguments(SchemaClass)``.  ``SchemaClass``
+  is built per (plugin, route) via
+  :func:`vtscore.plugins.schema.make_plugin_route_schema` - a sibling
+  of :func:`make_plugin_arg_schema` that namespaces the generated class
+  name by route id (e.g. ``import_dataset_ServerFolderDatasetImporter_Args``
+  vs. ``stage_import_ServerFolderDatasetImporter_Args``) so the six
+  routes can target the same plugin without OpenAPI component
+  collisions, declares the per-route ``extra_keys`` pass-through fields
+  (``source_specs`` / ``clipper`` / ``embedder`` / ``dataset_name`` /
+  ``name`` / ``clipper_params``) as :class:`fields.Raw`, and uses
+  ``Meta.unknown = "include"`` so extras survive ``schema.load()``.
+  Werkzeug matches static URL rules before dynamic ones, so requests
+  for known plugins land on the typed route (and surface in
+  ``/api/openapi.json`` with real per-field types); requests for
+  unknown plugin names fall through to the parameterized fallback
+  (preserving the legacy 404 message). Plugins with ``file``-typed
+  fields stay on the parameterized fallback because the generic plugin
+  schema doesn't describe multipart bodies usefully (this is a small
+  minority: ``local_folder`` / ``local_files`` / ``pickle``).  Glue
+  helper: :func:`vtsearch.routes._shared.register_plugin_typed_routes`,
+  invoked from each of the six route modules.
+
 ## Open follow-ups
 
-- **OpenAPI spec types for plugin-field route bodies.** The six routes
-  above are validated at runtime against the per-plugin schema, but
-  their request bodies are still un-typed in ``/api/openapi.json``
-  (each handler is a plain ``@blueprint.route`` with no ``@arguments``
-  decorator). To surface real per-field types in the spec we'd need to
-  register one Flask URL rule per plugin variant at startup -
-  ``/api/dataset/import/server_folder``, ``/api/dataset/import/pickle``,
-  etc. - each decorated with its own ``@blp.arguments(plugin._arg_schema)``.
-  That's a bigger refactor than runtime validation and the dynamic
-  frontend (which discovers field shapes via ``/api/importers`` etc.
-  and builds forms generically) doesn't directly benefit from compile-
-  time types here, so the spec stays loose for now. The runtime
-  validation captures the per-plugin field types where it matters
-  (bad input → 422 → frontend's error pipeline).
 - **``ProcessorImportersApiService`` follow-up - RESOLVED.** The
   service, modal, and DTO were deleted in commit ``6b4c0b4d`` once it
   became clear the backend route had been removed. Initial bundle
