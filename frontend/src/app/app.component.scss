@@ -209,6 +209,22 @@ header {
   }
 }
 
+.achievements-btn {
+  position: relative;
+
+  .notif-dot {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 1.5px solid var(--header-bg);
+    pointer-events: none;
+  }
+}
+
 .settings-btn {
   background: transparent;
   border: 1px solid var(--header-btn-border);

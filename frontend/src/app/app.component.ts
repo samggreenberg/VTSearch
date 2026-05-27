@@ -91,7 +91,7 @@ export class AppComponent {
     private activeContext: ActiveContextService,
     private recent: RecentSessionsService,
     public auth: AuthService,
-    private achievements: AchievementsService,
+    public achievements: AchievementsService,
     private settingsState: SettingsStateService,
     private themeService: ThemeService,
     private newThingFlows: NewThingFlowsService,
@@ -104,6 +104,10 @@ export class AppComponent {
       this.achievementsDisabled = !!s?.disable_achievements;
     });
     this.achievements.refresh();
+    this.achievements.openPanelRequest$.subscribe(() => {
+      this.showAchievements = true;
+      this.achievements.acknowledgeAll();
+    });
     this.themeService.loadFromSettings();
     activeContextWatcher.start();
     this.recent.refresh().subscribe();
@@ -267,6 +271,7 @@ export class AppComponent {
   onAchievements(): void {
     this.menuOpen = false;
     this.showAchievements = true;
+    this.achievements.acknowledgeAll();
   }
 
   onAchievementsClosed(): void {
