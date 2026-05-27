@@ -861,9 +861,13 @@ Cross-section interaction agents:
   handlers from a hard-coded list of non-root loggers would stomp any
   handler a test or future feature legitimately attached there, and
   encode a closed list that would drift from reality silently.
-- **M24.** `CoreConfig.from_settings()` raises if a blueprint's module-level
+- ~~**M24.** `CoreConfig.from_settings()` raises if a blueprint's module-level
   code runs before `vtsearch/shim/__init__.py` registers the
-  builder.
+  builder.~~ Fixed: `app.py` now installs the shim hooks
+  (`register_flask_context_resolvers` / `register_app_persistence_hooks` /
+  `register_app_config_builder` / `register_app_plugin_families`) before
+  any `vtsearch.routes` blueprint module is imported, so the builder is
+  registered for any module-level code in a route that needs it.
 
 ### Frontend
 

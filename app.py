@@ -40,6 +40,32 @@ from werkzeug.exceptions import MethodNotAllowed, NotFound
 from vtscore.state.core import DatasetNotLoadedError, DetectorNotLoadedError  # noqa: E402
 from vtsearch.auth import get_login_provider  # noqa: E402
 from vtscore.embedding import initialize_models, preload_predicted_embedders  # noqa: E402
+
+# Install Flask-aware request-context resolvers on the (library-candidate)
+# ``vtsearch.state`` core so its ``get_active_*_context()`` helpers can read
+# the per-request dataset/detector context from ``flask.g`` without
+# ``vtscore.state.core`` itself having to import Flask.  Also wire the
+# library's "persist this" hooks (currently just last-embedder-per-media-
+# type) to ``vtsearch.settings`` and install the app-side builder for
+# ``CoreConfig.from_settings()``.  See ``vtscore/docs/architecture.md`` for
+# the seam.
+#
+# This block runs BEFORE blueprint modules are imported so that any
+# module-level code in a route that calls ``CoreConfig.from_settings()``
+# (or any other shim-backed hook) finds the builder already installed.
+# See logical-bug-audit M24.
+from vtsearch.shim import (  # noqa: E402
+    register_app_config_builder,
+    register_app_persistence_hooks,
+    register_app_plugin_families,
+    register_flask_context_resolvers,
+)
+
+register_flask_context_resolvers()
+register_app_persistence_hooks()
+register_app_config_builder()
+register_app_plugin_families()
+
 from vtsearch.routes import (  # noqa: E402
     achievements_bp,
     auth_bp,
@@ -87,25 +113,6 @@ app = Flask(__name__)
 # if set; otherwise fall back to a dev-only default.  Production
 # deployments should always set the env var.
 app.secret_key = os.environ.get("VTSEARCH_SECRET_KEY", "vtsearch-dev-key-change-in-production")
-
-# Install Flask-aware request-context resolvers on the (library-candidate)
-# ``vtsearch.state`` core so its ``get_active_*_context()`` helpers can read
-# the per-request dataset/detector context from ``flask.g`` without
-# ``vtscore.state.core`` itself having to import Flask.  Also wire the
-# library's "persist this" hooks (currently just last-embedder-per-media-
-# type) to ``vtsearch.settings``.  See ``vtscore/docs/architecture.md`` for
-# the seam.
-from vtsearch.shim import (  # noqa: E402
-    register_app_config_builder,
-    register_app_persistence_hooks,
-    register_app_plugin_families,
-    register_flask_context_resolvers,
-)
-
-register_flask_context_resolvers()
-register_app_persistence_hooks()
-register_app_config_builder()
-register_app_plugin_families()
 
 # Optional cap on request body size (uploads).  ``MAX_UPLOAD_MB == 0`` leaves
 # Flask's default of no limit in place; a positive value rejects oversized
