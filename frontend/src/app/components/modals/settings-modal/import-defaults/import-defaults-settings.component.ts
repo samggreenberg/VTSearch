@@ -244,13 +244,6 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
     return found?.license_notice ?? null;
   }
 
-  get clipperDisplayName(): string {
-    const c = this.activeClippers.find((x) => x.name === this.currentClipperName);
-    if (!c) return 'None';
-    if (c.name.endsWith('_default')) return 'None';
-    return c.display_name || c.name;
-  }
-
   /** True when the user has at least one saved override for the active
    *  mediaType, used to gate the "Reset" button so it doesn't appear
    *  when there's nothing to reset. */
