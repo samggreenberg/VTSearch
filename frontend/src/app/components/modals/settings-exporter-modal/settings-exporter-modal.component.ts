@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -18,7 +18,7 @@ type ModalView = 'picker' | 'form';
   templateUrl: './settings-exporter-modal.component.html',
   styleUrl: './settings-exporter-modal.component.scss',
 })
-export class SettingsExporterModalComponent implements OnInit {
+export class SettingsExporterModalComponent implements OnInit, OnDestroy {
   @Output() closed = new EventEmitter<void>();
   @Output() exported = new EventEmitter<void>();
 
@@ -30,6 +30,7 @@ export class SettingsExporterModalComponent implements OnInit {
   submitting = false;
   error = '';
   successMessage = '';
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private settingsIoApi: SettingsIoApiService) {}
 
@@ -116,7 +117,7 @@ export class SettingsExporterModalComponent implements OnInit {
 
         this.successMessage = res.message || 'Settings exported successfully';
         this.exported.emit();
-        setTimeout(() => this.close(), 1500);
+        this.closeTimer = setTimeout(() => this.close(), 1500);
       },
       error: (err) => {
         this.submitting = false;
@@ -126,6 +127,17 @@ export class SettingsExporterModalComponent implements OnInit {
   }
 
   close(): void {
+    if (this.closeTimer !== null) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
     this.closed.emit();
+  }
+
+  ngOnDestroy(): void {
+    if (this.closeTimer !== null) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
   }
 }
