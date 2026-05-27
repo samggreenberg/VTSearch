@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import queue
 import time
+import uuid
 from typing import Any, Callable, Generator
 
 from vtscore.concurrency.progress import (
@@ -31,6 +32,13 @@ from vtscore.concurrency.progress import (
 #: ``LoadingTasksTracker`` stale-prune window without us having to
 #: schedule a background timer for every finish.
 HEARTBEAT_SECONDS = 5.0
+
+#: Per-process identifier emitted as the first SSE frame on every new
+#: connection. Clients compare it against the last value they saw; when
+#: it changes, the backend has restarted and any frontend state keyed
+#: on ``task_id``s from the previous process must be discarded
+#: (otherwise stale ids leak forever — see audit M27).
+BOOT_ID = uuid.uuid4().hex
 
 #: Single-channel trackers (key = SSE event name).
 _TRACKER_CHANNELS: dict[str, ProgressTracker] = {
@@ -53,8 +61,13 @@ def _format_sse(event: str, data: Any) -> str:
 
 
 def initial_snapshot() -> list[str]:
-    """Return the SSE frames a freshly-connected client should receive first."""
-    frames: list[str] = []
+    """Return the SSE frames a freshly-connected client should receive first.
+
+    The first frame is always the ``server`` channel carrying the
+    process's :data:`BOOT_ID`; subsequent frames are the per-channel
+    progress snapshots.
+    """
+    frames: list[str] = [_format_sse("server", {"boot_id": BOOT_ID})]
     for name, tracker in _TRACKER_CHANNELS.items():
         frames.append(_format_sse(name, tracker.get()))
     for name, tasks_tracker in _TASK_CHANNELS.items():

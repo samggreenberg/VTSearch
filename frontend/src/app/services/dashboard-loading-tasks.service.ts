@@ -62,6 +62,26 @@ export class DashboardLoadingTasksService {
     this.progressEvents.detectorLoadingTasks$
       .pipe(filter((tasks) => tasks.some((t) => t.status !== 'idle')))
       .subscribe(() => this.startDetectorProgressPolling());
+    // Backend restart: every `task_id` we're tracking refers to a task
+    // that no longer exists. Tear down the existing polling loops (so
+    // their stale `awaitedTaskIds` don't keep them latched on forever),
+    // drop the per-task sets, and clear inline error rows that
+    // reference vanished tasks. The next non-idle SSE snapshot will
+    // re-engage polling cleanly via the constructor subscriptions above.
+    this.progressEvents.serverReset$.subscribe(() => this.resetOnBackendRestart());
+  }
+
+  private resetOnBackendRestart(): void {
+    this.polling$.next();
+    this.detectorPolling$.next();
+    this.awaitedTaskIds.clear();
+    this.completedTaskIds.clear();
+    this.completedModelTaskIds.clear();
+    this.datasetPollingActive = false;
+    this.detectorPollingActive = false;
+    this.loadingTasksSubject.next([]);
+    this.detectorLoadingTasksSubject.next([]);
+    this.datasetState.setLoading(false);
   }
 
   get loadingTasks(): LoadingTask[] {
