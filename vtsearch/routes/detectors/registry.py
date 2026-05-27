@@ -848,3 +848,25 @@ def set_detector_autorun(body: dict, detector_id: str):
     else:
         remove_autorun_detector(name)
     return {"ok": True, "autorun": flag}
+
+
+# ---------------------------------------------------------------------------
+# Per-plugin typed routes for /api/detectors/registry/from-labelset/<importer>.
+# Registered at module-import time by iterating the label-importer
+# registry, so each known importer gets a static URL whose body schema
+# is described in /api/openapi.json with real per-field types.  Unknown
+# importer names fall through to the parameterized route above
+# (preserving the legacy 404 message).
+# ---------------------------------------------------------------------------
+
+from vtscore.labels.importers import list_label_importers as _list_label_importers  # noqa: E402
+from vtsearch.routes._shared import register_plugin_typed_routes as _register_plugin_typed_routes  # noqa: E402
+
+_register_plugin_typed_routes(
+    detectors_registry_bp,
+    list_plugins=_list_label_importers,
+    path_template="/api/detectors/registry/from-labelset/{plugin_name}",
+    endpoint_prefix="register_detector_from_labelset",
+    delegate=register_detector_from_labelset,
+    extra_keys=("name",),
+)

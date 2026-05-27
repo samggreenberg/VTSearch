@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.routes._shared import (
     get_plugin_or_404,
+    register_plugin_typed_routes,
     require_dataset_header,
     require_detector_header,
     run_plugin_or_error,
@@ -286,3 +287,22 @@ def ingest_missing(body: dict):
         "failed": failed,
         "message": message,
     }
+
+
+# ---------------------------------------------------------------------------
+# Per-plugin typed routes for /api/label-importers/import/<name>.
+# Registered at module-import time by iterating the label-importer
+# registry, so each known importer gets a static URL whose body schema
+# is described in /api/openapi.json with real per-field types.  Unknown
+# importer names fall through to the parameterized route above.
+# Plugins with file fields stay on the parameterized fallback.
+# ---------------------------------------------------------------------------
+
+register_plugin_typed_routes(
+    label_importers_bp,
+    list_plugins=list_label_importers,
+    path_template="/api/label-importers/import/{plugin_name}",
+    endpoint_prefix="run_label_import",
+    delegate=run_label_import,
+    extra_decorators=(require_detector_header, require_dataset_header),
+)
