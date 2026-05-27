@@ -1,5 +1,17 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, ViewChild } from '@angular/core';
+import {
+  Component,
+  Input,
+  Output,
+  EventEmitter,
+  OnInit,
+  OnChanges,
+  OnDestroy,
+  SimpleChanges,
+  ViewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { SortBarComponent } from './sort-bar/sort-bar.component';
 import { SelectModeComponent } from './select-mode/select-mode.component';
 import { InclusionSliderComponent } from './inclusion-slider/inclusion-slider.component';
@@ -32,7 +44,7 @@ export type { SortMode, SelectMode, SortedItem };
   templateUrl: './left-panel.component.html',
   styleUrl: './left-panel.component.scss',
 })
-export class LeftPanelComponent implements OnInit, OnChanges {
+export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Input() medias: Media[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
@@ -99,22 +111,29 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   private mediaTypeInfos: MediaTypeInfo[] = [];
   private currentTypeId = '';
   private embedderInfos: EmbedderInfo[] = [];
+  private readonly destroy$ = new Subject<void>();
 
   constructor(private datasetsListingsApi: DatasetsListingsApiService) {}
 
   ngOnInit(): void {
-    this.datasetsListingsApi.getMediaTypes().subscribe({
-      next: (resp) => {
-        this.mediaTypeInfos = resp.media_types;
-        this.updateMediaTypeName();
-      },
-    });
-    this.datasetsListingsApi.getEmbedders().subscribe({
-      next: (embedders) => {
-        this.embedderInfos = embedders;
-        this.updateTextSortAvailable();
-      },
-    });
+    this.datasetsListingsApi
+      .getMediaTypes()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          this.mediaTypeInfos = resp.media_types;
+          this.updateMediaTypeName();
+        },
+      });
+    this.datasetsListingsApi
+      .getEmbedders()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (embedders) => {
+          this.embedderInfos = embedders;
+          this.updateTextSortAvailable();
+        },
+      });
     if (this.panelMode === 'find') {
       // Find mode doesn't use tabs; keep manual as a no-op default
       this.activeTab = 'manual';
@@ -131,6 +150,11 @@ export class LeftPanelComponent implements OnInit, OnChanges {
       this.updateMediaTypeName();
       this.updateTextSortAvailable();
     }
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   private updateMediaTypeName(): void {
