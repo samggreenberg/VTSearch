@@ -161,7 +161,7 @@ td.actions-col {
   }
 
   &.disabled {
-    opacity: 0.35;
+    opacity: var(--opacity-disabled);
     cursor: not-allowed;
   }
 }

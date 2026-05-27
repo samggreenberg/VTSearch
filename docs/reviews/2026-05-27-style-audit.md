@@ -1,5 +1,12 @@
 # Rendered Style Audit - 2026-05-27
 
+**Status:** V7 / V10 / V11 / V13 shipped, plus the underlying systemic
+fix (`--opacity-disabled` token, see §1.9 of `docs/style-guide.md`).
+V1 / V2 / V3 (tab-bar duplication) and the remaining Low findings (V4 /
+V5 / V6 / V8 / V9 / V12 / V14 / V15) are still open.
+
+
+
 **Scope.** Task 1 of `docs/plans/browser-vision-testing.md`: a rendered
 style audit of every major view in light and dark themes, comparing
 against `docs/style-guide.md` and the CLAUDE.md "Nested-modal back
@@ -75,6 +82,38 @@ No findings were promoted to High. The audit did not surface a
 broken-layout / unreadable-text bug in either theme; all issues are
 style-guide compliance or minor-contrast.
 
+### Systemic finding (added during fix-up)
+
+The four contrast Lows above (V7, V10, V11, V13) all traced back to one
+underlying habit: components reach for `opacity` to "tone something
+down" without picking a shared value, and without checking whether
+opacity is the right tool against the surface they're sitting on. A
+grep across `frontend/src` turned up **seven different opacity values**
+used to express the `:disabled` / `.disabled` state across button-like
+elements: `0.35`, `0.4`, `0.45`, `0.5`, `0.55`, `0.6`, `0.75`. The
+dashboard icon buttons sat at `0.35` (V10), the header "you are here"
+button at `0.4` against the accent-blue header (V11), the importer
+sub-tabs at `0.45`, and the global `.btn` baseline at `0.5`.
+
+Resolved by introducing a single `--opacity-disabled: 0.5` token (see
+`_variables.scss`; documented at §1.9 of `docs/style-guide.md`) and
+collapsing the standard `:disabled { opacity: ... }` sites onto it
+(`_components.scss`, `_picker-shared.scss`, `dashboard.component.scss`,
+`dataset-card.component.scss`, `app.component.scss`,
+`view-controls.component.scss`, `right-panel.component.scss`,
+`export-modal`, `media-crop-modal`, `audio-crop-overlay`,
+`label-importer-modal`). The few non-standard sites that mean
+"something different" (`folder-browser` at `0.55` is the wait-cursor
+state, `login` at `0.6`, achievement-tier opacities) are deliberately
+left alone - they convey distinct semantics and shouldn't be conflated
+with disabled.
+
+The V11 fix also makes the broader point: **opacity is the wrong tool
+for "disabled" when the surface is saturated**. White-on-accent-blue
+dimmed via opacity cannot hold contrast, so the header's Dashboard
+button now uses a `color: var(--header-text-dim)` shift instead. The
+style guide now calls this out explicitly.
+
 ---
 
 ## Dashboard
@@ -119,6 +158,12 @@ Suspected source: shared `.btn:disabled { opacity: 0.5 }` rule in
 chrome in `frontend/src/app/components/dashboard/dashboard.component.scss`
 (panel header right-aligned action group). Severity: Low.
 
+**Fixed.** `.side-action-btn:disabled` and `.select-checkbox:disabled`
+in `dashboard.component.scss` were sitting at `opacity: 0.35`; both now
+use `var(--opacity-disabled)` (0.5). Combined with the systemic token
+roll-out, every standard "this button is disabled" affordance now sits
+at the same opacity.
+
 ### V11 - "Dashboard" disabled button vs. accent header bg
 
 The persistent header bar uses the accent-purple background in both
@@ -132,6 +177,13 @@ Suspected source: header layout in
 `frontend/src/app/components/header/` (or wherever the top app bar
 lives) combined with `.btn:disabled { opacity: 0.5 }` in
 `frontend/src/scss/_components.scss`.
+
+**Fixed.** Actual source was `.top-bar-btn:disabled` in
+`app.component.scss` reaching for `opacity: 0.4`. Replaced with a
+color shift: `color: var(--header-text-dim)`,
+`background: transparent`, no opacity change. This is now the canonical
+example in §1.9 of the style guide: opacity cannot hold contrast on a
+saturated background; reach for a theme-aware dim color token instead.
 
 ---
 
@@ -184,6 +236,13 @@ Suspected source: `frontend/src/scss/_picker-shared.scss`
 `.badge-download` block + the `--bg-subtle`/`--text-muted` resolution
 on `[data-theme="dark"]` in `frontend/src/scss/_variables.scss`.
 Severity: Low.
+
+**Fixed.** `.badge-download` had been pairing `background: var(--border)`
+with `color: var(--text-muted)` - two near-equal shades of grey that
+flattened against the dark table row. Now uses
+`background: var(--bg-secondary-btn)` + `color: var(--text-secondary)`
+in `_picker-shared.scss`. Light mode also benefits (a hair more contrast
+on white).
 
 ### V15 - Picker-tab `<i>` icons mostly grey in light mode
 
@@ -372,6 +431,14 @@ likely overrides `overflow` without re-applying the project's
 `scrollbar-color` / webkit thumb rule that lives in
 `frontend/src/scss/_globals.scss` (or wherever the default scrollbar
 treatment is declared - grep for `::-webkit-scrollbar`).
+
+**Fixed.** The global `* { scrollbar-color: ... }` rule in
+`_components.scss` should reach `.guide`, but the screenshot proves it
+doesn't (likely a Chromium-on-Linux scrollbar-color quirk - the rule
+holds zero specificity and competes with whatever the engine falls
+back to per-overflow-context). Reasserted the theme scrollbar
+explicitly on `.guide` (both `scrollbar-color` and the
+`::-webkit-scrollbar*` variants), scoped to the Help modal body only.
 
 ---
 

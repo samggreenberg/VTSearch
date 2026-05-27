@@ -116,6 +116,16 @@ All three resolve through `--shadow-dropdown` so they auto-tint per theme.
 
 Never use a raw z-index. If you need a new layer, add a token.
 
+### 1.9 Disabled state - `--opacity-disabled`
+
+| Token                | Value | When to use |
+|----------------------|-------|-------------|
+| `--opacity-disabled` | 0.5   | The `opacity` value on every `:disabled` / `.disabled` button or interactive element styled via opacity. |
+
+There is only one disabled opacity. Don't write `opacity: 0.35` or `opacity: 0.4` because it "looks right" - the rendered audit at `docs/reviews/2026-05-27-style-audit.md` found seven different ad-hoc values in the wild and several dropped text below readable contrast.
+
+**Don't use opacity to disable text on a saturated background.** Opacity dims the rendered pixels toward the background, so 50% white on the accent-blue header collapses to a mid-blue that fails contrast. For buttons sitting on `--header-bg` (or any saturated surface), shift `color` to a theme-aware dimmed token (e.g. `--header-text-dim`) and keep the cursor change - skip `opacity` entirely.
+
 ---
 
 ## 2. Shared component classes
