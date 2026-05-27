@@ -1,7 +1,7 @@
 """Render a GitHub-style 7x24 punch card of PR merge times.
 
 PR merges are a cleaner "when did Sam actually touch this" signal than commits,
-because Claude commits run unattended in the cloud — only the merge-button press
+because Claude commits run unattended in the cloud - only the merge-button press
 reflects a human at the keyboard.
 
 Reproducing the data file (scripts/punchcard/pr_merges.txt):
@@ -71,7 +71,7 @@ for spine in ("top", "right"):
     ax.spines[spine].set_visible(False)
 
 ax.set_title(
-    f"VTSearch PR merges — {total} merged PRs, {date_min} to {date_max}",
+    f"VTSearch PR merges - {total} merged PRs, {date_min} to {date_max}",
     fontsize=12,
     loc="left",
     pad=12,

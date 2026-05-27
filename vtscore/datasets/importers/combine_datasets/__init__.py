@@ -142,7 +142,7 @@ class CombineDatasetsImporter(DatasetImporter):
             label="Name",
             field_type="text",
             description="Display name for the new combined dataset.",
-            # Display-only — not part of the dataset's identity, so leave it
+            # Display-only - not part of the dataset's identity, so leave it
             # out of the persisted origin to keep reloads deterministic.
             include_in_origin=False,
             required=False,

@@ -16,7 +16,7 @@ type RemoveIndex<T> = {
 };
 
 /**
- * The renderable media shape — a stub from ``GET /api/medias/ids``
+ * The renderable media shape: a stub from ``GET /api/medias/ids``
  * (``id``, ``type``, optional ``embedder``) optionally augmented with the
  * full per-item metadata returned by ``POST /api/medias/batch``
  * (``filename``, ``md5``, ``custom_metadata``, clip extents, …).
@@ -44,7 +44,7 @@ export interface VotesResponse {
 
 /**
  * The unified shape every long-running operation emits over the SSE stream
- * (`/api/events` — see `progress-events.service.ts`).
+ * (`/api/events`; see `progress-events.service.ts`).
  *
  * Backend: every singleton `ProgressTracker` (dataset, sort, eval, find) and
  * every per-task tracker created by `LoadingTasksTracker` carries the same
@@ -143,7 +143,7 @@ export interface SourceSpec {
   params: Record<string, string | number | null>;
 }
 
-/** Saved per-mediaType defaults for the Add Dataset advanced panel —
+/** Saved per-mediaType defaults for the Add Dataset advanced panel:
  *  the embedder, clipper (+ params), and converter rows the user wants
  *  applied automatically every time they import a dataset whose output
  *  is the matching mediaType. Edited from Settings > Data Imports;
@@ -153,7 +153,7 @@ export interface ImportDefaultsForMediaType {
   clipper?: string;
   clipper_params?: Record<string, string | number>;
   /** Source-spec rows to seed into the importer's "Include media" picker.
-   *  May omit the native "include directly" row — the importer adds it
+   *  May omit the native "include directly" row; the importer adds it
    *  implicitly so the form is never empty. */
   source_specs?: SourceSpec[];
 }
@@ -227,7 +227,7 @@ export interface MediaTypeDetectionResponse {
   dominant: string | null;
   /** ``true`` when the backend stopped walking before reaching the file
    *  cap because the directory-count cap or wall-clock budget fired.  The
-   *  rest of the response is still meaningful — it's just a less complete
+   *  rest of the response is still meaningful; it's just a less complete
    *  sample than usual. */
   truncated?: boolean;
 }
@@ -369,7 +369,7 @@ export interface EmbedderInfo {
   /**
    * Whether this embedder can embed text queries into the same vector space as
    * its media. ``false`` for vision-only encoders (DINOv3, Perception Encoder)
-   * — the UI hides text-search affordances for datasets using them.
+   * so the UI hides text-search affordances for datasets using them.
    */
   supports_text?: boolean;
   /**
@@ -384,7 +384,7 @@ export interface EmbedderInfo {
    * ``null`` for embedders with no special licensing constraints; a short
    * human-readable string for embedders with restrictive licences (e.g.
    * facebookresearch/EUPE under the FAIR Noncommercial Research Licence).
-   * Advisory only — the picker shows a warning chip, it does not gate
+   * Advisory only; the picker shows a warning chip, it does not gate
    * selection behind an acceptance click.
    */
   license_notice?: string | null;

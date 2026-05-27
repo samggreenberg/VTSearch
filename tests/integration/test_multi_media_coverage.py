@@ -2,7 +2,7 @@
 
 Exercises key workflows (text sort, learned sort, vote, label export/import,
 example sort, extract, localize) against image, text, video, and document
-media types — not just audio.  Also covers previously-untested endpoints:
+media types; not just audio.  Also covers previously-untested endpoints:
 
   - POST /api/example-sort-server
   - POST /api/example-sort-origin
@@ -235,7 +235,7 @@ class TestMediasListingMultiMedia:
 
 
 class TestExampleSortUpload:
-    """POST /api/example-sort — upload a file for similarity sorting."""
+    """POST /api/example-sort; upload a file for similarity sorting."""
 
     def test_upload_wav_example_sort(self, client):
         wav = make_wav_bytes()
@@ -267,7 +267,7 @@ class TestExampleSortUpload:
 
 
 class TestExampleSortServer:
-    """POST /api/example-sort-server — sort by a server-side file."""
+    """POST /api/example-sort-server; sort by a server-side file."""
 
     def test_missing_filename_returns_422(self, client):
         # The example-sort-server schema declares ``filename`` as required,
@@ -307,7 +307,7 @@ class TestExampleSortServer:
 
 
 class TestExampleSortOrigin:
-    """POST /api/example-sort-origin — sort by media resolved from an origin."""
+    """POST /api/example-sort-origin; sort by media resolved from an origin."""
 
     def test_missing_origin_returns_422(self, client):
         # The example-sort-origin schema declares ``origin`` as required.
@@ -357,7 +357,7 @@ class TestExampleSortOrigin:
 
 
 class TestExtractEndpoint:
-    """POST /api/extract — run a single extractor."""
+    """POST /api/extract; run a single extractor."""
 
     def test_missing_extractor_type_returns_422(self, client):
         resp = client.post("/api/extract", json={"name": "test", "config": {"foo": 1}})
@@ -409,7 +409,7 @@ class TestExtractEndpoint:
 
 
 class TestAutoExtractEndpoint:
-    """POST /api/auto-extract — run all autorun extractors."""
+    """POST /api/auto-extract; run all autorun extractors."""
 
     def test_no_medias_returns_400(self, client):
         saved = dict(medias)
@@ -429,7 +429,7 @@ class TestAutoExtractEndpoint:
 
 
 class TestAutoLocalizeEndpoint:
-    """POST /api/auto-localize — run all autorun localizers."""
+    """POST /api/auto-localize; run all autorun localizers."""
 
     def test_no_medias_returns_400(self, client):
         saved = dict(medias)

@@ -2,7 +2,7 @@
 
 A media embedder turns a media file (or a text query) into a fixed-size
 vector in some embedding space. Each embedder belongs to exactly one
-media type, but a type can have multiple embedders — VTSearch ships
+media type, but a type can have multiple embedders - VTSearch ships
 two CLAP variants for audio, four image embedders (SigLIP + three
 patch-capable backbones), three video embedders, and so on. Embedders
 are auto-discovered: any `embedder_<name>.py` file (or `embedder_<name>/`
@@ -33,24 +33,24 @@ batch / bulk hooks.
 
 | Member | Type | Purpose |
 |--------|------|---------|
-| `name` (property) | `str` | Unique registry key — `"clap"`, `"siglip"`, `"my_embedder"` |
+| `name` (property) | `str` | Unique registry key - `"clap"`, `"siglip"`, `"my_embedder"` |
 | `media_type_id` (property) | `str` | The `MediaType.type_id` this embedder works on |
-| `_load_models_impl()` | `() -> None` | Idempotent model load — override this, NOT `load_models()` |
-| `_embed_media_impl(media)` | `(dict) -> np.ndarray \| None` | Embed one media dict — override this, NOT `embed_media()` |
+| `_load_models_impl()` | `() -> None` | Idempotent model load - override this, NOT `load_models()` |
+| `_embed_media_impl(media)` | `(dict) -> np.ndarray \| None` | Embed one media dict - override this, NOT `embed_media()` |
 
 Optional but commonly overridden:
 
 | Member | Default | Purpose |
 |--------|---------|---------|
 | `display_name` | `name` | Friendlier label for the picker UI |
-| `is_default` | `False` | Exactly one embedder per media type should return `True` — that one is what `embedders_for_type(t)[0]` returns |
+| `is_default` | `False` | Exactly one embedder per media type should return `True` - that one is what `embedders_for_type(t)[0]` returns |
 | `embed_text(text)` | `None` | Return `None` to disable text-query sort, or a vector in the same space as `_embed_media_impl` |
 | `description_wrappers` | `[]` | Templates with `{text}` for enriched text embedding (e.g. `["the sound of {text}"]`) |
 | `_embed_media_bulk_impl(medias)` | per-item loop | Native bulk hook for service embedders or batched GPU forward passes |
 | `_patch_forward_impl(media)` | `None` | For patch-capable image encoders; required when `supports_patch_regions = True` |
 
 Don't override the public methods `embed_media`, `embed_media_bulk`,
-`load_models`, or `patch_forward` — they wrap the `_impl` hooks with
+`load_models`, or `patch_forward` - they wrap the `_impl` hooks with
 shared locking and progress dispatch.
 
 ## Where the file goes
@@ -67,7 +67,7 @@ looks for any file matching `embedder*.py` (or any directory matching
 and registers its `EMBEDDER` sentinel.
 
 Out-of-tree, the simplest path is to symlink your `embedder_<name>.py`
-into the right directory — the scan uses
+into the right directory - the scan uses
 `importlib.util.spec_from_file_location` so symlinked files load
 cleanly. There is no `vtscore.embedders` entry-point group; embedders
 are tied to a specific media-type package by directory placement.
@@ -85,7 +85,7 @@ class MyEmbedder(MediaEmbedder):
 
     def _load_models_impl(self) -> None:
         if self._model is not None:
-            return  # idempotent — concurrent callers all wait on the per-class lock
+            return  # idempotent - concurrent callers all wait on the per-class lock
         from somewhere import HeavyModel  # imports inside method = lazy
         cache_dir = embedder_load_setup(self._on_progress, "Loading MyModel weights…")
         self._model = HeavyModel.from_pretrained("…", cache_dir=cache_dir)
@@ -94,14 +94,14 @@ class MyEmbedder(MediaEmbedder):
 Three helpers in [`vtscore/media/embedder.py`](../../media/embedder.py)
 keep heavy loads non-blocking from the UI's point of view:
 
-- `embedder_load_setup(on_progress, message)` — calls
+- `embedder_load_setup(on_progress, message)` - calls
   `ensure_torch_configured()`, emits an initial progress event, and
   returns the model cache directory as a string. Use it at the top of
   every `_load_models_impl()`.
-- `timed_progress(on_progress, status, message, ...)` — context
+- `timed_progress(on_progress, status, message, ...)` - context
   manager that appends an elapsed-time suffix to a long-running
   import or load step every second, so the UI doesn't look frozen.
-- `load_pretrained_local_first(load_fn, *args, **kw)` — tries
+- `load_pretrained_local_first(load_fn, *args, **kw)` - tries
   `local_files_only=True` first so a slow Hub round-trip doesn't
   stall a cached model load, then falls back to a network load with
   retry / backoff for transient 5xx errors.
@@ -128,7 +128,7 @@ fighting over GPU memory.
 
 `embed_media_bulk(medias)` is the bulk entry point. The default
 `_embed_media_bulk_impl` loops over `embed_media` and emits per-item
-progress through `self._on_progress("embedding", ..., i, total)` — fine
+progress through `self._on_progress("embedding", ..., i, total)` - fine
 for embedders that don't batch internally. Override
 `_embed_media_bulk_impl` when:
 
@@ -139,14 +139,14 @@ for embedders that don't batch internally. Override
 
 Overrides that batch internally are responsible for emitting their own
 progress updates. `embed_medias(dict[int, dict])` is a sugar wrapper
-that delegates to `embed_media_bulk` and returns id-keyed vectors —
+that delegates to `embed_media_bulk` and returns id-keyed vectors -
 importers usually call this.
 
 `patch_forward(media)` is for patch-based image encoders (DINOv2,
 DINOv3, EUPE). Set `supports_patch_regions = True` and implement
 `_patch_forward_impl(media)` returning a `PatchEmbedOutput`
 ([`vtscore/media/patch_embed.py`](../../media/patch_embed.py)). The
-dataset loader gates on the flag — single-vector embedders leave the
+dataset loader gates on the flag - single-vector embedders leave the
 default in place and the patch pipeline skips their datasets entirely.
 
 ## Capability flags
@@ -187,7 +187,7 @@ from vtscore.media.embedder import (
 
 
 class TextMiniLMEmbedder(MediaEmbedder):
-    """all-MiniLM-L6-v2 (sentence-transformers) — 384-dim text encoder."""
+    """all-MiniLM-L6-v2 (sentence-transformers) - 384-dim text encoder."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -249,7 +249,7 @@ EMBEDDER = TextMiniLMEmbedder()
 
 That's the full library-side contract. Drop the file into
 `vtscore/media/text/embedder_minilm.py` and the next import of
-`vtscore.media` auto-discovers it. No `__init__.py` edits needed —
+`vtscore.media` auto-discovers it. No `__init__.py` edits needed -
 the per-file embedder scan handles registration.
 
 ## Testing pattern

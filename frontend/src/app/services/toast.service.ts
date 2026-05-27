@@ -5,7 +5,7 @@ import { ProgressEventsService } from './progress-events.service';
 
 /**
  * Rich error context attached to HTTP-failure toasts. Carries everything
- * a user needs to file a useful bug report — the endpoint, status,
+ * a user needs to file a useful bug report: the endpoint, status,
  * request_id, and the active dataset / detector at the time of failure.
  */
 export interface ErrorContext {
@@ -42,7 +42,7 @@ export interface Toast {
   level: ToastLevel;
   message: string;
   detail?: string;
-  /** Optional rich HTTP error context — enables the Details / Copy debug info actions. */
+  /** Optional rich HTTP error context; enables the Details / Copy debug info actions. */
   errorContext?: ErrorContext;
   /** Optional follow-up action button (see :class:`ToastAction`). */
   action?: ToastAction;
@@ -70,9 +70,9 @@ const SUCCESS_AUTO_DISMISS_MS = 5000;
  * Central toast sink for the frontend. Every error surface routes
  * through this service:
  *
- *  - HTTP failures (via ``errorInterceptor``) — emitted with full
+ *  - HTTP failures (via ``errorInterceptor``): emitted with full
  *    ``ErrorContext`` for the Details / Copy debug info actions.
- *  - SSE LoadingTask failures (via ``SseErrorRouterService``) — emitted
+ *  - SSE LoadingTask failures (via ``SseErrorRouterService``): emitted
  *    deduped per task_id.
  *
  * Toasts stack (newest at the bottom) and stay until the user

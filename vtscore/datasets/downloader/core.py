@@ -62,7 +62,7 @@ UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 # HMDB51
 HMDB51_URL = "http://serre-lab.clps.brown.edu/wp-content/uploads/2013/10/hmdb51_org.rar"
 
-# UCF101 full (ZIP mirror on HuggingFace — no auth required)
+# UCF101 full (ZIP mirror on HuggingFace - no auth required)
 UCF101_FULL_URL = "https://huggingface.co/datasets/quchenyuan/UCF101-ZIP/resolve/main/UCF-101.zip"
 
 # KTH Actions
@@ -139,7 +139,7 @@ def download_file_with_progress(
     # (connect_timeout, read_timeout): fail fast on unresponsive hosts
     # and abort if the server stops streaming bytes for 60s mid-download.
     # We follow redirects manually so that every hop is re-checked by
-    # validate_url() — otherwise a public URL could redirect to an internal
+    # validate_url() - otherwise a public URL could redirect to an internal
     # host (SSRF), bypassing the up-front check that callers performed.
     session = requests.Session()
     current_url = url
@@ -284,11 +284,11 @@ def _download_and_extract(  # noqa: C901
 
         suffix = archive_name.lower()
         if suffix.endswith((".tar.gz", ".tgz")):
-            # Iterate lazily instead of calling getmembers() — the latter must
+            # Iterate lazily instead of calling getmembers() - the latter must
             # decompress the entire gzip stream just to read tar headers, then
             # extraction decompresses it *again*.  Lazy iteration decompresses
             # once and avoids a minutes-long stall on multi-GB archives.
-            # Use "r:*" to auto-detect compression — some CDNs (e.g. HuggingFace
+            # Use "r:*" to auto-detect compression - some CDNs (e.g. HuggingFace
             # Xet) transparently decompress .tar.gz files during transfer.
             total_bytes = temp_archive.stat().st_size
             with open(temp_archive, "rb") as raw_f:
@@ -334,7 +334,7 @@ def _download_and_extract(  # noqa: C901
             except OSError:
                 pass  # extract_to appeared between check and rename (race)
 
-        # extract_to already existed (e.g. it is DATA_DIR) — move children.
+        # extract_to already existed (e.g. it is DATA_DIR) - move children.
         _move_tree_contents(temp_extract, extract_to)
     finally:
         temp_archive.unlink(missing_ok=True)

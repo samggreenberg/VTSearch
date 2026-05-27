@@ -453,7 +453,7 @@ class TestSettingsSyncOnChange:
         }
         settings.set_settings_source_config(config)
 
-        # Change a setting — should auto-export to source
+        # Change a setting; should auto-export to source
         settings.set_volume(0.42)
 
         assert source_file.exists()
@@ -477,7 +477,7 @@ class TestSettingsSyncOnChange:
     def test_no_source_configured_no_error(self, isolated_settings):
         from vtsearch import settings
 
-        # No source configured — should not raise
+        # No source configured; should not raise
         settings.set_volume(0.5)
 
 
@@ -574,14 +574,14 @@ class TestApplySettings:
     def test_apply_settings_skips_unknown_keys(self, isolated_settings):
         from vtsearch import settings
 
-        # Should not raise — unknown keys are silently ignored
+        # Should not raise; unknown keys are silently ignored
         settings._apply_settings({"nonexistent_key_xyz": "hello"})
 
     def test_apply_settings_skips_invalid_values(self, isolated_settings):
         from vtsearch import settings
 
         orig_theme = settings.get_theme()
-        # "neon" is not a valid theme — should be silently skipped
+        # "neon" is not a valid theme; should be silently skipped
         settings._apply_settings({"theme": "neon"})
         assert settings.get_theme() == orig_theme
 
@@ -625,7 +625,7 @@ class TestStartupAutoImport:
     def test_startup_import_noop_when_no_source(self, isolated_settings):
         from vtsearch import settings
 
-        # No source configured — should return None and not error
+        # No source configured; should return None and not error
         assert settings.sync_from_settings_source() is None
 
     def test_startup_import_noop_when_source_file_missing(self, tmp_path, isolated_settings):
@@ -647,14 +647,14 @@ class TestStartupAutoImport:
 
 
 # ---------------------------------------------------------------------------
-# M16 regression tests — lazy auto-sync semantics (race, retry, freshness)
+# M16 regression tests: lazy auto-sync semantics (race, retry, freshness)
 # ---------------------------------------------------------------------------
 
 
 class TestSyncFromSourceFreshness:
     """Regression tests for M16 and the two adjacent defects.
 
-    See ``docs/plans/logical-bug-audit.md`` § Settings / sync — M16.
+    See ``docs/plans/logical-bug-audit.md`` § Settings / sync; M16.
     """
 
     def test_source_file_change_triggers_resync_on_next_read(self, tmp_path, isolated_settings):
@@ -891,7 +891,7 @@ class TestSyncFromSourceFreshness:
 
         monkeypatch.setattr(src, "peek_version", counted)
 
-        # Many reads inside the freshness window — at most one probe.
+        # Many reads inside the freshness window; at most one probe.
         baseline = probes["n"]
         for _ in range(20):
             settings.get_volume()
@@ -1110,7 +1110,7 @@ class TestLabelsetSync:
 
         ctx = DetectorContext(det_name, name=det_name, media_type="audio")
         ctx.model = None
-        ctx.threshold = 0.99  # noise — should NOT be emitted without a model
+        ctx.threshold = 0.99  # noise; should NOT be emitted without a model
         ctx.labelset_source = {
             "source_name": "server_json_file",
             "field_values": {"filepath": str(tmp_path / "labels.json")},
@@ -1426,7 +1426,7 @@ class TestLabelsetSyncDebounce:
             t0 = time.monotonic()
             sync_to_labelset_source()
             elapsed = time.monotonic() - t0
-            # Scheduling must be effectively free — well under the 200ms
+            # Scheduling must be effectively free; well under the 200ms
             # debounce window, let alone the timer + slow save.
             assert elapsed < 0.1
 

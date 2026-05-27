@@ -1,4 +1,4 @@
-"""MLP training primitives — generic build/train, media-agnostic.
+"""MLP training primitives - generic build/train, media-agnostic.
 
 The functions here take feature matrices and labels and return PyTorch
 models. They have no knowledge of medias, votes, or detector contexts;
@@ -47,7 +47,7 @@ def build_model(
         input_dim: Dimensionality of the input embeddings.
         hidden_dim: Number of neurons in the hidden layer (default 64).
         dropout: Dropout probability applied after the hidden layer
-            (default 0.0 — no dropout).  Active only during training.
+            (default 0.0 - no dropout).  Active only during training.
         generator: Optional local RNG for weight initialisation.  When
             provided the weights are re-initialised using this generator
             instead of PyTorch's global RNG, making construction
@@ -150,13 +150,13 @@ def train_model(
 
     Returns:
         A trained ``nn.Sequential`` model in eval mode.
-        The model outputs raw logits — apply ``torch.sigmoid`` at inference.
+        The model outputs raw logits - apply ``torch.sigmoid`` at inference.
 
     Raises:
         ValueError: If ``y_train`` does not contain at least one positive
             (``y == 1``) and one negative (``y == 0``) example.  BCE has no
-            discriminative signal on single-class data — the model would
-            saturate to a single constant for every input — so we refuse
+            discriminative signal on single-class data - the model would
+            saturate to a single constant for every input - so we refuse
             up front instead of returning a useless model.
     """
     import torch  # noqa: PLC0415
@@ -192,7 +192,7 @@ def train_model(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 
-    # Balanced class weights — the single-class case was rejected above.
+    # Balanced class weights - the single-class case was rejected above.
     weight_true = num_false / num_true
     weight_false = 1.0
 
@@ -208,14 +208,14 @@ def train_model(
     weights = torch.where(y_train == 1, weight_true, weight_false).squeeze().to(device)
     loss_fn = nn.BCEWithLogitsLoss(reduction="none")
 
-    # Fork the global RNG so the Dropout seed is isolated per call —
+    # Fork the global RNG so the Dropout seed is isolated per call -
     # concurrent training invocations each get their own RNG state.
     model.train()
     epochs = config.TRAIN_EPOCHS
     patience = config.TRAIN_PATIENCE
     best_loss = float("inf")
     epochs_since_improve = 0
-    # Require at least this much absolute decrease to count as progress —
+    # Require at least this much absolute decrease to count as progress -
     # without it, float noise drifts the loss down forever and the early-stop
     # never fires.
     min_delta = 1e-4

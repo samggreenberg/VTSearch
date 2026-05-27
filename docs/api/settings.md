@@ -88,14 +88,14 @@ and `settings_source`).
 `autorun_detectors` is a flat list of registered detector names that
 should run during `/api/auto-detect` and the CLI's `--autodetect` flow.
 Toggle a detector via `PUT /api/detectors/registry/{detector_id}/autorun`
-(see `docs/api/detectors.md`) — the registry endpoint is the source of
+(see `docs/api/detectors.md`); the registry endpoint is the source of
 truth and writes through to this settings list.
 
 ---
 
 ## Settings Sources (Sync)
 
-Settings sources provide **bidirectional sync** for settings — when a source
+Settings sources provide **bidirectional sync** for settings; when a source
 is active, settings changes are automatically exported to the source, and
 `/sync` pulls from the source back into the app. At startup, the active
 source is auto-imported so it takes precedence over local settings.

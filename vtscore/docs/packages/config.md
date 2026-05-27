@@ -6,7 +6,7 @@ here: module-level constants resolved from environment variables at
 import time (filesystem roots, thread caps, model IDs), and the
 `CoreConfig` dataclass that bundles the per-call configuration that
 would otherwise force the library to import `vtsearch.settings`. The
-file is import-clean — it never reaches into the app — and is the only
+file is import-clean - it never reaches into the app - and is the only
 place library code is allowed to read environment variables directly.
 
 **Source:** `vtscore/config.py` (~263 lines).
@@ -19,7 +19,7 @@ place library code is allowed to read environment variables directly.
 Library code under `vtscore/` is meant to run with or without the Flask
 app. Before this seam existed, every loader, trainer, and embedder
 reached into `vtsearch.settings` for tunables like `saved_datasets_dir`,
-`calibrate_count`, or `safe_thresholds` — which made the library
+`calibrate_count`, or `safe_thresholds` - which made the library
 impossible to vendor independently. `CoreConfig` is the seam:
 
 - **Library-only consumers** construct a `CoreConfig(...)` directly and
@@ -36,7 +36,7 @@ thread cannot be mutated underneath it.
 
 ## The `CoreConfig` dataclass
 
-Defined at `vtscore/config.py:208-263`. Every field is required — the
+Defined at `vtscore/config.py:208-263`. Every field is required - the
 class has no defaults so consumers can never accidentally inherit
 stale state from a previous run.
 
@@ -56,7 +56,7 @@ stale state from a previous run.
 | `data_dir`                        | `Path`         | bootstrap   | Filesystem root for caches, embeddings, and model downloads. Mirrors `DATA_DIR` at construction. |
 
 "Server" and "per-user" refer to where the app stores the corresponding
-setting — both tiers flow into the same `CoreConfig` so library code
+setting - both tiers flow into the same `CoreConfig` so library code
 never has to know the difference. Library-only callers just pass
 whatever values they want.
 
@@ -122,20 +122,20 @@ the app's default settings file.
 ## Module-level filesystem constants
 
 All paths are resolved once at import time. They are `Path` instances,
-not strings, and they are anchored to the repo root — *not* the current
-working directory — so launching the app from `systemd`, `cron`, or a
+not strings, and they are anchored to the repo root - *not* the current
+working directory - so launching the app from `systemd`, `cron`, or a
 fresh dev shell will not silently create an empty `data/` next to the
 service launcher.
 
 | Constant            | Default                       | Override env var          | Meaning                                                              |
 |---------------------|-------------------------------|---------------------------|----------------------------------------------------------------------|
 | `DATA_DIR`          | `<repo>/data`                 | `VTSEARCH_DATA_DIR`       | Canonical data root. All runtime artefacts live underneath this.     |
-| `EMBEDDINGS_DIR`    | `DATA_DIR / "embeddings"`     | —                         | Embedding cache root. Derived from `DATA_DIR`.                       |
+| `EMBEDDINGS_DIR`    | `DATA_DIR / "embeddings"`     | -                         | Embedding cache root. Derived from `DATA_DIR`.                       |
 | `MODELS_CACHE_DIR`  | `DATA_DIR / "models"`         | `VTSEARCH_MODELS_DIR`     | HuggingFace + torch hub cache root.                                  |
 
 **Invariant.** `DATA_DIR` is the only path library code is allowed to
 derive runtime locations from. No file under `vtscore/` should hardcode
-`./data/...` — always start from `DATA_DIR` (or a `CoreConfig.data_dir`
+`./data/...` - always start from `DATA_DIR` (or a `CoreConfig.data_dir`
 when one is in scope). Tests rely on this: they override
 `VTSEARCH_DATA_DIR` per-test to redirect every cache to a `tmp_path`.
 
@@ -149,9 +149,9 @@ when one is in scope). Tests rely on this: they override
 | `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on MLP training epochs. `vtscore.training.mlp.train_model` may early-stop sooner.                    |
 | `TRAIN_PATIENCE`         | `10`    | `VTSEARCH_TRAIN_PATIENCE`     | Epochs the training loss must fail to improve before early-stop fires. `0` disables early-stop.                  |
 | `DEFAULT_CALIBRATE_COUNT`| `1`     | `VTSEARCH_CALIBRATE_COUNT`    | First-run default for `CoreConfig.calibrate_count`. Min 1.                                                       |
-| `MLP_HIDDEN_MIN`         | `4`     | —                             | Auto-sizing floor for MLP hidden width.                                                                          |
-| `MLP_HIDDEN_MAX`         | `32`    | —                             | Auto-sizing ceiling for MLP hidden width.                                                                        |
-| `MLP_DROPOUT`            | `0.5`   | —                             | Dropout rate for trained MLPs.                                                                                   |
+| `MLP_HIDDEN_MIN`         | `4`     | -                             | Auto-sizing floor for MLP hidden width.                                                                          |
+| `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width.                                                                        |
+| `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs.                                                                                   |
 
 ### `resolve_device()`
 
@@ -170,7 +170,7 @@ torch_device = resolve_device()
 Imports `torch` lazily so simply importing `vtscore.config` does not
 pull torch into the process. Returns `"cpu"` if torch isn't installed
 at all. When `DEVICE` is anything other than `"auto"`, the env var's
-value is returned unchanged — this is how you pin to `"cuda:1"` or
+value is returned unchanged - this is how you pin to `"cuda:1"` or
 `"mps"` for a specific run.
 
 ## Server-path roots
@@ -191,14 +191,14 @@ export VTSEARCH_SERVER_ROOTS=/srv/data:/srv/imports
 ```
 
 The first entry is what `/api/browse` shows when no `path` parameter
-is provided. Multi-user mode is unaffected — each user is still
+is provided. Multi-user mode is unaffected - each user is still
 confined to their own `<get_user_data_dir(user)>/...` subtree
 regardless of this setting.
 
 ## Embedder model identifiers
 
 Every public embedder ID is a plain string constant. They are
-*identifiers only* — none of these constants load anything at import
+*identifiers only* - none of these constants load anything at import
 time. The actual download + load is lazy, driven by
 `vtscore.embedding.loader` getters (`get_clap_model`, `get_xclip_model`,
 `get_e5_model`, etc.).
@@ -229,7 +229,7 @@ The EUPE model is not the same as `facebook/PE-Core-B16-224`; the
 constant points at a single `.pt` weight file (an `AutoModel.from_pretrained`
 path will not work, because the HF repo has no `config.json`).
 
-## Environment variables — summary
+## Environment variables - summary
 
 Every env var consulted by `vtscore.config`, in one place:
 
@@ -263,12 +263,12 @@ The end-to-end picture for a library + app deployment:
    delegates to `builder_fn` and returns a frozen `CoreConfig` valid
    for this request only.
 4. The handler hands that `CoreConfig` to whatever library function it
-   calls — datasets loader, detector trainer, exporter. Background
+   calls - datasets loader, detector trainer, exporter. Background
    threads spawned from the request keep using the same frozen object.
 
 For library-only consumers, steps 2–3 collapse: the consumer builds
 `CoreConfig(...)` directly and passes it down. `from_settings()` is
-never called. The library is identical in both cases — it does not
+never called. The library is identical in both cases - it does not
 care which path produced the config.
 
 ## Invariants
@@ -276,7 +276,7 @@ care which path produced the config.
 - `vtscore.config` does **not** import `vtsearch.settings`. Ever.
   Adding such an import is the bug `register_core_config_builder`
   exists to prevent.
-- No code under `vtscore/` should hardcode `./data` or `data/` —
+- No code under `vtscore/` should hardcode `./data` or `data/` -
   always derive from `DATA_DIR` or `CoreConfig.data_dir`.
 - Module-level constants are resolved at import time. They are
   effectively `Final`; don't reassign them.

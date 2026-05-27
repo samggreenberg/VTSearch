@@ -3,15 +3,15 @@
 DINOv2 is exposed as two embedders that share the same backbone but differ
 in what they expose:
 
-- ``dinov2_single`` — CLS-pooled single vector per image; fast, small
+- ``dinov2_single`` - CLS-pooled single vector per image; fast, small
   storage, no region search.
-- ``dinov2_patch``  — same CLS vector plus a per-patch grid + HAC region
+- ``dinov2_patch``  - same CLS vector plus a per-patch grid + HAC region
   tree; ~30× slower per image and ~100× more storage, but enables region
   similarity and region-aware MLP scoring.
 
 Both share this base.  The underscore-prefixed filename keeps it out of
 the auto-discovery scan in :mod:`vtscore.media` (only ``embedder*.py``
-files are imported as plugins) — the variant modules import from here.
+files are imported as plugins) - the variant modules import from here.
 """
 
 from __future__ import annotations
@@ -113,7 +113,7 @@ class _Dinov2Base(MediaEmbedder):
             inputs = {k: v.to(device) for k, v in inputs.items()}
             with torch.no_grad():
                 outputs = self._model(**inputs)
-                # DINOv2's ``last_hidden_state[:, 0]`` is the CLS token — the
+                # DINOv2's ``last_hidden_state[:, 0]`` is the CLS token - the
                 # global representation used for linear probing.
                 cls_token = outputs.last_hidden_state[:, 0]
                 embedding = cls_token.detach().cpu().numpy()

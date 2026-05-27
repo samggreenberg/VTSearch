@@ -1,4 +1,4 @@
-"""Text clippers — split into paragraphs or sentences, or pass-through text media."""
+"""Text clippers - split into paragraphs or sentences, or pass-through text media."""
 
 from __future__ import annotations
 

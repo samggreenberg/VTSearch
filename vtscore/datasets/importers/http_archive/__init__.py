@@ -52,8 +52,8 @@ def _reject_traversal(extract_dir_resolved: Path, member_name: str) -> None:
     """Raise ValueError if *member_name* would extract outside extract_dir.
 
     Validates before extraction so a malicious member is never written to disk.
-    Rejects absolute paths, ``..`` traversal, and any name that — once joined
-    and normalised — escapes the extraction root.
+    Rejects absolute paths, ``..`` traversal, and any name that - once joined
+    and normalised - escapes the extraction root.
     """
     # Reject absolute member names outright; on Windows they'd also drop the
     # root prefix when joined, but we want to fail loudly either way.

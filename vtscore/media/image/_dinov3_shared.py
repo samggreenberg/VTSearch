@@ -3,13 +3,13 @@
 DINOv3 is exposed as two embedders that share the same backbone but differ
 in what they expose:
 
-- ``dinov3_single`` — CLS-pooled single vector per image; fast, small
+- ``dinov3_single`` - CLS-pooled single vector per image; fast, small
   storage, no region search.
-- ``dinov3_patch``  — same CLS vector plus a per-patch grid + HAC region
+- ``dinov3_patch``  - same CLS vector plus a per-patch grid + HAC region
   tree; ~30× slower per image and ~100× more storage, but enables region
   similarity and region-aware MLP scoring.
 
-DINOv3 weights are **gated** on Hugging Face — running either variant
+DINOv3 weights are **gated** on Hugging Face - running either variant
 requires the ``HF_TOKEN`` env var to be set to a user token that has
 accepted the DINOv3 licence at
 ``https://huggingface.co/facebook/dinov3-vitb16-pretrain-lvd1689m``.

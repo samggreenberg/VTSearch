@@ -1,7 +1,7 @@
 # `vtscore.utils`
 
 The leftover-helpers package. Most of what used to live here has
-moved to topical homes — state, plugins, sync, concurrency, security,
+moved to topical homes - state, plugins, sync, concurrency, security,
 and audio helpers all live in their own top-level packages now (see
 `vtscore.state`, `vtscore.plugins`, `vtscore.sync`,
 `vtscore.concurrency`, `vtscore.security`, and
@@ -20,7 +20,7 @@ Used by `vtscore.cli` when assembling autodetect results and by the
 app's `/api/labels/fill-from-sort` route when materialising scored
 rows for the UI. If you score a media against a detector and want to
 return the result, build the row through this function rather than
-constructing the dict by hand — that's how new optional fields
+constructing the dict by hand - that's how new optional fields
 (clip boundaries, MD5, origin) get picked up automatically.
 
 ```python
@@ -100,7 +100,7 @@ Extra keyword arguments are merged in last, so callers can attach
 detector-specific or call-site-specific fields (`label="good"`,
 `detector="my-detector"`) without needing to extend this function.
 
-## `vtscore.utils.synthetic` — offline media generators
+## `vtscore.utils.synthetic` - offline media generators
 
 Deterministic, internet-free media synthesis for the
 `SyntheticDatasetImporter`. Each generator writes a small,
@@ -124,7 +124,7 @@ video_paths: list[Path] = generate_video_dataset(Path("synth/video"), count=24)
 Each function takes `output_dir`, `count`, an optional `seed`
 (default `42`), and an optional `on_progress` callback compatible
 with `vtscore.media.base.ProgressCallback`. Each is **deterministic**
-given the same `(count, seed)` — re-running produces the same files,
+given the same `(count, seed)` - re-running produces the same files,
 and existing files matching the naming scheme are kept on subsequent
 calls (the importer relies on this cache across reloads).
 
@@ -151,10 +151,10 @@ CLAP-family embedders consume the files without resampling.
 `vtscore/utils/synthetic/images.py:140`. Cycles through two ideas at
 256x256 PNG:
 
-- `smiley` — a face on a coloured background, with one of four
+- `smiley` - a face on a coloured background, with one of four
   emotions (happy / sad / neutral / angry), random face / skin
   colour, size, and position.
-- `shapes` — 1–5 coloured circles, squares, and rotated triangles
+- `shapes` - 1–5 coloured circles, squares, and rotated triangles
   on a plain background.
 
 Requires `PIL` (Pillow), imported lazily. Output filenames:
@@ -165,10 +165,10 @@ Requires `PIL` (Pillow), imported lazily. Output filenames:
 `vtscore/utils/synthetic/video.py:190`. Cycles through four ideas
 encoded as 2-second 12 fps mp4 at 224x224:
 
-- `ball` — bouncing-ball animation.
-- `walker` — walking smiley with vertical bob.
-- `rotator` — rotating regular polygon (3–7 sides).
-- `marquee` — scrolling text rendered as coloured per-character
+- `ball` - bouncing-ball animation.
+- `walker` - walking smiley with vertical bob.
+- `rotator` - rotating regular polygon (3–7 sides).
+- `marquee` - scrolling text rendered as coloured per-character
   rectangles (no font file dependency).
 
 Encodes via `imageio_ffmpeg` (the bundled static ffmpeg already
@@ -185,7 +185,7 @@ ProgressCallback = Callable[[str, str, int, int], None]
 ```
 
 The `status` field is always `"downloading"` so synthetic generation
-maps to the dataset pipeline's "fetching files" step — the
+maps to the dataset pipeline's "fetching files" step - the
 importer's consumer doesn't need to special-case synthetic origins.
 The callback is fired at the start, once per file (with
 `current = i`), and once at the end (with `current = total`).

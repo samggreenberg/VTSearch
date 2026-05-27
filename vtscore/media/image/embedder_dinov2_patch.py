@@ -1,4 +1,4 @@
-"""Image embedder — DINOv2 patch-region mode (``dinov2_patch``).
+"""Image embedder - DINOv2 patch-region mode (``dinov2_patch``).
 
 Produces a CLS vector **plus** a per-patch grid + HAC region tree per
 image.  ~30× slower per image and ~100× more storage than the

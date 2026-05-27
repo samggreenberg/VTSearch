@@ -389,7 +389,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
     def test_slow_sync_to_source_does_not_block_reader(self, monkeypatch, isolated_settings):
         """One thread inside _sync_to_source must NOT freeze a reader."""
         # Plant a placeholder source config first so the setter under
-        # test actually invokes _sync_to_source — only then install the
+        # test actually invokes _sync_to_source; only then install the
         # slow stub so the placeholder write itself stays fast.
         _settings_mod.set_settings_source_config({"source_name": "_h29_unused", "field_values": {}})
 
@@ -427,7 +427,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
 
         reader_thread = threading.Thread(target=reader)
         reader_thread.start()
-        assert reader_done.wait(timeout=5), "Reader thread was blocked by the slow source — H29 has regressed"
+        assert reader_done.wait(timeout=5), "Reader thread was blocked by the slow source; H29 has regressed"
 
         unblock.set()
         setter_thread.join(timeout=5)
@@ -489,7 +489,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
 
         tb = threading.Thread(target=user_b_setter)
         tb.start()
-        assert user_b_done.wait(timeout=5), "user_b's set_volume was blocked by user_a's hung fsync — H29 has regressed"
+        assert user_b_done.wait(timeout=5), "user_b's set_volume was blocked by user_a's hung fsync; H29 has regressed"
 
         unblock.set()
         ta.join(timeout=5)
@@ -501,7 +501,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
 
     def test_slow_atomic_write_does_not_block_settings_reads(self, monkeypatch, isolated_settings):
         """A hung local fsync for the current user must NOT block other
-        threads doing settings *reads* — those only need ``_settings_lock``,
+        threads doing settings *reads*; those only need ``_settings_lock``,
         which is no longer held across file I/O.
         """
         in_write = threading.Event()
@@ -538,7 +538,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
 
         reader_thread = threading.Thread(target=reader)
         reader_thread.start()
-        assert reader_done.wait(timeout=5), "Reader thread was blocked by the slow local fsync — H29 has regressed"
+        assert reader_done.wait(timeout=5), "Reader thread was blocked by the slow local fsync; H29 has regressed"
 
         unblock.set()
         setter_thread.join(timeout=5)
@@ -597,7 +597,7 @@ class TestPluginRegistryLock:
     def test_concurrent_first_access_discovers_once(self):
         """Concurrent .list() calls should trigger _discover exactly once.
 
-        Uses ``eager=False`` so we can observe the deferred-discovery path —
+        Uses ``eager=False`` so we can observe the deferred-discovery path;
         the default eager construction skips :meth:`_ensure_discovered` work
         on subsequent calls entirely, so the lock is uninteresting there.
         """
@@ -717,8 +717,8 @@ class TestStateProgressLockOrder:
 
         With the pre-fix code, ``_set_vote_locked`` acquired ``_progress_lock``
         while still holding ``_state_lock``.  A second thread doing any
-        ``_state_lock``-only mutation would then block — even though there's
-        no reason it should — because the first thread is parked waiting for
+        no reason it should; because the first thread is parked waiting for
+        no reason it should - because the first thread is parked waiting for
         ``_progress_lock``.  After the fix, the first thread releases
         ``_state_lock`` before attempting ``_progress_lock``, so the second
         ``_state_lock``-only mutation proceeds independently.
@@ -768,7 +768,7 @@ class TestStateProgressLockOrder:
         other_thread = threading.Thread(target=other)
         other_thread.start()
         assert other_done.wait(timeout=5), (
-            "concurrent set_vote was blocked — invalidator is holding _state_lock while waiting "
+            "concurrent set_vote was blocked; invalidator is holding _state_lock while waiting "
             "on _progress_lock (M1 regression)"
         )
         other_thread.join(timeout=5)

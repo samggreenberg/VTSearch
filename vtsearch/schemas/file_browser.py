@@ -59,7 +59,7 @@ class BrowseFileEntrySchema(BrowseDirectoryEntrySchema):
 class BrowseResponseSchema(Schema):
     """Response for ``GET /api/browse``.
 
-    Note: ``root`` is intentionally omitted from the response — exposing
+    Note: ``root`` is intentionally omitted from the response; exposing
     the server's absolute filesystem path is a leak that the
     multi-user-isolation tests assert against.
     """

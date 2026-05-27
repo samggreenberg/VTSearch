@@ -1,4 +1,4 @@
-"""Image embedder — EUPE patch-region mode (``eupe_patch``).
+"""Image embedder - EUPE patch-region mode (``eupe_patch``).
 
 Produces a CLS vector **plus** a per-patch grid + HAC region tree per
 image using the ``facebookresearch/EUPE`` ViT-B/16 backbone.  ~30×
@@ -13,7 +13,7 @@ EUPE's attention path uses ``torch.nn.functional.scaled_dot_product_attention``
 which doesn't return weights, so :attr:`patch_saliency` falls back to a
 CLS-cosine-similarity proxy (softmax of each patch's cosine similarity
 to the CLS vector).  EUPE outputs are bound by Meta's FAIR Noncommercial
-Research Licence — see :attr:`license_notice`.
+Research Licence - see :attr:`license_notice`.
 """
 
 from __future__ import annotations

@@ -13,7 +13,7 @@ import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import type { AppSettings } from '../../../generated/api-client/models/app-settings';
-import { MediaTypeInfo } from '../../../models/api.models';
+import { EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
 import { VtDialogService } from '../../../services/dialog.service';
@@ -31,6 +31,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   settings: AppSettings = { volume: 50 };
   mediaTypes: MediaTypeInfo[] = [];
+  /** All registered embedders, keyed by media-type id, used to populate
+   *  the per-mediaType "Solo embedder" dropdowns under Appearance. */
+  embeddersByType: Record<string, EmbedderInfo[]> = {};
   activeSettingsTab = 'appearance';
   activeViewTab = '';
   loading = true;
@@ -61,6 +64,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     forkJoin({
       settings: this.settingsApi.getSettings(),
       mediaTypes: this.datasetsListingsApi.getMediaTypes(),
+      embedders: this.datasetsListingsApi.getEmbedders(),
       version: this.settingsApi.getVersion(),
     })
       .pipe(takeUntil(this.destroy$))
@@ -69,6 +73,19 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
         this.settings = res.settings;
         this.version = formatVersion(res.version.version);
         this.mediaTypes = res.mediaTypes.media_types || [];
+        const allEmbedders = res.embedders || [];
+        // Group embedders by media_type_id with defaults first, matching
+        // the order ``embedders_for_type`` returns from the API.
+        const byType: Record<string, EmbedderInfo[]> = {};
+        for (const emb of allEmbedders) {
+          const tid = emb.media_type_id || '';
+          if (!tid) continue;
+          (byType[tid] ||= []).push(emb);
+        }
+        for (const list of Object.values(byType)) {
+          list.sort((a, b) => Number(!!b.is_default) - Number(!!a.is_default));
+        }
+        this.embeddersByType = byType;
         if (this.mediaTypes.length > 0) {
           const preselected = this.preselectedViewTab;
           if (preselected && this.mediaTypes.some((mt) => mt.type_id === preselected)) {
@@ -129,6 +146,69 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     (this.settings as Record<string, unknown>)['solo_media_type'] = next;
     (this.settings as Record<string, unknown>)['solo_media_type_explicit'] = true;
     (this.settings as Record<string, unknown>)['effective_solo_media_type'] = next;
+    this.save();
+  }
+
+  /** Embedder options for a given media type, used by the per-type
+   *  "Solo embedder" dropdowns. Returns an empty list when the registry
+   *  hasn't loaded yet or the type has no embedders. */
+  embeddersForType(typeId: string): EmbedderInfo[] {
+    return this.embeddersByType[typeId] || [];
+  }
+
+  /** Currently selected solo embedder name for *typeId*. Reads from the
+   *  effective map (user explicit overlaid on the CLI fallback) so the
+   *  picker shows what the user will actually get when they open the
+   *  importer (including a CLI-only lock that has not been overridden). */
+  soloEmbedderSelectValue(typeId: string): string {
+    const map = this.settings.effective_solo_embedder_per_media_type || {};
+    const value = map[typeId];
+    if (!value) return '';
+    // If the stored embedder no longer exists for this type, surface
+    // "Ask each time" rather than a broken-looking option.
+    const valid = this.embeddersByType[typeId] || [];
+    return valid.find((e) => e.name === value) ? value : '';
+  }
+
+  /** Hint text under a solo-embedder dropdown: explains a CLI override
+   *  ("from --solo-embedder") or a stale embedder reference so the user
+   *  understands why the dropdown shows what it does. Returns ``''`` for
+   *  the normal case (no lock, or a user-explicit pick). */
+  soloEmbedderNote(typeId: string): string {
+    const userMap = this.settings.solo_embedder_per_media_type || {};
+    const effectiveMap = this.settings.effective_solo_embedder_per_media_type || {};
+    const userVal = userMap[typeId];
+    const effective = effectiveMap[typeId];
+    if (!effective && !userVal) return '';
+    const valid = this.embeddersByType[typeId] || [];
+    if (effective && !valid.find((e) => e.name === effective)) {
+      return `Locked embedder "${effective}" is no longer registered for this type. ` +
+        'Pick a different embedder to update the lock.';
+    }
+    if (effective && !userVal) {
+      return `Currently set to ${effective} by --solo-embedder. Pick any value here to override it.`;
+    }
+    return '';
+  }
+
+  onSoloEmbedderChange(typeId: string, value: string): void {
+    const userMap = { ...(this.settings.solo_embedder_per_media_type || {}) };
+    // Empty value = "Ask each time". Persist it as the opt-out sentinel
+    // (an empty-string entry) so it overrides any ``--solo-embedder``
+    // CLI fallback for this type; same pattern as solo_media_type's
+    // explicit-null override of --solo-media-type.
+    userMap[typeId] = value || '';
+    (this.settings as Record<string, unknown>)['solo_embedder_per_media_type'] = userMap;
+    // Optimistically update the effective map so the dropdown reflects
+    // the new choice immediately; the PUT response will replace it with
+    // the authoritative server view including any CLI fallback.
+    const effective = { ...(this.settings.effective_solo_embedder_per_media_type || {}) };
+    if (value) {
+      effective[typeId] = value;
+    } else {
+      delete effective[typeId];
+    }
+    (this.settings as Record<string, unknown>)['effective_solo_embedder_per_media_type'] = effective;
     this.save();
   }
 
@@ -215,7 +295,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  /** Effective solo-mediaType for the import-defaults tab — collapses
+  /** Effective solo-mediaType for the import-defaults tab: collapses
    *  the per-mediaType picker to a single tab when the user is in solo
    *  mode (so they only configure what they'll actually import). */
   get effectiveSoloMediaType(): string | null {

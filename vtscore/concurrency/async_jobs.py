@@ -15,12 +15,12 @@ pending slot is updated in place (latest wins) and the same job object is
 returned.  When the running job finishes, the pending job is promoted and
 spawned automatically.  This avoids the previous design's failure mode
 where rapid-fire requests spawned parallel training threads that fought
-for CPU/GPU — cancellation was cooperative-only and never honoured inside
+for CPU/GPU - cancellation was cooperative-only and never honoured inside
 the training loop.
 
 Results from the most recent successful run are kept by *signature* so a
 follow-up request with an unchanged signature can short-circuit and return
-the previous result — the "re-sort without new votes is free" fast path.
+the previous result - the "re-sort without new votes is free" fast path.
 """
 
 from __future__ import annotations
@@ -134,8 +134,8 @@ class JobManager:
 
         If no job is running, *target* spawns immediately on a daemon
         thread.  If a job is already running, the new (signature, target)
-        is stashed in the pending slot — overwriting any existing pending
-        — and the same pending :class:`AsyncJob` is returned on every
+        is stashed in the pending slot - overwriting any existing pending
+        - and the same pending :class:`AsyncJob` is returned on every
         subsequent call until the runner picks it up.
 
         *target* receives the :class:`AsyncJob` and should assign
@@ -354,7 +354,7 @@ def list_active_pairs() -> list[dict[str, Any]]:
     :class:`JobManager`.
 
     Jobs with no ``(dataset_id, detector_id)`` recorded (legacy callers that
-    skipped the kwargs, e.g. test fixtures) are dropped — there is no row
+    skipped the kwargs, e.g. test fixtures) are dropped - there is no row
     in the pulldown to attach a spinner to without both ids.
     """
     pair_jobs: dict[tuple[str, str], list[str]] = {}

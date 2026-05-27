@@ -1,8 +1,8 @@
 # Scalability Implementation Plan
 
-**Status:** Open — no fixes shipped yet.
+**Status:** Open; no fixes shipped yet.
 
-**Parent:** [`scalability.md`](scalability.md) — the brainstorm that defines
+**Parent:** [`scalability.md`](scalability.md); the brainstorm that defines
 all S# IDs referenced here.
 
 **Goal:** Make VTSearch usable at 100 k items (near-term) and survivable at
@@ -14,7 +14,7 @@ independently.
 
 ---
 
-## Phase 1 — Trivial wins (no architecture change)
+## Phase 1: Trivial wins (no architecture change)
 
 These are 1–3 line fixes that eliminate growing hot paths.  Land them
 together in a single PR.
@@ -42,10 +42,10 @@ def _calibration_cache_key(X_list, y_list, inclusion_value, ...):
 
 The hash is computed from the same bytes (so correctness is identical), but
 only 32 bytes are stored in the key tuple instead of the full array.
-`blake2b` at this size is ~1 GB/s on modern hardware — far cheaper than
+`blake2b` at this size is ~1 GB/s on modern hardware; far cheaper than
 the current path.
 
-**Risk:** negligible (birthday collision at 2^64 — unreachable).
+**Risk:** negligible (birthday collision at 2^64; unreachable).
 
 ---
 
@@ -88,7 +88,7 @@ is called from the safe-threshold blender
 `vtscore/embedding/matrix.py:58–79`
 
 **Problem:** `get_embedding_matrix` calls `sorted(ctx.medias.keys())` on
-every invocation — O(N log N) — to detect whether the cached matrix is
+every invocation; O(N log N); to detect whether the cached matrix is
 stale.
 
 **Fix:** Add an integer `_medias_epoch` field to `DatasetContext`.
@@ -113,7 +113,7 @@ def __init__(self, dataset_id: str = "") -> None:
     self._emb_matrix: Any = None
 ```
 
-`_emb_matrix_ids` is dropped — it was only needed for the sorted-key
+`_emb_matrix_ids` is dropped; it was only needed for the sorted-key
 comparison and is no longer required.
 
 All sites that structurally modify `ctx.medias` must increment the epoch:
@@ -140,7 +140,7 @@ def get_embedding_matrix(ctx):
         ...  # rebuild as before; store ctx._emb_matrix_epoch = ctx._medias_epoch
 ```
 
-Wait — the sorted_ids return value still needs `sorted(...)` on the cache
+Wait; the sorted_ids return value still needs `sorted(...)` on the cache
 hit path.  Callers that need the id list on every call will still pay O(N
 log N) for that.  Fix those callers to not re-sort on cache-hit:
 
@@ -157,7 +157,7 @@ After this change, the ctx branch reuses the epoch path (shared cached
 matrix); the temp-dict/cross-dataset branch still sorts once (unavoidable
 since there is no epoch for an ad-hoc dict).
 
-**Risk:** medium — touches `DatasetContext.__slots__` and several mutation
+**Risk:** medium; touches `DatasetContext.__slots__` and several mutation
 sites.  Must be covered by tests that verify the matrix is rebuilt exactly
 when medias change.
 
@@ -199,13 +199,13 @@ sig = (
 
 Vote sets are small (tens to hundreds of items), so sorting them is cheap.
 
-**Risk:** low — the signature is only a cache key; a false miss (different
+**Risk:** low; the signature is only a cache key; a false miss (different
 epoch, same medias) wastes one retrain; a false hit (same epoch, different
 medias) cannot happen because the epoch is only bumped on structural change.
 
 ---
 
-## Phase 2 — Medium effort, high leverage
+## Phase 2: Medium effort, high leverage
 
 ### 2.1  Cap and defer diversity tree construction (S2, S8)
 
@@ -218,7 +218,7 @@ allocates GBs.
 
 **Fix (two parts):**
 
-**Part A — smarter defaults.**  In `DiversityTree.__init__`, cap k-means
+**Part A; smarter defaults.**  In `DiversityTree.__init__`, cap k-means
 `_N_INIT` as a function of node size:
 
 ```python
@@ -246,7 +246,7 @@ def _auto_max_depth(n: int, k: int, min_node_size: int) -> int:
 Apply this in `build_diversity_tree_for_context` when the caller doesn't
 pass an explicit `max_depth`.
 
-**Part B — skip above a threshold; expose a "Build diversity tree" endpoint.**
+**Part B; skip above a threshold; expose a "Build diversity tree" endpoint.**
 In `_build_diversity_tree_stage` (load pipeline):
 
 ```python
@@ -266,7 +266,7 @@ pattern) and reports progress via `/api/progress/dataset/<id>`.  The
 frontend shows a "Build diversity index" button in the dataset panel when
 the tree is absent.
 
-**Risk:** medium — the diversity tree is the autopilot's diversity signal.
+**Risk:** medium; the diversity tree is the autopilot's diversity signal.
 Without it, autopilot falls back to score-only sampling.  This is
 acceptable and already handled by the `if tree is None` guard in
 `diversity_tree_next_sample`.
@@ -308,15 +308,15 @@ def sync_to_labelset_source(flush_delay: float = _FLUSH_DELAY) -> None:
     _flush_timers[det_id] = timer
 ```
 
-This means votes accumulate for up to 2 s before a write fires — one write
+This means votes accumulate for up to 2 s before a write fires; one write
 instead of N.  On process shutdown the timers are daemon threads so they do
 not block exit; the settings-source sync (which is already separate) is
 responsible for flushing on graceful shutdown.
 
-An immediate flush can be forced by passing `flush_delay=0` — useful in
+An immediate flush can be forced by passing `flush_delay=0`; useful in
 tests and in the label-export route.
 
-**Risk:** low — labels might be up to 2 s stale in the sync target after a
+**Risk:** low; labels might be up to 2 s stale in the sync target after a
 vote, which is acceptable.
 
 ---
@@ -328,7 +328,7 @@ various route files that rebuild `md5_to_media` / `origin_key_to_cid` per
 request.
 
 **Problem:** Many routes rebuild `{m["md5"]: m for m in snap.values()}`
-(or similar) on every request — O(N) Python iteration with dict construction.
+(or similar) on every request; O(N) Python iteration with dict construction.
 
 **Fix:** Add maintained secondary indexes to `DatasetContext`:
 
@@ -371,14 +371,14 @@ snapshot switch to `ctx._md5_index` / `ctx._origin_key_index` directly.
 This is a medium refactor because mutation sites are spread across
 `load_pipeline.py`, `state/__init__.py`, and `state/media_lookup.py`.
 
-**Risk:** medium — secondary indexes must stay in sync with `medias`.  Any
+**Risk:** medium; secondary indexes must stay in sync with `medias`.  Any
 site that writes to `ctx.medias` directly (bypassing the helper) will
 produce stale indexes.  The Phase 1.3 epoch audit surfaces all those sites,
 so Phase 1.3 should land first.
 
 ---
 
-## Phase 3 — Larger architectural work
+## Phase 3: Larger architectural work
 
 ### 3.1  mmap embedding matrix (S1)
 
@@ -392,7 +392,7 @@ from the per-item entries on every cold start.
 
 **Fix (two-step):**
 
-**Step A — sidecar `.npy` file.**  During the post-load phase
+**Step A; sidecar `.npy` file.**  During the post-load phase
 (after all embeddings are present), write the sorted-by-cid embedding
 matrix to `<dataset_path>.emb.npy` if it doesn't already exist.  Format:
 
@@ -404,7 +404,7 @@ matrix to `<dataset_path>.emb.npy` if it doesn't already exist.  Format:
 Actually simpler: use `np.save` / `np.load` with a companion `<dataset>.cids.npy`
 (int64 array of sorted cids) and `<dataset>.emb.npy` (float32 matrix).
 
-**Step B — mmap load.**  On pickle load, check whether both sidecars exist
+**Step B; mmap load.**  On pickle load, check whether both sidecars exist
 and their cid list matches the pickle's media IDs.  If so:
 
 ```python
@@ -426,7 +426,7 @@ way and skip the rebuild.
 if the cid list doesn't match, fall back to the in-memory build (and
 optionally write fresh sidecars).
 
-**Risk:** high — introduces file-system state alongside pickle files.
+**Risk:** high; introduces file-system state alongside pickle files.
 Must be careful about:
 - Race between sidecar write and concurrent load
 - Version drift if the embedder changes (embedding dim changes → sidecar invalid)
@@ -493,7 +493,7 @@ interface SortWindow {
 ```
 
 `media-list.component.ts:rebuildOrderedItems` no longer iterates a
-full array — it renders whatever is in `items` and shows a "Load more"
+full array; it renders whatever is in `items` and shows a "Load more"
 trigger at the end.  `cachedOrderedItems` stays bounded to the loaded
 window (≤ 700 items by default).
 
@@ -538,12 +538,12 @@ The template renders each row as a flex container with `cols` items.
 Existing breakpoints (`VIRTUAL_SCROLL_THRESHOLD = 500`) apply to both list
 and grid mode.
 
-**Risk:** medium — requires layout changes to the grid template and dynamic
+**Risk:** medium; requires layout changes to the grid template and dynamic
 `itemSize` computation when icon-size settings change.
 
 ---
 
-## Phase 4 — Major infrastructure (1 M+ items)
+## Phase 4: Major infrastructure (1 M+ items)
 
 These are deferred until Phase 1–3 are stable.
 
@@ -578,23 +578,23 @@ response identical.
 
 Each phase needs targeted tests before merging:
 
-- **1.1** — Unit test: cache key is always the same tuple length regardless
+- **1.1**: Unit test: cache key is always the same tuple length regardless
   of N_labels; verify no collision for distinct X/y pairs.
-- **1.2** — Unit test: `calculate_gmm_threshold` with N > 50 k produces a
+- **1.2**: Unit test: `calculate_gmm_threshold` with N > 50 k produces a
   threshold within 1% of the full-sample result (use a known bimodal
   distribution).
-- **1.3** — Integration test: matrix is rebuilt exactly when medias change,
+- **1.3**: Integration test: matrix is rebuilt exactly when medias change,
   reused when they don't; epoch counter is O(1) to check.
-- **1.4** — Integration test: learned-sort job is not re-fired when called
+- **1.4**: Integration test: learned-sort job is not re-fired when called
   twice with the same votes on the same epoch.
-- **2.1** — Load test: dataset with 100 k items loads in < 30 s without a
+- **2.1**: Load test: dataset with 100 k items loads in < 30 s without a
   diversity tree; "Build diversity tree" endpoint completes and the result
   is used by autopilot.
-- **2.2** — Integration test: 100 rapid votes produce exactly 1 file write
+- **2.2**: Integration test: 100 rapid votes produce exactly 1 file write
   within 2 s of the last vote.
-- **3.1** — Integration test: load, unload, reload a dataset; matrix is
+- **3.1**: Integration test: load, unload, reload a dataset; matrix is
   re-used from sidecar on second load without rebuilding from per-item entries.
-- **3.2** — API test: sort response with 200 k items contains ≤ 700 results;
+- **3.2**: API test: sort response with 200 k items contains ≤ 700 results;
   `/api/sort/page?offset=700&limit=200` returns the next window.
 
 ---
@@ -602,8 +602,8 @@ Each phase needs targeted tests before merging:
 ## Open follow-ups
 
 - FAISS / HNSW replacement for diversity tree (long-term S2 fix)
-- Columnar `medias` storage (S4) — deferred; requires redesign of every
+- Columnar `medias` storage (S4): deferred; requires redesign of every
   media-reading call site
-- Append-only vote journal for labelset sources (S12 long-term) — deferred
+- Append-only vote journal for labelset sources (S12 long-term): deferred
   until compaction semantics are defined
-- CLI progress bar rate-limiting (S21) — trivial, add when touching CLI
+- CLI progress bar rate-limiting (S21): trivial, add when touching CLI

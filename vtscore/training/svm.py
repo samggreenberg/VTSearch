@@ -1,6 +1,6 @@
 """SVM trainer prototype for the learned-sort comparison study.
 
-This module is intentionally standalone — it does NOT wire into
+This module is intentionally standalone - it does NOT wire into
 ``DetectorContext`` or the ``train_and_score`` production path.  Its job
 is to expose a trainer with the same input/output contract as the MLP
 (features in, calibrated [0, 1] probabilities out) so the label-curve
@@ -28,7 +28,7 @@ class SVMClassifier:
     """Trained SVM wrapped with a probability source.
 
     ``calibrator`` is either a sklearn ``CalibratedClassifierCV`` (when CV
-    calibration was feasible) or ``None`` (small-data fallback — we sigmoid
+    calibration was feasible) or ``None`` (small-data fallback - we sigmoid
     the raw decision function instead).
     """
 
@@ -82,7 +82,7 @@ def _make_base_estimator(
     if kernel == "rbf":
         from sklearn.svm import SVC  # noqa: PLC0415
 
-        # ``probability=False`` here — we attach our own calibrator outside
+        # ``probability=False`` here - we attach our own calibrator outside
         # so the calibration mode is uniform across kernels.
         return SVC(
             C=C,
@@ -111,7 +111,7 @@ def _effective_calibration(
     downgrade to ``sigmoid`` (Platt) in that regime.
     """
     if requested != "auto":
-        # Caller asked for a specific mode — try to honour it; fall back
+        # Caller asked for a specific mode - try to honour it; fall back
         # only if the data literally can't support CV calibration.
         if requested in ("sigmoid", "isotonic") and min(n_pos, n_neg) < 2:
             return "decision_sigmoid"
@@ -154,7 +154,7 @@ def train_svm(
     ``CalibratedClassifierCV`` would burn training data on k-fold CV
     (strictly less data per fold than fitting once on all of it) and
     invert the effect of ``inclusion_value`` by mapping decision scores
-    back to the empirical base rate — both of which are undesirable
+    back to the empirical base rate - both of which are undesirable
     when only the ranking and a learnable threshold matter.  Pass
     ``calibration="isotonic"`` or ``"sigmoid"`` (Platt) if you do
     explicitly want calibrated probabilities for some downstream task,
@@ -175,7 +175,7 @@ def train_svm(
             fall-back behaviour when the data can't support CV
             calibration.
         inclusion_value: ``[-10, 10]`` bias toward including (positive) or
-            excluding (negative) — translated to ``class_weight``.
+            excluding (negative) - translated to ``class_weight``.
         seed: Random seed for the SVM solver and the calibrator's CV splits.
         standardize: When ``True``, fit a ``StandardScaler`` first.  Most
             embedders (CLAP/CLIP/SigLIP/E5) emit L2-normalised vectors so

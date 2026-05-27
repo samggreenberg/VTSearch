@@ -77,7 +77,7 @@ def _snapshot_user() -> str | None:
     set by a parent ``spawn`` call or by ``set_thread_user``); otherwise
     the current Flask request's ``g.user`` if there is one; otherwise
     ``None``.  We deliberately do *not* fall back to
-    :func:`vtsearch.auth.get_current_user`'s ``"default"`` sentinel —
+    :func:`vtsearch.auth.get_current_user`'s ``"default"`` sentinel;
     that would clobber the spawned thread's thread-local with
     ``"default"`` even when no user was ever explicitly set, masking
     the "no user" state.
@@ -105,7 +105,7 @@ def _install_user(user: str | None) -> None:
 def _snapshot_state_contexts() -> tuple[Any, Any]:
     """Capture the active dataset + detector context as resolved on the
     calling thread."""
-    # Library-tier import — keep deferred so the helper stays importable
+    # Library-tier import; keep deferred so the helper stays importable
     # in environments where ``vtscore.state`` hasn't been initialised
     # (notably the lib-clean test runner).
     from vtsearch.state import get_active_context, get_active_detector_context  # noqa: PLC0415

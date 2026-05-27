@@ -38,12 +38,12 @@ group to pick.
 | Labelset sources | `vtscore.labelset_sources` | `LABELSET_SOURCE` | `LabelsetSource` | Bidirectional sync of a detector's labelset with an external store |
 | Media converters | `vtscore.converters` | `CONVERTER` | `MediaConverter` | Cross-format access: image → text (OCR), audio → image (spectrogram), … |
 | Media sources | `vtscore.media_sources` | `SOURCE` | `MediaSource` (via factory) | Low-level file-resolution for an origin (local folder, HTTP archive, …) |
-| Media types | — (in-tree only) | `MEDIA_TYPE` | `MediaType` | A whole new content kind (file extensions, HTTP serving, demos) |
-| Media embedders | — (in-tree only) | `EMBEDDER` | `MediaEmbedder` | A new encoder for an existing or new media type |
-| Media clippers | — (in-tree only) | `CLIPPERS` (list) | `MediaClipper` | Split one media into many (tiling, sentence-split, scene-split) |
+| Media types | - (in-tree only) | `MEDIA_TYPE` | `MediaType` | A whole new content kind (file extensions, HTTP serving, demos) |
+| Media embedders | - (in-tree only) | `EMBEDDER` | `MediaEmbedder` | A new encoder for an existing or new media type |
+| Media clippers | - (in-tree only) | `CLIPPERS` (list) | `MediaClipper` | Split one media into many (tiling, sentence-split, scene-split) |
 
 Media types, embedders, and clippers do not currently expose an
-entry-point group — they discover via the `vtscore.media`
+entry-point group - they discover via the `vtscore.media`
 sub-package scan. To ship one out-of-tree, symlink the
 `embedder_<name>.py` (or media-type sub-package) into the appropriate
 directory under `vtscore/media/`; both symlinked files and symlinked
@@ -64,14 +64,14 @@ sync at the model layer.
 
 ## Per-family guides
 
-- [Dataset importers](dataset-importers.md) — pull media into the system
-- [Media types](media-types.md) — add a whole new content kind
-- [Embedders](embedders.md) — add a new encoder for a media type
-- [Clippers](clippers.md) — split media into sub-clips
-- [Converters](converters.md) — transform media between types
-- [Results exporters](results-exporters.md) — send results/labels out
-- [Label importers](label-importers.md) — one-shot label pull
-- [Labelset sources](labelset-sources.md) — bidirectional label sync
+- [Dataset importers](dataset-importers.md) - pull media into the system
+- [Media types](media-types.md) - add a whole new content kind
+- [Embedders](embedders.md) - add a new encoder for a media type
+- [Clippers](clippers.md) - split media into sub-clips
+- [Converters](converters.md) - transform media between types
+- [Results exporters](results-exporters.md) - send results/labels out
+- [Label importers](label-importers.md) - one-shot label pull
+- [Labelset sources](labelset-sources.md) - bidirectional label sync
 
 ## Shared rules for every plugin
 
@@ -103,7 +103,7 @@ rather than hard-coding `"data/foo"`. Models go under
 `vtscore.config.MODELS_CACHE_DIR` (honouring `VTSEARCH_MODELS_DIR`).
 
 **No Flask imports, no `vtsearch.settings` imports.** Library-tier
-plugins must be importable in a Flask-free environment — the
+plugins must be importable in a Flask-free environment - the
 `tests_lib/` test tier is verified by `./run-tests.sh vtscore-clean`,
 which installs a meta-path import hook that refuses `flask`,
 `werkzeug`, and `flask_smorest`. Read configuration through
@@ -128,7 +128,7 @@ guard).
 
 A third-party distribution registers a plugin by adding one line per
 plugin to the family's entry-point group. The value resolves to an
-already-instantiated plugin object — the same shape the in-tree
+already-instantiated plugin object - the same shape the in-tree
 sentinel attribute holds. For example, a third-party dataset importer:
 
 ```toml
@@ -156,7 +156,7 @@ built-in plugins take precedence on name clashes.
 ## Testing your plugin
 
 The library-tier test suite (`tests_lib/`) exercises plugins through
-the library API only — no Flask, no `vtsearch.settings`, no
+the library API only - no Flask, no `vtsearch.settings`, no
 `vtsearch.routes`. New plugin tests belong in:
 
 - `tests_lib/io/` for importers, exporters, label importers, sources
@@ -175,7 +175,7 @@ for the autouse fixtures every test inherits (`reset_contexts`,
 ## Inventory and listing
 
 `vtscore.plugins.inventory.gather_plugins()` returns every registered
-plugin grouped by family — useful for tooling, shell completion, and
+plugin grouped by family - useful for tooling, shell completion, and
 the `python app.py --list-plugins` CLI. Library families
 self-register at module import; app-only families are injected via
 `vtsearch.shim.register_app_plugin_families()` so the inventory module

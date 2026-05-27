@@ -20,7 +20,7 @@ html, body {
 }
 
 // Honor OS-level "reduce motion" requests (also a useful escape hatch for
-// thin clients with no GPU compositing — long CSS animations can pin a
+// thin clients with no GPU compositing, where long CSS animations can pin a
 // software-rendered browser).
 @media (prefers-reduced-motion: reduce) {
   *,

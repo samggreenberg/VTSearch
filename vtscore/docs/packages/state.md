@@ -2,7 +2,7 @@
 
 The runtime state package. Every loaded dataset and every loaded detector
 gets its own context object that bundles the mutable data structures
-operating on it — votes, label history, click times, the cached embedding
+operating on it - votes, label history, click times, the cached embedding
 matrix, the diversity tree, the trained MLP, the calibrated threshold.
 The package also owns the resolution chain that picks which context is
 "active" for the current call (Flask request, background thread, or test
@@ -36,7 +36,7 @@ infrastructure that drives long-running operations on these contexts.
 and `vtscore/state/core.py:122`. Both use `__slots__` so accidentally
 shadowing an attribute raises immediately. Every field is in-memory
 only; datasets persist via pickle, detectors via labelset JSON (origins
-+ labels only, never MLP weights — see the "No Persisted Vectors or
++ labels only, never MLP weights - see the "No Persisted Vectors or
 MLPs" rule in `CLAUDE.md`).
 
 ### `DatasetContext`
@@ -61,7 +61,7 @@ the matrix and the diversity tree.
 ### `DetectorContext`
 
 Per-detector mutable state. Vote state, training artefacts, and the
-trained MLP live here — never on `DatasetContext`. One detector can be
+trained MLP live here - never on `DatasetContext`. One detector can be
 trained on labels collected against many datasets; the labelset is the
 canonical persisted form.
 
@@ -102,7 +102,7 @@ dataset's origins they came from.
 `votes.pop(cid, None)`, test with `cid in votes`. Dicts preserve
 insertion order so the vote sequence round-trips through JSON without a
 separate ordering field. **Never** call `votes.add()` or
-`votes.remove()` — that will `AttributeError` and indicates the caller
+`votes.remove()` - that will `AttributeError` and indicates the caller
 is treating the dict as a set.
 
 ---
@@ -139,7 +139,7 @@ det_ctx = get_active_detector_context()   # never returns None
 Two process-wide registries map each loaded ID to its context. These are
 different from the on-disk dataset registry in
 `vtscore.datasets.registry`, which tracks `.pkl` files available on disk
-— a dataset can be on-disk-registered but not loaded (no context).
+- a dataset can be on-disk-registered but not loaded (no context).
 
 | Function | Side | Description |
 |----------|------|-------------|
@@ -169,7 +169,7 @@ point at the context being removed.
 
 ## Resolver hooks (app integration)
 
-`vtscore` is a library — it must not import Flask. The app layer
+`vtscore` is a library - it must not import Flask. The app layer
 (`vtsearch/shim/`) installs a Flask-aware resolver that reads the
 request's `X-Dataset-Id` / `X-Detector-Id` header out of `flask.g`. The
 hooks are at `vtscore/state/core.py:66`:
@@ -194,7 +194,7 @@ Library-only consumers leave the default resolver in place
 tier. A consumer running library code from a worker thread calls
 `set_thread_dataset_context(ctx)` / `set_thread_detector_context(ctx)` at
 the start and `set_thread_*_context(None)` at the end. There is no
-"unregister resolver" — installing a new one replaces the previous.
+"unregister resolver" - installing a new one replaces the previous.
 
 ---
 
@@ -216,7 +216,7 @@ with override_detector_context(other_detector_ctx):
 # Resolution chain restored on exit.
 ```
 
-There is no analogous override for datasets — the thread-local plus
+There is no analogous override for datasets - the thread-local plus
 `with_dataset_context` has been sufficient.
 
 ### `with_dataset_context(dataset_id)` / `with_detector_context(detector_id)`
@@ -234,7 +234,7 @@ with with_dataset_context("ds_a"):
         ...
 ```
 
-These are **not** thread-safe — they mutate the calling thread's
+These are **not** thread-safe - they mutate the calling thread's
 thread-local only.
 
 ---
@@ -336,7 +336,7 @@ through diverse parts of the dataset before homing in on a category.
 | `diversity_tree_label(cid)` / `diversity_tree_unlabel(cid)` | Mark / unmark a leaf |
 
 `build_diversity_tree_for_context` is the variant parallel dataset
-loading uses — the new dataset is not yet active and the helper must
+loading uses - the new dataset is not yet active and the helper must
 operate on the passed-in `ctx` directly.
 
 `diversity_tree_next_sample` accepts an optional `scores` dict
@@ -365,7 +365,7 @@ except `get_dupe_count`, which falls back to the active context.
 
 The lookup tables are origin-keyed first, MD5-keyed second, name-keyed
 third. The fallback to name-keyed matching **only** triggers when the
-entry has neither an origin+name pair nor an MD5 — matching by basename
+entry has neither an origin+name pair nor an MD5 - matching by basename
 alone on a partial origin would falsely apply a label whenever an
 unrelated dataset happens to contain a file with the same basename.
 
@@ -388,9 +388,9 @@ entries.
 
 ## Setting-persistence hooks
 
-Some library helpers — `get_inclusion`, `set_inclusion`,
+Some library helpers - `get_inclusion`, `set_inclusion`,
 `set_calibrate_count`, `set_calibration_fraction`, `set_safe_thresholds`
-— read user-pref values that the **app** owns. The library exposes the
+- read user-pref values that the **app** owns. The library exposes the
 hook surface; the app installs the persistence callbacks. Library-only
 consumers see purely in-memory mutation.
 

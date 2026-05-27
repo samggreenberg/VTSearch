@@ -71,7 +71,7 @@ export const activeContextGuard: CanActivateFn = (route) => {
       }
 
       // If the pair already matches (and nothing's loading), skip the
-      // wait entirely — saves a microtask on intra-view navigation.
+      // wait entirely; saves a microtask on intra-view navigation.
       if (
         activeContext.datasetId === datasetId &&
         activeContext.modelId === detectorId &&
@@ -82,8 +82,8 @@ export const activeContextGuard: CanActivateFn = (route) => {
       }
 
       // Otherwise hold the route until prep completes. Incompatibility
-      // is a valid UI state — the explainer renders against the new
-      // pair — so we don't fast-fail on it here.
+      // is a valid UI state (the explainer renders against the new
+      // pair), so we don't fast-fail on it here.
       return contextSwitch.applyActivePair(datasetId, detectorId).pipe(
         // `applyActivePair` returns an Observable that completes (no
         // value) on success. `combineLatest`-ing with an of(true) ensures

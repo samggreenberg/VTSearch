@@ -11,11 +11,11 @@ here works without it.
 
 Comprehensive developer documentation lives under [`docs/`](docs/):
 
-- **[Quickstart](docs/quickstart.md)** — load a folder, train a detector, score new media. Start here.
-- **[Architecture](docs/architecture.md)** — system overview, the seven seams between vtscore and vtsearch, the resolution chain for "active context".
-- **[Concepts](docs/concepts.md)** — `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the MLP detector. The vocabulary every other doc assumes.
-- **[Package reference](docs/README.md#package-reference)** — one deep-dive guide per subpackage.
-- **[Extending vtscore](docs/extending/README.md)** — eleven plugin families with authoring guides for each.
+- **[Quickstart](docs/quickstart.md)** - load a folder, train a detector, score new media. Start here.
+- **[Architecture](docs/architecture.md)** - system overview, the seven seams between vtscore and vtsearch, the resolution chain for "active context".
+- **[Concepts](docs/concepts.md)** - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the MLP detector. The vocabulary every other doc assumes.
+- **[Package reference](docs/README.md#package-reference)** - one deep-dive guide per subpackage.
+- **[Extending vtscore](docs/extending/README.md)** - eleven plugin families with authoring guides for each.
 
 For the canonical inventory of every name vtscore exports, see
 [`docs/vtscore-api.md`](../docs/vtscore-api.md) at the repo root (a
@@ -40,14 +40,14 @@ external consumer asks for it. For now, install the repo and import
 
 The library exports three core flows: **load a dataset**, **train a
 detector from labels**, **score new media**. Here's the shortest possible
-end-to-end script — see [docs/quickstart.md](docs/quickstart.md) for the
+end-to-end script - see [docs/quickstart.md](docs/quickstart.md) for the
 walkthrough with all of the details.
 
 ```python
 from pathlib import Path
 import numpy as np, torch
 
-from vtscore.media import audio  # noqa: F401 — registers the audio MediaType
+from vtscore.media import audio  # noqa: F401 - registers the audio MediaType
 from vtscore.datasets.loader import load_dataset_from_folder
 from vtscore.training import train_model, calculate_cross_calibration_threshold
 
@@ -133,4 +133,4 @@ for per-release notes.
 
 ## License
 
-Same as the parent `vtsearch` project — see the repository's `LICENSE` file.
+Same as the parent `vtsearch` project - see the repository's `LICENSE` file.

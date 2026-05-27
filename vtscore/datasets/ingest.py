@@ -11,7 +11,7 @@ appended to the in-memory dataset.
 When a :class:`~vtscore.datasets.sources.base.MediaSource` is available
 for an origin (e.g. folder, http_archive), individual files are fetched
 directly via :meth:`~MediaSource.fetch_item` instead of re-running the
-full importer — this is much faster when only a few medias are missing.
+full importer - this is much faster when only a few medias are missing.
 """
 
 from __future__ import annotations
@@ -251,7 +251,7 @@ def _ingest_via_source(
             if file_path is None:
                 continue
 
-            # Resolve embedding + clip-aware bytes/md5 — if any step fails,
+            # Resolve embedding + clip-aware bytes/md5 - if any step fails,
             # fall back to the legacy full-import path so we don't produce
             # medias with mismatched embedding/MD5/bytes triples.
             if not media_type_id:
@@ -325,7 +325,7 @@ def _ingest_via_resolver(
         origin_name = entry.get("origin_name", "")
         filename = entry.get("filename", "")
 
-        # Hold the source alive through both embed and read_bytes — some
+        # Hold the source alive through both embed and read_bytes - some
         # MediaSources materialise the file inside a TemporaryDirectory
         # they own, and dropping the source before we touch the path
         # finalises that temp dir under GC and leaves us with a stale path.

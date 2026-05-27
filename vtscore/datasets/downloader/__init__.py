@@ -2,15 +2,15 @@
 
 This package is split into sub-modules by media type:
 
-- :mod:`~vtscore.datasets.downloader.core` — shared constants, progress helpers,
+- :mod:`~vtscore.datasets.downloader.core` - shared constants, progress helpers,
   ``download_file_with_progress``, archive validation & extraction
-- :mod:`~vtscore.datasets.downloader.audio` — ESC-50, GTZAN, Speech Commands v2,
+- :mod:`~vtscore.datasets.downloader.audio` - ESC-50, GTZAN, Speech Commands v2,
   UrbanSound8K
-- :mod:`~vtscore.datasets.downloader.images` — CIFAR-10, Caltech-101/256, Oxford
+- :mod:`~vtscore.datasets.downloader.images` - CIFAR-10, Caltech-101/256, Oxford
   Flowers, Food-101, EuroSAT, Stanford Dogs, Places365
-- :mod:`~vtscore.datasets.downloader.video` — UCF-101 subset
-- :mod:`~vtscore.datasets.downloader.text` — 20 Newsgroups, BBC News, AG News, IMDB
-- :mod:`~vtscore.datasets.downloader.documents` — UCSF Industry Documents
+- :mod:`~vtscore.datasets.downloader.video` - UCF-101 subset
+- :mod:`~vtscore.datasets.downloader.text` - 20 Newsgroups, BBC News, AG News, IMDB
+- :mod:`~vtscore.datasets.downloader.documents` - UCSF Industry Documents
 
 All public symbols are re-exported here for backward compatibility so that
 ``from vtscore.datasets.downloader import download_esc50`` continues to work.

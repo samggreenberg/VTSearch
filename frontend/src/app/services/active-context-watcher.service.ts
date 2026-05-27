@@ -16,7 +16,7 @@ import { ToastService } from './toast.service';
  *     view state changed underneath them.
  *
  * Only fires after we've seen the active id appear in the registry at
- * least once — a transient "id set, registry still loading" state on
+ * least once; a transient "id set, registry still loading" state on
  * page load shouldn't trigger a phantom deletion toast.
  */
 @Injectable({ providedIn: 'root' })
@@ -34,7 +34,7 @@ export class ActiveContextWatcherService {
 
   /** Navigate to /dashboard when an active half is cleared from under
    *  us. Phase 2 makes the URL the source of truth, so a half-set pair
-   *  is not a representable URL state — bouncing to /dashboard is the
+   *  is not a representable URL state; bouncing to /dashboard is the
    *  only sensible recovery. No-op when the user is already on
    *  `/dashboard`. */
   private leaveBrokenPairView(): void {
@@ -44,7 +44,7 @@ export class ActiveContextWatcherService {
     }
   }
 
-  /** Idempotent — safe to call from multiple bootstrappers. */
+  /** Idempotent; safe to call from multiple bootstrappers. */
   start(): void {
     if (this.started) return;
     this.started = true;

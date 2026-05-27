@@ -42,11 +42,11 @@ interface ActiveSwitch {
  *
  * Two entry points:
  *
- *  - `switchTo(ds, det)` — called by the top-bar pulldowns. When the
+ *  - `switchTo(ds, det)`: called by the top-bar pulldowns. When the
  *    user is on `/label/:ds/:det` or `/find/:ds/:det`, it navigates to
  *    the new URL (the route guard then calls `applyActivePair`). On
  *    other routes (e.g. `/dashboard`) it flips the pair imperatively.
- *  - `applyActivePair(ds, det)` — called by the active-context route
+ *  - `applyActivePair(ds, det)`: called by the active-context route
  *    guard. Flips the pair imperatively (no navigation) and returns an
  *    Observable that completes when any required loads complete, so
  *    the guard can hold the route until prep is done.
@@ -73,11 +73,11 @@ export class ContextSwitchService {
 
   /**
    * Pulldown-initiated switch. On `/label` or `/find`, navigates to the
-   * matching `/<view>/:ds/:det` URL — the route guard then drives the
+   * matching `/<view>/:ds/:det` URL; the route guard then drives the
    * active-pair flip via `applyActivePair`. On other routes, flips the
    * pair imperatively (no navigation).
    *
-   * Passing `''` for either half clears that half — no load is fired
+   * Passing `''` for either half clears that half; no load is fired
    * for an empty id, and we never navigate to a partial URL.
    */
   switchTo(datasetId: string, detectorId: string): void {
@@ -113,11 +113,11 @@ export class ContextSwitchService {
       previous.detectorId === detectorId &&
       !previous.cancelled
     ) {
-      // Same pair, same in-flight switch — share the completion signal.
+      // Same pair, same in-flight switch; share the completion signal.
       return previous.completion.asObservable();
     }
 
-    // Cancel any in-flight prep — best effort. The request-id check on
+    // Cancel any in-flight prep (best effort). The request-id check on
     // completion is what actually guards against stale results.
     if (previous && !previous.cancelled) {
       previous.cancelled = true;
@@ -139,7 +139,7 @@ export class ContextSwitchService {
     this.active = current;
 
     // Tag the user's intent so UI affordances (pulldown highlight) update
-    // immediately. The active pair — what the HTTP interceptor reads —
+    // immediately. The active pair (what the HTTP interceptor reads)
     // stays pinned to the currently-loaded backend state and is promoted
     // in `finishIfCurrent` once any required load completes. This avoids
     // the H25 race where the interceptor would otherwise tag requests
@@ -291,7 +291,7 @@ export class ContextSwitchService {
   private finishIfCurrent(current: ActiveSwitch): void {
     if (this.active !== current || current.cancelled) return;
     if (current.requestId !== this.activeContext.currentRequestId) return;
-    // Loads have settled — promote intent to active now so the HTTP
+    // Loads have settled; promote intent to active now so the HTTP
     // interceptor starts tagging requests with the new ids (and not
     // before, per H25).
     this.activeContext.setActive(current.datasetId, current.detectorId);

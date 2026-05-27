@@ -4,7 +4,7 @@
 Scans `frontend/src/**/*.scss` for violations of the rules in
 `docs/style-guide.md`.  Designed to be invoked by the `/style-check`
 skill: prints findings grouped by rule, with file:line and a one-line
-explanation per hit.  Exits 0 even when violations are found — this is
+explanation per hit.  Exits 0 even when violations are found - this is
 a report tool, not a CI gate.
 
 Run from the repo root or via the skill.
@@ -88,7 +88,7 @@ def check_raw_lengths(files: list[Path]) -> Finding:
                     raw = length_match.group(0)
                     if raw in RAW_OK_VALUES:
                         continue
-                    # Allow 1px borders inside `border:` declarations — we
+                    # Allow 1px borders inside `border:` declarations - we
                     # already filter by SPACING_PROP, so they wouldn't reach
                     # here, but skip any leftover.
                     f.hits.append((path, lineno, line.rstrip()))
@@ -107,7 +107,7 @@ def check_hex_colors(files: list[Path]) -> Finding:
         rule="§4.3 Hex colors in component SCSS",
         description=(
             "Theme variables only. Component-local hex literals don't respond "
-            "to theme changes — add a token to _variables.scss instead."
+            "to theme changes - add a token to _variables.scss instead."
         ),
     )
     for path in files:
@@ -152,7 +152,7 @@ def check_heading_restyling(files: list[Path]) -> Finding:
         rule="§4.7 Heading tags visually restyled in component SCSS",
         description=(
             "Use the right tag; let the global rule style it. Margin-only "
-            "scoping (`h3 { margin: 0 0 var(--space-md); }`) is fine — it "
+            "scoping (`h3 { margin: 0 0 var(--space-md); }`) is fine - it "
             "positions the heading without changing its identity. This flags "
             "blocks that override `font-size` or `font-weight`, which is the "
             "actual 'make a smaller tag look like a bigger one' anti-pattern."
@@ -318,8 +318,8 @@ def check_redeclared_utility(files: list[Path]) -> Finding:
             "tweak is genuinely needed."
         ),
     )
-    # End of the class name must be a non-class-character — not `-` or
-    # `\w` — so `.btn-good` and `.form-group--section` (which are new
+    # End of the class name must be a non-class-character - not `-` or
+    # `\w` - so `.btn-good` and `.form-group--section` (which are new
     # classes, not redeclarations of `.btn` or `.form-group`) don't match.
     pattern = re.compile(r"^\.(" + "|".join(re.escape(c) for c in SHARED_CLASSES) + r")(?![-\w])[^{]*\{")
     for path in files:
@@ -363,7 +363,7 @@ def print_report(findings: list[Finding]) -> int:
     print()
     print(f"{bold}Total findings: {total}{reset}")
     print(
-        "Findings are informational — review and curate before fixing; "
+        "Findings are informational - review and curate before fixing; "
         "some hits (e.g. a column-header button intentionally inheriting "
         "its parent's small uppercase font) are legitimate."
     )

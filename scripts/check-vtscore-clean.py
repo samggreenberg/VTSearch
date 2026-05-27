@@ -5,7 +5,7 @@ The ``vtscore`` library (Phase 8 of ``../vtscore/docs/architecture.md``)
 must be importable without Flask installed.  Until the physical
 ``git mv`` to ``vtscore/`` lands, the library code still lives at
 ``vtsearch.<subpackage>`` paths, so we can't simulate "Flask uninstalled"
-by creating a Flask-less virtualenv — Flask is a dependency of the
+by creating a Flask-less virtualenv - Flask is a dependency of the
 top-level ``vtsearch`` package.
 
 Instead we install a meta-path import hook that *blocks* ``flask`` (and
@@ -19,7 +19,7 @@ Run this script with the same CLI arguments you would pass to pytest:
     python scripts/check-vtscore-clean.py -k diversity_tree
 
 The script always restricts collection to ``tests_lib/`` and the
-non-gpu non-slow markers — there's no point in running app-tier tests
+non-gpu non-slow markers - there's no point in running app-tier tests
 in a mode that bans Flask.
 """
 
@@ -45,7 +45,7 @@ class _FlaskBlocker(importlib.abc.MetaPathFinder):
         root = fullname.partition(".")[0]
         if root in _BLOCKED_TOP_LEVEL:
             # Returning a spec whose loader raises makes the import look
-            # like a real failure, which is what we want — pytest will
+            # like a real failure, which is what we want - pytest will
             # surface the importing module's path in the traceback.
             return importlib.machinery.ModuleSpec(fullname, _FlaskBlockerLoader(fullname))
         return None
@@ -69,7 +69,7 @@ class _FlaskBlockerLoader(importlib.abc.Loader):
 def main() -> int:
     sys.meta_path.insert(0, _FlaskBlocker())
 
-    # Defer pytest import until after the blocker is in place — pytest
+    # Defer pytest import until after the blocker is in place - pytest
     # itself does NOT import Flask, but pulling it in early reduces the
     # window for accidental Flask imports.
     import pytest  # noqa: PLC0415

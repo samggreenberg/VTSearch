@@ -1,4 +1,4 @@
-// Theme CSS custom properties — dark (default), light, highviz.
+// Theme CSS custom properties: dark (default), light, highviz.
 // These mirror the vanilla styles.css :root / [data-theme] blocks.
 
 :root {
@@ -30,7 +30,7 @@
   --radius-xl: 8px;
   --radius-pill: 999px;
 
-  // Font weights — semantic, not numeric
+  // Font weights (semantic, not numeric):
   //   --weight-regular  → body copy, table cells, descriptions
   //   --weight-medium   → form labels, table headers, secondary emphasis
   //   --weight-semibold → card titles, active tabs, primary emphasis
@@ -38,7 +38,7 @@
   --weight-medium: 500;
   --weight-semibold: 600;
 
-  // Transition durations — every interactive transition picks one of these.
+  // Transition durations: every interactive transition picks one of these.
   //   --transition-fast → hover/background swaps that should feel instant
   //   --transition-base → default for color/border/background on interactive elements
   //   --transition-slow → bars, fills, and other animations that benefit from being perceptible
@@ -112,7 +112,7 @@
   --btn-icon-hover-bg: rgba(255, 255, 255, 0.08);
   --text-warning: #e6a700;
 
-  // Achievement tiers — deliberately theme-agnostic (bronze should
+  // Achievement tiers are deliberately theme-agnostic (bronze should
   // look bronze in every theme). Defined once at `:root` and NOT
   // overridden in `[data-theme="light"]`/`[data-theme="highviz"]`.
   --tier-bronze: #cd7f32;

@@ -32,7 +32,7 @@ def _normalise_converter_specs(
     the converter runner).  Unknown converter names are silently dropped
     to match the runner's prior behaviour.
     """
-    from vtscore.converters import get_converter  # noqa: PLC0415 — deferred to avoid circular import during eager registry discovery
+    from vtscore.converters import get_converter  # noqa: PLC0415 - deferred to avoid circular import during eager registry discovery
 
     result: list[tuple[Any, dict[str, Any]]] = []
     if not converter_specs:
@@ -108,7 +108,7 @@ def _build_converted_media_dict(
 ) -> dict[str, Any]:
     """Build the media dict for one converter output.
 
-    ``embedding`` is left at ``None`` — the framework
+    ``embedding`` is left at ``None``; the framework
     :func:`~vtscore.datasets.load_pipeline.embed_missing` stage embeds
     converter outputs via ``media_bytes`` / ``media_string`` after the
     importer returns.
@@ -308,7 +308,7 @@ def apply_converter_to_demo(
     converter_name: str,
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
-    embedder_name: str = "",  # noqa: ARG001 — kept for call-site compatibility; framework picks the embedder now
+    embedder_name: str = "",  # noqa: ARG001 - kept for call-site compatibility; framework picks the embedder now
     on_progress: Optional[ProgressCallback] = None,
 ) -> None:
     """Convert all medias in-place using the named converter.
@@ -319,7 +319,7 @@ def apply_converter_to_demo(
     leave with ``embedding=None``; the framework embed stage fills them
     in.
     """
-    from vtscore.converters import get_converter  # noqa: PLC0415 — deferred to avoid circular import during eager registry discovery
+    from vtscore.converters import get_converter  # noqa: PLC0415 - deferred to avoid circular import during eager registry discovery
 
     converter = get_converter(converter_name)
     if converter is None:

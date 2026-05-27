@@ -93,7 +93,7 @@ class LoginProvider(ABC):
 
 
 # ---------------------------------------------------------------------------
-# DefaultLoginProvider — single-user, no authentication
+# DefaultLoginProvider - single-user, no authentication
 # ---------------------------------------------------------------------------
 
 
@@ -117,12 +117,12 @@ class DefaultLoginProvider(LoginProvider):
         return False
 
     def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:  # noqa: ARG002
-        # Single-user: no subdirectory — use data/ directly.
+        # Single-user: no subdirectory, use data/ directly.
         return base_data_dir
 
 
 # ---------------------------------------------------------------------------
-# TrivialLoginProvider — cookie-based, no password
+# TrivialLoginProvider - cookie-based, no password
 # ---------------------------------------------------------------------------
 
 
@@ -131,7 +131,7 @@ class TrivialLoginProvider(LoginProvider):
 
     The frontend prompts for a username and sends it via
     ``POST /api/auth/login``.  The server stores the name in a
-    signed Flask session cookie.  Completely insecure — useful only
+    signed Flask session cookie.  Completely insecure; useful only
     for testing multi-user features locally.
     """
 
@@ -163,7 +163,7 @@ class TrivialLoginProvider(LoginProvider):
 
 
 # ---------------------------------------------------------------------------
-# ApiKeyLoginProvider — bearer-token, for headless integrations
+# ApiKeyLoginProvider - bearer-token, for headless integrations
 # ---------------------------------------------------------------------------
 
 
@@ -193,8 +193,8 @@ class ApiKeyLoginProvider(LoginProvider):
 
     Requests without a valid bearer token resolve to the username
     ``"anonymous"`` and ``is_authenticated`` returns ``False``.  This
-    provider does not show a login UI (``login_required`` is ``False``)
-    — it is meant for headless callers that send the header directly.
+    provider does not show a login UI (``login_required`` is ``False``);
+    it is meant for headless callers that send the header directly.
     """
 
     name = "api_key"
@@ -211,7 +211,7 @@ class ApiKeyLoginProvider(LoginProvider):
         self._load_keys_if_changed()
         if not self._keys:
             logger.warning(
-                "ApiKeyLoginProvider: no keys loaded from %s — every request will be anonymous. "
+                "ApiKeyLoginProvider: no keys loaded from %s; every request will be anonymous. "
                 "Add entries with the snippet in the class docstring.",
                 self._keys_file,
             )
@@ -237,7 +237,7 @@ class ApiKeyLoginProvider(LoginProvider):
                 data = json.load(f)
         except Exception:
             logger.exception(
-                "ApiKeyLoginProvider: failed to load %s — keeping previously loaded keys",
+                "ApiKeyLoginProvider: failed to load %s; keeping previously loaded keys",
                 self._keys_file,
             )
             return
@@ -333,7 +333,7 @@ def get_current_user() -> str:
 
     1. ``g.user`` (set by the ``before_request`` middleware in ``app.py``).
     2. Thread-local fallback (scoped by the :func:`thread_user` context
-       manager — background threads spawned from a request handler use
+       manager; background threads spawned from a request handler use
        this).
     3. ``"default"`` (CLI, tests, threads with no explicit user).
     """
@@ -353,7 +353,7 @@ def get_current_user() -> str:
 def set_thread_user(username: str | None) -> None:
     """Set the thread-local user for the current thread.
 
-    Prefer :func:`thread_user` (a context manager) for new code — it saves
+    Prefer :func:`thread_user` (a context manager) for new code, as it saves
     and restores the prior value automatically, removing the need for a
     manual ``try/finally`` discipline that is easy to get wrong (and would
     leak across requests if these threads were ever pooled).
@@ -373,7 +373,7 @@ def thread_user(username: str | None) -> Iterator[None]:
     """Scope the thread-local user to *username* for the ``with``-block.
 
     On entry, snapshots the prior thread-local user (if any) and sets it
-    to *username*.  On exit, restores the snapshot — so nested scopes
+    to *username*.  On exit, restores the snapshot, so nested scopes
     compose correctly and a pooled / reused thread cannot leak identity
     across jobs even if the inner body raises.
 

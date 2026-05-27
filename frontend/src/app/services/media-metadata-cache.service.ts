@@ -17,7 +17,7 @@ const BATCH_SIZE = 200;
  *
  * The dataset-wide listing comes from `GET /api/medias/ids` and only
  * carries `id`, `type`, and (optionally) `embedder`.  This cache fills in
- * the rest on demand — typically for the items currently in a
+ * the rest on demand, typically for the items currently in a
  * virtual-scrolling viewport.
  *
  * Usage:
@@ -29,7 +29,7 @@ const BATCH_SIZE = 200;
  *
  * Media IDs are per-dataset, so every cache entry is keyed by
  * `${datasetId}:${mediaId}` and pending IDs are bucketed by the dataset
- * they were queued under — otherwise a switch from dataset A to dataset B
+ * they were queued under; otherwise a switch from dataset A to dataset B
  * returns A's filename / md5 / metadata for B's id.
  */
 @Injectable({ providedIn: 'root' })

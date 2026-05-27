@@ -1,13 +1,13 @@
 # `vtscore.labels`
 
-Label I/O — the two plugin families and the sync glue that move
+Label I/O - the two plugin families and the sync glue that move
 detector labels between VTSearch and external systems. A *label
 importer* is one-way (read labels from somewhere external, apply them
 to the active detector). A *labelset source* is bidirectional: it
 both loads labels from an external store and pushes them back whenever
 votes change. Both produce / consume the same
 [`LabelSet`](datasets.md#labelset) object defined in
-`vtscore.datasets` — there is no separate label datatype.
+`vtscore.datasets` - there is no separate label datatype.
 
 ## Label importers
 
@@ -29,7 +29,7 @@ labels = imp.run({"filepath": "/data/labels.json"})
 
 `run(field_values)` returns a list of dicts; only `"md5"` and `"label"`
 (values `"good"` or `"bad"`) are required. The route layer / CLI maps
-each dict's `md5` against `medias[*]["md5"]` to apply the vote — the
+each dict's `md5` against `medias[*]["md5"]` to apply the vote - the
 importer itself doesn't touch dataset state.
 
 `list_label_importers()` skips importers with `hidden_from_picker =
@@ -96,9 +96,9 @@ regardless of whether a source is active.
 The generic parameters are `SyncSource[list[dict[str, str]],
 LabelSet]`:
 
-- `load(field_values) -> list[{"md5": ..., "label": ...}]` — the raw label list (compatibility with `LabelImporter.run`).
-- `load_full(field_values) -> LabelSet` — the full `LabelSet`, including any `detector_meta` block. The default implementation wraps `load()` into a metadata-less `LabelSet`; override to surface `media_type` / `input_spec` / `threshold` round-tripped through the source.
-- `save(labelset: LabelSet, field_values) -> None` — persist the labelset.
+- `load(field_values) -> list[{"md5": ..., "label": ...}]` - the raw label list (compatibility with `LabelImporter.run`).
+- `load_full(field_values) -> LabelSet` - the full `LabelSet`, including any `detector_meta` block. The default implementation wraps `load()` into a metadata-less `LabelSet`; override to surface `media_type` / `input_spec` / `threshold` round-tripped through the source.
+- `save(labelset: LabelSet, field_values) -> None` - persist the labelset.
 
 Subclasses expose a module-level `LABELSET_SOURCE` sentinel for
 auto-discovery; the `vtscore.labelset_sources` entry-point group
@@ -192,12 +192,12 @@ that uses the **latest** captured contexts (latest wins). A per-detector
 detectors from coalescing into each other's window
 (`vtscore/labels/sync.py:60`).
 
-`flush_pending_label_syncs()` drains the queue synchronously — used by
+`flush_pending_label_syncs()` drains the queue synchronously - used by
 tests that need to assert the file was written, and by graceful
 shutdown paths. An `atexit` hook also calls it so the most recent
 vote's push survives normal interpreter exit (Ctrl-C, gunicorn
 SIGQUIT, `sys.exit`). Hard kills (SIGKILL, `os._exit`) bypass `atexit`
-and still drop the last ~200ms of work — accept this as the cost of
+and still drop the last ~200ms of work - accept this as the cost of
 debouncing.
 
 For test isolation, `reset_label_sync_for_tests()` *cancels* pending
@@ -211,7 +211,7 @@ A module-level boolean (`_syncing`, guarded by `_sync_lock`) prevents
 circular re-export: while `sync_from_labelset_source` is mid-apply,
 any `sync_to_labelset_source` triggered by the resulting `apply_label`
 calls is silently skipped. Without this, importing a labelset would
-immediately push it right back to the source — fine for a no-op
+immediately push it right back to the source - fine for a no-op
 round-trip, but pathological for sources that timestamp or version
 their writes.
 
@@ -227,7 +227,7 @@ the timer fires but before the push runs still suppresses the push.
 block. When `sync_from_labelset_source` sees one, it folds the
 source's `input_spec` (and `media_type`, when the receiving detector
 is missing one) into the receiving detector's on-disk JSON. The
-source's `threshold` is intentionally **not** applied — the receiver
+source's `threshold` is intentionally **not** applied - the receiver
 retrains its MLP from the imported labels and recomputes its own
 threshold (`vtscore/labels/sync.py:296`). The detector files
 themselves only ever store origins and meta, never embeddings or MLP
@@ -255,10 +255,10 @@ linked source costs nothing on every vote.
 
 ## Relationship to `vtscore.datasets`
 
-Labels are not a separate domain — they're `LabeledElement` /
+Labels are not a separate domain - they're `LabeledElement` /
 `LabelSet` from [`vtscore.datasets`](datasets.md#labelset). Both
 plugin families operate on (or produce) that type:
 
 - A `LabelImporter` returns `list[{"md5", "label"}]` for compatibility with the legacy label format. Wrapping that into a `LabelSet` is `LabelSet.from_dict({"labels": result})`.
 - A `LabelsetSource.save` consumes a `LabelSet`; its `load` returns the same raw list shape for symmetry with importers, while `load_full` returns the full `LabelSet` for sources that carry richer metadata.
-- The on-disk JSON format both built-ins use is the dict produced by `LabelSet.to_dict()` — a superset of the legacy `{"labels": [{"md5", "label"}]}` shape, with optional `origin`, `origin_name`, `filename`, `category`, `metadata`, `region_box` per element and an optional top-level `detector_meta` block.
+- The on-disk JSON format both built-ins use is the dict produced by `LabelSet.to_dict()` - a superset of the legacy `{"labels": [{"md5", "label"}]}` shape, with optional `origin`, `origin_name`, `filename`, `category`, `metadata`, `region_box` per element and an optional top-level `detector_meta` block.

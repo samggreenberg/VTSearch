@@ -1,8 +1,8 @@
-"""Audio embedder — Whisper encoder (speech-rich datasets).
+"""Audio embedder - Whisper encoder (speech-rich datasets).
 
 Uses the encoder half of OpenAI's Whisper model (``openai/whisper-base``)
 and time-averages the last hidden states into a fixed-size vector.  The
-decoder (text generation) is never invoked — this is purely a speech-
+decoder (text generation) is never invoked - this is purely a speech-
 aware audio embedder, not a transcription pipeline.
 
 There is no paired text encoder in the same vector space, so
@@ -89,7 +89,7 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
                 cache_dir=cache_dir,
                 token=False,
             )
-        # Encoder only — drop the decoder so we don't keep ~half the
+        # Encoder only - drop the decoder so we don't keep ~half the
         # weights in RSS for no benefit (we never invoke it).
         full_model = full_model.to("cpu")
         self._model = full_model.encoder

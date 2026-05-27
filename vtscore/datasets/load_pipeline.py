@@ -86,8 +86,8 @@ _embed_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_
 # whatever the app installs here.  Default is a no-op so this module doesn't
 # need to import ``vtsearch.settings`` (Phase 2 of
 # ``../docs/architecture.md``).  ``vtsearch/shim/`` registers the
-# real implementation — ``vtsearch.settings.set_last_embedder_for_media_type``
-# — at app startup.
+# real implementation; ``vtsearch.settings.set_last_embedder_for_media_type``
+# is wired at app startup.
 _last_embedder_persistence_hook: Callable[[str, str], None] | None = None
 
 
@@ -331,7 +331,7 @@ def _regenerate_clip_thumbnails(  # noqa: C901
     media; without this fixup, every sub-item would render the parent's
     waveform or middle-frame thumbnail in the find/label list.
 
-    Image clips don't go through this path — their thumbnail is the cropped
+    Image clips don't go through this path; their thumbnail is the cropped
     ``media_bytes`` itself, served directly by the media-image route.
     """
     if media_type == "audio":
@@ -391,12 +391,12 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
 
     A clip needs recomputation when:
     - ``needs_recompute`` is ``True`` (genuine sub-item from a multi-output
-      clipper — the parent's MD5 and embedding are stale), **or**
+      clipper (the parent's MD5 and embedding are stale), **or**
     - the clip has no embedding at all (import phase was skipped because a
       clipper was going to re-embed anyway).
 
     For any clip reaching this fixup with new content bytes (audio/image/
-    text), the MD5 is always rehashed from those final bytes — including
+    text), the MD5 is always rehashed from those final bytes (including
     single-output clippers that copy the parent dict via ``dict(media)``
     and would otherwise carry the parent's stale MD5 forward.
 
@@ -433,7 +433,7 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
             clip["md5"] = hashlib.md5(content_bytes).hexdigest()
         elif recompute:
             # Metadata-only clips (e.g. video): bytes unchanged but
-            # boundaries differ — create a unique MD5 by hashing the
+            # boundaries differ; create a unique MD5 by hashing the
             # parent bytes + clip boundaries so dedup doesn't collapse
             # distinct clips.
             parent_bytes = clip.get("media_bytes", b"")
@@ -488,7 +488,7 @@ def _clip_content_bytes(clip: dict, media_type: str) -> bytes | None:
 
     For media types where the clipper produces new bytes (audio, image) or
     a new string (text), return those bytes so the caller can hash and
-    re-embed them.  For metadata-only clips (video), return ``None`` —
+    re-embed them.  For metadata-only clips (video), return ``None``;
     the caller will use a boundary-based hash instead.
     """
     if media_type == "video":
@@ -513,7 +513,7 @@ def _build_clip_embed_input(clip: dict, media_type: str) -> dict:
 
     Video clips additionally carry ``clip_start`` / ``clip_end`` (and
     ``media_path`` when available) because the underlying parent bytes
-    are shared across every tile — the embedder uses the boundary
+    are shared across every tile; the embedder uses the boundary
     metadata to sample distinct frame ranges per tile.
     """
     base: dict = {
@@ -549,7 +549,7 @@ def _resolve_clip_embedder(media_type: str):
         import logging as _logging
 
         _logging.getLogger(__name__).warning(
-            "clip re-embed: no embedders registered for media_type=%r — skipping bulk call",
+            "clip re-embed: no embedders registered for media_type=%r; skipping bulk call",
             media_type,
         )
         return None
@@ -635,7 +635,7 @@ def _auto_register_dataset(
             ingest_started_at=ingest_started_at,
         )
     except Exception:
-        # Registry write failed — clean up the orphaned pkl so we don't
+        # Registry write failed; clean up the orphaned pkl so we don't
         # leave a stale file behind with nothing pointing at it.
         traceback.print_exc()
         Path(pkl_path).unlink(missing_ok=True)
@@ -735,7 +735,7 @@ def _tag_origins(media_dict: dict, origin: dict) -> None:
     Each media gets its own fresh copy of the origin dict (including a
     fresh ``params``).  Sharing one dict by reference across siblings
     means any later mutation of ``media["origin"]["params"]`` on one
-    media silently corrupts every other media stamped by the same load —
+    media silently corrupts every other media stamped by the same load;
     and that aliasing also survives pickle round-trips via backreferences.
     """
     for media in media_dict.values():
@@ -783,7 +783,7 @@ def embed_missing(  # noqa: C901
 ) -> None:
     """Embed media items in *medias* that don't already have an embedding.
 
-    Importers are not responsible for calling the embedder — they emit
+    Importers are not responsible for calling the embedder; they emit
     media dicts and optionally pre-populate ``embedding`` from
     ``content_vectors`` / ``custom_metadata_map``.  Items still at
     ``None`` after the importer finishes go through this function, which
@@ -917,7 +917,7 @@ def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
     ``_fixup_clip_md5_and_embeddings`` is best-effort: when its bulk
     re-embed call fails (no embedder, vector ``None``, exception) the
     clip is left in ``ctx.medias`` with ``embedding=None``.  Letting
-    those through poisons every downstream consumer — the matrix builder
+    those through poisons every downstream consumer; the matrix builder
     in ``vtscore/embedding/matrix.py`` raises (M11 fix); sort/score
     aggregations get wrong-length lists.  Drop them here so the rest of
     the load pipeline (dedup, diversity tree, registry) sees a clean
@@ -994,7 +994,7 @@ def _register_and_migrate(
 ) -> tuple[str, str | None]:
     """Save to registry, migrate the context from task_id to its real id.
 
-    Returns ``(context_id, registry_entry_id)`` — *context_id* is the
+    Returns ``(context_id, registry_entry_id)``; *context_id* is the
     (possibly migrated) context id, and *registry_entry_id* is the id of
     the newly created registry entry (or ``None`` if registration was
     skipped).  Callers should retain *registry_entry_id* so a later
@@ -1026,7 +1026,7 @@ def _register_and_migrate(
         # finished-task tick is attributed to the right dashboard row.
         loading_tasks.set_dataset_id(task_id, entry_id)
     except Exception:
-        # Migration failed after the registry entry was written — roll
+        # Migration failed after the registry entry was written; roll
         # it back so the dashboard doesn't show a half-built dataset.
         try:
             _reg_unregister(entry_id)
@@ -1040,7 +1040,7 @@ def _warmup_embedder_async(media_dict: dict) -> None:
     """Warm up the embedder (model load + text-encoder prime) in a daemon thread.
 
     Fire-and-forget: the caller doesn't wait, and there is no progress
-    surface — the dataset is usable for grid-browsing immediately, and
+    surface; the dataset is usable for grid-browsing immediately, and
     text sort waits behind its own ``_embedder_load_lock`` (see
     ``vtsearch/routes/sorting.py:_load_embedder_with_progress``) on first
     use.  ``MediaEmbedder.load_models`` is idempotent and serialised by
@@ -1070,7 +1070,7 @@ def _handle_load_failure(
     """Unregister the context and write the failure into *tracker*.
 
     If *registry_entry_id* is set, the on-disk registry entry (and its
-    backing pkl) is also removed — this prevents an orphaned dashboard
+    backing pkl) is also removed; this prevents an orphaned dashboard
     row when a load fails after :func:`_register_and_migrate` has
     already written the entry.
     """
@@ -1082,7 +1082,7 @@ def _handle_load_failure(
         traceback.print_exc()
         error = f"Missing dependency: {exc}. Install all required packages with: pip install -e '.[cpu,dev]'"
     elif isinstance(exc, MemoryError):
-        error = "Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM."
+        error = "Out of memory: this dataset is too large. Try a smaller dataset or free up system RAM."
     else:
         traceback.print_exc()
         error = str(exc) or repr(exc) or "Unknown error during dataset loading"
@@ -1111,7 +1111,7 @@ def _run_origin_load_in_background(
 ) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
-    *load_fn* is called with a single argument — the target medias dict —
+    *load_fn* is called with a single argument (the target medias dict);
     and should populate it in-place.  Everything after (origin tagging,
     clipping, dedup, diversity tree, registry, embedder warm-up) is handled
     automatically.
@@ -1123,7 +1123,7 @@ def _run_origin_load_in_background(
     Returns the task_id that can be used to poll progress or cancel.
     """
     # Reset the legacy cancellation flag so a previous cancel does not
-    # immediately abort this new operation — but only when no other parallel
+    # immediately abort this new operation; but only when no other parallel
     # loads are running (otherwise we would clear cancellation that might
     # still be intended for those in-flight tasks).
     if not loading_tasks.has_active_tasks():
@@ -1156,7 +1156,7 @@ def _run_origin_load_in_background(
         ctx = DatasetContext(task_id)
         # Pin the in-flight context to this thread so importers, clippers,
         # dedup, diversity-tree, and label-sync helpers that resolve via
-        # ``get_active_context()`` see the dataset being built — not the
+        # ``get_active_context()`` see the dataset being built, not the
         # empty fallback context.  Without this, mutations addressed at
         # the active context (e.g. label restoration, vote replay) land
         # on ``_empty_dataset_context`` and are silently lost.
@@ -1192,7 +1192,7 @@ def _run_origin_load_in_background(
                     if not ctx.medias:
                         raise ValueError("Import produced no medias.")
 
-                    # Post-load stages are CPU/GPU-bound and touch embeddings —
+                    # Post-load stages are CPU/GPU-bound and touch embeddings;
                     # gate them on the embed semaphore.  Calling swap here
                     # unconditionally is also the safety net for minimalist
                     # importers that complete without firing an ``"embedding"``
@@ -1419,7 +1419,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                     "",
                     0,
                     0,
-                    error="Out of memory — this dataset is too large. Try a smaller dataset or free up system RAM.",
+                    error="Out of memory: this dataset is too large. Try a smaller dataset or free up system RAM.",
                 )
             except Exception as e:
                 traceback.print_exc()

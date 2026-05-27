@@ -1,4 +1,4 @@
-"""Tests for vtscore.datasets.sources — MediaSource abstraction."""
+"""Tests for vtscore.datasets.sources; MediaSource abstraction."""
 
 import zipfile
 from unittest.mock import patch

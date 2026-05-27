@@ -1,6 +1,6 @@
 # OpenAPI schema + generated TS client
 
-Status: every blueprint migrated; per-plugin runtime validation in place for the six plugin-field routes; one cosmetic follow-up (real spec types for plugin-field bodies) is deferred — see *Open follow-ups*.
+Status: every blueprint migrated; per-plugin runtime validation in place for the six plugin-field routes; one cosmetic follow-up (real spec types for plugin-field bodies) is deferred - see *Open follow-ups*.
 
 ## The problem
 
@@ -11,7 +11,7 @@ and every consumer in `frontend/src/app/` reads them through a hand-
 written TypeScript interface in `frontend/src/app/models/api.models.ts`.
 
 Nothing ties the two together. When a route adds, renames, or removes a
-field, the matching DTO has to be updated by hand — and when it isn't,
+field, the matching DTO has to be updated by hand - and when it isn't,
 the bug is silent. TypeScript's structural typing happily accepts a
 response that "looks close enough" and the mismatch surfaces as a
 runtime undefined-access or a quietly-missing UI element. The settings
@@ -23,7 +23,7 @@ anywhere the frontend can see.
 
 1. **Single source of truth.** The shape of every request body, query
    string, and response is declared once, in a schema, and that
-   declaration is *load-bearing* — it parses and validates incoming
+   declaration is *load-bearing* - it parses and validates incoming
    requests and serialises outgoing responses. Drift between docs and
    code becomes impossible by construction.
 2. **Self-documenting API.** A Swagger UI at `/api/docs` lets a
@@ -42,7 +42,7 @@ anywhere the frontend can see.
 - **No backwards-compatibility shim for old error envelopes.** The
   frontend reads `response.error.error` (a single string) today.
   flask-smorest emits a richer envelope (see below). The frontend's
-  error handlers will be updated in lockstep — no compatibility layer
+  error handlers will be updated in lockstep - no compatibility layer
   in either direction. This is acceptable per the project's BC policy.
 - **No incremental "documentation-only" pass.** The whole point is to
   make schemas load-bearing; declaring schemas without using them for
@@ -58,22 +58,22 @@ anywhere the frontend can see.
 
 `flask-smorest` extends Flask's `Blueprint` with two decorators:
 
-- `@blp.arguments(SomeSchema, location="json"|"query"|"form")` — parses
+- `@blp.arguments(SomeSchema, location="json"|"query"|"form")` - parses
   the request, validates it against the schema, raises 422 on failure,
   and injects the result as a kwarg.
-- `@blp.response(status, SomeSchema)` — runs the route's return value
+- `@blp.response(status, SomeSchema)` - runs the route's return value
   through the schema's `dump()`, guaranteeing the response matches the
   declared shape (extra keys are dropped, missing required keys raise).
 
 Schemas are written in **marshmallow** (flask-smorest's native dialect).
-We considered Pydantic v2 — flask-smorest has experimental support via
-`apispec-pydantic-plugin` — but marshmallow's integration is older and
+We considered Pydantic v2 - flask-smorest has experimental support via
+`apispec-pydantic-plugin` - but marshmallow's integration is older and
 more battle-tested, and the schemas are small enough that porting later
 (if §12.17 pulls us toward Pydantic for `_SETTING_SPECS`) is mechanical.
 
 ### Where schemas live
 
-`vtsearch/schemas/` — a new sibling of `vtsearch/routes/`, mirroring the
+`vtsearch/schemas/` - a new sibling of `vtsearch/routes/`, mirroring the
 route sub-package layout:
 
 ```
@@ -87,15 +87,15 @@ vtsearch/schemas/
 ```
 
 Schemas are imported into the route module that uses them. There is no
-global registry — flask-smorest discovers them through the decorator
+global registry - flask-smorest discovers them through the decorator
 chain.
 
 ### Swagger UI and spec endpoint
 
 flask-smorest's `Api` object serves both:
 
-- `/api/openapi.json` — the OpenAPI 3.x spec (machine-readable).
-- `/api/docs` — Swagger UI (human-browsable).
+- `/api/openapi.json` - the OpenAPI 3.x spec (machine-readable).
+- `/api/docs` - Swagger UI (human-browsable).
 
 Config goes in `app.py` alongside blueprint registration.
 
@@ -141,9 +141,9 @@ clients + DTOs into `frontend/src/app/generated/api-client/`.
 Hybrid checked-in policy (deviation from the original plan's "check in
 both"):
 
-- `frontend/openapi.json` IS tracked — small, semantically meaningful,
+- `frontend/openapi.json` IS tracked - small, semantically meaningful,
   the git diff really does show API changes at PR time.
-- `frontend/src/app/generated/` is **gitignored** — generated TS is a
+- `frontend/src/app/generated/` is **gitignored** - generated TS is a
   deterministic function of the spec + generator version, so checking
   it in adds noisy diffs and merge conflicts for no benefit.
 - The Angular build's `prebuild` / `prebuild:prod` npm hooks run
@@ -159,7 +159,7 @@ CI guards drift three ways:
    `prebuild:prod` hook) and then typechecks every consumer, so
    renaming a field that the frontend reads now breaks compilation.
 3. The `ApiConfiguration`, function modules, and model types are
-   reachable via direct paths under `generated/api-client/` only — the
+   reachable via direct paths under `generated/api-client/` only - the
    barrel index files are intentionally disabled in
    `ng-openapi-gen.json` (`indexFile: false`, `functionIndex: false`,
    `modelIndex: false`) so that an unrelated import doesn't accidentally
@@ -171,7 +171,7 @@ Consumers MUST `import type { Foo }` (not `import { Foo }`) for any
 generated DTO, and import functions / `ApiConfiguration` from their
 specific module paths under `generated/api-client/`. Pulling a model in
 as a runtime import (or going through a barrel) adds the entire
-`models/` graph to the initial chunk — measured at ~36 kB versus the
+`models/` graph to the initial chunk - measured at ~36 kB versus the
 ~6 kB cost of importing just the functions a service actually calls.
 
 ## Migration strategy
@@ -191,16 +191,16 @@ Blueprint by blueprint. Each blueprint migration is one PR:
 
 ### Order (smallest → biggest)
 
-1. **`settings/api.py`** (pilot, this PR) — 3 routes, ~230 LOC, the
+1. **`settings/api.py`** (pilot, this PR) - 3 routes, ~230 LOC, the
    most repetitive validation in the codebase. High-leverage proof of
    concept.
-2. **`auth.py`, `achievements.py`, `main.py`** — tiny, mostly GETs.
-3. **`labels/`** — vote.py, importers.py, exporters.py.
-4. **`detectors/`** — store.py, registry.py, scoring.py, find.py.
-5. **`processors/`** — crud.py, scoring.py.
-6. **`media/`** — list.py, server.py, embed.py.
-7. **`datasets/`** — crud.py, registry.py, ui.py.
-8. **`sorting.py`, `eval.py`, `file_browser.py`** — last because they
+2. **`auth.py`, `achievements.py`, `main.py`** - tiny, mostly GETs.
+3. **`labels/`** - vote.py, importers.py, exporters.py.
+4. **`detectors/`** - store.py, registry.py, scoring.py, find.py.
+5. **`processors/`** - crud.py, scoring.py.
+6. **`media/`** - list.py, server.py, embed.py.
+7. **`datasets/`** - crud.py, registry.py, ui.py.
+8. **`sorting.py`, `eval.py`, `file_browser.py`** - last because they
    have the loosest schemas (free-form sort results, eval JSON).
 
 After each blueprint migration, the corresponding section of
@@ -210,11 +210,11 @@ After each blueprint migration, the corresponding section of
 
 When the migration completes, these files should not exist:
 
-- `frontend/src/app/models/api.models.ts` — every interface moves to
+- `frontend/src/app/models/api.models.ts` - every interface moves to
   `generated/api-client/`.
 - Most of `vtsearch/routes/_shared.py`'s `get_json_or_400`,
   `get_json_safe`, `extract_plugin_fields`, `validate_required_fields`
-  — replaced by `@blp.arguments` decorators. Helpers that operate on
+  - replaced by `@blp.arguments` decorators. Helpers that operate on
   *plugin* fields (`extract_plugin_fields`, `validate_required_fields`)
   may survive in some form, since plugin field schemas are dynamic per-
   plugin and don't lend themselves to a static marshmallow schema.
@@ -231,10 +231,10 @@ emitted a permissive spec (every route/method/path-param/docstring, but
 That permissive spec has been **deleted** now that flask-smorest covers
 every blueprint and serves a richer spec at `/api/openapi.json` (plus
 Swagger UI at `/api/docs`) with real request/response schemas. The
-removals — `vtsearch/openapi.py`, the `/openapi.json` route on
+removals - `vtsearch/openapi.py`, the `/openapi.json` route on
 `main_bp`, the `--openapi-schema` CLI flag, the
 `tests/api/test_openapi_schema.py` tests, and the docs references in
-`docs/CLI.md` / `docs/API.md` — all landed together in the same PR that
+`docs/CLI.md` / `docs/API.md` - all landed together in the same PR that
 checks off this follow-up.
 
 ## Resolved questions
@@ -243,13 +243,13 @@ checks off this follow-up.
   `/api/importers/<name>/run`, `/api/label-importers/import/<name>`,
   `/api/dataset/stage-import/<name>`, `/api/dataset/import/<name>`,
   `/api/detectors/registry/from-labelset/<name>`,
-  `/api/settings-importers/import/<name>`, etc.) — request shapes
+  `/api/settings-importers/import/<name>`, etc.) - request shapes
   depend on each plugin's declared `fields`. **Decision: hybrid of
   option (c) and option (b).**
 
   Per-plugin marshmallow schemas are built lazily from each plugin's
   `fields` declaration (`vtscore/plugins/schema.py::make_plugin_arg_schema`)
-  and cached on the plugin instance — the runtime validation tier.
+  and cached on the plugin instance - the runtime validation tier.
   Each route handler looks up `plugin._arg_schema_instance` via
   `validate_plugin_args(plugin, ...)` and feeds the request body
   through it; schema-level rejects raise the standard `422 + errors`
@@ -273,7 +273,7 @@ checks off this follow-up.
     in-memory `BytesIO`, selected via `file_mode=`).
 
   The schema uses `Meta.unknown = "exclude"` so it stays a faithful
-  description of the plugin's declared field set — pass-through keys
+  description of the plugin's declared field set - pass-through keys
   (`converters`, `source_specs`, `clipper`, `embedder`,
   `dataset_name`, `name`) are declared explicitly per call site via
   `extra_keys=(...)`.
@@ -281,13 +281,13 @@ checks off this follow-up.
   Where the design *doesn't* go to option (c): each plugin-field
   route still uses one parameterised URL (`<importer_name>`) rather
   than one static URL per plugin variant, so its request body is
-  *not* described in the OpenAPI spec at all — the spec lists the
+  *not* described in the OpenAPI spec at all - the spec lists the
   path but with an empty / loose body schema. That's the option (b)
   half: runtime validation is per-plugin, but spec consumers don't
   see per-plugin types. Lifting the spec to real per-field types
   would require registering one Flask URL rule per plugin variant at
   startup (e.g. `/api/dataset/import/server_folder`,
-  `/api/dataset/import/pickle`, …) — a bigger refactor than runtime
+  `/api/dataset/import/pickle`, …) - a bigger refactor than runtime
   validation, and the dynamic frontend (which discovers field shapes
   via `/api/importers` etc. and builds forms generically) doesn't
   directly benefit from compile-time types here. Captured in *Open
@@ -297,7 +297,7 @@ checks off this follow-up.
   list endpoint actually needs it: `/api/medias/ids` is already the
   lightweight half of an ids+batch split (the metadata comes back
   from `POST /api/medias/batch` for the visible IDs), and nothing
-  else returns lists big enough to matter. **Decision: closed — keep
+  else returns lists big enough to matter. **Decision: closed - keep
   current shapes. Revisit only if a future endpoint actually needs
   paging.**
 
@@ -305,7 +305,7 @@ checks off this follow-up.
   `frontend/src/app/generated/api-client/` and the generated
   `openapi.json` into git.** Pros: deterministic builds, no need to
   spin up Flask in frontend CI, no install hop for a new dev. The
-  "noisy diffs" downside is the feature here, not a bug — the diff
+  "noisy diffs" downside is the feature here, not a bug - the diff
   *is* the API-change review, and the `regenerate-and-diff` CI job
   enforces it.
 
@@ -351,7 +351,7 @@ checks off this follow-up.
       legacy plain-Flask path on the same ``flask_smorest.Blueprint``
       (same pattern as ``detectors/labels.py``'s
       ``import-labels/<importer_name>`` and
-      ``detectors/registry/from-labelset/<importer>``) — its body is a
+      ``detectors/registry/from-labelset/<importer>``) - its body is a
       plugin-field shape that doesn't fit a static marshmallow schema.
       See *Resolved questions / Plugin field endpoints*.
 - [x] `datasets/staging.py` migrated to flask-smorest (available-files,
@@ -397,7 +397,7 @@ checks off this follow-up.
       rejects (``media_type='any'``, whitespace-only name, not loaded)
       keep their HTTP codes (400 / 404 / 409 / 500) with the standard
       ``message`` envelope. The ``POST /api/detectors/registry/from-labelset/<importer>``
-      route stays on plain Flask — its body is a plugin-field shape that
+      route stays on plain Flask - its body is a plugin-field shape that
       doesn't fit a static marshmallow schema (see *Open questions /
       Plugin field endpoints* above). Registry tests in
       ``tests/api/test_error_recovery.py`` updated to match.
@@ -422,7 +422,7 @@ checks off this follow-up.
       routes (save labels / labels-detail / vote) use the standard
       ``arguments`` + ``response`` decorators; schema-level validation
       failures (invalid ``vote`` value) surface as 422. The two binary
-      GET routes — ``preview`` and ``thumbnail`` — declare their
+      GET routes - ``preview`` and ``thumbnail`` - declare their
       non-default JSON error responses via ``alt_response`` but do not
       model the success body in the spec (binary stream or text-content
       JSON depending on media type). The plugin-field
@@ -441,7 +441,7 @@ checks off this follow-up.
       media-type mismatch, unbuildable config, rename collisions, no
       autorun processors for active media type) keep their HTTP codes
       (400 / 404) with the standard ``message`` envelope. The shared
-      sub-package ``processors_bp`` aggregator is gone — both
+      sub-package ``processors_bp`` aggregator is gone - both
       blueprints are now registered directly with the flask-smorest
       ``Api`` in ``app.py`` (mirroring the ``detectors/`` layout).
       Extractor tests in ``tests/detectors/test_extractors.py`` and the
@@ -477,7 +477,7 @@ checks off this follow-up.
       converters / importers listings; dataset status + cancel; demo-list
       + demo-categories + browse-media-files (+select) + dashboard
       info/rename/disk-usage). The plugin ``to_dict()`` payloads are
-      declared as ``fields.Dict()`` rather than nested schemas — the
+      declared as ``fields.Dict()`` rather than nested schemas - the
       inner shapes are plugin-dependent and already round-trip cleanly
       via ``to_dict()``; redeclaring every field would only duplicate
       the source of truth. Schema-level validation failures (missing
@@ -488,13 +488,13 @@ checks off this follow-up.
       404s are intercepted by the app-level ``NotFound`` errorhandler
       in ``app.py``, which matches a more specific exception subclass
       than flask-smorest's ``HTTPException`` handler and so wins on
-      every 404 — those keep the legacy ``{"error": "Not Found",
+      every 404 - those keep the legacy ``{"error": "Not Found",
       "request_id": "..."}`` shape regardless of the ``message=`` kwarg
       passed to ``abort()``. Tests in ``tests/api/test_dashboard.py``
       and ``tests/datasets/test_datasets.py`` updated to match
       (``message`` for 400, ``error`` for 404). The heavier dataset
       modules (``staging.py``, ``registry.py``) stay on plain Flask
-      blueprints for now — they involve plugin-field shapes that need
+      blueprints for now - they involve plugin-field shapes that need
       the *Resolved questions / Plugin field endpoints* decision in
       hand (importer staging / import).
 - [x] `eval.py` migrated to flask-smorest (labeling-progress,
@@ -551,7 +551,7 @@ checks off this follow-up.
       standard ``errors`` envelope. The ``inclusion`` field is
       declared as ``fields.Raw`` with a custom validator (rather than
       ``fields.Integer(strict=True)``) so that ``3.7`` continues to
-      round to ``3`` while booleans are still rejected explicitly —
+      round to ``3`` while booleans are still rejected explicitly -
       preserving the pre-migration coercion behavior. Handler-level
       rejects (empty / whitespace ``text``, no good/bad votes, no
       medias loaded, embedder doesn't support text, multipart no-file
@@ -581,7 +581,7 @@ checks off this follow-up.
       (settings-importers / settings-exporters / settings-sources /
       labelset-sources). The two plugin-field routes
       (``POST /api/settings-importers/import/<importer_name>``) stay on
-      the legacy plain-Flask path on the same smorest blueprint — same
+      the legacy plain-Flask path on the same smorest blueprint - same
       pattern as ``labels/importers.py``. Schema-level validation
       failures (missing required ``exporter_name`` / ``source_name``)
       surface as 422 with the standard ``errors`` envelope; handler-
@@ -679,8 +679,8 @@ checks off this follow-up.
       ``activeTabExporterFields: ImporterField[]`` getter (Angular's
       template type-checker rejects dot-syntax access on index
       signatures). A dead-code reference to ``exp['label']`` in the
-      ``autodetect-results-modal`` template — never populated by the
-      backend, always fell through to ``exp.name`` — was fixed to
+      ``autodetect-results-modal`` template - never populated by the
+      backend, always fell through to ``exp.name`` - was fixed to
       ``exp.display_name || exp.name`` to match the actual response
       shape.
 - [x] ``SettingsIoApiService`` rewired to the generated TS client. The
@@ -691,7 +691,7 @@ checks off this follow-up.
       generated ``RunSettingsExportResponse``. The plugin-field
       ``POST /api/settings-importers/import/<importer_name>`` route
       stays on plain ``HttpClient.post`` (same pattern as
-      ``LabelImportersApiService.runImport``) — its body shape is
+      ``LabelImportersApiService.runImport``) - its body shape is
       plugin-dependent and not described in the OpenAPI spec; the local
       ``SettingsImportResponse`` interface stays in the service file for
       the same reason (the spec types the route's response as just
@@ -708,7 +708,7 @@ checks off this follow-up.
       ``export-modal``). With this migration ``settings-io`` no longer
       imports ``ExporterInfo``, so the ``ExporterInfo`` interface was
       deleted from ``frontend/src/app/models/api.models.ts`` (no
-      remaining consumers — ``settings-exporter-modal``'s local
+      remaining consumers - ``settings-exporter-modal``'s local
       ``SettingsExporterInfo`` was a separately-named shim, not a
       reference). ``ImporterInfo`` stays because many other services
       (label-importers, processor-importers, dataset-importer-modal,
@@ -722,7 +722,7 @@ checks off this follow-up.
       ``POST /api/label-importers/import/<importer_name>``,
       ``runModelImport`` →
       ``POST /api/detectors/<name>/import-labels/<importer_name>``)
-      stay on plain ``HttpClient.post`` — their body shapes are
+      stay on plain ``HttpClient.post`` - their body shapes are
       plugin-dependent and not described in the OpenAPI spec, same
       pattern as ``SettingsIoApiService.runImport``. The two consumers
       (``label-importer-modal``,
@@ -734,7 +734,7 @@ checks off this follow-up.
       ``selectedLabelImporterFields`` getters (same Angular
       template-type-checker workaround as ``export-modal`` /
       ``settings-importer-modal``). The ``LabelImporterInfo`` interface
-      was deleted from ``frontend/src/app/models/api.models.ts`` — no
+      was deleted from ``frontend/src/app/models/api.models.ts`` - no
       remaining consumers.
 - [x] ``MediasApiService`` rewired to the generated TS client. The
       service now calls ``apiMediasIdsGet`` / ``apiMediasBatchPost`` /
@@ -745,13 +745,13 @@ checks off this follow-up.
       ``MediaAddToPileResponse``, and the request body for ``vote`` now
       uses the generated ``MediaVoteRequest``. The four binary-stream
       routes (``getAudio`` / ``getVideo`` / ``getImage`` / ``getMedia``)
-      stay on plain ``HttpClient.get`` with ``responseType: 'blob'`` —
+      stay on plain ``HttpClient.get`` with ``responseType: 'blob'`` -
       ng-openapi-gen doesn't model binary response bodies usefully (the
       generated function declares the success body as ``Error`` because
       the spec only carries error responses for these routes). The
       multipart ``addToPile`` route stays on plain ``HttpClient.post``
       because the generated function's ``$Params`` has no ``body`` field
-      — same pattern as ``server-media-files/upload``. The local
+      - same pattern as ``server-media-files/upload``. The local
       ``TextResponse`` and ``VoteResponse`` interfaces were deleted from
       ``frontend/src/app/models/api.models.ts`` (no remaining consumers).
       ``MediaItem`` stays in ``api.models.ts`` for now because it is the
@@ -790,7 +790,7 @@ checks off this follow-up.
       ``TextsortSuggestionsResponse``).
 
       Multipart routes (``exampleSort``, ``labelFileSort``,
-      ``uploadServerMediaFile``) stay on plain ``HttpClient.post`` — same
+      ``uploadServerMediaFile``) stay on plain ``HttpClient.post`` - same
       pattern as ``MediasApiService.addToPile``. The
       ``getDiversityTreeNext`` POST branch (which carries an optional
       ``{scores, threshold}`` body that the backend reads via
@@ -798,7 +798,7 @@ checks off this follow-up.
       also stays on plain ``HttpClient.post``; the GET branch uses the
       generated ``apiDiversityTreeNextGet``. ``getLabelingProgress`` keeps
       a tiny plain-``HttpClient.post`` wrapper for parity with the legacy
-      surface — production callers were already removed and the spec has
+      surface - production callers were already removed and the spec has
       no request body for the route.
 
       Consumers updated:
@@ -820,7 +820,7 @@ checks off this follow-up.
         / ``r['score']``) to satisfy ``noPropertyAccessFromIndexSignature``.
         The ``labelingStatus`` field stays typed as the legacy
         ``LabelingStatusResponse`` (a ``StatusIndicator``-bearing shape)
-        with a single cast at the polling subscribe — the autopilot
+        with a single cast at the polling subscribe - the autopilot
         consumer chain (``AutopilotStateService``,
         ``AutopilotPanelComponent``, ``LeftPanelComponent``) is too wide
         to retype in this PR and is captured as a follow-up below.
@@ -905,7 +905,7 @@ checks off this follow-up.
 
       The plugin ``to_dict()`` payloads (importers, clippers, embedders,
       converters, media types) are generated as
-      ``Array<{[key: string]: any}>`` — the service casts each list at
+      ``Array<{[key: string]: any}>`` - the service casts each list at
       the boundary to the richer ``ImporterInfo`` / ``ClipperInfo`` /
       ``EmbedderInfo`` / ``ConverterInfo`` / ``MediaTypeInfo``
       interfaces in ``api.models.ts``, same pattern as
@@ -916,13 +916,13 @@ checks off this follow-up.
 
       Multipart routes (``importLocalFolder``, ``loadFile``,
       ``stageFile``) and the binary-stream ``exportDataset`` stay on
-      plain ``HttpClient`` — same pattern as
+      plain ``HttpClient`` - same pattern as
       ``MediasApiService.addToPile`` /
       ``SortingApiService.exampleSort``. The two plugin-field routes
       (``runImporter`` → ``POST /api/dataset/import/<importer_name>``,
       ``stageImport`` → ``POST /api/dataset/stage-import/<importer_name>``)
       stay on plain ``HttpClient`` because their body shapes are
-      plugin-dependent and not described in the OpenAPI spec — see
+      plugin-dependent and not described in the OpenAPI spec - see
       *Open follow-ups / Per-plugin schemas for plugin-field routes*.
 
       Consumers updated:
@@ -960,7 +960,7 @@ checks off this follow-up.
       optional ``reason``; ``Meta.unknown = "include"`` plus a
       ``@post_dump(pass_original=True)`` hook preserves the metric-specific
       keys (``cost``, ``flips``, ``avg_flip_rate``, ``diversity_level``,
-      ``max_level``, …) — ``unknown = "include"`` only affects ``load``, so
+      ``max_level``, …) - ``unknown = "include"`` only affects ``load``, so
       the post-dump re-merge is required to keep them in the response.
       The generated TS ``StatusIndicator`` is ``{status: string; reason?:
       string; [key: string]: any}``; ``LabelingStatusResponse`` references
@@ -984,7 +984,7 @@ checks off this follow-up.
       list, center panel + audio/video/image/text/document viewers, right
       panel, label-list, label-view, find-view) consumes
       ``Media = MediaIdsListResponse & Partial<Omit<RemoveIndex<MediaBatchResponse>,
-      keyof MediaIdsListResponse>>`` — a derivation that admits both stubs
+      keyof MediaIdsListResponse>>`` - a derivation that admits both stubs
       (initial listing, cache miss) and hydrated batch entries, with the
       ``MediaBatchResponse`` index signature stripped so direct property
       access works under ``noPropertyAccessFromIndexSignature``. Sites
@@ -1006,7 +1006,7 @@ checks off this follow-up.
       declared per call site via ``extra_keys=(...)``. Legacy helpers
       ``extract_plugin_fields`` / ``validate_required_fields`` /
       ``get_request_field`` / ``_extract_importer_fields`` deleted.
-      Spec-side per-plugin types are still loose — see *Open
+      Spec-side per-plugin types are still loose - see *Open
       follow-ups / OpenAPI spec types for plugin-field route bodies*.
 
 ## What shipped
@@ -1025,7 +1025,7 @@ checks off this follow-up.
   envelope, matching the rest of the API. Pass-through keys
   (``converters``, ``source_specs``, ``clipper``, ``embedder``,
   ``dataset_name``, ``name``) are declared explicitly per call site via
-  ``validate_plugin_args(..., extra_keys=(...))`` — the schema itself
+  ``validate_plugin_args(..., extra_keys=(...))`` - the schema itself
   uses ``Meta.unknown = "exclude"`` so it stays a faithful description
   of the plugin's declared field set. The legacy
   ``extract_plugin_fields`` / ``validate_required_fields`` /
@@ -1040,16 +1040,16 @@ checks off this follow-up.
   their request bodies are still un-typed in ``/api/openapi.json``
   (each handler is a plain ``@blueprint.route`` with no ``@arguments``
   decorator). To surface real per-field types in the spec we'd need to
-  register one Flask URL rule per plugin variant at startup —
+  register one Flask URL rule per plugin variant at startup -
   ``/api/dataset/import/server_folder``, ``/api/dataset/import/pickle``,
-  etc. — each decorated with its own ``@blp.arguments(plugin._arg_schema)``.
+  etc. - each decorated with its own ``@blp.arguments(plugin._arg_schema)``.
   That's a bigger refactor than runtime validation and the dynamic
   frontend (which discovers field shapes via ``/api/importers`` etc.
   and builds forms generically) doesn't directly benefit from compile-
   time types here, so the spec stays loose for now. The runtime
   validation captures the per-plugin field types where it matters
   (bad input → 422 → frontend's error pipeline).
-- **``ProcessorImportersApiService`` follow-up — RESOLVED.** The
+- **``ProcessorImportersApiService`` follow-up - RESOLVED.** The
   service, modal, and DTO were deleted in commit ``6b4c0b4d`` once it
   became clear the backend route had been removed. Initial bundle
   dropped from 512 kB to 496 kB.

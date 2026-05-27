@@ -302,7 +302,7 @@ class TestFolderImporterMetadata:
         assert self._get_importer().name == "server_folder"
 
     def test_icon_is_folder_emoji(self):
-        # 📁 — frontend renders this as a "folder" icon, matching the
+        # 📁; frontend renders this as a "folder" icon, matching the
         # browser-side Local Folder card.  The Server tab makes the
         # server-vs-local distinction.
         assert self._get_importer().icon == "📁"
@@ -330,7 +330,7 @@ class TestFolderImporterMetadata:
 
 
 # ---------------------------------------------------------------------------
-# DatasetImporter base class — user-typed dataset name
+# DatasetImporter base class: user-typed dataset name
 # ---------------------------------------------------------------------------
 
 
@@ -378,7 +378,7 @@ class TestImporterDatasetName:
         assert d["fields"][-1]["field_type"] == "text"
 
     def test_class_fields_attribute_unchanged_by_to_dict(self):
-        """to_dict() appends dataset_name only on the serialised payload —
+        """to_dict() appends dataset_name only on the serialised payload;
         the class-level ``fields`` attribute remains as the developer wrote it."""
         from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 
@@ -408,7 +408,7 @@ class TestImporterDatasetName:
 
     def test_resolve_display_name_strips_whitespace(self):
         imp = self._make_importer()
-        # An all-whitespace name is treated as empty — the default wins.
+        # An all-whitespace name is treated as empty; the default wins.
         assert imp.resolve_display_name({"dataset_name": "   "}) == imp.display_name
 
     def test_resolve_display_name_empty_field_values(self):
@@ -468,7 +468,7 @@ class TestImporterDefaultDisplayName:
         assert IMPORTER.default_display_name({"paths_file": "/tmp/audio_list.txt"}) == "audio_list"
 
     def test_origin_does_not_include_dataset_name(self):
-        """The user-typed display name is UI metadata, not provenance —
+        """The user-typed display name is UI metadata, not provenance;
         it must NOT leak into origin params (which feed Detector reload)."""
         from vtscore.datasets.importers.server_folder import IMPORTER
 
@@ -713,7 +713,7 @@ class TestImporterBulkHooks:
         records = [{"name": "x"}]
 
         def fetch_one(record, _fv, _thin):
-            # fetch_record may omit origin / origin_name — run() fills them in.
+            # fetch_record may omit origin / origin_name; run() fills them in.
             return {"media_type": "audio", "filename": record["name"], "embedding": None}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
@@ -756,7 +756,7 @@ class TestImporterBulkHooks:
 
     def test_bulk_override_used_when_implemented(self):
         # When a subclass overrides _fetch_records_bulk_impl, fetch_record must
-        # NOT be called — the bulk path takes over completely.
+        # NOT be called; the bulk path takes over completely.
         per_item_calls: list = []
 
         def fetch_one(record, _fv, _thin):
@@ -956,7 +956,7 @@ class TestReCallerMultiMedia:
 # every converter-derived item because it reads m.get("media_type") to pick
 # the right embedder.
 #
-# The fake converter in TestReCaller above returned media_type explicitly —
+# The fake converter in TestReCaller above returned media_type explicitly;
 # masking the bug.  The tests below use a converter that omits media_type,
 # matching the real converter contract.
 
@@ -999,7 +999,7 @@ class TestIngestSpecStreamMediaType:
         assert v2i is not None
 
         def fake_convert(media, params):
-            # Real converters return bytes without media_type — mirror that here.
+            # Real converters return bytes without media_type; mirror that here.
             return [{"filename": "frame_0.png", "media_bytes": b"PNG", "duration": 0}]
 
         monkeypatch.setattr(v2i, "convert", fake_convert)

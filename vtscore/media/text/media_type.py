@@ -1,4 +1,4 @@
-"""Text (paragraph) media type — TXT/MD files."""
+"""Text (paragraph) media type - TXT/MD files."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from vtscore.media.base import (
 
 
 class TextMediaType(MediaType):
-    """Handles plain-text paragraphs — file import, HTTP serving, and demo datasets.
+    """Handles plain-text paragraphs - file import, HTTP serving, and demo datasets.
 
     Embedding is handled by :class:`~vtscore.media.text.embedder_e5.TextE5Embedder`.
     """

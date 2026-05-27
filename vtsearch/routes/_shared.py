@@ -37,8 +37,8 @@ def require_detector_header(fn: Callable) -> Callable:
     are absent, but if any future code path sets the thread-local on a
     Flask request thread, a header-absent request would land on a stale
     detector. This guard rejects header-absent requests *before* the
-    resolver chain runs, regardless of thread-local state — defence in
-    depth.
+    resolver chain runs, regardless of thread-local state (defence in
+    depth).
 
     Apply to any endpoint that mutates ``DetectorContext`` state
     (``good_votes`` / ``bad_votes`` / ``label_history`` / ``vote_*`` /
@@ -61,7 +61,7 @@ def require_detector_header(fn: Callable) -> Callable:
 def require_dataset_header(fn: Callable) -> Callable:
     """Route decorator: reject 400 if no ``X-Dataset-Id`` is identified.
 
-    Sister of :func:`require_detector_header` — closes the dataset-side
+    Sister of :func:`require_detector_header`; closes the dataset-side
     analog of H34. Apply to any endpoint that mutates ``DatasetContext``
     state (``medias`` insertions, ``diversity_tree`` rebuilds) or whose
     correctness depends on knowing which dataset's cid-keyed votes are
@@ -105,8 +105,8 @@ def error_response(error: str, status: int, detail: Any | None = None, **extra: 
 def get_json_safe() -> dict:
     """Parse the request body as JSON, returning ``{}`` on missing or invalid input.
 
-    Unlike :func:`get_json_or_400`, this never returns an error tuple — it
-    silently falls back to an empty dict.  Use this when the JSON body is
+    Unlike :func:`get_json_or_400`, this never returns an error tuple;
+    it silently falls back to an empty dict.  Use this when the JSON body is
     entirely optional (e.g. endpoints that accept both GET and POST).
     """
     return request.get_json(force=True, silent=True) or {}
@@ -124,7 +124,7 @@ def get_plugin_or_404(get_fn, list_fn, name: str, type_label: str):
 
     Returns:
         ``(plugin, None)`` on success, or ``(None, (response, 404))`` on
-        failure — the caller returns the error tuple directly.
+        failure; the caller returns the error tuple directly.
     """
     plugin = get_fn(name)
     if plugin is not None:
@@ -181,9 +181,9 @@ def validate_plugin_args(
 
     Schema-level rejects (missing required field, invalid select value,
     unparseable number) surface as ``422`` with the standard
-    ``errors`` envelope — matching the validation behaviour of routes
+    ``errors`` envelope, matching the validation behaviour of routes
     using ``@blp.arguments(...)``.  Keys the schema doesn't recognise
-    are dropped (the schema uses ``Meta.unknown = "exclude"``) — pass
+    are dropped (the schema uses ``Meta.unknown = "exclude"``); pass
     *extra_keys* to allow specific extra body fields through to the
     returned dict (e.g. ``"converters"``, ``"clipper"``, ``"name"``).
 
@@ -195,18 +195,18 @@ def validate_plugin_args(
         How to surface file uploads.  Both modes satisfy the
         :class:`~vtscore.plugins.uploads.UploadedFile` protocol.
         ``"filestorage"`` (default) keeps the Werkzeug
-        :class:`~werkzeug.datastructures.FileStorage` object — used by
+        :class:`~werkzeug.datastructures.FileStorage` object; used by
         label-importer routes where the file is consumed synchronously.
         ``"bytesio"`` wraps the upload bytes in a
         :class:`~vtscore.plugins.uploads.BytesIOUploadedFile` carrying
-        the original filename — used by dataset-importer routes that
+        the original filename; used by dataset-importer routes that
         hand the file off to a background thread (the request context,
         and the underlying ``FileStorage``, are torn down before the
         thread reads).
     extra_keys:
         Pass-through keys whose values should ride along on the
         returned dict if present in the request body.  Each is copied
-        verbatim — type / shape validation is the route handler's
+        verbatim; type / shape validation is the route handler's
         responsibility.
     """
     from vtscore.plugins.schema import get_plugin_arg_schema  # noqa: PLC0415

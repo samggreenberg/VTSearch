@@ -3,7 +3,7 @@
 The response shape (``AppSettingsSchema``) mirrors ``settings.get_all()``
 and is the source of truth for the frontend's settings DTO.
 ``SettingsUpdateSchema`` is the partial-update shape accepted by
-``PUT /api/settings`` — every field is optional; only present keys are
+``PUT /api/settings``; every field is optional and only present keys are
 modified.
 
 Server-tier vs. per-user routing is handled inside ``vtsearch.settings``;
@@ -76,14 +76,14 @@ class AppSettingsSchema(Schema):
     max_concurrent_dataset_embeddings = fields.Integer()
     autorun_detectors = fields.List(fields.String())
 
-    # Per-user, ``{media_type_id: embedder_name}`` — the dataset-importer
+    # Per-user, ``{media_type_id: embedder_name}``; the dataset-importer
     # modal pre-selects the last embedder the user picked for each media
     # type from this map when no loaded dataset is around to supply the
     # same hint via ``guessedMediaEmbedder``.
     last_embedder_per_media_type = _PerMediaTypeStringDict()
 
     # Per-user, ``{media_type_id: {embedder, clipper, clipper_params,
-    # source_specs}}`` — defaults the Add Dataset modal auto-fills when
+    # source_specs}}``, which defaults the Add Dataset modal auto-fills when
     # the user picks an importer whose output is the matching mediaType.
     # See ``UserSettings.import_defaults_by_media_type`` for the value
     # shape; the field is declared as a free-form dict here because the
@@ -95,7 +95,7 @@ class AppSettingsSchema(Schema):
     # once the user has changed it from settings (so the CLI fallback no
     # longer applies). ``effective_solo_media_type`` is the resolver's
     # output the frontend should read to decide whether to hide mediaType
-    # pickers — it accounts for the CLI fallback and the explicit flag.
+    # pickers; it accounts for the CLI fallback and the explicit flag.
     solo_media_type = fields.String(allow_none=True)
     solo_media_type_explicit = fields.Boolean()
     effective_solo_media_type = fields.String(allow_none=True, dump_only=True)
@@ -176,7 +176,7 @@ class SettingsUpdateSchema(Schema):
     solo_embedder_per_media_type = fields.Raw(allow_none=True)
 
     class Meta:
-        # Reject keys we don't know — the frontend should never send
+        # Reject keys we don't know; the frontend should never send
         # settings the backend can't apply.
         unknown = "exclude"
 

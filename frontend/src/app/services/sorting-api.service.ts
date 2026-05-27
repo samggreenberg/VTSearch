@@ -128,7 +128,7 @@ export class SortingApiService {
     );
   }
 
-  /** Multipart upload — stays on plain HttpClient because ng-openapi-gen
+  /** Multipart upload; stays on plain HttpClient because ng-openapi-gen
    *  doesn't model multipart bodies (the generated function's ``$Params``
    *  has no ``body`` field). */
   exampleSort(file: File, cropParams?: Record<string, unknown>): Observable<SortResponse> {
@@ -164,7 +164,7 @@ export class SortingApiService {
   }
 
   /** Sort the loaded snapshot by similarity to an already-loaded media.
-   *  Skips re-embedding when ``crop_params`` is absent — the in-memory
+   *  Skips re-embedding when ``crop_params`` is absent; the in-memory
    *  embedding is reused directly. */
   exampleSortById(params: {
     media_id: number;
@@ -186,7 +186,7 @@ export class SortingApiService {
     }).pipe(map((r) => r.body));
   }
 
-  /** Multipart upload — see {@link exampleSort}. */
+  /** Multipart upload; see {@link exampleSort}. */
   uploadServerMediaFile(
     file: File,
     options?: { mediaType?: string; cropParams?: Record<string, unknown> },
@@ -202,7 +202,7 @@ export class SortingApiService {
     return this.http.post<ServerMediaUploadResponse>('/api/server-media-files/upload', formData);
   }
 
-  /** Multipart upload — see {@link exampleSort}. */
+  /** Multipart upload; see {@link exampleSort}. */
   labelFileSort(file: File): Observable<LabelFileSortResponse> {
     const formData = new FormData();
     formData.append('file', file);
@@ -220,7 +220,7 @@ export class SortingApiService {
   }
 
   /** ``/api/labeling-progress`` reads global state (votes, label history) and
-   *  takes no request body — the spec's ``ApiLabelingProgressPost$Params``
+   *  takes no request body; the spec's ``ApiLabelingProgressPost$Params``
    *  reflects that.  Production callers were removed; the method is kept for
    *  parity with the legacy surface. */
   getLabelingProgress(): Observable<unknown> {
@@ -240,7 +240,7 @@ export class SortingApiService {
   }
 
   /** The POST branch carries an optional ``{scores, threshold}`` body that the
-   *  backend reads via ``request.get_json(silent=True)`` — the OpenAPI spec
+   *  backend reads via ``request.get_json(silent=True)``; the OpenAPI spec
    *  intentionally omits that body so GET and POST share one declaration, so
    *  the POST call stays on plain ``HttpClient``.  The GET branch uses the
    *  generated function. */

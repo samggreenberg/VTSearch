@@ -172,7 +172,7 @@ class TestThreadDetectorContextScope:
 class TestCombinedScopes:
     def test_stacked_scopes_all_restore(self):
         """All three scopes can be stacked in a single ``with`` and
-        each restores independently on exit — the pattern used by
+        each restores independently on exit; the pattern used by
         ``vtscore/labels/sync.py:_push_with_thread_context``."""
         set_thread_user("outer_user")
         outer_ds = DatasetContext("outer_ds")
@@ -201,7 +201,7 @@ class TestCombinedScopes:
     def test_simulated_pool_reuse_does_not_leak(self):
         """Simulate a thread that runs two jobs back-to-back with
         different identities.  With the context-manager scopes, the
-        second job sees the empty thread-local on entry — proving that
+        second job sees the empty thread-local on entry, proving that
         a future ``ThreadPoolExecutor`` would not leak identity across
         jobs even though the same OS thread runs both."""
         observed = []
@@ -213,7 +213,7 @@ class TestCombinedScopes:
                 observed.append(("inside_job_1", get_thread_user()))
             observed.append(("between_jobs", get_thread_user()))
             proceed.wait(timeout=5)
-            # Job 2 — same OS thread, fresh identity
+            # Job 2: same OS thread, fresh identity
             with thread_user("user_b"):
                 observed.append(("inside_job_2", get_thread_user()))
             observed.append(("after_job_2", get_thread_user()))

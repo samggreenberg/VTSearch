@@ -40,7 +40,7 @@ covers the UI / route wiring. This guide focuses on the library API.
 subclass. The generic parameters describe the load and save shapes:
 `load()` returns a list of label dicts; `save()` accepts a `LabelSet`
 ([`vtscore/datasets/labelset.py`](../../datasets/labelset.py)). The
-two shapes differ intentionally — `load()` is the cheap path that the
+two shapes differ intentionally - `load()` is the cheap path that the
 manual-sync endpoint and detector-reload flow use, while `save()` gets
 the full structured labelset including per-element origins and
 optional detector metadata.
@@ -67,19 +67,19 @@ Expose `LABELSET_SOURCE = YourSource()` at module level.
 
 ## `load` vs. `load_full`
 
-`load()` returns the minimum — a list of label dicts the receiving
+`load()` returns the minimum - a list of label dicts the receiving
 detector can apply. The default `load_full()` wraps each dict in a
 `LabeledElement` and returns a `LabelSet(elements)`, which is enough
 for sources that only round-trip label/MD5 pairs.
 
 Override `load_full()` when your source carries detector-level
-metadata you want the receiving detector to adopt — input spec
+metadata you want the receiving detector to adopt - input spec
 (media type, embedder, clipper choice), threshold, etc. The returned
 `LabelSet.detector_meta` is folded into the detector's on-disk JSON
 via `apply_detector_meta`
 ([`vtscore/detectors/input_spec.py`](../../detectors/input_spec.py))
 on import. Threshold is intentionally **not** persisted from
-`detector_meta` — the receiving detector retrains its MLP from the
+`detector_meta` - the receiving detector retrains its MLP from the
 imported labels and computes its own threshold; remember the
 [no-persisted-vectors-or-MLPs invariant](README.md#shared-rules-for-every-plugin).
 
@@ -93,8 +93,8 @@ is the canonical reference: `load()` returns raw label dicts;
 Field values support two template variables resolved at runtime from
 the active `DetectorContext`:
 
-- `{detector_id}` — stable internal identifier
-- `{detector_name}` — user-facing detector name (may be renamed; the
+- `{detector_id}` - stable internal identifier
+- `{detector_name}` - user-facing detector name (may be renamed; the
   rename endpoint resolves both old and new paths to detect orphaned
   files)
 
@@ -120,7 +120,7 @@ inside `SERVER_ROOTS`. The built-in server-JSON source's
 
 When a source's `load()` runs, every label it applies would normally
 fire `sync_to_labelset_source()` and push the same labels back to the
-source — an infinite loop. The framework prevents this with a
+source - an infinite loop. The framework prevents this with a
 module-level `_syncing` flag in
 [`vtscore/labels/sync.py:41`](../../labels/sync.py), coordinated by a
 re-entrant `_sync_lock`. The flag is set for the duration of a
@@ -128,7 +128,7 @@ re-entrant `_sync_lock`. The flag is set for the duration of a
 `sync_to_labelset_source()` checks it (both at scheduling time and at
 execution time) to suppress the push.
 
-You don't have to do anything in your source to participate — the
+You don't have to do anything in your source to participate - the
 guard wraps the apply pass, not your `load()` or `save()`. Just know
 that:
 
@@ -350,5 +350,5 @@ class TestS3LabelsetSourceSave:
 ```
 
 The built-in [`vtscore/labels/sources/server_json_file/__init__.py`](../../labels/sources/server_json_file/__init__.py)
-is the closest reference implementation — single file, single field,
+is the closest reference implementation - single file, single field,
 both `load()` and `load_full()` overrides, atomic-write `save()`.

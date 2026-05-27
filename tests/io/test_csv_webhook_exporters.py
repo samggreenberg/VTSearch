@@ -37,7 +37,7 @@ def _make_sample_results():
 
 
 # ---------------------------------------------------------------------------
-# CSV Exporter — metadata
+# CSV Exporter: metadata
 # ---------------------------------------------------------------------------
 
 
@@ -80,7 +80,7 @@ class TestCsvExporterMetadata:
 
 
 # ---------------------------------------------------------------------------
-# CSV Exporter — CLI arguments
+# CSV Exporter: CLI arguments
 # ---------------------------------------------------------------------------
 
 
@@ -125,7 +125,7 @@ class TestCsvExporterCLI:
 
 
 # ---------------------------------------------------------------------------
-# CSV Exporter — export functionality
+# CSV Exporter: export functionality
 # ---------------------------------------------------------------------------
 
 
@@ -247,7 +247,7 @@ class TestCsvExporterExport:
 
 
 # ---------------------------------------------------------------------------
-# CSV Exporter — labels format with selected columns
+# CSV Exporter: labels format with selected columns
 # ---------------------------------------------------------------------------
 
 
@@ -467,7 +467,7 @@ class TestCsvExporterLabelsFormat:
 
 
 # ---------------------------------------------------------------------------
-# JSON Exporter — labels format with selected columns
+# JSON Exporter: labels format with selected columns
 # ---------------------------------------------------------------------------
 
 
@@ -562,7 +562,7 @@ class TestCsvExporterIntegration:
 
 
 # ---------------------------------------------------------------------------
-# Webhook Exporter — metadata
+# Webhook Exporter: metadata
 # ---------------------------------------------------------------------------
 
 
@@ -625,7 +625,7 @@ class TestWebhookExporterMetadata:
 
 
 # ---------------------------------------------------------------------------
-# Webhook Exporter — CLI arguments
+# Webhook Exporter: CLI arguments
 # ---------------------------------------------------------------------------
 
 
@@ -665,7 +665,7 @@ class TestWebhookExporterCLI:
 
 
 # ---------------------------------------------------------------------------
-# Webhook Exporter — export functionality
+# Webhook Exporter: export functionality
 # ---------------------------------------------------------------------------
 
 

@@ -7,7 +7,7 @@ split, and reporting rank-based metrics plus a production-path F1
 across seeds.
 
 The headline metrics are rank-based on purpose: VTSearch never trusts
-the model's raw score as a probability — it derives the operating
+the model's raw score as a probability - it derives the operating
 threshold via :func:`vtscore.training.thresholds.calculate_cross_calibration_threshold`
 and then applies it at inference.  So the relevant comparison is "how
 good is the ranking" (AUROC, AP, best-F1) plus "what F1 does the
@@ -93,7 +93,7 @@ def _train_svm_factory(kernel: str) -> TrainerFn:
     return trainer
 
 
-# Registry of available trainers.  Keep this dict tight — adding a new
+# Registry of available trainers.  Keep this dict tight - adding a new
 # entry here is the only place a new candidate model needs to be plugged
 # in for the sweep.
 TRAINERS: dict[str, TrainerFn] = {
@@ -310,7 +310,7 @@ _DIAGNOSTIC_METRICS: tuple[str, ...] = (
 """Kept on every row but excluded from the default summary.
 
 Brier and F1@0.5 only mean something if the score is a calibrated
-probability with 0.5 as the operating point — neither holds in VTSearch
+probability with 0.5 as the operating point - neither holds in VTSearch
 (the MLP's sigmoid is uncalibrated and the operating point is the
 cross-calibrated threshold).  They stay available for anyone debugging
 score-distribution shapes.
@@ -417,7 +417,7 @@ def evaluate_one(
     try:
         predict = trainer_fn(X_train, y_train, seed)
     except ValueError:
-        # SVM trainer raises on single-class data — guard already covered
+        # SVM trainer raises on single-class data - guard already covered
         # by the balanced sampler, but the trainer also defends itself so
         # we treat unexpected refusals as skipped cells.
         return None
@@ -556,7 +556,7 @@ def summarise(df: pd.DataFrame, *, include_diagnostics: bool = False) -> pd.Data
     mean and stddev for each metric so error bars are still computable.
 
     By default only the rank-based metrics, ``best_f1``, the cross-
-    calibrated threshold, and ``f1_at_xcal`` are aggregated — those are
+    calibrated threshold, and ``f1_at_xcal`` are aggregated - those are
     the columns that matter when downstream consumes ranks and learns
     its own threshold.  Pass ``include_diagnostics=True`` to also get
     Brier and F1@0.5 (useful if you specifically want to inspect score
@@ -567,7 +567,7 @@ def summarise(df: pd.DataFrame, *, include_diagnostics: bool = False) -> pd.Data
     metric_cols = list(_HEADLINE_METRICS)
     if include_diagnostics:
         metric_cols += list(_DIAGNOSTIC_METRICS)
-    # Keep only the metrics that are actually present in *df* — lets older
+    # Keep only the metrics that are actually present in *df* - lets older
     # callers / cached frames flow through ``summarise()`` without crashing.
     metric_cols = [c for c in metric_cols if c in df.columns]
     grouped = df.groupby(["dataset", "category", "trainer", "n_labels"], sort=False)

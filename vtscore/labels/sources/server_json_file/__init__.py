@@ -1,4 +1,4 @@
-"""Server JSON labelset source — bidirectional sync with a JSON file on the server.
+"""Server JSON labelset source - bidirectional sync with a JSON file on the server.
 
 Loads labels from, and saves labels to, a JSON file on the server
 filesystem.  The ``filepath`` field supports ``{detector_id}`` and
@@ -73,7 +73,7 @@ def resolve_filepath_for(
     """Resolve the filepath using explicit detector identity values.
 
     Used by flows that need to resolve a path for a detector other than the
-    currently-active one — notably the rename endpoint, which needs to
+    currently-active one - notably the rename endpoint, which needs to
     resolve both the OLD and NEW paths to detect an orphaned labelset file.
     The framework's per-field normalize pass can't help here because the
     detector identity isn't the active context; this helper does the

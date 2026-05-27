@@ -14,7 +14,7 @@ export class TextViewerComponent implements OnChanges, OnDestroy {
 
   text = 'Loading...';
   private sub: Subscription | null = null;
-  // See ImageViewerComponent.lastMediaId — avoid re-fetching the text payload
+  // See ImageViewerComponent.lastMediaId; avoid re-fetching the text payload
   // every time the metadata cache hydrates a new reference for the same id.
   private lastMediaId: number | null = null;
 

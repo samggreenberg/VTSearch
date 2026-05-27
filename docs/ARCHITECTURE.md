@@ -23,22 +23,22 @@ which pieces you need and how to pull them out.
 
 VTSearch is a trainable media search tool. The thing the user searches
 *with* is a **detector**: a small ranker that scores every item in a
-dataset by how well it matches. Detectors come from two places —
+dataset by how well it matches. Detectors come from two places;
 either trained in the UI from good/bad votes in a labeling pass, or
 imported/loaded from disk and applied as-is. The architecture combines:
 
-- **Detectors (learned search)** — a small MLP trained on user votes
+- **Detectors (learned search)**: a small MLP trained on user votes
   to predict good/bad labels. This is the primary search mechanism.
-  Detectors are persisted as **labelsets** (origin info + labels — never
+  Detectors are persisted as **labelsets** (origin info + labels; never
   weights; weights are an in-memory artifact, re-derived on demand from
   origins and the active embedder).
-- **Semantic sort (text-similarity search)** — LAION-CLAP (audio),
+- **Semantic sort (text-similarity search)**: LAION-CLAP (audio),
   SigLIP (images), X-CLIP (video), E5-base-v2 (text) for
   embedding-based similarity search, with alternative embedders
   available (CLAP Music, BGE). Used to seed a detector during the
   training loop, or as a quick stand-alone search.
-- **Flask web UI** — Angular SPA frontend with a REST API.
-- **Plugin systems** — nine auto-discovered plugin families: dataset
+- **Flask web UI**: Angular SPA frontend with a REST API.
+- **Plugin systems**: nine auto-discovered plugin families: dataset
   importers, results exporters, label importers, settings importers/
   exporters/sources, labelset sources, media converters, and media
   sources.
@@ -48,15 +48,15 @@ imported/loaded from disk and applied as-is. The architecture combines:
 ## Directory map
 
 The codebase is split into two top-level Python packages: **`vtscore/`**
-(the Flask-free library tier — everything ML, media, dataset, and
-plugin-related) and **`vtsearch/`** (the Flask app tier — routes,
+(the Flask-free library tier; everything ML, media, dataset, and
+plugin-related) and **`vtsearch/`** (the Flask app tier; routes,
 settings, auth, and the app-side state shim).
 
 ```
 VTSearch/
 ├── app.py                          Flask entry point, CLI arg parsing, startup
 │
-├── vtscore/                        Library tier — no Flask dependency
+├── vtscore/                        Library tier; no Flask dependency
 │   ├── config.py                   Constants (sample rates, paths, model IDs)
 │   ├── cli.py                      CLI autodetect workflow
 │   ├── cli_pipeline.py             Pipeline YAML loader
@@ -70,12 +70,12 @@ VTSearch/
 │   │   ├── audio/                  Audio media type, embedders (CLAP, CLAP-Music, CLAP-General,
 │   │   │                           AST, Whisper), clippers, SpeechExtractor
 │   │   ├── image/                  Image media type, embedders (SigLIP default; SigLIP2, CLIP,
-│   │   │                           DINOv2, DINOv3, EUPE — each with single + patch variants),
+│   │   │                           DINOv2, DINOv3, EUPE; each with single + patch variants),
 │   │   │                           clippers, ImageClassExtractor, FaceLocalizer, OCRExtractor
 │   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers
 │   │   ├── video/                  Video media type, embedders (X-CLIP default, LanguageBind,
 │   │   │                           VideoMAE), clippers
-│   │   └── document/               Document media type (no embedder — convert first), clipper
+│   │   └── document/               Document media type (no embedder; convert first), clipper
 │   │
 │   ├── converters/                 Media type converters (auto-discovered via CONVERTER sentinel)
 │   │   ├── audio2image.py          Mel/CQT spectrogram rendering
@@ -97,7 +97,7 @@ VTSearch/
 │   │   ├── matrix.py               Cached contiguous (N, D) embedding matrix on DatasetContext
 │   │   └── loader.py               initialize_models, smart_preload_in_background
 │   │
-│   ├── detectors/                  Detector lifecycle — resolve→embed→train pipeline
+│   ├── detectors/                  Detector lifecycle; resolve→embed→train pipeline
 │   │   ├── registry.py             In-memory detector registry
 │   │   ├── store.py                On-disk labelset/query store
 │   │   ├── training.py             Vote-aware training, origin-based training
@@ -158,7 +158,7 @@ VTSearch/
 │   ├── sync/                       SyncSource[LoadT, SaveT] generic base class
 │   └── utils/                      Shared helpers: hits.py (build_media_hit), synthetic/
 │
-├── vtsearch/                       Flask app tier (imports Flask — not library-safe)
+├── vtsearch/                       Flask app tier (imports Flask; not library-safe)
 │   ├── settings.py                 Persistent settings (server tier + per-user tier)
 │   ├── settings_factory.py         Accessor factories for settings.py
 │   ├── settings_models.py          Marshmallow schema helpers for settings
@@ -170,10 +170,10 @@ VTSearch/
 │   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_current_user(),
 │   │                               get_user_data_dir()
 │   │
-│   ├── state/                      App-tier state shim — re-exports vtscore.state.* and adds
+│   ├── state/                      App-tier state shim; re-exports vtscore.state.* and adds
 │   │                               proxy view (medias, good_votes, bad_votes, …) from shim/
 │   │
-│   ├── shim/                       state_proxies.py — _ProxyDict / _ProxyList per-request
+│   ├── shim/                       state_proxies.py; _ProxyDict / _ProxyList per-request
 │   │                               resolution (checks flask.g, falls back to thread-local)
 │   │
 │   ├── schemas/                    Marshmallow schemas for API serialisation
@@ -183,7 +183,7 @@ VTSearch/
 │   │   ├── exporters/              local_json_file, server_json_file
 │   │   └── sources/                server_json_file (bidirectional settings sync)
 │   │
-│   └── routes/                     Flask blueprints — all HTTP request handling
+│   └── routes/                     Flask blueprints; all HTTP request handling
 │       ├── _shared.py              Shared route helpers (request parsing, JSON safety)
 │       ├── auth.py                 /api/auth/status
 │       ├── main.py                 Root route, favicon, logo
@@ -195,12 +195,12 @@ VTSearch/
 │       ├── jobs.py                 Job management (/api/jobs/*)
 │       ├── sessions.py             Session management (/api/sessions/*)
 │       ├── achievements.py         Achievement routes (/api/achievements/*)
-│       ├── datasets/               Dataset routes — listings, load, staging, registry, status, ui
-│       ├── detectors/              Detector routes — crud, labels, registry, scoring, find
-│       ├── processors/             Processor routes — crud, scoring (extractors/localizers)
-│       ├── media/                  Media routes — list, server, embed
-│       ├── labels/                 Label routes — vote, importers, exporters
-│       └── settings/               Settings routes — api, io, sources
+│       ├── datasets/               Dataset routes; listings, load, staging, registry, status, ui
+│       ├── detectors/              Detector routes; crud, labels, registry, scoring, find
+│       ├── processors/             Processor routes; crud, scoring (extractors/localizers)
+│       ├── media/                  Media routes; list, server, embed
+│       ├── labels/                 Label routes; vote, importers, exporters
+│       └── settings/               Settings routes; api, io, sources
 │
 ├── static/                         Angular build output (HTML + CSS + JS)
 ├── frontend/                       Angular SPA source (components, services, SCSS)
@@ -284,7 +284,7 @@ modules on the right.
 - **media types do NOT import Flask.**  They return a `MediaResponse`
   dataclass; the route layer converts it to a Flask response.
 - **Most of training/ and embedding/ do NOT import Flask or global state**
-  — core functions in `training/mlp.py`, `training/thresholds.py`,
+ ; core functions in `training/mlp.py`, `training/thresholds.py`,
   `embedding/helpers.py` accept parameters only.  The exception is
   `detectors/workflow.py`, which imports `flask.g` for request-scoped
   context resolution.
@@ -309,27 +309,27 @@ modules on the right.
 
 | Module | Flask? | Global state? | Can extract standalone? |
 |--------|--------|---------------|-------------------------|
-| `vtscore/training/mlp.py` + `thresholds.py` | No | No (params) | **Yes** — pure PyTorch/sklearn |
-| `vtscore/detectors/labeling_progress.py` | No | No (params) | **Yes** — pure torch/numpy |
-| `vtscore/exporters/` (base + all) | No | No | **Yes** — pure data processing |
-| `vtscore/labels/importers/` (base + all) | No | No | **Yes** — pure data processing |
-| `vtsearch/settings_io/sources/` | No | No | **Yes** — pure file I/O |
-| `vtscore/labels/sources/` | No | No | **Yes** — pure file I/O |
-| `vtscore/labels/sync.py` | No | Yes (reads votes) | Partially — needs state for vote export |
-| `vtscore/datasets/downloader/` | No | No (callback) | **Yes** — requests only |
-| `vtscore/datasets/loader.py` | No | No (callback + params) | **Yes** — needs media registry |
-| `vtscore/datasets/importers/` (base + all) | No | No (callback) | **Yes** — each self-contained |
-| `vtscore/eval/` | No | No | **Yes** — needs media + datasets |
-| `vtsearch/settings.py` | No | No | **Yes** — JSON file I/O |
-| `vtscore/media/base.py` | No | No | **Yes** — abstract only |
-| `vtscore/media/{audio,image,text,video,document}` | No | No | **Yes** — torch + HF models |
-| `vtscore/converters/` | No | No | **Yes** — pure media conversion |
-| `vtscore/concurrency/progress.py` | No | No | **Yes** — threading only |
-| `vtscore/state/` | No | N/A (IS the state) | **Yes** — plain Python dicts |
-| `vtscore/config.py` | No | No | **Yes** — just constants |
-| `vtsearch/auth/` | No | No | **Yes** — ABC + default provider |
-| `vtsearch/routes/` | **Yes** | **Yes** | No — Flask-specific |
-| `app.py` | **Yes** | **Yes** | No — application entry point |
+| `vtscore/training/mlp.py` + `thresholds.py` | No | No (params) | **Yes**: pure PyTorch/sklearn |
+| `vtscore/detectors/labeling_progress.py` | No | No (params) | **Yes**: pure torch/numpy |
+| `vtscore/exporters/` (base + all) | No | No | **Yes**: pure data processing |
+| `vtscore/labels/importers/` (base + all) | No | No | **Yes**: pure data processing |
+| `vtsearch/settings_io/sources/` | No | No | **Yes**: pure file I/O |
+| `vtscore/labels/sources/` | No | No | **Yes**: pure file I/O |
+| `vtscore/labels/sync.py` | No | Yes (reads votes) | Partially: needs state for vote export |
+| `vtscore/datasets/downloader/` | No | No (callback) | **Yes**: requests only |
+| `vtscore/datasets/loader.py` | No | No (callback + params) | **Yes**: needs media registry |
+| `vtscore/datasets/importers/` (base + all) | No | No (callback) | **Yes**: each self-contained |
+| `vtscore/eval/` | No | No | **Yes**: needs media + datasets |
+| `vtsearch/settings.py` | No | No | **Yes**: JSON file I/O |
+| `vtscore/media/base.py` | No | No | **Yes**: abstract only |
+| `vtscore/media/{audio,image,text,video,document}` | No | No | **Yes**: torch + HF models |
+| `vtscore/converters/` | No | No | **Yes**: pure media conversion |
+| `vtscore/concurrency/progress.py` | No | No | **Yes**: threading only |
+| `vtscore/state/` | No | N/A (IS the state) | **Yes**: plain Python dicts |
+| `vtscore/config.py` | No | No | **Yes**: just constants |
+| `vtsearch/auth/` | No | No | **Yes**: ABC + default provider |
+| `vtsearch/routes/` | **Yes** | **Yes** | No: Flask-specific |
+| `app.py` | **Yes** | **Yes** | No: application entry point |
 
 ---
 
@@ -380,7 +380,7 @@ text_vec  = embedder.embed_text("birdsong")                       # same space
 
 Because the embedder sees the whole media dict (not just a `Path`), a
 service-based embedder can resolve content via `media["origin"]` /
-`media.get("custom_metadata")` without touching local disk — e.g. a
+`media.get("custom_metadata")` without touching local disk; e.g. a
 remote lookup by `origin["params"]["content_id"]`.  The loader always
 routes every pending file through `embed_media_bulk(medias)`; the ABC's
 default implementation loops per item (with progress).  Services that
@@ -464,7 +464,7 @@ and media sources) share a common `PluginBase` / `PluginField` /
    registers them lazily on first access.
 4. **CLI support** auto-generates `argparse` flags from field
    definitions.  Override `add_cli_arguments()` for custom handling.
-5. **Graceful degradation** — if a plugin's optional dependency is
+5. **Graceful degradation**; if a plugin's optional dependency is
    missing, a warning is emitted but the app continues.
 
 ### Explicitly registered plugins (media types / embedders / clippers)
@@ -500,7 +500,7 @@ owns `DatasetContext`, `DetectorContext`, `_state_lock`, and all context
 operations; **`vtsearch/state/__init__.py`** is the app-tier shim that
 re-exports everything from `vtscore.state` and adds the proxy view.  The
 module-level names below are **proxy objects** (from `vtsearch/shim/state_proxies.py`)
-that delegate to a per-request `DatasetContext` or `DetectorContext` —
+that delegate to a per-request `DatasetContext` or `DetectorContext`;
 see [Multi-dataset support](#multi-dataset-support). All mutable access
 is protected by `_state_lock` (a `threading.RLock`):
 
@@ -529,7 +529,7 @@ suggestions) and resolve via the active `DatasetContext` /
 Persistent settings live in `vtsearch/settings.py`, split across two
 tiers.  **Server tier** (shared, `data/settings.json`): `saved_datasets_dir`,
 `detectors_dir`, `max_concurrent_*`, `autorun_detectors`, `hidden_plugins`.
-**Per-user tier** (`<user_data_dir>/user_settings.json`): everything else —
+**Per-user tier** (`<user_data_dir>/user_settings.json`): everything else;
 `volume`, `theme`, `inclusion`, `enrich_descriptions`, `safe_thresholds`,
 `calibrate_count`, `calibration_fraction`, `audio_playing`, `swipe_animation`,
 `show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
@@ -542,7 +542,7 @@ via the `detectors_crud_bp` / `detectors_labels_bp` route blueprints.
 Each stores a name, text query, media type, examples list, and labelset.
 
 **Primarily Flask routes mutate this state.**  Most ML and dataset
-functions accept state as parameters — so you can use the ML code in a
+functions accept state as parameters; so you can use the ML code in a
 script or notebook by passing your own dicts. A few modules (notably
 `vtscore/detectors/workflow.py` and `vtscore/labels/sync.py`) import
 specific helpers and resolve the active context via Flask's `g` or
@@ -579,10 +579,10 @@ The module-level names (`medias`, `good_votes`, etc.) are **proxy
 objects** (`_ProxyDict` / `_ProxyList`) that delegate to the context
 resolved per-request:
 
-1. **Inside a Flask request** — the `before_request` handler reads
+1. **Inside a Flask request**; the `before_request` handler reads
    `X-Dataset-Id` and `X-Detector-Id` headers, resolves the matching
    contexts, and stashes them on Flask's `g`. Proxies check `g` first.
-2. **Outside a request** (background threads, CLI, tests) — proxies
+2. **Outside a request** (background threads, CLI, tests); proxies
    fall back to a thread-local context scoped via the
    `thread_dataset_context()` / `thread_detector_context()` context
    managers (which snapshot and restore the prior value automatically).

@@ -5,8 +5,8 @@ import { activeContextGuard } from './guards/active-context.guard';
  * Routes. The label/find views encode the active (dataset, detector)
  * pair in the URL so reload, share-link, and browser back/forward all
  * carry the pair correctly. The bare `/label` and `/find` paths are
- * legacy redirects — they have no pair to encode and would land on a
- * broken view, so we bounce them back to the Dashboard.
+ * legacy redirects (they have no pair to encode and would land on a
+ * broken view), so we bounce them back to the Dashboard.
  */
 export const routes: Routes = [
   {

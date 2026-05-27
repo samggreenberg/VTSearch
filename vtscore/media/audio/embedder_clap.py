@@ -1,4 +1,4 @@
-"""Audio embedder — CLAP (laion/clap-htsat-unfused)."""
+"""Audio embedder - CLAP (laion/clap-htsat-unfused)."""
 
 from __future__ import annotations
 

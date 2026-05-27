@@ -119,7 +119,7 @@ export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, Aft
   @Output() pathChange = new EventEmitter<{ path: string; rootPath: string }>();
 
   /** Fired when the user confirms a file (Enter on selected file, or
-   *  double-click on a file).  Folders are never emitted — they
+   *  double-click on a file).  Folders are never emitted; they
    *  navigate. */
   @Output() confirm = new EventEmitter<FolderBrowserFileEntry>();
 
@@ -300,7 +300,7 @@ export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, Aft
       if (key === 'modified') {
         return sign * ((a.modified_at || '').localeCompare(b.modified_at || ''));
       }
-      // size — directories have no size so sort by name within dirs.
+      // size: directories have no size so sort by name within dirs.
       const av = a.size_bytes ?? -1;
       const bv = b.size_bytes ?? -1;
       if (av === bv) return a.name.localeCompare(b.name);

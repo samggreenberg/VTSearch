@@ -7,23 +7,23 @@ write PNG files to a specified output directory.
 
 Charts produced by :func:`plot_eval_results`:
 
-1. **mAP by dataset** — horizontal bar chart of mean Average Precision.
-2. **AP by query** — grouped bar chart of per-query Average Precision,
+1. **mAP by dataset** - horizontal bar chart of mean Average Precision.
+2. **AP by query** - grouped bar chart of per-query Average Precision,
    one group per dataset.
-3. **P@k curves** — line chart of Precision@k for each query.
-4. **R@k curves** — line chart of Recall@k for each query.
-5. **Learned-sort F1 by category** — grouped bar chart of F1 per
+3. **P@k curves** - line chart of Precision@k for each query.
+4. **R@k curves** - line chart of Recall@k for each query.
+5. **Learned-sort F1 by category** - grouped bar chart of F1 per
    category, one group per dataset.
-6. **Learned-sort metrics breakdown** — grouped bar chart showing
+6. **Learned-sort metrics breakdown** - grouped bar chart showing
    accuracy, precision, recall, and F1 side-by-side per category.
 
 Charts produced by :func:`plot_voting_iterations`:
 
-1. **Cost over voting iterations** — line chart showing how the
+1. **Cost over voting iterations** - line chart showing how the
    inclusion-weighted cost decreases as more votes are cast.  One
    line per (dataset, category) combination; multiple seeds are
    averaged with a shaded ±1 std-dev band.
-2. **FPR / FNR over voting iterations** — similar layout, with
+2. **FPR / FNR over voting iterations** - similar layout, with
    separate lines for FPR and FNR.
 """
 

@@ -4,7 +4,7 @@ A trained MLP can produce ``NaN`` logits when training destabilises (bad
 optimisation, corrupted input embeddings, AMP overflow on CUDA, extreme
 class-weight bias from a large ``inclusion_value`` shift, etc.).
 ``torch.sigmoid(NaN)`` is ``NaN``, and ``json.dumps`` happily emits the
-literal token ``NaN`` (and ``Infinity``/``-Infinity``) by default — invalid
+literal token ``NaN`` (and ``Infinity``/``-Infinity``) by default - invalid
 JSON per RFC 7159, rejected by every browser ``JSON.parse``. A single
 poisoned response breaks the Angular client until the user clears votes.
 
@@ -17,7 +17,7 @@ sentinel:
   any sort).
 * The frontend already treats missing scores as ``-1`` (see
   ``label-list.component.ts``'s ``learnedScores[id] ?? -1``), so a
-  sanitised score renders identically to "no score yet" — no UI change.
+  sanitised score renders identically to "no score yet" - no UI change.
 """
 
 from __future__ import annotations

@@ -3,11 +3,11 @@
 Single entry point for routes that need to score the loaded media set
 against a query vector.  Handles the two cases transparently:
 
-* **Legacy single-vector media** (SigLIP, CLIP, etc.) — exactly the
+* **Legacy single-vector media** (SigLIP, CLIP, etc.) - exactly the
   same fast vectorised numpy path as before.  No ``best_region`` info
   is returned because there is none.
 
-* **Patch-region media** (DINOv2, DINOv3, EUPE) — for each media,
+* **Patch-region media** (DINOv2, DINOv3, EUPE) - for each media,
   cosine-similarity against every ``RegionVector`` in
   ``media["patch_regions"]`` (full-image, leaves, HAC internals) and
   return the **max**.  Also returns the winning region's box so the
@@ -38,7 +38,7 @@ def score_against_query(
     """Return ``(max_cosine_similarity, best_region_box)`` for *media*.
 
     *query_vec* is the embedded query (text or example image), L2-norm
-    irrelevant — we cosine-normalise here.
+    irrelevant - we cosine-normalise here.
 
     For patch-region media, we score every region vector and return the
     max along with that region's bounding box.  For legacy single-vector
@@ -96,14 +96,14 @@ def cosine_sort_with_boxes(
     """Score every media in *snap* against *query_vec*, return per-media dicts.
 
     Each result dict has ``id``, ``similarity``, and (only when the active
-    snapshot is patch-region-aware) ``best_region`` — a 4-tuple
+    snapshot is patch-region-aware) ``best_region`` - a 4-tuple
     ``(x0, y0, x1, y1)`` in normalised image coordinates.
 
-    Returns ``(results, raw_similarities)`` — *results* sorted descending
+    Returns ``(results, raw_similarities)`` - *results* sorted descending
     by similarity, *raw_similarities* in the original snapshot order
     (used by GMM threshold computation).
 
-    Performance: zero overhead for legacy single-vector snapshots — we
+    Performance: zero overhead for legacy single-vector snapshots - we
     detect them via :func:`_snapshot_has_patch_regions` and take the
     fast vectorised numpy path.  Patch-region snapshots iterate per-
     media and are O(N · K) where K is the per-image region count
@@ -125,7 +125,7 @@ def cosine_sort_with_boxes(
         results.sort(key=lambda x: x["similarity"], reverse=True)
         return results, sims
 
-    # Fast path: pure single-vector cosine — same arithmetic as the
+    # Fast path: pure single-vector cosine - same arithmetic as the
     # original _cosine_sort, retained verbatim so SigLIP / CLIP /
     # SigLIP2 datasets see zero overhead from this refactor.  The matrix
     # is reused from the active DatasetContext cache when available.

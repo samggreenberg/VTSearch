@@ -3,24 +3,24 @@
 Selected via ``--progress-format {text,json}`` on ``python app.py``. In ``text``
 mode (the default) the CLI prints human-readable prose, preserving the
 pre-flag behaviour byte-for-byte. In ``json`` mode the same status updates
-are emitted to stdout as **NDJSON** — one JSON object per line, each shaped
-``{"event": <name>, "ts": <iso8601-z>, ...}`` — so scripts and CI runners
+are emitted to stdout as **NDJSON** - one JSON object per line, each shaped
+``{"event": <name>, "ts": <iso8601-z>, ...}`` - so scripts and CI runners
 can consume progress without scraping prose or tqdm glyphs.
 
 Event names emitted today:
 
-- ``chunk_start``    — a new chunk is about to be scored
+- ``chunk_start``    - a new chunk is about to be scored
   fields: ``chunk_num`` (int), ``chunk_size`` (int)
-- ``chunks_done``    — chunked scoring finished
+- ``chunks_done``    - chunked scoring finished
   fields: ``total_medias`` (int), ``chunks`` (int)
-- ``labels_imported`` — one-shot ``--import-labels-into`` finished
+- ``labels_imported`` - one-shot ``--import-labels-into`` finished
   fields: ``detector`` (str), ``applied`` (int), ``skipped`` (int)
-- ``export_complete`` — exporter finished its run
-  fields: ``message`` (str — the exporter's own confirmation text)
-- ``progress``       — a tick from the embedding / loading stack
+- ``export_complete`` - exporter finished its run
+  fields: ``message`` (str - the exporter's own confirmation text)
+- ``progress``       - a tick from the embedding / loading stack
   fields: ``status`` (str), ``message`` (str?), ``current`` (int?),
-  ``total`` (int?), ``pct`` (float? — only when total > 0)
-- ``error``          — fatal error; the process will exit non-zero
+  ``total`` (int?), ``pct`` (float? - only when total > 0)
+- ``error``          - fatal error; the process will exit non-zero
   fields: ``message`` (str)
 
 In JSON mode every event is written to stdout (including errors), so a
@@ -69,7 +69,7 @@ def emit(
     """Emit a status update for humans or for scripts.
 
     - In ``text`` mode: writes *text* (if given) to *stream* with a trailing
-      newline and a flush. When *text* is ``None`` nothing is written —
+      newline and a flush. When *text* is ``None`` nothing is written -
       callers use this for JSON-only events that have no prose analogue.
     - In ``json`` mode: writes one NDJSON line
       ``{"event": event, "ts": ..., **fields}`` to *stream* and flushes.

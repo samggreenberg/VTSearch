@@ -3,7 +3,7 @@
 The Flask-free command-line entry points for VTSearch's autodetect
 workflow: load a dataset (from pickle or via an importer), train each
 autorun detector against it, score every media, and hand the results
-to an exporter. Three modules cooperate — `vtscore.cli` is the
+to an exporter. Three modules cooperate - `vtscore.cli` is the
 imperative pipeline (four entry-point functions plus helpers),
 `vtscore.cli_pipeline` parses YAML pipeline files into the same call
 shape, and `vtscore.cli_progress` is a tiny format-aware emitter that
@@ -17,12 +17,12 @@ functions documented here are the underlying primitives.
 
 ## When to use what
 
-- `vtscore.cli` — the supported library entry points. Call these
+- `vtscore.cli` - the supported library entry points. Call these
   directly from a Python script or a custom wrapper CLI.
-- `vtscore.cli_pipeline` — same flow, but driven by a YAML file. Use
+- `vtscore.cli_pipeline` - same flow, but driven by a YAML file. Use
   this when you want a reusable, file-shaped artefact instead of a
   long argv invocation.
-- `vtscore.cli_progress` — wire your script's `stdout`/`stderr` for
+- `vtscore.cli_progress` - wire your script's `stdout`/`stderr` for
   human vs. machine consumption. Both other modules emit through
   this; you call `set_format("json")` once at startup to flip the
   whole CLI into NDJSON mode.
@@ -31,11 +31,11 @@ All three depend on `vtscore.config.CoreConfig.from_settings()`, so
 the app-side builder must be registered before calling them in an
 app context. Library-only callers should construct a `CoreConfig`
 directly and skip these entry points entirely if they don't want the
-autodetect *workflow* — the same loaders, trainers, and exporters
+autodetect *workflow* - the same loaders, trainers, and exporters
 are accessible piece-by-piece from `vtscore.datasets`,
 `vtscore.detectors`, and `vtscore.exporters`.
 
-## `vtscore.cli` — autodetect entry points
+## `vtscore.cli` - autodetect entry points
 
 Four public entry points, all sharing the same internal `_run_pipeline`
 helper. Each variant differs only in how it produces media chunks:
@@ -50,7 +50,7 @@ helper. Each variant differs only in how it produces media chunks:
 All four take optional `settings_path`, `exporter_name`,
 `exporter_field_values`, and the keyword-only `dry_run=False`. They
 print errors via `cli_progress.emit_error()` and `sys.exit(1)` on
-failure — i.e. they're meant to be called from a `__main__`-style
+failure - i.e. they're meant to be called from a `__main__`-style
 wrapper, not as well-behaved library functions. If you want the
 library function shape, call `_run_pipeline` (private but stable).
 
@@ -133,7 +133,7 @@ autodetect_importer_main(
 Every entry point accepts `dry_run=True`. In that mode the function
 prints (or emits, in JSON format) the *plan*: which source it would
 read, which settings file it would use, which detectors would be
-trained, and which exporter would run — without loading any media or
+trained, and which exporter would run - without loading any media or
 embedding anything. Validation still happens (importer name lookup,
 exporter name lookup, exporter field validation), so a typo fails
 fast.
@@ -141,7 +141,7 @@ fast.
 In `text` format the plan is printed as labelled sections:
 
 ```
-DRY RUN — no media will be loaded, embedded, scored, or exported.
+DRY RUN - no media will be loaded, embedded, scored, or exported.
 
 Source:
   Importer: server_folder
@@ -199,11 +199,11 @@ All four entry points delegate to `_run_pipeline` (defined at
 
 Detectors whose label origins cannot be resolved from the CLI
 environment (e.g. labels collected through the browser's `local_folder`
-importer have no `resolve_file()` path) raise `ValueError` — that's a
+importer have no `resolve_file()` path) raise `ValueError` - that's a
 hard error, not a skip, because it indicates the run cannot be
 reproduced as the user expects.
 
-## `vtscore.cli_pipeline` — YAML pipeline files
+## `vtscore.cli_pipeline` - YAML pipeline files
 
 Source: `vtscore/cli_pipeline.py`. One public function:
 
@@ -228,7 +228,7 @@ dispatch.
 | `import_labels` | `{detector, file, importer?}` | Run a label importer + merge into a detector before scoring.   |
 | `exporter`      | `{name, fields?}`     | Exporter name + per-field values.                                        |
 
-Field-key validation happens against the live plugin registry — a
+Field-key validation happens against the live plugin registry - a
 typo in `importer.name` or any `fields.*` key fails at parse time
 before media touches RAM.
 
@@ -265,7 +265,7 @@ optional `import_labels` block, then dispatches to `_run_pipeline`
 with `override_detectors=config["detectors"]` so the YAML file can
 declare a detector list inline without mutating `settings.json`.
 
-## `vtscore.cli_progress` — format-aware output
+## `vtscore.cli_progress` - format-aware output
 
 Source: `vtscore/cli_progress.py`. The whole module is thread-safe by
 construction (writes go straight to `sys.stdout`/`sys.stderr` with
@@ -294,20 +294,20 @@ def progress_callback(status: str, message: str = "", current: int = 0, total: i
 
 ### Behaviour
 
-- `set_format(fmt)` — call once at startup; flag is module-global.
+- `set_format(fmt)` - call once at startup; flag is module-global.
   `"text"` (default) sends prose to stdout, errors to stderr, tqdm
   bars to stderr. `"json"` sends NDJSON to stdout and errors *also*
   to stdout so a single pipe captures the whole stream. Any other
   value raises `ValueError`.
-- `emit(event, *, text=None, stream=None, **fields)` — in `text`
+- `emit(event, *, text=None, stream=None, **fields)` - in `text`
   mode, writes *text* (when given) to *stream* with a newline +
   flush. In `json` mode, writes one NDJSON line
   `{"event": event, "ts": <iso8601-z>, **fields}` to *stream*; *text*
   is ignored. *stream* defaults to `sys.stdout`.
-- `emit_error(message)` — `Error: <message>\n` to stderr in text
+- `emit_error(message)` - `Error: <message>\n` to stderr in text
   mode, `{"event":"error",...}` to stdout in JSON mode. Caller is
   responsible for `sys.exit(1)` afterwards.
-- `progress_callback` — a drop-in `ProgressCallback`
+- `progress_callback` - a drop-in `ProgressCallback`
   (`vtscore.media.base.ProgressCallback`) that emits `progress`
   events in JSON mode and is a no-op in text mode. Pass it to any
   loader / embedder API that accepts a `progress_callback`.

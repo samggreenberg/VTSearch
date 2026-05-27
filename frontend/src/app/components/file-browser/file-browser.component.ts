@@ -13,7 +13,7 @@ import {
 /** "Text input + Browse button" field that opens an inline OS-style
  *  folder browser panel.
  *
- *  Thin wrapper around :cmp:`FolderBrowserComponent` — the field
+ *  Thin wrapper around :cmp:`FolderBrowserComponent`; the field
  *  controls open/close state and binds a ``/api/browse``-backed
  *  ``browseFn`` to the unified browser. */
 @Component({
@@ -27,7 +27,7 @@ export class FileBrowserComponent implements OnInit, OnChanges {
   /** Comma-separated extensions to filter files, e.g. ".csv,.json" */
   @Input() extensions = '';
 
-  /** Current value (path) — pre-populates the filename input. */
+  /** Current value (path): pre-populates the filename input. */
   @Input() value = '';
 
   /** Placeholder text for the manual input. */

@@ -1,4 +1,4 @@
-"""HTTP-archive media source — access media files inside a remote archive.
+"""HTTP-archive media source - access media files inside a remote archive.
 
 Downloads the archive on first access, extracts it to a temporary directory,
 and delegates all file operations to a :class:`LocalFolderSource` over the

@@ -1,4 +1,4 @@
-"""Synthetic image generation — smileys and colored shapes.
+"""Synthetic image generation - smileys and colored shapes.
 
 Each image is rendered with PIL and saved as PNG. The dataset cycles through
 two "ideas" so embedders have something semantic to distinguish:

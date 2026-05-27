@@ -42,14 +42,14 @@ settings_bp = Blueprint(
 
 # Map of update-body key → setter callable. Setters live in
 # ``vtsearch.settings`` and enforce range clamping / value validation,
-# so this module's only job is to dispatch — marshmallow already
+# so this module's only job is to dispatch; marshmallow already
 # validated the *types*.
 #
 # The training-relevant settings (``safe_thresholds``, ``calibrate_count``,
 # ``calibration_fraction``) route through ``vtsearch.state`` rather than
 # ``vtsearch.settings`` so the state setter's side-effect
 # (``invalidate_loaded_detector_models``) fires and the cached MLP /
-# threshold on every loaded detector context is dropped — otherwise
+# threshold on every loaded detector context is dropped; otherwise
 # ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` would keep
 # scoring with a threshold computed under the prior setting (M7).
 _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
@@ -134,7 +134,7 @@ def _apply_solo_embedder_per_media_type(value) -> None:
     ``None`` clears every per-type lock. Otherwise *value* must be a dict
     mapping registered media-type ids to embedder names that exist for
     that type (per :func:`vtscore.media.embedders_for_type`). An empty
-    string value is preserved as a **per-type opt-out sentinel** — it
+    string value is preserved as a **per-type opt-out sentinel**; it
     overrides the ``--solo-embedder`` CLI fallback for that type
     (analog of setting ``solo_media_type=null`` to override
     ``--solo-media-type``). Any other invalid pairing raises 400.
@@ -156,7 +156,7 @@ def _apply_solo_embedder_per_media_type(value) -> None:
         if mt not in valid_types:
             abort(400, message=f"Unknown media type: {mt!r}. Valid: {sorted(valid_types)}")
         if raw_emb is None or (isinstance(raw_emb, str) and not raw_emb.strip()):
-            # Per-type opt-out sentinel — preserve so it overrides the
+            # Per-type opt-out sentinel: preserve so it overrides the
             # CLI fallback. ``None`` is normalised to "" here.
             cleaned[mt] = ""
             continue
@@ -194,8 +194,8 @@ def _apply_dir(key: str, value: str, setter) -> None:
 def get_settings():
     """Return the merged server + per-user settings dict.
 
-    Augments the persisted dict with ``effective_solo_media_type`` — the
-    resolver's view of the per-user value plus the CLI fallback. The
+    Augments the persisted dict with ``effective_solo_media_type``, which is
+    the resolver's view of the per-user value plus the CLI fallback. The
     frontend reads only this key when deciding whether to hide mediaType
     pickers; the raw ``solo_media_type`` / ``solo_media_type_explicit``
     pair is still exposed for the settings UI to render the current state.

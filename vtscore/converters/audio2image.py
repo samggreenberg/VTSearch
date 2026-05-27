@@ -97,7 +97,7 @@ def _get_png_dimensions(png_bytes: bytes, Image) -> tuple[int | None, int | None
 class Audio2ImageMediaConverter(MediaConverter):
     """Render an audio file as a mel-spectrogram (or CQT) PNG image.
 
-    Unlocks image embedders (SigLIP, DINOv3, etc.) over audio data — useful
+    Unlocks image embedders (SigLIP, DINOv3, etc.) over audio data - useful
     for cross-model ensembling and for visually spotting recurring spectral
     patterns.
 
@@ -201,7 +201,7 @@ class Audio2ImageMediaConverter(MediaConverter):
             n_mels = int(self.get_param(params, "n_mels") or 128)
         except (TypeError, ValueError):
             n_mels = 128
-        # Defensive clamp to the declared PluginField range — the upstream
+        # Defensive clamp to the declared PluginField range - the upstream
         # plugin schema enforces this for any API-supplied params, but direct
         # callers of convert() (tests, ad-hoc scripts) skip that path.
         n_mels = max(8, min(512, n_mels))

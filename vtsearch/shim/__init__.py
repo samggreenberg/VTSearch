@@ -2,7 +2,7 @@
 and the Flask request lifecycle.
 
 The library is being split into a Flask-free ``vtscore`` and a Flask-
-wrapping ``vtsearch`` app — see ``../../vtscore/docs/architecture.md``.  Any
+wrapping ``vtsearch`` app - see ``../../vtscore/docs/architecture.md``.  Any
 piece of code that wants to read or override the per-request
 ``DatasetContext`` / ``DetectorContext`` via ``flask.g`` belongs here
 so the core package can stay import-clean.
@@ -27,7 +27,7 @@ def _flask_dataset_context_resolver() -> Any:
     the *previous* request's context for inspection (``with
     app.test_client() as c:`` blocks pop-and-keep the request context
     so the caller can read ``session`` / ``g`` after the response).
-    Inside that window we are no longer in the active handler — falling
+    Inside that window we are no longer in the active handler - falling
     back to the thread-local matches what the next real request would
     see (and what production code, which never has a preserved context,
     always saw). The ``before_request`` hook sets
@@ -39,7 +39,7 @@ def _flask_dataset_context_resolver() -> Any:
     request explicitly named a dataset (``X-Dataset-Id`` header or
     ``?dataset_id=`` query param) that is not loaded. Without this, the
     proxy silently resolved to the empty context and the client saw
-    stale data — logical-bug-audit H16.
+    stale data - logical-bug-audit H16.
     """
     from flask import g, has_request_context
 
@@ -82,7 +82,7 @@ def _flask_in_request_handler_predicate() -> bool:
     preserves the popped request context inside ``with app.test_client()
     as c:`` blocks so the caller can inspect ``session`` / ``g`` after
     the response. Inside that preserved window we are no longer "in a
-    request" — code that mutates state (e.g. a test's
+    request" - code that mutates state (e.g. a test's
     ``app_module.medias.update(saved)`` restore in ``finally``) should
     write to the real context, not refuse via the request-missing
     sentinel.
@@ -110,7 +110,7 @@ def register_flask_context_resolvers() -> None:
     predicate so :func:`vtscore.state.core.get_active_context` returns the
     frozen request-missing sentinel (rather than the global empty
     context) when a request arrives without an ``X-Dataset-Id`` /
-    ``X-Detector-Id`` header — see ``docs/plans/logical-bug-audit.md``
+    ``X-Detector-Id`` header - see ``docs/plans/logical-bug-audit.md``
     H13 / H16.
     """
     from vtscore.state.core import (
@@ -149,7 +149,7 @@ def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
 
     The app-side implementation of :meth:`CoreConfig.from_settings`.  Lives
     here so the library file ``vtsearch/config.py`` never imports
-    ``vtsearch.settings`` — see Phase 8 of
+    ``vtsearch.settings`` - see Phase 8 of
     ``../../vtscore/docs/architecture.md``.
 
     When *settings_path* is given, the server-tier settings file path is
@@ -197,7 +197,7 @@ def register_app_plugin_families() -> None:
     :mod:`vtsearch.settings_io`, which is app-tier (it round-trips
     ``vtsearch.settings`` to disk).  Registering them here keeps
     ``vtscore.plugins.inventory`` free of any ``vtsearch.settings_io``
-    import — see ``../../vtscore/docs/architecture.md`` Phase 5.
+    import - see ``../../vtscore/docs/architecture.md`` Phase 5.
 
     Called once at Flask app startup, before the argparse parser is built
     so ``--list-settings-importers`` and friends get their shortcut flags.

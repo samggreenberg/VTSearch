@@ -65,7 +65,7 @@ class TestSymlinkedImporterDiscovery:
 
     def test_dotted_symlink_name_is_skipped(self, tmp_path):
         """A symlink whose name contains a dot (e.g. 'foo.symbolic_link')
-        should be silently skipped — dots in directory names break importlib
+        should be silently skipped; dots in directory names break importlib
         module path construction."""
         import os
         import sys
@@ -259,7 +259,7 @@ class TestGlobTopLevelSymlinks:
         """Non-recursive scans deliberately do not descend into folders.
 
         A symlink that points at a directory therefore stays out of the
-        result set — only top-level *files* (real or symlinked) are
+        result set; only top-level *files* (real or symlinked) are
         returned.
         """
         from vtscore.security.path_validation import glob_top_level

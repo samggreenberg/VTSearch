@@ -16,7 +16,7 @@ import numpy as np
 # Sentinel threshold meaning "predict nothing as Good". Sigmoid scores are
 # in [0, 1], so any value > 1.0 makes every ``score >= threshold`` check
 # evaluate to False. Kept finite (vs. ``float("inf")``) so it cannot poison
-# downstream blends — ``0.0 * inf`` evaluates to NaN, which would then be
+# downstream blends - ``0.0 * inf`` evaluates to NaN, which would then be
 # stored on ``DetectorContext.threshold`` and break every comparison.
 NO_GOOD_THRESHOLD = 2.0
 
@@ -82,8 +82,8 @@ def _calibration_cache_key(
     these inputs (the RNG is seeded with 42 at every call site that uses the
     cache), so two calls with matching keys must produce the same threshold.
     The key encodes the raw training vectors (not just the label IDs) so that
-    a labelset re-resolved to different embeddings — e.g. after the embedder
-    changes — invalidates the cache automatically.
+    a labelset re-resolved to different embeddings - e.g. after the embedder
+    changes - invalidates the cache automatically.
     """
     X_bytes = np.stack(X_list).astype(np.float32, copy=False).tobytes()
     y_bytes = np.asarray(y_list, dtype=np.float32).tobytes()
@@ -118,7 +118,7 @@ def cross_calibration_threshold_cached(
     same number we computed last time.
 
     A real label change produces a different cache key and falls through
-    to a fresh calibration — no explicit invalidation needed.
+    to a fresh calibration - no explicit invalidation needed.
     """
     if det_ctx is not None:
         key = _calibration_cache_key(
@@ -294,7 +294,7 @@ def calculate_cross_calibration_threshold(
     if n_train < 2 or n_cal < 1:
         return NO_GOOD_THRESHOLD
 
-    # Stratify by class so every fold's train side has both classes — an
+    # Stratify by class so every fold's train side has both classes - an
     # unstratified random split could produce a single-class y_train on
     # small or skewed labelsets, and ``train_model`` (correctly) refuses
     # to fit BCE on that.  Needs at least two of each class to guarantee

@@ -66,7 +66,7 @@ def _print_dry_run_plan(
     exporter_field_values: dict[str, Any] | None,
 ) -> None:
     """Print the autodetect plan that ``--dry-run`` would otherwise execute."""
-    print("DRY RUN — no media will be loaded, embedded, scored, or exported.", flush=True)
+    print("DRY RUN - no media will be loaded, embedded, scored, or exported.", flush=True)
     print("", flush=True)
 
     print("Source:", flush=True)
@@ -88,13 +88,13 @@ def _print_dry_run_plan(
 
     print(f"Settings: {settings_path or '(default: data/settings.json)'}", flush=True)
     if not autorun_detectors:
-        print("Autorun detectors: (none — pipeline would abort with an error)", flush=True)
+        print("Autorun detectors: (none - pipeline would abort with an error)", flush=True)
     else:
         summaries = _summarize_autorun_detectors(autorun_detectors)
         print(f"Autorun detectors ({len(summaries)}):", flush=True)
         for s in summaries:
             if s.get("missing"):
-                print(f"  - {s['name']}  [MISSING — {s['path']}]", flush=True)
+                print(f"  - {s['name']}  [MISSING - {s['path']}]", flush=True)
             else:
                 print(
                     f"  - {s['name']}  [media_type={s['media_type'] or '?'}, labels={s['labels']}, file={s['path']}]",
@@ -102,7 +102,7 @@ def _print_dry_run_plan(
                 )
     print("", flush=True)
 
-    print(f"Exporter: {exporter_name or 'gui (default — print to console)'}", flush=True)
+    print(f"Exporter: {exporter_name or 'gui (default - print to console)'}", flush=True)
     if exporter_field_values:
         for k, v in exporter_field_values.items():
             print(f"  {k}: {v if v != '' else '(empty)'}", flush=True)
@@ -128,12 +128,12 @@ def _load_and_train_detectors(
     from the resulting vectors.  Detectors whose ``media_type`` doesn't match
     the dataset are skipped with a warning.  Detectors that declare an
     ``input_spec`` (a clipper the detector was trained on) are also skipped
-    when the loaded dataset wasn't clipped to match — the resulting
+    when the loaded dataset wasn't clipped to match - the resulting
     embeddings would be from a different granularity and the scores would
     be meaningless.
 
     Returns a ``{name: {"mlp": nn.Sequential, "threshold": float}}`` map.
-    Raises :class:`ValueError` if a detector cannot be trained — for example
+    Raises :class:`ValueError` if a detector cannot be trained - for example
     when none of its labels' origin files are resolvable from the CLI
     environment.
     """
@@ -203,7 +203,7 @@ def _load_and_train_detectors(
             raise ValueError(
                 f"Detector '{det_name}': could not train MLP "
                 f"(resolved {cached} of {total} label origins, need ≥1 good and ≥1 bad). "
-                "The original media may not be reachable from the CLI — for example, "
+                "The original media may not be reachable from the CLI - for example, "
                 "labels collected through the local_folder importer have no resolve_file() path."
             )
         out[det_name] = {"mlp": det_ctx.model, "threshold": det_ctx.threshold}
@@ -383,7 +383,7 @@ def _renumber_chunks(
     """Re-issue media IDs across a chunk stream so they are globally unique.
 
     Every chunked importer (and every chunked pickle/folder loader) emits
-    chunks whose IDs restart at 1 — the in-process consumer
+    chunks whose IDs restart at 1 - the in-process consumer
     :func:`vtscore.datasets.load_pipeline.consume_chunks_into` renumbers
     them as it drains. The CLI pipeline scores each chunk independently
     and merges the per-chunk hit lists, so without renumbering the hits
@@ -525,7 +525,7 @@ def _train_detectors_for_first_chunk(
 ) -> dict[str, dict[str, Any]]:
     """Train each autorun (or override) detector once against the first chunk.
 
-    Raises :class:`ValueError` when no detector applies to *media_type* —
+    Raises :class:`ValueError` when no detector applies to *media_type* -
     that's almost always a settings-file misconfiguration the caller wants
     surfaced immediately.
     """
@@ -636,8 +636,8 @@ def _run_pipeline(
     from vtscore.config import CoreConfig
 
     # Build the runtime config once (routing the optional settings_path
-    # redirect through the same call) so this function — and the helpers
-    # below — never import ``vtsearch.settings`` directly.
+    # redirect through the same call) so this function - and the helpers
+    # below - never import ``vtsearch.settings`` directly.
     config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
     autorun_detectors = list(config.autorun_detectors)
 

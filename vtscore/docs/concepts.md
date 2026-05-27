@@ -3,20 +3,20 @@
 Eight ideas show up in every `vtscore` package. Read this once and the
 package docs read smoothly.
 
-1. [Media](#1-media) — what the library actually moves around.
-2. [Embedding](#2-embedding) — the fixed-dimensional vector for a media item.
-3. [Origin](#3-origin) — provenance: how to find a media item again.
-4. [LabelSet / LabeledElement](#4-labelset--labeledelement) — voted labels with provenance.
-5. [Embedder](#5-embedder) — the model that turns a file into an embedding.
-6. [Detector](#6-detector) — the MLP + threshold that scores embeddings.
-7. [Context](#7-context) — per-dataset / per-detector mutable state holder.
-8. [Plugin](#8-plugin) — auto-discovered, swappable component of any family.
+1. [Media](#1-media) - what the library actually moves around.
+2. [Embedding](#2-embedding) - the fixed-dimensional vector for a media item.
+3. [Origin](#3-origin) - provenance: how to find a media item again.
+4. [LabelSet / LabeledElement](#4-labelset--labeledelement) - voted labels with provenance.
+5. [Embedder](#5-embedder) - the model that turns a file into an embedding.
+6. [Detector](#6-detector) - the MLP + threshold that scores embeddings.
+7. [Context](#7-context) - per-dataset / per-detector mutable state holder.
+8. [Plugin](#8-plugin) - auto-discovered, swappable component of any family.
 
 ---
 
 ## 1. Media
 
-A **media item** is a Python dict — not a class, not a dataclass — keyed by
+A **media item** is a Python dict - not a class, not a dataclass - keyed by
 sequential integer IDs starting at 1. The dict shape is the library's
 internal interchange format; every importer, embedder, exporter, and
 detector reads and writes media dicts.
@@ -49,7 +49,7 @@ must preserve the base contract.
 The dict-of-dicts representation is deliberate:
 
 - Cheap to serialise (it's already JSON-shaped except for the embedding).
-- Easy to project — `[m["embedding"] for m in medias.values()]` builds the
+- Easy to project - `[m["embedding"] for m in medias.values()]` builds the
   training matrix in one line.
 - No risk of accidental method calls or stale class instances after a
   pickle round-trip.
@@ -73,7 +73,7 @@ The library also maintains a **cached embedding matrix** per
 `DatasetContext`: a contiguous `(N, D)` float32 array built lazily by
 `vtscore.embedding.matrix.get_embedding_matrix(ctx)` and reused across
 cosine sort, MLP scoring, and diversity-tree construction. The cache lives
-in process memory only — it's never persisted — and is invalidated when
+in process memory only - it's never persisted - and is invalidated when
 the underlying `medias` dict changes.
 
 ## 3. Origin
@@ -148,7 +148,7 @@ restored = LabelSet.from_json(json_str)
 `LabelSet` round-trips through JSON for detector storage and through
 plain dicts for the labelset-source / labelset-exporter plugin contracts.
 `LabeledElement.metadata` is the recommended escape hatch for per-label
-data that doesn't fit the core fields — it survives every serialisation
+data that doesn't fit the core fields - it survives every serialisation
 boundary.
 
 ## 5. Embedder
@@ -167,13 +167,13 @@ class MediaEmbedder:
         """Return (N, D) float32 array, one row per file."""
 
     def embed_text(self, query: str) -> np.ndarray:
-        """Return (D,) float32 — the text-query embedding in the same space."""
+        """Return (D,) float32 - the text-query embedding in the same space."""
 
     def forward_patches(self, path: Path) -> np.ndarray:
         """Optional. Return (P, D) for patch-level scoring."""
 ```
 
-Embedders are **lazy** — the model is downloaded and constructed on first
+Embedders are **lazy** - the model is downloaded and constructed on first
 use, then cached process-wide. The cache lives in `CoreConfig.data_dir /
 "models"` by default. Embedders that wrap multimodal models implement
 `embed_text` so a text query can seed a sort or a detector in the same
@@ -202,7 +202,7 @@ input  (D,)
 
 Training (`vtscore.training.train_model`):
 
-- Class-weighted BCE-with-logits — weight controlled by
+- Class-weighted BCE-with-logits - weight controlled by
   `inclusion_value ∈ [-10, +10]` (positive biases toward more recalled
   positives, negative biases toward fewer false positives).
 - Local `torch.Generator` seeded with the caller-supplied seed
@@ -232,10 +232,10 @@ happens to be.
 A **`DatasetContext`** holds all mutable state belonging to one loaded
 dataset:
 
-- `medias: dict[int, dict]` — the media items.
-- `diversity_tree` — hierarchical clustering for max-diversity sampling.
-- `dataset_display_name: str | None` — human-readable name.
-- `_emb_matrix_ids` / `_emb_matrix` — the cached `(N, D)` matrix and the
+- `medias: dict[int, dict]` - the media items.
+- `diversity_tree` - hierarchical clustering for max-diversity sampling.
+- `dataset_display_name: str | None` - human-readable name.
+- `_emb_matrix_ids` / `_emb_matrix` - the cached `(N, D)` matrix and the
   sorted media-id list it corresponds to.
 
 A **`DetectorContext`** holds all mutable state belonging to one loaded
@@ -247,7 +247,7 @@ detector:
   `model`, `threshold`, `calibration_cache`.
 - Cached labelset: `cached_labelset`, `cached_labelset_mtime`,
   `cached_labelset_media_type` (so a re-train doesn't re-parse JSON).
-- Cross-dataset counts: `labelset_good_count`, `labelset_bad_count` —
+- Cross-dataset counts: `labelset_good_count`, `labelset_bad_count` -
   enable "Sort by Learned" even when the active dataset isn't the one
   the detector was trained on.
 - Sync state: `labelset_source` (dict of `{source_name, field_values}`).

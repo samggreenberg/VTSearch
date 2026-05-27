@@ -448,7 +448,7 @@ class TestCdnDecompressedTarGz:
         misnamed = tmp_path / "test.tar.gz"
         tar_path.rename(misnamed)
 
-        # Should not raise — the file is a valid tar even without gzip.
+        # Should not raise; the file is a valid tar even without gzip.
         dl_module._validate_archive(misnamed, "test.tar.gz", "Test")
 
     def test_raw_tar_with_tar_gz_name_extracts(self, tmp_path):
@@ -602,7 +602,7 @@ class TestConcurrentDownloads:
         errors: list[Exception] = []
 
         def slow_download(url, dest, size, cb):
-            """Simulate a slow download — both threads start before either finishes."""
+            """Simulate a slow download; both threads start before either finishes."""
             shutil.copy(str(source_zip), str(dest))
             barrier.wait()  # ensure both threads are mid-download
 

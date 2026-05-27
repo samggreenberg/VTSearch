@@ -6,13 +6,13 @@ users who have already embedded their data don't have to re-embed it.
 
 Two NPZ layouts are supported:
 
-1. **filenames + vectors** (preferred) — Two top-level arrays,
+1. **filenames + vectors** (preferred) - Two top-level arrays,
    ``filenames`` (1-D string-like) and ``vectors`` (2-D float).  The
    i-th filename maps to the i-th row of ``vectors``.  Produced e.g. by
    ``np.savez(path, filenames=names, vectors=vecs)``.  This is the
    memory-efficient form: the vectors live in one contiguous array, and
    per-row ``np.asarray`` calls return cheap views rather than copies.
-2. **per-key** — Each archive key is a filename and the corresponding
+2. **per-key** - Each archive key is a filename and the corresponding
    value is its vector.  Produced e.g. by
    ``np.savez(path, **{name: vec for name, vec in zip(names, vecs)})``.
    Convenient but materialises every row into its own ndarray in a Python

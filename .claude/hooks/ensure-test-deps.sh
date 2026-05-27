@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Lazy dependency installer — only runs pip install the first time.
+# Lazy dependency installer: only runs pip install the first time.
 # Called before test/app commands that actually need the full stack.
 # Skips entirely outside remote (Claude Code on the web) environments.
 
@@ -14,7 +14,7 @@ fi
 # session's marker and forces the install block to re-run.  Without this,
 # a long-lived container that ran an older version of the script would
 # keep short-circuiting at the `-f $MARKER` check forever, even after the
-# repo was updated to require new install steps — e.g. the pip-audit
+# repo was updated to require new install steps, e.g. the pip-audit
 # system-package upgrade block added in `e3eb87fd` was silently skipped
 # on containers whose marker was created before that fix landed.
 SCRIPT_HASH="$(sha256sum "${BASH_SOURCE[0]}" | cut -d' ' -f1 | cut -c1-12)"
@@ -29,7 +29,7 @@ echo "Installing project dependencies (first test run this session)..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/../.."
 
-# Upgrade setuptools first — the system version (68.x) has a broken
+# Upgrade setuptools first; the system version (68.x) has a broken
 # install_layout attribute that prevents building wheels for some packages
 # (progressbar, wget) needed by laion_clap.
 pip install --upgrade setuptools -q

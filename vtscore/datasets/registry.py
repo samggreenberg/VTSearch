@@ -37,12 +37,12 @@ def get_saved_datasets_dir() -> Path:
     return CoreConfig.from_settings().saved_datasets_dir
 
 
-# Backward-compat alias — prefer :func:`get_saved_datasets_dir` for live value.
+# Backward-compat alias - prefer :func:`get_saved_datasets_dir` for live value.
 SAVED_DATASETS_DIR = DATA_DIR / "saved_datasets"
 
 _lock = threading.RLock()
 
-# In-memory cache — loaded once from disk, written back on every mutation.
+# In-memory cache - loaded once from disk, written back on every mutation.
 _entries: list[dict[str, Any]] | None = None
 
 # The set of dataset IDs that are currently loaded in memory.

@@ -54,7 +54,7 @@ def _ensure_angular_bundle() -> None:
             allow_module_level=True,
         )
     try:
-        subprocess.run(  # noqa: S603 — npm resolved via shutil.which, args constant
+        subprocess.run(  # noqa: S603  # npm resolved via shutil.which, args are constant
             [npm, "run", "build:prod"],
             cwd=_FRONTEND_DIR,
             check=True,
@@ -307,7 +307,7 @@ class TestVersionResolution:
         from vtsearch import _version_from_git
 
         version = _version_from_git()
-        assert version is not None, "tests run from a git checkout — git resolution must succeed"
+        assert version is not None, "tests run from a git checkout; git resolution must succeed"
         assert version.endswith("Z")
 
     def test_file_resolver_reads_baked_version(self, tmp_path, monkeypatch):

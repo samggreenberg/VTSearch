@@ -7,7 +7,7 @@ renders the leaf + HAC-internal bounding-box overlays as PNGs, and
 writes a markdown report under ``docs/experiments/hac-tree-sweep/``.
 
 Places365 is closer to the application's actual imagery (varied
-real-world scenes — indoor rooms, outdoor natural + man-made
+real-world scenes - indoor rooms, outdoor natural + man-made
 environments) than the cropped-object photos of caltech-101, so the
 visual review is more representative of what users will see.
 
@@ -63,12 +63,12 @@ def sample_places365_paths(places_dir: Path, n: int, seed: int) -> list[tuple[Pa
     mapping each filename to one of 365 scene categories.  We parse the
     label file, group by category, shuffle each category's file list,
     then round-robin one image from each shuffled category until we
-    have *n* — the same strategy used previously for caltech-101's
+    have *n* - the same strategy used previously for caltech-101's
     nested category dirs, so the sample spans many scene types rather
     than concentrating on a few.
 
     Returns ``(path, category_name)`` pairs.  We need the category
-    explicitly because the on-disk layout is flat — the parent dir is
+    explicitly because the on-disk layout is flat - the parent dir is
     just ``val_256/`` for everything.
     """
     from vtscore.datasets.metadata import load_places365_metadata
@@ -121,7 +121,7 @@ def load_dinov2() -> _Backbone:
     model_id = "facebook/dinov2-base"
     print(f"  loading {model_id} (this may download ~350MB on first run)…", flush=True)
     # Force eager attention so output_attentions=True actually returns
-    # weights — recent transformers default to SDPA which drops them.
+    # weights - recent transformers default to SDPA which drops them.
     model = AutoModel.from_pretrained(
         model_id,
         low_cpu_mem_usage=True,
@@ -161,7 +161,7 @@ def _cell_mask_of(regions: list[RegionVector], idx: int) -> np.ndarray:
     Walks ``children`` until it bottoms out at leaves, then ORs their
     ``cell_mask`` arrays.  Leaf cell masks are disjoint by construction
     (Voronoi-by-spatial-distance), so the union is exactly the set of
-    patch cells underneath this node — the *true* polygonal footprint,
+    patch cells underneath this node - the *true* polygonal footprint,
     not the loose bounding box.
     """
     node = regions[idx]
@@ -194,7 +194,7 @@ def _render_cell_thumb(
     cell union, then fit inside *size* with aspect-preserving resize.
 
     This shows the union-of-cells footprint, not the loose bounding
-    rectangle — so an L-shaped leaf actually looks L-shaped, and an
+    rectangle - so an L-shaped leaf actually looks L-shaped, and an
     internal whose merge added cells "inside" its child's bbox is
     visibly different from that child.
     """
@@ -243,10 +243,10 @@ def _render_cell_thumb(
 
 
 def _layout_tree(regions: list[RegionVector], k: int) -> tuple[list[float], list[int], int]:
-    """Assign each HAC node a (column, row) position — planar.
+    """Assign each HAC node a (column, row) position - planar.
 
     Strategy: in-order DFS from the root.  Every binary tree admits a
-    planar embedding via in-order traversal — each subtree occupies a
+    planar embedding via in-order traversal - each subtree occupies a
     contiguous range of leaf columns, so siblings never cross.  At each
     merge we visit the child whose subtree contains the *leftmost-x* leaf
     (by box centroid) first; that makes the global left-to-right leaf
@@ -259,7 +259,7 @@ def _layout_tree(regions: list[RegionVector], k: int) -> tuple[list[float], list
     hac = regions[1:]
     n = len(hac)
 
-    # Leaf centroid x (image coords) — used only to decide left vs right
+    # Leaf centroid x (image coords) - used only to decide left vs right
     # at each merge, never to override the tree structure.
     leaf_cx: dict[int, float] = {i: (hac[i].box[0] + hac[i].box[2]) / 2.0 for i in range(k)}
     # min(leaf_cx) over each subtree, computed bottom-up over the HAC build
@@ -319,7 +319,7 @@ def render_config_tree(
       tree leaves the upper-left corner empty, so the original image
       tucks into that staircase),
     * HAC internal merge nodes in the middle (each masked to the *union
-      of patch cells* under the node — not its loose bounding box),
+      of patch cells* under the node - not its loose bounding box),
     * HAC leaves along the bottom (each masked to its cell footprint),
     * solid grey edges connecting parents to their two children.
 
@@ -328,7 +328,7 @@ def render_config_tree(
     merge strictly grows the cell set (leaves are non-empty and
     disjoint by construction, so the union is always larger than
     either child).  A previous version of this view dashed edges where
-    the *loose bounding rectangle* happened to equal a child's box —
+    the *loose bounding rectangle* happened to equal a child's box -
     but that's an artifact of the rectangle, not the underlying region
     the MLP and similarity rule pool over.
     """
@@ -377,7 +377,7 @@ def render_config_tree(
         s_x = (cx - thumb / 2 - img_origin_x) / img_w_orig
         s_y = (cy - thumb / 2 - img_origin_y) / img_h_orig
         node_caps.append(max(s_x, s_y))
-    # Also clamp by the canvas itself — the image must not extend past
+    # Also clamp by the canvas itself - the image must not extend past
     # the right edge or the bottom margin.
     s_canvas_w = (canvas_w - margin - img_origin_x) / img_w_orig
     s_canvas_h = (canvas_h - margin - img_origin_y) / img_h_orig
@@ -400,7 +400,7 @@ def render_config_tree(
     # ---- edges (drawn first so thumbnails sit on top) ----------------------
     # All edges are solid grey.  Earlier we dashed edges where the
     # parent's *bbox* equalled a child's bbox, but in patch-cell space
-    # the parent's cell set always strictly grows on every merge — so
+    # the parent's cell set always strictly grows on every merge - so
     # the "duplicate" only existed in rectangle-land and was misleading
     # for a viewer reasoning about what the MLP / similarity rule
     # actually sees.
@@ -452,9 +452,9 @@ def load_or_compute_patch(
 ) -> PatchEmbedOutput | None:
     """Return a cached :class:`PatchEmbedOutput` or run a forward pass.
 
-    The cache is throwaway — feel free to ``rm -rf docs/experiments/
+    The cache is throwaway - feel free to ``rm -rf docs/experiments/
     hac-tree-sweep/cache`` to force re-inference.  Cached arrays are
-    float32 (small enough — ~600 KB per image at 16×16×768).
+    float32 (small enough - ~600 KB per image at 16×16×768).
     """
     if cache_path.exists():
         with np.load(cache_path) as z:
@@ -504,21 +504,21 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
     directly comparable across K and α.
 
     Keys returned:
-      * ``leaf_area_mean``           — mean leaf box area (1/K is uniform).
-      * ``leaf_area_std``            — std of leaf areas (high = imbalanced).
-      * ``leaf_overlap_max``         — max IoU between any two leaves
+      * ``leaf_area_mean``           - mean leaf box area (1/K is uniform).
+      * ``leaf_area_std``            - std of leaf areas (high = imbalanced).
+      * ``leaf_overlap_max``         - max IoU between any two leaves
         (leaves should be near-disjoint, so this should be near 0).
-      * ``internal_area_mean``       — mean HAC-internal box area.
-      * ``root_area``                — area of the final merge box; ideally
+      * ``internal_area_mean``       - mean HAC-internal box area.
+      * ``root_area``                - area of the final merge box; ideally
         close to 1.0 (root recovers the whole image).
-      * ``merge_balance``            — mean over internals of
+      * ``merge_balance``            - mean over internals of
         ``min(|left|, |right|) / max(|left|, |right|)`` where ``|·|`` is
         the subtree size in patch cells (= sum of leaf areas).  1.0 is
         perfectly balanced, ~0.1 is degenerate-chain.
-      * ``area_growth``              — mean ratio of internal area to
+      * ``area_growth``              - mean ratio of internal area to
         sum of its children's areas; ≈ 1 means children are adjacent,
         > 1 means the merge introduces a lot of empty bounding box.
-      * ``cell_noop_rate``           — fraction of internal merges
+      * ``cell_noop_rate``           - fraction of internal merges
         whose **patch-cell union** is identical to one of its children's
         cell sets.  This is the right "did the merge actually produce
         a new region?" check (the MLP and similarity rule pool over
@@ -562,7 +562,7 @@ def measure_config(regions: list[RegionVector], k: int) -> dict[str, float]:
             growths.append(area_node / area_children_sum)
         # Compare the actual patch-cell sets the MLP / similarity rule
         # see, not the loose rectangles.  Leaves are non-empty disjoint,
-        # so this is always False — we tally it to publish the invariant.
+        # so this is always False - we tally it to publish the invariant.
         parent_mask = _cell_mask_of(regions, offset + 1)
         left_mask = _cell_mask_of(regions, ci)
         right_mask = _cell_mask_of(regions, cj)
@@ -675,7 +675,7 @@ def main() -> None:
         out = load_or_compute_patch(bb, image, cache_path)
         timings.append(time.perf_counter() - t0)
         if out is None:
-            print(f"  [{idx}] {image_label}: patch_forward returned None — skipping")
+            print(f"  [{idx}] {image_label}: patch_forward returned None - skipping")
             continue
         cls_vectors.append(out.cls_vec)
         image_labels.append(image_label)
@@ -687,7 +687,7 @@ def main() -> None:
                 config_metrics[(k, alpha)].append(measure_config(regions, k=k))
                 config_regions[(k, alpha)] = regions
 
-        # Default-config single tree — the headline visualization.
+        # Default-config single tree - the headline visualization.
         default_key = (args.default_k, args.default_alpha)
         tree = render_config_tree(
             image,
@@ -751,10 +751,10 @@ def write_report(
     mean_forward_s: float,
 ) -> None:
     lines: list[str] = []
-    lines.append("# HAC tree (K, α) sweep — Places365")
+    lines.append("# HAC tree (K, α) sweep - Places365")
     lines.append("")
     lines.append(
-        "Throwaway experiment for `docs/plans/patch-embedder.md` — "
+        "Throwaway experiment for `docs/plans/patch-embedder.md` - "
         f"confirms the K={default_k}, α={default_alpha} defaults pinned in "
         "`vtsearch/datasets/loader_folder.py::_attach_patch_regions`."
     )
@@ -763,7 +763,7 @@ def write_report(
         "Sample drawn from the **Places365 validation set** (`val_256`, "
         "365 scene categories, 100 images per category).  Places365 is "
         "closer to the application's real-world imagery than the cropped-"
-        "object photos of caltech-101 — indoor rooms, outdoor natural "
+        "object photos of caltech-101 - indoor rooms, outdoor natural "
         "scenes, and outdoor man-made environments, with the kind of "
         "background clutter and scene-level structure that the patch-"
         "embedder's region tree actually has to handle in production."
@@ -779,7 +779,7 @@ def write_report(
     lines.append("## Images sampled")
     lines.append("")
     for i, label in enumerate(image_labels):
-        lines.append(f"- `{i:02d}` — {label}")
+        lines.append(f"- `{i:02d}` - {label}")
     lines.append("")
     lines.append("## Region trees")
     lines.append("")
@@ -790,12 +790,12 @@ def write_report(
         "large as the empty upper-left region of the binary tree allows "
         "(so the canvas is no taller than the tree itself needs).  The "
         f"**bottom row** is the {default_k} HAC **leaves** (yellow "
-        "outline) — patch-grid saliency-peak Voronoi cells; each "
+        "outline) - patch-grid saliency-peak Voronoi cells; each "
         "thumbnail shows only the patches that landed in that leaf "
         "(non-cell pixels dimmed), so an L-shaped leaf actually looks "
         f"L-shaped.  Above them are the **{default_k - 1} HAC internal "
         "merges** (cyan outline), each drawn as the union of its "
-        "constituent leaves' cells — the *true* polygonal footprint "
+        "constituent leaves' cells - the *true* polygonal footprint "
         "the MLP and similarity rule pool over, not the loose bounding "
         "box.  Solid grey edges connect each merge to its two children. "
         " Read it bottom-up: leaves first, then progressively coarser "
@@ -803,11 +803,11 @@ def write_report(
         "top-left as the global-scale fallback (always present, not "
         "part of the HAC graph).  Internal node vectors are the "
         "L2-normalised saliency-weighted mean over the patches in the "
-        "cell union — order-independent, equal to re-pooling from "
+        "cell union - order-independent, equal to re-pooling from "
         "scratch.  By construction every merge strictly grows the cell "
         "set (leaves are non-empty and disjoint, so the union always "
         "contains new patches relative to either child), so there are "
-        'no "duplicate" merges to flag — the loose bounding '
+        'no "duplicate" merges to flag - the loose bounding '
         "rectangle occasionally lands on a child's rectangle, but "
         "that's a rectangle artifact, not something the model sees."
     )
@@ -821,7 +821,7 @@ def write_report(
         lines.append("")
 
     lines.append(
-        "Cross-config visual comparison is intentionally omitted — at any "
+        "Cross-config visual comparison is intentionally omitted - at any "
         "thumbnail size that fits nine trees in one image the leaves "
         "become unreadable, which was the original failure mode of the "
         "boxed-overlay view.  The metrics table below captures the (K, α) "
@@ -839,7 +839,7 @@ def write_report(
         "`leaf_area` ≈ how much of the image each leaf covers "
         "(uniform = 1/K); "
         "`leaf_overlap_max` ≈ max IoU between any two leaves (lower is "
-        "better — leaves should be disjoint); "
+        "better - leaves should be disjoint); "
         "`internal_area` ≈ mean HAC-internal box area; "
         "`root_area` ≈ final merge box area (1.0 = root recovers the "
         "whole image, good); "
@@ -849,11 +849,11 @@ def write_report(
         "(1.0 = perfectly adjacent children, > 1 = boxes include empty "
         "space); "
         "`cell_noop_rate` ≈ fraction of internal merges whose "
-        "**patch-cell union** equals one of its children's cell set — "
+        "**patch-cell union** equals one of its children's cell set - "
         'i.e. "did the merge actually grow the region the MLP sees?"'
         "  Always 0 by construction (leaves are non-empty and disjoint, "
         "so the union strictly contains either child).  Published "
-        "as a sanity invariant — if it ever drifts above 0 the "
+        "as a sanity invariant - if it ever drifts above 0 the "
         "HAC implementation is doing something wrong."
     )
     lines.append("")
@@ -904,7 +904,7 @@ def write_report(
     lines.append("### How K and α move the metrics")
     lines.append("")
     lines.append(
-        "- **Leaf geometry only depends on K** — `leaf_area`, "
+        "- **Leaf geometry only depends on K** - `leaf_area`, "
         "`leaf_area_std`, and `leaf_overlap_max` are constant across "
         "α, because `propose_leaves` runs before the HAC step.  Leaves "
         "are saliency-peak Voronoi cells over the patch grid, so their "
@@ -917,20 +917,20 @@ def write_report(
         "(heavier spatial weight) → `area_growth` ≈ 1.0 (children of "
         "an internal node are already adjacent, so the union crop "
         "stays tight).  Higher α (heavier cosine weight) → "
-        "`area_growth` climbs to ~1.06–1.08 — internal thumbnails at "
+        "`area_growth` climbs to ~1.06–1.08 - internal thumbnails at "
         "α=0.7 visibly pull in background space when two "
         "visually-similar but spatially-distant leaves get merged."
     )
     lines.append(
         "- **Higher K gives finer granularity but worse balance.**  "
-        "K=8 has the best `merge_balance` (~0.70 — well-balanced "
+        "K=8 has the best `merge_balance` (~0.70 - well-balanced "
         "binary tree); K=16 drops to ~0.62 (more chain-like).  This "
         "is the expected trade-off: with more leaves, the affinity "
         "matrix gets noisier and HAC can fall into a long chain when "
         'one leaf keeps being the "closest neighbour."'
     )
     lines.append(
-        "- **`root_area` is always 1.0** — every config recovers the "
+        "- **`root_area` is always 1.0** - every config recovers the "
         "full image at the root, which means the max-pool similarity "
         "rule (Similarity § in the design doc) always has a "
         "global-scale fallback even before falling back to the "
@@ -945,7 +945,7 @@ def write_report(
     )
     lines.append("")
     lines.append(
-        "- K=8 lumps multi-object scenes into too few regions — entire "
+        "- K=8 lumps multi-object scenes into too few regions - entire "
         "rooms or scene-wide subjects end up in 1–2 leaves, so the MLP "
         "and similarity rule have nothing finer than the full image to "
         "choose between.  Especially painful on Places365 where most "
@@ -971,13 +971,13 @@ def write_report(
     lines.append("")
     lines.append(
         "- α=0.3 produces the tightest, most spatially-coherent "
-        "internals (`area_growth` ≈ 1.0) — internals nearly always "
+        "internals (`area_growth` ≈ 1.0) - internals nearly always "
         "correspond to a contiguous crop.  Visually the cleanest read "
         "on scenes with a single dominant subject."
     )
     lines.append(
         "- α=0.7 lets a few internals form L-shapes over background "
-        "patches — at α=0.7 a cyan internal can span a scene subject "
+        "patches - at α=0.7 a cyan internal can span a scene subject "
         "*plus* a chunk of surrounding context that shares its texture "
         "(common in Places365 scenes where foreground and background "
         "share materials)."
@@ -992,17 +992,17 @@ def write_report(
     )
     lines.append("")
     lines.append(
-        "The choice is robust — every cell of the 3×3 sweep produces "
+        "The choice is robust - every cell of the 3×3 sweep produces "
         "a usable tree, and the geometric metrics differ by "
         "single-digit percent.  The defaults pinned in "
         "`_attach_patch_regions` "
         f"(`k={default_k}, alpha={default_alpha}`) stand."
     )
     lines.append("")
-    lines.append("### Diversity-tree verdict — pass")
+    lines.append("### Diversity-tree verdict - pass")
     lines.append("")
     lines.append(
-        "Inspect the clusters above — Places365 scenes should land in "
+        "Inspect the clusters above - Places365 scenes should land in "
         "indoor / outdoor-natural / outdoor-man-made groupings, with "
         "finer splits along lighting and dominant-material lines.  "
         "Treating those broad scene types as semantic clusters is the "

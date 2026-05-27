@@ -3,20 +3,20 @@
 The `vtscore` library is the Flask-free, reusable core of
 [VTSearch](https://github.com/samggreenberg/vtsearch). It provides everything
 needed to load a dataset, embed media, train an MLP detector from labels,
-score new media, and evaluate results — without any web framework, settings
+score new media, and evaluate results - without any web framework, settings
 system, or UI dependency. The companion `vtsearch` Flask + Angular app wraps
 this library with the HTTP / SPA / settings layer.
 
-This documentation is **for developers** — people writing scripts on top of
+This documentation is **for developers** - people writing scripts on top of
 `vtscore`, embedding it inside other applications, or shipping plugins for it.
 For end users of the VTSearch web app, see the
 [user guide](../../docs/user/USER_GUIDE.md) instead.
 
 ## Start here
 
-- [Quickstart](quickstart.md) — load a folder, train a detector, score new media. ~15 minute read.
-- [Architecture](architecture.md) — system overview, the seven seams between vtscore and vtsearch, the resolution chain for "active context".
-- [Concepts](concepts.md) — `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the MLP detector. The vocabulary every other doc assumes.
+- [Quickstart](quickstart.md) - load a folder, train a detector, score new media. ~15 minute read.
+- [Architecture](architecture.md) - system overview, the seven seams between vtscore and vtsearch, the resolution chain for "active context".
+- [Concepts](concepts.md) - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the MLP detector. The vocabulary every other doc assumes.
 
 ## Package reference
 
@@ -50,7 +50,7 @@ the relevant base class, expose a sentinel attribute, drop the module in the
 right directory (or register an `importlib.metadata` entry point), and the
 library discovers it automatically. See:
 
-- [Plugin authoring overview](extending/README.md) — registries, sentinels, entry-point groups.
+- [Plugin authoring overview](extending/README.md) - registries, sentinels, entry-point groups.
 - [Dataset importers](extending/dataset-importers.md)
 - [Media types](extending/media-types.md)
 - [Embedders](extending/embedders.md)
@@ -62,7 +62,7 @@ library discovers it automatically. See:
 
 ## Conventions
 
-These rules hold across every package — internalise them once and the rest of
+These rules hold across every package - internalise them once and the rest of
 the docs make sense:
 
 - **No persisted vectors or MLP weights.** Embeddings and trained models are
@@ -92,7 +92,7 @@ the docs make sense:
 ## API contract reference
 
 For the canonical inventory of every name vtscore exports, see
-[`docs/vtscore-api.md`](../../docs/vtscore-api.md) — a docstring-only
+[`docs/vtscore-api.md`](../../docs/vtscore-api.md) - a docstring-only
 contract sketch produced as the Phase 0 deliverable of the library
 extraction. Treat it as the authoritative list when checking whether a
 symbol is part of the public surface.
@@ -110,7 +110,7 @@ effectively a new app release. See the top-level
 The library lives in the same git repository as the app
 (`samggreenberg/vtsearch`). Run `./run-tests.sh` from the repo root for the
 full test suite, or `./run-tests.sh vtscore-clean` to run only the
-library-tier tests (`tests_lib/`) under a Flask-blocking import hook —
+library-tier tests (`tests_lib/`) under a Flask-blocking import hook -
 useful when verifying that a change keeps the library import-clean. New
 library code goes under `vtscore/`; new library tests go under
 `tests_lib/`.

@@ -314,7 +314,7 @@ class TestLabelExportExpandsDupes:
         exported = resp.get_json()
         assert len(exported["labels"]) == 2
 
-        # Clear votes and import back — both entries share the same MD5,
+        # Clear votes and import back; both entries share the same MD5,
         # so they should match the single representative.
         app_module.good_votes.clear()
         resp = client.post("/api/labels/import", json=exported)

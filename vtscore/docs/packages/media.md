@@ -6,7 +6,7 @@ describes a content kind (audio, image, text, video, document), the
 that splits one media into sub-items of the same type, and the `Processor`
 ABCs (`Detector` / `Localizer` / `Extractor`) that score or annotate media.
 Each media-type sub-package self-registers at import time through sentinel
-attributes — adding a new format is "drop a folder into `vtscore/media/`",
+attributes - adding a new format is "drop a folder into `vtscore/media/`",
 not "edit an `__init__.py`". This package has no Flask or settings imports
 and is the foundation every other `vtscore` subsystem builds on.
 
@@ -41,9 +41,9 @@ sub_medias = tiling.clip(audio_media_dict)
 
 ## Core ABCs
 
-### `MediaType` — one per content kind
+### `MediaType` - one per content kind
 
-`vtscore/media/base.py:171` — an ABC bundling the file-extension filter,
+`vtscore/media/base.py:171` - an ABC bundling the file-extension filter,
 demo-dataset list, HTTP-serving helper, and "load one file into a media
 dict" loader for a single content format.
 
@@ -51,7 +51,7 @@ A concrete `MediaType` declares:
 
 | Abstract member                     | Purpose                                           |
 |-------------------------------------|---------------------------------------------------|
-| `type_id` (`vtscore/media/base.py:204`)  | Internal identifier — `"audio"`, `"image"`, etc.  |
+| `type_id` (`vtscore/media/base.py:204`)  | Internal identifier - `"audio"`, `"image"`, etc.  |
 | `name`                              | Human-readable label for pickers                  |
 | `icon`                              | SVG icon key                                      |
 | `file_extensions`                   | List of glob patterns (e.g. `["*.wav", "*.mp3"]`) |
@@ -72,9 +72,9 @@ content from `media_bytes` → `media_path` → `media_url` in that order, so
 implementations transparently handle in-memory, on-disk, and lazy-fetched
 items.
 
-### `MediaEmbedder` — file/text → vector
+### `MediaEmbedder` - file/text → vector
 
-`vtscore/media/embedder.py:416` — an ABC for "take one media dict and
+`vtscore/media/embedder.py:416` - an ABC for "take one media dict and
 produce a fixed-D `np.ndarray`". Each embedder is bound to exactly one
 `MediaType` via `media_type_id`, but a media type can have many
 embedders. Subclasses implement four things:
@@ -98,7 +98,7 @@ Threading and lock contract:
   acquire it per-item, not once per batch, so two parallel callers
   interleave smoothly.
 - `_model_load_lock` (`vtscore/media/embedder.py:434`) is **per-class**.
-  `load_models()` is idempotent and lock-protected — concurrent callers
+  `load_models()` is idempotent and lock-protected - concurrent callers
   serialise on the first load, subsequent callers return immediately
   once `self._model is not None`.
 - `_on_progress` is a per-instance attribute set by
@@ -124,13 +124,13 @@ implementation uses:
 | `timed_progress(cb, status, msg)` (`vtscore/media/embedder.py:103`) | Append `(Ns)` to a stuck progress message. |
 | `resolve_embed_batch_size(default)` (`vtscore/media/embedder.py:38`) | Read `$VTSEARCH_EMBED_BATCH_SIZE`.      |
 
-### `MediaClipper` — split one media into sub-medias of the same type
+### `MediaClipper` - split one media into sub-medias of the same type
 
-`vtscore/media/clipper.py:9` — given one media dict, return one or more
+`vtscore/media/clipper.py:9` - given one media dict, return one or more
 media dicts of the **same** type. Used to tile a long audio clip into
 fixed-length windows, slice a paragraph into sentences, crop an image
 into a fixed bbox, etc. Clippers are how you bound the unit of
-recall — every produced sub-media is what gets embedded and labelled.
+recall - every produced sub-media is what gets embedded and labelled.
 
 ```python
 class MediaClipper(ABC):
@@ -147,9 +147,9 @@ class MediaClipper(ABC):
 Two optional hooks let the dataset-load pipeline tune a clipper at
 load time:
 
-- `resolve_for_durations(durations)` (`vtscore/media/clipper.py:145`) —
+- `resolve_for_durations(durations)` (`vtscore/media/clipper.py:145`) -
   dataset-level: decide once, given every item's duration.
-- `resolve_for_media(media)` (`vtscore/media/clipper.py:156`) — per-item:
+- `resolve_for_media(media)` (`vtscore/media/clipper.py:156`) - per-item:
   auto-route to a different concrete clipper based on each item
   (e.g. pass-through for short audio, tiling for long).
 
@@ -191,7 +191,7 @@ and `"bbox"` (format is media-specific). Extractor outputs must include
 
 ### `MediaResponse`
 
-`vtscore/media/base.py:69` — a `dataclass` for "this is bytes of MIME
+`vtscore/media/base.py:69` - a `dataclass` for "this is bytes of MIME
 type X, name it Y on download". Framework-agnostic so the same
 `MediaType.media_response(media)` works whether the caller is a Flask
 route, a Jupyter notebook, or a CLI exporter. The app converts it to a
@@ -207,7 +207,7 @@ class MediaResponse:
 
 ### `DemoDataset`
 
-`vtscore/media/base.py:88` — metadata for one downloadable demo dataset
+`vtscore/media/base.py:88` - metadata for one downloadable demo dataset
 attached to a media type. Bundles the id, label, description, category
 slugs, optional slicing bounds, and the `required_folder` used both as
 a staleness check on the pickle cache and as the browsable root for
@@ -226,7 +226,7 @@ and `total == 0` means indeterminate.
 
 ### `crop_file_bytes`
 
-`vtscore/media/cropping.py:16` — apply a single-clip bounded clipper to
+`vtscore/media/cropping.py:16` - apply a single-clip bounded clipper to
 an arbitrary file. Used by upload/example-sort callers that need to
 materialise a sub-region of one item without round-tripping through a
 full clipper pipeline. Supported types: `"audio"` (start/end seconds)
@@ -247,7 +247,7 @@ Three sentinel names drive discovery:
 | `EMBEDDER`   | `embedder_*.py` inside a media-type package | `MediaEmbedder` |
 
 Sub-packages **and** `.py` files are both scanned, and symlinks are
-followed via `importlib.util.spec_from_file_location` — a custom
+followed via `importlib.util.spec_from_file_location` - a custom
 embedder living outside the VTSearch tree can be wired in by
 symlinking a single file (or directory) into the relevant media-type
 folder. No `__init__.py` edits required.
@@ -296,7 +296,7 @@ type should override `is_default`.
 def set_progress_callback(cb: ProgressCallback) -> None: ...
 ```
 
-(`vtscore/media/__init__.py:363`) — wires `cb` into every registered
+(`vtscore/media/__init__.py:363`) - wires `cb` into every registered
 `MediaType._on_progress` and `MediaEmbedder._on_progress`. Call this
 once at startup. A thread-local override
 (`set_thread_progress_callback`) is in the public-API sketch but lives
@@ -315,7 +315,7 @@ Each lives under `vtscore/media/<type>/` and self-registers:
 | image    | `vtscore/media/image/`       | `siglip` (`google/siglip-base-patch16-224`) | `clip`, `siglip2`, `dinov2_single`, `dinov2_patch`, `dinov3_single`, `dinov3_patch`, `eupe_single`, `eupe_patch`, `face` |
 | text     | `vtscore/media/text/`        | `e5` (`intfloat/multilingual-e5-base`) | `bge`                                            |
 | video    | `vtscore/media/video/`       | `xclip` (`microsoft/xclip-base-patch32`) | `videomae`, `languagebind`                       |
-| document | `vtscore/media/document/`    | — (uses converters; see below)  | —                                                       |
+| document | `vtscore/media/document/`    | - (uses converters; see below)  | -                                                       |
 
 Each media-type package's `__init__.py` exposes the sentinels. For
 example, `vtscore/media/audio/__init__.py`:
@@ -360,7 +360,7 @@ text-embedder). See [converters](converters.md).
 
 ## Implementing a new media type
 
-Sketch — the full walkthrough is in
+Sketch - the full walkthrough is in
 [../../docs/EXTENDING-media.md](../../../docs/EXTENDING-media.md).
 
 1. Create `vtscore/media/<type>/__init__.py`, `media_type.py`,
@@ -407,7 +407,7 @@ out-of-tree implementations.
 - **Patch-region embedders must override `_patch_forward_impl`.** If
   `supports_patch_regions = True` but the implementation defaults to
   `None`, the dataset loader will store empty region data. This is
-  not enforced by the ABC — the `True` flag is treated as a promise.
+  not enforced by the ABC - the `True` flag is treated as a promise.
 - **Discovery is eager and silent on import errors.** A broken
   embedder module emits a `warnings.warn(...)` and the registry skips
   it. Check `all_embedders()` after import if a custom embedder
@@ -423,11 +423,11 @@ out-of-tree implementations.
 
 ## Cross-references
 
-- [embedding](embedding.md) — façade over the registry plus the
+- [embedding](embedding.md) - façade over the registry plus the
   matrix cache and smart preload.
-- [converters](converters.md) — cross-type bridges (audio →
+- [converters](converters.md) - cross-type bridges (audio →
   spectrogram, OCR, ASR, video → keyframes).
-- [../../docs/EXTENDING-media.md](../../../docs/EXTENDING-media.md) — the
+- [../../docs/EXTENDING-media.md](../../../docs/EXTENDING-media.md) - the
   full walkthrough for adding a media type, embedder, or clipper.
-- [../../docs/EXTENDING-processors.md](../../../docs/EXTENDING-processors.md) —
+- [../../docs/EXTENDING-processors.md](../../../docs/EXTENDING-processors.md) -
   adding detectors / localizers / extractors.

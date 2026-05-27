@@ -2,30 +2,30 @@
 
 Covers the routes in ``vtsearch/routes/sorting.py``:
 
-* ``POST /api/sort``                          — :class:`SortRequestSchema` →
+* ``POST /api/sort``                          -> :class:`SortRequestSchema` ->
                                                 :class:`SortResponseSchema`
-* ``POST /api/learned-sort``                  — :class:`LearnedSortRequestSchema` →
+* ``POST /api/learned-sort``                  -> :class:`LearnedSortRequestSchema` ->
                                                 :class:`LearnedSortResponseSchema`
-* ``GET  /api/learned-sort/result``           — :class:`LearnedSortResultQuerySchema` →
+* ``GET  /api/learned-sort/result``           -> :class:`LearnedSortResultQuerySchema` ->
                                                 :class:`LearnedSortResponseSchema`
-* ``GET  /api/votes``                         — :class:`VotesResponseSchema`
-* ``POST /api/votes/clear``                   — :class:`OkResponseSchema`
-* ``POST /api/votes/seed-from-examples``      — :class:`SeedFromExamplesRequestSchema` →
+* ``GET  /api/votes``                         -> :class:`VotesResponseSchema`
+* ``POST /api/votes/clear``                   -> :class:`OkResponseSchema`
+* ``POST /api/votes/seed-from-examples``      -> :class:`SeedFromExamplesRequestSchema` ->
                                                 :class:`SeedFromExamplesResponseSchema`
-* ``GET  /api/textsort-suggestions``          — :class:`TextsortSuggestionsResponseSchema`
-* ``POST /api/textsort-suggestions``          — :class:`TextsortSuggestionRequestSchema` →
+* ``GET  /api/textsort-suggestions``          -> :class:`TextsortSuggestionsResponseSchema`
+* ``POST /api/textsort-suggestions``          -> :class:`TextsortSuggestionRequestSchema` ->
                                                 :class:`OkResponseSchema`
-* ``GET  /api/inclusion``                     — :class:`InclusionResponseSchema`
-* ``POST /api/inclusion``                     — :class:`InclusionRequestSchema` →
+* ``GET  /api/inclusion``                     -> :class:`InclusionResponseSchema`
+* ``POST /api/inclusion``                     -> :class:`InclusionRequestSchema` ->
                                                 :class:`InclusionResponseSchema`
-* ``GET  /api/safe-thresholds``               — :class:`SafeThresholdsResponseSchema`
-* ``POST /api/safe-thresholds``               — :class:`SafeThresholdsRequestSchema` →
+* ``GET  /api/safe-thresholds``               -> :class:`SafeThresholdsResponseSchema`
+* ``POST /api/safe-thresholds``               -> :class:`SafeThresholdsRequestSchema` ->
                                                 :class:`SafeThresholdsResponseSchema`
-* ``POST /api/example-sort``                  — multipart upload →
+* ``POST /api/example-sort``                  (multipart upload) ->
                                                 :class:`SortResponseSchema`
-* ``POST /api/label-file-sort``               — multipart upload →
+* ``POST /api/label-file-sort``               (multipart upload) ->
                                                 :class:`LabelFileSortResponseSchema`
-* ``GET|POST /api/diversity-tree/next``       — :class:`DiversityTreeNextRequestSchema` →
+* ``GET|POST /api/diversity-tree/next``       -> :class:`DiversityTreeNextRequestSchema` ->
                                                 :class:`DiversityTreeNextResponseSchema`
 
 The sort result items use ``fields.Dict()`` rather than nested schemas
@@ -102,7 +102,7 @@ class LearnedSortResultQuerySchema(Schema):
 class LearnedSortResponseSchema(Schema):
     """Combined response for the learned-sort start + poll endpoints.
 
-    The response varies by status — ``running`` carries ``current``/``total``,
+    The response varies by status: ``running`` carries ``current``/``total``,
     ``done`` carries ``results``/``threshold``, ``error`` carries an
     ``error`` message. Declared permissively so a single schema covers
     every state.
@@ -186,7 +186,7 @@ class InclusionResponseSchema(Schema):
 def _validate_numeric(value):
     """Reject booleans and non-numeric values for the inclusion field.
 
-    Booleans are a subclass of ``int`` in Python — without this guard
+    Booleans are a subclass of ``int`` in Python; without this guard
     ``true`` / ``false`` would sneak through as ``1`` / ``0``.
     Declared as a plain validator rather than ``fields.Integer(strict=True)``
     so that ``3.7`` continues to round to ``3`` in the handler
@@ -217,7 +217,7 @@ def _validate_bool(value):
     """Reject non-boolean values for boolean fields.
 
     Restricting ``fields.Boolean.truthy / falsy`` to ``{True} / {False}``
-    isn't enough on its own — Python treats ``1 == True`` and ``0 == False``
+    isn't enough on its own; Python treats ``1 == True`` and ``0 == False``
     when checking set membership, so numeric inputs sneak through. A
     plain ``isinstance(value, bool)`` check is the only way to require
     strictly-typed booleans.
@@ -230,7 +230,7 @@ class SafeThresholdsRequestSchema(Schema):
     """Body for ``POST /api/safe-thresholds``.
 
     Declared as ``fields.Raw`` + a custom validator to preserve the
-    pre-migration "must be a boolean" behavior — string forms
+    pre-migration "must be a boolean" behavior; string forms
     (``"yes"`` / ``"no"`` / ``"true"``) and numeric forms (``0`` / ``1``)
     are rejected as 422.
     """

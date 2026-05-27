@@ -192,7 +192,7 @@ def reset_contexts(tmp_path, monkeypatch):
     """Reset all library-tier mutable global state before each test.
 
     Smaller cousin of the app-tier ``reset_state`` fixture in
-    ``tests/conftest.py`` — only touches state that lives under
+    ``tests/conftest.py``; only touches state that lives under
     library-candidate packages.  No login provider, no autorun
     processors, no settings file isolation (the library default
     CoreConfig builder above is stable for every test).
@@ -255,12 +255,12 @@ def reset_contexts(tmp_path, monkeypatch):
 def pytest_unconfigure(config):
     """Force-exit to avoid SIGABRT from native library cleanup at shutdown.
 
-    Same rationale as in ``tests/conftest.py`` — PyTorch / OpenMP / numba
+    Same rationale as in ``tests/conftest.py``: PyTorch / OpenMP / numba
     spin up C++ thread pools whose teardown can call ``std::terminate``
     during interpreter shutdown, producing exit code 134 even though all
     tests passed.  ``os._exit`` skips atexit/static-destructor teardown.
 
-    Only runs when ``tests_lib/`` is the *sole* pytest session — when both
+    Only runs when ``tests_lib/`` is the *sole* pytest session. When both
     ``tests/`` and ``tests_lib/`` collect together (a single pytest
     invocation), the app-tier conftest's ``pytest_unconfigure`` handles
     the force-exit and prints the summary.
@@ -268,7 +268,7 @@ def pytest_unconfigure(config):
     import sys
 
     # If the app-tier conftest is loaded (i.e. pytest is collecting both
-    # trees), skip — its ``pytest_unconfigure`` already does the work.
+    # trees, skip; its ``pytest_unconfigure`` already does the work.
     if any("tests/conftest" in str(p) for p in getattr(config, "_inifile", None) and [config._inifile] or []):
         return
     # Heuristic: only one of the two confests should print the summary.

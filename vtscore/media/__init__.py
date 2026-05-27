@@ -8,13 +8,13 @@ import time by scanning sub-packages of ``vtscore.media``:
 - Each embedder lives under the media-type package as either a flat
   module (e.g. ``vtsearch/media/audio/embedder_clap_music.py``) or a
   sub-package (e.g. ``vtsearch/media/image/embedder_fancy/__init__.py``)
-  and exposes a module-level ``EMBEDDER`` sentinel — one embedder per
+  and exposes a module-level ``EMBEDDER`` sentinel - one embedder per
   module or sub-package.  Any ``embedder*.py`` file or ``embedder*/``
   directory with an ``__init__.py`` found inside a media-type package
   is auto-loaded.
 
-To add a new embedder, drop an ``embedder_<name>.py`` file — or an
-``embedder_<name>/`` sub-package containing an ``__init__.py`` — into
+To add a new embedder, drop an ``embedder_<name>.py`` file - or an
+``embedder_<name>/`` sub-package containing an ``__init__.py`` - into
 the appropriate media-type package with an ``EMBEDDER`` sentinel at the
 module/package top level.  Symlinked directories and symlinked embedder
 files are both supported, so custom embedders living outside the
@@ -107,7 +107,7 @@ def get_by_extension(ext: str) -> "MediaType | None":
     ext = ext.lower()
     for mt in _registry.values():
         for pattern in mt.file_extensions:
-            # pattern looks like "*.wav" — extract the extension part
+            # pattern looks like "*.wav" - extract the extension part
             if ext == pattern.lstrip("*"):
                 return mt
     return None
@@ -118,7 +118,7 @@ def all_folder_names() -> list[str]:
 
     Used by dataset importers to populate their media-type selection fields
     dynamically, so adding a new media type to the registry is all that's
-    needed — no importer code changes required.
+    needed - no importer code changes required.
     """
     return [mt.folder_import_name for mt in _registry.values()]
 
@@ -280,7 +280,7 @@ def _discover_embedders_in(media_type_dir: Path, package_name: str) -> None:
             load_path = entry
             is_package = False
         # Sub-package: embedder_<name>/__init__.py.  Skip names containing
-        # dots — they aren't valid Python identifiers and would be
+        # dots - they aren't valid Python identifiers and would be
         # misinterpreted as nested module paths by importlib.
         elif entry.is_dir() and "." not in entry.name and (entry / "__init__.py").exists():
             module_stem = entry.name
@@ -322,8 +322,8 @@ def _discover_media_plugins() -> None:
 
     Each media-type sub-package (directory with ``__init__.py``) may expose:
 
-    - ``MEDIA_TYPE`` — a single :class:`MediaType` instance.
-    - ``CLIPPERS``  — a list of :class:`MediaClipper` instances.
+    - ``MEDIA_TYPE`` - a single :class:`MediaType` instance.
+    - ``CLIPPERS``  - a list of :class:`MediaClipper` instances.
 
     Embedders are auto-discovered per module: every ``embedder*.py`` file
     inside a media-type sub-package is scanned for an ``EMBEDDER`` sentinel

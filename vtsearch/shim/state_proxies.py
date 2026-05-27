@@ -3,7 +3,7 @@
 Many app-layer call sites (Flask routes, app-tier tests) like to import
 ``medias``, ``good_votes``, etc. as module-level dict/list names and treat
 them as the "current" container.  The library does not depend on those
-names — its functions resolve the active context explicitly — but the app
+names - its functions resolve the active context explicitly - but the app
 keeps them as a convenience facade so existing code reads naturally.
 
 These proxies live on the app side of the future ``vtscore`` / ``vtsearch``
@@ -33,7 +33,7 @@ class _ProxyDict(dict):
     """
 
     def __init__(self, target_attr: str, context_fn: Callable[[], Any] | None = None) -> None:
-        # Do NOT call super().__init__() with data — we are a proxy, not a
+        # Do NOT call super().__init__() with data - we are a proxy, not a
         # real container.  The empty super().__init__() satisfies the dict
         # constructor without storing anything in our own hash table.
         super().__init__()
@@ -201,7 +201,7 @@ class _ProxyList(list):
 
 
 # ---------------------------------------------------------------------------
-# Module-level proxy instances — re-exported by ``vtsearch.state`` so app
+# Module-level proxy instances - re-exported by ``vtsearch.state`` so app
 # call sites can write ``from vtsearch.state import medias`` and treat
 # ``medias`` like a normal dict that always points at the current request's
 # active dataset.

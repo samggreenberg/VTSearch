@@ -11,7 +11,7 @@ import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.m
  *  "Details ▸" opener for picking among converters (when there are
  *  multiple) and editing their params.  The native row also gets its
  *  own "Details ▸" button when there is more than one MediaClipper to
- *  pick between — clicking it asks the parent to open the shared
+ *  pick between - clicking it asks the parent to open the shared
  *  clipper-chooser modal.  The picker itself lives inside the outer
  *  importer's "Advanced" section, so a nested "Advanced" label here
  *  would read as "Advanced inside Advanced". */
@@ -26,7 +26,7 @@ export class SourceSpecsPickerComponent implements OnChanges {
   /** All converters whose ``target_type`` matches the current native
    *  type.  Comes from the importer's ``to_dict()`` payload. */
   @Input() availableConverters: ConverterInfo[] = [];
-  /** Native media type id (e.g. ``"image"``) — the dataset's output
+  /** Native media type id (e.g. ``"image"``) - the dataset's output
    *  type.  The native checkbox represents "include direct files of
    *  this type, no conversion". */
   @Input() nativeType = '';
@@ -36,7 +36,7 @@ export class SourceSpecsPickerComponent implements OnChanges {
    *  when a label is missing. */
   @Input() typeLabels: Record<string, string> = {};
   /** Clippers available for the native media type.  Drives the native
-   *  row's "Details" button — shown only when there is more than one
+   *  row's "Details" button - shown only when there is more than one
    *  clipper to pick between (same gate as the legacy standalone
    *  Clipper section).  An empty list means "no clipper choice", and
    *  the Details button is suppressed. */
@@ -115,7 +115,7 @@ export class SourceSpecsPickerComponent implements OnChanges {
     return this.clippers.length > 1;
   }
 
-  /** Click handler for the native row's Details button — bubbles up to
+  /** Click handler for the native row's Details button - bubbles up to
    *  the parent, which opens the shared clipper-chooser modal. */
   onNativeDetailsClick(): void {
     this.clipperChooserRequested.emit();

@@ -98,7 +98,7 @@ def indicator_score_history(query: dict):
     """Return cached indicator score history for a given metric.
 
     Reads only the per-step cache populated by the labeling-status
-    polling — no models are retrained.
+    polling; no models are retrained.
     """
     metric = query["metric"]
 
@@ -263,7 +263,7 @@ def cancel_eval_train_and_score(job_id: str):
 
     Sets the cancel flag on the :class:`AsyncJob`; the per-step retrain
     loop polls it cooperatively. Returns 200 even when the job has
-    already finished — see ``cancel_learned_sort`` for the rationale.
+    already finished; see ``cancel_learned_sort`` for the rationale.
     """
     from vtscore.concurrency.async_jobs import eval_jobs
 

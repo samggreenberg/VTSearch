@@ -107,7 +107,7 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** Picker views supported by the single-file example picker.  Importers
    *  whose ``picker_view`` is anything else (e.g. ``"form"``) are hidden
-   *  here — the user can still use them via the Add Dataset modal. */
+   *  here; the user can still use them via the Add Dataset modal. */
   private static readonly SUPPORTED_PICKER_VIEWS = new Set([
     'demo',
     'server_folder',
@@ -209,7 +209,7 @@ export class NewDetectorModalComponent implements OnInit {
         this.mediaTypes = this.mediaTypeInfos.map((t) => t.type_id || t.name);
       },
     });
-    // Settings power the solo-mediaType lockdown — load them so the
+    // Settings power the solo-mediaType lockdown; load them so the
     // template's @if guards see the resolved value on first render.
     this.settingsState.load();
 
@@ -404,7 +404,7 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   /** Visible category tabs.  Only categories that contain at least one
-   *  supported importer are shown — empty categories (e.g. ``"services"``
+   *  supported importer are shown; empty categories (e.g. ``"services"``
    *  on a vanilla install) are hidden so the picker stays focused on
    *  options the user can act on. */
   get visibleImporterTabs(): ImporterPickerTab[] {

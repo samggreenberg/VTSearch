@@ -11,7 +11,7 @@ standard ``errors`` envelope. Handler-level rejects (empty / whitespace
 keep their HTTP codes (400 / 404 / 500) with the standard ``message``
 envelope. The two multipart routes (``/api/example-sort``,
 ``/api/label-file-sort``) omit ``arguments`` and declare their error
-responses via ``alt_response`` — same pattern as ``add-to-pile`` and
+responses via ``alt_response``; same pattern as ``add-to-pile`` and
 ``server-media-files/upload``.
 """
 
@@ -92,7 +92,7 @@ def _cosine_sort(query_vec):
     *threshold* is the GMM-based boundary (rounded to 4 decimals).
 
     For datasets embedded with a patch-aware embedder (DINOv2, DINOv3,
-    EUPE), each result also carries a ``best_region`` field — the
+    EUPE), each result also carries a ``best_region`` field containing the
     bounding box of the region that scored highest, in normalised
     image coordinates ``[x0, y0, x1, y1]``.  Single-vector embedders
     take a fast vectorised numpy path with no per-result box.
@@ -165,7 +165,7 @@ def sort_clips(body: dict):
     # Reject the request up-front when the active embedder is vision-only
     # (e.g. DINOv3, Perception Encoder). Without this short-circuit we'd
     # waste time loading the model into RAM just to discover it can't embed
-    # text — and the frontend wouldn't get a clean ``supports_text=False``
+    # text; the frontend wouldn't get a clean ``supports_text=False``
     # signal to hide its text-search UI.
     if embedder_name:
         try:
@@ -297,7 +297,7 @@ def _model_matches_local_votes(labelset, has_cross_dataset, local_good, local_ba
     """Decide whether the trained model maps cleanly onto current-dataset votes.
 
     The progress cache is keyed on local cids, so we only inject when the
-    training set is fully representable there — otherwise we'd return a
+    training set is fully representable there; otherwise we'd return a
     cross-dataset model on a local-only replay.
     """
     if labelset is None:
@@ -365,8 +365,8 @@ def learned_sort(body: dict):
     """Kick off (or short-circuit) a learned-sort training job.
 
     Training is GIL-bound and ran inline used to stall every other request
-    served by the small ``gthread`` pool — votes polls, thumbnails, even
-    media bytes.  The endpoint now hands the work off to a background daemon
+    served by the small ``gthread`` pool (votes polls, thumbnails, and even
+    media bytes).  The endpoint now hands the work off to a background daemon
     thread and returns immediately with a ``job_id``; clients poll
     :func:`learned_sort_result` until ``status == "done"``.
 
@@ -511,7 +511,7 @@ def learned_sort_result(query: dict):
     if job is None:
         # 404s are intercepted by the app-level ``NotFound`` errorhandler
         # in ``app.py`` and rendered with the legacy
-        # ``{"error": "Not Found", "request_id": "..."}`` envelope — the
+        # ``{"error": "Not Found", "request_id": "..."}`` envelope; the
         # ``message`` kwarg and any extras (e.g. ``status="missing"``)
         # are dropped. Frontends rely on the HTTP status code for the
         # missing-job branch rather than a body field.
@@ -539,7 +539,7 @@ def cancel_learned_sort(job_id: str):
 
     Sets the cancel flag on the :class:`AsyncJob`; the training loop
     polls it cooperatively. Returns 200 even when the job has already
-    finished — the caller's contract is "make sure it's no longer
+    finished; the caller's contract is "make sure it's no longer
     running", which also holds for done / errored / already-cancelled
     jobs.
     """
@@ -571,7 +571,7 @@ def get_votes():
     # Defensive guard against non-finite scores poisoning the response: every
     # write site is already sanitised via ``sigmoid_to_finite_scores``, but
     # ``round(NaN, 4)`` returns ``NaN`` and Flask's default JSON provider
-    # emits the literal token ``NaN`` — invalid JSON that breaks every
+    # emits the literal token ``NaN``, which is invalid JSON that breaks every
     # browser ``JSON.parse``. Belt-and-braces audit M13.
     return {
         "good": sorted(good_votes),
@@ -608,7 +608,7 @@ def seed_votes_from_examples(body: dict):
 
     For each ``type: "media"`` example, reads the file from
     ``data/example_media/``, computes its MD5, and either marks the
-    matching loaded media as Good, or — if the example is new —
+    matching loaded media as Good, or (if the example is new)
     embeds it, inserts it into the ``medias`` dict, and votes it Good.
 
     Returns::
@@ -624,7 +624,7 @@ def seed_votes_from_examples(body: dict):
 
     if seeded > 0:
         # Surface persistence failures explicitly instead of letting them
-        # bubble as an uncaught 500 — same C11/H30 pattern as
+        # bubble as an uncaught 500; same C11/H30 pattern as
         # ``fill_labels_from_sort`` and ``vote_media``.  Without this, an
         # ``os.replace`` failure inside ``_write_detector`` would leave the
         # in-memory good votes committed while the on-disk labelset stayed
@@ -985,7 +985,7 @@ def diversity_tree_next():
     threshold: float | None = None
     if request.method == "POST":
         # ``request.get_json(silent=True)`` keeps the legacy lenient body
-        # handling — flask-smorest's ``arguments`` would 422 on a missing
+        # handling; flask-smorest's ``arguments`` would 422 on a missing
         # body, but we want GET / POST to behave identically when nothing
         # is sent. The shape-level validation lives in the schema; per-
         # value int-coercion stays in the handler so we can return a 400

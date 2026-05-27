@@ -1,5 +1,5 @@
 // Styles previously inlined in the parent component for the
-// media-type select + detection hint chip — moved here when the two
+// media-type select + detection hint chip; moved here when the two
 // adjacent form groups were collapsed into <vt-import-config>.
 
 :host {
@@ -39,7 +39,7 @@
   // higher specificity than the global `.form-select`, so an `inherit`
   // shorthand here would silently win over `.form-select`'s
   // `font-size: var(--font-md)` and render the trigger at the page-root
-  // 1rem instead — making "Audio" visibly larger than the
+  // 1rem instead, making "Audio" visibly larger than the
   // "Dataset MediaType" label above it (style-guide §2.3).
   font-family: inherit;
   font-size: var(--font-md);

@@ -11,7 +11,7 @@ on the running app. Used by:
   differs from the checked-in copy.
 
 The script is invoked as ``python scripts/dump_openapi.py`` from the
-repository root — it relies on ``app.py`` being importable.
+repository root - it relies on ``app.py`` being importable.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def main() -> int:
     real_stdout = sys.stdout
     sys.stdout = sys.stderr
     try:
-        from app import api  # noqa: E402 — env-var stripping must precede import
+        from app import api  # noqa: E402 - env-var stripping must precede import
     finally:
         sys.stdout = real_stdout
 
@@ -46,7 +46,7 @@ def main() -> int:
     # ``info.version`` is the HEAD commit's UTC timestamp (see
     # ``vtsearch/__init__.py``), which changes on every rebase. Pin it to
     # a fixed sentinel before writing so the snapshot reflects API
-    # surface only — the live ``/api/openapi.json`` still serves the
+    # surface only - the live ``/api/openapi.json`` still serves the
     # real per-process version, but the diff guard wouldn't survive
     # rebases otherwise.
     spec.setdefault("info", {})["version"] = "snapshot"

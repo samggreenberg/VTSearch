@@ -1,6 +1,6 @@
 """Tests for ``GET /api/jobs/active``.
 
-The endpoint underpins the top-bar pulldown's spinner glyph — it must
+The endpoint underpins the top-bar pulldown's spinner glyph; it must
 list every ``(dataset_id, detector_id)`` pair with a running or pending
 job on any registered :class:`JobManager`, deduplicate across managers,
 and exclude jobs that were started without a pair (legacy callers, test
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import threading
 
-import app as app_module  # noqa: F401 — triggers conftest side effects
+import app as app_module  # noqa: F401  (triggers conftest side effects)
 from vtscore.concurrency.async_jobs import (
     AsyncJob,
     eval_jobs,
@@ -97,7 +97,7 @@ class TestApiJobsActive:
             learned_sort_jobs.start(
                 signature=("a",),
                 target=_blocking_target(release),
-                # No dataset_id / detector_id — should be excluded.
+                # No dataset_id / detector_id; should be excluded.
             )
 
             resp = client.get("/api/jobs/active")
@@ -113,7 +113,7 @@ class TestListActivePairs:
 
     def test_includes_pending_jobs(self):
         """The pulldown spinner should reflect work that's about to run, not just
-        what's executing this instant — pending counts."""
+        what's executing this instant; pending counts."""
         release = threading.Event()
         try:
             learned_sort_jobs.start(

@@ -1,4 +1,4 @@
-"""Video media type — MP4/AVI/MOV/WEBM/MKV files."""
+"""Video media type - MP4/AVI/MOV/WEBM/MKV files."""
 
 from __future__ import annotations
 
@@ -198,7 +198,7 @@ _VIDEO_MIME_TYPES: dict[str, str] = {
 
 
 class VideoMediaType(MediaType):
-    """Handles video medias — file import, HTTP serving, and demo datasets.
+    """Handles video medias - file import, HTTP serving, and demo datasets.
 
     Embedding is handled by :class:`~vtscore.media.video.embedder_xclip.VideoXClipEmbedder`.
     """

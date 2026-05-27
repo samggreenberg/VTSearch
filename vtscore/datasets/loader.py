@@ -5,9 +5,9 @@ live in dedicated sibling modules; this file holds the shared helpers,
 ``export_dataset_to_file``, and re-exports so existing imports
 (``from vtscore.datasets.loader import ...``) continue to work.
 
-* :mod:`vtscore.datasets.loader_folder` — folder loaders
-* :mod:`vtscore.datasets.loader_pickle` — pickle loaders, sidecars, image embed
-* :mod:`vtscore.datasets.loader_demo` — demo dataset loader
+* :mod:`vtscore.datasets.loader_folder` - folder loaders
+* :mod:`vtscore.datasets.loader_pickle` - pickle loaders, sidecars, image embed
+* :mod:`vtscore.datasets.loader_demo` - demo dataset loader
 
 All public functions that perform I/O accept an optional ``on_progress``
 callback with the signature
@@ -27,8 +27,8 @@ from typing import Any, Callable
 
 import numpy as np
 
-from vtscore.config import EMBEDDINGS_DIR  # noqa: F401  — re-exported & patched in tests
-from vtscore.datasets.metadata import (  # noqa: F401  — re-exported for consumers
+from vtscore.config import EMBEDDINGS_DIR  # noqa: F401  - re-exported & patched in tests
+from vtscore.datasets.metadata import (  # noqa: F401  - re-exported for consumers
     load_audio_metadata_from_folders,
     load_cifar10_batch,
     load_esc50_metadata,
@@ -39,7 +39,7 @@ from vtscore.datasets.metadata import (  # noqa: F401  — re-exported for consu
     load_urbansound8k_metadata,
     load_video_metadata_from_folders,
 )
-from vtscore.security.pickle import (  # noqa: F401  — re-exported for consumers
+from vtscore.security.pickle import (  # noqa: F401  - re-exported for consumers
     RestrictedUnpickler,
     _PICKLE_SAFE_CLASSES,
     safe_pickle_load,
@@ -109,7 +109,7 @@ def _streaming_md5(file_path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Public loaders — re-exported from sibling modules
+# Public loaders - re-exported from sibling modules
 # ---------------------------------------------------------------------------
 
 from vtscore.datasets.loader_folder import (  # noqa: E402, F401
@@ -130,7 +130,7 @@ from vtscore.datasets.loader_demo import (  # noqa: E402, F401
     load_demo_dataset,
 )
 
-# Backward-compat alias — canonical location is vtscore.converters.runner
+# Backward-compat alias - canonical location is vtscore.converters.runner
 from vtscore.converters.runner import apply_converter_to_demo as _apply_converter_to_demo  # noqa: E402, F401
 
 

@@ -320,7 +320,7 @@ class TestMultiUserDatasetFlow:
             ids = [d["id"] for d in resp.get_json()["datasets"]]
             assert entry["id"] in ids
 
-            # Bob logs in — can't see alice's private dataset
+            # Bob logs in; can't see alice's private dataset
             client.post("/api/auth/login", json={"username": "bob"})
             resp = client.get("/api/datasets/registry")
             ids = [d["id"] for d in resp.get_json()["datasets"]]

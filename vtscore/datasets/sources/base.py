@@ -4,11 +4,11 @@ A :class:`MediaSource` describes how to access media files from a location
 (local folder, HTTP archive, S3 bucket, etc.).  It provides three core
 operations:
 
-- **list_items** — enumerate available media files, optionally filtered by
+- **list_items** - enumerate available media files, optionally filtered by
   file extension.
-- **fetch_item** — retrieve a single file by its key (relative path within
+- **fetch_item** - retrieve a single file by its key (relative path within
   the source), returning a local ``Path``.
-- **resolve_path** — find a file by ``origin_name`` or ``filename``, used by
+- **resolve_path** - find a file by ``origin_name`` or ``filename``, used by
   the resolver module for cross-dataset label resolution.
 
 Sources are instantiated per-use (not singletons) because they may carry

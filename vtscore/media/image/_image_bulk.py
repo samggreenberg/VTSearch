@@ -1,6 +1,6 @@
 """Shared bulk helpers for image embedders.
 
-Every image embedder shares the same input pipeline — PIL-load each
+Every image embedder shares the same input pipeline - PIL-load each
 file, convert to RGB, pass a list of PIL images through the model's
 processor, run the forward in chunks, then split the resulting tensor
 back per-item.  This module factors that out so each concrete embedder
@@ -75,7 +75,7 @@ def bulk_embed_image_files(
     Files that fail to decode are reported as ``None`` in the output at
     the matching index.  A failing GPU forward fails the whole batch
     (those positions are filled with ``None``) but does not abort the
-    overall call — subsequent batches still run.
+    overall call - subsequent batches still run.
     """
     total = len(medias)
     results: list[Optional[np.ndarray]] = [None] * total
@@ -114,7 +114,7 @@ def bulk_embed_image_files(
 
         if vectors is None or len(vectors) != len(chunk_indices):
             _log.warning(
-                "Bulk %s forward returned %d vectors for %d inputs — skipping batch",
+                "Bulk %s forward returned %d vectors for %d inputs - skipping batch",
                 label,
                 0 if vectors is None else len(vectors),
                 len(chunk_indices),
@@ -181,7 +181,7 @@ def bulk_patch_forward_image_files(
 
         if outputs is None or len(outputs) != len(chunk_indices):
             _log.warning(
-                "Bulk %s patch-forward returned %d outputs for %d inputs — skipping batch",
+                "Bulk %s patch-forward returned %d outputs for %d inputs - skipping batch",
                 label,
                 0 if outputs is None else len(outputs),
                 len(chunk_indices),

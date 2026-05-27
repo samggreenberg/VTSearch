@@ -14,15 +14,15 @@ class MediaConverter(PluginBase, ABC):
 
     Subclasses must implement:
 
-    * :attr:`source_type` — the ``type_id`` of the input media type.
-    * :attr:`target_type` — the ``type_id`` of the output media type.
-    * :meth:`convert` — perform the actual conversion.
+    * :attr:`source_type` - the ``type_id`` of the input media type.
+    * :attr:`target_type` - the ``type_id`` of the output media type.
+    * :meth:`convert` - perform the actual conversion.
 
     Per-converter parameters
     ------------------------
     Converters can declare user-configurable parameters via the
     :attr:`fields` class attribute (a list of
-    :class:`~vtscore.plugins.PluginField`) — the same mechanism
+    :class:`~vtscore.plugins.PluginField`) - the same mechanism
     every other plugin family uses.  Values flow in through the ``params``
     dict on :meth:`convert`.
 
@@ -34,14 +34,14 @@ class MediaConverter(PluginBase, ABC):
     so :meth:`convert` receives a fully-populated, non-``None`` dict
     where every declared field key is present.  Subclasses can therefore
     read ``params[key]`` directly without juggling ``None`` / missing /
-    empty-string cases — :meth:`get_param` remains as a thin shim for
+    empty-string cases - :meth:`get_param` remains as a thin shim for
     third-party converters not yet migrated.
 
     The returned media dicts contain the fields produced by the target
     media type's :meth:`~vtscore.media.base.MediaType.load_media_data`
     (e.g. ``media_bytes``, ``duration``, ``width``, ``height``) plus a
     ``filename`` key.  They do **not** include ``id``, ``embedding``, or
-    ``md5`` — the caller is responsible for assigning IDs, computing
+    ``md5`` - the caller is responsible for assigning IDs, computing
     embeddings, and hashing.
     """
 
@@ -57,13 +57,13 @@ class MediaConverter(PluginBase, ABC):
     #: parameter values.  The frontend substitutes each ``{key}`` with the
     #: current value of the field named ``key`` (see :attr:`fields`) when
     #: rendering the import row preview.  Subclasses with configurable
-    #: parameters should override to surface the active values — e.g.
+    #: parameters should override to surface the active values - e.g.
     #: ``"Pull the audio track from video. Timeout {ffmpeg_timeout}sec."``.
     #: Defaults to empty (falls back to :attr:`description`).
     summary_template: str = ""
 
     #: User-configurable parameters.  Same :class:`PluginField` system
-    #: every plugin family uses.  Empty by default — converters with no
+    #: every plugin family uses.  Empty by default - converters with no
     #: tunables don't have to declare anything.
     fields: list[PluginField] = []
 
@@ -107,7 +107,7 @@ class MediaConverter(PluginBase, ABC):
 
         Each returned dict must contain at minimum:
 
-        * ``"filename"`` — a descriptive filename for the converted media.
+        * ``"filename"`` - a descriptive filename for the converted media.
         * The data fields expected by the target media type (e.g.
           ``"media_bytes"`` and ``"duration"`` for image/audio/video,
           ``"media_string"`` for text).
@@ -123,7 +123,7 @@ class MediaConverter(PluginBase, ABC):
     ) -> list[dict[str, Any]]:
         """Validate and default-fill *params*, then dispatch to :meth:`convert`.
 
-        This is the framework's entry point — every in-tree call site
+        This is the framework's entry point - every in-tree call site
         (importer multi-media ingestion, converter-folder runner,
         clipper-chain runner) routes through here so :meth:`convert`
         receives a fully-populated dict every time.
@@ -154,7 +154,7 @@ class MediaConverter(PluginBase, ABC):
         marshmallow schema, enforcing declared :attr:`PluginField.min` /
         :attr:`max` ranges and :attr:`options` whitelists).  This
         preserves the legacy :meth:`get_param` semantics where ``""``
-        was treated as "unset" — marshmallow's ``Number`` fields would
+        was treated as "unset" - marshmallow's ``Number`` fields would
         otherwise reject an empty string as "Not a valid integer".
 
         Subclasses rarely call this directly; :meth:`convert_normalized`
@@ -188,7 +188,7 @@ class MediaConverter(PluginBase, ABC):
 
         Converters are usually invoked from ``source_specs`` /
         ``clipper_chain`` dicts that flow through the API as pass-through
-        payloads — they don't go through :func:`validate_plugin_args`
+        payloads - they don't go through :func:`validate_plugin_args`
         like importer/exporter form bodies do.  Framework call sites
         invoke :meth:`convert_normalized`, which wraps this method;
         most plugin code never calls ``validate_params`` directly.

@@ -1,4 +1,4 @@
-"""Audio clippers — tile or pass-through audio media."""
+"""Audio clippers - tile or pass-through audio media."""
 
 from __future__ import annotations
 
@@ -301,7 +301,7 @@ class SoundSilenceClipper(MediaClipper):
     """Split audio into non-silent segments via :func:`librosa.effects.split`.
 
     Detects silence using an amplitude threshold (*top_db* dB below the
-    reference) and returns one clip per non-silent interval — intro/outro
+    reference) and returns one clip per non-silent interval - intro/outro
     silence is dropped automatically.  Suitable for podcasts, voice
     recordings, and sound-event datasets where each "thing" is separated
     by quiet.
@@ -401,7 +401,7 @@ class SoundSilenceClipper(MediaClipper):
 
         total_samples = len(audio_data)
         # librosa's effects.split returns a single full-coverage interval on
-        # degenerate input (e.g. pure silence — ref amplitude is zero, so the
+        # degenerate input (e.g. pure silence - ref amplitude is zero, so the
         # dB threshold is meaningless).  Treat that as "no segmentation".
         if len(intervals) == 1 and int(intervals[0][0]) <= 0 and int(intervals[0][1]) >= total_samples:
             return []
@@ -448,7 +448,7 @@ class SoundSilenceClipper(MediaClipper):
                 "label": "Silence threshold (dB)",
                 "description": (
                     "Audio quieter than this many dB below the reference is treated as silence. "
-                    "Lower values are more aggressive — more, shorter clips."
+                    "Lower values are more aggressive - more, shorter clips."
                 ),
                 "type": "number",
                 "default": self._top_db,
@@ -498,7 +498,7 @@ class SoundClipClipper(MediaClipper):
     Unlike :class:`SoundTilingClipper`, which auto-tiles a clip into many
     equally-spaced segments, ``SoundClipClipper`` returns exactly one tile
     bounded by the start and end times the caller provides.  The intended
-    use is user-driven cropping — e.g. picking a sub-region of an example
+    use is user-driven cropping - e.g. picking a sub-region of an example
     sound to drive a similarity search or a training example.
 
     The returned media dict carries the same ``clip_start`` / ``clip_end``
@@ -601,7 +601,7 @@ class SoundSpeechActivityClipper(MediaClipper):
     voice-activity detection on a 16 kHz mono downmix of the input.  Returned
     speech intervals are sliced out of the **original** WAV bytes (preserving
     the source sample rate / channels) and emitted as separate clips, the
-    same way :class:`SoundSilenceClipper` works — non-speech gaps and
+    same way :class:`SoundSilenceClipper` works - non-speech gaps and
     intro/outro silence are dropped automatically.  Designed for podcasts,
     interviews, voice memos, and lecture recordings where each unit of
     interest is a contiguous speech turn.
@@ -786,7 +786,7 @@ class SoundSpeechActivityClipper(MediaClipper):
                 "key": "threshold",
                 "label": "VAD threshold",
                 "description": (
-                    "Silero VAD confidence threshold (0–1). Higher values are more conservative — "
+                    "Silero VAD confidence threshold (0–1). Higher values are more conservative - "
                     "only louder, clearer speech is kept."
                 ),
                 "type": "number",

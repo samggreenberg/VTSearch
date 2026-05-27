@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 
-import app as app_module  # noqa: F401 — triggers conftest media init
+import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import settings as settings_mod
 from vtsearch.auth import set_thread_user
 
@@ -173,7 +173,7 @@ class TestLegacyMigration:
 
     def test_server_rewrite_failure_keeps_cache_and_disk_consistent(self, tmp_path, monkeypatch):
         """If the server-file rewrite fails after the user write succeeds,
-        the in-memory ``_server_cache`` must not have legacy keys popped —
+        the in-memory ``_server_cache`` must not have legacy keys popped;
         otherwise it would silently disagree with the on-disk server file."""
         from vtsearch import settings as settings_mod
 
@@ -211,7 +211,7 @@ class TestLegacyMigration:
             on_disk = json.loads(server_path.read_text())
             assert on_disk == legacy
 
-            # Crucially, in-memory cache matches disk — legacy keys NOT popped.
+            # Crucially, in-memory cache matches disk; legacy keys NOT popped.
             assert settings_mod._server_cache is not None
             assert settings_mod._server_cache.get("volume") == 0.33
             assert settings_mod._server_cache.get("theme") == "light"
@@ -255,7 +255,7 @@ class TestBackgroundThreadPropagation:
 
 class TestExportFilter:
     def test_get_user_settings_yields_user_view(self, isolated_settings):
-        """get_user_settings() returns this user's data — never another user's."""
+        """get_user_settings() returns this user's data; never another user's."""
         set_thread_user("alice")
         try:
             settings_mod.set_volume(0.3)

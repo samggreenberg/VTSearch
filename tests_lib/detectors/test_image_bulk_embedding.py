@@ -1,6 +1,6 @@
 """Tests for the batched ``_embed_media_bulk_impl`` overrides on image embedders.
 
-The overrides themselves are model-free — they delegate to the shared
+The overrides themselves are model-free; they delegate to the shared
 helper in ``vtscore.media.image._image_bulk`` and a per-embedder
 ``_forward_pil_batch`` callable.  These tests stub the model + processor
 so we can assert:
@@ -12,7 +12,7 @@ so we can assert:
 * The same plumbing works for ``patch_forward_bulk`` on the patch
   embedders.
 
-No model weights are loaded — these tests run on CPU in milliseconds.
+No model weights are loaded; these tests run on CPU in milliseconds.
 """
 
 from __future__ import annotations
@@ -218,7 +218,7 @@ class TestBulkEmbedImageFilesHelper:
 
 
 # ---------------------------------------------------------------------------
-# Concrete embedder overrides — wired up but model-free.
+# Concrete embedder overrides: wired up but model-free.
 # ---------------------------------------------------------------------------
 
 
@@ -357,7 +357,7 @@ class TestEupeBulkOverride:
         emb = ImageEupeSingleEmbedder()
         emb._model = mock.MagicMock()
         emb._preprocess = mock.MagicMock()
-        # EUPE's bulk goes through _forward_pil_batch as well — same shortcut.
+        # EUPE's bulk goes through _forward_pil_batch as well; same shortcut.
 
         def fake_forward(images):
             return np.stack([np.full(3, float(i), dtype=np.float32) for i in range(len(images))])

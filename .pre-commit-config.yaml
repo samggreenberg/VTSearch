@@ -13,7 +13,7 @@
 #
 # `./run-tests.sh` is the source of truth (ruff + codespell + deptry +
 # pip-audit + pyright + OpenAPI snapshot drift + the frontend build +
-# pytest, all in one go) — these hooks just shorten the feedback loop
+# pytest, all in one go); these hooks just shorten the feedback loop
 # so the ruff/codespell/deptry subset is caught at commit time instead
 # of on the next `./run-tests.sh`. VTSearch has no GitHub Actions
 # workflows; nothing runs on push.

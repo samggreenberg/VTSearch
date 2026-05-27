@@ -1,4 +1,4 @@
-"""Image embedder — SigLIP (google/siglip-base-patch16-224)."""
+"""Image embedder - SigLIP (google/siglip-base-patch16-224)."""
 
 from __future__ import annotations
 
@@ -148,7 +148,7 @@ class ImageSiglipEmbedder(MediaEmbedder):
         """Run SigLIP's vision encoder on a list of PIL images.
 
         Returns an ``(N, 768)`` array.  Caller is responsible for batch
-        sizing — this runs the whole list in one forward pass.
+        sizing - this runs the whole list in one forward pass.
         """
         import torch  # noqa: PLC0415
 

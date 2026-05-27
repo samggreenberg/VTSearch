@@ -17,7 +17,7 @@ fast for the UI hint:
   ``0.75``).
 
 Whichever fires first ends the walk; the response reflects whatever has
-been counted so far.  Symlinks are **not** followed during detection —
+been counted so far.  Symlinks are **not** followed during detection -
 the import itself still follows them, but a detection sample doesn't
 need to walk through a symlinked tree to make a good guess.
 """
@@ -45,7 +45,7 @@ def detect_media_types_in_folder(  # noqa: C901
     Args:
         folder: Directory to scan.  Must exist and be a directory.
         recursive: When ``True`` (default) descend into sub-directories.
-            Symlinks are **not** followed regardless — see the module
+            Symlinks are **not** followed regardless - see the module
             docstring for the rationale.  When ``False`` only files
             directly inside *folder* are sampled.
         limit: Maximum number of files to examine.

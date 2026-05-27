@@ -1,4 +1,4 @@
-"""Eval runner — loads datasets and measures sorting quality.
+"""Eval runner - loads datasets and measures sorting quality.
 
 Two evaluation modes:
 

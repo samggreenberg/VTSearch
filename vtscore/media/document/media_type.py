@@ -1,4 +1,4 @@
-"""Document media type — PDF/DOC/PPT files (no embedder)."""
+"""Document media type - PDF/DOC/PPT files (no embedder)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ _DOCUMENT_MIME_TYPES: dict[str, str] = {
 class DocumentMediaType(MediaType):
     """Handles document files (PDF, DOC, PPT).
 
-    This media type does **not** have an embedder — :meth:`embed_media` and
+    This media type does **not** have an embedder - :meth:`embed_media` and
     :meth:`embed_text` always return ``None``.  Documents are intended to
     be converted to other media types (images, text, audio) via
     :class:`~vtscore.converters.base.MediaConverter` subclasses before

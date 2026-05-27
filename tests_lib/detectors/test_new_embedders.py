@@ -587,7 +587,7 @@ class TestVideoMAEEmbedderProperties:
         assert emb.media_type_id == "video"
 
     def test_supports_text_is_false(self):
-        """VideoMAE is vision-only — no text encoder, so text queries are unsupported."""
+        """VideoMAE is vision-only; no text encoder, so text queries are unsupported."""
         from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
@@ -649,7 +649,7 @@ class TestVideoMAEEmbedderProperties:
         assert result is None
 
     def test_embed_text_always_returns_none(self):
-        """VideoMAE has no text tower — embed_text returns None even when loaded."""
+        """VideoMAE has no text tower; embed_text returns None even when loaded."""
         from vtscore.media.video.embedder_videomae import VideoVideoMAEEmbedder
 
         emb = VideoVideoMAEEmbedder()
@@ -701,8 +701,8 @@ class TestPreprocessFrames:
 class TestVideoMAEPreprocessFrames:
     """Verify VideoMAE's frame preprocessing produces the expected shape.
 
-    VideoMAE expects ``(T, C, H, W)`` per video — unlike LanguageBind which
-    transposes to ``(C, T, H, W)`` — so the helper differs by one axis order.
+    transposes to ``(C, T, H, W)``; so the helper differs by one axis order.
+    transposes to ``(C, T, H, W)`` - so the helper differs by one axis order.
     """
 
     def test_output_shape(self):
@@ -867,7 +867,7 @@ class TestAllEmbeddersRegistration:
 class TestEmbedderSentinelDiscovery:
     """Verify built-in embedder modules expose the ``EMBEDDER`` sentinel
     so that auto-discovery picks them up with no edits to any
-    ``__init__.py`` — the same pattern used by exporters, dataset
+    ``__init__.py``; the same pattern used by exporters, dataset
     importers, label importers, processor importers, settings importers /
     exporters, and sync sources.
     """
@@ -920,13 +920,13 @@ class TestEmbedderSentinelDiscovery:
 
     def test_media_type_init_no_longer_lists_embedders(self):
         """Media-type package ``__init__.py`` files should not expose an
-        ``EMBEDDERS`` attribute — embedders are discovered per-module.
+        ``EMBEDDERS`` attribute; embedders are discovered per-module.
         """
         from vtscore.media import audio, document, image, text, video
 
         for pkg in (audio, image, text, video, document):
             assert not hasattr(pkg, "EMBEDDERS"), (
-                f"{pkg.__name__} still exposes an EMBEDDERS list — "
+                f"{pkg.__name__} still exposes an EMBEDDERS list; "
                 "embedders should be discovered via per-module EMBEDDER sentinels"
             )
 
@@ -1188,7 +1188,7 @@ class TestEmbedMediaLock:
             import time
 
             time.sleep(0.1)
-            # t2 should be blocked on the lock — inside should still be set by t1 only
+            # t2 should be blocked on the lock; inside should still be set by t1 only
             assert not overlap_detected, "t2 entered _embed_media_impl while t1 was still inside"
 
             # Let t1 finish

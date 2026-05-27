@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import pathlib
 
-import app as app_module  # noqa: F401 — triggers conftest media init
+import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import achievements
 from vtsearch import settings as settings_mod
 
@@ -296,13 +296,13 @@ class TestVoteStreak:
         ts = _ts(2026, 5, 13, 12, 0, 0)
         for _ in range(200):
             achievements.record_vote("det", "audio", now=ts)
-            ts += 60  # 1-min gaps — well under 10 min
+            ts += 60  # 1-min gaps; well under 10 min
         streak = _by_id(achievements.get_full_state(), "vote_streak")
         assert streak["counter"] == 200
         assert streak["tier_idx"] == 0  # Bronze at 200
 
     def test_long_pause_then_new_streak_does_not_combine(self):
-        # 50 in a row, hour-long break, 30 more — watermark stays at 50.
+        # 50 in a row, hour-long break, 30 more; watermark stays at 50.
         ts = _ts(2026, 5, 13, 8, 0, 0)
         for _ in range(50):
             achievements.record_vote("det", "audio", now=ts)
@@ -560,7 +560,7 @@ class TestPersistence:
         state = achievements.get_full_state()
         votes = _by_id(state, "votes_cast")
         assert votes["counter"] == 500
-        # Bronze already announced — no pending for tier 0.
+        # Bronze already announced; no pending for tier 0.
         pending = _pending_for(state, "votes_cast")
         assert [p["tier_idx"] for p in pending] == []
 
@@ -628,7 +628,7 @@ class TestActionHooks:
     def test_idempotent_re_vote_does_not_increment(self, client):
         """H1 fix: sending target=good on an already-good media is idempotent
         and must not credit a second vote.  This is the achievement-counter
-        side of the inflation race — two stale-view tabs each POSTing the
+        side of the inflation race; two stale-view tabs each POSTing the
         same target collapse into one increment on the server."""
         listing = client.get("/api/medias/ids").get_json()
         media_id = listing[0]["id"]
@@ -641,7 +641,7 @@ class TestActionHooks:
         """Find-mode auto-labels must not count toward votes_cast or vote_streak.
 
         The app applies labels to every media item in Find mode, but those are
-        system-generated scores — the user did not cast them — so they must not
+        system-generated scores (the user did not cast them), so they must not
         inflate the Votes Cast or Marathoner achievements.
         """
         from helpers import setup_trainable_model_in_registry
@@ -731,7 +731,7 @@ class TestDisableAchievements:
         achievements.record_vote("det-1", media_type="audio")
         client.put("/api/settings", json={"disable_achievements": True})
         client.put("/api/settings", json={"disable_achievements": False})
-        # Counters should still be zero — the wipe is permanent.
+        # Counters should still be zero; the wipe is permanent.
         state = achievements.get_full_state()
         for a in state["achievements"]:
             assert a["counter"] == 0

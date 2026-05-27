@@ -397,7 +397,7 @@ describe('LabelViewComponent', () => {
   it('should select hard items by index distance, not score distance', () => {
     flushInitialRequests();
 
-    // Scores cluster above the threshold — by score distance, id 4 (0.55) is
+    // Scores cluster above the threshold; by score distance, id 4 (0.55) is
     // closest to 0.5, but by index the threshold sits between id 4 and id 5.
     // Both sides of the boundary should get equal consideration.
     component.sortState.setSortResults(
@@ -405,8 +405,8 @@ describe('LabelViewComponent', () => {
         { id: 1, score: 0.95 },
         { id: 2, score: 0.90 },
         { id: 3, score: 0.80 },
-        { id: 4, score: 0.55 },  // index 3 — just above threshold
-        { id: 5, score: 0.10 },  // index 4 — just below threshold
+        { id: 4, score: 0.55 },  // index 3, just above threshold
+        { id: 5, score: 0.10 },  // index 4, just below threshold
         { id: 6, score: 0.05 },  // index 5
       ],
       0.5,
@@ -414,7 +414,7 @@ describe('LabelViewComponent', () => {
 
     // Vote on id 4 (the one right at the boundary). With score-based selection
     // the next pick would be id 3 (score 0.80, dist=0.30) over id 5 (score 0.10,
-    // dist=0.40) — biasing toward goods. Index-based should pick id 5 (index 4,
+    // dist=0.40), biasing toward goods. Index-based should pick id 5 (index 4,
     // one step from threshold index 4) over id 3 (index 2, two steps away).
     component.voteState.loadVotes();
     httpMock.expectOne('/api/votes').flush({ good: [4], bad: [], click_times: {}, learned_scores: {} });
@@ -434,7 +434,7 @@ describe('LabelViewComponent', () => {
     component.sortState.setSelectMode('hard');
 
     // Simulate voting on id 1 (closest to threshold) but votes not yet loaded
-    // (vote state still shows empty — the async loadVotes hasn't returned)
+    // (vote state still shows empty; the async loadVotes hasn't returned)
     component.onMediaVoted({ id: 1, vote: 'bad' });
 
     // Flush the loadVotes triggered by onMediaVoted
@@ -470,7 +470,7 @@ describe('LabelViewComponent', () => {
     // Switch to manual mode
     component.onAutopilotStop();
 
-    // Vote many times — resort prompt should never fire because autopilot is off
+    // Vote many times; resort prompt should never fire because autopilot is off
     for (let i = 0; i < 15; i++) {
       component.onMediaVoted({ id: 1, vote: 'good' });
       httpMock.match('/api/votes').forEach(req =>
@@ -562,7 +562,7 @@ describe('LabelViewComponent', () => {
     expect(voteState.badVotes.size).toBe(4);
 
     // Creating a new label-view should clear stale votes before autopilot
-    // activates, so it starts in 'good' phase — NOT 'hard' (Refine Boundary)
+    // activates, so it starts in 'good' phase (NOT 'hard'/Refine Boundary)
     const freshFixture = TestBed.createComponent(LabelViewComponent);
     freshFixture.detectChanges();
 

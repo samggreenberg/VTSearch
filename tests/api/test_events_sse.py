@@ -80,7 +80,7 @@ class TestProgressTrackerEta:
     """``ProgressTracker`` should fill in a smoothed ``eta_seconds`` once a
     bar has been running >5s, reset its phase clock when the status or total
     changes, and stay silent otherwise. We patch :func:`time.monotonic` for
-    determinism — the clock advance values matter, not wall time."""
+    determinism; the clock advance values matter, not wall time."""
 
     def _make_tracker(self) -> ProgressTracker:
         return ProgressTracker(extra_fields={"eta_seconds": None})
@@ -172,7 +172,7 @@ class TestProgressTrackerEta:
         assert tracker.get()["eta_seconds"] is None
 
     def test_eta_field_absent_when_extra_not_declared(self):
-        """Trackers created without an ``eta_seconds`` extra get no key —
+        """Trackers created without an ``eta_seconds`` extra get no key;
         the feature is opt-in via :data:`_PROGRESS_COMMON_EXTRAS`."""
         tracker = ProgressTracker()
         tracker.update("loading", "", 1, 2)
