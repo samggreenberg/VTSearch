@@ -121,8 +121,16 @@ def _make_console_progress(original_callback):
     _last_base: list[str | None] = [None]
     _on_progress_line: list[bool] = [False]
 
+    _FULL_BAR = "#" * 30
+
+    def _complete_bar() -> None:
+        """Overwrite the current progress line with a 100% bar."""
+        if _last_base[0]:
+            sys.stdout.write(f"\r    {_last_base[0]} [{_FULL_BAR}] 100%\033[K")
+
     def _flush() -> None:
         if _on_progress_line[0]:
+            _complete_bar()
             sys.stdout.write("\n")
             sys.stdout.flush()
             _on_progress_line[0] = False
@@ -134,8 +142,10 @@ def _make_console_progress(original_callback):
 
         if total > 0:
             base = _strip_time_suffix(message)
-            # If we're already on a progress line for a different task, terminate it.
+            # If we're already on a progress line for a different task, complete it
+            # at 100% before starting the new bar.
             if _on_progress_line[0] and _last_base[0] is not None and _last_base[0] != base:
+                _complete_bar()
                 sys.stdout.write("\n")
             pct = min(100, current * 100 // total)
             filled = pct * 30 // 100
@@ -149,8 +159,9 @@ def _make_console_progress(original_callback):
             _last_base[0] = base
             _last_msg[0] = message
         elif message and message != _last_msg[0]:
-            # New phase message - print on its own line
+            # New phase message - print on its own line; complete any active bar first.
             if _on_progress_line[0]:
+                _complete_bar()
                 sys.stdout.write("\n")
                 _on_progress_line[0] = False
                 _last_base[0] = None
