@@ -912,8 +912,17 @@ Cross-section interaction agents:
   console or overwrite the next media's canvas.
 - **M29.** `AudioContext` not cleaned up on rapid navigation → resource
   exhaustion.
-- **M30.** Autopilot phase transitions can oscillate
-  (`hard → new → hard → new`) when smart/stable status flickers.
+- ~~**M30.** Autopilot phase transitions can oscillate
+  (`hard → new → hard → new`) when smart/stable status flickers.~~
+  **Won't fix.** Evaluated and closed. The current derivation in
+  `AutopilotStateService.checkPhaseTransition` is intentionally instantaneous
+  so the phase tracks real indicator state both forward and backward (per the
+  existing comment about vote-removal regressions). A one-way ratchet or
+  hysteresis would suppress the bounce but would also mask genuine
+  instability after entering `new`, leaving the user on a stale sort with no
+  automatic recovery. The observable oscillation is rate-limited by the
+  autopilot resort interval and settles on its own; adding stickiness costs
+  more than the noise it would remove.
 - ~~**M31.** `settings-importer-modal` auto-closes after 1.5s timeout
   regardless of operation duration.~~; resolved. The 1.5s timer fires only
   after the server returns success (not mid-operation), so the original
