@@ -609,6 +609,7 @@ class DatasetImporter(PluginBase):
                 continue
             if spec.converter is None:
                 outs = [raw]
+                target_type = spec.source_type
             else:
                 converter = converter_cache.get(spec.converter)
                 if converter is None:
@@ -618,9 +619,11 @@ class DatasetImporter(PluginBase):
                     converter = resolved
                     converter_cache[spec.converter] = converter
                 outs = converter.convert_normalized(raw, spec.params)
+                target_type = converter.target_type
             for media in outs:
                 if media is None:
                     continue
+                media.setdefault("media_type", target_type)
                 media["id"] = next_id
                 media.setdefault("origin", default_origin)
                 media.setdefault("origin_name", media.get("filename") or str(next_id))
