@@ -1,9 +1,9 @@
 # Logical-Bug Audit: 2026-05
 
 **Status:** Mostly resolved; C1–C12 (critical) and H1–H34 (high) are
-shipped; ~13 medium/low items remain open (M21–M24, M27–M34, L1–L9;
-M25 shipped, M26 was a false positive). Resolved findings are marked
-as struck-through headings.
+shipped; ~12 medium/low items remain open (M21–M24, M28–M34, L1–L9;
+M25 and M27 shipped, M26 was a false positive). Resolved findings are
+marked as struck-through headings.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on
@@ -890,8 +890,20 @@ Cross-section interaction agents:
   `stopPolling$` which the timer's `takeUntil` honors. The only real
   observation is that `destroy$` itself is dead code; cosmetic, not a
   leak.
-- **M27.** `progress-events.service` doesn't reconcile stale `task_id`s after
-  backend restart.
+- ~~**M27.** `progress-events.service` doesn't reconcile stale `task_id`s after
+  backend restart.~~ **Shipped.** The SSE stream now emits a leading `server`
+  frame carrying a per-process `boot_id` (generated once at module import in
+  `vtscore/concurrency/events.py`). `ProgressEventsService` compares the
+  incoming `boot_id` against the previous one and fires `serverReset$` on
+  change (suppressed for the very first connect, so a clean reload doesn't
+  trigger a spurious reset). `DashboardLoadingTasksService` subscribes to
+  that signal and tears down its `awaitedTaskIds` / `completedTaskIds` /
+  `completedModelTaskIds` sets, terminates the existing `polling$` /
+  `detectorPolling$` subscriptions, clears its inline error rows, and resets
+  `setLoading(false)` — the next non-idle SSE snapshot then re-engages
+  polling cleanly via the existing constructor subscriptions. A transient
+  network blip that reconnects to the same backend keeps the same boot_id
+  and is therefore a no-op.
 - ~~**M28.** Audio waveform fetch's `catch {}` silently shows "Unable to load
   waveform" with no UI state propagation.~~ **Shipped.** `drawWaveform` now
   uses an `AbortController` (cancelled on next load / `ngOnDestroy`), checks

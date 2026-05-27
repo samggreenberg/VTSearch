@@ -7,6 +7,7 @@ import time
 from vtscore.concurrency.events import (
     _TASK_CHANNELS,
     _TRACKER_CHANNELS,
+    BOOT_ID,
     initial_snapshot,
     stream_progress_events,
 )
@@ -224,10 +225,18 @@ class TestLoadingTasksTrackerSubscriptions:
 class TestEventsRoute:
     def test_initial_snapshot_includes_every_channel(self):
         frames = initial_snapshot()
-        # One frame per known channel.
+        # One frame per known channel plus the leading `server` identity
+        # frame carrying boot_id.
         names = {f.split("\n", 1)[0].replace("event: ", "") for f in frames}
-        expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys())
+        expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys()) | {"server"}
         assert names == expected
+
+    def test_initial_snapshot_first_frame_is_server_boot_id(self):
+        frames = initial_snapshot()
+        assert frames[0].startswith("event: server\n")
+        data_line = [ln for ln in frames[0].splitlines() if ln.startswith("data: ")][0]
+        payload = json.loads(data_line.removeprefix("data: "))
+        assert payload == {"boot_id": BOOT_ID}
 
     def test_endpoint_returns_sse_mimetype(self, client):
         # We can't keep the generator open easily through the test client,
@@ -247,7 +256,7 @@ class TestEventsRoute:
             # Drain initial connect comment + the snapshot frames so the
             # generator is parked on the queue.get() call.
             seen_channels: set[str] = set()
-            expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys())
+            expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys()) | {"server"}
             deadline = time.monotonic() + 2.0
             while seen_channels != expected and time.monotonic() < deadline:
                 chunk = next(gen)
