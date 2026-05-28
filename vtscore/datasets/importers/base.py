@@ -56,6 +56,7 @@ verifies that every imported package is declared there.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field as dc_field
 from pathlib import Path
@@ -183,6 +184,33 @@ def _validate_spec_converter(spec: SourceSpec, output_type: str, get_converter) 
 
 
 PickerView = str  # one of: "form", "demo", "server_folder", "local"
+
+
+def _fill_converter_output_fields(media: dict[str, Any]) -> None:
+    """Fill framework-required fields that converters don't produce.
+
+    Converter implementations return only content fields (``media_bytes``,
+    ``media_string``, ``filename``, ``duration``, ``width``, ``height``).
+    The ingestion layer is responsible for stamping the bookkeeping fields
+    that the rest of the framework (``export_dataset_to_file``, the embed
+    stage, etc.) expects on every media dict.
+    """
+    if "file_size" not in media:
+        mb = media.get("media_bytes") or b""
+        ms = (media.get("media_string") or "").encode("utf-8")
+        media["file_size"] = len(mb) if mb else len(ms)
+    if "md5" not in media:
+        mb = media.get("media_bytes")
+        if mb:
+            media["md5"] = hashlib.md5(mb).hexdigest()
+        elif media.get("media_string"):
+            media["md5"] = hashlib.md5((media["media_string"] or "").encode("utf-8")).hexdigest()
+        else:
+            media["md5"] = hashlib.md5(b"").hexdigest()
+    media.setdefault("embedding", None)
+    media.setdefault("embedder", "")
+    media.setdefault("category", "custom")
+    media.setdefault("duration", 0)
 
 
 # Synthetic per-importer field that lets the user pick a name for the new
@@ -627,6 +655,8 @@ class DatasetImporter(PluginBase):
                 media["id"] = next_id
                 media.setdefault("origin", default_origin)
                 media.setdefault("origin_name", media.get("filename") or str(next_id))
+                if spec.converter is not None:
+                    _fill_converter_output_fields(media)
                 medias[next_id] = media
                 next_id += 1
         return next_id
