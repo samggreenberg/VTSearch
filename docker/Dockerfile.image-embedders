@@ -91,6 +91,7 @@ COPY vtsearch/__init__.py vtsearch/__init__.py
 
 # Copy package source so `pip install -e .` finds it.
 COPY vtsearch/ vtsearch/
+COPY vtscore/ vtscore/
 
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
@@ -140,7 +141,7 @@ COPY model_cache/ "$VTSEARCH_MODELS_DIR/"
 
 # SigLIP (default, ungated).
 RUN python -u -c "import os; \
-from vtsearch.config import SIGLIP_MODEL_ID; \
+from vtscore.config import SIGLIP_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
 print(f'Pre-downloading {SIGLIP_MODEL_ID} to {cache}', flush=True); \
 from transformers import SiglipModel, SiglipImageProcessor, SiglipTokenizer; \
@@ -151,7 +152,7 @@ print('SigLIP weights cached.', flush=True)"
 
 # SigLIP 2 (ungated).
 RUN python -u -c "import os; \
-from vtsearch.config import SIGLIP2_MODEL_ID; \
+from vtscore.config import SIGLIP2_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
 print(f'Pre-downloading {SIGLIP2_MODEL_ID} to {cache}', flush=True); \
 from transformers import AutoModel, AutoProcessor; \
@@ -161,7 +162,7 @@ print('SigLIP 2 weights cached.', flush=True)"
 
 # OpenAI CLIP (ungated).
 RUN python -u -c "import os; \
-from vtsearch.config import CLIP_MODEL_ID; \
+from vtscore.config import CLIP_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
 print(f'Pre-downloading {CLIP_MODEL_ID} to {cache}', flush=True); \
 from transformers import CLIPModel, CLIPProcessor; \
@@ -171,7 +172,7 @@ print('CLIP weights cached.', flush=True)"
 
 # DINOv2 (ungated; anyone can download these).
 RUN python -u -c "import os; \
-from vtsearch.config import DINOV2_MODEL_ID; \
+from vtscore.config import DINOV2_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
 print(f'Pre-downloading {DINOV2_MODEL_ID} to {cache}', flush=True); \
 from transformers import AutoModel, AutoImageProcessor; \
@@ -189,7 +190,7 @@ print('DINOv2 weights cached.', flush=True)"
 # is a single ``python -c`` line and try/except is a compound statement
 # that can't be flattened with semicolons.
 RUN python -u -c "import os; \
-from vtsearch.config import DINOV3_MODEL_ID; \
+from vtscore.config import DINOV3_MODEL_ID; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
 from transformers import AutoModel, AutoImageProcessor; \
 AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
@@ -206,7 +207,7 @@ print('DINOv3 weights loaded from local cache.', flush=True)" \
 # to skipping EUPE if the build host has no network access.
 ENV TORCH_HOME=${VTSEARCH_MODELS_DIR}
 RUN python -u -c "import os; \
-from vtsearch.config import EUPE_MODEL_ID; \
+from vtscore.config import EUPE_MODEL_ID; \
 import torch; \
 torch.hub.load('facebookresearch/EUPE', 'eupe_vitb16', source='github', \
                pretrained=True, weights=EUPE_MODEL_ID, trust_repo=True); \
