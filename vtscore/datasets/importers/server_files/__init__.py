@@ -358,9 +358,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
             had_direct = False
             for spec in specs:
                 if spec.converter is None:
-                    if self._load_direct_into(
-                        staging, spec, field_values, medias, thin, merged_vectors, embedder_name
-                    ):
+                    if self._load_direct_into(staging, spec, field_values, medias, thin, merged_vectors, embedder_name):
                         had_direct = True
 
             converter_rows = [s for s in specs if s.converter is not None]
