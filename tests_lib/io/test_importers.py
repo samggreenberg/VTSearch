@@ -1099,5 +1099,462 @@ class TestIngestSpecStreamMediaType:
 
 
 # ---------------------------------------------------------------------------
+# _ingest_spec_stream: required framework fields on converter outputs
+# ---------------------------------------------------------------------------
+#
+# Converters return only content fields (media_bytes, filename, duration, …).
+# _ingest_spec_stream is responsible for computing file_size / md5 and
+# defaulting embedding / embedder / category so the rest of the pipeline
+# never sees a KeyError.
+
+
+class TestIngestSpecStreamRequiredFields:
+    """Converter outputs get file_size, md5, embedding, embedder, category."""
+
+    @staticmethod
+    def _make_importer(records: list[dict]):
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+
+        class _Imp(DatasetImporter):
+            name = "test_fields"
+            display_name = "Test"
+            description = "Test importer."
+            fields = [
+                ImporterField(
+                    "media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"
+                ),
+            ]
+
+            def fetch_source_media(self, spec: SourceSpec, field_values: dict, thin: bool = False):
+                yield from iter(records)
+
+        return _Imp()
+
+    def test_file_size_and_md5_computed_from_bytes(self, monkeypatch):
+        """file_size and md5 are derived from media_bytes when the converter omits them."""
+        import hashlib
+        import json
+
+        from vtscore.converters import get_converter
+
+        v2i = get_converter("video2image")
+        assert v2i is not None
+
+        png = b"PNGDATA"
+
+        def fake_convert(media, params):
+            return [{"filename": "frame_0.png", "media_bytes": png, "duration": 0}]
+
+        monkeypatch.setattr(v2i, "convert", fake_convert)
+
+        imp = self._make_importer([{"filename": "clip.mp4", "media_bytes": b"VID"}])
+        medias: dict = {}
+        source_specs = json.dumps([{"source_type": "video", "converter": "video2image", "params": {}}])
+        imp.run({"media_type": "image", "source_specs": source_specs}, medias)
+
+        assert len(medias) == 1
+        m = medias[1]
+        assert m["file_size"] == len(png)
+        assert m["md5"] == hashlib.md5(png).hexdigest()
+
+    def test_embedding_embedder_category_defaulted(self, monkeypatch):
+        """embedding=None, embedder='', category='custom' are set on converter outputs."""
+        import json
+
+        from vtscore.converters import get_converter
+
+        v2i = get_converter("video2image")
+        assert v2i is not None
+
+        def fake_convert(media, params):
+            return [{"filename": "frame_0.png", "media_bytes": b"PNG", "duration": 0}]
+
+        monkeypatch.setattr(v2i, "convert", fake_convert)
+
+        imp = self._make_importer([{"filename": "clip.mp4", "media_bytes": b"VID"}])
+        medias: dict = {}
+        source_specs = json.dumps([{"source_type": "video", "converter": "video2image", "params": {}}])
+        imp.run({"media_type": "image", "source_specs": source_specs}, medias)
+
+        m = medias[1]
+        assert m.get("embedding") is None
+        assert m.get("embedder") == ""
+        assert m.get("category") == "custom"
+
+    def test_preexisting_md5_not_overwritten(self, monkeypatch):
+        """If a converter explicitly sets md5 (future-proofing), it is preserved."""
+        import json
+
+        from vtscore.converters import get_converter
+
+        v2i = get_converter("video2image")
+        assert v2i is not None
+
+        def fake_convert(media, params):
+            return [{"filename": "frame_0.png", "media_bytes": b"PNG", "duration": 0, "md5": "precomputed"}]
+
+        monkeypatch.setattr(v2i, "convert", fake_convert)
+
+        imp = self._make_importer([{"filename": "clip.mp4", "media_bytes": b"VID"}])
+        medias: dict = {}
+        source_specs = json.dumps([{"source_type": "video", "converter": "video2image", "params": {}}])
+        imp.run({"media_type": "image", "source_specs": source_specs}, medias)
+
+        assert medias[1]["md5"] == "precomputed"
+
+    def test_no_bytes_yields_empty_md5(self, monkeypatch):
+        """A converter that produces no bytes gets md5=md5(b'')."""
+        import hashlib
+        import json
+
+        from vtscore.converters import get_converter
+
+        v2i = get_converter("video2image")
+        assert v2i is not None
+
+        def fake_convert(media, params):
+            return [{"filename": "empty.png", "duration": 0}]
+
+        monkeypatch.setattr(v2i, "convert", fake_convert)
+
+        imp = self._make_importer([{"filename": "clip.mp4", "media_bytes": b"VID"}])
+        medias: dict = {}
+        source_specs = json.dumps([{"source_type": "video", "converter": "video2image", "params": {}}])
+        imp.run({"media_type": "image", "source_specs": source_specs}, medias)
+
+        assert medias[1]["md5"] == hashlib.md5(b"").hexdigest()
+        assert medias[1]["file_size"] == 0
+
+    def test_direct_spec_not_affected(self):
+        """Pass-through (no-converter) specs are not modified by _fill_converter_output_fields."""
+        import json
+
+        # A direct spec whose raw media explicitly lacks file_size/md5 should
+        # NOT have them added (that would mask a broken importer).
+        imp = self._make_importer([{"filename": "photo.png", "media_bytes": b"PNG", "media_type": "image"}])
+        medias: dict = {}
+        source_specs = json.dumps([{"source_type": "image", "converter": None, "params": {}}])
+        imp.run({"media_type": "image", "source_specs": source_specs}, medias)
+
+        # file_size / md5 are NOT added for direct (no-converter) specs
+        assert "file_size" not in medias[1]
+        assert "md5" not in medias[1]
+
+
+# ---------------------------------------------------------------------------
+# Converter output end-to-end: export_dataset_to_file, round-trip, labelset
+# ---------------------------------------------------------------------------
+#
+# The previous regression class (TestIngestSpecStreamRequiredFields) checks
+# that _ingest_spec_stream stamps the fields.  This class checks every place
+# downstream that reads those fields hard – without .get() – to make sure
+# nothing blows up end-to-end.  History: we kept finding vid2img errors in
+# different layers; every new test here corresponds to a real crash site or
+# data-quality footgun that was missed.
+
+
+class TestConverterOutputEndToEnd:
+    """Downstream consumers must not crash on media produced via the spec-stream converter path."""
+
+    @staticmethod
+    def _make_importer(records: list[dict]):
+        from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+
+        class _Imp(DatasetImporter):
+            name = "test_e2e"
+            display_name = "Test"
+            description = "Test importer."
+            fields = [
+                ImporterField(
+                    "media_type",
+                    "Media Type",
+                    "select",
+                    options=["image", "video", "audio", "text"],
+                    default="image",
+                ),
+            ]
+
+            def fetch_source_media(self, spec: SourceSpec, field_values: dict, thin: bool = False):
+                yield from iter(records)
+
+        return _Imp()
+
+    @staticmethod
+    def _run_v2i(monkeypatch, records, frames_per_video=1, *, frame_bytes_fn=None):
+        """Helper: run import with video2image converter; return medias dict."""
+        import json
+
+        from vtscore.converters import get_converter
+
+        v2i = get_converter("video2image")
+        assert v2i is not None
+
+        def _fake_convert(media, params):
+            stem = media.get("filename", "vid").split(".")[0]
+            frames = []
+            for i in range(frames_per_video):
+                fb = frame_bytes_fn(i) if frame_bytes_fn else f"PNG_{stem}_{i}".encode()
+                frames.append({"filename": f"{stem}_clip_{i + 1}.png", "media_bytes": fb, "duration": 0})
+            return frames
+
+        monkeypatch.setattr(v2i, "convert", _fake_convert)
+
+        imp = TestConverterOutputEndToEnd._make_importer(records)
+        medias: dict = {}
+        imp.run(
+            {
+                "media_type": "image",
+                "source_specs": json.dumps([{"source_type": "video", "converter": "video2image", "params": {}}]),
+            },
+            medias,
+        )
+        return medias
+
+    # ------------------------------------------------------------------
+    # export_dataset_to_file must not raise
+    # ------------------------------------------------------------------
+
+    def test_export_does_not_raise(self, monkeypatch):
+        """export_dataset_to_file must not raise KeyError on converter-output medias.
+
+        This is the exact production crash: file_size and md5 were missing,
+        causing KeyError at loader.py:165-166.
+        """
+        import numpy as np
+
+        from vtscore.datasets.loader import export_dataset_to_file
+
+        medias = self._run_v2i(monkeypatch, [{"filename": "clip.mp4", "media_bytes": b"VID"}])
+
+        rng = np.random.default_rng(1)
+        medias[1]["embedding"] = rng.standard_normal(512).astype(np.float32)
+
+        data = export_dataset_to_file(medias)  # must not raise
+        assert len(data) > 0
+
+    def test_export_duration_not_missing(self, monkeypatch):
+        """export_dataset_to_file accesses media["duration"] directly; it must be present."""
+        import numpy as np
+
+        from vtscore.datasets.loader import export_dataset_to_file
+
+        medias = self._run_v2i(monkeypatch, [{"filename": "clip.mp4", "media_bytes": b"VID"}])
+        rng = np.random.default_rng(2)
+        medias[1]["embedding"] = rng.standard_normal(512).astype(np.float32)
+
+        assert "duration" in medias[1]
+        export_dataset_to_file(medias)  # hard access on media["duration"] must not KeyError
+
+    # ------------------------------------------------------------------
+    # Full pickle round-trip
+    # ------------------------------------------------------------------
+
+    def test_pickle_round_trip_preserves_all_fields(self, monkeypatch, tmp_path):
+        """Fields set by _fill_converter_output_fields survive export → reload intact."""
+        import hashlib
+
+        import numpy as np
+
+        from vtscore.datasets.loader import export_dataset_to_file, load_dataset_from_pickle
+
+        png = b"FRAME_BYTES"
+        medias = self._run_v2i(
+            monkeypatch,
+            [{"filename": "test.mp4", "media_bytes": b"VIDEO"}],
+            frame_bytes_fn=lambda _: png,
+        )
+
+        rng = np.random.default_rng(3)
+        medias[1]["embedding"] = rng.standard_normal(128).astype(np.float32)
+
+        pkl_path = tmp_path / "frames.pkl"
+        pkl_path.write_bytes(export_dataset_to_file(medias))
+
+        reloaded: dict = {}
+        load_dataset_from_pickle(pkl_path, reloaded)
+
+        assert len(reloaded) == 1
+        m = reloaded[1]
+        assert m["media_type"] == "image"
+        assert m["file_size"] == len(png)
+        assert m["md5"] == hashlib.md5(png).hexdigest()
+        assert m["duration"] == 0
+        assert m["category"] == "custom"
+        assert m["embedder"] == ""
+        assert m["embedding"] is not None
+
+    # ------------------------------------------------------------------
+    # Multiple frames from one video
+    # ------------------------------------------------------------------
+
+    def test_multi_frame_export_does_not_raise(self, monkeypatch, tmp_path):
+        """Multiple frames from a single video all export cleanly."""
+        import numpy as np
+
+        from vtscore.datasets.loader import export_dataset_to_file
+
+        medias = self._run_v2i(
+            monkeypatch,
+            [{"filename": "long.mp4", "media_bytes": b"VID"}],
+            frames_per_video=5,
+        )
+        assert len(medias) == 5
+
+        rng = np.random.default_rng(4)
+        for m in medias.values():
+            m["embedding"] = rng.standard_normal(64).astype(np.float32)
+
+        export_dataset_to_file(medias)  # must not raise
+
+    def test_frames_from_same_video_have_distinct_md5s(self, monkeypatch):
+        """Each frame gets its own md5 derived from its own bytes, not a shared one."""
+        medias = self._run_v2i(
+            monkeypatch,
+            [{"filename": "clip.mp4", "media_bytes": b"VID"}],
+            frames_per_video=4,
+            frame_bytes_fn=lambda i: f"DISTINCT_FRAME_{i}".encode(),
+        )
+
+        assert len(medias) == 4
+        md5s = [m["md5"] for m in medias.values()]
+        assert len(set(md5s)) == 4, "Each frame must have a unique md5"
+
+    def test_two_videos_produce_independent_md5s(self, monkeypatch):
+        """Frames from two different videos each get their own md5."""
+        medias = self._run_v2i(
+            monkeypatch,
+            [
+                {"filename": "videoA.mp4", "media_bytes": b"VIDA"},
+                {"filename": "videoB.mp4", "media_bytes": b"VIDB"},
+            ],
+            frames_per_video=2,
+        )
+
+        assert len(medias) == 4
+        md5s = [m["md5"] for m in medias.values()]
+        assert len(set(md5s)) == 4, "All 4 frames (2 videos × 2 frames) must have distinct md5s"
+
+    # ------------------------------------------------------------------
+    # Text converter path (media_string, not media_bytes)
+    # ------------------------------------------------------------------
+
+    def test_text_converter_file_size_and_md5_from_string(self, monkeypatch):
+        """Text converters (returning media_string) get file_size and md5 from the string."""
+        import hashlib
+        import json
+
+        from vtscore.converters import get_converter
+
+        i2t = get_converter("image2text")
+        assert i2t is not None
+
+        caption = "a brown dog sits on the grass"
+        monkeypatch.setattr(
+            i2t,
+            "convert",
+            lambda media, params: [
+                {
+                    "filename": "caption.txt",
+                    "media_string": caption,
+                    "duration": 0,
+                    "word_count": 7,
+                    "character_count": len(caption),
+                }
+            ],
+        )
+
+        imp = self._make_importer([{"filename": "photo.png", "media_bytes": b"PNG"}])
+        medias: dict = {}
+        imp.run(
+            {
+                "media_type": "text",
+                "source_specs": json.dumps([{"source_type": "image", "converter": "image2text", "params": {}}]),
+            },
+            medias,
+        )
+
+        m = medias[1]
+        encoded = caption.encode("utf-8")
+        assert m["file_size"] == len(encoded)
+        assert m["md5"] == hashlib.md5(encoded).hexdigest()
+
+    def test_text_converter_export_does_not_raise(self, monkeypatch, tmp_path):
+        """export_dataset_to_file must not raise on text-converter outputs."""
+        import json
+
+        import numpy as np
+
+        from vtscore.converters import get_converter
+        from vtscore.datasets.loader import export_dataset_to_file
+
+        i2t = get_converter("image2text")
+        assert i2t is not None
+
+        monkeypatch.setattr(
+            i2t,
+            "convert",
+            lambda media, params: [
+                {
+                    "filename": "caption.txt",
+                    "media_string": "hello world",
+                    "duration": 0,
+                    "word_count": 2,
+                    "character_count": 11,
+                }
+            ],
+        )
+
+        imp = self._make_importer([{"filename": "img.png", "media_bytes": b"PNG"}])
+        medias: dict = {}
+        imp.run(
+            {
+                "media_type": "text",
+                "source_specs": json.dumps([{"source_type": "image", "converter": "image2text", "params": {}}]),
+            },
+            medias,
+        )
+
+        rng = np.random.default_rng(5)
+        medias[1]["embedding"] = rng.standard_normal(64).astype(np.float32)
+        export_dataset_to_file(medias)  # must not raise
+
+    # ------------------------------------------------------------------
+    # labelset._clip_to_elements reads media["md5"] directly
+    # ------------------------------------------------------------------
+
+    def test_labelset_clip_to_elements_does_not_crash(self, monkeypatch):
+        """_clip_to_elements must not raise KeyError when called on converter-output media.
+
+        labelset.py:445 accesses media["md5"] unconditionally; if md5 is
+        missing the crash surfaces only when the user first labels a frame,
+        making it hard to connect to the import step.
+        """
+        from vtscore.datasets.labelset import _clip_to_elements
+
+        medias = self._run_v2i(monkeypatch, [{"filename": "clip.mp4", "media_bytes": b"VID"}])
+
+        elements = _clip_to_elements(medias[1], "good")
+        assert len(elements) == 1
+        assert elements[0].md5 != ""
+        assert elements[0].label == "good"
+
+    def test_labelset_clip_to_elements_md5_is_correct(self, monkeypatch):
+        """md5 seen by _clip_to_elements matches the computed hash of the frame bytes."""
+        import hashlib
+
+        from vtscore.datasets.labelset import _clip_to_elements
+
+        frame_data = b"SPECIFIC_FRAME"
+        medias = self._run_v2i(
+            monkeypatch,
+            [{"filename": "v.mp4", "media_bytes": b"VID"}],
+            frame_bytes_fn=lambda _: frame_data,
+        )
+
+        elements = _clip_to_elements(medias[1], "bad")
+        assert elements[0].md5 == hashlib.md5(frame_data).hexdigest()
+
+
+# ---------------------------------------------------------------------------
 # load_dataset_from_folder – content_vectors support
 # ---------------------------------------------------------------------------

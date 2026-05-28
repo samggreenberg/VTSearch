@@ -97,7 +97,7 @@ header {
   }
 
   &.disabled {
-    opacity: 0.4;
+    opacity: var(--opacity-disabled);
     cursor: not-allowed;
 
     &:hover {
@@ -171,7 +171,12 @@ header {
 
   &:disabled,
   &.disabled {
-    opacity: 0.4;
+    // Avoid `opacity` here: white text dimmed via opacity on the saturated
+    // accent-blue header collapses to unreadable contrast. A color shift to
+    // --header-text-dim keeps the "you are here / not actionable" feel while
+    // staying readable in all three themes.
+    color: var(--header-text-dim);
+    background: transparent;
     cursor: not-allowed;
   }
 }

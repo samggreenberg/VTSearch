@@ -78,7 +78,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   }
 
   &:disabled {
-    opacity: 0.5;
+    opacity: var(--opacity-disabled);
     cursor: not-allowed;
   }
 

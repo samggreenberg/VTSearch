@@ -202,7 +202,7 @@ build (~2 GB).
 
 ## Building the frontend
 
-The Angular frontend must be built after checking out the code; the compiled files are not committed to Git. You'll need **Node.js 18+** and **npm**.
+The Angular frontend must be built after checking out the code; the compiled files are not committed to Git. You'll need **Node.js 22+** and **npm**.
 
 Check if they're installed:
 
@@ -216,7 +216,7 @@ If not installed:
 <details><summary>Ubuntu / Debian</summary>
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
@@ -225,7 +225,7 @@ sudo apt install -y nodejs
 <details><summary>RHEL / Fedora / Rocky / Alma</summary>
 
 ```bash
-curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo -E bash -
 sudo dnf install -y nodejs
 ```
 

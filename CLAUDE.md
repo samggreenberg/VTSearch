@@ -1,6 +1,8 @@
 # VTSearch
 
-Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector**; a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a small MLP learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
+Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector**: a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a small MLP learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
+
+Architecture, state model, plugin systems, auth, and the directory map all live in **`docs/ARCHITECTURE.md`**. This file holds the testing rules and the policy/gotchas that must be in context every turn.
 
 ## Ask Questions via `AskUserQuestion`: NOT prose (CRITICAL, READ FIRST)
 
@@ -117,6 +119,7 @@ The `.back-btn` rule in `frontend/src/scss/_components.scss` provides the shared
 A flow can legitimately carry both: a nested view shows `← Back` at the top to step back one view, while the outer view's footer shows `Cancel` to dismiss the whole modal. What it should *not* do is use the word "Cancel" for an action that is really navigation back to a parent view.
 
 ## Commands
+
 - **Run tests (CPU, fast)**: `./run-tests.sh` (also runs `ruff check`, `ruff format --check`, `codespell`, `deptry`, and the frontend TypeScript build)
 - **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs ruff/codespell/deptry first; `core` additionally runs the frontend build check)
 - **Run tests with coverage**: `VTSEARCH_COVERAGE=1 ./run-tests.sh` (opt-in; adds ~10-20% overhead)
@@ -142,56 +145,6 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Dependency check**: `python -m deptry .`
 - **Dead code audit** (manual, pre-release): see `.vulture-whitelist.py` for the full invocation (60% confidence, with marshmallow/pydantic field directories excluded and pytest/Flask/dunder noise filtered). Run before each release; not a CI gate.
 
-## Architecture
-- `app.py`: Flask entry point, registers blueprints, startup logic, CLI argument parsing, per-request user context via `before_request` middleware, per-request dataset/model context resolution from `X-Dataset-Id`/`X-Detector-Id` headers
-- `vtsearch/auth/`: Authentication: `LoginProvider` ABC, `DefaultLoginProvider` (single-user, no-op), `get_current_user()`, `get_user_data_dir()`, `set_login_provider()`
-- `vtscore/config.py`: Constants (CLAP_SAMPLE_RATE, paths, model IDs)
-- `tests/fixtures/medias.py` / `tests_lib/fixtures/medias.py`: Test media generation and embedding cache management (loaded by the respective conftest; not part of the runtime app)
-- `vtscore/cli.py`: CLI utilities: autodetect (load dataset + detectors from settings, run inference, export results)
-- `vtsearch/settings.py`: Persistent settings, split across two tiers. **Server tier** (shared, stored in `data/settings.json` at `SETTINGS_PATH`): saved_datasets_dir, detectors_dir, max_concurrent_dataset_downloads, max_concurrent_dataset_embeddings, autorun_detectors, hidden_plugins. **Per-user tier** (stored in `<get_user_data_dir(user)>/user_settings.json`, isolated per user via `get_current_user()`): volume, inclusion, theme, enrich_descriptions, safe_thresholds, calibrate_count, calibration_fraction, audio_playing, swipe_animation, show_metadata, view_mode_left/right, focus_mode_left/right, grid_icon_size_left/right, panel_pct_left/right, autopilot_enabled, hide_autopilot, autopilot_top_greens/hard_reds/resort_interval/goal_diversity, solo_media_type, solo_media_type_explicit, settings_source, achievement_state. **Process-level** (not persisted): `_cli_solo_media_type`, set by `set_cli_solo_media_type()` from the `--solo-media-type` CLI flag and consulted by `get_effective_solo_media_type()` as a fallback when the per-user `solo_media_type_explicit` is False (see "Solo mediaType streamlining" below). `_cli_hidden_plugins`, set by `add_cli_hidden_plugin()` from repeatable `--hide-plugin family:name` flags and merged (union) with the server-tier `hidden_plugins` map by `get_effective_hidden_plugins()` (see "Plugin hiding" below). Each `set_*` accessor routes to the correct tier; `_save_user()` also auto-syncs to the user's configured `settings_source` (guarded by a per-user entry in `_syncing` to prevent circular re-export). `sync_from_settings_source()` runs lazily on each user's first per-user-cache load each process lifetime (tracked in `_synced_users`). `get_user_settings()` returns only the current user's keys for export. Pre-refactor `data/settings.json` files containing per-user keys are migrated into `data/default/user_settings.json` on first load. Background threads spawned from a request handler must scope `vtsearch.auth.thread_user(name)` (a context manager that snapshots and restores the prior thread-local) so per-user writes resolve correctly (done automatically by `JobManager` and the dataset-load/stage thread spawn sites); the bare `set_thread_user()` setter remains available for tests.
-- `vtsearch/routes/`: Flask blueprints, grouped by domain into sub-packages with flat top-level files for single-blueprint domains:
-  - `datasets/`: `crud.py` (import/staging/media-types), `registry.py` (registry CRUD at `/api/datasets/registry/*`), `ui.py` (dashboard, demo list, display name)
-  - `detectors/`: `crud.py` (detector CRUD: list/create/get/delete/rename/examples/combine at `/api/detectors/*`), `labels.py` (labelset save/import/labels-detail/preview/thumbnail/vote at `/api/detectors/<name>/labels*`), `registry.py` (in-memory detector registry at `/api/detectors/registry/*`, autorun toggle), `scoring.py` (`/api/auto-detect`, `/api/find-label`), `find.py` (multi-dataset Find)
-  - `processors/`: `crud.py` and `scoring.py` for extractor/localizer/pregen-processor CRUD + execution
-  - `media/`: `list.py` (media-list APIs), `server.py` (server-side media files + example-sort), `embed.py` (on-demand embedding)
-  - `settings/`: `api.py` (settings CRUD), `io.py` (import/export), `sources.py` (sync sources)
-  - `labels/`: `vote.py` (label management), `importers.py` (label importers), `exporters.py` (label exporters)
-  - Top-level: `auth.py`, `eval.py`, `file_browser.py`, `main.py`, `sorting.py`, `achievements.py`
-  - `_shared.py`: shared route helpers (request parsing, JSON safety, embedder lookup)
-  - Note: dataset-load orchestration lives at `vtscore/datasets/load_pipeline.py` (background-task helpers, ConcurrencyGate, clip fix-up).
-- `vtscore/detectors/`: Detector lifecycle and the resolve→embed→train pipeline. `registry.py` (in-memory detector registry), `store.py` (on-disk labelset/query store), `training.py` (vote-aware `train_and_score`, `train_and_threshold`, `train_detector_from_origins`, `collect_media_origins`), `workflow.py` (`apply_and_retrain`, Flask-aware), `resolver.py` (origin → file + embedding resolution), `label_sync.py`/`label_restoration.py`/`labelset_elements.py`/`labelset_training.py` (cross-dataset labelset materialisation + MLP training), `dataset_sync.py` (sync detectors when a dataset loads), `media_seeding.py` (seed training media), `labeling_progress.py` (per-step MLP cache + stability analysis)
-- `vtscore/training/`: Generic learned-sort training primitives (media-agnostic). `mlp.py` (`build_model`, `build_model_from_weights`, `train_model`, `_auto_hidden_dim`), `thresholds.py` (`calculate_gmm_threshold`, `find_optimal_threshold`, `calculate_cross_calibration_threshold`, `cross_calibration_threshold_cached`, `calculate_safe_threshold`), `svm.py` (SVM trainer prototype), `region_similarity.py` (cosine-sim scoring with patch-region max-pool)
-- `vtscore/embedding/`: Embedder façades and torch runtime. `helpers.py` (`embed_audio_file`/`embed_image_file`/`embed_video_file`/`embed_paragraph_file`/`embed_text_query`, thin wrappers around `MediaEmbedder`), `loader.py` (`initialize_models`, `predict_embedders_to_preload`/`preload_predicted_embedders`/`smart_preload_in_background`, `get_torch_device`, `get_clap_model`/`get_xclip_model`/`get_e5_model` getter wrappers), `matrix.py` (cached contiguous `(N, D)` embedding matrix on `DatasetContext`)
-- `vtscore/datasets/`: Dataset loading, downloading, ingestion, origin tracking, labelsets, splitting. `loader.py` is the public façade that re-exports the actual loaders from sibling modules: `loader_folder.py` (folder loaders), `loader_pickle.py` (pickle loaders + sidecars + image embed), `loader_demo.py` (demo dataset loader). Importers live in `importers/`: `local_folder`/`local_files` (browser-side upload placeholders), `server_folder`/`server_files` (server filesystem paths), `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`, `recaller`; auto-discovered via the `IMPORTER` sentinel. `sources/` sub-package provides the `MediaSource` abstraction for resolving media files from origins (local_folder, http_archive, pullwrest)
-- `vtscore/eval/`: Evaluation framework: runner, metrics, visualisation, voting iterations
-- `vtscore/exporters/`: Results exporters (server_json_file/server_csv_file/email_smtp/webhook/gui/holder); auto-discovered via `EXPORTER` sentinel
-- `vtsearch/settings_io/`: Settings import/export plugins; `importers/` (local_json_file/server_json_file; auto-discovered via `SETTINGS_IMPORTER` sentinel), `exporters/` (local_json_file/server_json_file; auto-discovered via `SETTINGS_EXPORTER` sentinel), and `sources/` (server_json_file; auto-discovered via `SETTINGS_SOURCE` sentinel) for bidirectional sync
-- `vtscore/labels/`: Label importers and sync sources; `importers/` (server_json_file/server_csv_file/holder; auto-discovered via `LABEL_IMPORTER` sentinel) and `sources/` (server_json_file; auto-discovered via `LABELSET_SOURCE` sentinel) for bidirectional label sync
-- `vtscore/labels/sync.py`: Labelset source sync utilities: `sync_to_labelset_source()` (auto-export on vote change) and `sync_from_labelset_source()` (manual import), with `_syncing` guard to prevent circular re-export
-- `vtscore/media/`: Media type plugins: audio, image, text, video, document
-- `vtscore/converters/`: Media converters: document→image, document→text, video→audio, video→image, audio→image (spectrogram), audio→text (Whisper ASR), image→text (OCR). Each is a `MediaConverter` (a `PluginBase`) that can declare user-configurable params via `fields: list[PluginField]`. `convert(media, params)` reads those at conversion time. Used by the multi-media import flow (see `docs/plans/multi-media-import.md`) and the legacy per-importer `converters` field
-- `vtscore/state/`: Multi-dataset / multi-detector global state (library tier). `core.py` owns `DatasetContext`, `DetectorContext`, `_state_lock`, and the context registries. Sub-modules split the operations by concern: `votes.py` (toggle_vote / apply_label / clear_votes), `clicks.py` (vote click times), `diversity.py` (diversity tree), `media_lookup.py` (origin-keyed lookup, collapse_duplicates). The package `__init__.py` re-exports every public name and hosts cross-cutting helpers (`snapshot_medias`, `clear_medias`, `clear_all`) plus the settings-persistence hook surface (`register_setting_persister`, `get_inclusion`/`set_inclusion`, dataset-display-name and safe-thresholds accessors).
-- `vtsearch/state/__init__.py`: App-tier shim. `from vtscore.state import *`s every library name and adds the proxy view (`medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `last_learned_scores`, `textsort_suggestions`) from `vtsearch/shim/state_proxies.py`. App code can keep writing `from vtsearch.state import medias` without thinking about the split.
-- `vtsearch/autorun_processors.py`: App-side singleton holding the `autorun_extractors` / `autorun_localizers` dicts and their CRUD. Lives outside the library-candidate `state/` package because which processors run on every newly-loaded media is user-facing policy.
-- `vtscore/plugins/`: `PluginRegistry`, `PluginBase`, `PluginField`, and the sentinel-based auto-discovery scanner shared by every plugin family (dataset importers, exporters, label importers/sources, processor importers, settings importers/exporters/sources)
-- `vtscore/sync/`: Generic `SyncSource[LoadT, SaveT]` base class (built on `PluginBase`) shared by `SettingsSource` and `LabelsetSource` for bidirectional load/save
-- `vtscore/concurrency/`: Async job manager (`async_jobs.py`: `AsyncJob`, `JobManager`, `eval_jobs`, `learned_sort_jobs`), memory-aware worker capping (`memory_budget.py`: `cap_workers_by_memory`), and the long-running-operation progress infrastructure (`progress.py`: `ProgressTracker`, `LoadingTasksTracker`, `update_progress`/`get_progress` + sort/eval/find variants, `cancel_dataset_progress`, `check_dataset_cancelled`). The labeling-session analyzer in `vtscore/detectors/labeling_progress.py` is a separate, unrelated module that caches per-step trained MLPs and computes stopping-condition metrics; the historical name collision with this package was resolved by renaming `models/progress.py` to `models/labeling_progress.py` (since moved into `vtscore/detectors/`)
-- `vtscore/security/`: Path / URL / pickle safety: `path_validation.py` (validate_server_filepath, sanitize_template_value, rglob_follow_symlinks, glob_top_level), `url_validation.py` (SSRF guard for outbound HTTP), `pickle.py` (safe_pickle_load + peek_pickle_dataset_summary for dataset pickles)
-- `vtscore/utils/`: Leftover helpers that don't fit the packages above: `hits.py` (`build_media_hit`, the single source of truth for the scored-media hit dict shared by CLI autodetect and `/api/labels/fill-from-sort`), and `synthetic/` (offline media synthesis: `images.py`, `audio.py`, `video.py` for the SyntheticDatasetImporter)
-- `vtsearch/settings_factory.py`: Accessor factories (`make_accessors`, `make_per_side_setting`, `clamp`, `one_of`) used by `vtsearch/settings.py` to generate get/set pairs from the `_SETTING_SPECS` table
-- `frontend/`: Angular SPA source (components, services, SCSS); builds to `static/` via `npm run build:prod`. `ActiveContextService` tracks which dataset/model the user selected; `activeContextInterceptor` attaches `X-Dataset-Id`/`X-Detector-Id` headers to every API request
-- `static/`: Angular build output (index.html, main.js, polyfills.js, styles.css) and assets (favicons, logo.svg, logo.png)
-- `docs/`: Extended docs (API.md, ARCHITECTURE.md, CLI.md, DEPLOYMENT.md, EVAL.md, EXTENDING.md + EXTENDING-plugins.md + EXTENDING-media.md + EXTENDING-processors.md, HANDOFF.md, ML.md, SETUP.md, demos.md, design/cli-detector-converter.md, plans/README.md + open plan docs under plans/; see that index). End-user docs live under `docs/user/` (currently `USER_GUIDE.md`) and are copied into the frontend at build time so the in-app Help window renders them; keep that subtree user-focused.
-- `tests/`; **App-tier** test suite (uses Flask `client`, `vtsearch.routes`, `vtsearch.settings`, `vtsearch.auth`, etc.). Files are bucketed by group folder; the folder name **is** the pytest marker (`tests/core/test_*.py` → marker `core`). New test files inherit their group from where they live; no registry to update.
-  - `conftest.py`: Shared fixtures: `reset_state` (autouse, clears all mutable global state including app-tier autorun-processors and login-provider), `isolated_settings` (autouse, redirects settings to tmp_path), `client` (Flask test client). Also stubs all embedders so tests never download real model weights.
-  - `helpers.py`: Shared helpers (`make_wav_bytes`, `make_dataset_file`, media-builder fns), imported as `from helpers import ...` via the `pythonpath = ["tests", "tests_lib"]` in `pyproject.toml`.
-  - `fixtures/medias.py`: Test media generation + per-worker embedding cache, loaded by conftest.
-  - `tests/__init__.py`: Test-package helpers (`load_detector_and_wait`).
-  - Test groups (folders): `core/`, `api/`, `sorting/`, `datasets/`, `io/`, `detectors/`, `downloads/`, `integration/`, `cli/`, `converters/`. To find tests for an area, look in the corresponding folder; to add a new test, drop it in the folder that matches its concern.
-- `tests_lib/`: **Library-tier** test suite. Mirrors the `tests/` layout but every file is import-clean of Flask, `vtsearch.routes`, `vtsearch.settings`, `vtsearch.auth`, `vtsearch.shim`, `vtsearch.autorun_processors`, and `vtsearch.settings_io`. Verified by `./run-tests.sh vtscore-clean`, which installs a meta-path import hook that refuses `flask` / `werkzeug` / `flask_smorest` before pytest collection. Test groups present here: `core/`, `cli/`, `datasets/`, `detectors/`, `downloads/`, `io/`, `sorting/`, `integration/`, `gpu/`. New tests should be added to `tests_lib/` if they don't touch any app-tier module; otherwise add them to `tests/`.
-  - `conftest.py`: App-free, settings-free shared fixtures: `reset_contexts` (autouse, resets dataset/detector contexts, progress trackers, async jobs, label-sync, registries), `_allow_test_tmp_paths` (autouse, widens path validation for tmp dirs), `_stub_embedding_models` (session, stubs every embedder).  Installs a library-only `CoreConfig.from_settings()` builder so library code that calls it (e.g. `vtscore/datasets/registry.py:get_saved_datasets_dir()`) works without the app shim.
-  - `helpers.py` / `fixtures/medias.py`: duplicates of the `tests/` versions; the duplication is intentional so each tier is self-contained.
-
 ## Test Groups
 
 Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to.
@@ -212,11 +165,25 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 
 **Recommended workflow**: Run `./run-tests.sh <group>` for the area you changed, then `./run-tests.sh` for the full suite.
 
+`tests/` is the app-tier suite (uses `client`, `vtsearch.routes`, `vtsearch.settings`, `vtsearch.auth`, etc.). `tests_lib/` mirrors the same layout but every file must be import-clean of Flask, `vtsearch.routes`, `vtsearch.settings`, `vtsearch.auth`, `vtsearch.shim`, `vtsearch.autorun_processors`, and `vtsearch.settings_io` — verified by `./run-tests.sh vtscore-clean`. Add a new test to `tests_lib/` if it doesn't touch any app-tier module; otherwise add it to `tests/`.
+
 ## Test Markers
+
 - **Default** (`./run-tests.sh` or `pytest tests/`): Runs fast CPU tests only (~35s). Excludes `gpu` and `slow` markers.
 - **`slow`**: CLI subprocess tests that spawn `python app.py --autodetect` (each ~16s, total ~290s). Run with `-m slow` or include with `-m 'not gpu'`.
 - **`gpu`**: CUDA-only tests. Run with `-m gpu`.
 - **All tests**: Use `-m ''` to run everything.
+
+## Test Workflow (IMPORTANT)
+
+Testing can crash the session. To avoid losing work, follow this workflow:
+
+1. **Commit and push before running tests.** Before running `pytest` or any test command, commit all current changes and push to your working branch. Use a message like `"WIP: pre-test checkpoint"` if the work isn't finalized yet.
+2. **Run tests in the foreground (never in the background).** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for 1-3 minutes; this is normal. Do NOT run tests with `run_in_background` or assume output capture is broken because of the delay. Use a timeout of at least 300000ms (5 minutes).
+3. **If tests fail and fixes are needed**, make the fixes, then commit and push again before re-running tests.
+4. **Repeat** until tests pass. Every cycle of fixes should be committed and pushed before the next test run.
+
+This ensures work is recoverable if the session crashes during a test run.
 
 ## Reading Test Results (IMPORTANT)
 
@@ -232,31 +199,20 @@ tests/test_memory_errors.py::TestPickleMemoryError::test_importer_background_oom
 ```
 means the test **passed**; the word "error" is part of the test name, not an indication of failure.
 
-## Test Workflow (IMPORTANT)
-
-Testing can crash the session. To avoid losing work, follow this workflow:
-
-1. **Commit and push before running tests.** Before running `pytest` or any test command, commit all current changes and push to your working branch. Use a message like `"WIP: pre-test checkpoint"` if the work isn't finalized yet.
-2. **Run tests in the foreground (never in the background).** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for 1-3 minutes; this is normal. Do NOT run tests with `run_in_background` or assume output capture is broken because of the delay. Use a timeout of at least 300000ms (5 minutes).
-3. **If tests fail and fixes are needed**, make the fixes, then commit and push again before re-running tests.
-4. **Repeat** until tests pass. Every cycle of fixes should be committed and pushed before the next test run.
-
-This ensures work is recoverable if the session crashes during a test run.
-
 ## Test Isolation (IMPORTANT)
 
 All mutable global state is reset automatically before each test via two autouse fixtures in `conftest.py`:
 
-1. **`reset_state`**; Clears all dataset contexts and creates a fresh `_test_default` context with the pre-generated test medias replayed into it. Also clears:
+1. **`reset_state`** — Clears all dataset contexts and creates a fresh `_test_default` context with the pre-generated test medias replayed into it. Also clears:
    - `autorun_extractors`, `autorun_localizers` (global state)
    - Progress cache and progress trackers
    - Login provider and dataset/model registries
 
-2. **`isolated_settings`**; Redirects `SETTINGS_PATH` to a per-test temp file so settings writes never touch `data/settings.json`. Yields the temp path for tests that need to inspect the file.
+2. **`isolated_settings`** — Redirects `SETTINGS_PATH` to a per-test temp file so settings writes never touch `data/settings.json`. Yields the temp path for tests that need to inspect the file.
 
 **When writing new tests:**
-- Do NOT add per-file or per-class autouse fixtures to clear autorun state, reset settings, or reset votes: `conftest.py` handles all of this automatically.
-- Do NOT add inline `.pop()` or `.clear()` cleanup at the end of tests: the conftest fixtures run before each test regardless of whether the previous test passed or failed.
+- Do NOT add per-file or per-class autouse fixtures to clear autorun state, reset settings, or reset votes — `conftest.py` handles all of this automatically.
+- Do NOT add inline `.pop()` or `.clear()` cleanup at the end of tests — the conftest fixtures run before each test regardless of whether the previous test passed or failed.
 - If a test needs to temporarily empty `medias`, use the save/restore pattern with try/finally (since `medias` is intentionally NOT reset between tests to avoid expensive re-generation):
   ```python
   saved = dict(medias)
@@ -268,12 +224,15 @@ All mutable global state is reset automatically before each test via two autouse
   ```
 - If a test needs to read the settings file path (e.g. to verify persistence), use `isolated_settings` as a parameter: `def test_foo(self, isolated_settings): ...`
 
+`tests_lib/conftest.py` provides app-free, settings-free shared fixtures: `reset_contexts` (autouse, resets dataset/detector contexts, progress trackers, async jobs, label-sync, registries), `_allow_test_tmp_paths` (autouse, widens path validation for tmp dirs), `_stub_embedding_models` (session, stubs every embedder). It also installs a library-only `CoreConfig.from_settings()` builder so library code that calls it works without the app shim. `tests/helpers.py` and `tests_lib/helpers.py` are intentional duplicates so each tier is self-contained; both are importable as `from helpers import ...` because of the `pythonpath = ["tests", "tests_lib"]` setting in `pyproject.toml`.
+
 ## Avoiding Flaky Tests (IMPORTANT)
 
-When writing new tests, avoid these two common sources of flakiness:
+When writing new tests, avoid these three common sources of flakiness.
 
 ### 1. Always seed random number generators
-Never call `np.random.randn()`, `np.random.rand()`, `torch.randn()`, or similar without a fixed seed. Random embeddings feed into neural net training and sorting, where different values cause non-deterministic convergence; making assertions pass or fail depending on the random draw.
+
+Never call `np.random.randn()`, `np.random.rand()`, `torch.randn()`, or similar without a fixed seed. Random embeddings feed into neural net training and sorting, where different values cause non-deterministic convergence — making assertions pass or fail depending on the random draw.
 
 **Do this:**
 ```python
@@ -287,6 +246,7 @@ fake_embeddings = np.random.randn(n, dim).astype(np.float32)  # FLAKY; unseeded
 ```
 
 ### 2. Never use `time.sleep()` for thread synchronization
+
 `time.sleep(0.2)` to "wait for a thread to start" is unreliable on loaded machines. Use `threading.Event` for deterministic synchronization, and set generous polling timeouts.
 
 **Do this:**
@@ -307,7 +267,8 @@ time.sleep(0.2)  # FLAKY; may not be enough on a loaded machine
 ```
 
 ### 3. Never use bounded loops to simulate "cancellable" or "interruptible" work
-A `for i in range(100): sleep(0.05)` loop finishes in 5 seconds; but on a loaded machine the code that's supposed to interrupt it (e.g. setting a cancel flag) can take longer than 5 seconds to run. If the loop completes before the interrupt arrives, the test follows the wrong code path and fails.
+
+A `for i in range(100): sleep(0.05)` loop finishes in 5 seconds — but on a loaded machine the code that's supposed to interrupt it (e.g. setting a cancel flag) can take longer than 5 seconds to run. If the loop completes before the interrupt arrives, the test follows the wrong code path and fails.
 
 **Do this:**
 ```python
@@ -328,25 +289,15 @@ def slow_load():
 ```
 
 ## Environment Notes (Claude Code on the web)
+
 - **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed. Karma has been removed from frontend devDependencies. The Python backend tests (`./run-tests.sh`) work fine without a browser.
 
-## Key Details
-- **Multi-dataset support**: Multiple datasets can be loaded in memory simultaneously. Per-dataset state is bundled in `DatasetContext` objects (`vtscore/state/core.py`). The module-level names `medias`, `good_votes`, `bad_votes`, etc. are **proxy objects** (`_ProxyDict`/`_ProxyList`) that delegate to the context resolved per-request. The frontend sends `X-Dataset-Id` and `X-Detector-Id` HTTP headers to specify which loaded dataset/model each request operates on (see `ActiveContextService` and `activeContextInterceptor` in the Angular frontend). The `before_request` handler in `app.py` stashes the resolved contexts on Flask's `g`, and the proxy objects check `g` first. Outside a request context (background threads, tests), proxies fall back to a **thread-local** context scoped via the `thread_dataset_context()` / `thread_detector_context()` context managers (which snapshot and restore the prior value); the bare `set_thread_dataset_context()` / `set_thread_detector_context()` setters remain available for tests. There is no global "active" pointer. Key functions: `register_context()`, `unregister_context()`, `get_context()`, `list_loaded_dataset_ids()`. Global (non-per-dataset) state: `autorun_extractors`, `autorun_localizers`. API: `POST /api/datasets/registry/<id>/load` (load from pkl), `POST /api/datasets/registry/<id>/unload` (free RAM). Registry tracks `_loaded_ids` (set of in-memory dataset IDs).
-- Per-dataset state in `DatasetContext`: `medias`, `diversity_tree`, `dataset_display_name`
-- Per-detector state in `DetectorContext`: `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `inclusion`, `training_medias`, `model`, `threshold`, `labelset_source`
-- All mutable state protected by `_state_lock` (RLock) in `vtscore/state/core.py`
-- Votes are `dict[int, None]` (not sets): use `votes[id] = None` syntax
-- Persistent settings live in `vtsearch/settings.py`, split into a server tier (shared, `data/settings.json`: saved_datasets_dir, detectors_dir, max_concurrent_dataset_downloads, max_concurrent_dataset_embeddings, autorun_detectors) and a per-user tier (`<get_user_data_dir(user)>/user_settings.json`: everything else, including settings_source and achievement_state). See the file-by-file overview above for the full per-key breakdown and migration semantics.
-- **Smart model preload**: startup runs `preload_predicted_embedders()` in `vtscore/embedding/loader.py`, which walks the dataset and detector registries and warms each unique embedder referenced (via `entry["embedder"]` or the default embedder for `entry["media_type"]`). With an empty registry, nothing is preloaded. `register_dataset()` also fires `smart_preload_in_background()` so any newly-implied embedder is warmed in the background. The preload mechanism replaces the old user-curated `autoload_media_embedders` setting.
-- **Concurrent dataset loading**: Dataset loads go through two independent `ConcurrencyGate`s in `vtscore/datasets/load_pipeline.py`: `_download_gate` covers the importer's download/import phase (bandwidth/disk-bound) and `_embed_gate` covers all CPU/GPU-bound embedding work (importer-side per-file embedding plus post-load clipping, dedup, diversity tree, and embedder warm-up). A task acquires the download gate first, swaps to the embed gate when the importer emits its first `"embedding"` progress status (so another dataset can start downloading while this one embeds), and post-load steps also run under the embed gate. Limits are read fresh on every acquire, so changes to `max_concurrent_dataset_downloads` / `max_concurrent_dataset_embeddings` take effect for queued and future tasks (running tasks are never preempted). Defaults are 1/1, preserving serialised behaviour out of the box.
-- **Solo mediaType streamlining**: a per-user `solo_media_type` (one of the registered media-type ids, or `None`) plus a `solo_media_type_explicit` flag let users opt into a single-mediaType UI. The dataset-importer and new-detector flows hide their mediaType pickers and lock to the chosen value; converter offerings are filtered by output type (so picking `image` still surfaces video→image and document→image converters). The `--solo-media-type <type>` CLI flag is a process-level fallback; anyone who has set `explicit=True` (including explicitly opting back into "show everything" via `solo_media_type=None`) wins over the CLI value for themselves. Resolution lives in `settings.get_effective_solo_media_type()` and is exposed at `/api/settings` as `effective_solo_media_type` (read-only; writes go through `solo_media_type`, which `apply_user_solo_media_type()` flips alongside `solo_media_type_explicit=True`). At startup, `preload_predicted_embedders(extra_media_types=[cli_solo])` warms the solo type's default embedder even with empty registries.
-- **Plugin hiding**: a server-tier `hidden_plugins` map (`{family: [name, ...]}`) plus the repeatable `--hide-plugin family:name` CLI flag let an admin drop arbitrary plugins from picker / listing API responses without editing plugin code. Family keys are the `vtscore.plugins.inventory` ids (`importers`, `exporters`, `label_importers`, `labelset_sources`, `converters`, `media_sources`, `media_types`, `embedders`, `clippers`, `settings_importers`, `settings_exporters`, `settings_sources`); names are the plugin's registered `.name` (or `.type_id` for `media_types`). The two sources merge with union semantics in `settings.get_effective_hidden_plugins()`. Hidden plugins remain importable and callable by name via execution endpoints: this is a UI declutter (orthogonal to the static `PluginBase.hidden_from_picker` flag used for CLI-only plugins), not a security boundary. Listing routes call `filter_visible_plugins(family, plugins)` / `filter_visible_plugin_dicts(family, dicts, id_key=...)` before serialising.
-- **Sync sources** provide bidirectional sync for settings and detector labels. A `SettingsSource` auto-exports the current user's settings to an external target (e.g. server JSON file) on every change, and auto-imports on first per-user-cache load each process lifetime (no longer a startup-time hook, since the source is per-user). A `LabelsetSource` does the same for a model's labels: auto-exporting on vote changes and auto-importing on model load. Both use the `PluginRegistry` discovery pattern (sentinels `SETTINGS_SOURCE` and `LABELSET_SOURCE`). Standalone importers/exporters remain fully functional regardless of whether a source is active. Config: `settings_source` key in `settings.json` (excluded from defaults and source export to avoid circularity); `labelset_source` field on `DetectorContext`. Template variables: `{username}` for settings sources, `{detector_id}`/`{detector_name}` for labelset sources
-- Each media item has `origin` (dict or None), `origin_name` (str), and optionally `media_url` (str) for per-element provenance and URL-based lazy-fetch
-- `Origin` class in `vtscore/datasets/origin.py`; `LabelSet`/`LabeledElement` in `vtscore/datasets/labelset.py`. `LabeledElement` has an optional `metadata` dict for arbitrary per-label data that round-trips through serialisation
-- Label export (`/api/labels/export`) returns a `LabelSet` with per-element origin info (superset of legacy format). With `enrich=true`, `origin.params` are flattened into `custom_metadata` and `available_columns`
-- **Extension scaffolds** (hidden_from_picker=True until API clients implemented): `vtscore/datasets/importers/recaller/` (ReCaller dataset importer), `vtscore/exporters/holder/` (Holder labelset exporter), `vtscore/labels/importers/holder/` (Holder label importer), `vtscore/datasets/sources/pullwrest.py` (PullWrest media source). See `docs/plans/RCDatasetImporter.md` for dev instructions
-- **Multi-media imports**: every importer accepts a `source_specs` form value; a list of `SourceSpec(source_type, converter|None, params)` rows; the framework iterates them, runs each row's converter (when set), and ingests the result. The user picks the dataset's output `media_type` plus zero or more converter rows in the modal (e.g. `image` output + `video → video2image` row with `n_clips=30` + `document → document2image`). Importers expose the work via three optional hooks (`list_records`/`fetch_record`, `fetch_source_media(spec, …)`, `fetch_all_source_media(specs, …)`); folder-shaped importers override `run()` itself and delegate to `run_converters_on_folder()`. There is no longer a `multi_media` flag (every importer is multi-media-aware); the legacy comma-separated `converters` form field is gone. See `docs/plans/multi-media-import.md`.
-- `data/` dir created at runtime for embeddings, model cache, media files
-- OMP_NUM_THREADS and MKL_NUM_THREADS set to 1 for memory optimization
-- Linter/formatter: ruff (default rules + flake8-bandit `S`, line-length 120, target-version py310; E402 and noisy S rules ignored: see `pyproject.toml` for the full list). codespell + deptry round out the lint stage; `pre-commit install` wires them into git pre-commit. See `docs/plans/python-quality-tools.md` for the rationale.
+## More docs
+
+- `docs/ARCHITECTURE.md` — directory map, dependency graph, plugin systems, state management (multi-dataset / multi-detector contexts, proxies, `X-Dataset-Id` / `X-Detector-Id` headers), auth, origin tracking.
+- `docs/API.md` and `docs/api/*.md` — REST API reference.
+- `docs/CLI.md` — CLI flags and autodetect workflow.
+- `docs/ML.md` — training/scoring details.
+- `docs/EXTENDING.md` + `docs/EXTENDING-plugins.md` + `docs/EXTENDING-media.md` + `docs/EXTENDING-processors.md` — how to add plugins.
+- `docs/plans/` and `docs/design/` — open and shipped design docs; check here before adding a "Phase N" feature.
+- `docs/style-guide.md` — frontend SCSS conventions.

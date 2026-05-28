@@ -116,6 +116,20 @@
 .guide {
   max-height: 70vh;
   overflow-y: auto;
+  // The global `* { scrollbar-color: ... }` rule in _components.scss does
+  // not reliably reach this element in dark theme (audit 2026-05-27
+  // observed the default browser thumb on a light track). Reassert it
+  // here so the help modal body stays on-theme.
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--bg-panel);
+
+  &::-webkit-scrollbar { width: 6px; }
+  &::-webkit-scrollbar-track { background: var(--bg-panel); }
+  &::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: var(--radius-sm);
+  }
+  &::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 }
 
 .guide-loading,
