@@ -562,3 +562,192 @@ class TestExampleSortOriginEndpoint:
         )
         # Will get 500 if embedder can't handle fake audio, but not 400/404
         assert resp.status_code in (200, 500)
+
+
+# ── ServerFilesSource ─────────────────────────────────────────────────
+
+
+class TestServerFilesSource:
+    def _make_npz(self, tmp_path, paths_and_vecs, embedder_name=""):
+        """Create a .npz archive with given paths and vectors."""
+        import numpy as np
+
+        names = np.array([str(p) for p in paths_and_vecs])
+        vecs = np.stack([v for _, v in paths_and_vecs.items()])
+        kwargs = {"filenames": names, "vectors": vecs}
+        if embedder_name:
+            kwargs["embedder_name"] = np.array(embedder_name)
+        npz = tmp_path / "list.npz"
+        np.savez(npz, **kwargs)
+        return npz
+
+    def test_fetch_item_returns_path_and_embedding(self, tmp_path):
+        import numpy as np
+        from vtscore.datasets.sources.server_files import ServerFilesSource
+
+        media = tmp_path / "clip.wav"
+        media.write_bytes(b"audio")
+        vec = np.ones(4, dtype=np.float32)
+        npz = tmp_path / "list.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(media)]),
+            vectors=vec[np.newaxis],
+            embedder_name=np.array("test-embedder"),
+        )
+
+        source = ServerFilesSource(npz, embedder_name="test-embedder")
+        item = source.fetch_item(str(media))
+        assert item.path == media
+        np.testing.assert_array_equal(item.embedding, vec)
+        assert item.embedder_name == "test-embedder"
+
+    def test_fetch_item_missing_file_returns_none_path(self, tmp_path):
+        import numpy as np
+        from vtscore.datasets.sources.server_files import ServerFilesSource
+
+        vec = np.zeros(4, dtype=np.float32)
+        npz = tmp_path / "list.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(tmp_path / "nonexistent.wav")]),
+            vectors=vec[np.newaxis],
+        )
+        source = ServerFilesSource(npz)
+        item = source.fetch_item(str(tmp_path / "nonexistent.wav"))
+        assert item.path is None
+
+    def test_resolve_path_by_origin_name(self, tmp_path):
+        import numpy as np
+        from vtscore.datasets.sources.server_files import ServerFilesSource
+
+        media = tmp_path / "clip.wav"
+        media.write_bytes(b"audio")
+        vec = np.full(4, 2.0, dtype=np.float32)
+        npz = tmp_path / "list.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(media)]),
+            vectors=vec[np.newaxis],
+            embedder_name=np.array("my-embedder"),
+        )
+        source = ServerFilesSource(npz, embedder_name="my-embedder")
+        item = source.resolve_path(origin_name=str(media))
+        assert item.path == media
+        np.testing.assert_array_equal(item.embedding, vec)
+        assert item.embedder_name == "my-embedder"
+
+    def test_resolve_path_neither_found_returns_none(self, tmp_path):
+        import numpy as np
+        from vtscore.datasets.sources.server_files import ServerFilesSource
+
+        npz = tmp_path / "list.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(tmp_path / "missing.wav")]),
+            vectors=np.zeros((1, 4), dtype=np.float32),
+        )
+        source = ServerFilesSource(npz)
+        assert source.resolve_path().path is None
+        assert source.resolve_path(origin_name=str(tmp_path / "missing.wav")).path is None
+
+    def test_list_items_yields_existing_paths(self, tmp_path):
+        import numpy as np
+        from vtscore.datasets.sources.server_files import ServerFilesSource
+
+        existing = tmp_path / "a.wav"
+        existing.write_bytes(b"audio")
+        missing = tmp_path / "b.wav"
+        npz = tmp_path / "list.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(existing), str(missing)]),
+            vectors=np.zeros((2, 4), dtype=np.float32),
+        )
+        source = ServerFilesSource(npz)
+        items = list(source.list_items())
+        assert len(items) == 1
+        assert items[0].key == str(existing)
+        assert items[0].filename == "a.wav"
+        assert items[0].source_name == "server_files"
+
+    def test_list_items_extension_filter(self, tmp_path):
+        import numpy as np
+        from vtscore.datasets.sources.server_files import ServerFilesSource
+
+        wav = tmp_path / "a.wav"
+        mp3 = tmp_path / "b.mp3"
+        wav.write_bytes(b"audio_wav")
+        mp3.write_bytes(b"audio_mp3")
+        npz = tmp_path / "list.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(wav), str(mp3)]),
+            vectors=np.zeros((2, 4), dtype=np.float32),
+        )
+        source = ServerFilesSource(npz)
+        wav_items = list(source.list_items(extensions=[".wav"]))
+        assert len(wav_items) == 1
+        assert wav_items[0].filename == "a.wav"
+
+    def test_factory_creates_source_for_npz_origin(self, tmp_path):
+        import numpy as np
+        from vtscore.datasets.sources.server_files import SOURCE, ServerFilesSource
+
+        media = tmp_path / "clip.wav"
+        media.write_bytes(b"audio")
+        npz = tmp_path / "list.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(media)]),
+            vectors=np.zeros((1, 4), dtype=np.float32),
+            embedder_name=np.array("test-embed"),
+        )
+
+        origin = {
+            "importer": "server_files",
+            "params": {"paths_file": str(npz), "embedder_name": "test-embed"},
+        }
+        source = SOURCE.create_from_origin(origin)
+        assert isinstance(source, ServerFilesSource)
+        assert source._embedder_name == "test-embed"
+
+    def test_factory_returns_none_for_txt_origin(self, tmp_path):
+        from vtscore.datasets.sources.server_files import SOURCE
+
+        txt = tmp_path / "list.txt"
+        txt.write_text("/a.wav\n")
+        origin = {
+            "importer": "server_files",
+            "params": {"paths_file": str(txt)},
+        }
+        assert SOURCE.create_from_origin(origin) is None
+
+    def test_factory_returns_none_for_missing_npz(self, tmp_path):
+        from vtscore.datasets.sources.server_files import SOURCE
+
+        origin = {
+            "importer": "server_files",
+            "params": {"paths_file": str(tmp_path / "nonexistent.npz")},
+        }
+        assert SOURCE.create_from_origin(origin) is None
+
+    def test_get_source_for_npz_origin(self, tmp_path):
+        import numpy as np
+        from vtscore.datasets.sources.server_files import ServerFilesSource
+
+        media = tmp_path / "clip.wav"
+        media.write_bytes(b"audio")
+        npz = tmp_path / "list.npz"
+        np.savez(
+            npz,
+            filenames=np.array([str(media)]),
+            vectors=np.zeros((1, 4), dtype=np.float32),
+        )
+
+        origin = {
+            "importer": "server_files",
+            "params": {"paths_file": str(npz)},
+        }
+        source = get_source_for_origin(origin)
+        assert isinstance(source, ServerFilesSource)
