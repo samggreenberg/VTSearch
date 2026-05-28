@@ -14,7 +14,7 @@ proceeds as usual.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Iterator
 
 import numpy as np
 
