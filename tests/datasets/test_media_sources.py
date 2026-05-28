@@ -96,41 +96,41 @@ class TestLocalFolderSource:
     def test_fetch_item(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        result = source.fetch_item("sub/c.wav")
-        assert result is not None
-        assert result.name == "c.wav"
-        assert result.read_bytes() == b"audio_c"
+        item = source.fetch_item("sub/c.wav")
+        assert item.path is not None
+        assert item.path.name == "c.wav"
+        assert item.path.read_bytes() == b"audio_c"
 
     def test_fetch_item_missing(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        assert source.fetch_item("nonexistent.wav") is None
+        assert source.fetch_item("nonexistent.wav").path is None
 
     def test_fetch_item_path_traversal(self, tmp_path):
         root = self._make_tree(tmp_path)
         # Create a file outside the root
         (tmp_path.parent / "secret.txt").write_bytes(b"secret")
         source = LocalFolderSource(root)
-        assert source.fetch_item("../secret.txt") is None
+        assert source.fetch_item("../secret.txt").path is None
 
     def test_resolve_path_by_origin_name(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        result = source.resolve_path(origin_name="a.wav")
-        assert result is not None
-        assert result.name == "a.wav"
+        item = source.resolve_path(origin_name="a.wav")
+        assert item.path is not None
+        assert item.path.name == "a.wav"
 
     def test_resolve_path_by_filename_fallback(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        result = source.resolve_path(filename="sub/c.wav")
-        assert result is not None
-        assert result.name == "c.wav"
+        item = source.resolve_path(filename="sub/c.wav")
+        assert item.path is not None
+        assert item.path.name == "c.wav"
 
     def test_resolve_path_both_empty(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        assert source.resolve_path() is None
+        assert source.resolve_path().path is None
 
     def test_fetch_items_returns_existing_and_missing(self, tmp_path):
         root = self._make_tree(tmp_path)
@@ -206,9 +206,9 @@ class TestHttpArchiveSource:
 
         try:
             source = HttpArchiveSource("https://example.com/test.zip")
-            result = source.resolve_path(origin_name="clip.wav")
-            assert result is not None
-            assert result.name == "clip.wav"
+            item = source.resolve_path(origin_name="clip.wav")
+            assert item.path is not None
+            assert item.path.name == "clip.wav"
         finally:
             import shutil
 
@@ -237,9 +237,9 @@ class TestHttpArchiveSource:
         source._extract_dir = extract_dir
         source._inner = LocalFolderSource(extract_dir)
 
-        result = source.fetch_item("audio/clip.wav")
-        assert result is not None
-        assert result.name == "clip.wav"
+        item = source.fetch_item("audio/clip.wav")
+        assert item.path is not None
+        assert item.path.name == "clip.wav"
 
         items = list(source.list_items(extensions=[".wav"]))
         assert any(i.key == "audio/clip.wav" for i in items)

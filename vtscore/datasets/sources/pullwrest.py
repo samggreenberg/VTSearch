@@ -145,17 +145,17 @@ class PullWrestSource(MediaSource):
                 source_name=self.name,
             )
 
-    def fetch_item(self, key: str) -> Path | None:
-        """Download and return a local path for the media."""
+    def fetch_item(self, key: str) -> FetchedItem:
+        """Download and return a :class:`FetchedItem` for the media."""
         if key != self._content_id:
-            return None
-        return self._download_to_cache()
+            return FetchedItem(path=None)
+        return FetchedItem(path=self._download_to_cache())
 
-    def resolve_path(self, origin_name: str = "", filename: str = "") -> Path | None:
+    def resolve_path(self, origin_name: str = "", filename: str = "") -> FetchedItem:
         """Resolve by downloading if origin_name or filename matches."""
         if origin_name == self._content_id or filename == self._content_id:
-            return self._download_to_cache()
-        return None
+            return FetchedItem(path=self._download_to_cache())
+        return FetchedItem(path=None)
 
     # ------------------------------------------------------------------
     # Bulk fetch - override to use the PullWrest batch endpoint
@@ -214,7 +214,7 @@ class PullWrestSource(MediaSource):
         # Single-item fallback for anything not resolved by the batch call.
         for key in keys:
             if key not in result:
-                result[key] = FetchedItem(path=self.fetch_item(key))
+                result[key] = self.fetch_item(key)
 
         return result
 

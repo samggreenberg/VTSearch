@@ -6,18 +6,17 @@ operations:
 
 - **list_items** - enumerate available media files, optionally filtered by
   file extension.
-- **fetch_item** - retrieve a single file by its key (relative path within
-  the source), returning a local ``Path``.
-- **fetch_items** - retrieve multiple files by key in one call; returns a
-  :class:`FetchedItem` per key so sources can bundle pre-computed embeddings
-  and arbitrary metadata alongside the path.  The default loops over
-  :meth:`fetch_item`; override to parallelise (e.g. concurrent network
-  downloads with a batch API that also returns vectors + file metadata).
+- **fetch_item** - retrieve a single file by its key; returns a
+  :class:`FetchedItem` so sources can bundle pre-computed embeddings and
+  metadata alongside the path.
+- **fetch_items** - bulk form of :meth:`fetch_item`; the default loops, but
+  sources can override to parallelise (e.g. one batch API call that returns
+  files + vectors + metadata for all keys at once).
 - **resolve_path** - find a file by ``origin_name`` or ``filename``, used by
-  the resolver module for cross-dataset label resolution.
-- **resolve_paths** - bulk form of :meth:`resolve_path`; returns a
-  :class:`FetchedItem` per entry, aligned with the input list.  Override to
-  parallelise.
+  the resolver module for cross-dataset label resolution; returns a
+  :class:`FetchedItem`.
+- **resolve_paths** - bulk form of :meth:`resolve_path`; returns a list of
+  :class:`FetchedItem` aligned with the input.  Override to parallelise.
 
 Sources are instantiated per-use (not singletons) because they may carry
 state such as downloaded archives or temporary extraction directories.
@@ -56,12 +55,12 @@ class MediaItem:
 
 @dataclass
 class FetchedItem:
-    """Rich result from a bulk-fetch operation.
+    """Result of any fetch or resolve operation on a :class:`MediaSource`.
 
-    Every bulk fetch returns one ``FetchedItem`` per input key/entry.  The
-    ``path`` is the only required field; the remaining fields are optional
-    bonuses that remote sources (e.g. PullWrest) can populate when their API
-    returns the data alongside the file, avoiding redundant local work.
+    All four fetch/resolve methods return ``FetchedItem``, so sources that
+    have pre-computed data available (e.g. a remote API that returns the file
+    bytes, an embedding, and file metadata in one round-trip) can surface it
+    through both the single-item and bulk paths without loss.
 
     Attributes:
         path: Local file path, or ``None`` when the item could not be
@@ -88,11 +87,13 @@ class MediaSource(ABC):
     """Abstract base class for media sources.
 
     Subclass this and implement the three abstract methods (``list_items``,
-    ``fetch_item``, ``resolve_path``) to add a new source type.  The two
-    bulk methods (``fetch_items``, ``resolve_paths``) have default
+    ``fetch_item``, ``resolve_path``) to add a new source type.  All four
+    fetch/resolve methods return :class:`FetchedItem` so pre-computed
+    embeddings and metadata flow through single-item and bulk paths alike.
+
+    The two bulk methods (``fetch_items``, ``resolve_paths``) have default
     implementations that loop over their single-item counterparts; override
-    them to parallelise I/O and surface pre-computed embeddings / metadata
-    from a remote batch API.
+    them to parallelise I/O and/or surface pre-computed data from a batch API.
 
     See :class:`~vtscore.datasets.sources.local_folder.LocalFolderSource`
     for a minimal concrete example and
@@ -117,21 +118,24 @@ class MediaSource(ABC):
         """
 
     @abstractmethod
-    def fetch_item(self, key: str) -> Path | None:
-        """Return a local file path for the item identified by *key*.
+    def fetch_item(self, key: str) -> FetchedItem:
+        """Return a :class:`FetchedItem` for the item identified by *key*.
 
-        May trigger a download or extraction on demand.
+        May trigger a download or extraction on demand.  Sources that have
+        pre-computed embeddings or metadata available (e.g. from a remote
+        API response) should populate the corresponding :class:`FetchedItem`
+        fields rather than returning a bare path.
 
         Args:
             key: The :attr:`MediaItem.key` (typically a relative path).
 
         Returns:
-            A :class:`Path` to the file on disk, or ``None`` if the key
+            A :class:`FetchedItem`; ``item.path`` is ``None`` if the key
             does not exist in this source.
         """
 
     @abstractmethod
-    def resolve_path(self, origin_name: str = "", filename: str = "") -> Path | None:
+    def resolve_path(self, origin_name: str = "", filename: str = "") -> FetchedItem:
         """Resolve a media file by origin_name or filename.
 
         Tries *origin_name* first, then *filename*.  Used by the resolver
@@ -142,15 +146,16 @@ class MediaSource(ABC):
             filename: The ``filename`` stored on the media dict.
 
         Returns:
-            A :class:`Path` to the resolved file, or ``None``.
+            A :class:`FetchedItem`; ``item.path`` is ``None`` when neither
+            name resolves to an existing file.
         """
 
     def fetch_items(self, keys: list[str]) -> dict[str, FetchedItem]:
         """Fetch multiple items, returning a :class:`FetchedItem` per key.
 
-        The default wraps each :meth:`fetch_item` result in a plain
-        ``FetchedItem(path=...)``.  Override to parallelise downloads and/or
-        to return pre-computed embeddings and metadata from a batch API.
+        The default calls :meth:`fetch_item` once per key.  Override to
+        parallelise downloads and/or return pre-computed embeddings and
+        metadata from a batch API.
 
         Args:
             keys: The :attr:`MediaItem.key` values to fetch.
@@ -159,15 +164,15 @@ class MediaSource(ABC):
             Mapping from each input key to its :class:`FetchedItem`.
             ``item.path`` is ``None`` for keys not found in this source.
         """
-        return {key: FetchedItem(path=self.fetch_item(key)) for key in keys}
+        return {key: self.fetch_item(key) for key in keys}
 
     def resolve_paths(self, entries: list[tuple[str, str]]) -> list[FetchedItem]:
         """Resolve multiple ``(origin_name, filename)`` pairs.
 
         Returns a list aligned with *entries*: index *i* corresponds to
-        ``entries[i]``.  The default wraps each :meth:`resolve_path` result
-        in a plain ``FetchedItem(path=...)``.  Override to parallelise and/or
-        return pre-computed embeddings and metadata.
+        ``entries[i]``.  The default calls :meth:`resolve_path` once per
+        entry.  Override to parallelise and/or return pre-computed embeddings
+        and metadata.
 
         Args:
             entries: Sequence of ``(origin_name, filename)`` pairs.
@@ -176,7 +181,7 @@ class MediaSource(ABC):
             A :class:`FetchedItem` per entry; ``item.path`` is ``None`` when
             the entry could not be resolved.
         """
-        return [FetchedItem(path=self.resolve_path(origin_name, filename)) for origin_name, filename in entries]
+        return [self.resolve_path(origin_name, filename) for origin_name, filename in entries]
 
     def cleanup(self) -> None:
         """Release any temporary resources (extraction directories, etc.).
