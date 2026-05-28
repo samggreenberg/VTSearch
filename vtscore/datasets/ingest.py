@@ -225,7 +225,17 @@ def _ingest_via_source(
     medias: dict[int, dict[str, Any]],
     on_progress: ProgressCallback,
 ) -> int:
-    """Try to ingest missing entries using a MediaSource (item-by-item).
+    """Try to ingest missing entries using a MediaSource.
+
+    Resolves all entry paths in a single bulk call so sources that
+    override :meth:`~vtscore.datasets.sources.base.MediaSource.resolve_paths`
+    can parallelise network I/O and return pre-computed embeddings / metadata
+    before the sequential per-item processing step.
+
+    When a :class:`~vtscore.datasets.sources.base.FetchedItem` carries a
+    pre-computed ``embedding`` (and the origin has no clip params), the embed
+    step is skipped and the source's ``embedder_name`` and any ``extra``
+    fields are merged into the media record.
 
     Returns the number of successfully ingested medias, or -1 if no
     MediaSource is available for this origin (caller should fall back to
@@ -243,37 +253,56 @@ def _ingest_via_source(
     ingested = 0
 
     try:
-        for entry in entries:
+        pairs = [(e.get("origin_name", ""), e.get("filename", "")) for e in entries]
+        fetched = source.resolve_paths(pairs)
+
+        for entry, item in zip(entries, fetched):
             origin_name = entry.get("origin_name", "")
             filename = entry.get("filename", "")
 
-            file_path = source.resolve_path(origin_name, filename)
-            if file_path is None:
+            if item.path is None:
                 continue
 
-            # Resolve embedding + clip-aware bytes/md5 - if any step fails,
-            # fall back to the legacy full-import path so we don't produce
-            # medias with mismatched embedding/MD5/bytes triples.
             if not media_type_id:
                 source.cleanup()
                 return -1
-            resolved = _resolve_clip_content_and_embedding(file_path, media_type_id, origin_dict, embedder_name)
-            if resolved is None:
-                source.cleanup()
-                return -1  # Signal caller to use legacy full-import path
-            embedding, file_bytes, md5 = resolved
+
+            # When the source returns a pre-computed embedding (and there are
+            # no clip params that would require re-embedding a sub-segment),
+            # skip the local embed step entirely.
+            if item.embedding is not None and not _has_clip_params(origin_dict):
+                file_bytes = item.path.read_bytes()
+                embedding = item.embedding
+                effective_embedder = item.embedder_name or embedder_name
+                md5 = hashlib.md5(file_bytes).hexdigest()
+            else:
+                # Resolve embedding + clip-aware bytes/md5 - if any step fails,
+                # fall back to the legacy full-import path so we don't produce
+                # medias with mismatched embedding/MD5/bytes triples.
+                effective_embedder = embedder_name
+                resolved = _resolve_clip_content_and_embedding(item.path, media_type_id, origin_dict, embedder_name)
+                if resolved is None:
+                    source.cleanup()
+                    return -1  # Signal caller to use legacy full-import path
+                embedding, file_bytes, md5 = resolved
 
             media_data = _build_media_data(
                 origin_dict=origin_dict,
                 entry=entry,
                 media_type_id=media_type_id,
                 origin_name=origin_name,
-                file_path=file_path,
+                file_path=item.path,
                 file_bytes=file_bytes,
                 md5=md5,
                 embedding=embedding,
-                embedder_name=embedder_name,
+                embedder_name=effective_embedder,
             )
+
+            # Merge source-provided metadata (file_size, duration, created_at,
+            # etc.) into the record so remote sources can supply authoritative
+            # values without a redundant file read.
+            if item.extra:
+                media_data.update(item.extra)
 
             # Allocate the ID and insert atomically, so two concurrent
             # ingests cannot collide on the same next_media_id.
