@@ -150,6 +150,15 @@ if ! diff -u frontend/openapi.json "$_openapi_regen" > /dev/null; then
 fi
 rm -f "$_openapi_regen" "$_openapi_dump_log"
 
+echo "Checking Dockerfiles..."
+if ! python scripts/check-dockerfiles.py ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: Dockerfile check failed"
+    echo "============================================================"
+    exit 1
+fi
+
 # Split arguments into groups and extra pytest args
 TEST_GROUPS=()
 EXTRA_ARGS=()
