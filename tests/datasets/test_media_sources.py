@@ -132,6 +132,38 @@ class TestLocalFolderSource:
         source = LocalFolderSource(root)
         assert source.resolve_path() is None
 
+    def test_fetch_items_returns_existing_and_missing(self, tmp_path):
+        root = self._make_tree(tmp_path)
+        source = LocalFolderSource(root)
+        result = source.fetch_items(["a.wav", "sub/c.wav", "missing.wav"])
+        assert result["a.wav"] is not None
+        assert result["a.wav"].name == "a.wav"
+        assert result["sub/c.wav"] is not None
+        assert result["sub/c.wav"].name == "c.wav"
+        assert result["missing.wav"] is None
+
+    def test_fetch_items_empty_list(self, tmp_path):
+        source = LocalFolderSource(tmp_path)
+        assert source.fetch_items([]) == {}
+
+    def test_resolve_paths_aligned_with_input(self, tmp_path):
+        root = self._make_tree(tmp_path)
+        source = LocalFolderSource(root)
+        entries = [
+            ("a.wav", ""),
+            ("nope.wav", "sub/c.wav"),
+            ("", ""),
+        ]
+        result = source.resolve_paths(entries)
+        assert len(result) == 3
+        assert result[0] is not None and result[0].name == "a.wav"
+        assert result[1] is not None and result[1].name == "c.wav"
+        assert result[2] is None
+
+    def test_resolve_paths_empty_list(self, tmp_path):
+        source = LocalFolderSource(tmp_path)
+        assert source.resolve_paths([]) == []
+
     def test_folder_path_property(self, tmp_path):
         source = LocalFolderSource(tmp_path)
         assert source.folder_path == tmp_path
@@ -332,8 +364,8 @@ class TestResolverUsesSource:
 
 
 class TestIngestViaSource:
-    def test_ingest_fetches_individually(self, tmp_path):
-        """When a source is available and embedding works, ingest fetches individually."""
+    def test_ingest_bulk_fetch(self, tmp_path):
+        """When a source is available and embedding works, ingest resolves paths in bulk."""
         import numpy as np
 
         folder = tmp_path / "audio"

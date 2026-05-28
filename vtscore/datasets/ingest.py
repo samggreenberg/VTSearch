@@ -225,7 +225,11 @@ def _ingest_via_source(
     medias: dict[int, dict[str, Any]],
     on_progress: ProgressCallback,
 ) -> int:
-    """Try to ingest missing entries using a MediaSource (item-by-item).
+    """Try to ingest missing entries using a MediaSource.
+
+    Resolves all entry paths in a single bulk call so sources that
+    override :meth:`~vtscore.datasets.sources.base.MediaSource.resolve_paths`
+    can parallelise network I/O before the sequential embed step.
 
     Returns the number of successfully ingested medias, or -1 if no
     MediaSource is available for this origin (caller should fall back to
@@ -243,11 +247,13 @@ def _ingest_via_source(
     ingested = 0
 
     try:
-        for entry in entries:
+        pairs = [(e.get("origin_name", ""), e.get("filename", "")) for e in entries]
+        paths = source.resolve_paths(pairs)
+
+        for entry, file_path in zip(entries, paths):
             origin_name = entry.get("origin_name", "")
             filename = entry.get("filename", "")
 
-            file_path = source.resolve_path(origin_name, filename)
             if file_path is None:
                 continue
 
