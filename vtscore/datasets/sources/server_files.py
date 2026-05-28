@@ -77,7 +77,9 @@ class ServerFilesSource(MediaSource):
         p = Path(resolved)
         if not p.is_file():
             return FetchedItem(path=None)
-        vec = path_to_vec.get(resolved) or path_to_vec.get(key)
+        vec = path_to_vec.get(resolved)
+        if vec is None:
+            vec = path_to_vec.get(key)
         if vec is not None:
             return FetchedItem(path=p, embedding=vec, embedder_name=self._embedder_name)
         return FetchedItem(path=p)
