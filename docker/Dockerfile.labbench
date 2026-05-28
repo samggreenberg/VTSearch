@@ -51,6 +51,7 @@ COPY vtsearch/__init__.py vtsearch/__init__.py
 
 # Copy package source so `pip install -e .` finds it.
 COPY vtsearch/ vtsearch/
+COPY vtscore/ vtscore/
 
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
