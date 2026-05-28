@@ -50,7 +50,7 @@
   @extend .importer-tab;
 
   &.disabled, &:disabled {
-    opacity: 0.45;
+    opacity: var(--opacity-disabled);
     cursor: not-allowed;
   }
 }
@@ -219,7 +219,11 @@
 
 .badge-ready { background: var(--color-good); }
 .badge-embedding { background: var(--badge-embedding, var(--accent)); }
-.badge-download { background: var(--border); color: var(--text-muted); }
+// Neutral "needs action" pill. Uses --bg-secondary-btn (a step lighter than
+// --border) + --text-secondary so the text holds readable contrast in dark
+// mode; the previous --border + --text-muted pairing layered two near-equal
+// shades of grey and was effectively invisible against the table row.
+.badge-download { background: var(--bg-secondary-btn); color: var(--text-secondary); }
 
 // (The server folder browser chrome - breadcrumbs, list, items, path footer -
 // now lives in `vt-folder-browser`. See

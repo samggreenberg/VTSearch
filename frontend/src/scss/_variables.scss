@@ -52,6 +52,17 @@
   --shadow-md: 0 4px 12px var(--shadow-dropdown);
   --shadow-lg: 0 8px 32px var(--shadow-dropdown);
 
+  // Disabled-state opacity. One value, used everywhere a button or
+  // interactive element renders its `:disabled` / `.disabled` state via
+  // opacity. Do not pick a different opacity per component - the audit at
+  // docs/reviews/2026-05-27-style-audit.md found seven different values in
+  // the wild (0.35/0.4/0.45/0.5/0.55/0.6/0.75) and several of them dropped
+  // text below readable contrast. For disabled buttons that sit on a
+  // saturated background (e.g. the accent-blue app header), prefer a
+  // `color: var(--header-text-dim)` shift over opacity - opacity can't hold
+  // contrast on a saturated surface.
+  --opacity-disabled: 0.5;
+
   // Z-index scale (centralised stacking order)
   --z-base: 1;
   --z-elevated: 10;
