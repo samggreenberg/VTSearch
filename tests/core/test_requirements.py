@@ -38,7 +38,7 @@ def _parse_packages(path: Path) -> set[str]:
         line = line.strip()
         if not line or line.startswith("#") or line.startswith("-"):
             continue
-        name = re.split(r"[>=<!;\[", line)[0].strip()
+        name = re.split(r"[>=<!;\[\]]", line)[0].strip()
         if name:
             pkgs.add(_normalise(name))
     return pkgs
