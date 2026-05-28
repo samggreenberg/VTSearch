@@ -280,9 +280,7 @@ def _ingest_via_source(
                 # fall back to the legacy full-import path so we don't produce
                 # medias with mismatched embedding/MD5/bytes triples.
                 effective_embedder = embedder_name
-                resolved = _resolve_clip_content_and_embedding(
-                    item.path, media_type_id, origin_dict, embedder_name
-                )
+                resolved = _resolve_clip_content_and_embedding(item.path, media_type_id, origin_dict, embedder_name)
                 if resolved is None:
                     source.cleanup()
                     return -1  # Signal caller to use legacy full-import path

@@ -437,7 +437,6 @@ class TestIngestViaSource:
         ingest path skips local re-embedding and uses the source's vector and
         any extra metadata (e.g. duration) directly."""
         import numpy as np
-        from unittest.mock import MagicMock
 
         from vtscore.datasets.ingest import _ingest_via_source
         from vtscore.datasets.sources.base import FetchedItem
@@ -473,7 +472,9 @@ class TestIngestViaSource:
         medias: dict = {}
         with patch("vtscore.datasets.sources.get_source_for_origin", return_value=real_source):
             # embed_file must NOT be called when pre-computed embedding is provided.
-            with patch("vtscore.detectors.resolver.embed_file", side_effect=AssertionError("embed_file called unexpectedly")) as mock_embed:
+            with patch(
+                "vtscore.detectors.resolver.embed_file", side_effect=AssertionError("embed_file called unexpectedly")
+            ):
                 result = _ingest_via_source(origin, entries, medias, lambda *a: None)
 
         assert result == 1

@@ -182,9 +182,7 @@ class PullWrestSource(MediaSource):
 
         if owned:
             tmpdir = self._ensure_tmpdir()
-            batch_requests = [
-                {"media_url": self._media_url, "content_id": self._content_id}
-            ]
+            batch_requests = [{"media_url": self._media_url, "content_id": self._content_id}]
             try:
                 responses = _pw_fetch_media_batch(batch_requests)
                 for req, resp in zip(batch_requests, responses):

@@ -176,10 +176,7 @@ class MediaSource(ABC):
             A :class:`FetchedItem` per entry; ``item.path`` is ``None`` when
             the entry could not be resolved.
         """
-        return [
-            FetchedItem(path=self.resolve_path(origin_name, filename))
-            for origin_name, filename in entries
-        ]
+        return [FetchedItem(path=self.resolve_path(origin_name, filename)) for origin_name, filename in entries]
 
     def cleanup(self) -> None:
         """Release any temporary resources (extraction directories, etc.).
