@@ -136,11 +136,20 @@ class TestLocalFolderSource:
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
         result = source.fetch_items(["a.wav", "sub/c.wav", "missing.wav"])
-        assert result["a.wav"] is not None
-        assert result["a.wav"].name == "a.wav"
-        assert result["sub/c.wav"] is not None
-        assert result["sub/c.wav"].name == "c.wav"
-        assert result["missing.wav"] is None
+        assert result["a.wav"].path is not None
+        assert result["a.wav"].path.name == "a.wav"
+        assert result["sub/c.wav"].path is not None
+        assert result["sub/c.wav"].path.name == "c.wav"
+        assert result["missing.wav"].path is None
+
+    def test_fetch_items_empty_fields_on_plain_source(self, tmp_path):
+        """Default fetch_items leaves embedding/extra empty (no pre-computation)."""
+        root = self._make_tree(tmp_path)
+        source = LocalFolderSource(root)
+        item = source.fetch_items(["a.wav"])["a.wav"]
+        assert item.embedding is None
+        assert item.embedder_name == ""
+        assert item.extra == {}
 
     def test_fetch_items_empty_list(self, tmp_path):
         source = LocalFolderSource(tmp_path)
@@ -156,9 +165,9 @@ class TestLocalFolderSource:
         ]
         result = source.resolve_paths(entries)
         assert len(result) == 3
-        assert result[0] is not None and result[0].name == "a.wav"
-        assert result[1] is not None and result[1].name == "c.wav"
-        assert result[2] is None
+        assert result[0].path is not None and result[0].path.name == "a.wav"
+        assert result[1].path is not None and result[1].path.name == "c.wav"
+        assert result[2].path is None
 
     def test_resolve_paths_empty_list(self, tmp_path):
         source = LocalFolderSource(tmp_path)
@@ -422,6 +431,57 @@ class TestIngestViaSource:
 
         assert result == -1
         assert len(medias) == 0  # Nothing ingested, caller should use legacy
+
+    def test_ingest_uses_precomputed_embedding_from_source(self, tmp_path):
+        """When resolve_paths returns a FetchedItem with an embedding, the
+        ingest path skips local re-embedding and uses the source's vector and
+        any extra metadata (e.g. duration) directly."""
+        import numpy as np
+        from unittest.mock import MagicMock
+
+        from vtscore.datasets.ingest import _ingest_via_source
+        from vtscore.datasets.sources.base import FetchedItem
+        from vtscore.datasets.sources import get_source_for_origin
+
+        folder = tmp_path / "audio"
+        folder.mkdir()
+        (folder / "clip.wav").write_bytes(b"audio_data")
+
+        origin = {
+            "importer": "server_folder",
+            "params": {"path": str(folder), "media_type": "audio"},
+        }
+        entries = [
+            {"origin": origin, "origin_name": "clip.wav", "md5": "", "label": "good", "filename": "clip.wav"},
+        ]
+
+        precomputed_emb = np.ones(512, dtype=np.float32)
+
+        # Patch the source so resolve_paths returns a FetchedItem with a
+        # pre-computed embedding and extra metadata.
+        real_source = get_source_for_origin(origin)
+        assert real_source is not None
+        real_source.resolve_paths = lambda pairs: [  # type: ignore[method-assign]
+            FetchedItem(
+                path=folder / "clip.wav",
+                embedding=precomputed_emb,
+                embedder_name="test-embedder",
+                extra={"duration": 3.5},
+            )
+        ]
+
+        medias: dict = {}
+        with patch("vtscore.datasets.sources.get_source_for_origin", return_value=real_source):
+            # embed_file must NOT be called when pre-computed embedding is provided.
+            with patch("vtscore.detectors.resolver.embed_file", side_effect=AssertionError("embed_file called unexpectedly")) as mock_embed:
+                result = _ingest_via_source(origin, entries, medias, lambda *a: None)
+
+        assert result == 1
+        assert len(medias) == 1
+        media = next(iter(medias.values()))
+        assert np.array_equal(media["embedding"], precomputed_emb)
+        assert media["embedder"] == "test-embedder"
+        assert media["duration"] == 3.5
 
     def test_ingest_returns_negative_one_for_pickle(self):
         """Non-file-based origins return -1 (fallback to full importer)."""
