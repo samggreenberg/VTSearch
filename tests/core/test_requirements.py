@@ -49,9 +49,7 @@ def _is_forwarding(path: Path) -> bool:
 
 
 _SLIM_FILES = [
-    p
-    for p in sorted((_REPO_ROOT / "requirements").iterdir())
-    if p.suffix == ".txt" and not _is_forwarding(p)
+    p for p in sorted((_REPO_ROOT / "requirements").iterdir()) if p.suffix == ".txt" and not _is_forwarding(p)
 ]
 
 
