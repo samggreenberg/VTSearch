@@ -10467,6 +10467,69 @@
         ]
       }
     },
+    "/api/label-importers/field-options/{importer_name}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "label_importer_field_options",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImporterFieldOptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImporterFieldOptionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Unknown or non-dynamic field key."
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+          },
+          "500": {
+            "description": "get_field_options did not return a list."
+          },
+          "501": {
+            "description": "Importer does not implement get_field_options."
+          },
+          "502": {
+            "description": "Remote service backing dynamic options raised an error."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return dropdown options for a dynamic-options field on a label importer.",
+        "tags": [
+          "label_importers"
+        ]
+      }
+    },
     "/api/label-importers/import/holder": {
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",

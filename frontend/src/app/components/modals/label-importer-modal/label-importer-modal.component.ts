@@ -49,6 +49,9 @@ export class LabelImporterModalComponent implements OnInit, OnDestroy {
   submitting = false;
   error = '';
   successMessage = '';
+  dynamicFieldOptions: Record<string, string[]> = {};
+  dynamicFieldLoading: Record<string, boolean> = {};
+  dynamicFieldError: Record<string, string> = {};
   addingGood = false;
   addingBad = false;
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -93,6 +96,9 @@ export class LabelImporterModalComponent implements OnInit, OnDestroy {
     this.selectedFileFieldKey = null;
     this.error = '';
     this.successMessage = '';
+    this.dynamicFieldOptions = {};
+    this.dynamicFieldLoading = {};
+    this.dynamicFieldError = {};
     const fields = (importer.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -105,7 +111,58 @@ export class LabelImporterModalComponent implements OnInit, OnDestroy {
         this.formValues[field.key] = field.options![0];
       }
     }
+    for (const field of fields) {
+      if (field.dynamic_options) {
+        this.refreshDynamicFieldOptions(field);
+      }
+    }
     this.view = 'form';
+  }
+
+  onFormFieldChanged(changedKey: string): void {
+    const importer = this.selectedImporter;
+    if (!importer?.fields) return;
+    for (const field of (importer.fields as ImporterField[])) {
+      if (!field.dynamic_options) continue;
+      if (!(field.depends_on || []).includes(changedKey)) continue;
+      this.formValues[field.key] = '';
+      this.refreshDynamicFieldOptions(field);
+    }
+  }
+
+  optionsFor(field: ImporterField): string[] {
+    if (field.dynamic_options) {
+      return this.dynamicFieldOptions[field.key] || [];
+    }
+    return field.options || [];
+  }
+
+  private refreshDynamicFieldOptions(field: ImporterField): void {
+    const importer = this.selectedImporter;
+    if (!importer) return;
+    const key = field.key;
+    this.dynamicFieldLoading[key] = true;
+    this.dynamicFieldError[key] = '';
+    this.labelImportersApi
+      .getFieldOptions(importer.name, key, { ...this.formValues })
+      .subscribe({
+        next: (res) => {
+          this.dynamicFieldOptions[key] = res.options || [];
+          this.dynamicFieldLoading[key] = false;
+          const current = this.formValues[key];
+          if (current && !this.dynamicFieldOptions[key].includes(String(current))) {
+            this.formValues[key] = '';
+          }
+          if (!this.formValues[key] && field.required && this.dynamicFieldOptions[key].length > 0) {
+            this.formValues[key] = this.dynamicFieldOptions[key][0];
+          }
+        },
+        error: (err) => {
+          this.dynamicFieldLoading[key] = false;
+          this.dynamicFieldError[key] = err?.error?.error || 'Could not load options';
+          this.dynamicFieldOptions[key] = [];
+        },
+      });
   }
 
   back(): void {
