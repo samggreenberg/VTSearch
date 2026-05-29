@@ -59,6 +59,13 @@ export class LabelImportersApiService {
     return this.http.post(url, params);
   }
 
+  getFieldOptions(importerName: string, fieldKey: string, values: Record<string, string>): Observable<{ options: string[] }> {
+    return this.http.post<{ options: string[] }>(
+      `/api/label-importers/field-options/${encodeURIComponent(importerName)}`,
+      { field_key: fieldKey, values },
+    );
+  }
+
   ingestMissing(entries: Record<string, unknown>[]): Observable<IngestMissingResponse> {
     return ingestMissing(this.http, this.config.rootUrl, {
       body: { entries },
