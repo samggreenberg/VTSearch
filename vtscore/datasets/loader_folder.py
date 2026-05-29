@@ -274,21 +274,25 @@ def _resolve_file_embedding(
     file_name: str,
     file_cm: dict[str, Any] | None,
     content_vectors: dict[str, Any] | None,
+    content_embedder_name: str = "",
 ) -> tuple[Any, str]:
     """Pick a pre-computed embedding for *file_path* if available.
 
     Resolution order: custom_metadata embedding → content_vectors[rel_path]
-    → content_vectors[basename] → ``(None, "")``.  External vectors come
-    back with ``embedder_id == ""``; the framework embed stage stamps
-    the live embedder name on items that come out at ``None`` here.
+    → content_vectors[basename] → ``(None, "")``.  Custom-metadata vectors
+    come back with ``embedder_id == ""``.  Content-vectors hits use
+    *content_embedder_name* so the embedder that produced the NPZ archive
+    is recorded on the media; ``""`` is returned when the caller doesn't
+    know the embedder (the framework embed stage will stamp its own name
+    when embedding is ``None``).
     """
     cm_embedding = _get_embedding_value(file_cm) if file_cm else None
     if cm_embedding is not None:
         return cm_embedding, ""
     if content_vectors and rel_path in content_vectors:
-        return content_vectors[rel_path], ""
+        return content_vectors[rel_path], content_embedder_name
     if content_vectors and file_name in content_vectors:
-        return content_vectors[file_name], ""
+        return content_vectors[file_name], content_embedder_name
     return None, ""
 
 
@@ -387,6 +391,7 @@ def _build_per_file_media(
     custom_metadata_map: dict[str, dict[str, Any]] | None,
     thin: bool,
     origin: dict[str, Any] | None,
+    content_embedder_name: str = "",
 ) -> dict[str, Any]:
     """Resolve any pre-computed embedding + md5 and build the per-file media dict.
 
@@ -395,7 +400,9 @@ def _build_per_file_media(
     """
     file_cm = _lookup_file_custom_metadata(rel_path, file_path.name, custom_metadata_map)
 
-    embedding, embedder_id = _resolve_file_embedding(rel_path, file_path.name, file_cm, content_vectors)
+    embedding, embedder_id = _resolve_file_embedding(
+        rel_path, file_path.name, file_cm, content_vectors, content_embedder_name
+    )
 
     cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
@@ -452,6 +459,7 @@ def load_dataset_from_folder(
     thin: bool = False,
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
     recursive: bool = True,
+    content_embedder_name: str = "",
 ) -> None:
     """Generate a dataset in-place from a flat folder of media files.
 
@@ -495,6 +503,9 @@ def load_dataset_from_folder(
             (highest priority).  The dict is attached as
             ``media["custom_metadata"]``.
         recursive: When ``True`` (default), scan subdirectories.
+        content_embedder_name: Name of the embedder that produced the
+            vectors in *content_vectors*.  Stored as ``media["embedder"]``
+            for every file whose vector comes from *content_vectors*.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, if no matching
@@ -544,6 +555,7 @@ def load_dataset_from_folder(
                 custom_metadata_map=custom_metadata_map,
                 thin=thin,
                 origin=origin,
+                content_embedder_name=content_embedder_name,
             )
             medias[media_id] = built
             media_id += 1
@@ -595,6 +607,7 @@ def load_dataset_from_folder_chunked(
     thin: bool = False,
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
     recursive: bool = True,
+    content_embedder_name: str = "",
 ) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield chunks of medias from a folder of media files.
 
@@ -656,6 +669,7 @@ def load_dataset_from_folder_chunked(
                 custom_metadata_map=custom_metadata_map,
                 thin=thin,
                 origin=origin,
+                content_embedder_name=content_embedder_name,
             )
             chunk_medias[media_id] = built
             media_id += 1

@@ -33,7 +33,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from vtscore.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
+from vtscore.datasets.importers._npz_vectors import read_npz_embedder_name, read_npz_filenames_and_vectors
 from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
@@ -69,14 +69,17 @@ def _read_text_paths_file(paths_file: Path) -> list[Path]:
     return paths
 
 
-def _read_npz_paths_file(paths_file: Path) -> tuple[list[Path], dict[str, Any]]:
-    """Read media paths + pre-computed vectors from a ``.npz`` archive.
+def _read_npz_paths_file(paths_file: Path) -> tuple[list[Path], dict[str, Any], str]:
+    """Read media paths + pre-computed vectors + embedder name from a ``.npz``.
 
-    Returns ``(paths, path_to_vector)`` where keys of *path_to_vector*
-    are the absolute path strings of the resolved entries (the same
-    strings that appear in *paths*).
+    Returns ``(paths, path_to_vector, embedder_name)`` where keys of
+    *path_to_vector* are the absolute path strings of the resolved entries
+    (the same strings that appear in *paths*), and *embedder_name* is the
+    value stored under ``"embedder_name"`` or ``"embedder"`` in the archive
+    (``""`` when absent).
     """
     name_to_vector = read_npz_filenames_and_vectors(paths_file)
+    embedder_name = read_npz_embedder_name(paths_file)
     base_dir = paths_file.resolve().parent
     paths: list[Path] = []
     path_to_vector: dict[str, Any] = {}
@@ -89,7 +92,7 @@ def _read_npz_paths_file(paths_file: Path) -> tuple[list[Path], dict[str, Any]]:
             candidate = (base_dir / candidate).resolve()
         paths.append(candidate)
         path_to_vector[str(candidate)] = vec
-    return paths, path_to_vector
+    return paths, path_to_vector, embedder_name
 
 
 def _read_paths_file(paths_file: Path) -> list[Path]:
@@ -103,23 +106,25 @@ def _read_paths_file(paths_file: Path) -> list[Path]:
     if not paths_file.is_file():
         raise FileNotFoundError(f"Paths file not found: {paths_file}")
     if paths_file.suffix.lower() == ".npz":
-        paths, _ = _read_npz_paths_file(paths_file)
+        paths, _, _embedder = _read_npz_paths_file(paths_file)
         return paths
     return _read_text_paths_file(paths_file)
 
 
-def _read_paths_and_vectors(paths_file: Path) -> tuple[list[Path], dict[str, Any]]:
-    """Like :func:`_read_paths_file` but also returns pre-computed vectors.
+def _read_paths_and_vectors(paths_file: Path) -> tuple[list[Path], dict[str, Any], str]:
+    """Like :func:`_read_paths_file` but also returns pre-computed vectors and embedder name.
 
-    For ``.txt`` / ``.list`` inputs the second tuple element is an empty
-    dict.  For ``.npz`` inputs it maps each resolved path string to its
-    pre-computed embedding vector.
+    For ``.txt`` / ``.list`` inputs the second and third tuple elements
+    are an empty dict and ``""`` respectively.  For ``.npz`` inputs the
+    second element maps each resolved path string to its pre-computed
+    embedding vector, and the third element is the embedder name (``""``
+    if the archive doesn't record one).
     """
     if not paths_file.is_file():
         raise FileNotFoundError(f"Paths file not found: {paths_file}")
     if paths_file.suffix.lower() == ".npz":
         return _read_npz_paths_file(paths_file)
-    return _read_text_paths_file(paths_file), {}
+    return _read_text_paths_file(paths_file), {}, ""
 
 
 def _expand_paths(paths: list[Path]) -> list[Path]:
@@ -234,10 +239,10 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 f.options = all_folder_names()
                 break
 
-    def _stage_paths(self, field_values: dict[str, Any]) -> tuple[Path, dict[str, Path], dict[str, Any]]:
+    def _stage_paths(self, field_values: dict[str, Any]) -> tuple[Path, dict[str, Path], dict[str, Any], str]:
         """Read the paths file and symlink each entry into a fresh temp dir.
 
-        Returns ``(staging_dir, name_to_source, content_vectors)`` where:
+        Returns ``(staging_dir, name_to_source, content_vectors, embedder_name)`` where:
 
         - ``staging_dir`` is the freshly created temp directory holding
           one symlink per imported file (caller must ``rmtree`` it).
@@ -249,9 +254,12 @@ class ServerFilesDatasetImporter(DatasetImporter):
           paths.  Returned as a local dict (not threaded through
           :meth:`~DatasetImporter.yield_precomputed`) so the singleton
           importer instance does not accumulate per-import state.
+        - ``embedder_name`` is the name of the embedder that produced the
+          pre-computed vectors (``""`` for plain text paths files or NPZ
+          archives that don't record an embedder name).
         """
         paths_file = Path(field_values["paths_file"])
-        paths, path_to_vector = _read_paths_and_vectors(paths_file)
+        paths, path_to_vector, embedder_name = _read_paths_and_vectors(paths_file)
         if not paths:
             raise ValueError(f"No paths found in {paths_file}")
 
@@ -270,26 +278,33 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 vec = path_to_vector.get(str(source))
                 if vec is not None:
                     content_vectors[name] = vec
-        return staging, name_to_source, content_vectors
+        return staging, name_to_source, content_vectors, embedder_name
 
     def _rewrite_origins(
         self,
         medias: dict[int, dict[str, Any]],
         name_to_source: dict[str, Path],
         origin: dict[str, Any],
+        embedder_name: str = "",
     ) -> None:
         """Point each media at its real source path instead of the symlink.
 
         Each media gets a fresh copy of *origin* so a later mutation of one
-        media's ``origin.params`` cannot leak across siblings.
+        media's ``origin.params`` cannot leak across siblings.  When
+        *embedder_name* is non-empty it is stored in the origin params so
+        the ``server_files`` :class:`~vtscore.datasets.sources.MediaSource`
+        can surface the embedder on re-ingestion.
         """
         for media in medias.values():
             src = name_to_source.get(media.get("origin_name", "")) or name_to_source.get(media.get("filename", ""))
             if src is None:
                 continue
+            params = dict(origin.get("params", {}))
+            if embedder_name:
+                params["embedder_name"] = embedder_name
             media["origin"] = {
                 "importer": origin.get("importer", ""),
-                "params": dict(origin.get("params", {})),
+                "params": params,
             }
             media["origin_name"] = str(src)
             media["media_path"] = str(src)
@@ -302,6 +317,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         medias: dict,
         thin: bool,
         merged_vectors: dict[str, Any],
+        content_embedder_name: str = "",
     ) -> bool:
         """Load files of ``spec.source_type`` from the staging dir.
 
@@ -318,6 +334,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                 medias,
                 thin=thin,
                 content_vectors=merged_vectors or None,
+                content_embedder_name=content_embedder_name,
                 content_md5s=self.content_md5s or None,
                 custom_metadata_map=self.custom_metadata_map or None,
             )
@@ -331,7 +348,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         specs = self.effective_source_specs(field_values)
         output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
 
-        staging, name_to_source, npz_vectors = self._stage_paths(field_values)
+        staging, name_to_source, npz_vectors, embedder_name = self._stage_paths(field_values)
         # Merge npz-supplied vectors with any vectors set externally on
         # ``self.content_vectors``.  NPZ vectors take priority for keys
         # that overlap.
@@ -341,7 +358,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
             had_direct = False
             for spec in specs:
                 if spec.converter is None:
-                    if self._load_direct_into(staging, spec, field_values, medias, thin, merged_vectors):
+                    if self._load_direct_into(staging, spec, field_values, medias, thin, merged_vectors, embedder_name):
                         had_direct = True
 
             converter_rows = [s for s in specs if s.converter is not None]
@@ -360,7 +377,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
                     },
                 )
 
-            self._rewrite_origins(medias, name_to_source, self.build_origin(field_values))
+            self._rewrite_origins(medias, name_to_source, self.build_origin(field_values), embedder_name)
 
             if not had_direct and not medias:
                 raise ValueError(f"No {output_type} files found in listed paths")
@@ -390,7 +407,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
         specs = self.effective_source_specs(field_values)
         output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
 
-        staging, name_to_source, npz_vectors = self._stage_paths(field_values)
+        staging, name_to_source, npz_vectors, embedder_name = self._stage_paths(field_values)
         origin = self.build_origin(field_values)
         merged_vectors: dict[str, Any] = dict(self.content_vectors or {})
         merged_vectors.update(npz_vectors)
@@ -406,10 +423,11 @@ class ServerFilesDatasetImporter(DatasetImporter):
                         chunk_size,
                         thin=thin,
                         content_vectors=merged_vectors or None,
+                        content_embedder_name=embedder_name,
                         content_md5s=self.content_md5s or None,
                         custom_metadata_map=self.custom_metadata_map or None,
                     ):
-                        self._rewrite_origins(chunk, name_to_source, origin)
+                        self._rewrite_origins(chunk, name_to_source, origin, embedder_name)
                         yield chunk
                 except ValueError:
                     # Empty for this source type - keep going; converter

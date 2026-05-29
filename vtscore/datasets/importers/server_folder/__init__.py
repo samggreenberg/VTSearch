@@ -402,7 +402,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
         from vtscore.datasets.sources.local_folder import LocalFolderSource
 
         source = LocalFolderSource(folder)
-        return source.resolve_path(origin_name, filename)
+        return source.resolve_path(origin_name, filename).path
 
 
 IMPORTER = ServerFolderDatasetImporter()
