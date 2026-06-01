@@ -266,10 +266,14 @@ Run `umap-learn` on the cached `(N, d)` embedding matrix to produce an
   ingest (see *§Prerequisite*), Euclidean distance on the unit sphere is a
   monotonic function of cosine distance, so UMAP needs no special metric and
   no per-fit normalization step.
-- **Determinism:** seed `random_state` so the map is reproducible run to
-  run. Tradeoff: a fixed `random_state` disables UMAP's numba parallelism,
-  so the fit is slower. The map is the canonical, shareable view, so
-  **determinism wins** over fit speed.
+- **Determinism:** **not seeded.** We accept a non-deterministic fit (no
+  fixed `random_state`), which keeps UMAP's numba parallelism on and the fit
+  faster. The map is a browsing aid, not a citable artifact, so a different
+  layout on each refit is acceptable. **Consequence for caching:** because
+  the coordinates are not reproducible, the projection cannot be content-
+  addressed — every fit is a brand-new layout and must mint a fresh
+  projection id, which is what tile-cache invalidation keys on (see
+  *§Tile-cache invalidation*).
 - **Cost & scheduling:** UMAP is O(N) with heavy constants — seconds at a
   few thousand points, into minutes at 10⁵. It runs as a **background
   async job with progress** (`vtscore/concurrency`), never inline in a
@@ -283,9 +287,10 @@ Run `umap-learn` on the cached `(N, d)` embedding matrix to produce an
   no incremental layout and no out-of-sample `umap.transform()`. If you want
   to combine datasets (or otherwise change the pile), you **re-run UMAP from
   scratch** on the new full set — the layout is expected to change wholesale,
-  and that's correct. This makes the projection a pure function of (the
-  embedding set + UMAP params + seed), which is also why it's safe to treat
-  as a recompute-on-load cache.
+  and that's correct. The projection is a pure-ish function of (the embedding
+  set + UMAP params), modulo the unseeded random init, which is why it's safe
+  to treat as a recompute-on-load cache — each load produces *a* valid
+  layout, just not the same one twice.
 
 > **CRITICAL — do not persist the projection.** UMAP coordinates are a
 > *derived artifact* of the embeddings, so the repo's **"No Persisted
@@ -337,6 +342,37 @@ once at build time, on the server, and amortized across every pan/zoom and
 every client). The price is more machinery (a pyramid + a tile endpoint +
 client-side tile caching) and round-trips on zoom/pan, mitigated by an LRU
 tile cache and prefetching neighbors.
+
+#### Tile-cache invalidation (the `ETag` problem)
+
+The whole reason tiles are worth caching — they're immutable and viewport-
+bounded — is also what makes them dangerous across a refit. A tile is keyed
+by `(level, tx, ty)`, but its **contents** (which hexes, their counts, their
+representative clips) are only meaningful *relative to one projection*. When
+the projection is re-fit, every coordinate moves, so tile `(level, tx, ty)`
+now describes a different patch of a different layout. Any cache that still
+holds the old tile under the same key — the browser HTTP cache, an LRU in the
+client, a CDN/proxy in front of the app — will serve **stale geometry**, and
+the canvas renders a Frankenstein mix of old and new tiles that don't line
+up. This is exactly the situation our just-made decision *worsens*: with an
+**unseeded** UMAP, a refit is guaranteed to produce different coordinates, so
+there is no "same dataset → same tiles" stability to lean on. We can't
+content-address the tiles (hash the inputs and reuse across fits) because the
+output isn't a function of the inputs alone.
+
+So the projection needs a **version stamp** that changes on every fit, and
+the tile identity must incorporate it so a stale tile can never masquerade as
+a fresh one. Concretely, the server mints a `projection_id` (a per-fit nonce
+— UUID or fit timestamp; *not* a content hash, since content isn't stable)
+when the background job finishes, stores it on the `DatasetContext` next to
+the in-memory projection + pyramid, and hands it to the client in the
+projection-metadata response (alongside extent and `Zmax`). From there the
+mechanism is the open choice (see below); whatever we pick must guarantee
+(a) old-`projection_id` tiles are never rendered after a refit, and (b) the
+client re-reads the projection metadata (extent/`Zmax` also change with a new
+random layout) before requesting tiles under a new id. The single-dataset,
+in-memory, mostly-single-user shape of v1 means refits are rare (process
+start, dataset (re)load) — but when they happen the swap must be clean.
 
 ### Stage 3 — Canvas renderer (client-side, **Canvas 2D**)
 
@@ -443,10 +479,10 @@ tunable parameters, not bake in constants:
 
 **Design (resolve before scaffold).**
 
-- **Determinism vs. fit speed:** confirm we accept the seeded (slower) fit.
 - **Rebuild semantics:** full refit on dataset change is locked (datasets are
   immutable input piles; no incremental `umap.transform`); the open part is
-  the projection-version/`ETag` scheme for tile-cache invalidation.
+  the projection-version/`ETag` scheme for tile-cache invalidation (see
+  *§Tile-cache invalidation* for the problem statement; mechanism TBD).
 
 ## `vtscore` back-edges to address
 
