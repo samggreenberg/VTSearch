@@ -379,6 +379,9 @@ tile cache and prefetching neighbors.
 | Embedding normalization | **App-wide L2 at ingest** | Normalize in every `embed`/`embed_text`; drop per-comparison normalization. See *§Prerequisite*. |
 | Canvas point = one clip | **Clip, not file** | Each point is a clip media item (`clip_start`/`clip_end` from the audio clipper); sibling clips of one source file land independently on the map. |
 | Hover audio | **Local clip only** | Hovering a point plays *that clip's* `[clip_start, clip_end]` slice, never the whole source file — even when other clips of the same file sit elsewhere on the canvas. |
+| Product scope (v1) | **Browse-only** | Pan / zoom / hover-to-listen + sibling highlight. No selection, voting, detector training, or ranking in v1; handoff to VTSearch's train-a-detector flow is a deferred follow-up. |
+| Hex color | **Density (count)** | Color = clip count per hex (log/sqrt-scaled), which the tile pyramid already aggregates for free. No detector/query needed; a second visual channel (opacity/outline) is reserved for hover + sibling highlight. |
+| Sibling highlight | **On hover** | Hovering a clip highlights the other clips of the same source file wherever they fall on the canvas. Requires a per-point source-file group id; see *§Interaction model*. |
 
 ### Notes on the second Angular build target
 
@@ -392,6 +395,35 @@ outputs; `run-tests.sh`'s frontend build check must cover both. This is
 heavier than a single in-app route but keeps the browser free of the
 VTSearch shell (left panel, center panel, detector/dashboard UI), which it
 does not use.
+
+## Interaction model (v1)
+
+VictoryTones v1 is **browse-only**: the only interactions are spatial
+navigation (pan/zoom) and two hover behaviors. There is no selection, voting,
+detector, or ranking — those belong to the deferred VTSearch handoff (see
+*§Open follow-ups*).
+
+- **Hover → listen.** Hovering a point plays that clip's
+  `[clip_start, clip_end]` slice (locked above).
+- **Hover → highlight siblings.** Simultaneously, the other clips of the same
+  source file are highlighted wherever they sit. This needs each rendered
+  point to carry a **source-file group id** (derivable from the clip's origin
+  / source path — clips already record their parent), so the renderer can
+  light up matching points without a round-trip.
+- **Color → density.** Hex fill encodes clip count, taken straight from the
+  pyramid's per-hex aggregation; hover/sibling state rides a separate channel
+  (outline or opacity bump) so it reads on top of the density fill.
+
+**Binning interaction (resolve at implementation).** Sibling highlight and
+per-point hover are only literally per-point at the deepest zoom, where the
+renderer draws individual clips. At aggregated zoom levels a "point" is a
+hex of many clips, so both behaviors must degrade gracefully: hovering a hex
+should highlight the **hexes that contain** sibling clips (not invisible
+points), and the listen target becomes a representative clip of the hovered
+hex (exact pick is part of the empirical hover policy). The tile payload
+therefore needs enough per-hex identity to answer "which hexes hold a sibling
+of this group?" — either ship source-file group ids down to the hex level, or
+serve sibling lookups from a small server endpoint keyed by group id.
 
 ## Open problems to resolve before/at scaffold
 
@@ -444,6 +476,11 @@ vtscore-clean` from day one.
 
 - Nothing shipped yet — this is a proposal. When the first slice lands,
   add a *What shipped* section and update the status header.
+- **VTSearch detector handoff:** v1 is browse-only. The deferred feature is
+  letting a user select/vote clips on the canvas to seed VTSearch's existing
+  train-a-detector flow (and, once a detector exists, optionally recolor hexes
+  by detector score instead of density). Adds selection + vote UI and a
+  bridge into the detector context; explicitly out of v1.
 - **Text-seeded navigation:** a query box that embeds text and flies the
   canvas to the nearest region (reuses `embed_text_query` + cosine). Out of
   v1 scope; the projection is the only ordering in v1.
