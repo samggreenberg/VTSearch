@@ -216,23 +216,18 @@ def _score_medias_with_detectors(
 ) -> dict[str, dict[str, Any]]:
     """Score *medias* against pre-trained detector MLPs.
 
-    Embeds any items still missing a vector (idempotent — a no-op for
-    pre-embedded pickle chunks, the actual embed pass for folder chunks that
-    arrive with ``embedding=None``) and drops anything the embedder couldn't
-    embed before scoring.
+    Every media must already carry an embedding; an unexpected ``None`` here
+    raises (the M11 guard) rather than silently scoring NaN.  Sources that
+    legitimately arrive unembedded (folder chunks) are embedded one chunk at a
+    time by :func:`_embed_and_filter_chunk` in the pipeline layer before they
+    reach this scorer.
     """
     if not medias or not detector_mlps:
         return {}
 
     import torch  # noqa: PLC0415
 
-    from vtscore.datasets.load_pipeline import embed_missing  # noqa: PLC0415
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
-
-    embed_missing(medias, "")
-    medias = {cid: m for cid, m in medias.items() if m.get("embedding") is not None}
-    if not medias:
-        return {}
 
     all_ids, all_embs = get_embedding_matrix_for_snap(medias)
     X_all = torch.from_numpy(all_embs)
@@ -553,6 +548,24 @@ def _train_detectors_for_first_chunk(
     return detector_mlps
 
 
+def _embed_and_filter_chunk(chunk: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    """Embed any chunk medias still missing a vector, then drop un-embeddable ones.
+
+    Importers emit media with ``embedding=None`` (folder chunks especially);
+    the framework embed stage is what fills them in.  The CLI scores chunk by
+    chunk without going through the full load pipeline, so it runs the embed
+    stage here, one chunk at a time, keeping peak memory bounded by the chunk
+    size.  :func:`embed_missing` is idempotent — a no-op for pre-embedded
+    pickle chunks — so this is safe on every source.  Items the embedder
+    couldn't embed (returned ``None``) are dropped, mirroring the load
+    pipeline's drop-none stage, so the strict scorer never sees a ``None``.
+    """
+    from vtscore.datasets.load_pipeline import embed_missing  # noqa: PLC0415
+
+    embed_missing(chunk, "")
+    return {cid: m for cid, m in chunk.items() if m.get("embedding") is not None}
+
+
 def _score_chunk(
     chunk_medias: dict[int, dict[str, Any]],
     chunk_num: int,
@@ -568,7 +581,7 @@ def _score_chunk(
             chunk_num=chunk_num,
             chunk_size=len(chunk_medias),
         )
-    chunk_results = _score_medias_with_detectors(chunk_medias, detector_mlps)
+    chunk_results = _score_medias_with_detectors(_embed_and_filter_chunk(chunk_medias), detector_mlps)
     _merge_detector_results(merged_results, chunk_results)
 
 
@@ -656,7 +669,7 @@ def _stream_hit_records(
                 chunk_num=chunk_num,
                 chunk_size=len(chunk),
             )
-        chunk_results = _score_medias_with_detectors(chunk, detector_mlps)
+        chunk_results = _score_medias_with_detectors(_embed_and_filter_chunk(chunk), detector_mlps)
         for det_name, det_result in chunk_results.items():
             for hit in det_result.get("hits", []):
                 yield det_name, {**hit, "label": "good"}

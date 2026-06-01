@@ -13,9 +13,9 @@ from pathlib import Path
 from helpers import make_wav_bytes as _make_wav_bytes
 
 
-def _make_wav_files(folder: Path, n: int) -> None:
+def _make_wav_files(folder: Path, n: int, prefix: str = "clip") -> None:
     for i in range(n):
-        (folder / f"clip_{i:03d}.wav").write_bytes(_make_wav_bytes(frequency=440.0 + i))
+        (folder / f"{prefix}_{i:03d}.wav").write_bytes(_make_wav_bytes(frequency=440.0 + i))
 
 
 class TestGeneratorGlobs:
@@ -23,11 +23,11 @@ class TestGeneratorGlobs:
         from vtscore.security.path_validation import iter_rglob_follow_symlinks, rglob_follow_symlinks
 
         (tmp_path / "sub").mkdir()
-        _make_wav_files(tmp_path, 2)
-        _make_wav_files(tmp_path / "sub", 2)
+        _make_wav_files(tmp_path, 2, prefix="top")
+        _make_wav_files(tmp_path / "sub", 2, prefix="nested")
 
-        streamed = {p.name for p in iter_rglob_follow_symlinks(tmp_path, "*.wav")}
-        materialised = {p.name for p in rglob_follow_symlinks(tmp_path, "*.wav")}
+        streamed = {p.resolve() for p in iter_rglob_follow_symlinks(tmp_path, "*.wav")}
+        materialised = {p.resolve() for p in rglob_follow_symlinks(tmp_path, "*.wav")}
         assert streamed == materialised
         assert len(streamed) == 4
 
