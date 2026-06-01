@@ -13,11 +13,10 @@ import hashlib
 from pathlib import Path
 from typing import Any, Iterator
 
-import numpy as np
-
 from vtscore.datasets.loader import (
     ProgressCallback,
 )
+from vtscore.embedding.normalize import l2_normalize
 from vtscore.security.pickle import safe_pickle_load
 
 
@@ -125,7 +124,7 @@ def _build_pickle_thin_media(
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", 0),
         "md5": media_info.get("md5", ""),
-        "embedding": np.array(media_info["embedding"]),
+        "embedding": l2_normalize(media_info["embedding"]),
         "media_bytes": None,
         "media_string": None,
         "media_path": media_path,
@@ -160,7 +159,7 @@ def _build_pickle_full_media(
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", len(media_bytes)),
         "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
-        "embedding": np.array(media_info["embedding"]),
+        "embedding": l2_normalize(media_info["embedding"]),
         "media_bytes": media_bytes,
         "media_string": media_string,
         "media_path": media_path or media_info.get("media_path"),

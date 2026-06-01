@@ -21,6 +21,7 @@ import json
 from typing import Any, Callable, Optional
 
 from vtsearch.state import next_media_id
+from vtscore.embedding.normalize import l2_normalize
 from vtscore.state.core import _state_lock
 
 ProgressCallback = Callable[[str, str, int, int], None]
@@ -128,7 +129,7 @@ def _build_media_data(
         "media_type": media_type_id,
         "file_size": len(file_bytes),
         "md5": md5,
-        "embedding": embedding,
+        "embedding": None if embedding is None else l2_normalize(embedding),
         "embedder": embedder_name,
         "filename": entry.get("filename") or name,
         "category": entry.get("category", ""),

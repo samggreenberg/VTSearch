@@ -1,8 +1,11 @@
 # Design: VictoryTones — a UMAP hexbin Audio Browser on `vtscore`
 
-> **Status:** Proposed (design only; no code yet). This doc scopes
-> VictoryTones as a **second app tier** in the VTSearch repo, built on
-> the existing `vtscore` library alongside `vtsearch`.
+> **Status:** Prerequisite shipped (app-wide L2 normalization at ingest);
+> VictoryTones itself (projection backend, app tier, frontend) not yet
+> built. This doc scopes VictoryTones as a **second app tier** in the
+> VTSearch repo, built on the existing `vtscore` library alongside
+> `vtsearch`. See *§What shipped* and *§Open follow-ups* at the bottom for
+> where things stand.
 >
 > **Direction change (this revision):** the original sketch was a
 > *hover-to-hear grid* that reused VTSearch's left-panel media-list. The
@@ -237,6 +240,16 @@ convergence, and threshold calibration. Breaks backwards compatibility of
 stored-embedding magnitude (acceptable per repo policy) — call it out in the
 PR.
 
+> **Shipped — see *§What shipped*.** Implemented as a single helper,
+> `vtscore/embedding/normalize.py:l2_normalize`, applied at the
+> `MediaEmbedder` base wrappers (`embed_media`, `embed_media_bulk`, and a new
+> `embed_text` → `_embed_text_impl` indirection so every subclass is covered
+> at one layer) **and** at the pickle/re-ingest write paths
+> (`loader_pickle._build_pickle_{full,thin}_media`, `ingest._build_media_data`).
+> `region_similarity` now scores by plain dot product. The chosen chokepoint
+> was "normalize wherever a vector enters `medias` (plus query vectors at the
+> embedder)", not the matrix boundary.
+
 **Chokepoint placement (resolve at implementation).** Normalizing *only*
 inside `embed`/`embed_text` covers fresh embeds but **not pickle-loaded
 datasets**, which write stored (possibly raw, old) vectors straight into
@@ -417,7 +430,8 @@ anyone.
   dependency). Draw one filled hexagon per non-empty visible hex,
   **viewport-culled**. Canvas 2D comfortably handles low tens-of-thousands
   of on-screen hexes; because the screen-visible hex count is roughly
-  constant by construction (LOD), this stays well within budget. WebGL is
+  constant by construction (level-of-detail), this stays well within
+  budget. WebGL is
   the escape hatch if a future requirement blows past it.
 - **Density color.** Map `count` → a perceptually-uniform ramp (viridis /
   magma) on a **log or sqrt scale**, because density is heavy-tailed. Wire
@@ -543,10 +557,36 @@ should be written **Flask-free** (it belongs in `vtscore`, e.g.
 `vtscore/projection/`), so it can live under `./run-tests.sh
 vtscore-clean` from day one.
 
-## Open follow-ups
+## What shipped
 
-- Nothing shipped yet — this is a proposal. When the first slice lands,
-  add a *What shipped* section and update the status header.
+- **Prerequisite: app-wide L2 normalization at ingest.** Every embedding is
+  now unit-norm at the point it enters `medias`, and every text-query vector
+  is unit-norm at the embedder, so all similarity is a plain dot product.
+  - New leaf helper `vtscore/embedding/normalize.py:l2_normalize` (numpy-only;
+    zero / non-finite norms pass through untouched; idempotent).
+  - Applied at the `MediaEmbedder` base: `embed_media` and `embed_media_bulk`
+    normalize fresh outputs; `embed_text` became a thin wrapper over a new
+    `_embed_text_impl` hook (every embedder subclass renamed `embed_text →
+    _embed_text_impl`) so the normalization lives in one place.
+  - Applied at the stored-vector write paths so pickle/legacy loads and
+    re-ingest-from-origin also hold the invariant:
+    `loader_pickle._build_pickle_full_media` / `_build_pickle_thin_media` and
+    `ingest._build_media_data`.
+  - `vtscore/training/region_similarity.py` dropped per-comparison
+    normalization (both the per-media `score_against_query` path and the
+    vectorized `cosine_sort_with_boxes` fast path); the zero-query guard
+    stays. Contract change: callers must pass a unit-norm `query_vec` (all
+    in-tree sources already do).
+  - `svm.py` standardize-caveat docstring refreshed.
+  - **Behavior changes (per design):** the diversity tree's k-means now
+    clusters on unit vectors (angular, not magnitude+direction), so diversity
+    ordering shifts; the MLP trains on unit-scale inputs, which can shift
+    threshold calibration. **Breaks backwards compatibility** of
+    stored-embedding magnitude — legacy pickles re-normalize on load.
+  - Tests: `tests_lib/detectors/test_embedding_normalization.py`,
+    `tests_lib/datasets/test_pickle_normalization.py`.
+
+## Open follow-ups
 - **VTSearch detector handoff:** v1 is browse-only. The deferred feature is
   letting a user select/vote clips on the canvas to seed VTSearch's existing
   train-a-detector flow (and, once a detector exists, optionally recolor hexes

@@ -480,7 +480,9 @@ class TestIngestViaSource:
         assert result == 1
         assert len(medias) == 1
         media = next(iter(medias.values()))
-        assert np.array_equal(media["embedding"], precomputed_emb)
+        # Ingest L2-normalizes the source's vector at the write chokepoint,
+        # so the stored embedding is the unit-norm form of precomputed_emb.
+        assert np.allclose(media["embedding"], precomputed_emb / np.linalg.norm(precomputed_emb))
         assert media["embedder"] == "test-embedder"
         assert media["duration"] == 3.5
 
