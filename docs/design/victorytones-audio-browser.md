@@ -1,26 +1,50 @@
-# Design: VictoryTones — a hover-to-hear Audio Browser on `vtscore`
+# Design: VictoryTones — a UMAP hexbin Audio Browser on `vtscore`
 
 > **Status:** Proposed (design only; no code yet). This doc scopes
 > VictoryTones as a **second app tier** in the VTSearch repo, built on
-> the existing `vtscore` library alongside `vtsearch`. It records the
-> repo-structure decision, what VictoryTones reuses vs. omits, the
-> frontend plan, and the `vtscore → vtsearch` back-edges that need
-> attention. See *Open follow-ups* at the bottom.
+> the existing `vtscore` library alongside `vtsearch`.
+>
+> **Direction change (this revision):** the original sketch was a
+> *hover-to-hear grid* that reused VTSearch's left-panel media-list. The
+> Browse experience is now a **UMAP 2-D projection rendered as a
+> pannable/zoomable hexbin density map**, where hovering a hex auditions a
+> representative clip from that region. The repo-structure decision and the
+> reuse/omit story are unchanged; the **frontend and a new projection +
+> tiling backend** are the substantive additions, captured in
+> *§Browse-canvas architecture* below.
+>
+> **Decisions locked** (see *§Locked decisions*): single-dataset v1,
+> MediaType fixed to Audio, **server-side hex tiling**, a **second Angular
+> build target**, **Canvas 2D** rendering, **browse-only** scope, and a
+> **projection frozen + persisted at ingest** (unseeded UMAP, computed once).
 
 ## Problem / Goal
 
-We want an **Audio Browser** ("VictoryTones") for quickly auditioning a
-collection of audio. The interaction is the **hover-to-hear** affordance
-from VTSearch's Find UI: as the cursor moves over items in the list/grid,
-each one plays audibly — but with **no big center panel** (no waveform,
-no transport, no detail view). You sweep the grid and hear the dataset.
+We want an **Audio Browser** ("VictoryTones") for quickly auditioning and
+exploring a collection of audio by *content*. The center of the app is a
+**Browse canvas**: a 2-D UMAP projection of the audio content-embedding
+space, drawn as a tiled field of **hexagons**.
+
+- The canvas is **pannable and zoomable**.
+- Each hex's **color encodes how many audio clips fall in that region**
+  (density).
+- **Hovering a hex plays a representative ("central") clip** from that
+  region, on repeat, until the cursor moves to another hex.
+- **Zooming in subdivides** the hexes into finer-grained cells over a
+  narrower slice of the projection (level-of-detail), so the same screen
+  always shows a readable number of hexes but reveals more structure as you
+  descend.
 
 It reuses the heavy lifting VTSearch already has:
 
-- the **DatasetImporters** (load audio from folders, pickles, archives, …);
-- the **audio MediaEmbedders** (LAION-CLAP, CLAP-Music, AST, Whisper) so a
-  text query can seed an ordering of the grid, or items can be arranged by
-  embedding similarity.
+- the **DatasetImporters** (load audio from folders, pickles, archives, …),
+  with **MediaType fixed to Audio**;
+- the **audio MediaEmbedders** (LAION-CLAP, CLAP-Music, AST, Whisper) and the
+  cached **embedding matrix** that already backs sorting in VTSearch.
+
+On top of that reused stack it adds two new pieces: a **UMAP projection** of
+the embedding matrix to 2-D, and a **server-side hex-tile pyramid** that the
+canvas streams as the user pans and zooms.
 
 It deliberately **does not** want most of VTSearch's apparatus: no
 LabelSets, no labels/votes, no detector training, no MLP, no eval, no
@@ -44,16 +68,16 @@ vtscore" — at least not now. Reasoning below.
    *second* app tier that also consumes `vtscore` is the grain of the
    existing architecture — see `docs/ARCHITECTURE.md` §Directory map and
    §Dependency graph — not a fork of it.
-3. **The hover-to-hear UI is not in `vtscore` at all.** It's Angular, in
-   the app tier (`frontend/`). Either path reuses or re-implements
-   frontend; same-repo lets VictoryTones share Angular components,
-   services, and SCSS instead of copy-pasting them into another repo.
+3. **The Browse canvas is not in `vtscore` at all.** It's Angular, in the
+   app tier (`frontend/`). Either path reuses or re-implements frontend;
+   same-repo lets VictoryTones share Angular services and SCSS instead of
+   copy-pasting them into another repo.
 4. **Dropping labels/detectors is subtractive and trivial in-repo.** Those
    are per-**detector** concerns (`DetectorContext`: votes, training,
    model, threshold). VictoryTones simply never instantiates a
-   `DetectorContext`; it uses only `DatasetContext` (`medias`) +
-   embedders + media serving. Nothing has to be removed — it just isn't
-   wired up.
+   `DetectorContext`; it uses only `DatasetContext` (`medias`) + the
+   embedding matrix + a new projection + media serving. Nothing has to be
+   removed — it just isn't wired up.
 
 ### The fact that rules out "separate repo referencing vtscore" today
 
@@ -82,7 +106,7 @@ that an audio browser does not by itself justify.
 Notably, the paths VictoryTones touches most are in that table:
 `datasets/load_pipeline.py` (dataset loading) reaches into `vtsearch.auth`
 and `vtsearch.state`. So even the in-repo version benefits from tidying
-those edges (see *vtscore back-edges* below), but in-repo it keeps working
+those edges (see *§vtscore back-edges* below), but in-repo it keeps working
 as-is because `vtsearch` is present.
 
 ### When to revisit (separate repo / published `vtscore`)
@@ -99,21 +123,31 @@ avoids paying the decoupling tax up front for a benefit you don't yet need.
 
 - **Dataset importers** — `vtscore/datasets/importers/*` (server_folder,
   local_folder, pickle, http_archive, demo, …) via the `PluginRegistry`.
-  Unchanged.
+  Unchanged, **but constrained to MediaType Audio** in the UI.
 - **Audio media type + embedders** — `vtscore/media/audio/*`
   (`embedder_clap`, `embedder_clap_music`, `embedder_ast`,
   `embedder_whisper`) via the media/embedder registries in
-  `vtscore/media/__init__.py`. Unchanged.
+  `vtscore/media/__init__.py`. Unchanged. Output dimensionality `d` is
+  **512** (CLAP, CLAP-Music, Whisper) or **768** (AST); embeddings are now
+  **L2-normalized at ingest** (see *§Prerequisite*), so the projection
+  consumes unit vectors directly.
+- **The embedding matrix** — `vtscore/embedding/matrix.py`
+  `get_embedding_matrix(ctx) → (sorted_ids, (N, d) float32)`, lazily built
+  and cached on `DatasetContext` (`_emb_matrix` / `_emb_matrix_ids` in
+  `vtscore/state/core.py`), invalidated when the media-id set changes. This
+  is the **direct input to UMAP**; row `i` ↔ `sorted_ids[i]`.
 - **Media loading + embedding** — `vtscore/datasets/loader*.py`,
-  `vtscore/embedding/{helpers,matrix,loader}.py`.
-- **Per-dataset state** — `vtscore/state/core.py` `DatasetContext`
-  (`medias`) and the embedding matrix. No `DetectorContext`.
-- **Text-seeded ordering** — `embed_text_query` + cosine against the
-  dataset embedding matrix to order the grid by similarity to a text query
-  (the "quick stand-alone search" half of VTSearch's semantic sort, minus
-  the detector seeding).
+  `vtscore/embedding/{helpers,matrix,loader}.py`, and the
+  `load_pipeline → ingest → embed_media_bulk` flow.
+- **Audio serving** — `GET /api/medias/<id>/audio`
+  (`vtsearch/routes/media/list.py`) streams WAV bytes; reused verbatim for
+  hover playback.
+- **Clipper system** — `vtscore/media/audio/clipper.py` (tiling / silence /
+  VAD splitters). Each clip is embedded independently and carries
+  `clip_start`/`clip_end`, so **clipping directly controls map density**
+  (more clips → more points → a denser projection).
 - **Concurrency/progress** — `vtscore/concurrency/{progress,async_jobs}.py`
-  for background dataset loads.
+  for background dataset loads **and the background UMAP/tiling build**.
 
 ## What VictoryTones omits (vs. `vtsearch`)
 
@@ -124,7 +158,10 @@ avoids paying the decoupling tax up front for a benefit you don't yet need.
   workflow, no scoring routes.
 - **No eval** — no `vtscore/eval`.
 - **No achievements**, no detector/labelset persistence.
-- **No center panel** — no waveform render, no transport, no detail view.
+- **No left-panel media-list, no center panel** — the Browse canvas
+  replaces both. There is no per-item list, no waveform detail, no
+  transport. (This supersedes the earlier "reuse the media-list grid"
+  sketch.)
 
 ### Package name
 
@@ -139,53 +176,348 @@ was the runner-up.)
 ## App-tier shape (`victorytones/`)
 
 A thin Flask app paralleling `vtsearch`, importing only the `vtscore`
-slices above. Minimum surface:
+slices above. v1 is **single-user** (`DefaultLoginProvider`) and
+**single-dataset** — no multi-dataset registry, no `X-Dataset-Id` headers.
+Minimum surface:
 
-- `GET /api/medias` — list items in the loaded `DatasetContext` (id, name,
-  metadata, audio URL).
-- `GET /api/medias/<id>/audio` — stream audio bytes (mirror of the
-  existing media-serving route, audio-only).
 - `POST /api/datasets/load` (or registry load) — load a dataset via an
-  importer / pickle, populate a `DatasetContext`.
-- `POST /api/order` (optional) — text query → ordered list of media ids by
-  embedding similarity. No persistence, no votes.
+  importer / pickle (MediaType Audio), populate the one `DatasetContext`.
+  Reuses the existing load pipeline + progress.
+- `GET /api/medias/<id>/audio` — stream audio bytes (reused from
+  `vtsearch`, audio-only).
+- **`POST /api/projection/build`** — kick the background job that computes
+  UMAP + the hex-tile pyramid for the loaded dataset; reports progress.
+- **`GET /api/projection/meta`** — projection bounds, available zoom
+  levels, hex sizing per level, point count, build status.
+- **`GET /api/projection/tiles/<level>/<tx>/<ty>`** — the hex aggregates
+  for one tile at one zoom level (see *§Browse-canvas architecture*).
 
-It can borrow `vtsearch`'s settings/auth tiers if multi-user is wanted, but
-the default is single-user (`DefaultLoginProvider`) and a single loaded
-dataset — much smaller than VTSearch's multi-dataset/multi-detector
-context machinery.
+No `/api/order` text-query endpoint in v1 (the projection *is* the
+ordering); a text-seeded "fly to this region" affordance is a follow-up.
 
-## Frontend plan
+## Prerequisite: normalize embeddings at ingest (app-wide)
 
-The hover-to-hear behavior already exists and is **decoupled from
-voting**:
+The projection wants unit vectors, and it turns out VTSearch is *already*
+direction-only nearly everywhere — it just normalizes lazily, at every
+comparison. We make that canonical: **L2-normalize each embedding once, at
+ingest, in every embedder's `embed` / `embed_text`** (audio, image, and the
+CLAP/CLIP text-query paths), then **drop the per-comparison normalization**.
+This is a VTSearch-wide change, not VictoryTones-local — done as a
+prerequisite so VictoryTones can consume unit vectors and use plain
+Euclidean UMAP.
 
-- `frontend/src/app/components/left-panel/media-item/media-item.component.ts`
-  — `@Input() focusMode: 'click' | 'hover'`; `onMouseEnter()` emits a
-  `select` when `focusMode === 'hover'`. (`media-list.component.ts` and
-  `left-panel.component.ts` thread the same `focusMode` input.)
-- Audio playback lives in the center panel's player component and is keyed
-  off the selected media — **no label/vote coupling**.
+Why it's safe and arguably overdue:
 
-VictoryTones reuses the **left panel grid + media-item hover→select**
-wiring but **drops the center panel entirely**. Instead of "select →
-load center panel → play," the flow is "hover → play the hovered item's
-audio directly." Concretely:
+- **Magnitude is already discarded for all similarity.** The cosine-sort
+  path (`vtscore/training/region_similarity.py:135-140` and `:49-75`)
+  re-normalizes query and media on every call. Normalizing at ingest just
+  moves that work earlier and makes it the stored form. Several embedders
+  already normalize at output (BGE/E5 text, DINOv2/v3 patch); this makes the
+  rest (CLAP, CLAP-Music, CLIP, SigLIP, and their text-query paths) match.
 
-- Reuse the media-list/media-item grid (icon-size, view-mode controls).
-- Replace the center-panel player with a lightweight hover-driven
-  `HTMLAudioElement` (or small Web Audio wrapper) that plays the hovered
-  item and stops/replaces on the next hover — no canvas, no transport.
-- Keep an optional text-query box that calls `/api/order` to reorder the
-  grid.
-- Drop label-view, vote controls, right-panel detector UI, achievements,
-  dashboard.
+Two real behavior changes to validate (not just no-ops):
 
-This can be a **new Angular app** in `frontend/` (second build target) or
-a separate minimal frontend that imports the shared components/services.
-Decide at scaffold time; either way the shared bits stay in one repo.
+- **Diversity tree** (`vtscore/state/diversity_tree.py`) k-means currently
+  clusters on **raw** vectors (Euclidean = magnitude + direction) — the one
+  consumer that uses magnitude. Normalizing switches it to **angular**
+  clustering, which is the standard, more-correct choice for these
+  embeddings and makes it consistent with every other comparison, **but it
+  changes diversity ordering** users will observe.
+- **MLP** (`vtscore/training/mlp.py`) trains on raw embeddings; unit-norm
+  inputs change the input scale (not direction), which shifts **threshold
+  calibration**. Generally neutral-to-helpful, but retest convergence and
+  thresholds.
 
-(Per repo policy: desktop-only; no mobile/responsive concerns.)
+**Sites to touch:** add an L2 step to the non-normalizing embedders' `embed`
+and `embed_text` (CLAP, CLAP-Music, CLIP, SigLIP, …); guard against the
+zero-vector divide; remove the now-redundant normalization in
+`region_similarity.py`; refresh the `svm.py` docstring caveat. **Retest:**
+full `./run-tests.sh`, with attention to diversity ordering, MLP
+convergence, and threshold calibration. Breaks backwards compatibility of
+stored-embedding magnitude (acceptable per repo policy) — call it out in the
+PR.
+
+**Chokepoint placement (resolve at implementation).** Normalizing *only*
+inside `embed`/`embed_text` covers fresh embeds but **not pickle-loaded
+datasets**, which write stored (possibly raw, old) vectors straight into
+`medias[cid]["embedding"]` without re-embedding. To keep the invariant
+"every embedding in `medias` is unit-norm" we need a single ingest
+chokepoint that also covers the pickle/import write path — e.g. normalize
+wherever an embedding is written into `medias`, or normalize at the
+`get_embedding_matrix` boundary and route every similarity consumer through
+the matrix. Pick one canonical chokepoint rather than scattering L2 calls
+across each embedder; otherwise pickle loads silently bypass it.
+
+## Browse-canvas architecture
+
+This is the heart of VictoryTones and the part with no precedent in
+`vtsearch`. It splits cleanly into a **projection stage** (run once per
+dataset at ingest, server-side, then frozen and persisted with the dataset),
+a **tile-pyramid stage** (server-side aggregation, persisted alongside the
+projection, streamed to the client), and a **canvas renderer** (Canvas 2D,
+client-side).
+
+### Stage 1 — UMAP projection (server-side, batch, **computed once at ingest, persisted**)
+
+Run `umap-learn` on the cached `(N, d)` embedding matrix to produce an
+`(N, 2)` array of projected coordinates.
+
+- **New dependency:** `umap-learn` (pulls `pynndescent`; `numba` is already
+  present transitively via `librosa`, and `scikit-learn` is a direct dep).
+- **Metric:** plain **Euclidean**. Because embeddings are L2-normalized at
+  ingest (see *§Prerequisite*), Euclidean distance on the unit sphere is a
+  monotonic function of cosine distance, so UMAP needs no special metric and
+  no per-fit normalization step.
+- **Determinism:** **not seeded.** We accept a non-deterministic fit (no
+  fixed `random_state`), which keeps UMAP's numba parallelism on and the fit
+  faster. This is only acceptable *because the projection is frozen at ingest*
+  (below): the layout is computed exactly once and then reused verbatim
+  forever, so its non-reproducibility never surfaces — you never see a
+  "different map" for the same dataset, because the fit never runs a second
+  time. (If we recomputed on every load, unseeded would mean a new layout each
+  session; freezing is what buys back stability without paying for a seeded,
+  parallelism-disabled fit.)
+- **Cost & scheduling:** UMAP is O(N) with heavy constants — seconds at a
+  few thousand points, into minutes at 10⁵. It runs as a **background
+  async job with progress** (`vtscore/concurrency`), never inline in a
+  request. The canvas shows a building state until it's ready.
+- **Small-N edge cases:** `n_neighbors` must be `< N`; clamp for tiny
+  datasets. Decide a minimum-N below which we skip UMAP and fall back to a
+  trivial layout (e.g. PCA-2 or a grid).
+- **Datasets are immutable input piles for the projection — by design, not
+  just v1.** A UMAP fit locks to the exact set of points it was trained on.
+  We deliberately **never add to or remove from a loaded dataset**; there is
+  no incremental layout and no out-of-sample `umap.transform()`. If you want
+  to combine datasets (or otherwise change the pile), you **re-run UMAP from
+  scratch** on the new full set, producing a *new* dataset artifact with its
+  own frozen projection — the old map is not migrated or transformed. Because
+  the pile is immutable, the projection it induces is too: computed once when
+  the dataset is ingested, then stored and treated as a fixed property of the
+  dataset (like its embeddings), never recomputed for the life of that
+  artifact.
+
+> **Carve-out from "No Persisted Vectors or MLPs" — the projection IS
+> persisted.** This is a deliberate, scoped exception to the repo rule, and
+> it needs to be called out because that rule is otherwise strict. The
+> rationale: the rule exists so that embeddings and MLP weights can never
+> drift from the active embedder/labels — they are *re-derivable* from
+> origins, so caching them on disk only risks staleness. The UMAP projection
+> is different in the one way that matters: with an **unseeded** fit it is
+> **not reproducible**, so "re-derive on load" does not reproduce the same
+> artifact — it produces a *different* map. To deliver "compute once, never
+> again" (the locked behavior), the `(N, 2)` coordinates **and** the tile
+> pyramid must be stored, not recomputed.
+>
+> Scope of the exception, to keep it honest:
+> - It covers **only** the 2D projection coordinates and the derived hex
+>   pyramid — *not* embeddings and *not* MLP weights, which stay in-memory /
+>   re-derived exactly as the rule demands.
+> - Storage rides with the **dataset artifact** (the pickle is already the
+>   sanctioned snapshot of media + embeddings; the projection is the same
+>   kind of frozen-at-ingest property). A dataset ingested without a
+>   projection (e.g. a legacy `vtsearch` pickle) computes UMAP **once on
+>   first open** and persists it back, after which it is never recomputed.
+> - It is still **never** written to `settings.json` or to detector/labelset
+>   JSON — those remain origin-only.
+> - Each artifact carries a `projection_id` (minted at the one-time fit) so a
+>   tile can always be checked against the projection it belongs to; because
+>   the projection never changes after ingest, this id is effectively a
+>   stable per-dataset constant rather than a moving invalidation token.
+
+### Stage 2 — Hex-tile pyramid (server-side aggregation)
+
+Per the locked decision, **the server bins points into hexes and serves
+them as tiles**, rather than shipping the raw point cloud for the client to
+bin. The server builds a **multi-resolution pyramid** over the 2-D
+projection:
+
+- **Zoom levels `z = 0 … Zmax`.** Level 0 is the coarsest (whole projection
+  in a handful of big hexes); each deeper level **halves the hex edge
+  length** in projection space, so a fixed screen always shows a comparable
+  number of hexes while revealing finer structure as you descend — this is
+  the "zoom in → hexes subdivide" behavior.
+- **Hex lattice anchored in projection (data) space**, using axial/cube
+  coordinates with nearest-center rounding (the d3-hexbin algorithm,
+  reimplemented — no d3 dependency). Anchoring in data space means **pure
+  panning never changes hex membership**; only crossing a zoom-level
+  boundary re-bins. (The canvas still pans continuously; it just swaps which
+  precomputed level it draws as the scale crosses thresholds.)
+- **Per hex, the server precomputes:** axial coords (→ center), **count**
+  (for the density color), and a **representative media id** = the clip
+  whose projected point is nearest the hex centroid (this is the clip
+  hover-plays). Representative selection is per level, so the audition clip
+  naturally generalizes/specializes as you zoom.
+- **Tiles** group hexes into a spatial grid per level: a tile is
+  `(level, tx, ty)` → the list of non-empty hexes inside it. This makes the
+  payload **viewport-bounded** (the client fetches only the tiles covering
+  what's on screen) and **trivially cacheable**: because the projection is
+  frozen at ingest, a tile is **immutable for the life of the dataset**, so
+  the client (and any CDN) can cache it with a long `max-age` and the
+  `projection_id` in the URL — no revalidation, no invalidation logic (see
+  *§Tile-cache invalidation*).
+- **Build & storage:** the pyramid is computed in the same one-time ingest
+  job as the UMAP fit (one O(N · levels) pass after the projection) and
+  **persisted with the dataset artifact** alongside the coordinates — it is
+  part of the carve-out above, not recomputed on load.
+
+Why server-side tiling (the chosen path) over client-side binning: it keeps
+the per-interaction payload bounded by the **viewport**, not by **N**, so
+the design scales to very large collections (the cost of binning is paid
+once at build time, on the server, and amortized across every pan/zoom and
+every client). The price is more machinery (a pyramid + a tile endpoint +
+client-side tile caching) and round-trips on zoom/pan, mitigated by an LRU
+tile cache and prefetching neighbors.
+
+#### Tile-cache invalidation (a non-problem, by construction)
+
+Freezing the projection at ingest **dissolves** what would otherwise be the
+trickiest caching question, so it is worth recording why there is nothing to
+solve here. A tile is keyed by `(level, tx, ty)`, and its contents (which
+hexes, their counts, their representative clips) are only meaningful relative
+to one projection. In a world where the projection could be *re-fit* — and
+especially with our unseeded fit, where a re-fit is **guaranteed** to move
+every coordinate — a cached tile would silently become stale geometry, and
+the canvas would render a Frankenstein mix of two layouts. That is the
+classic `ETag`/invalidation problem.
+
+We sidestep it entirely: **the projection is computed exactly once and never
+re-fit**, so a tile's contents are fixed for the entire life of the dataset
+artifact. Mechanically:
+
+- Each artifact has a `projection_id` minted at its one-time fit. It goes in
+  the tile URL (e.g. `…/tiles/{projection_id}/{level}/{tx}/{ty}`), so tiles
+  from different datasets can never collide in any cache.
+- Within a dataset that `projection_id` is a **stable constant**, so tiles
+  are served with a long-lived `Cache-Control: max-age` (effectively
+  immutable). No `If-None-Match` round-trips, no revalidation, no
+  version-bumping — the client, an LRU, and any CDN can all cache forever.
+- The only event that introduces a *new* `projection_id` is ingesting a
+  **different** dataset (a new artifact), which the user reaches by loading
+  it — a fresh metadata fetch under a fresh id. There is no in-place rebuild
+  of an existing dataset's projection to invalidate against.
+
+So the `projection_id` survives as a clean cache-namespacing key, but the
+hard part — invalidating live caches when a projection changes underneath
+them — simply does not arise, because projections don't change underneath
+anyone.
+
+### Stage 3 — Canvas renderer (client-side, **Canvas 2D**)
+
+- **Transform model.** Maintain a projection-space ↔ screen-space affine
+  transform: **pan = translate**, **zoom = scale about the cursor**. From
+  the continuous scale, pick the **nearest discrete pyramid level** to
+  fetch; render its hexes through the current transform. Pan within a level
+  is a cheap retransform of already-fetched tiles.
+- **Tile streaming.** On each viewport change, compute the covering tiles
+  for the active level, fetch any missing ones (`GET …/tiles/z/tx/ty`),
+  keep them in an **LRU cache**, and prefetch adjacent tiles + the
+  neighboring levels for snappy zoom.
+- **Drawing.** Raw **Canvas 2D** (matching the existing
+  `charts.service.ts` / audio-waveform code — no d3/three/pixi
+  dependency). Draw one filled hexagon per non-empty visible hex,
+  **viewport-culled**. Canvas 2D comfortably handles low tens-of-thousands
+  of on-screen hexes; because the screen-visible hex count is roughly
+  constant by construction (LOD), this stays well within budget. WebGL is
+  the escape hatch if a future requirement blows past it.
+- **Density color.** Map `count` → a perceptually-uniform ramp (viridis /
+  magma) on a **log or sqrt scale**, because density is heavy-tailed. Wire
+  the ramp endpoints to theme CSS variables as the charts service does.
+- **Hover-to-hear.** On hex hover, play the hex's representative id via
+  `/api/medias/<id>/audio` with `loop = true`; **hard-cut/replace** on
+  moving to the next hex; **debounce** so sweeping the canvas doesn't
+  machine-gun audio. Browsers block autoplay until a user gesture, so the
+  first canvas click **unlocks** the audio element / `AudioContext`.
+- **Initial framing.** Fit-to-bounds of the projection on first paint, at
+  the level whose hex count best fills the viewport.
+
+## Locked decisions
+
+| Decision | Choice | Notes |
+|----------|--------|-------|
+| Dataset scope (v1) | **Single dataset** | No registry / `X-Dataset-Id` headers; one `DatasetContext`. |
+| Media type | **Audio, fixed** | Importer UI constrained to Audio; no media-type picker. |
+| Hex binning location | **Server-side tiles** | Pyramid + tile endpoint; viewport-bounded payload; scales to large N. |
+| Frontend packaging | **Second Angular build target** | Separate app, its own `outputPath`/`index`/`main`; served by the `victorytones` Flask app. Shares SCSS/services where practical, not the VTSearch shell. |
+| Renderer | **Canvas 2D** | No new viz dependency; WebGL deferred. |
+| Embedding normalization | **App-wide L2 at ingest** | Normalize in every `embed`/`embed_text`; drop per-comparison normalization. See *§Prerequisite*. |
+| Canvas point = one clip | **Clip, not file** | Each point is a clip media item (`clip_start`/`clip_end` from the audio clipper); sibling clips of one source file land independently on the map. |
+| Hover audio | **Local clip only** | Hovering a point plays *that clip's* `[clip_start, clip_end]` slice, never the whole source file — even when other clips of the same file sit elsewhere on the canvas. |
+| Product scope (v1) | **Browse-only** | Pan / zoom / hover-to-listen + sibling highlight. No selection, voting, detector training, or ranking in v1; handoff to VTSearch's train-a-detector flow is a deferred follow-up. |
+| Hex color | **Density (count)** | Color = clip count per hex (log/sqrt-scaled), which the tile pyramid already aggregates for free. No detector/query needed; a second visual channel (opacity/outline) is reserved for hover + sibling highlight. |
+| Sibling highlight | **On hover** | Hovering a clip highlights the other clips of the same source file wherever they fall on the canvas. Requires a per-point source-file group id; see *§Interaction model*. |
+| UMAP seeding | **Unseeded (fast)** | No `random_state`; numba parallelism stays on. Safe only because the projection is frozen at ingest, so the fit never re-runs for a given dataset. |
+| Projection lifetime | **Frozen at ingest, persisted** | UMAP + pyramid computed once and stored with the dataset artifact (carve-out from "No Persisted Vectors/MLPs"; covers 2D coords + pyramid only). Never recomputed; legacy datasets compute-once on first open. Dissolves tile-cache invalidation. |
+
+### Notes on the second Angular build target
+
+`frontend/angular.json` currently defines a single `frontend` application
+that builds to `../static` (served by `vtsearch`). VictoryTones adds a
+**second project** (e.g. `victorytones`) with its own `browser` entry
+(`main.ts`), `index.html`, and `outputPath` (e.g. `../static-vt`, served by
+the `victorytones` Flask app), reusing the shared SCSS tokens and any
+framework-agnostic services. Two build targets means two `npm run build`
+outputs; `run-tests.sh`'s frontend build check must cover both. This is
+heavier than a single in-app route but keeps the browser free of the
+VTSearch shell (left panel, center panel, detector/dashboard UI), which it
+does not use.
+
+## Interaction model (v1)
+
+VictoryTones v1 is **browse-only**: the only interactions are spatial
+navigation (pan/zoom) and two hover behaviors. There is no selection, voting,
+detector, or ranking — those belong to the deferred VTSearch handoff (see
+*§Open follow-ups*).
+
+- **Hover → listen.** Hovering a point plays that clip's
+  `[clip_start, clip_end]` slice (locked above).
+- **Hover → highlight siblings.** Simultaneously, the other clips of the same
+  source file are highlighted wherever they sit. This needs each rendered
+  point to carry a **source-file group id** (derivable from the clip's origin
+  / source path — clips already record their parent), so the renderer can
+  light up matching points without a round-trip.
+- **Color → density.** Hex fill encodes clip count, taken straight from the
+  pyramid's per-hex aggregation; hover/sibling state rides a separate channel
+  (outline or opacity bump) so it reads on top of the density fill.
+
+**Binning interaction (resolve at implementation).** Sibling highlight and
+per-point hover are only literally per-point at the deepest zoom, where the
+renderer draws individual clips. At aggregated zoom levels a "point" is a
+hex of many clips, so both behaviors must degrade gracefully: hovering a hex
+should highlight the **hexes that contain** sibling clips (not invisible
+points), and the listen target becomes a representative clip of the hovered
+hex (exact pick is part of the empirical hover policy). The tile payload
+therefore needs enough per-hex identity to answer "which hexes hold a sibling
+of this group?" — either ship source-file group ids down to the hex level, or
+serve sibling lookups from a small server endpoint keyed by group id.
+
+## Open problems to resolve before/at scaffold
+
+**Empirical (deferred to experimentation, not design blockers).** These have
+no defensible a-priori value; we set them by running UMAP/the pyramid on
+real audio datasets and looking at the output. The design must leave them as
+tunable parameters, not bake in constants:
+
+- **UMAP knobs:** `n_neighbors`, `min_dist`, and the small-N fallback
+  threshold. (Metric is settled: Euclidean on ingest-normalized vectors.)
+- **Pyramid parameters:** `Zmax`, base hex size at level 0, tile size
+  (hexes per tile), and the density color scale (log vs sqrt, colormap).
+- **Performance ceiling / target N** for v1 — sets whether Canvas 2D
+  culling is sufficient or WebGL is needed sooner.
+- **Hover audio policy:** debounce window, loop, hard-cut vs. crossfade,
+  volume source, autoplay-unlock gesture.
+
+**Design (resolve before scaffold).** All resolved — see *§Locked decisions*.
+For the record:
+
+- **UMAP determinism** — settled: unseeded (fast), safe because the
+  projection is frozen at ingest.
+- **Projection lifetime / rebuild** — settled: computed once at ingest and
+  persisted with the dataset artifact; never re-fit. Datasets remain
+  immutable input piles (combining them produces a new artifact, not an
+  in-place rebuild).
+- **Tile-cache invalidation** — settled: a non-problem by construction (frozen
+  projection ⇒ immutable tiles); `projection_id` survives only as a stable
+  cache-namespacing key. See *§Tile-cache invalidation*.
 
 ## `vtscore` back-edges to address
 
@@ -206,21 +538,24 @@ Even in-repo, the dataset-load path VictoryTones depends on
 Recommendation: start with (1) to ship the browser, but treat each
 back-edge VictoryTones actually exercises as a candidate for (2) — it
 both de-risks a future extraction and removes a hidden `vtsearch`
-dependency from the load path.
-
-## Open questions (resolve before/at scaffold)
-
-- **Second Angular app vs. shared-component minimal frontend?** Affects
-  build config and how much SCSS/component sharing is practical.
-- **Single dataset vs. multi-dataset?** Single keeps the app tiny;
-  multi reuses VTSearch's registry/context headers.
-- **Hover playback policy** — debounce/leading-edge, overlap vs.
-  hard-cut, volume from settings? (UX detail, not architecture.)
+dependency from the load path. The UMAP + tiling code itself is new and
+should be written **Flask-free** (it belongs in `vtscore`, e.g.
+`vtscore/projection/`), so it can live under `./run-tests.sh
+vtscore-clean` from day one.
 
 ## Open follow-ups
 
 - Nothing shipped yet — this is a proposal. When the first slice lands,
   add a *What shipped* section and update the status header.
+- **VTSearch detector handoff:** v1 is browse-only. The deferred feature is
+  letting a user select/vote clips on the canvas to seed VTSearch's existing
+  train-a-detector flow (and, once a detector exists, optionally recolor hexes
+  by detector score instead of density). Adds selection + vote UI and a
+  bridge into the detector context; explicitly out of v1.
+- **Text-seeded navigation:** a query box that embeds text and flies the
+  canvas to the nearest region (reuses `embed_text_query` + cosine). Out of
+  v1 scope; the projection is the only ordering in v1.
+- **WebGL renderer** if the Canvas 2D ceiling is hit.
 - If/when independent distribution is required, open a companion plan for
   **`vtscore` decoupling + PyPI publish** (sever the back-edges in the
   table above) and migrate VictoryTones to depend on the package.
