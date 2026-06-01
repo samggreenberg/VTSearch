@@ -28,7 +28,7 @@ achievements. It is a browser, not a trainable searcher.
 
 ## Decision: in-repo second app tier (not a separate repo)
 
-**Add `vtvictorytones/` (an app tier) to this repo, consuming the same
+**Add `victorytones/` (an app tier) to this repo, consuming the same
 `vtscore`.** Do *not* spin up a separate repository that "references
 vtscore" — at least not now. Reasoning below.
 
@@ -126,7 +126,17 @@ avoids paying the decoupling tax up front for a benefit you don't yet need.
 - **No achievements**, no detector/labelset persistence.
 - **No center panel** — no waveform render, no transport, no detail view.
 
-## App-tier shape (`vtvictorytones/`)
+### Package name
+
+The package is `victorytones/` (not `vtvictorytones/`). The `vt` prefix on
+`vtscore`/`vtsearch` (and the `vt-` Angular selectors) plausibly derives
+from **V**ictory**T**ones itself, so `vtvictorytones` would read as
+"VictoryTones VictoryTones." VictoryTones is its own product, so it takes
+the brand name directly rather than a `vt`+role name like `vtsearch`. (If
+family-grouping under `vt*` ever matters more than the brand, `vtbrowser`
+was the runner-up.)
+
+## App-tier shape (`victorytones/`)
 
 A thin Flask app paralleling `vtsearch`, importing only the `vtscore`
 slices above. Minimum surface:
