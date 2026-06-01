@@ -10,6 +10,7 @@ from __future__ import annotations
 import fnmatch
 import os
 from pathlib import Path
+from typing import Iterator
 
 
 def get_file_access_base_dir() -> Path | None:
@@ -97,6 +98,20 @@ def sanitize_template_value(value: str) -> str:
     return sanitized
 
 
+def iter_rglob_follow_symlinks(root: Path, pattern: str) -> Iterator[Path]:
+    """Stream files under *root* matching *pattern*, following symlinks.
+
+    Generator twin of :func:`rglob_follow_symlinks`.  Yields each match as
+    :func:`os.walk` discovers it, so the caller never holds the full file
+    list in memory — essential when scanning a directory tree with more
+    files than fit in RAM (see ``docs/plans/cli-stream-massive-images.md``).
+    """
+    for dirpath, _dirnames, filenames in os.walk(root, followlinks=True):
+        for filename in filenames:
+            if fnmatch.fnmatch(filename, pattern):
+                yield Path(dirpath) / filename
+
+
 def rglob_follow_symlinks(root: Path, pattern: str) -> list[Path]:
     """Like ``Path.rglob(pattern)`` but follows symlinks into directories.
 
@@ -104,13 +119,23 @@ def rglob_follow_symlinks(root: Path, pattern: str) -> list[Path]:
     media files inside symlinked sub-folders are silently skipped during
     dataset import.  This helper uses :func:`os.walk` with
     ``followlinks=True`` to ensure symlinked directory trees are traversed.
+
+    Materialises the full list; callers that can stream should prefer
+    :func:`iter_rglob_follow_symlinks`.
     """
-    results: list[Path] = []
-    for dirpath, _dirnames, filenames in os.walk(root, followlinks=True):
-        for filename in filenames:
-            if fnmatch.fnmatch(filename, pattern):
-                results.append(Path(dirpath) / filename)
-    return results
+    return list(iter_rglob_follow_symlinks(root, pattern))
+
+
+def iter_glob_top_level(root: Path, pattern: str) -> Iterator[Path]:
+    """Stream files directly in *root* matching *pattern* (no recursion).
+
+    Generator twin of :func:`glob_top_level`.
+    """
+    if not root.is_dir():
+        return
+    for entry in os.scandir(root):
+        if entry.is_file(follow_symlinks=True) and fnmatch.fnmatch(entry.name, pattern):
+            yield Path(entry.path)
 
 
 def glob_top_level(root: Path, pattern: str) -> list[Path]:
@@ -118,11 +143,8 @@ def glob_top_level(root: Path, pattern: str) -> list[Path]:
 
     Mirrors :func:`rglob_follow_symlinks` but limited to the immediate
     children of *root*.  Subdirectories are not descended into.
+
+    Materialises the full list; callers that can stream should prefer
+    :func:`iter_glob_top_level`.
     """
-    results: list[Path] = []
-    if not root.is_dir():
-        return results
-    for entry in os.scandir(root):
-        if entry.is_file(follow_symlinks=True) and fnmatch.fnmatch(entry.name, pattern):
-            results.append(Path(entry.path))
-    return results
+    return list(iter_glob_top_level(root, pattern))

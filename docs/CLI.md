@@ -35,6 +35,28 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --chunk-s
 python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json --chunk-size 500
 ```
 
+`--chunk-size` bounds the *loading and embedding* working set, but the default
+flow still accumulates every hit in memory and buffers the whole result set
+before the exporter writes it. For a media source with more items (and more
+hits) than fit in RAM — e.g. a folder tree of billions of images — add
+`--stream-results` (requires `--chunk-size` and a streaming-capable exporter:
+`server_json_file`, `server_csv_file`, or `gui`):
+
+```bash
+python app.py --autodetect --importer server_folder --path /data/images \
+  --media-type image --settings settings.json --chunk-size 500 \
+  --stream-results --exporter server_json_file --filepath hits.ndjson
+```
+
+With `--stream-results` the folder is enumerated lazily (the full file list is
+never held in memory), each chunk's hits are written straight to the exporter,
+and nothing accumulates across chunks. `server_json_file` switches to
+newline-delimited JSON (NDJSON): a metadata header line followed by one hit per
+line. The tradeoff: streamed hits are ordered by chunk, **not** globally sorted
+by score (sort the NDJSON afterwards if you need a global ranking). Only
+above-threshold (predicted-good) hits are written; add `--keep-negatives` to
+also stream the below-threshold items (tagged `label=bad`).
+
 **Exporting results**: by default results are printed to the console. Add `--exporter <name>` to send them elsewhere:
 
 ```bash
@@ -152,6 +174,15 @@ detectors:
 
 # Optional. Process medias in batches of N. Same as --chunk-size.
 chunk_size: 1000
+
+# Optional. Stream each chunk's hits straight to the exporter instead of
+# accumulating them (same as --stream-results). Requires chunk_size and a
+# streaming-capable exporter. Output is chunk-ordered, not globally sorted.
+stream_results: false
+
+# Optional. With stream_results, also emit below-threshold hits (label=bad).
+# Same as --keep-negatives. Off by default.
+keep_negatives: false
 
 # Optional. One-shot merge of an external label file into a detector
 # before scoring (same as --import-labels-into / --label-importer /

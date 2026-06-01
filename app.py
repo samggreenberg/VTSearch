@@ -684,6 +684,29 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--stream-results",
+        action="store_true",
+        dest="stream_results",
+        help=(
+            "Stream each chunk's hits straight to the exporter instead of "
+            "accumulating them all in memory. Requires --chunk-size and a "
+            "streaming-capable exporter (server_json_file → NDJSON, "
+            "server_csv_file, gui). Output is ordered by chunk, not globally "
+            "sorted by score. Lets --autodetect run against a media source "
+            "with more items (and more hits) than fit in RAM."
+        ),
+    )
+    parser.add_argument(
+        "--keep-negatives",
+        action="store_true",
+        dest="keep_negatives",
+        help=(
+            "With --stream-results, also stream below-threshold (negative) "
+            "hits, tagged label=bad. Off by default: a find over a massive "
+            "source only emits the predicted-good items."
+        ),
+    )
+    parser.add_argument(
         "--import-labels-into",
         type=str,
         default=None,
@@ -963,6 +986,13 @@ if __name__ == "__main__":
 
         dry_run = bool(getattr(args, "dry_run", False))
 
+        stream_results = bool(getattr(args, "stream_results", False))
+        keep_negatives = bool(getattr(args, "keep_negatives", False))
+        if stream_results and not chunk_size:
+            parser.error("--stream-results requires --chunk-size N (it streams chunk by chunk)")
+        if keep_negatives and not stream_results:
+            parser.error("--keep-negatives only applies with --stream-results")
+
         # Optional one-shot label import into a detector before scoring.
         # The merged labelset is picked up by the autodetect pipeline below.
         if args.import_labels_into:
@@ -1025,6 +1055,8 @@ if __name__ == "__main__":
                     args.exporter,
                     exporter_field_values,
                     dry_run=dry_run,
+                    stream_results=stream_results,
+                    keep_negatives=keep_negatives,
                 )
             else:
                 from vtscore.cli import autodetect_importer_main
@@ -1050,6 +1082,8 @@ if __name__ == "__main__":
                     args.exporter,
                     exporter_field_values,
                     dry_run=dry_run,
+                    stream_results=stream_results,
+                    keep_negatives=keep_negatives,
                 )
             else:
                 from vtscore.cli import autodetect_main

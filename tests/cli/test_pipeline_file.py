@@ -192,6 +192,43 @@ class TestLoadPipelineFile:
         with pytest.raises(ValueError, match="list of detector names"):
             load_pipeline_file(p)
 
+    def test_stream_results_requires_chunk_size(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "stream_results": True}))
+        with pytest.raises(ValueError, match="requires 'chunk_size:'"):
+            load_pipeline_file(p)
+
+    def test_keep_negatives_requires_stream_results(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "keep_negatives": True}))
+        with pytest.raises(ValueError, match="only applies with 'stream_results:'"):
+            load_pipeline_file(p)
+
+    def test_stream_results_must_be_bool(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "stream_results": "yes"}))
+        with pytest.raises(ValueError, match="must be a boolean"):
+            load_pipeline_file(p)
+
+    def test_stream_results_and_keep_negatives_round_trip(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {"dataset": "foo.pkl", "chunk_size": 10, "stream_results": True, "keep_negatives": True}
+            )
+        )
+        cfg = load_pipeline_file(p)
+        assert cfg["stream_results"] is True
+        assert cfg["keep_negatives"] is True
+
     def test_import_labels_requires_detector_and_file(self, tmp_path):
         from vtscore.cli_pipeline import load_pipeline_file
 

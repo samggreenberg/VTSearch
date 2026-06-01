@@ -214,13 +214,25 @@ def _score_medias_with_detectors(
     medias: dict[int, dict[str, Any]],
     detector_mlps: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Score *medias* against pre-trained detector MLPs."""
+    """Score *medias* against pre-trained detector MLPs.
+
+    Embeds any items still missing a vector (idempotent — a no-op for
+    pre-embedded pickle chunks, the actual embed pass for folder chunks that
+    arrive with ``embedding=None``) and drops anything the embedder couldn't
+    embed before scoring.
+    """
     if not medias or not detector_mlps:
         return {}
 
     import torch  # noqa: PLC0415
 
+    from vtscore.datasets.load_pipeline import embed_missing  # noqa: PLC0415
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+
+    embed_missing(medias, "")
+    medias = {cid: m for cid, m in medias.items() if m.get("embedding") is not None}
+    if not medias:
+        return {}
 
     all_ids, all_embs = get_embedding_matrix_for_snap(medias)
     X_all = torch.from_numpy(all_embs)
@@ -607,6 +619,111 @@ def _run_live_pipeline(
     _run_exporter(exporter_name or "gui", exporter_field_values or {}, results)
 
 
+def _list_streaming_exporter_names() -> list[str]:
+    """Return the names of exporters that support ``--stream-results``."""
+    from vtscore.exporters import list_exporters
+
+    return [exp.name for exp in list_exporters() if getattr(exp, "supports_streaming", False)]
+
+
+def _stream_hit_records(
+    first_chunk: dict[int, dict[str, Any]],
+    rest: Iterator[dict[int, dict[str, Any]]],
+    detector_mlps: dict[str, dict[str, Any]],
+    keep_negatives: bool,
+) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Score each chunk and yield ``(detector_name, hit)`` pairs in chunk order.
+
+    No global accumulation and no global sort: each chunk is scored, its hits
+    are yielded, and the chunk is dropped before the next one is pulled, so
+    peak memory stays bounded by the chunk size regardless of how many hits
+    the whole run produces.  Above-threshold hits carry ``label="good"``;
+    below-threshold hits are emitted (with ``label="bad"``) only when
+    *keep_negatives* is set.
+    """
+    import itertools  # noqa: PLC0415
+
+    for chunk_num, chunk in enumerate(itertools.chain([first_chunk], rest), 1):
+        if not chunk:
+            continue
+        if chunk is not first_chunk:
+            # The first chunk was already normalised by the caller (it had to
+            # be, to train the detectors and build the header).
+            apply_custom_metadata_md5(chunk)
+            cli_progress.emit(
+                "chunk_start",
+                text=f"Processing chunk {chunk_num} ({len(chunk)} medias)...",
+                chunk_num=chunk_num,
+                chunk_size=len(chunk),
+            )
+        chunk_results = _score_medias_with_detectors(chunk, detector_mlps)
+        for det_name, det_result in chunk_results.items():
+            for hit in det_result.get("hits", []):
+                yield det_name, {**hit, "label": "good"}
+            if keep_negatives:
+                for hit in det_result.get("negative_hits", []):
+                    yield det_name, {**hit, "label": "bad"}
+
+
+def _run_streaming_pipeline(
+    media_source: Iterator[dict[int, dict[str, Any]]],
+    *,
+    exporter_name: str | None,
+    exporter_field_values: dict[str, Any] | None,
+    override_detectors: list[str] | None,
+    autorun_detectors: list[str],
+    keep_negatives: bool,
+    empty_error: str,
+) -> None:
+    """Stream scored hits straight to a streaming-capable exporter.
+
+    Trains detectors on the first chunk (so the exporter gets its header
+    before any hit), then hands the exporter a lazy record iterator.  Nothing
+    accumulates across chunks, so this is the path that scales to a media
+    source with more items (and more hits) than fit in RAM.
+    """
+    from vtscore.exporters import get_exporter
+
+    exporter = get_exporter(exporter_name or "gui")
+    if exporter is None:
+        available = _list_exporter_names()
+        raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
+    if not getattr(exporter, "supports_streaming", False):
+        streaming = ", ".join(_list_streaming_exporter_names())
+        raise ValueError(
+            f"Exporter '{exporter.name}' does not support --stream-results. Streaming-capable exporters: {streaming}."
+        )
+    exporter.validate_cli_field_values(exporter_field_values or {})
+
+    # Pull the first non-empty chunk so we can detect the media type and train
+    # the detectors before any hit streams out.
+    iterator = iter(media_source)
+    first_chunk: dict[int, dict[str, Any]] | None = None
+    for chunk in iterator:
+        if chunk:
+            first_chunk = chunk
+            break
+    if first_chunk is None:
+        raise ValueError(empty_error)
+
+    apply_custom_metadata_md5(first_chunk)
+    media_type = _detect_media_type(first_chunk)
+    detector_mlps = _train_detectors_for_first_chunk(first_chunk, media_type, override_detectors, autorun_detectors)
+
+    header = {
+        "media_type": media_type,
+        "detectors": [
+            {"detector_name": name, "threshold": round(info["threshold"], 4)} for name, info in detector_mlps.items()
+        ],
+        "keep_negatives": bool(keep_negatives),
+    }
+
+    records = _stream_hit_records(first_chunk, iterator, detector_mlps, keep_negatives)
+    result = exporter.export_cli_streaming(header, records, exporter_field_values or {})
+    message = result.get("message", "Export complete.")
+    cli_progress.emit("export_complete", text=message, message=message)
+
+
 def _run_pipeline(
     media_source: Iterator[dict[int, dict[str, Any]]],
     *,
@@ -616,6 +733,8 @@ def _run_pipeline(
     override_detectors: list[str] | None = None,
     empty_error: str = "No medias loaded",
     dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
     source_description: dict[str, Any] | None = None,
 ) -> None:
     """Shared pipeline: read settings, iterate media chunks, score, export.
@@ -648,6 +767,18 @@ def _run_pipeline(
             autorun_detectors,
             exporter_name,
             exporter_field_values,
+        )
+        return
+
+    if stream_results:
+        _run_streaming_pipeline(
+            media_source,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            override_detectors=override_detectors,
+            autorun_detectors=autorun_detectors,
+            keep_negatives=keep_negatives,
+            empty_error=empty_error,
         )
         return
 
@@ -723,6 +854,8 @@ def autodetect_main_chunked(
     exporter_field_values: dict[str, Any] | None = None,
     *,
     dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
 ) -> None:
     """CLI entry point: chunked autodetect on a pickle dataset."""
     try:
@@ -733,6 +866,8 @@ def autodetect_main_chunked(
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded from dataset: {dataset_path}",
             dry_run=dry_run,
+            stream_results=stream_results,
+            keep_negatives=keep_negatives,
             source_description={"kind": "pickle", "dataset": dataset_path, "chunk_size": chunk_size},
         )
     except Exception as e:
@@ -749,6 +884,8 @@ def autodetect_importer_main_chunked(
     exporter_field_values: dict[str, Any] | None = None,
     *,
     dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
 ) -> None:
     """CLI entry point: chunked autodetect with a named importer."""
     try:
@@ -759,6 +896,8 @@ def autodetect_importer_main_chunked(
             exporter_field_values=exporter_field_values,
             empty_error=f"No medias loaded by importer '{importer_name}'",
             dry_run=dry_run,
+            stream_results=stream_results,
+            keep_negatives=keep_negatives,
             source_description={
                 "kind": "importer",
                 "importer": importer_name,

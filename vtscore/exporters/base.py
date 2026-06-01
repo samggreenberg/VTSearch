@@ -46,7 +46,7 @@ verifies that every imported package is declared there.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 from vtscore.plugins import PluginBase, PluginField
 
@@ -123,3 +123,57 @@ class LabelsetExporter(PluginBase):
         GUI exporter, which has no browser) should override this method.
         """
         return self.export(results, field_values)
+
+    # ------------------------------------------------------------------
+    # Streaming CLI support (massive sources)
+    # ------------------------------------------------------------------
+
+    @property
+    def supports_streaming(self) -> bool:
+        """Whether this exporter can write results incrementally.
+
+        Exporters that override :meth:`export_cli_streaming` return ``True``
+        so the ``--stream-results`` CLI path can route to them.  Exporters
+        that inherently need the whole payload at once (e.g. sending a single
+        email or webhook POST) leave this ``False``; requesting
+        ``--stream-results`` with them is rejected with a clear error.
+
+        See ``docs/plans/cli-stream-massive-images.md``.
+        """
+        return False
+
+    def export_cli_streaming(
+        self,
+        header: dict[str, Any],
+        records: Iterator[tuple[str, dict[str, Any]]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Write results incrementally as scored chunks stream in.
+
+        Unlike :meth:`export_cli`, which receives the fully-materialised
+        results dict, this method receives a lazy *records* iterator and is
+        expected to write each record to the destination as it arrives,
+        never buffering the whole set.  This is what lets ``--autodetect``
+        run against a media source with more items (and more hits) than fit
+        in RAM.
+
+        Args:
+            header: Metadata known before any hit streams, with keys
+                ``"media_type"`` (str), ``"detectors"`` (a list of
+                ``{"detector_name": str, "threshold": float}`` dicts), and
+                ``"keep_negatives"`` (bool — whether below-threshold hits are
+                included in *records*).
+            records: Yields ``(detector_name, hit)`` tuples in chunk order
+                (NOT globally sorted by score).  Each *hit* is the dict from
+                :func:`vtscore.utils.hits.build_media_hit` plus a ``"label"``
+                key (``"good"`` for above-threshold, ``"bad"`` otherwise).
+            field_values: Mapping of :attr:`ExporterField.key` → value.
+
+        Returns:
+            A status dict with a ``"message"`` key (and optionally
+            ``"filepath"``), like :meth:`export`.
+
+        Raises:
+            NotImplementedError: If the exporter does not support streaming.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support streaming export")
