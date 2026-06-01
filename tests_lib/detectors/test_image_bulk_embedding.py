@@ -264,7 +264,7 @@ class TestSiglipBulkOverride:
         assert len(out) == 3
         assert all(v is not None for v in out)
         # One-hot per slot confirms slot alignment (argmax survives L2-norm).
-        assert [int(np.argmax(v)) for v in out] == [0, 1, 2]
+        assert [int(np.argmax(v)) for v in out if v is not None] == [0, 1, 2]
 
     def test_routes_through_bulk_helper(self, tmp_path):
         from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
