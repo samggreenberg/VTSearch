@@ -15,7 +15,8 @@
 >
 > **Decisions locked** (see *§Locked decisions*): single-dataset v1,
 > MediaType fixed to Audio, **server-side hex tiling**, a **second Angular
-> build target**, **Canvas 2D** rendering.
+> build target**, **Canvas 2D** rendering, **browse-only** scope, and a
+> **projection frozen + persisted at ingest** (unseeded UMAP, computed once).
 
 ## Problem / Goal
 
@@ -251,11 +252,12 @@ across each embedder; otherwise pickle loads silently bypass it.
 
 This is the heart of VictoryTones and the part with no precedent in
 `vtsearch`. It splits cleanly into a **projection stage** (run once per
-dataset, server-side, in memory), a **tile-pyramid stage** (server-side
-aggregation the client streams), and a **canvas renderer** (Canvas 2D,
+dataset at ingest, server-side, then frozen and persisted with the dataset),
+a **tile-pyramid stage** (server-side aggregation, persisted alongside the
+projection, streamed to the client), and a **canvas renderer** (Canvas 2D,
 client-side).
 
-### Stage 1 — UMAP projection (server-side, batch, **in-memory only**)
+### Stage 1 — UMAP projection (server-side, batch, **computed once at ingest, persisted**)
 
 Run `umap-learn` on the cached `(N, d)` embedding matrix to produce an
 `(N, 2)` array of projected coordinates.
@@ -268,12 +270,13 @@ Run `umap-learn` on the cached `(N, d)` embedding matrix to produce an
   no per-fit normalization step.
 - **Determinism:** **not seeded.** We accept a non-deterministic fit (no
   fixed `random_state`), which keeps UMAP's numba parallelism on and the fit
-  faster. The map is a browsing aid, not a citable artifact, so a different
-  layout on each refit is acceptable. **Consequence for caching:** because
-  the coordinates are not reproducible, the projection cannot be content-
-  addressed — every fit is a brand-new layout and must mint a fresh
-  projection id, which is what tile-cache invalidation keys on (see
-  *§Tile-cache invalidation*).
+  faster. This is only acceptable *because the projection is frozen at ingest*
+  (below): the layout is computed exactly once and then reused verbatim
+  forever, so its non-reproducibility never surfaces — you never see a
+  "different map" for the same dataset, because the fit never runs a second
+  time. (If we recomputed on every load, unseeded would mean a new layout each
+  session; freezing is what buys back stability without paying for a seeded,
+  parallelism-disabled fit.)
 - **Cost & scheduling:** UMAP is O(N) with heavy constants — seconds at a
   few thousand points, into minutes at 10⁵. It runs as a **background
   async job with progress** (`vtscore/concurrency`), never inline in a
@@ -286,21 +289,40 @@ Run `umap-learn` on the cached `(N, d)` embedding matrix to produce an
   We deliberately **never add to or remove from a loaded dataset**; there is
   no incremental layout and no out-of-sample `umap.transform()`. If you want
   to combine datasets (or otherwise change the pile), you **re-run UMAP from
-  scratch** on the new full set — the layout is expected to change wholesale,
-  and that's correct. The projection is a pure-ish function of (the embedding
-  set + UMAP params), modulo the unseeded random init, which is why it's safe
-  to treat as a recompute-on-load cache — each load produces *a* valid
-  layout, just not the same one twice.
+  scratch** on the new full set, producing a *new* dataset artifact with its
+  own frozen projection — the old map is not migrated or transformed. Because
+  the pile is immutable, the projection it induces is too: computed once when
+  the dataset is ingested, then stored and treated as a fixed property of the
+  dataset (like its embeddings), never recomputed for the life of that
+  artifact.
 
-> **CRITICAL — do not persist the projection.** UMAP coordinates are a
-> *derived artifact* of the embeddings, so the repo's **"No Persisted
-> Vectors or MLPs"** rule applies in full: the `(N, 2)` array (and the tile
-> pyramid below) live **only in memory**, on the `DatasetContext` (a new
-> lazy field alongside `_emb_matrix`), and are **recomputed on load**. They
-> are never written to `settings.json`, to a detector/dataset JSON, or to
-> any other store. The one allowed exception elsewhere — dataset pickles —
-> stores *embeddings*, from which the projection is re-derived; it never
-> stores the projection itself.
+> **Carve-out from "No Persisted Vectors or MLPs" — the projection IS
+> persisted.** This is a deliberate, scoped exception to the repo rule, and
+> it needs to be called out because that rule is otherwise strict. The
+> rationale: the rule exists so that embeddings and MLP weights can never
+> drift from the active embedder/labels — they are *re-derivable* from
+> origins, so caching them on disk only risks staleness. The UMAP projection
+> is different in the one way that matters: with an **unseeded** fit it is
+> **not reproducible**, so "re-derive on load" does not reproduce the same
+> artifact — it produces a *different* map. To deliver "compute once, never
+> again" (the locked behavior), the `(N, 2)` coordinates **and** the tile
+> pyramid must be stored, not recomputed.
+>
+> Scope of the exception, to keep it honest:
+> - It covers **only** the 2D projection coordinates and the derived hex
+>   pyramid — *not* embeddings and *not* MLP weights, which stay in-memory /
+>   re-derived exactly as the rule demands.
+> - Storage rides with the **dataset artifact** (the pickle is already the
+>   sanctioned snapshot of media + embeddings; the projection is the same
+>   kind of frozen-at-ingest property). A dataset ingested without a
+>   projection (e.g. a legacy `vtsearch` pickle) computes UMAP **once on
+>   first open** and persists it back, after which it is never recomputed.
+> - It is still **never** written to `settings.json` or to detector/labelset
+>   JSON — those remain origin-only.
+> - Each artifact carries a `projection_id` (minted at the one-time fit) so a
+>   tile can always be checked against the projection it belongs to; because
+>   the projection never changes after ingest, this id is effectively a
+>   stable per-dataset constant rather than a moving invalidation token.
 
 ### Stage 2 — Hex-tile pyramid (server-side aggregation)
 
@@ -328,12 +350,15 @@ projection:
 - **Tiles** group hexes into a spatial grid per level: a tile is
   `(level, tx, ty)` → the list of non-empty hexes inside it. This makes the
   payload **viewport-bounded** (the client fetches only the tiles covering
-  what's on screen) and **cacheable** (immutable per projection build; an
-  `ETag`/version keyed on the build id lets the browser and any CDN cache
-  them, and invalidate atomically when the dataset/projection rebuilds).
-- **Build:** the pyramid is computed in the same background job as the UMAP
-  fit (one O(N · levels) pass after the projection), and held in memory on
-  the `DatasetContext` (again, never persisted).
+  what's on screen) and **trivially cacheable**: because the projection is
+  frozen at ingest, a tile is **immutable for the life of the dataset**, so
+  the client (and any CDN) can cache it with a long `max-age` and the
+  `projection_id` in the URL — no revalidation, no invalidation logic (see
+  *§Tile-cache invalidation*).
+- **Build & storage:** the pyramid is computed in the same one-time ingest
+  job as the UMAP fit (one O(N · levels) pass after the projection) and
+  **persisted with the dataset artifact** alongside the coordinates — it is
+  part of the carve-out above, not recomputed on load.
 
 Why server-side tiling (the chosen path) over client-side binning: it keeps
 the per-interaction payload bounded by the **viewport**, not by **N**, so
@@ -343,36 +368,38 @@ every client). The price is more machinery (a pyramid + a tile endpoint +
 client-side tile caching) and round-trips on zoom/pan, mitigated by an LRU
 tile cache and prefetching neighbors.
 
-#### Tile-cache invalidation (the `ETag` problem)
+#### Tile-cache invalidation (a non-problem, by construction)
 
-The whole reason tiles are worth caching — they're immutable and viewport-
-bounded — is also what makes them dangerous across a refit. A tile is keyed
-by `(level, tx, ty)`, but its **contents** (which hexes, their counts, their
-representative clips) are only meaningful *relative to one projection*. When
-the projection is re-fit, every coordinate moves, so tile `(level, tx, ty)`
-now describes a different patch of a different layout. Any cache that still
-holds the old tile under the same key — the browser HTTP cache, an LRU in the
-client, a CDN/proxy in front of the app — will serve **stale geometry**, and
-the canvas renders a Frankenstein mix of old and new tiles that don't line
-up. This is exactly the situation our just-made decision *worsens*: with an
-**unseeded** UMAP, a refit is guaranteed to produce different coordinates, so
-there is no "same dataset → same tiles" stability to lean on. We can't
-content-address the tiles (hash the inputs and reuse across fits) because the
-output isn't a function of the inputs alone.
+Freezing the projection at ingest **dissolves** what would otherwise be the
+trickiest caching question, so it is worth recording why there is nothing to
+solve here. A tile is keyed by `(level, tx, ty)`, and its contents (which
+hexes, their counts, their representative clips) are only meaningful relative
+to one projection. In a world where the projection could be *re-fit* — and
+especially with our unseeded fit, where a re-fit is **guaranteed** to move
+every coordinate — a cached tile would silently become stale geometry, and
+the canvas would render a Frankenstein mix of two layouts. That is the
+classic `ETag`/invalidation problem.
 
-So the projection needs a **version stamp** that changes on every fit, and
-the tile identity must incorporate it so a stale tile can never masquerade as
-a fresh one. Concretely, the server mints a `projection_id` (a per-fit nonce
-— UUID or fit timestamp; *not* a content hash, since content isn't stable)
-when the background job finishes, stores it on the `DatasetContext` next to
-the in-memory projection + pyramid, and hands it to the client in the
-projection-metadata response (alongside extent and `Zmax`). From there the
-mechanism is the open choice (see below); whatever we pick must guarantee
-(a) old-`projection_id` tiles are never rendered after a refit, and (b) the
-client re-reads the projection metadata (extent/`Zmax` also change with a new
-random layout) before requesting tiles under a new id. The single-dataset,
-in-memory, mostly-single-user shape of v1 means refits are rare (process
-start, dataset (re)load) — but when they happen the swap must be clean.
+We sidestep it entirely: **the projection is computed exactly once and never
+re-fit**, so a tile's contents are fixed for the entire life of the dataset
+artifact. Mechanically:
+
+- Each artifact has a `projection_id` minted at its one-time fit. It goes in
+  the tile URL (e.g. `…/tiles/{projection_id}/{level}/{tx}/{ty}`), so tiles
+  from different datasets can never collide in any cache.
+- Within a dataset that `projection_id` is a **stable constant**, so tiles
+  are served with a long-lived `Cache-Control: max-age` (effectively
+  immutable). No `If-None-Match` round-trips, no revalidation, no
+  version-bumping — the client, an LRU, and any CDN can all cache forever.
+- The only event that introduces a *new* `projection_id` is ingesting a
+  **different** dataset (a new artifact), which the user reaches by loading
+  it — a fresh metadata fetch under a fresh id. There is no in-place rebuild
+  of an existing dataset's projection to invalidate against.
+
+So the `projection_id` survives as a clean cache-namespacing key, but the
+hard part — invalidating live caches when a projection changes underneath
+them — simply does not arise, because projections don't change underneath
+anyone.
 
 ### Stage 3 — Canvas renderer (client-side, **Canvas 2D**)
 
@@ -418,6 +445,8 @@ start, dataset (re)load) — but when they happen the swap must be clean.
 | Product scope (v1) | **Browse-only** | Pan / zoom / hover-to-listen + sibling highlight. No selection, voting, detector training, or ranking in v1; handoff to VTSearch's train-a-detector flow is a deferred follow-up. |
 | Hex color | **Density (count)** | Color = clip count per hex (log/sqrt-scaled), which the tile pyramid already aggregates for free. No detector/query needed; a second visual channel (opacity/outline) is reserved for hover + sibling highlight. |
 | Sibling highlight | **On hover** | Hovering a clip highlights the other clips of the same source file wherever they fall on the canvas. Requires a per-point source-file group id; see *§Interaction model*. |
+| UMAP seeding | **Unseeded (fast)** | No `random_state`; numba parallelism stays on. Safe only because the projection is frozen at ingest, so the fit never re-runs for a given dataset. |
+| Projection lifetime | **Frozen at ingest, persisted** | UMAP + pyramid computed once and stored with the dataset artifact (carve-out from "No Persisted Vectors/MLPs"; covers 2D coords + pyramid only). Never recomputed; legacy datasets compute-once on first open. Dissolves tile-cache invalidation. |
 
 ### Notes on the second Angular build target
 
@@ -477,12 +506,18 @@ tunable parameters, not bake in constants:
 - **Hover audio policy:** debounce window, loop, hard-cut vs. crossfade,
   volume source, autoplay-unlock gesture.
 
-**Design (resolve before scaffold).**
+**Design (resolve before scaffold).** All resolved — see *§Locked decisions*.
+For the record:
 
-- **Rebuild semantics:** full refit on dataset change is locked (datasets are
-  immutable input piles; no incremental `umap.transform`); the open part is
-  the projection-version/`ETag` scheme for tile-cache invalidation (see
-  *§Tile-cache invalidation* for the problem statement; mechanism TBD).
+- **UMAP determinism** — settled: unseeded (fast), safe because the
+  projection is frozen at ingest.
+- **Projection lifetime / rebuild** — settled: computed once at ingest and
+  persisted with the dataset artifact; never re-fit. Datasets remain
+  immutable input piles (combining them produces a new artifact, not an
+  in-place rebuild).
+- **Tile-cache invalidation** — settled: a non-problem by construction (frozen
+  projection ⇒ immutable tiles); `projection_id` survives only as a stable
+  cache-namespacing key. See *§Tile-cache invalidation*.
 
 ## `vtscore` back-edges to address
 
