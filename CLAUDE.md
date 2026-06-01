@@ -161,6 +161,7 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 | `integration` | End-to-end workflows, thread safety, async jobs |
 | `cli` | CLI autodetect, load sort window, progress bars |
 | `converters` | Media converters (document, video, image) |
+| `projection` | VictoryTones UMAP projection + hex-tile pyramid (library tier) |
 | `gpu` | CUDA-only tests (excluded by default) |
 
 **Recommended workflow**: Run `./run-tests.sh <group>` for the area you changed, then `./run-tests.sh` for the full suite.

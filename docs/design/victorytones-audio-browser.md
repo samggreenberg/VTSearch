@@ -1,9 +1,11 @@
 # Design: VictoryTones — a UMAP hexbin Audio Browser on `vtscore`
 
-> **Status:** Prerequisite shipped (app-wide L2 normalization at ingest);
-> VictoryTones itself (projection backend, app tier, frontend) not yet
-> built. This doc scopes VictoryTones as a **second app tier** in the
-> VTSearch repo, built on the existing `vtscore` library alongside
+> **Status:** Prerequisite shipped (app-wide L2 normalization at ingest) **and
+> the Flask-free projection backend** (`vtscore/projection/`: UMAP fit +
+> hex-tile pyramid). The app tier (a `victorytones/` Flask app) and the Angular
+> browse canvas are not yet built. This doc scopes VictoryTones as a **second
+> app tier** in the VTSearch repo, built on the existing `vtscore` library
+> alongside
 > `vtsearch`. See *§What shipped* and *§Open follow-ups* at the bottom for
 > where things stand.
 >
@@ -585,6 +587,40 @@ vtscore-clean` from day one.
     stored-embedding magnitude — legacy pickles re-normalize on load.
   - Tests: `tests_lib/detectors/test_embedding_normalization.py`,
     `tests_lib/datasets/test_pickle_normalization.py`.
+
+- **Projection backend (Stages 1 + 2), Flask-free.** The browse-canvas compute
+  core landed under `vtscore/projection/` (library tier — covered by
+  `./run-tests.sh vtscore-clean`), with no app/HTTP wiring yet.
+  - `umap_projection.py` — `fit_projection(matrix, ids, …) → Projection`
+    (Stage 1). Plain Euclidean UMAP on the ingest-normalized matrix; **unseeded
+    by default** (`random_state=None`) per the locked decision, with an optional
+    seed for reproducible/test fits. `n_neighbors` is clamped to `N-1`; below
+    `min_n_for_umap` it falls back to a deterministic **PCA-2** layout, and the
+    degenerate `N ≤ 2` / scalar-embedding cases fall back to a trivial layout.
+    Each fit mints a `projection_id`. An optional `on_progress` callback matches
+    the ingest `(status, message, current, total)` convention.
+  - `hexbin.py` — the **d3-hexbin** assignment rule reimplemented vectorized in
+    NumPy (no d3 dependency): `hexbin_assign(points, radius) → (q, r)` integer
+    cell keys (`q = round(2·pi)` to keep d3's half-integer column index
+    integral) and `hex_center(q, r, radius)` to invert.
+  - `pyramid.py` — `build_pyramid(projection, …) → Pyramid` (Stage 2). Builds
+    `n_levels` zoom levels (each halving the hex radius), aggregating per hex:
+    axial key, center, **count** (density), and a **representative media id**
+    (member nearest the cell centroid, ties broken to the smaller id). Hexes are
+    grouped into `(level, tx, ty)` **tiles**; `Tile.to_payload()` /
+    `Pyramid.meta()` emit JSON-friendly dicts for the future tile/meta endpoints.
+    Tunable knobs (`n_levels`, `base_cols`/`base_radius`, `tile_span`) are
+    parameters, not baked constants, per *§Open problems*; `max_useful_levels()`
+    is an advisory `n_levels` ceiling.
+  - **New dependency:** `umap-learn` (added to `[project.dependencies]` with the
+    `umap-learn → umap` deptry module-name mapping). Imported lazily so the
+    package import never triggers numba's JIT until a fit runs.
+  - Tests: `tests_lib/projection/` (new `projection` group/marker) —
+    `test_hexbin.py`, `test_umap_projection.py`, `test_pyramid.py`.
+  - **Not yet built (next phases):** persistence of the projection + pyramid
+    with the dataset artifact (the carve-out), the `victorytones/` Flask app and
+    its `/api/projection/{build,meta,tiles}` endpoints, and the Canvas 2D
+    frontend (Stage 3).
 
 ## Open follow-ups
 - **VTSearch detector handoff:** v1 is browse-only. The deferred feature is
