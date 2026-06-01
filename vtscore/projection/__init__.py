@@ -1,7 +1,7 @@
-"""VictoryTones projection backend: UMAP layout + hex-tile pyramid.
+"""VTSBrowse projection backend: UMAP layout + hex-tile pyramid.
 
-The Flask-free core of the VictoryTones browse canvas (see
-``docs/design/victorytones-audio-browser.md``).  Two stages:
+The Flask-free core of the VTSBrowse browse canvas (see
+``docs/design/vtsbrowse.md``).  Two stages:
 
 - :func:`fit_projection` (Stage 1) reduces a dataset's ``(N, d)`` embedding
   matrix to a frozen ``(N, 2)`` :class:`Projection`.
@@ -11,7 +11,7 @@ The Flask-free core of the VictoryTones browse canvas (see
 
 Persistence of the projection + pyramid (the carve-out from the
 "No Persisted Vectors or MLPs" rule) and the HTTP endpoints live in the
-VictoryTones app tier, not here.
+VTSearch Browse routes, not here.
 """
 
 from __future__ import annotations

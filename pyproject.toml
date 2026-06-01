@@ -205,7 +205,7 @@ markers = [
     "integration: end-to-end workflows, thread safety",
     "cli: CLI autodetect, load sort window, progress",
     "converters: document and media converters",
-    "projection: VictoryTones UMAP projection and hex-tile pyramid",
+    "projection: VTSBrowse UMAP projection and hex-tile pyramid",
 ]
 addopts = "-m 'not gpu and not slow'"
 
