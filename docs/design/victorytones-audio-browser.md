@@ -127,8 +127,9 @@ avoids paying the decoupling tax up front for a benefit you don't yet need.
   (`embedder_clap`, `embedder_clap_music`, `embedder_ast`,
   `embedder_whisper`) via the media/embedder registries in
   `vtscore/media/__init__.py`. Unchanged. Output dimensionality `d` is
-  **512** (CLAP, CLAP-Music, Whisper) or **768** (AST); embeddings are
-  **not L2-normalized**, which matters for the UMAP metric (see below).
+  **512** (CLAP, CLAP-Music, Whisper) or **768** (AST); embeddings are now
+  **L2-normalized at ingest** (see *§Prerequisite*), so the projection
+  consumes unit vectors directly.
 - **The embedding matrix** — `vtscore/embedding/matrix.py`
   `get_embedding_matrix(ctx) → (sorted_ids, (N, d) float32)`, lazily built
   and cached on `DatasetContext` (`_emb_matrix` / `_emb_matrix_ids` in
@@ -193,6 +194,59 @@ Minimum surface:
 No `/api/order` text-query endpoint in v1 (the projection *is* the
 ordering); a text-seeded "fly to this region" affordance is a follow-up.
 
+## Prerequisite: normalize embeddings at ingest (app-wide)
+
+The projection wants unit vectors, and it turns out VTSearch is *already*
+direction-only nearly everywhere — it just normalizes lazily, at every
+comparison. We make that canonical: **L2-normalize each embedding once, at
+ingest, in every embedder's `embed` / `embed_text`** (audio, image, and the
+CLAP/CLIP text-query paths), then **drop the per-comparison normalization**.
+This is a VTSearch-wide change, not VictoryTones-local — done as a
+prerequisite so VictoryTones can consume unit vectors and use plain
+Euclidean UMAP.
+
+Why it's safe and arguably overdue:
+
+- **Magnitude is already discarded for all similarity.** The cosine-sort
+  path (`vtscore/training/region_similarity.py:135-140` and `:49-75`)
+  re-normalizes query and media on every call. Normalizing at ingest just
+  moves that work earlier and makes it the stored form. Several embedders
+  already normalize at output (BGE/E5 text, DINOv2/v3 patch); this makes the
+  rest (CLAP, CLAP-Music, CLIP, SigLIP, and their text-query paths) match.
+
+Two real behavior changes to validate (not just no-ops):
+
+- **Diversity tree** (`vtscore/state/diversity_tree.py`) k-means currently
+  clusters on **raw** vectors (Euclidean = magnitude + direction) — the one
+  consumer that uses magnitude. Normalizing switches it to **angular**
+  clustering, which is the standard, more-correct choice for these
+  embeddings and makes it consistent with every other comparison, **but it
+  changes diversity ordering** users will observe.
+- **MLP** (`vtscore/training/mlp.py`) trains on raw embeddings; unit-norm
+  inputs change the input scale (not direction), which shifts **threshold
+  calibration**. Generally neutral-to-helpful, but retest convergence and
+  thresholds.
+
+**Sites to touch:** add an L2 step to the non-normalizing embedders' `embed`
+and `embed_text` (CLAP, CLAP-Music, CLIP, SigLIP, …); guard against the
+zero-vector divide; remove the now-redundant normalization in
+`region_similarity.py`; refresh the `svm.py` docstring caveat. **Retest:**
+full `./run-tests.sh`, with attention to diversity ordering, MLP
+convergence, and threshold calibration. Breaks backwards compatibility of
+stored-embedding magnitude (acceptable per repo policy) — call it out in the
+PR.
+
+**Chokepoint placement (resolve at implementation).** Normalizing *only*
+inside `embed`/`embed_text` covers fresh embeds but **not pickle-loaded
+datasets**, which write stored (possibly raw, old) vectors straight into
+`medias[cid]["embedding"]` without re-embedding. To keep the invariant
+"every embedding in `medias` is unit-norm" we need a single ingest
+chokepoint that also covers the pickle/import write path — e.g. normalize
+wherever an embedding is written into `medias`, or normalize at the
+`get_embedding_matrix` boundary and route every similarity consumer through
+the matrix. Pick one canonical chokepoint rather than scattering L2 calls
+across each embedder; otherwise pickle loads silently bypass it.
+
 ## Browse-canvas architecture
 
 This is the heart of VictoryTones and the part with no precedent in
@@ -208,9 +262,10 @@ Run `umap-learn` on the cached `(N, d)` embedding matrix to produce an
 
 - **New dependency:** `umap-learn` (pulls `pynndescent`; `numba` is already
   present transitively via `librosa`, and `scikit-learn` is a direct dep).
-- **Metric:** `metric="cosine"` — CLAP-family embeddings live in a cosine
-  space and are not L2-normalized, so Euclidean UMAP would distort the
-  layout. (Equivalently, L2-normalize first and use Euclidean.)
+- **Metric:** plain **Euclidean**. Because embeddings are L2-normalized at
+  ingest (see *§Prerequisite*), Euclidean distance on the unit sphere is a
+  monotonic function of cosine distance, so UMAP needs no special metric and
+  no per-fit normalization step.
 - **Determinism:** seed `random_state` so the map is reproducible run to
   run. Tradeoff: a fixed `random_state` disables UMAP's numba parallelism,
   so the fit is slower. The map is the canonical, shareable view, so
@@ -222,10 +277,15 @@ Run `umap-learn` on the cached `(N, d)` embedding matrix to produce an
 - **Small-N edge cases:** `n_neighbors` must be `< N`; clamp for tiny
   datasets. Decide a minimum-N below which we skip UMAP and fall back to a
   trivial layout (e.g. PCA-2 or a grid).
-- **No incremental layout in v1.** Adding/removing media re-lays-out the
-  whole cloud (a full refit), which is visually jarring but correct.
-  `umap.transform()` out-of-sample embedding (keeping the fitted model in
-  memory) is a later optimization, not v1.
+- **Datasets are immutable input piles for the projection — by design, not
+  just v1.** A UMAP fit locks to the exact set of points it was trained on.
+  We deliberately **never add to or remove from a loaded dataset**; there is
+  no incremental layout and no out-of-sample `umap.transform()`. If you want
+  to combine datasets (or otherwise change the pile), you **re-run UMAP from
+  scratch** on the new full set — the layout is expected to change wholesale,
+  and that's correct. This makes the projection a pure function of (the
+  embedding set + UMAP params + seed), which is also why it's safe to treat
+  as a recompute-on-load cache.
 
 > **CRITICAL — do not persist the projection.** UMAP coordinates are a
 > *derived artifact* of the embeddings, so the repo's **"No Persisted
@@ -316,6 +376,7 @@ tile cache and prefetching neighbors.
 | Hex binning location | **Server-side tiles** | Pyramid + tile endpoint; viewport-bounded payload; scales to large N. |
 | Frontend packaging | **Second Angular build target** | Separate app, its own `outputPath`/`index`/`main`; served by the `victorytones` Flask app. Shares SCSS/services where practical, not the VTSearch shell. |
 | Renderer | **Canvas 2D** | No new viz dependency; WebGL deferred. |
+| Embedding normalization | **App-wide L2 at ingest** | Normalize in every `embed`/`embed_text`; drop per-comparison normalization. See *§Prerequisite*. |
 
 ### Notes on the second Angular build target
 
@@ -332,8 +393,8 @@ does not use.
 
 ## Open problems to resolve before/at scaffold
 
-- **UMAP knobs:** `n_neighbors`, `min_dist`, the small-N fallback
-  threshold, and whether to L2-normalize vs. use `metric="cosine"`.
+- **UMAP knobs:** `n_neighbors`, `min_dist`, and the small-N fallback
+  threshold. (Metric is settled: Euclidean on ingest-normalized vectors.)
 - **Determinism vs. fit speed:** confirm we accept the seeded (slower) fit.
 - **Pyramid parameters:** `Zmax`, base hex size at level 0, tile size
   (hexes per tile), and the density color scale (log vs sqrt, colormap).
@@ -379,8 +440,6 @@ vtscore-clean` from day one.
 - **Text-seeded navigation:** a query box that embeds text and flies the
   canvas to the nearest region (reuses `embed_text_query` + cosine). Out of
   v1 scope; the projection is the only ordering in v1.
-- **Incremental projection:** keep the fitted UMAP model in memory and use
-  `umap.transform()` for newly added media instead of a full refit.
 - **WebGL renderer** if the Canvas 2D ceiling is hit.
 - If/when independent distribution is required, open a companion plan for
   **`vtscore` decoupling + PyPI publish** (sever the back-edges in the
