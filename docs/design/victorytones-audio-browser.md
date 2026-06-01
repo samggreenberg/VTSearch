@@ -377,6 +377,8 @@ tile cache and prefetching neighbors.
 | Frontend packaging | **Second Angular build target** | Separate app, its own `outputPath`/`index`/`main`; served by the `victorytones` Flask app. Shares SCSS/services where practical, not the VTSearch shell. |
 | Renderer | **Canvas 2D** | No new viz dependency; WebGL deferred. |
 | Embedding normalization | **App-wide L2 at ingest** | Normalize in every `embed`/`embed_text`; drop per-comparison normalization. See *§Prerequisite*. |
+| Canvas point = one clip | **Clip, not file** | Each point is a clip media item (`clip_start`/`clip_end` from the audio clipper); sibling clips of one source file land independently on the map. |
+| Hover audio | **Local clip only** | Hovering a point plays *that clip's* `[clip_start, clip_end]` slice, never the whole source file — even when other clips of the same file sit elsewhere on the canvas. |
 
 ### Notes on the second Angular build target
 
@@ -393,21 +395,26 @@ does not use.
 
 ## Open problems to resolve before/at scaffold
 
+**Empirical (deferred to experimentation, not design blockers).** These have
+no defensible a-priori value; we set them by running UMAP/the pyramid on
+real audio datasets and looking at the output. The design must leave them as
+tunable parameters, not bake in constants:
+
 - **UMAP knobs:** `n_neighbors`, `min_dist`, and the small-N fallback
   threshold. (Metric is settled: Euclidean on ingest-normalized vectors.)
-- **Determinism vs. fit speed:** confirm we accept the seeded (slower) fit.
 - **Pyramid parameters:** `Zmax`, base hex size at level 0, tile size
   (hexes per tile), and the density color scale (log vs sqrt, colormap).
 - **Performance ceiling / target N** for v1 — sets whether Canvas 2D
   culling is sufficient or WebGL is needed sooner.
-- **Whole file vs. clip on hover:** is the hover audio the whole media or a
-  clipper-produced clip? (Interacts with how the dataset was clipped at
-  load, which also sets map density.)
 - **Hover audio policy:** debounce window, loop, hard-cut vs. crossfade,
   volume source, autoplay-unlock gesture.
-- **Rebuild semantics:** confirm full refit on dataset change (no
-  incremental `umap.transform` in v1) and the projection-version/`ETag`
-  scheme for tile-cache invalidation.
+
+**Design (resolve before scaffold).**
+
+- **Determinism vs. fit speed:** confirm we accept the seeded (slower) fit.
+- **Rebuild semantics:** full refit on dataset change is locked (datasets are
+  immutable input piles; no incremental `umap.transform`); the open part is
+  the projection-version/`ETag` scheme for tile-cache invalidation.
 
 ## `vtscore` back-edges to address
 
