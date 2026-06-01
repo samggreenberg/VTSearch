@@ -430,7 +430,8 @@ anyone.
   dependency). Draw one filled hexagon per non-empty visible hex,
   **viewport-culled**. Canvas 2D comfortably handles low tens-of-thousands
   of on-screen hexes; because the screen-visible hex count is roughly
-  constant by construction (LOD), this stays well within budget. WebGL is
+  constant by construction (level-of-detail), this stays well within
+  budget. WebGL is
   the escape hatch if a future requirement blows past it.
 - **Density color.** Map `count` → a perceptually-uniform ramp (viridis /
   magma) on a **log or sqrt scale**, because density is heavy-tailed. Wire

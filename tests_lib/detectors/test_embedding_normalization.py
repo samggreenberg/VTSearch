@@ -90,6 +90,7 @@ class _FakeEmbedder(MediaEmbedder):
 class TestEmbedderNormalizesOutput:
     def test_embed_media_is_unit_norm(self):
         vec = _FakeEmbedder().embed_media({})
+        assert vec is not None
         np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-6)
 
     def test_embed_media_none_passes_through(self):
@@ -99,10 +100,12 @@ class TestEmbedderNormalizesOutput:
         out = _FakeEmbedder().embed_media_bulk([{}, {"fail": True}, {}])
         assert out[1] is None
         for v in (out[0], out[2]):
+            assert v is not None
             np.testing.assert_allclose(np.linalg.norm(v), 1.0, atol=1e-6)
 
     def test_embed_text_is_unit_norm(self):
         vec = _FakeEmbedder().embed_text("hello")
+        assert vec is not None
         np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-6)
 
     def test_embed_text_none_passes_through(self):

@@ -68,18 +68,21 @@ class TestPickleMemoryError:
 
         target: dict = {}
 
-        # Make np.array raise MemoryError on the 3rd call
+        # Make the per-media embedding step raise MemoryError on the 3rd
+        # call (l2_normalize is called once per media when building the
+        # pickle media dict, so it stands in for the old np.array hook).
+        from vtscore.embedding.normalize import l2_normalize as _real_l2
+
         call_count = 0
-        original_np_array = np.array
 
         def oom_on_third_call(*args, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count >= 3:
                 raise MemoryError("simulated OOM")
-            return original_np_array(*args, **kwargs)
+            return _real_l2(*args, **kwargs)
 
-        with mock.patch("vtscore.datasets.loader_pickle.np.array", side_effect=oom_on_third_call):
+        with mock.patch("vtscore.datasets.loader_pickle.l2_normalize", side_effect=oom_on_third_call):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_pickle(pkl, target)
 

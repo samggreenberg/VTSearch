@@ -222,7 +222,7 @@ class TestBulkEmbedImageFilesHelper:
 # ---------------------------------------------------------------------------
 
 
-def _stub_image_embedder(emb, dim: int = 3):
+def _stub_image_embedder(emb, dim: int = 8):
     """Install minimal mocks so the bulk override can run end-to-end."""
 
     fake_processor = mock.MagicMock()
@@ -237,8 +237,13 @@ def _stub_image_embedder(emb, dim: int = 3):
 
     # Replace the per-class _forward_pil_batch so we never touch torch.
     def fake_forward(images):
-        # Position-based vectors so we can assert slot alignment.
-        return np.stack([np.full(dim, float(i), dtype=np.float32) for i in range(len(images))])
+        # One-hot per slot so the slot index is recoverable via argmax even
+        # after the base wrapper L2-normalizes the result (a constant-
+        # magnitude vector would collapse to one shared direction).
+        out = np.zeros((len(images), dim), dtype=np.float32)
+        for i in range(len(images)):
+            out[i, i] = 1.0
+        return out
 
     emb._forward_pil_batch = fake_forward
 
@@ -258,10 +263,8 @@ class TestSiglipBulkOverride:
 
         assert len(out) == 3
         assert all(v is not None for v in out)
-        # Position-based vectors confirm slot alignment.
-        assert out[0][0] == 0.0  # pyright: ignore[reportOptionalSubscript]
-        assert out[1][0] == 1.0  # pyright: ignore[reportOptionalSubscript]
-        assert out[2][0] == 2.0  # pyright: ignore[reportOptionalSubscript]
+        # One-hot per slot confirms slot alignment (argmax survives L2-norm).
+        assert [int(np.argmax(v)) for v in out] == [0, 1, 2]
 
     def test_routes_through_bulk_helper(self, tmp_path):
         from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
@@ -330,7 +333,7 @@ class TestDinov2BulkOverride:
 
         out = emb.embed_media_bulk([_media(p) for p in paths])
         assert all(v is not None for v in out)
-        assert [v[0] for v in out if v is not None] == [0.0, 1.0]
+        assert [int(np.argmax(v)) for v in out if v is not None] == [0, 1]
 
 
 class TestDinov3BulkOverride:
@@ -360,7 +363,11 @@ class TestEupeBulkOverride:
         # EUPE's bulk goes through _forward_pil_batch as well; same shortcut.
 
         def fake_forward(images):
-            return np.stack([np.full(3, float(i), dtype=np.float32) for i in range(len(images))])
+            # One-hot per slot so argmax recovers the slot after L2-norm.
+            out = np.zeros((len(images), 3), dtype=np.float32)
+            for i in range(len(images)):
+                out[i, i] = 1.0
+            return out
 
         emb._forward_pil_batch = fake_forward
 
@@ -370,7 +377,7 @@ class TestEupeBulkOverride:
 
         out = emb.embed_media_bulk([_media(p) for p in paths])
         assert all(v is not None for v in out)
-        assert [v[0] for v in out if v is not None] == [0.0, 1.0, 2.0]
+        assert [int(np.argmax(v)) for v in out if v is not None] == [0, 1, 2]
 
 
 # ---------------------------------------------------------------------------
