@@ -691,3 +691,84 @@ class TestExportEndpoint:
 
         assert any("Permission denied" in r.message for r in caplog.records)
         assert any(r.exc_info for r in caplog.records if "Permission denied" in r.message)
+
+
+# ---------------------------------------------------------------------------
+# Streaming CLI export (--stream-results)
+# ---------------------------------------------------------------------------
+
+_STREAM_HEADER = {
+    "media_type": "audio",
+    "detectors": [{"detector_name": "dog_bark", "threshold": 0.5}],
+    "keep_negatives": False,
+}
+
+
+def _stream_records():
+    """Two good hits and one bad hit, in chunk order (not score-sorted)."""
+    yield "dog_bark", {"id": 2, "filename": "b2.wav", "category": "c", "score": 0.7, "label": "good"}
+    yield "dog_bark", {"id": 9, "filename": "b9.wav", "category": "c", "score": 0.9, "label": "good"}
+    yield "dog_bark", {"id": 4, "filename": "b4.wav", "category": "c", "score": 0.2, "label": "bad"}
+
+
+class TestStreamingExportSupport:
+    def test_streaming_exporters_advertise_support(self):
+        from vtscore.exporters import get_exporter
+
+        for name in ("gui", "server_json_file", "server_csv_file"):
+            assert get_exporter(name).supports_streaming is True
+
+    def test_non_streaming_exporters_do_not(self):
+        from vtscore.exporters import get_exporter
+
+        for name in ("email_smtp", "webhook"):
+            assert get_exporter(name).supports_streaming is False
+
+
+class TestServerJsonStreaming:
+    def test_writes_ndjson_with_meta_header(self):
+        from vtscore.exporters import get_exporter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "hits.ndjson"
+            res = get_exporter("server_json_file").export_cli_streaming(
+                _STREAM_HEADER, _stream_records(), {"filepath": str(out)}
+            )
+            lines = [json.loads(ln) for ln in out.read_text().splitlines() if ln.strip()]
+            assert lines[0]["_meta"]["format"] == "vtsearch-hits-ndjson/v1"
+            hits = lines[1:]
+            assert [h["id"] for h in hits] == [2, 9, 4]  # chunk order preserved
+            assert hits[0]["detector"] == "dog_bark"
+            assert "3 hit(s)" in res["message"]
+            assert not out.with_name(out.name + ".tmp").exists()
+
+
+class TestServerCsvStreaming:
+    def test_writes_csv_rows(self):
+        import csv
+
+        from vtscore.exporters import get_exporter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "hits.csv"
+            get_exporter("server_csv_file").export_cli_streaming(
+                _STREAM_HEADER, _stream_records(), {"filepath": str(out)}
+            )
+            rows = list(csv.reader(out.read_text().splitlines()))
+            assert rows[0][0] == "detector"
+            assert "label" in rows[0]
+            assert len(rows) == 4  # header + 3 hits
+            assert rows[1][0] == "dog_bark"
+
+
+class TestGuiStreaming:
+    def test_prints_only_good_hits(self, capsys):
+        from vtscore.exporters import get_exporter
+
+        res = get_exporter("gui").export_cli_streaming(_STREAM_HEADER, _stream_records(), {})
+        captured = capsys.readouterr()
+        # Only the two good hits print; the bad one is filtered.
+        assert "b2.wav" in captured.out
+        assert "b9.wav" in captured.out
+        assert "b4.wav" not in captured.out
+        assert "2 hit(s)" in res["message"]
