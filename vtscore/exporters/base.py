@@ -12,6 +12,12 @@ exporters work on the command line without any extra code.  Exporters whose
 :meth:`export` expects non-string values should override :meth:`export_cli` to
 handle the CLI-appropriate types.
 
+For the CLI ``--stream-results`` path (scoring a media source larger than RAM),
+an exporter can write hits incrementally instead of buffering the whole result
+set: set :attr:`~LabelsetExporter.supports_streaming` to ``True`` and implement
+:meth:`~LabelsetExporter.export_cli_streaming`.  See that method's docstring and
+``docs/plans/cli-stream-massive-images.md`` for details.
+
 Example – a minimal SFTP exporter skeleton::
 
     # vtsearch/exporters/sftp/__init__.py
@@ -67,6 +73,11 @@ class LabelsetExporter(PluginBase):
     ``/api/auto-detect`` and a flat mapping of field values supplied by the
     user via the UI.  It should return a dict with at minimum a ``"message"``
     key describing what happened (shown to the user as confirmation).
+
+    Exporters that can write results incrementally (for the CLI
+    ``--stream-results`` path on a media source larger than RAM) override
+    :attr:`supports_streaming` to return ``True`` and implement
+    :meth:`export_cli_streaming`.
     """
 
     #: Emoji or icon string shown next to the display name in the UI.

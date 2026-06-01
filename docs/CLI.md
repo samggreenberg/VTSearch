@@ -131,6 +131,10 @@ Exporter: server_json_file
   filepath: out.json
 ```
 
+When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
+under the source (noting whether negatives are dropped or included), so a
+streaming run can be sanity-checked before it starts.
+
 `--dry-run` validates importer and exporter names, checks that the
 dataset pickle (if given) exists, verifies required CLI fields are
 populated, and reports any detector JSON files that are missing; so

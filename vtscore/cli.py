@@ -57,18 +57,8 @@ def _summarize_autorun_detectors(detector_names: list[str]) -> list[dict[str, An
     return summaries
 
 
-def _print_dry_run_plan(
-    *,
-    source_description: dict[str, Any],
-    settings_path: str | None,
-    autorun_detectors: list[str],
-    exporter_name: str | None,
-    exporter_field_values: dict[str, Any] | None,
-) -> None:
-    """Print the autodetect plan that ``--dry-run`` would otherwise execute."""
-    print("DRY RUN - no media will be loaded, embedded, scored, or exported.", flush=True)
-    print("", flush=True)
-
+def _print_dry_run_source(source_description: dict[str, Any]) -> None:
+    """Print the ``Source:`` block of the dry-run plan (kind, params, chunking)."""
     print("Source:", flush=True)
     kind = source_description.get("kind", "")
     if kind == "pickle":
@@ -84,6 +74,24 @@ def _print_dry_run_plan(
             print("  Params: (none)", flush=True)
     chunk_size = source_description.get("chunk_size")
     print(f"  Chunk size: {chunk_size if chunk_size else 'whole dataset'}", flush=True)
+    if source_description.get("stream_results"):
+        neg = "included" if source_description.get("keep_negatives") else "dropped"
+        print(f"  Streaming: yes (hits written to the exporter per chunk; negatives {neg})", flush=True)
+
+
+def _print_dry_run_plan(
+    *,
+    source_description: dict[str, Any],
+    settings_path: str | None,
+    autorun_detectors: list[str],
+    exporter_name: str | None,
+    exporter_field_values: dict[str, Any] | None,
+) -> None:
+    """Print the autodetect plan that ``--dry-run`` would otherwise execute."""
+    print("DRY RUN - no media will be loaded, embedded, scored, or exported.", flush=True)
+    print("", flush=True)
+
+    _print_dry_run_source(source_description)
     print("", flush=True)
 
     print(f"Settings: {settings_path or '(default: data/settings.json)'}", flush=True)
@@ -881,7 +889,13 @@ def autodetect_main_chunked(
             dry_run=dry_run,
             stream_results=stream_results,
             keep_negatives=keep_negatives,
-            source_description={"kind": "pickle", "dataset": dataset_path, "chunk_size": chunk_size},
+            source_description={
+                "kind": "pickle",
+                "dataset": dataset_path,
+                "chunk_size": chunk_size,
+                "stream_results": stream_results,
+                "keep_negatives": keep_negatives,
+            },
         )
     except Exception as e:
         cli_progress.emit_error(str(e))
@@ -916,6 +930,8 @@ def autodetect_importer_main_chunked(
                 "importer": importer_name,
                 "params": field_values,
                 "chunk_size": chunk_size,
+                "stream_results": stream_results,
+                "keep_negatives": keep_negatives,
             },
         )
     except Exception as e:

@@ -1146,7 +1146,13 @@ sentinel module attribute is `EXPORTER`.
 ```python
 class LabelsetExporter(PluginBase):
     """Abstract base. Subclasses declare `fields` and implement
-    `export(labelset: LabelSet, field_values: dict) -> None`."""
+    `export(labelset: LabelSet, field_values: dict) -> None`.
+
+    For the CLI `--stream-results` path (sources larger than RAM), an
+    exporter can write hits incrementally by setting
+    `supports_streaming = True` and implementing
+    `export_cli_streaming(header, records, field_values)`. See
+    EXTENDING-plugins.md and docs/plans/cli-stream-massive-images.md."""
 
 ExporterField = PluginField  # backwards-compat alias
 
@@ -1156,6 +1162,9 @@ def list_exporters() -> list[LabelsetExporter]: ...
 # Built-ins (each registered via an `EXPORTER` sentinel in its module):
 #   server_json_file, server_csv_file, webhook, email_smtp, gui (display-only,
 #   hidden_from_picker), holder (scaffold, hidden_from_picker until API client lands).
+# Streaming-capable (export_cli_streaming): server_json_file (NDJSON),
+#   server_csv_file, gui. webhook / email_smtp need the whole payload at once,
+#   so they are not streamable.
 ```
 
 ---

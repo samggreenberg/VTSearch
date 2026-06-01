@@ -72,6 +72,8 @@ re-includes them. Exporters opt in via `supports_streaming` +
 
 `email_smtp` / `webhook` inherently need the whole payload, so they do not
 support streaming; requesting `--stream-results` with them is a clear error.
+`--dry-run` reports a `Streaming: yes (...)` line (with whether negatives are
+dropped) so a streaming run can be sanity-checked before it starts.
 
 **Tradeoff (accepted):** streamed output is ordered by chunk, **not** globally
 sorted by score. Callers who need a global ranking sort the NDJSON afterwards.
