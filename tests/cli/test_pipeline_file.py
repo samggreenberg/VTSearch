@@ -221,9 +221,7 @@ class TestLoadPipelineFile:
 
         p = tmp_path / "p.yaml"
         p.write_text(
-            yaml.safe_dump(
-                {"dataset": "foo.pkl", "chunk_size": 10, "stream_results": True, "keep_negatives": True}
-            )
+            yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "stream_results": True, "keep_negatives": True})
         )
         cfg = load_pipeline_file(p)
         assert cfg["stream_results"] is True
