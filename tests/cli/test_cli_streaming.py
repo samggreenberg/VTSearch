@@ -26,14 +26,19 @@ def _unique_bytes(media_id: int) -> bytes:
 
 def _make_audio_media(media_id: int) -> dict:
     raw = _unique_bytes(media_id)
+    # 2-dim *unit-norm* embedding whose dim 0 strictly decreases with id
+    # (0.9, 0.8, 0.7, 0.6, 0.5 for ids 1..5).  Embeddings are L2-normalized at
+    # ingest, so we store a unit vector to make that normalization a no-op and
+    # keep dim 0 the clean, id-ordered signal the stubbed MLP thresholds on.
+    e0 = 1.0 - 0.1 * media_id
+    e1 = (1.0 - e0 * e0) ** 0.5
     return {
         "id": media_id,
         "media_type": "audio",
         "duration": 1.0,
         "file_size": len(raw),
         "md5": hashlib.md5(raw).hexdigest(),
-        # 2-dim embedding: [id, id + 0.5].  The stubbed MLP reads dim 0.
-        "embedding": [float(media_id), float(media_id) + 0.5],
+        "embedding": [e0, e1],
         "media_bytes": None,
         "media_string": None,
         "media_path": None,
@@ -87,11 +92,13 @@ def _clean_detectors_dir():
 
 @pytest.fixture
 def _stub_split_training(monkeypatch):
-    """Train a deterministic MLP whose logit is ``3 - embedding[0]``.
+    """Train a deterministic MLP whose logit is ``100 * (embedding[0] - 0.65)``.
 
-    With embeddings ``[id, id + 0.5]`` and threshold 0.5 (sigmoid), media
-    ids 1/2/3 score above threshold (good) and 4/5 below (bad), giving a
-    fixed positive/negative split to assert against.
+    With the unit-norm embeddings from ``_make_audio_media`` (dim 0 = 0.9, 0.8,
+    0.7, 0.6, 0.5 for ids 1..5) and threshold 0.5 (sigmoid), the 0.65 boundary
+    puts ids 1/2/3 above threshold (good) and 4/5 below (bad), giving a fixed
+    positive/negative split to assert against.  The wide ``100`` scale keeps the
+    sigmoid margins clear of float-precision wobble.
     """
     import torch
     from torch import nn
@@ -101,8 +108,8 @@ def _stub_split_training(monkeypatch):
     def _fake_load_and_train(detector_names, media_type, first_chunk_medias):
         linear = nn.Linear(2, 1)
         with torch.no_grad():
-            linear.weight.data = torch.tensor([[-1.0, 0.0]])
-            linear.bias.data = torch.tensor([3.0])
+            linear.weight.data = torch.tensor([[100.0, 0.0]])
+            linear.bias.data = torch.tensor([-65.0])
         mlp = nn.Sequential(linear)
         mlp.eval()
         return {name: {"mlp": mlp, "threshold": 0.5} for name in detector_names}
