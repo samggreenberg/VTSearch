@@ -137,6 +137,7 @@ class TestContainerProjection:
         assert loaded is not None
         assert loaded[0].projection_id == "second-pid"
 
+
 class TestContainerMetaReaders:
     def test_read_embedder_from_container(self, tmp_path):
         from vtscore.datasets.loader_pickle import read_pkl_embedder
@@ -151,4 +152,3 @@ class TestContainerMetaReaders:
         path = tmp_path / "dataset.pkl"
         write_container(path, _medias_pkl_bytes(), _meta())
         assert read_pkl_clipper(path) == "test_clipper"
-
