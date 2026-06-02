@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import type { ProjectionMeta, ProjectionBuildResponse, TilePayload } from '../models/projection.models';
 
 @Injectable({ providedIn: 'root' })
@@ -9,7 +9,13 @@ export class ProjectionApiService {
   private http = inject(HttpClient);
 
   getMeta(): Observable<ProjectionMeta> {
-    return this.http.get<ProjectionMeta>('/api/projection/meta');
+    // The browse view polls this to discover whether a projection exists
+    // yet. A not-loaded / not-built dataset answers 404/409, which the
+    // caller handles inline (→ "empty"/Build affordance). Suppress the
+    // global error toast so that expected state doesn't alarm the user.
+    return this.http.get<ProjectionMeta>('/api/projection/meta', {
+      context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+    });
   }
 
   build(): Observable<ProjectionBuildResponse> {
