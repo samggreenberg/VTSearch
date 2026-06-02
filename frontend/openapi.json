@@ -163,6 +163,11 @@
           "calibration_fraction": {
             "type": "number"
           },
+          "dataset_max_age_days": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
           "detectors_dir": {
             "readOnly": true,
             "type": "string"
@@ -4005,6 +4010,10 @@
           },
           "calibration_fraction": {
             "type": "number"
+          },
+          "dataset_max_age_days": {
+            "nullable": true,
+            "type": "integer"
           },
           "detectors_dir": {
             "type": "string"
