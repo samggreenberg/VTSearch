@@ -1,6 +1,6 @@
 """Vectorized d3-hexbin binning over a 2-D point cloud (no d3 dependency).
 
-VictoryTones renders the UMAP projection as a field of hexagons whose color
+VTSBrowse renders the UMAP projection as a field of hexagons whose color
 encodes density.  To do that the server has to assign every projected point to
 a hex cell.  This module reimplements the `d3-hexbin
 <https://github.com/d3/d3-hexbin>`_ assignment algorithm in NumPy so a whole
@@ -12,7 +12,7 @@ spacing ``dx = r·√3`` and row spacing ``dy = 1.5·r``; odd rows are offset by
 half a column.  Anchoring in data space is what makes pure panning free in the
 renderer (membership only changes when the radius changes, i.e. across a zoom
 level), per *§Browse-canvas architecture* in
-``docs/design/victorytones-audio-browser.md``.
+``docs/design/vtsbrowse.md``.
 
 A bin is identified by an integer pair ``(q, r)`` where ``q = round(2·pi)``
 (d3's column index ``pi`` can be a half-integer after the edge correction, so we

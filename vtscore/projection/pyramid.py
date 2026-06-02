@@ -1,9 +1,9 @@
-"""Stage 2 of the VictoryTones browse canvas: the hex-tile pyramid.
+"""Stage 2 of the VTSBrowse browse canvas: the hex-tile pyramid.
 
 Given a frozen :class:`~vtscore.projection.umap_projection.Projection`, build a
 multi-resolution pyramid of hexagon aggregates that the canvas streams as it
 pans and zooms.  Per *§Browse-canvas architecture* in
-``docs/design/victorytones-audio-browser.md``:
+``docs/design/vtsbrowse.md``:
 
 - **Zoom levels** ``z = 0 … n_levels-1``.  Level 0 is coarsest (the whole
   projection in a handful of big hexes); each deeper level *halves the hex
@@ -19,7 +19,7 @@ pans and zooms.  Per *§Browse-canvas architecture* in
   tile is immutable for the life of the dataset and trivially cacheable.
 
 This module is pure NumPy (Flask-free) and does no I/O; persistence and the
-HTTP tile endpoint live in the VictoryTones app tier.
+HTTP tile endpoint live in the VTSearch Browse routes.
 """
 
 from __future__ import annotations

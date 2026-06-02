@@ -1,4 +1,4 @@
-"""App-wide L2-normalization-at-ingest invariant (VictoryTones prerequisite).
+"""App-wide L2-normalization-at-ingest invariant (VTSBrowse prerequisite).
 
 Every embedding that enters the system is L2-normalized exactly once, so
 downstream similarity is a plain dot product.  These tests pin the four
@@ -12,7 +12,7 @@ guarantees that make that safe, all model-free:
 * :mod:`vtscore.training.region_similarity` scores with a dot product (no
   per-comparison normalization) and still guards the zero-query case.
 
-See ``docs/design/victorytones-audio-browser.md`` §Prerequisite.
+See ``docs/design/vtsbrowse.md`` §Prerequisite.
 """
 
 from __future__ import annotations

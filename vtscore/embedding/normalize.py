@@ -22,8 +22,8 @@ applied at each point a vector enters the system:
 
 Because the invariant holds at the store, downstream consumers (the cached
 embedding matrix, the diversity tree's k-means, MLP training, region
-similarity, and the VictoryTones UMAP projection) all consume unit vectors
-without re-normalizing.  See ``docs/design/victorytones-audio-browser.md``
+similarity, and the VTSBrowse UMAP projection) all consume unit vectors
+without re-normalizing.  See ``docs/design/vtsbrowse.md``
 §Prerequisite for the full rationale and the behaviour changes this implies
 (angular diversity clustering; MLP input scale).
 

@@ -1,9 +1,9 @@
-"""Stage 1 of the VictoryTones browse canvas: project the embedding matrix to 2-D.
+"""Stage 1 of the VTSBrowse browse canvas: project the embedding matrix to 2-D.
 
 Runs UMAP on the cached ``(N, d)`` embedding matrix
 (:func:`vtscore.embedding.matrix.get_embedding_matrix`) to produce an
 ``(N, 2)`` layout.  Because embeddings are L2-normalized at ingest (see
-*§Prerequisite* in ``docs/design/victorytones-audio-browser.md``), Euclidean
+*§Prerequisite* in ``docs/design/vtsbrowse.md``), Euclidean
 distance on the unit sphere is monotonic in cosine distance, so UMAP uses the
 plain ``"euclidean"`` metric with no per-fit normalization.
 
