@@ -38,8 +38,15 @@ export const browseContextGuard: CanActivateFn = (route) => {
         return of(router.parseUrl('/dashboard'));
       }
 
+      // Fast-path only when the dataset is genuinely loaded in the
+      // backend. A matching *active* id is not sufficient: the dataset
+      // may have been unloaded/evicted since it was last active, in
+      // which case short-circuiting here would let the browse view fire
+      // requests that 409 `dataset_not_loaded`. When `loaded` is false
+      // we fall through to `applyActivePair`, which loads it first.
       if (
         activeContext.datasetId === datasetId &&
+        dataset.loaded &&
         !contextSwitch.switching
       ) {
         return of(true);
