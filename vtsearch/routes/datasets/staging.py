@@ -297,7 +297,7 @@ def import_dataset(importer_name: str):
     field_values = validate_plugin_args(
         importer,
         file_mode="bytesio",
-        extra_keys=("source_specs", "clipper", "embedder", "dataset_name"),
+        extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "build_projection"),
     )
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
@@ -331,7 +331,7 @@ register_plugin_typed_routes(
     path_template="/api/dataset/import/{plugin_name}",
     endpoint_prefix="import_dataset",
     delegate=import_dataset,
-    extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "clipper_params"),
+    extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "clipper_params", "build_projection"),
 )
 register_plugin_typed_routes(
     datasets_staging_bp,

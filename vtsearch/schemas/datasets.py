@@ -344,6 +344,10 @@ class DatasetLoadDemoRequestSchema(Schema):
     clipper = fields.String(load_default="")
     converter = fields.String(load_default="")
     dataset_name = fields.String(load_default="")
+    build_projection = fields.String(
+        load_default="false",
+        metadata={"description": "When 'true', compute + persist the 2-D Browse projection at ingest."},
+    )
 
 
 class DatasetLoadFolderRequestSchema(Schema):

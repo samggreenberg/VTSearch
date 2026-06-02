@@ -9,9 +9,12 @@
 > persistence** shipped (inside the dataset container), **ZIP container
 > format** shipped (single `.pkl` file containing `medias.pkl` + `meta.json`
 > + optional `projection.npz`; all legacy raw-pickle and sidecar support
-> removed), **and dataset age-off** shipped (server setting
+> removed), **dataset age-off** shipped (server setting
 > `dataset_max_age_days`, `expires_at` timestamp on datasets, auto-removal
-> on load/list).
+> on load/list), **and opt-in projection-at-creation** shipped (a "Build
+> 2-D Browse projection now" checkbox in every dataset importer that runs
+> the UMAP + pyramid build inline as a load stage instead of lazily on
+> first Browse visit; defaults off).
 > This doc scopes VTSBrowse as a **module within
 > VTSearch** — new routes, services, and Angular components that add a Browse
 > mode alongside the existing Find and Train modes. See *§What shipped* and
@@ -671,6 +674,31 @@ and available to any future consumer of `vtscore`.
     reads via `read_container`.
   - Stage-file endpoint extracts `medias.pkl` from the ZIP for peeking.
   - Tests: `tests_lib/datasets/test_container.py`.
+
+- **Opt-in projection-at-creation.** A "Build 2-D Browse projection now"
+  checkbox in the Advanced block of every dataset importer lets the user
+  spend the UMAP + hex-tile compute up front (so Browse opens instantly)
+  instead of paying for it lazily on first Browse visit. Defaults **off**:
+  building the projection is a cost the user explicitly opts into.
+  - Frontend: the checkbox lives in the shared `vt-import-advanced`
+    component, so it appears uniformly across the generic-form,
+    server-folder, local-folder/files, and demo import flows. Its value
+    rides each flow's existing submit path (`runImporter` params,
+    `import-local-{folder,files}` multipart, `load-file` multipart,
+    `load-demo` body) as a `build_projection` `"true"`/`"false"` string.
+  - Backend: `build_projection` is a framework-level pass-through key
+    (like `clipper` / `embedder` / `dataset_name`), threaded through
+    `_run_importer_in_background` → `_run_origin_load_in_background` to a
+    new inline `_build_projection_stage`. The stage runs **after** the
+    dataset is registered, fits UMAP on the cached embedding matrix,
+    builds the hex-tile pyramid, caches both on the `DatasetContext`, and
+    persists them into the container via `_persist_projection_to_container`
+    (resolving the pkl path through the dataset registry). It is
+    **best-effort by contract**: the dataset is already saved and usable
+    before it runs, so a failure — or a cancel during the fit — leaves the
+    dataset intact and just defers the projection to the lazy Browse-time
+    build. Empty / embedding-less datasets are a silent no-op.
+  - Tests: `tests/datasets/test_load_projection_stage.py`.
 
 - **Dataset age-off.** Server setting `dataset_max_age_days` (default: None
   = never expire) stamps new datasets with an `expires_at` timestamp in
