@@ -1202,8 +1202,8 @@ class TestEmbedMediaLock:
         finally:
             MediaEmbedder._embed_lock = original_lock
 
-    def test_embed_media_delegates_to_impl(self):
-        """embed_media() should call _embed_media_impl() and return its result."""
+    def test_embed_media_delegates_to_impl_and_normalizes(self):
+        """embed_media() calls _embed_media_impl() and L2-normalizes its result."""
         from vtscore.media.embedder import MediaEmbedder
 
         class SimpleEmbedder(MediaEmbedder):
@@ -1219,12 +1219,14 @@ class TestEmbedMediaLock:
                 pass
 
             def _embed_media_impl(self, media):
-                return np.ones(4, dtype=np.float32)
+                return np.ones(4, dtype=np.float32)  # raw norm 2
 
-            def embed_text(self, text):
+            def _embed_text_impl(self, text):
                 return None
 
         emb = SimpleEmbedder()
         result = emb.embed_media({"media_path": "/fake"})
         assert result is not None
-        np.testing.assert_array_equal(result, np.ones(4, dtype=np.float32))
+        # The base wrapper normalizes the raw (norm-2) vector to unit length.
+        np.testing.assert_allclose(result, np.full(4, 0.5, dtype=np.float32), atol=1e-6)
+        np.testing.assert_allclose(np.linalg.norm(result), 1.0, atol=1e-6)

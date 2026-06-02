@@ -69,6 +69,8 @@
             [selectedClipper]="selectedDemoClipper"
             [selectedClipperParams]="{}"
             (clipperChooserRequested)="openClipperChooser('demo')"
+            [buildProjection]="buildProjection"
+            (buildProjectionChange)="buildProjection = $event"
           ></vt-import-advanced>
         </div>
       }
@@ -129,6 +131,8 @@
           [selectedClipper]="sfSelectedClipper"
           [selectedClipperParams]="sfClipperParamValues"
           (clipperChooserRequested)="openClipperChooser('sf')"
+          [buildProjection]="buildProjection"
+          (buildProjectionChange)="buildProjection = $event"
         ></vt-import-advanced>
       </div>
 
@@ -204,6 +208,8 @@
           [selectedClipper]="lfSelectedClipper"
           [selectedClipperParams]="lfClipperParamValues"
           (clipperChooserRequested)="openClipperChooser('lf')"
+          [buildProjection]="buildProjection"
+          (buildProjectionChange)="buildProjection = $event"
         ></vt-import-advanced>
       </div>
 
@@ -362,6 +368,8 @@
           [selectedClipper]="selectedClipper"
           [selectedClipperParams]="clipperParamValues"
           (clipperChooserRequested)="openClipperChooser('form')"
+          [buildProjection]="buildProjection"
+          (buildProjectionChange)="buildProjection = $event"
         ></vt-import-advanced>
       </div>
 

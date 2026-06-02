@@ -195,7 +195,7 @@ class VideoVideoMAEEmbedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding %s", source_repr)
             return None
 
-    def embed_text(self, text: str) -> Optional[np.ndarray]:
+    def _embed_text_impl(self, text: str) -> Optional[np.ndarray]:
         """VideoMAE is vision-only - text queries are unsupported.
 
         Returns ``None`` so :func:`vtsearch.routes.media.embed.embed_text`

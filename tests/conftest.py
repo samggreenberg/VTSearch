@@ -64,7 +64,10 @@ def _fake_embed_audio(arg):
     except Exception:
         seed = hash(str(path)) % 2**31
     rng = np.random.RandomState(seed)
-    return rng.randn(_EMBEDDING_DIM).astype(np.float32)
+    vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
+    # Real embedders now L2-normalize at ingest, so the fakes must too:
+    # region_similarity scores by dot product on the unit-norm assumption.
+    return vec / np.linalg.norm(vec)
 
 
 def _fake_embed_text(text):
@@ -73,7 +76,8 @@ def _fake_embed_text(text):
 
     seed = int(_hl.md5(text.encode()).hexdigest(), 16) % 2**31
     rng = np.random.RandomState(seed)
-    return rng.randn(_EMBEDDING_DIM).astype(np.float32)
+    vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
+    return vec / np.linalg.norm(vec)
 
 
 # Patch embed_audio_file so init_medias() never triggers CLAP model loading.

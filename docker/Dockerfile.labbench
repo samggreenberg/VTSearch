@@ -20,7 +20,8 @@
 #     See ``vtsearch.settings.get_effective_hidden_plugins`` for the
 #     merge semantics; the same effect is achievable at runtime with
 #     ``--hide-plugin converters:audio2image --hide-plugin importers:demo``
-#     in dev-mode invocations.
+#     in dev-mode invocations. It also sets ``dataset_max_age_days = 30``
+#     so every new dataset ages off ~1 month after creation.
 #
 # Build (from repo root):
 #   docker build -f docker/Dockerfile.labbench -t vtsearch:labbench .
@@ -106,6 +107,12 @@ RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_ver
 #   Hidden plugins remain importable by name for any backend code that
 #   names them directly; this is a UI declutter, not a security gate.
 #
+# * ``dataset_max_age_days=30`` gives every dataset created on this
+#   server a ~1-month age-off: it's stamped with an ``expires_at`` 30
+#   days out and auto-removed from the registry once that passes. This
+#   keeps the shared LabBench volume from accumulating stale datasets
+#   indefinitely. Users can change or clear it in Settings.
+#
 # Per-user tier (``data/default/user_settings.json``; the
 # ``DefaultLoginProvider`` resolves to the ``default`` user):
 #
@@ -122,6 +129,7 @@ RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_ver
 RUN mkdir -p /app/data /app/data/default && \
     printf '%s\n' \
       '{' \
+      '  "dataset_max_age_days": 30,' \
       '  "hidden_plugins": {' \
       '    "converters": ["audio2image"],' \
       '    "importers": ["demo"]' \

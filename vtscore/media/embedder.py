@@ -592,10 +592,19 @@ class MediaEmbedder(ABC):
         time across all embedder types.  Subclasses must override
         :meth:`_embed_media_impl` (not this method).
 
+        The returned vector is **L2-normalized** here (via
+        :func:`vtscore.embedding.normalize.l2_normalize`) so that every
+        embedding stored in ``medias`` is unit-norm regardless of which
+        embedder produced it; subclasses must not (and need not) normalize
+        themselves.
+
         Returns ``None`` if the media cannot be embedded.
         """
+        from vtscore.embedding.normalize import l2_normalize  # noqa: PLC0415
+
         with self._embed_lock:
-            return self._embed_media_impl(media)
+            vec = self._embed_media_impl(media)
+        return None if vec is None else l2_normalize(vec)
 
     @abstractmethod
     def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
@@ -622,10 +631,19 @@ class MediaEmbedder(ABC):
         per request should override :meth:`_embed_media_bulk_impl`.  If
         they chunk internally (batching), they are responsible for
         emitting their own progress updates through :attr:`_on_progress`.
+
+        Every returned vector is **L2-normalized** here so the stored-as-
+        unit-norm invariant holds for the bulk path too (the default impl
+        already routes through :meth:`embed_media`, so re-normalizing is a
+        harmless no-op; overriding impls that batch raw outputs are covered
+        here).
         """
         if not medias:
             return []
-        return self._embed_media_bulk_impl(medias)
+        from vtscore.embedding.normalize import l2_normalize  # noqa: PLC0415
+
+        vectors = self._embed_media_bulk_impl(medias)
+        return [None if v is None else l2_normalize(v) for v in vectors]
 
     def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
         """Subclass hook: embed a list of media items.
@@ -660,7 +678,27 @@ class MediaEmbedder(ABC):
     def embed_text(self, text: str) -> Optional[np.ndarray]:
         """Return an embedding of *text* in the **same vector space** as :meth:`embed_media`.
 
-        The default implementation returns ``None`` (text sorting unavailable).
+        The result is **L2-normalized** here so query vectors are unit-norm
+        just like stored media embeddings; this is what lets
+        :mod:`vtscore.training.region_similarity` score with a plain dot
+        product instead of re-normalizing on every comparison.  Subclasses
+        override :meth:`_embed_text_impl` (not this method) and need not
+        normalize themselves.
+
+        Returns ``None`` when this embedder cannot embed text.
+        """
+        vec = self._embed_text_impl(text)
+        if vec is None:
+            return None
+        from vtscore.embedding.normalize import l2_normalize  # noqa: PLC0415
+
+        return l2_normalize(vec)
+
+    def _embed_text_impl(self, text: str) -> Optional[np.ndarray]:
+        """Subclass hook: embed a text query.
+
+        Override this instead of :meth:`embed_text`.  The default returns
+        ``None`` (text sorting unavailable).
         """
         return None
 

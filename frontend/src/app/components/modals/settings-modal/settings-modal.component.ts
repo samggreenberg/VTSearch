@@ -306,6 +306,28 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     return this.settings.effective_solo_media_type || null;
   }
 
+  /** Comma-separated list of auto-run detector names for the read-only
+   *  Server tab, or ``''`` when none are configured (so the template can
+   *  fall back to a muted "None"). */
+  get autorunDetectorsDisplay(): string {
+    const list = (this.settings as Record<string, unknown>)['autorun_detectors'] as string[] | undefined;
+    return list && list.length ? list.join(', ') : '';
+  }
+
+  /** Effective hidden-plugins map flattened to ``[{family, names}]`` rows
+   *  (sorted by family, empty families dropped) for the read-only Server
+   *  tab. ``names`` is the comma-joined plugin names within the family. */
+  get hiddenPluginsDisplay(): { family: string; names: string }[] {
+    const raw = (this.settings as Record<string, unknown>)['hidden_plugins'] as
+      | Record<string, string[]>
+      | undefined;
+    if (!raw) return [];
+    return Object.keys(raw)
+      .filter((family) => (raw[family] || []).length > 0)
+      .sort()
+      .map((family) => ({ family, names: (raw[family] || []).join(', ') }));
+  }
+
   async resetDefaults(): Promise<void> {
     const ok = await this.dialog.confirmDestructive(
       'Reset all settings to factory defaults?',

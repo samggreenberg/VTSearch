@@ -59,6 +59,11 @@ datasets_load_bp = Blueprint(
 LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
 
 
+def _form_flag(raw: str | None) -> bool:
+    """Parse a multipart checkbox value (``"true"``/``"false"``) to ``bool``."""
+    return (raw or "").strip().lower() == "true"
+
+
 def _parse_clipper_params(raw: str) -> dict | None:
     if not raw:
         return None
@@ -212,6 +217,7 @@ def import_local_folder():
         embedder=field_values.get("embedder", ""),
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
+        build_projection=_form_flag(request.form.get("build_projection")),
     )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
@@ -303,6 +309,7 @@ def import_local_files():
         embedder=field_values.get("embedder", ""),
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
+        build_projection=_form_flag(request.form.get("build_projection")),
     )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
@@ -337,6 +344,8 @@ def load_demo_dataset_route(body: dict):
     field_values: dict = {"name": dataset_name}
     if user_dataset_name:
         field_values["dataset_name"] = user_dataset_name
+    if _form_flag(body.get("build_projection")):
+        field_values["build_projection"] = "true"
     # Inject media_type so the loading task exposes it to the frontend,
     # allowing the "guessed type" logic to consider in-progress loads.
     if converter_name:
@@ -378,7 +387,13 @@ def load_dataset_file():
     # Flask FileStorage stream is only valid during the request lifecycle.
     file_bytes = io.BytesIO(file.read())
     file_bytes.name = file.filename
-    task_id = _run_importer_in_background(importer, {"file": file_bytes})
+    task_id = _run_importer_in_background(
+        importer,
+        {
+            "file": file_bytes,
+            "build_projection": "true" if _form_flag(request.form.get("build_projection")) else "false",
+        },
+    )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 

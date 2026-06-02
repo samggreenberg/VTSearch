@@ -240,6 +240,9 @@ export interface DatasetRegistryEntry {
   readers?: string[];
   /** Name of the embedder this dataset's media were vectorised with. */
   embedder?: string;
+  /** Unix timestamp (seconds) at which this dataset ages off and is
+   *  automatically removed; `null`/absent means it never expires. */
+  expires_at?: number | null;
   [key: string]: unknown;
 }
 

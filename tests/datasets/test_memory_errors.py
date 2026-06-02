@@ -36,14 +36,15 @@ class TestPickleMemoryError:
     """load_dataset_from_pickle should handle MemoryError gracefully."""
 
     def test_pickle_load_oom_raises_with_message(self, tmp_path):
-        """If pickle.load itself OOMs, a clear MemoryError is raised."""
+        """If reading the container OOMs, a clear MemoryError is raised."""
+        from vtscore.datasets.container import write_container
         from vtscore.datasets.loader import load_dataset_from_pickle
 
         pkl = tmp_path / "big.pkl"
-        pkl.write_bytes(pickle.dumps({"medias": {}}))
+        write_container(pkl, pickle.dumps({"medias": {}}), {"format_version": 1})
 
         target: dict = {}
-        with mock.patch("vtscore.datasets.loader_pickle.safe_pickle_load", side_effect=MemoryError):
+        with mock.patch("vtscore.datasets.container.safe_pickle_load", side_effect=MemoryError):
             with pytest.raises(MemoryError, match="too large for available RAM"):
                 load_dataset_from_pickle(pkl, target)
 
@@ -51,9 +52,9 @@ class TestPickleMemoryError:
 
     def test_pickle_clip_loop_oom_clears_clips(self, tmp_path):
         """If MemoryError occurs during media processing, medias are cleared."""
+        from vtscore.datasets.container import write_container
         from vtscore.datasets.loader import load_dataset_from_pickle
 
-        # Create a pickle with several medias
         medias_data = {}
         for i in range(1, 6):
             medias_data[i] = {
@@ -64,22 +65,25 @@ class TestPickleMemoryError:
                 "md5": f"md5_{i}",
             }
         pkl = tmp_path / "medium.pkl"
-        pkl.write_bytes(pickle.dumps({"medias": medias_data}))
+        write_container(pkl, pickle.dumps({"medias": medias_data}), {"format_version": 1})
 
         target: dict = {}
 
-        # Make np.array raise MemoryError on the 3rd call
+        # Make the per-media embedding step raise MemoryError on the 3rd
+        # call (l2_normalize is called once per media when building the
+        # pickle media dict, so it stands in for the old np.array hook).
+        from vtscore.embedding.normalize import l2_normalize as _real_l2
+
         call_count = 0
-        original_np_array = np.array
 
         def oom_on_third_call(*args, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count >= 3:
                 raise MemoryError("simulated OOM")
-            return original_np_array(*args, **kwargs)
+            return _real_l2(*args, **kwargs)
 
-        with mock.patch("vtscore.datasets.loader_pickle.np.array", side_effect=oom_on_third_call):
+        with mock.patch("vtscore.datasets.loader_pickle.l2_normalize", side_effect=oom_on_third_call):
             with pytest.raises(MemoryError, match="Out of memory after loading"):
                 load_dataset_from_pickle(pkl, target)
 
@@ -99,8 +103,10 @@ class TestPickleMemoryError:
                 "md5": "abc",
             }
         }
+        from vtscore.datasets.container import write_container
+
         pkl = tmp_path / "small.pkl"
-        pkl.write_bytes(pickle.dumps({"medias": medias_data}))
+        write_container(pkl, pickle.dumps({"medias": medias_data}), {"format_version": 1})
 
         target: dict = {}
         with mock.patch("vtscore.datasets.loader_pickle.gc.collect") as mock_gc:
@@ -161,6 +167,8 @@ class TestCombineMemoryError:
         from vtscore.datasets.importers.combine_datasets import CombineDatasetsImporter
 
         # Create two small pickles
+        from vtscore.datasets.container import write_container
+
         for name in ("a.pkl", "b.pkl"):
             medias_data = {
                 1: {
@@ -171,7 +179,7 @@ class TestCombineMemoryError:
                     "md5": f"md5_{name}",
                 }
             }
-            (tmp_path / name).write_bytes(pickle.dumps({"medias": medias_data}))
+            write_container(tmp_path / name, pickle.dumps({"medias": medias_data}), {"format_version": 1})
 
         importer = CombineDatasetsImporter()
         target: dict = {}
