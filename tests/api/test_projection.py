@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import numpy as np
 
 import app as app_module  # noqa: F401
@@ -30,6 +32,17 @@ def _wait_projection(timeout: float = 30.0) -> None:
         if follow is None or follow.job_id == job.job_id:
             return
     raise TimeoutError(f"projection job did not finish within {timeout}s")
+
+
+def _fake_fit_projection(matrix, ids, **kwargs):
+    """PCA-like fast fake to avoid numba JIT from UMAP."""
+    from vtscore.projection.umap_projection import Projection
+
+    rng = np.random.default_rng(0)
+    coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+    import uuid
+
+    return Projection(uuid.uuid4().hex, list(ids), coords, "fake")
 
 
 class TestProjectionMeta:
@@ -74,7 +87,8 @@ class TestProjectionBuild:
         finally:
             ctx.medias.update(saved)
 
-    def test_build_and_poll(self, client):
+    @patch("vtsearch.routes.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_build_and_poll(self, _mock_fit, client):
         resp = client.post("/api/projection/build")
         assert resp.status_code == 200
         body = resp.get_json()
@@ -140,7 +154,7 @@ class TestProjectionTiles:
         ctx._pyramid = pyr
 
         found_cells = False
-        for (level, tx, ty), tile in pyr.tiles.items():
+        for (level, tx, ty) in pyr.tiles:
             resp = client.get(f"/api/projection/tiles/{level}/{tx}/{ty}")
             assert resp.status_code == 200
             body = resp.get_json()

@@ -11796,7 +11796,6 @@
           "name": "tx",
           "required": true,
           "schema": {
-            "minimum": 0,
             "type": "integer"
           }
         },
@@ -11805,7 +11804,6 @@
           "name": "ty",
           "required": true,
           "schema": {
-            "minimum": 0,
             "type": "integer"
           }
         }

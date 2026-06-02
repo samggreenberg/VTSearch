@@ -143,7 +143,7 @@ def projection_meta():
     return {"status": "idle"}
 
 
-@projection_bp.route("/api/projection/tiles/<int:level>/<int:tx>/<int:ty>", methods=["GET"])
+@projection_bp.route("/api/projection/tiles/<int:level>/<int(signed=True):tx>/<int(signed=True):ty>", methods=["GET"])
 @projection_bp.response(200, TileResponseSchema)
 @projection_bp.alt_response(404, description="Tile not found or projection not ready.")
 def get_tile(level: int, tx: int, ty: int):
