@@ -1,12 +1,14 @@
 # Design: VTSBrowse — a UMAP hexbin Dataset Browser in VTSearch
 
-> **Status:** Prerequisite shipped (app-wide L2 normalization at ingest) **and
-> the Flask-free projection backend** (`vtscore/projection/`: UMAP fit +
-> hex-tile pyramid). The Browse routes and Angular browse canvas are not yet
-> built. This doc scopes VTSBrowse as a **module within VTSearch** — new
-> routes, services, and Angular components that add a Browse mode alongside
-> the existing Find and Train modes. See *§What shipped* and *§Open
-> follow-ups* at the bottom for where things stand.
+> **Status:** Prerequisite shipped (app-wide L2 normalization at ingest),
+> **Flask-free projection backend** (`vtscore/projection/`: UMAP fit +
+> hex-tile pyramid), **and the Angular browse canvas** (Canvas 2D renderer,
+> pan/zoom, hover preview, tile caching, `/browse/:datasetId` route). The
+> Browse routes (`/api/projection/{build,meta,tiles}`) and projection
+> persistence are not yet built. This doc scopes VTSBrowse as a **module
+> within VTSearch** — new routes, services, and Angular components that add a
+> Browse mode alongside the existing Find and Train modes. See *§What
+> shipped* and *§Open follow-ups* at the bottom for where things stand.
 >
 > **Direction change (this revision):** the original sketch was a
 > *hover-to-hear grid* that reused VTSearch's left-panel media-list. The
@@ -569,10 +571,51 @@ and available to any future consumer of `vtscore`.
     `test_hexbin.py`, `test_umap_projection.py`, `test_pyramid.py`.
   - **Not yet built (next phases):** persistence of the projection + pyramid
     with the dataset artifact (the carve-out), the Browse routes in
-    `vtsearch/routes/` (`/api/projection/{build,meta,tiles}` endpoints), and
-    the Canvas 2D frontend components (Stage 3).
+    `vtsearch/routes/` (`/api/projection/{build,meta,tiles}` endpoints).
+
+- **Browse canvas frontend (Stage 3).** Angular components for the Canvas 2D
+  hex-tile renderer, coded against the `Tile.to_payload()` / `Pyramid.meta()`
+  contracts from the projection backend. Backend routes are not yet wired.
+  - `BrowseCanvasComponent` — Canvas 2D renderer with:
+    - Affine projection-space ↔ screen-space transform (pan = translate,
+      zoom = scale about cursor).
+    - Automatic level-of-detail: picks the pyramid zoom level whose hex
+      screen radius is ~28px.
+    - Viewport culling: only draws hexes inside the visible area.
+    - Density colormap: viridis (14-stop LUT), log-scaled count.
+    - Hover hit-test: finds the nearest hex within one radius of the cursor.
+    - Tile prefetch: neighbors + adjacent zoom levels.
+    - ResizeObserver for responsive canvas sizing; devicePixelRatio-aware.
+  - `BrowseHoverPreviewComponent` — media-type-dependent hover previews:
+    audio playback (looped, hard-cut on move), image/video thumbnails,
+    text snippets (fetched via `/api/medias/<id>/paragraph`).
+  - `BrowseViewComponent` — routed view with status states (loading,
+    building, ready, empty, error), projection build trigger, dataset
+    info overlay.
+  - `ProjectionApiService` — API calls for the future
+    `/api/projection/{build,meta,tiles}` endpoints.
+  - `TileCacheService` — LRU tile cache (512 entries) with in-flight
+    request dedup, shareReplay, and neighbor/level prefetching.
+  - `browseContextGuard` — dataset-only route guard; Browse requires no
+    detector.
+  - Route: `/browse/:datasetId` (lazy-loaded `BrowseViewComponent`).
+  - App shell integration: `isOnLabelView` recognizes `/browse`;
+    incompatible-pair explainer skipped (no detector on browse).
+  - `ContextSwitchService` updated to navigate within `/browse` when the
+    dataset pulldown changes on the browse route.
+  - **Not yet wired:** sibling highlighting (needs source-file group ids
+    in the tile payload or a server-side lookup endpoint), and the
+    backend routes themselves.
 
 ## Open follow-ups
+- **Browse routes + projection persistence:** the Flask routes
+  (`/api/projection/{build,meta,tiles}`) and persistence of the projection +
+  pyramid with the dataset artifact are the remaining backend work before the
+  browse canvas is functional end-to-end.
+- **Sibling highlighting:** hovering a hex should highlight hexes containing
+  items from the same source file. Requires either source-file group ids in
+  the tile payload or a server-side lookup endpoint keyed by group id. The
+  canvas component has the rendering path ready but the data isn't wired yet.
 - **VTSearch detector handoff:** v1 is browse-only. The deferred feature is
   letting a user select/vote items on the canvas to seed VTSearch's existing
   train-a-detector flow (and, once a detector exists, optionally recolor hexes
