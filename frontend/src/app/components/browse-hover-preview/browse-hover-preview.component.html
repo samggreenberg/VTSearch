@@ -1,0 +1,16 @@
+@if (visible) {
+  <div
+    class="hover-popup"
+    [style.left.px]="left"
+    [style.top.px]="top"
+  >
+    <div class="hover-count">{{ count }} {{ count === 1 ? 'item' : 'items' }}</div>
+    @if (imageSrc) {
+      <img [src]="imageSrc" class="hover-image" alt="Preview" />
+    }
+    @if (textContent) {
+      <div class="hover-text">{{ textContent }}</div>
+    }
+  </div>
+}
+<audio #audioEl [src]="audioSrc" style="display: none"></audio>
