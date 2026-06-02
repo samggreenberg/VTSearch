@@ -17,6 +17,11 @@ VTSearch Browse routes, not here.
 from __future__ import annotations
 
 from vtscore.projection.hexbin import hex_center, hexbin_assign
+from vtscore.projection.persistence import (
+    load_projection,
+    projection_sidecar_path,
+    save_projection,
+)
 from vtscore.projection.pyramid import (
     HexCell,
     LevelMeta,
@@ -38,4 +43,7 @@ __all__ = [
     "max_useful_levels",
     "hexbin_assign",
     "hex_center",
+    "save_projection",
+    "load_projection",
+    "projection_sidecar_path",
 ]

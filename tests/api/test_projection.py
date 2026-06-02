@@ -121,6 +121,97 @@ class TestProjectionBuild:
         assert body["projection_id"] == "cached-id"
 
 
+class TestProjectionPersistence:
+    """Sidecar save/load integration in the build route."""
+
+    def test_build_loads_from_sidecar(self, client):
+        """When a valid sidecar exists, build returns ready without computing."""
+        ctx = get_active_context()
+        ids = sorted(ctx.medias.keys())
+        rng = np.random.default_rng(55)
+        coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+        proj = Projection("sidecar-pid", ids, coords, "pca")
+        pyr = build_pyramid(proj, n_levels=2)
+
+        from vtscore.projection.persistence import save_projection
+
+        fake_pkl = "/tmp/test_sidecar_load.pkl"  # noqa: S108
+        save_projection(fake_pkl, proj, pyr)
+
+        with patch(
+            "vtsearch.routes.projection._pkl_path_for",
+            return_value=fake_pkl,
+        ):
+            resp = client.post("/api/projection/build")
+            assert resp.status_code == 200
+            body = resp.get_json()
+            assert body["status"] == "ready"
+            assert body["projection_id"] == "sidecar-pid"
+
+        assert ctx._pyramid is not None
+        assert ctx._pyramid.projection_id == "sidecar-pid"
+
+        import os
+
+        os.unlink(fake_pkl.replace(".pkl", ".projection"))
+
+    def test_build_skips_stale_sidecar(self, client):
+        """A sidecar with mismatched ids is ignored."""
+        ctx = get_active_context()
+        wrong_ids = [999990, 999991, 999992]
+        rng = np.random.default_rng(66)
+        coords = rng.standard_normal((3, 2)).astype(np.float32)
+        proj = Projection("stale-pid", wrong_ids, coords, "pca")
+        pyr = build_pyramid(proj, n_levels=1)
+
+        from vtscore.projection.persistence import save_projection
+
+        fake_pkl = "/tmp/test_sidecar_stale.pkl"  # noqa: S108
+        save_projection(fake_pkl, proj, pyr)
+
+        with (
+            patch(
+                "vtsearch.routes.projection._pkl_path_for",
+                return_value=fake_pkl,
+            ),
+            patch(
+                "vtscore.projection.umap_projection.fit_projection",
+                side_effect=_fake_fit_projection,
+            ),
+        ):
+            resp = client.post("/api/projection/build")
+            assert resp.status_code == 200
+            body = resp.get_json()
+            assert body["status"] in ("building", "ready")
+            if body["status"] == "building":
+                _wait_projection()
+            assert ctx._pyramid is not None
+            assert ctx._pyramid.projection_id != "stale-pid"
+
+        import os
+
+        sidecar = fake_pkl.replace(".pkl", ".projection")
+        if os.path.exists(sidecar):
+            os.unlink(sidecar)
+
+    @patch("vtscore.projection.umap_projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_build_saves_sidecar(self, _mock_fit, client, tmp_path):
+        """After a fresh build, the projection is persisted to a sidecar."""
+        fake_pkl = str(tmp_path / "persist_test.pkl")
+        with patch(
+            "vtsearch.routes.projection._pkl_path_for",
+            return_value=fake_pkl,
+        ):
+            resp = client.post("/api/projection/build")
+            assert resp.status_code == 200
+            _wait_projection()
+
+        from pathlib import Path
+
+        sidecar = Path(fake_pkl).with_suffix(".projection")
+        assert sidecar.exists(), "sidecar should be written after build"
+
+
 class TestProjectionTiles:
     """``GET /api/projection/tiles/<level>/<tx>/<ty>``."""
 

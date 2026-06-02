@@ -33,6 +33,16 @@ def _media_type_for(ctx) -> str:
     return first.get("media_type", "audio")
 
 
+def _pkl_path_for(dataset_id: str) -> str | None:
+    """Return the pkl_path from the dataset registry, or ``None``."""
+    from vtscore.datasets.registry import get_dataset
+
+    entry = get_dataset(dataset_id)
+    if entry is None:
+        return None
+    return entry.get("pkl_path") or None
+
+
 @projection_bp.route("/api/projection/build", methods=["POST"])
 @projection_bp.response(200, ProjectionBuildResponseSchema)
 @projection_bp.alt_response(409, description="Dataset is empty or has no embeddings.")
@@ -67,6 +77,20 @@ def build_projection():
     if matrix.size == 0:
         abort(409, message="Dataset has no embeddings — nothing to project.")
 
+    # Try loading a persisted projection from the sidecar file.
+    pkl_path = _pkl_path_for(ctx.dataset_id)
+    if pkl_path is not None:
+        from vtscore.projection.persistence import load_projection
+
+        loaded = load_projection(pkl_path)
+        if loaded is not None:
+            proj, pyr = loaded
+            if set(proj.ids) == set(sorted_ids):
+                ctx._projection = proj
+                ctx._pyramid = pyr
+                return {"status": "ready", "projection_id": pyr.projection_id}
+            logger.info("Sidecar projection ids mismatch; will recompute.")
+
     sig = (ctx.dataset_id, tuple(sorted_ids))
     cached = projection_jobs.cached_for(sig)
     if cached is not None and cached.result is not None:
@@ -77,6 +101,7 @@ def build_projection():
 
     mat_copy = matrix.copy()
     ids_copy = list(sorted_ids)
+    dataset_id = ctx.dataset_id
 
     def _run(job):
         with thread_dataset_context(ctx):
@@ -97,6 +122,8 @@ def build_projection():
             ctx._projection = proj
             ctx._pyramid = pyr
             job.result = (proj, pyr)
+
+            _persist_projection(dataset_id, proj, pyr)
 
     job = projection_jobs.start(
         sig,
@@ -164,6 +191,19 @@ def get_tile(level: int, tx: int, ty: int):
         return {"level": level, "tx": tx, "ty": ty, "cells": []}
 
     return tile.to_payload()
+
+
+def _persist_projection(dataset_id: str, proj, pyr) -> None:
+    """Best-effort save of the projection sidecar after a build."""
+    pkl_path = _pkl_path_for(dataset_id)
+    if pkl_path is None:
+        return
+    try:
+        from vtscore.projection.persistence import save_projection
+
+        save_projection(pkl_path, proj, pyr)
+    except Exception:
+        logger.warning("Failed to persist projection sidecar for %s", dataset_id, exc_info=True)
 
 
 __all__ = ["projection_bp"]
