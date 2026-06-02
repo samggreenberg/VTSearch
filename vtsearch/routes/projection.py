@@ -43,8 +43,8 @@ def _pkl_path_for(dataset_id: str) -> str | None:
     return entry.get("pkl_path") or None
 
 
-def _try_load_sidecar(ctx, sorted_ids: list[int]) -> dict | None:
-    """Try to restore a projection from the dataset container or sidecar.
+def _try_load_persisted(ctx, sorted_ids: list[int]) -> dict | None:
+    """Try to restore a projection from the dataset container.
 
     Returns a ready-response dict on success, or ``None`` if no valid
     persisted projection is available.
@@ -100,10 +100,9 @@ def build_projection():
     if matrix.size == 0:
         abort(409, message="Dataset has no embeddings — nothing to project.")
 
-    # Try loading a persisted projection from the sidecar file.
-    sidecar_result = _try_load_sidecar(ctx, sorted_ids)
-    if sidecar_result is not None:
-        return sidecar_result
+    persisted = _try_load_persisted(ctx, sorted_ids)
+    if persisted is not None:
+        return persisted
 
     sig = (ctx.dataset_id, tuple(sorted_ids))
     cached = projection_jobs.cached_for(sig)

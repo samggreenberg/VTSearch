@@ -122,41 +122,45 @@ class TestProjectionBuild:
 
 
 class TestProjectionPersistence:
-    """Sidecar save/load integration in the build route."""
+    """Container-based projection persistence in the build route."""
 
-    def test_build_loads_from_sidecar(self, client):
-        """When a valid sidecar exists, build returns ready without computing."""
+    def test_build_loads_from_container(self, client, tmp_path):
+        """When a valid projection exists in the container, build returns ready without computing."""
+        import pickle as _pickle
+
+        from vtscore.datasets.container import append_projection, write_container
+
         ctx = get_active_context()
         ids = sorted(ctx.medias.keys())
         rng = np.random.default_rng(55)
         coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
-        proj = Projection("sidecar-pid", ids, coords, "pca")
+        proj = Projection("container-pid", ids, coords, "pca")
         pyr = build_pyramid(proj, n_levels=2)
 
-        from vtscore.projection.persistence import save_projection
-
-        fake_pkl = "/tmp/test_sidecar_load.pkl"  # noqa: S108
-        save_projection(fake_pkl, proj, pyr)
+        fake_pkl = tmp_path / "test_container_load.pkl"
+        pkl_bytes = _pickle.dumps({"medias": {}})
+        write_container(fake_pkl, pkl_bytes, {"format_version": 1})
+        append_projection(fake_pkl, proj, pyr)
 
         with patch(
             "vtsearch.routes.projection._pkl_path_for",
-            return_value=fake_pkl,
+            return_value=str(fake_pkl),
         ):
             resp = client.post("/api/projection/build")
             assert resp.status_code == 200
             body = resp.get_json()
             assert body["status"] == "ready"
-            assert body["projection_id"] == "sidecar-pid"
+            assert body["projection_id"] == "container-pid"
 
         assert ctx._pyramid is not None
-        assert ctx._pyramid.projection_id == "sidecar-pid"
+        assert ctx._pyramid.projection_id == "container-pid"
 
-        import os
+    def test_build_skips_stale_container_projection(self, client, tmp_path):
+        """A container projection with mismatched ids is ignored."""
+        import pickle as _pickle
 
-        os.unlink(fake_pkl.replace(".pkl", ".projection"))
+        from vtscore.datasets.container import append_projection, write_container
 
-    def test_build_skips_stale_sidecar(self, client):
-        """A sidecar with mismatched ids is ignored."""
         ctx = get_active_context()
         wrong_ids = [999990, 999991, 999992]
         rng = np.random.default_rng(66)
@@ -164,15 +168,15 @@ class TestProjectionPersistence:
         proj = Projection("stale-pid", wrong_ids, coords, "pca")
         pyr = build_pyramid(proj, n_levels=1)
 
-        from vtscore.projection.persistence import save_projection
-
-        fake_pkl = "/tmp/test_sidecar_stale.pkl"  # noqa: S108
-        save_projection(fake_pkl, proj, pyr)
+        fake_pkl = tmp_path / "test_container_stale.pkl"
+        pkl_bytes = _pickle.dumps({"medias": {}})
+        write_container(fake_pkl, pkl_bytes, {"format_version": 1})
+        append_projection(fake_pkl, proj, pyr)
 
         with (
             patch(
                 "vtsearch.routes.projection._pkl_path_for",
-                return_value=fake_pkl,
+                return_value=str(fake_pkl),
             ),
             patch(
                 "vtscore.projection.umap_projection.fit_projection",
@@ -188,28 +192,27 @@ class TestProjectionPersistence:
             assert ctx._pyramid is not None
             assert ctx._pyramid.projection_id != "stale-pid"
 
-        import os
-
-        sidecar = fake_pkl.replace(".pkl", ".projection")
-        if os.path.exists(sidecar):
-            os.unlink(sidecar)
-
     @patch("vtscore.projection.umap_projection.fit_projection", side_effect=_fake_fit_projection)
-    def test_build_saves_sidecar(self, _mock_fit, client, tmp_path):
-        """After a fresh build, the projection is persisted to a sidecar."""
-        fake_pkl = str(tmp_path / "persist_test.pkl")
+    def test_build_persists_to_container(self, _mock_fit, client, tmp_path):
+        """After a fresh build, the projection is persisted into the container."""
+        import pickle as _pickle
+
+        from vtscore.datasets.container import read_projection, write_container
+
+        fake_pkl = tmp_path / "persist_test.pkl"
+        pkl_bytes = _pickle.dumps({"medias": {}})
+        write_container(fake_pkl, pkl_bytes, {"format_version": 1})
+
         with patch(
             "vtsearch.routes.projection._pkl_path_for",
-            return_value=fake_pkl,
+            return_value=str(fake_pkl),
         ):
             resp = client.post("/api/projection/build")
             assert resp.status_code == 200
             _wait_projection()
 
-        from pathlib import Path
-
-        sidecar = Path(fake_pkl).with_suffix(".projection")
-        assert sidecar.exists(), "sidecar should be written after build"
+        loaded = read_projection(fake_pkl)
+        assert loaded is not None, "projection should be persisted into the container"
 
 
 class TestProjectionTiles:

@@ -103,7 +103,7 @@ def load_demo_dataset(  # noqa: C901
             When given, the demo is loaded in its native type and then
             converted.
         clipper_name: Optional name of a registered clipper.  Recorded in
-            a ``.clipper`` sidecar next to the pickle for status tracking.
+            the container metadata for status tracking.
 
     Raises:
         ValueError: If ``dataset_name`` is not in ``DEMO_DATASETS``, or if the
@@ -134,13 +134,10 @@ def load_demo_dataset(  # noqa: C901
         from vtscore.datasets.container import read_meta
 
         cached_meta = read_meta(pkl_file)
-        cached_embedder = cached_meta.get("embedder") or _loader.read_pkl_embedder(pkl_file)
+        cached_embedder = cached_meta.get("embedder") or ""
         if embedder_name and cached_embedder and embedder_name != cached_embedder:
-            # Embedder mismatch - discard stale cache and re-embed below.
             on_progress("loading", f"Re-embedding {dataset_name} with {embedder_name}...", 0, 0)
             pkl_file.unlink()
-            pkl_file.with_suffix(".embedder").unlink(missing_ok=True)
-            pkl_file.with_suffix(".clipper").unlink(missing_ok=True)
         else:
             on_progress("loading", f"Loading {dataset_name} dataset...", 0, 0)
             _loader.load_dataset_from_pickle(pkl_file, medias)
@@ -150,8 +147,6 @@ def load_demo_dataset(  # noqa: C901
                 # Pickle file exists but media files are missing, delete and re-embed
                 on_progress("loading", f"Media files missing, re-embedding {dataset_name}...", 0, 0)
                 pkl_file.unlink()
-                pkl_file.with_suffix(".embedder").unlink(missing_ok=True)
-                pkl_file.with_suffix(".clipper").unlink(missing_ok=True)
             else:
                 # Stamp demo origin on cached medias so that cross-dataset
                 # resolution always has the dataset name in the origin params.

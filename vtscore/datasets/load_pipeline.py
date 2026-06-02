@@ -1336,7 +1336,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     clipper_params = field_values.pop("clipper_params", None)
     chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
     # Keep clipper in field_values for importers that need it (e.g. demo
-    # importer writes a .clipper sidecar for readiness tracking).
+    # importer stores it in the container metadata for readiness tracking).
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
 

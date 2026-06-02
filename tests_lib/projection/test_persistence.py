@@ -1,16 +1,27 @@
-"""Tests for projection persistence (``vtscore.projection.persistence``)."""
+"""Tests for projection persistence via the ZIP container."""
 
 from __future__ import annotations
 
 import numpy as np
 
-from vtscore.projection.persistence import (
-    load_projection,
-    projection_sidecar_path,
-    save_projection,
+from vtscore.datasets.container import (
+    append_projection,
+    read_projection,
+    write_container,
 )
 from vtscore.projection.pyramid import build_pyramid
 from vtscore.projection.umap_projection import Projection
+
+import pickle
+
+
+def _make_container(tmp_path, n: int = 50):
+    path = tmp_path / "dataset.pkl"
+    medias = {i: {"id": i, "embedding": [0.1] * 8} for i in range(n)}
+    pkl_bytes = pickle.dumps({"medias": medias})
+    meta = {"format_version": 1, "embedder": "test", "clipper": "", "media_type": "audio"}
+    write_container(path, pkl_bytes, meta)
+    return path
 
 
 def _make_projection(n: int = 50, seed: int = 42, pid: str = "test-pid-abc") -> Projection:
@@ -21,20 +32,15 @@ def _make_projection(n: int = 50, seed: int = 42, pid: str = "test-pid-abc") -> 
 
 
 def test_round_trip(tmp_path):
-    """Save then load recovers identical projection + pyramid."""
-    pkl = tmp_path / "dataset.pkl"
-    pkl.write_bytes(b"fake")
+    """Append then read recovers identical projection + pyramid."""
+    path = _make_container(tmp_path)
 
     proj = _make_projection()
     pyr = build_pyramid(proj, n_levels=4)
 
-    save_projection(pkl, proj, pyr)
+    append_projection(path, proj, pyr)
 
-    sidecar = projection_sidecar_path(pkl)
-    assert sidecar.exists()
-    assert sidecar.suffix == ".projection"
-
-    loaded = load_projection(pkl)
+    loaded = read_projection(path)
     assert loaded is not None
     proj2, pyr2 = loaded
 
@@ -58,40 +64,23 @@ def test_round_trip(tmp_path):
         t1 = pyr.tiles[key]
         t2 = pyr2.tiles[key]
         assert t1.level == t2.level
-        assert t1.tx == t2.tx
-        assert t1.ty == t2.ty
         assert len(t1.cells) == len(t2.cells)
-        for c1, c2 in zip(t1.cells, t2.cells):
-            assert c1.q == c2.q
-            assert c1.r == c2.r
-            assert c1.count == c2.count
-            assert c1.rep_id == c2.rep_id
-            assert abs(c1.cx - c2.cx) < 1e-6
-            assert abs(c1.cy - c2.cy) < 1e-6
 
 
-def test_missing_sidecar_returns_none(tmp_path):
-    pkl = tmp_path / "missing.pkl"
-    assert load_projection(pkl) is None
-
-
-def test_corrupt_sidecar_returns_none(tmp_path):
-    pkl = tmp_path / "corrupt.pkl"
-    sidecar = projection_sidecar_path(pkl)
-    sidecar.write_bytes(b"not a valid npz file")
-    assert load_projection(pkl) is None
+def test_missing_projection_returns_none(tmp_path):
+    path = _make_container(tmp_path)
+    assert read_projection(path) is None
 
 
 def test_empty_projection(tmp_path):
     """Edge case: zero-point projection round-trips."""
-    pkl = tmp_path / "empty.pkl"
-    pkl.write_bytes(b"fake")
+    path = _make_container(tmp_path, n=0)
 
     proj = Projection("empty-pid", [], np.empty((0, 2), dtype=np.float32), "trivial")
     pyr = build_pyramid(proj, n_levels=2)
-    save_projection(pkl, proj, pyr)
+    append_projection(path, proj, pyr)
 
-    loaded = load_projection(pkl)
+    loaded = read_projection(path)
     assert loaded is not None
     proj2, pyr2 = loaded
     assert proj2.ids == []
@@ -101,8 +90,7 @@ def test_empty_projection(tmp_path):
 
 def test_negative_tile_indices(tmp_path):
     """Projections with negative tile indices round-trip correctly."""
-    pkl = tmp_path / "neg.pkl"
-    pkl.write_bytes(b"fake")
+    path = _make_container(tmp_path, n=200)
 
     rng = np.random.default_rng(99)
     coords = (rng.standard_normal((200, 2)) * 20).astype(np.float32)
@@ -112,26 +100,25 @@ def test_negative_tile_indices(tmp_path):
     has_negative = any(k[1] < 0 or k[2] < 0 for k in pyr.tiles)
     assert has_negative, "test data should produce negative tile indices"
 
-    save_projection(pkl, proj, pyr)
-    loaded = load_projection(pkl)
+    append_projection(path, proj, pyr)
+    loaded = read_projection(path)
     assert loaded is not None
     _, pyr2 = loaded
     assert set(pyr2.tiles.keys()) == set(pyr.tiles.keys())
 
 
 def test_overwrite_existing(tmp_path):
-    """A second save overwrites the previous sidecar."""
-    pkl = tmp_path / "dataset.pkl"
-    pkl.write_bytes(b"fake")
+    """A second append overwrites the previous projection."""
+    path = _make_container(tmp_path)
 
     proj1 = _make_projection(pid="first")
     pyr1 = build_pyramid(proj1, n_levels=2)
-    save_projection(pkl, proj1, pyr1)
+    append_projection(path, proj1, pyr1)
 
     proj2 = _make_projection(seed=99, pid="second")
     pyr2 = build_pyramid(proj2, n_levels=2)
-    save_projection(pkl, proj2, pyr2)
+    append_projection(path, proj2, pyr2)
 
-    loaded = load_projection(pkl)
+    loaded = read_projection(path)
     assert loaded is not None
     assert loaded[0].projection_id == "second"

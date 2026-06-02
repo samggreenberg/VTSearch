@@ -191,8 +191,6 @@ def unregister_dataset(dataset_id: str) -> bool:
                 pkl = Path(entry.get("pkl_path", ""))
                 if pkl.is_file():
                     pkl.unlink(missing_ok=True)
-                for ext in (".embedder", ".clipper", ".projection"):
-                    pkl.with_suffix(ext).unlink(missing_ok=True)
                 entries.pop(i)
                 _loaded_ids.discard(dataset_id)
                 _save(entries)

@@ -6,7 +6,7 @@ live in dedicated sibling modules; this file holds the shared helpers,
 (``from vtscore.datasets.loader import ...``) continue to work.
 
 * :mod:`vtscore.datasets.loader_folder` - folder loaders
-* :mod:`vtscore.datasets.loader_pickle` - pickle loaders, sidecars, image embed
+* :mod:`vtscore.datasets.loader_pickle` - pickle/container loaders, image embed
 * :mod:`vtscore.datasets.loader_demo` - demo dataset loader
 
 All public functions that perform I/O accept an optional ``on_progress``
@@ -118,8 +118,6 @@ from vtscore.datasets.loader_folder import (  # noqa: E402, F401
     load_dataset_from_folder_chunked,
 )
 from vtscore.datasets.loader_pickle import (  # noqa: E402, F401
-    _write_clipper_sidecar,
-    _write_embedder_sidecar,
     load_dataset_from_pickle,
     load_dataset_from_pickle_chunked,
     read_pkl_clipper,

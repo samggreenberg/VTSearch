@@ -9,7 +9,6 @@ import numpy as np
 
 from vtscore.datasets.container import (
     append_projection,
-    is_container,
     read_container,
     read_meta,
     read_projection,
@@ -53,7 +52,6 @@ class TestContainerFormat:
         path = tmp_path / "dataset.pkl"
         write_container(path, _medias_pkl_bytes(), _meta())
         assert path.exists()
-        assert is_container(path)
         with zipfile.ZipFile(str(path), "r") as zf:
             assert "medias.pkl" in zf.namelist()
             assert "meta.json" in zf.namelist()
@@ -85,20 +83,6 @@ class TestContainerFormat:
         )
         data, meta = read_container(path)
         assert data["audio_dir"] == "/data/audio"
-
-    def test_is_container_false_for_raw_pickle(self, tmp_path):
-        path = tmp_path / "legacy.pkl"
-        path.write_bytes(pickle.dumps({"medias": {}}))
-        assert not is_container(path)
-
-    def test_read_legacy_pickle(self, tmp_path):
-        path = tmp_path / "legacy.pkl"
-        medias = {1: {"id": 1, "embedding": [0.1, 0.2]}}
-        path.write_bytes(pickle.dumps({"medias": medias}))
-        data, meta = read_container(path)
-        assert "medias" in data
-        assert 1 in data["medias"]
-        assert meta.get("embedder") == ""
 
     def test_expires_at_in_meta(self, tmp_path):
         path = tmp_path / "dataset.pkl"
@@ -153,21 +137,7 @@ class TestContainerProjection:
         assert loaded is not None
         assert loaded[0].projection_id == "second-pid"
 
-    def test_legacy_file_uses_sidecar(self, tmp_path):
-        path = tmp_path / "legacy.pkl"
-        path.write_bytes(pickle.dumps({"medias": {}}))
-
-        proj, pyr = self._make_projection()
-        append_projection(path, proj, pyr)
-
-        assert path.with_suffix(".projection").exists()
-
-        loaded = read_projection(path)
-        assert loaded is not None
-        assert loaded[0].projection_id == "container-pid"
-
-
-class TestSidecarFallback:
+class TestContainerMetaReaders:
     def test_read_embedder_from_container(self, tmp_path):
         from vtscore.datasets.loader_pickle import read_pkl_embedder
 
@@ -182,10 +152,3 @@ class TestSidecarFallback:
         write_container(path, _medias_pkl_bytes(), _meta())
         assert read_pkl_clipper(path) == "test_clipper"
 
-    def test_read_embedder_from_legacy_sidecar(self, tmp_path):
-        from vtscore.datasets.loader_pickle import read_pkl_embedder
-
-        path = tmp_path / "legacy.pkl"
-        path.write_bytes(pickle.dumps({"medias": {}}))
-        path.with_suffix(".embedder").write_text("legacy_embedder")
-        assert read_pkl_embedder(path) == "legacy_embedder"

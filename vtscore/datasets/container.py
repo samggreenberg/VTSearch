@@ -1,15 +1,10 @@
 """ZIP-based dataset container format.
 
-Replaces the raw-pickle-plus-sidecars layout with a single append-friendly
-ZIP file.  The container stores:
+Each dataset is a single ZIP file containing:
 
 - ``medias.pkl``     — the pickled ``{"medias": {...}, ...}`` dict
 - ``meta.json``      — embedder, clipper, media_type, timestamps, age-off
 - ``projection.npz`` — (optional, appended later) frozen 2-D layout + pyramid
-
-Legacy raw-pickle files (no ZIP wrapper) are detected by magic bytes and
-handled transparently — the reader returns the same dict regardless of
-format.
 
 See ``docs/design/vtsbrowse.md`` for the persistence carve-out.
 """
@@ -31,17 +26,6 @@ import numpy as np
 from vtscore.security.pickle import safe_pickle_load
 
 logger = logging.getLogger(__name__)
-
-_ZIP_MAGIC = b"PK\x03\x04"
-
-
-def is_container(path: str | Path) -> bool:
-    """Return ``True`` if *path* is a ZIP container (vs. a raw pickle)."""
-    try:
-        with open(path, "rb") as f:
-            return f.read(4) == _ZIP_MAGIC
-    except OSError:
-        return False
 
 
 # ---------------------------------------------------------------------------
@@ -104,15 +88,8 @@ def write_container(
 
 
 def read_container(path: str | Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Read a container, returning ``(data_dict, meta)``.
-
-    Works with both ZIP containers and legacy raw pickles.  For legacy
-    files, ``meta`` is synthesized from sidecars / the pickle itself.
-    """
+    """Read a container, returning ``(data_dict, meta)``."""
     p = Path(path)
-
-    if not is_container(p):
-        return _read_legacy(p)
 
     with zipfile.ZipFile(str(p), "r") as zf:
         pkl_bytes = zf.read("medias.pkl")
@@ -132,41 +109,10 @@ def read_container(path: str | Path) -> tuple[dict[str, Any], dict[str, Any]]:
 
 def read_meta(path: str | Path) -> dict[str, Any]:
     """Read just the metadata from a container without loading medias."""
-    p = Path(path)
-    if not is_container(p):
-        return _read_legacy_meta(p)
-
-    with zipfile.ZipFile(str(p), "r") as zf:
+    with zipfile.ZipFile(str(path), "r") as zf:
         if "meta.json" in zf.namelist():
             return json.loads(zf.read("meta.json").decode("utf-8"))
     return {}
-
-
-def _read_legacy(p: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Read a legacy raw-pickle file and synthesize metadata from sidecars."""
-    from vtscore.datasets.loader_pickle import (
-        _read_pickle_dataset,
-        read_pkl_clipper,
-        read_pkl_embedder,
-    )
-
-    data = _read_pickle_dataset(p)
-    meta: dict[str, Any] = {
-        "embedder": read_pkl_embedder(p) or "",
-        "clipper": read_pkl_clipper(p) or "",
-        "name": data.get("name", ""),
-    }
-    return data, meta
-
-
-def _read_legacy_meta(p: Path) -> dict[str, Any]:
-    """Synthesize metadata from sidecar files without loading the pickle."""
-    from vtscore.datasets.loader_pickle import read_pkl_clipper, read_pkl_embedder
-
-    return {
-        "embedder": read_pkl_embedder(p) or "",
-        "clipper": read_pkl_clipper(p) or "",
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -179,17 +125,8 @@ def append_projection(
     projection: Any,
     pyramid: Any,
 ) -> None:
-    """Append (or replace) the projection inside an existing container.
-
-    For legacy raw-pickle files, falls back to a ``.projection`` sidecar.
-    """
-    from vtscore.projection.persistence import save_projection as _save_sidecar
-
+    """Append (or replace) the projection inside an existing container."""
     p = Path(path)
-    if not is_container(p):
-        _save_sidecar(p, projection, pyramid)
-        return
-
     npz_bytes = _serialize_projection(projection, pyramid)
 
     with zipfile.ZipFile(str(p), "a") as zf:
@@ -204,23 +141,14 @@ def append_projection(
 
 
 def read_projection(path: str | Path) -> tuple[Any, Any] | None:
-    """Read the projection + pyramid from a container, or ``None``.
-
-    Falls back to the ``.projection`` sidecar for legacy files.
-    """
-    from vtscore.projection.persistence import load_projection as _load_sidecar
-
-    p = Path(path)
-    if not is_container(p):
-        return _load_sidecar(p)
-
+    """Read the projection + pyramid from a container, or ``None``."""
     try:
-        with zipfile.ZipFile(str(p), "r") as zf:
+        with zipfile.ZipFile(str(path), "r") as zf:
             if "projection.npz" not in zf.namelist():
                 return None
             npz_bytes = zf.read("projection.npz")
     except Exception:
-        logger.warning("Failed to read projection from container %s", p, exc_info=True)
+        logger.warning("Failed to read projection from container %s", path, exc_info=True)
         return None
 
     return _deserialize_projection(npz_bytes)
