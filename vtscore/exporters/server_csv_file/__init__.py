@@ -13,9 +13,8 @@ from __future__ import annotations
 import csv
 import io
 import json
-import os
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import ExporterField, LabelsetExporter
@@ -91,87 +90,6 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
 
         # Autodetect results format (from CLI / fill-from-sort)
         return self._export_autodetect(results, filepath)
-
-    #: Fixed column order for streamed autodetect exports.  Streaming cannot
-    #: pre-scan all hits to detect which optional clip columns are present, so
-    #: the full superset is always written (empty cells where a hit lacks the
-    #: field).
-    _STREAM_COLUMNS = [
-        "detector",
-        "threshold",
-        "filename",
-        "category",
-        "score",
-        "label",
-        "clip_start",
-        "clip_end",
-        "clip_box",
-        "origin",
-        "origin_name",
-    ]
-
-    @property
-    def supports_streaming(self) -> bool:
-        return True
-
-    def export_cli_streaming(
-        self,
-        header: dict[str, Any],
-        records: Iterator[tuple[str, dict[str, Any]]],
-        field_values: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Write hits as CSV rows, one per hit, flushed as they stream.
-
-        Uses a fixed column superset (see :attr:`_STREAM_COLUMNS`) because a
-        streaming writer cannot look ahead to decide which optional clip
-        columns are present.  The file is built at a sibling ``.tmp`` path and
-        atomically renamed on success.
-        """
-        from vtscore.datasets.origin import Origin  # noqa: PLC0415
-
-        filepath = Path(field_values["filepath"])
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = filepath.with_name(filepath.name + ".tmp")
-
-        thresholds = {d.get("detector_name", ""): d.get("threshold", "") for d in header.get("detectors", [])}
-
-        total_hits = 0
-        try:
-            with open(tmp_path, "w", encoding="utf-8", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(self._STREAM_COLUMNS)
-                for detector_name, hit in records:
-                    origin = hit.get("origin")
-                    origin_str = Origin.from_dict(origin).display() if origin else ""
-                    clip_box = hit.get("clip_box")
-                    writer.writerow(
-                        [
-                            _sanitize_csv_cell(str(detector_name)),
-                            thresholds.get(detector_name, ""),
-                            _sanitize_csv_cell(hit.get("filename", "")),
-                            _sanitize_csv_cell(hit.get("category", "")),
-                            hit.get("score", ""),
-                            _sanitize_csv_cell(hit.get("label", "")),
-                            hit.get("clip_start", ""),
-                            hit.get("clip_end", ""),
-                            ",".join(str(v) for v in clip_box) if clip_box else "",
-                            _sanitize_csv_cell(origin_str),
-                            _sanitize_csv_cell(hit.get("origin_name", "")),
-                        ]
-                    )
-                    total_hits += 1
-            os.replace(tmp_path, filepath)
-        finally:
-            if tmp_path.exists():
-                tmp_path.unlink()
-
-        return {
-            "message": (
-                f"Streamed {total_hits} hit(s) across "
-                f"{len(header.get('detectors', []))} detector(s) to {filepath.resolve()}."
-            ),
-            "filepath": str(filepath.resolve()),
-        }
 
     def _export_labels(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
         """Export labels with user-selected columns.

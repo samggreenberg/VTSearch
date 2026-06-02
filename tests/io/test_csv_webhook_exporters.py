@@ -110,11 +110,11 @@ class TestCsvExporterCLI:
         # silently overwrite one another.
         assert args.filepath == f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
-    def test_validate_passes(self, tmp_path):
+    def test_validate_passes(self):
         from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
 
         exp = ServerCsvLabelsetExporter()
-        exp.validate_cli_field_values({"filepath": str(tmp_path / "out.csv")})
+        exp.validate_cli_field_values({"filepath": "/tmp/out.csv"})
 
     def test_validate_missing_filepath(self):
         from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter

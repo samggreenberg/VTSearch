@@ -13,10 +13,6 @@
 
 # ── Core framework ───────────────────────────────────────────────────
 flask
-flask-smorest
-marshmallow
-pydantic>=2
-werkzeug
 gunicorn
 numpy
 requests

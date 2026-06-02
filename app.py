@@ -94,7 +94,6 @@ from vtsearch.routes import (  # noqa: E402
     main_bp,
     processors_crud_bp,
     processors_scoring_bp,
-    projection_bp,
     sessions_bp,
     settings_bp,
     settings_io_bp,
@@ -522,7 +521,6 @@ api.register_blueprint(detectors_registry_bp)
 api.register_blueprint(detector_scoring_bp)
 api.register_blueprint(detector_find_bp)
 api.register_blueprint(embed_bp)
-api.register_blueprint(projection_bp)
 app.register_blueprint(events_bp)
 
 
@@ -683,29 +681,6 @@ if __name__ == "__main__":
             "Process the dataset in chunks of N medias at a time to limit "
             "memory usage. Used with --autodetect. When omitted the entire "
             "dataset is loaded at once (original behaviour)."
-        ),
-    )
-    parser.add_argument(
-        "--stream-results",
-        action="store_true",
-        dest="stream_results",
-        help=(
-            "Stream each chunk's hits straight to the exporter instead of "
-            "accumulating them all in memory. Requires --chunk-size and a "
-            "streaming-capable exporter (server_json_file → NDJSON, "
-            "server_csv_file, gui). Output is ordered by chunk, not globally "
-            "sorted by score. Lets --autodetect run against a media source "
-            "with more items (and more hits) than fit in RAM."
-        ),
-    )
-    parser.add_argument(
-        "--keep-negatives",
-        action="store_true",
-        dest="keep_negatives",
-        help=(
-            "With --stream-results, also stream below-threshold (negative) "
-            "hits, tagged label=bad. Off by default: a find over a massive "
-            "source only emits the predicted-good items."
         ),
     )
     parser.add_argument(
@@ -988,13 +963,6 @@ if __name__ == "__main__":
 
         dry_run = bool(getattr(args, "dry_run", False))
 
-        stream_results = bool(getattr(args, "stream_results", False))
-        keep_negatives = bool(getattr(args, "keep_negatives", False))
-        if stream_results and not chunk_size:
-            parser.error("--stream-results requires --chunk-size N (it streams chunk by chunk)")
-        if keep_negatives and not stream_results:
-            parser.error("--keep-negatives only applies with --stream-results")
-
         # Optional one-shot label import into a detector before scoring.
         # The merged labelset is picked up by the autodetect pipeline below.
         if args.import_labels_into:
@@ -1057,8 +1025,6 @@ if __name__ == "__main__":
                     args.exporter,
                     exporter_field_values,
                     dry_run=dry_run,
-                    stream_results=stream_results,
-                    keep_negatives=keep_negatives,
                 )
             else:
                 from vtscore.cli import autodetect_importer_main
@@ -1084,8 +1050,6 @@ if __name__ == "__main__":
                     args.exporter,
                     exporter_field_values,
                     dry_run=dry_run,
-                    stream_results=stream_results,
-                    keep_negatives=keep_negatives,
                 )
             else:
                 from vtscore.cli import autodetect_main

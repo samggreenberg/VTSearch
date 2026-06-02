@@ -66,7 +66,6 @@ export class AppComponent {
   showKeyboardHelp = false;
   gearClosing = false;
   isOnLabelView = false;
-  private isOnBrowseView = false;
   settingsViewTab = '';
   /** True when the current route consumes the active pair (label / find)
    *  and the pair is not compatible, so the explainer takes over the
@@ -118,11 +117,8 @@ export class AppComponent {
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
-        this.isOnBrowseView = e.urlAfterRedirects.startsWith('/browse');
         this.isOnLabelView =
-          e.urlAfterRedirects.startsWith('/label') ||
-          e.urlAfterRedirects.startsWith('/find') ||
-          this.isOnBrowseView;
+          e.urlAfterRedirects.startsWith('/label') || e.urlAfterRedirects.startsWith('/find');
         this.recomputeExplainer();
       });
 
@@ -141,7 +137,7 @@ export class AppComponent {
   }
 
   private recomputeExplainer(): void {
-    if (!this.isOnLabelView || this.isOnBrowseView) {
+    if (!this.isOnLabelView) {
       this.showIncompatibleExplainer = false;
       return;
     }

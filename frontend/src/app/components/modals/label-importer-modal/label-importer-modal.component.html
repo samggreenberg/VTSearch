@@ -124,21 +124,11 @@
                 [id]="'lif-' + field.key"
                 class="form-select"
                 [(ngModel)]="formValues[field.key]"
-                (ngModelChange)="onFormFieldChanged(field.key)"
-                [disabled]="!!dynamicFieldLoading[field.key] || (!!field.dynamic_options && optionsFor(field).length === 0)"
               >
-                @if (field.dynamic_options && dynamicFieldLoading[field.key]) {
-                  <option value="">Loading…</option>
-                } @else if (field.dynamic_options && optionsFor(field).length === 0 && !dynamicFieldError[field.key]) {
-                  <option value="">No options available</option>
-                }
-                @for (opt of optionsFor(field); track opt) {
+                @for (opt of field.options || []; track opt) {
                   <option [value]="opt">{{ opt }}</option>
                 }
               </select>
-              @if (field.dynamic_options && dynamicFieldError[field.key]) {
-                <p class="error-text">{{ dynamicFieldError[field.key] }}</p>
-              }
             } @else if (field.field_type === 'number') {
               <input
                 [id]="'lif-' + field.key"

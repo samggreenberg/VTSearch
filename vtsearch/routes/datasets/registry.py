@@ -84,16 +84,7 @@ def list_registered_datasets():
     """
     from vtsearch.auth import get_current_user
 
-    import time
-
     entries = _reg_list_for_user(get_current_user())
-
-    now = time.time()
-    expired_ids = [e["id"] for e in entries if e.get("expires_at") is not None and now > e["expires_at"]]
-    for eid in expired_ids:
-        _reg_unregister(eid)
-    entries = [e for e in entries if e["id"] not in expired_ids]
-
     loaded_ids = _reg_loaded_ids()
     from vtscore.media import get_clipper
 
@@ -133,14 +124,6 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     entry = _reg_get(dataset_id)
     if entry is None:
         abort(404, message="Dataset not found in registry")
-
-    expires_at = entry.get("expires_at")
-    if expires_at is not None:
-        import time
-
-        if time.time() > expires_at:
-            _reg_unregister(dataset_id)
-            abort(410, message="Dataset has expired and has been removed.")
 
     if not _reg_can_access(dataset_id, get_current_user()):
         abort(403, message="Access denied")

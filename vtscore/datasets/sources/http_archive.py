@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Iterator
 from uuid import uuid4
 
 from vtscore.config import DATA_DIR
-from vtscore.datasets.sources.base import FetchedItem, MediaItem, MediaSource
+from vtscore.datasets.sources.base import MediaItem, MediaSource
 
 if TYPE_CHECKING:
     from vtscore.datasets.sources.local_folder import LocalFolderSource
@@ -124,11 +124,11 @@ class HttpArchiveSource(MediaSource):
                 source_name=self.name,
             )
 
-    def fetch_item(self, key: str) -> FetchedItem:
+    def fetch_item(self, key: str) -> Path | None:
         inner = self._ensure_extracted()
         return inner.fetch_item(key)
 
-    def resolve_path(self, origin_name: str = "", filename: str = "") -> FetchedItem:
+    def resolve_path(self, origin_name: str = "", filename: str = "") -> Path | None:
         inner = self._ensure_extracted()
         return inner.resolve_path(origin_name, filename)
 

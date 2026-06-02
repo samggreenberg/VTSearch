@@ -78,17 +78,15 @@ def _make_image_clip(media_id: int, md5: str = "") -> dict:
 
 
 def _write_pickle_dataset(path, clips_dict):
-    """Write a dataset container file in the standard ZIP format."""
-    from vtscore.datasets.container import write_container
-
+    """Write a pickle dataset file in the standard format."""
     data = {
         "medias": {
             cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items()}
             for cid, media in clips_dict.items()
         }
     }
-    pkl_bytes = pickle.dumps(data)
-    write_container(path, pkl_bytes, {"format_version": 1})
+    with open(path, "wb") as f:
+        pickle.dump(data, f)
 
 
 # ---------------------------------------------------------------------------
@@ -424,9 +422,7 @@ class TestAvailableFilesEndpoint:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         test_pkl = EMBEDDINGS_DIR / "_test_combine.pkl"
-        from vtscore.datasets.container import write_container
-
-        write_container(test_pkl, pickle.dumps({"medias": {}}), {"format_version": 1})
+        test_pkl.write_bytes(pickle.dumps({"medias": {}}))
         try:
             resp = client.get("/api/dataset/available-files")
             data = resp.get_json()
@@ -499,16 +495,14 @@ class TestStageFileEndpoint:
         """Uploading a valid .pkl file returns staging metadata."""
         from io import BytesIO
 
-        from vtscore.datasets.container import write_container
-
         ds = {1: _make_audio_clip(1), 2: _make_audio_clip(2)}
+        buf = BytesIO()
         data = {
             "medias": {
                 cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()} for cid, m in ds.items()
             }
         }
-        buf = BytesIO()
-        write_container(buf, pickle.dumps(data), {"format_version": 1})
+        pickle.dump(data, buf)
         buf.seek(0)
 
         resp = client.post(
@@ -532,10 +526,8 @@ class TestStageFileEndpoint:
         """An empty pkl returns count=0."""
         from io import BytesIO
 
-        from vtscore.datasets.container import write_container
-
         buf = BytesIO()
-        write_container(buf, pickle.dumps({"medias": {}}), {"format_version": 1})
+        pickle.dump({"medias": {}}, buf)
         buf.seek(0)
 
         resp = client.post(
@@ -561,16 +553,14 @@ class TestStageImportEndpoint:
         """Staging the pickle importer returns 200 with ok=True."""
         from io import BytesIO
 
-        from vtscore.datasets.container import write_container
-
         ds = {1: _make_audio_clip(1)}
+        buf = BytesIO()
         data = {
             "medias": {
                 cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()} for cid, m in ds.items()
             }
         }
-        buf = BytesIO()
-        write_container(buf, pickle.dumps(data), {"format_version": 1})
+        pickle.dump(data, buf)
         buf.seek(0)
 
         resp = client.post(

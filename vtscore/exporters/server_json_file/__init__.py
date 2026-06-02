@@ -10,10 +10,8 @@ No additional pip packages are required; uses only Python's ``json`` and
 
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import ExporterField, LabelsetExporter
@@ -73,58 +71,6 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
                 f"Saved {total_hits} hit(s) across "
                 f"{results.get('detectors_run', 0)} detector(s) "
                 f"to {filepath.resolve()}."
-            ),
-            "filepath": str(filepath.resolve()),
-        }
-
-    @property
-    def supports_streaming(self) -> bool:
-        return True
-
-    def export_cli_streaming(
-        self,
-        header: dict[str, Any],
-        records: Iterator[tuple[str, dict[str, Any]]],
-        field_values: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Write hits as newline-delimited JSON (NDJSON), one hit per line.
-
-        The first line is a metadata object describing the run; every
-        subsequent line is a single hit with its ``detector`` name merged in.
-        Lines are flushed as they stream, so the full result set is never
-        held in memory.  The file is built at a sibling ``.tmp`` path and
-        atomically renamed on success, so a crash mid-run cannot leave a
-        half-written file at the destination.
-        """
-        filepath = Path(field_values["filepath"])
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = filepath.with_name(filepath.name + ".tmp")
-
-        meta = {
-            "format": "vtsearch-hits-ndjson/v1",
-            "media_type": header.get("media_type", "unknown"),
-            "detectors": header.get("detectors", []),
-            "keep_negatives": bool(header.get("keep_negatives", False)),
-        }
-
-        total_hits = 0
-        try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(json.dumps({"_meta": meta}) + "\n")
-                for detector_name, hit in records:
-                    f.write(json.dumps({"detector": detector_name, **hit}) + "\n")
-                    total_hits += 1
-            os.replace(tmp_path, filepath)
-        finally:
-            # Clean up the temp file if the rename never happened (e.g. an
-            # exception propagated out of the records iterator).
-            if tmp_path.exists():
-                tmp_path.unlink()
-
-        return {
-            "message": (
-                f"Streamed {total_hits} hit(s) across "
-                f"{len(meta['detectors'])} detector(s) to {filepath.resolve()} (NDJSON)."
             ),
             "filepath": str(filepath.resolve()),
         }

@@ -1,8 +1,9 @@
 """Pickle-based dataset loaders.
 
-Loads datasets from a ZIP container ``.pkl`` file (with optional companion
-media-file directory), plus the embedder/clipper metadata readers.  Split
-out from :mod:`vtscore.datasets.loader` for navigability.
+Loads datasets from a ``.pkl`` file (with optional companion media-file
+directory), plus the small image-embedding helper used by importers and
+the embedder/clipper sidecar utilities.  Split out from
+:mod:`vtscore.datasets.loader` for navigability.
 """
 
 from __future__ import annotations
@@ -12,28 +13,31 @@ import hashlib
 from pathlib import Path
 from typing import Any, Iterator
 
+import numpy as np
+
 from vtscore.datasets.loader import (
     ProgressCallback,
 )
-from vtscore.embedding.normalize import l2_normalize
+from vtscore.security.pickle import safe_pickle_load
 
 
 def _read_pickle_dataset(file_path: Path) -> dict[str, Any]:
-    """Load a dataset ZIP container and assert the ``"medias"`` envelope.
+    """Load a dataset pickle and assert the ``"medias"`` envelope.
 
     Translates :class:`MemoryError` into a contextual message and raises
     :class:`ValueError` when the file does not contain a dict with a
     ``"medias"`` key.
     """
-    from vtscore.datasets.container import read_container
-
     try:
-        data, _meta = read_container(file_path)
+        with open(file_path, "rb") as f:
+            data = safe_pickle_load(f)
     except MemoryError:
         gc.collect()
         raise MemoryError(
             f"Out of memory while reading {file_path.name}. The pickle file is too large for available RAM."
         )
+    if not isinstance(data, dict) or "medias" not in data:
+        raise ValueError(f"Invalid pickle format in {file_path.name}: expected a dict with a 'medias' key.")
     return data
 
 
@@ -121,7 +125,7 @@ def _build_pickle_thin_media(
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", 0),
         "md5": media_info.get("md5", ""),
-        "embedding": l2_normalize(media_info["embedding"]),
+        "embedding": np.array(media_info["embedding"]),
         "media_bytes": None,
         "media_string": None,
         "media_path": media_path,
@@ -156,7 +160,7 @@ def _build_pickle_full_media(
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", len(media_bytes)),
         "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
-        "embedding": l2_normalize(media_info["embedding"]),
+        "embedding": np.array(media_info["embedding"]),
         "media_bytes": media_bytes,
         "media_string": media_string,
         "media_path": media_path or media_info.get("media_path"),
@@ -368,17 +372,34 @@ def load_dataset_from_pickle_chunked(
             yield chunk_medias
 
 
-def read_pkl_clipper(pkl_path: Path) -> str | None:
-    """Return the clipper name from the container's ``meta.json``."""
-    from vtscore.datasets.container import read_meta
+def _write_embedder_sidecar(pkl_path: Path, embedder_name: str) -> None:
+    """Write a small ``<name>.embedder`` file next to *pkl_path*.
 
-    meta = read_meta(pkl_path)
-    return meta.get("clipper") or None
+    The file stores the embedder name used to produce the pickle so that
+    ``demo_dataset_list`` can cheaply check whether the cached embeddings
+    match the user's current embedder selection without loading the full pkl.
+    """
+    sidecar = pkl_path.with_suffix(".embedder")
+    sidecar.write_text(embedder_name, encoding="utf-8")
+
+
+def _write_clipper_sidecar(pkl_path: Path, clipper_name: str) -> None:
+    """Write a small ``<name>.clipper`` file next to *pkl_path*."""
+    sidecar = pkl_path.with_suffix(".clipper")
+    sidecar.write_text(clipper_name, encoding="utf-8")
+
+
+def read_pkl_clipper(pkl_path: Path) -> str | None:
+    """Return the clipper name stored for *pkl_path*, or ``None`` if unknown."""
+    sidecar = pkl_path.with_suffix(".clipper")
+    if sidecar.exists():
+        return sidecar.read_text(encoding="utf-8").strip()
+    return None
 
 
 def read_pkl_embedder(pkl_path: Path) -> str | None:
-    """Return the embedder name from the container's ``meta.json``."""
-    from vtscore.datasets.container import read_meta
-
-    meta = read_meta(pkl_path)
-    return meta.get("embedder") or None
+    """Return the embedder name stored for *pkl_path*, or ``None`` if unknown."""
+    sidecar = pkl_path.with_suffix(".embedder")
+    if sidecar.exists():
+        return sidecar.read_text(encoding="utf-8").strip()
+    return None

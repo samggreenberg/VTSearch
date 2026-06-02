@@ -21,8 +21,6 @@ _TOP_LEVEL_KEYS = {
     "settings",
     "detectors",
     "chunk_size",
-    "stream_results",
-    "keep_negatives",
     "import_labels",
     "exporter",
 }
@@ -88,17 +86,6 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         if not isinstance(chunk_size, int) or isinstance(chunk_size, bool) or chunk_size <= 0:
             raise ValueError("'chunk_size:' must be a positive integer.")
 
-    stream_results = raw.get("stream_results", False)
-    if not isinstance(stream_results, bool):
-        raise ValueError("'stream_results:' must be a boolean.")
-    keep_negatives = raw.get("keep_negatives", False)
-    if not isinstance(keep_negatives, bool):
-        raise ValueError("'keep_negatives:' must be a boolean.")
-    if stream_results and not chunk_size:
-        raise ValueError("'stream_results:' requires 'chunk_size:' (it streams chunk by chunk).")
-    if keep_negatives and not stream_results:
-        raise ValueError("'keep_negatives:' only applies with 'stream_results:'.")
-
     import_labels = raw.get("import_labels")
     parsed_import_labels: dict[str, str] | None = None
     if import_labels is not None:
@@ -119,8 +106,6 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         "settings": settings,
         "detectors": list(detectors) if detectors else None,
         "chunk_size": chunk_size,
-        "stream_results": stream_results,
-        "keep_negatives": keep_negatives,
         "import_labels": parsed_import_labels,
         "exporter": exporter_name,
         "exporter_fields": exporter_fields,
@@ -288,7 +273,5 @@ def _dispatch(config: dict[str, Any]) -> None:
         exporter_name=config["exporter"],
         exporter_field_values=config["exporter_fields"],
         override_detectors=config["detectors"],
-        stream_results=config.get("stream_results", False),
-        keep_negatives=config.get("keep_negatives", False),
         empty_error=empty_error,
     )

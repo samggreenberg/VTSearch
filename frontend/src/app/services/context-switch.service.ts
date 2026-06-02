@@ -84,11 +84,6 @@ export class ContextSwitchService {
     const currentUrl = this.router.url.split('?')[0];
     const onLabel = currentUrl.startsWith('/label');
     const onFind = currentUrl.startsWith('/find');
-    const onBrowse = currentUrl.startsWith('/browse');
-    if (onBrowse && datasetId) {
-      this.router.navigate(['/', 'browse', datasetId]);
-      return;
-    }
     if ((onLabel || onFind) && datasetId && detectorId) {
       const seg = onFind ? 'find' : 'label';
       this.router.navigate(['/', seg, datasetId, detectorId]);

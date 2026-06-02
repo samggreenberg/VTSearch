@@ -34,30 +34,6 @@ import numpy as np
 
 _FILENAMES_KEYS = ("filenames", "names", "paths", "filename")
 _VECTORS_KEYS = ("vectors", "embeddings", "vecs", "embedding")
-_EMBEDDER_NAME_KEYS = ("embedder_name", "embedder")
-
-
-def read_npz_embedder_name(npz_path: Path) -> str:
-    """Return the embedder name stored in *npz_path*, or ``""`` if absent.
-
-    Checks for a scalar or 1-element string array under the keys
-    ``"embedder_name"`` or ``"embedder"``.  Returns ``""`` for any archive
-    that does not contain such a key or where the stored value is blank.
-    Does not raise; returns ``""`` on any read error.
-    """
-    p = Path(npz_path)
-    if not p.is_file():
-        return ""
-    try:
-        with np.load(p, allow_pickle=False) as data:
-            for key in _EMBEDDER_NAME_KEYS:
-                if key in data.files:
-                    val = data[key]
-                    raw = str(val) if val.ndim == 0 else str(val.flat[0])
-                    return raw.strip()
-    except Exception:
-        pass
-    return ""
 
 
 def read_npz_filenames_and_vectors(npz_path: Path) -> dict[str, np.ndarray]:

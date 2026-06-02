@@ -87,14 +87,6 @@ export class ImportAdvancedComponent {
    *  shared clipper chooser modal. */
   @Output() clipperChooserRequested = new EventEmitter<void>();
 
-  /** Two-way bound "compute the 2-D Browse projection at ingest" toggle.
-   *  Defaults off: building the UMAP layout + hex-tile pyramid up front
-   *  costs compute the user may not want to spend (Browse builds it lazily
-   *  on first visit otherwise).  Lives in the Advanced block because it is
-   *  a cost/latency tradeoff, not a routine import setting. */
-  @Input() buildProjection = false;
-  @Output() buildProjectionChange = new EventEmitter<boolean>();
-
   /** Whether the Advanced section is currently expanded.  Local state
    *  per instance; opening Advanced in one flow does not carry over
    *  to another (the user only ever sees one flow at a time). */
@@ -206,10 +198,5 @@ export class ImportAdvancedComponent {
   /** Fired by the clipper button to request the parent's chooser. */
   onClipperClick(): void {
     this.clipperChooserRequested.emit();
-  }
-
-  /** Fired by the projection checkbox on user toggle. */
-  onBuildProjectionChange(value: boolean): void {
-    this.buildProjectionChange.emit(value);
   }
 }

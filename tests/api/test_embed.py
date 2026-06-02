@@ -80,11 +80,9 @@ class TestEmbedMediaUpload:
         assert body["embedder"] == "fake_image"
         assert body["media_type"] == "image"
         assert body["dim"] == 4
-        # embed_media L2-normalizes at the base wrapper, so the response
-        # carries the unit vector (and its norm is 1.0).
-        expected = (np.array([1.0, 2.0, 3.0, 4.0]) / np.sqrt(30.0)).tolist()
-        assert body["embedding"] == pytest.approx(expected, rel=1e-5)
-        assert body["norm"] == pytest.approx(1.0, rel=1e-5)
+        assert body["embedding"] == [1.0, 2.0, 3.0, 4.0]
+        # norm = sqrt(1+4+9+16) = sqrt(30)
+        assert body["norm"] == pytest.approx(np.sqrt(30.0), rel=1e-5)
         # Embedder saw a real file on disk that was cleaned up afterwards.
         assert fake_image_embedder.last_media_path is not None
 

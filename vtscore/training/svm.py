@@ -177,11 +177,10 @@ def train_svm(
         inclusion_value: ``[-10, 10]`` bias toward including (positive) or
             excluding (negative) - translated to ``class_weight``.
         seed: Random seed for the SVM solver and the calibrator's CV splits.
-        standardize: When ``True``, fit a ``StandardScaler`` first.  Every
-            embedding is L2-normalised once at ingest (see
-            :mod:`vtscore.embedding.normalize`), so features are already
-            unit-norm and this is off by default; turn it on only if you're
-            feeding raw or unnormalised features from an external source.
+        standardize: When ``True``, fit a ``StandardScaler`` first.  Most
+            embedders (CLAP/CLIP/SigLIP/E5) emit L2-normalised vectors so
+            this is off by default; turn on if you're feeding raw or
+            unnormalised features.
 
     Returns:
         A fitted :class:`SVMClassifier`.

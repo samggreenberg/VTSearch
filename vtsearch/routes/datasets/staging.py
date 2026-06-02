@@ -16,7 +16,6 @@ values raise 422.  See *Resolved questions / Plugin field endpoints*
 in the plan doc.
 """
 
-import io
 from pathlib import Path
 from uuid import uuid4
 
@@ -120,11 +119,8 @@ def stage_file():
     # instead of swallowed silently.
     error = ""
     try:
-        import zipfile
-
-        with zipfile.ZipFile(str(staging_path), "r") as zf:
-            pkl_bytes = zf.read("medias.pkl")
-        peeked = peek_pickle_dataset_summary(io.BytesIO(pkl_bytes))
+        with open(staging_path, "rb") as f:
+            peeked = peek_pickle_dataset_summary(f)
         if isinstance(peeked, dict) and "medias" in peeked:
             media_dict = peeked["medias"]
         elif isinstance(peeked, dict):
@@ -297,7 +293,7 @@ def import_dataset(importer_name: str):
     field_values = validate_plugin_args(
         importer,
         file_mode="bytesio",
-        extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "build_projection"),
+        extra_keys=("source_specs", "clipper", "embedder", "dataset_name"),
     )
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
@@ -331,7 +327,7 @@ register_plugin_typed_routes(
     path_template="/api/dataset/import/{plugin_name}",
     endpoint_prefix="import_dataset",
     delegate=import_dataset,
-    extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "clipper_params", "build_projection"),
+    extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "clipper_params"),
 )
 register_plugin_typed_routes(
     datasets_staging_bp,

@@ -96,82 +96,41 @@ class TestLocalFolderSource:
     def test_fetch_item(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        item = source.fetch_item("sub/c.wav")
-        assert item.path is not None
-        assert item.path.name == "c.wav"
-        assert item.path.read_bytes() == b"audio_c"
+        result = source.fetch_item("sub/c.wav")
+        assert result is not None
+        assert result.name == "c.wav"
+        assert result.read_bytes() == b"audio_c"
 
     def test_fetch_item_missing(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        assert source.fetch_item("nonexistent.wav").path is None
+        assert source.fetch_item("nonexistent.wav") is None
 
     def test_fetch_item_path_traversal(self, tmp_path):
         root = self._make_tree(tmp_path)
         # Create a file outside the root
         (tmp_path.parent / "secret.txt").write_bytes(b"secret")
         source = LocalFolderSource(root)
-        assert source.fetch_item("../secret.txt").path is None
+        assert source.fetch_item("../secret.txt") is None
 
     def test_resolve_path_by_origin_name(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        item = source.resolve_path(origin_name="a.wav")
-        assert item.path is not None
-        assert item.path.name == "a.wav"
+        result = source.resolve_path(origin_name="a.wav")
+        assert result is not None
+        assert result.name == "a.wav"
 
     def test_resolve_path_by_filename_fallback(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        item = source.resolve_path(filename="sub/c.wav")
-        assert item.path is not None
-        assert item.path.name == "c.wav"
+        result = source.resolve_path(filename="sub/c.wav")
+        assert result is not None
+        assert result.name == "c.wav"
 
     def test_resolve_path_both_empty(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
-        assert source.resolve_path().path is None
-
-    def test_fetch_items_returns_existing_and_missing(self, tmp_path):
-        root = self._make_tree(tmp_path)
-        source = LocalFolderSource(root)
-        result = source.fetch_items(["a.wav", "sub/c.wav", "missing.wav"])
-        assert result["a.wav"].path is not None
-        assert result["a.wav"].path.name == "a.wav"
-        assert result["sub/c.wav"].path is not None
-        assert result["sub/c.wav"].path.name == "c.wav"
-        assert result["missing.wav"].path is None
-
-    def test_fetch_items_empty_fields_on_plain_source(self, tmp_path):
-        """Default fetch_items leaves embedding/extra empty (no pre-computation)."""
-        root = self._make_tree(tmp_path)
-        source = LocalFolderSource(root)
-        item = source.fetch_items(["a.wav"])["a.wav"]
-        assert item.embedding is None
-        assert item.embedder_name == ""
-        assert item.extra == {}
-
-    def test_fetch_items_empty_list(self, tmp_path):
-        source = LocalFolderSource(tmp_path)
-        assert source.fetch_items([]) == {}
-
-    def test_resolve_paths_aligned_with_input(self, tmp_path):
-        root = self._make_tree(tmp_path)
-        source = LocalFolderSource(root)
-        entries = [
-            ("a.wav", ""),
-            ("nope.wav", "sub/c.wav"),
-            ("", ""),
-        ]
-        result = source.resolve_paths(entries)
-        assert len(result) == 3
-        assert result[0].path is not None and result[0].path.name == "a.wav"
-        assert result[1].path is not None and result[1].path.name == "c.wav"
-        assert result[2].path is None
-
-    def test_resolve_paths_empty_list(self, tmp_path):
-        source = LocalFolderSource(tmp_path)
-        assert source.resolve_paths([]) == []
+        assert source.resolve_path() is None
 
     def test_folder_path_property(self, tmp_path):
         source = LocalFolderSource(tmp_path)
@@ -206,9 +165,9 @@ class TestHttpArchiveSource:
 
         try:
             source = HttpArchiveSource("https://example.com/test.zip")
-            item = source.resolve_path(origin_name="clip.wav")
-            assert item.path is not None
-            assert item.path.name == "clip.wav"
+            result = source.resolve_path(origin_name="clip.wav")
+            assert result is not None
+            assert result.name == "clip.wav"
         finally:
             import shutil
 
@@ -237,9 +196,9 @@ class TestHttpArchiveSource:
         source._extract_dir = extract_dir
         source._inner = LocalFolderSource(extract_dir)
 
-        item = source.fetch_item("audio/clip.wav")
-        assert item.path is not None
-        assert item.path.name == "clip.wav"
+        result = source.fetch_item("audio/clip.wav")
+        assert result is not None
+        assert result.name == "clip.wav"
 
         items = list(source.list_items(extensions=[".wav"]))
         assert any(i.key == "audio/clip.wav" for i in items)
@@ -373,8 +332,8 @@ class TestResolverUsesSource:
 
 
 class TestIngestViaSource:
-    def test_ingest_bulk_fetch(self, tmp_path):
-        """When a source is available and embedding works, ingest resolves paths in bulk."""
+    def test_ingest_fetches_individually(self, tmp_path):
+        """When a source is available and embedding works, ingest fetches individually."""
         import numpy as np
 
         folder = tmp_path / "audio"
@@ -431,60 +390,6 @@ class TestIngestViaSource:
 
         assert result == -1
         assert len(medias) == 0  # Nothing ingested, caller should use legacy
-
-    def test_ingest_uses_precomputed_embedding_from_source(self, tmp_path):
-        """When resolve_paths returns a FetchedItem with an embedding, the
-        ingest path skips local re-embedding and uses the source's vector and
-        any extra metadata (e.g. duration) directly."""
-        import numpy as np
-
-        from vtscore.datasets.ingest import _ingest_via_source
-        from vtscore.datasets.sources.base import FetchedItem
-        from vtscore.datasets.sources import get_source_for_origin
-
-        folder = tmp_path / "audio"
-        folder.mkdir()
-        (folder / "clip.wav").write_bytes(b"audio_data")
-
-        origin = {
-            "importer": "server_folder",
-            "params": {"path": str(folder), "media_type": "audio"},
-        }
-        entries = [
-            {"origin": origin, "origin_name": "clip.wav", "md5": "", "label": "good", "filename": "clip.wav"},
-        ]
-
-        precomputed_emb = np.ones(512, dtype=np.float32)
-
-        # Patch the source so resolve_paths returns a FetchedItem with a
-        # pre-computed embedding and extra metadata.
-        real_source = get_source_for_origin(origin)
-        assert real_source is not None
-        real_source.resolve_paths = lambda pairs: [  # type: ignore[method-assign]
-            FetchedItem(
-                path=folder / "clip.wav",
-                embedding=precomputed_emb,
-                embedder_name="test-embedder",
-                extra={"duration": 3.5},
-            )
-        ]
-
-        medias: dict = {}
-        with patch("vtscore.datasets.sources.get_source_for_origin", return_value=real_source):
-            # embed_file must NOT be called when pre-computed embedding is provided.
-            with patch(
-                "vtscore.detectors.resolver.embed_file", side_effect=AssertionError("embed_file called unexpectedly")
-            ):
-                result = _ingest_via_source(origin, entries, medias, lambda *a: None)
-
-        assert result == 1
-        assert len(medias) == 1
-        media = next(iter(medias.values()))
-        # Ingest L2-normalizes the source's vector at the write chokepoint,
-        # so the stored embedding is the unit-norm form of precomputed_emb.
-        assert np.allclose(media["embedding"], precomputed_emb / np.linalg.norm(precomputed_emb))
-        assert media["embedder"] == "test-embedder"
-        assert media["duration"] == 3.5
 
     def test_ingest_returns_negative_one_for_pickle(self):
         """Non-file-based origins return -1 (fallback to full importer)."""
@@ -564,192 +469,3 @@ class TestExampleSortOriginEndpoint:
         )
         # Will get 500 if embedder can't handle fake audio, but not 400/404
         assert resp.status_code in (200, 500)
-
-
-# ── ServerFilesSource ─────────────────────────────────────────────────
-
-
-class TestServerFilesSource:
-    def _make_npz(self, tmp_path, paths_and_vecs, embedder_name=""):
-        """Create a .npz archive with given paths and vectors."""
-        import numpy as np
-
-        names = np.array([str(p) for p in paths_and_vecs])
-        vecs = np.stack([v for _, v in paths_and_vecs.items()])
-        kwargs = {"filenames": names, "vectors": vecs}
-        if embedder_name:
-            kwargs["embedder_name"] = np.array(embedder_name)
-        npz = tmp_path / "list.npz"
-        np.savez(npz, **kwargs)
-        return npz
-
-    def test_fetch_item_returns_path_and_embedding(self, tmp_path):
-        import numpy as np
-        from vtscore.datasets.sources.server_files import ServerFilesSource
-
-        media = tmp_path / "clip.wav"
-        media.write_bytes(b"audio")
-        vec = np.ones(4, dtype=np.float32)
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(media)]),
-            vectors=vec[np.newaxis],
-            embedder_name=np.array("test-embedder"),
-        )
-
-        source = ServerFilesSource(npz, embedder_name="test-embedder")
-        item = source.fetch_item(str(media))
-        assert item.path == media
-        np.testing.assert_array_equal(item.embedding, vec)
-        assert item.embedder_name == "test-embedder"
-
-    def test_fetch_item_missing_file_returns_none_path(self, tmp_path):
-        import numpy as np
-        from vtscore.datasets.sources.server_files import ServerFilesSource
-
-        vec = np.zeros(4, dtype=np.float32)
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(tmp_path / "nonexistent.wav")]),
-            vectors=vec[np.newaxis],
-        )
-        source = ServerFilesSource(npz)
-        item = source.fetch_item(str(tmp_path / "nonexistent.wav"))
-        assert item.path is None
-
-    def test_resolve_path_by_origin_name(self, tmp_path):
-        import numpy as np
-        from vtscore.datasets.sources.server_files import ServerFilesSource
-
-        media = tmp_path / "clip.wav"
-        media.write_bytes(b"audio")
-        vec = np.full(4, 2.0, dtype=np.float32)
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(media)]),
-            vectors=vec[np.newaxis],
-            embedder_name=np.array("my-embedder"),
-        )
-        source = ServerFilesSource(npz, embedder_name="my-embedder")
-        item = source.resolve_path(origin_name=str(media))
-        assert item.path == media
-        np.testing.assert_array_equal(item.embedding, vec)
-        assert item.embedder_name == "my-embedder"
-
-    def test_resolve_path_neither_found_returns_none(self, tmp_path):
-        import numpy as np
-        from vtscore.datasets.sources.server_files import ServerFilesSource
-
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(tmp_path / "missing.wav")]),
-            vectors=np.zeros((1, 4), dtype=np.float32),
-        )
-        source = ServerFilesSource(npz)
-        assert source.resolve_path().path is None
-        assert source.resolve_path(origin_name=str(tmp_path / "missing.wav")).path is None
-
-    def test_list_items_yields_existing_paths(self, tmp_path):
-        import numpy as np
-        from vtscore.datasets.sources.server_files import ServerFilesSource
-
-        existing = tmp_path / "a.wav"
-        existing.write_bytes(b"audio")
-        missing = tmp_path / "b.wav"
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(existing), str(missing)]),
-            vectors=np.zeros((2, 4), dtype=np.float32),
-        )
-        source = ServerFilesSource(npz)
-        items = list(source.list_items())
-        assert len(items) == 1
-        assert items[0].key == str(existing)
-        assert items[0].filename == "a.wav"
-        assert items[0].source_name == "server_files"
-
-    def test_list_items_extension_filter(self, tmp_path):
-        import numpy as np
-        from vtscore.datasets.sources.server_files import ServerFilesSource
-
-        wav = tmp_path / "a.wav"
-        mp3 = tmp_path / "b.mp3"
-        wav.write_bytes(b"audio_wav")
-        mp3.write_bytes(b"audio_mp3")
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(wav), str(mp3)]),
-            vectors=np.zeros((2, 4), dtype=np.float32),
-        )
-        source = ServerFilesSource(npz)
-        wav_items = list(source.list_items(extensions=[".wav"]))
-        assert len(wav_items) == 1
-        assert wav_items[0].filename == "a.wav"
-
-    def test_factory_creates_source_for_npz_origin(self, tmp_path):
-        import numpy as np
-        from vtscore.datasets.sources.server_files import SOURCE, ServerFilesSource
-
-        media = tmp_path / "clip.wav"
-        media.write_bytes(b"audio")
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(media)]),
-            vectors=np.zeros((1, 4), dtype=np.float32),
-            embedder_name=np.array("test-embed"),
-        )
-
-        origin = {
-            "importer": "server_files",
-            "params": {"paths_file": str(npz), "embedder_name": "test-embed"},
-        }
-        source = SOURCE.create_from_origin(origin)
-        assert isinstance(source, ServerFilesSource)
-        assert source._embedder_name == "test-embed"
-
-    def test_factory_returns_none_for_txt_origin(self, tmp_path):
-        from vtscore.datasets.sources.server_files import SOURCE
-
-        txt = tmp_path / "list.txt"
-        txt.write_text("/a.wav\n")
-        origin = {
-            "importer": "server_files",
-            "params": {"paths_file": str(txt)},
-        }
-        assert SOURCE.create_from_origin(origin) is None
-
-    def test_factory_returns_none_for_missing_npz(self, tmp_path):
-        from vtscore.datasets.sources.server_files import SOURCE
-
-        origin = {
-            "importer": "server_files",
-            "params": {"paths_file": str(tmp_path / "nonexistent.npz")},
-        }
-        assert SOURCE.create_from_origin(origin) is None
-
-    def test_get_source_for_npz_origin(self, tmp_path):
-        import numpy as np
-        from vtscore.datasets.sources.server_files import ServerFilesSource
-
-        media = tmp_path / "clip.wav"
-        media.write_bytes(b"audio")
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(media)]),
-            vectors=np.zeros((1, 4), dtype=np.float32),
-        )
-
-        origin = {
-            "importer": "server_files",
-            "params": {"paths_file": str(npz)},
-        }
-        source = get_source_for_origin(origin)
-        assert isinstance(source, ServerFilesSource)

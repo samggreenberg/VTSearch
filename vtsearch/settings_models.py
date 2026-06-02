@@ -130,11 +130,6 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_hidden_plugins`.
     hidden_plugins: dict[str, list[str]] = Field(default_factory=dict)
 
-    # Maximum age (in days) for datasets created on this server.  New
-    # datasets are stamped with an ``expires_at`` timestamp based on this
-    # value.  ``None`` (the default) means datasets never expire.
-    dataset_max_age_days: int | None = None
-
 
 class UserSettings(BaseModel):
     """Per-user settings persisted in ``<user_data_dir>/user_settings.json``."""

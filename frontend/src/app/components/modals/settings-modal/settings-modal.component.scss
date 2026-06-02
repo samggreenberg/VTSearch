@@ -153,51 +153,6 @@
 }
 
 
-// Read-only value display for the Server Settings tab. Styled to read as
-// a static, non-editable field (muted surface, no focus affordance) so
-// it's visually distinct from the editable controls in the other tabs
-// while still sitting under a `.form-label` like every other setting.
-.server-value {
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: var(--font-md);
-  word-break: break-word;
-
-  &--mono {
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-    font-size: var(--font-sm);
-    word-break: break-all;
-  }
-
-  &--empty {
-    color: var(--text-muted);
-    font-style: italic;
-  }
-}
-
-// Hidden-plugins breakdown: one `family: name, name` row per plugin
-// family. Shares the muted-surface look of `.server-value` so the whole
-// Server tab reads as a single read-only group.
-.server-list {
-  margin: 0;
-  padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-xl);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  font-size: var(--font-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-
-  &__key {
-    font-weight: var(--weight-medium);
-    color: var(--text-secondary);
-  }
-}
-
 .settings-tab-icon {
   transition: transform var(--transition-slow) ease;
   transform: rotate(0deg);

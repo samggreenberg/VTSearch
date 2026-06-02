@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Iterable
+from typing import Any, Callable, Iterable
 
 
 @dataclass
@@ -370,15 +370,8 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-if TYPE_CHECKING:
-    # ``FAMILIES`` is produced at access time by ``__getattr__`` above; declare
-    # it here so static analysis (and ``from … import FAMILIES`` callers) see a
-    # real, typed module member rather than an unresolved ``__all__`` entry.
-    FAMILIES: tuple[str, ...]
-
-
 __all__ = [
-    "FAMILIES",
+    "FAMILIES",  # noqa: F822 - exposed dynamically via module __getattr__
     "FamilyProvider",
     "PluginEntry",
     "family_flag",

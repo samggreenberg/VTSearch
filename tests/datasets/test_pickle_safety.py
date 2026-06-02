@@ -255,46 +255,32 @@ class TestMaliciousPickleInLoader:
     main dataset loading functions."""
 
     def test_load_dataset_from_pickle_rejects_rce(self, tmp_path):
-        """load_dataset_from_pickle must reject an RCE payload inside a container."""
-        import json
-        import zipfile
-
+        """load_dataset_from_pickle must reject an RCE payload."""
         pkl_path = tmp_path / "evil.pkl"
-        with zipfile.ZipFile(str(pkl_path), "w") as zf:
-            zf.writestr("medias.pkl", _make_malicious_pickle())
-            zf.writestr("meta.json", json.dumps({"format_version": 1}))
+        pkl_path.write_bytes(_make_malicious_pickle())
         target = {}
         with pytest.raises(pickle.UnpicklingError, match="Forbidden pickle class"):
             load_dataset_from_pickle(pkl_path, target)
 
     def test_load_dataset_from_pickle_chunked_rejects_rce(self, tmp_path):
-        """load_dataset_from_pickle_chunked must reject an RCE payload inside a container."""
-        import json
-        import zipfile
-
+        """load_dataset_from_pickle_chunked must reject an RCE payload."""
         pkl_path = tmp_path / "evil.pkl"
-        with zipfile.ZipFile(str(pkl_path), "w") as zf:
-            zf.writestr("medias.pkl", _make_malicious_pickle())
-            zf.writestr("meta.json", json.dumps({"format_version": 1}))
+        pkl_path.write_bytes(_make_malicious_pickle())
         with pytest.raises(pickle.UnpicklingError, match="Forbidden pickle class"):
             list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10))
 
     def test_stage_file_rejects_rce(self, client, tmp_path):
         """The /api/dataset/stage-file endpoint must not execute RCE payloads."""
-        import json
-        import zipfile
-
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
-            zf.writestr("medias.pkl", _make_malicious_pickle())
-            zf.writestr("meta.json", json.dumps({"format_version": 1}))
-        buf.seek(0)
-        data = {"file": (buf, "evil.pkl")}
+        payload = _make_malicious_pickle()
+        data = {"file": (io.BytesIO(payload), "evil.pkl")}
         resp = client.post(
             "/api/dataset/stage-file",
             data=data,
             content_type="multipart/form-data",
         )
+        # Endpoint stays 200 so the client keeps the staged path for cleanup,
+        # but the peek failure is surfaced via the ``error`` field instead of
+        # silently returning count=0 with no explanation.
         assert resp.status_code == 200
         body = resp.get_json()
         assert body["count"] == 0

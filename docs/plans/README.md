@@ -9,16 +9,13 @@ Open the file for status; this index is just a filename list so it
 can't drift.
 
 - [browser-vision-testing.md](browser-vision-testing.md): Browser-vision testing via the Claude Chrome extension (style audit, edge states, e2e flows, long-op observability)
-- [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect with converters and clippers
-- [cli-stream-massive-images.md](cli-stream-massive-images.md): CLI streaming for massive media sources
 - [clipper-chain.md](clipper-chain.md): Clipper chain
 - [frontend-bundle-organization.md](frontend-bundle-organization.md): Frontend bundle organization
 - [logical-bug-audit.md](logical-bug-audit.md): Logical-bug audit
 - [multi-media-import.md](multi-media-import.md): Multi-media importing
+- [openapi-schema.md](openapi-schema.md): OpenAPI schema + generated TS client
 - [patch-embedder.md](patch-embedder.md): Patch-based image embedder
 - [plugin-interface-streamlines.md](plugin-interface-streamlines.md): Plugin author interface streamlines
 - [RCDatasetImporter.md](RCDatasetImporter.md): RCDatasetImporter / Holder / PullWrest extension
 - [scalability.md](scalability.md): Scalability brainstorm: 100 k / 1 M / 10 M datasets
 - [scalability-plan.md](scalability-plan.md): Scalability implementation plan (phases 1–4)
-- [vtsbrowse.md](vtsbrowse.md): VTSBrowse — UMAP hexbin dataset browser
-- [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): VTSBrowse projection empirical tuning
