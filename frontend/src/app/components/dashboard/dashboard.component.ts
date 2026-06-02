@@ -18,6 +18,7 @@ import { TopBarStateService } from '../../services/top-bar-state.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { DashboardModalsService } from '../../services/dashboard-modals.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 import { DatasetRegistryEntry, DemoDataset, DetectorRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import {
@@ -102,11 +103,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
   datasetCols!: DashboardColumnsService['datasetCols'];
   detectorCols!: DashboardColumnsService['detectorCols'];
 
+  /** True when the server stamps datasets with an age-off (the
+   *  `dataset_max_age_days` setting is set). Gates the Age-Off column:
+   *  with no server age-off there is nothing to show, so the column is
+   *  dropped entirely. Mirrored from `SettingsStateService` in ngOnInit. */
+  serverSetsAgeOff = false;
+
   get visibleDatasetColumns(): DatasetColumn[] {
+    let cols = this.datasetCols.columnOrder;
     if (this.isDefaultLogin) {
-      return this.datasetCols.columnOrder.filter((c) => c !== 'created_by' && c !== 'readers');
+      cols = cols.filter((c) => c !== 'created_by' && c !== 'readers');
     }
-    return this.datasetCols.columnOrder;
+    if (!this.serverSetsAgeOff) {
+      cols = cols.filter((c) => c !== 'expires_at');
+    }
+    return cols;
   }
 
   get visibleDetectorColumns(): DetectorColumn[] {
@@ -159,6 +170,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     public modals: DashboardModalsService,
     public loadingTasksSvc: DashboardLoadingTasksService,
     private progressEvents: ProgressEventsService,
+    private settingsState: SettingsStateService,
     columnsService: DashboardColumnsService,
   ) {
     this.datasetCols = columnsService.datasetCols;
@@ -171,6 +183,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .subscribe((status) => {
         this.currentUser = status?.user || '';
         this.isDefaultLogin = status?.provider === 'default';
+      });
+    // Mirror the server's age-off setting so the Age-Off column appears
+    // only when the server actually stamps datasets with an expiry. The
+    // settings are loaded once at app startup (AppComponent); subscribing
+    // to the BehaviorSubject replays the latest value immediately.
+    this.settingsState.settings$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((settings) => {
+        this.serverSetsAgeOff = settings?.dataset_max_age_days != null;
       });
     // Auto-select newly added items whenever the dataset/model lists change
     this.datasetState.datasets$

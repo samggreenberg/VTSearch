@@ -6,6 +6,7 @@ export type DatasetColumn =
   | 'media_type'
   | 'num_items'
   | 'created_at'
+  | 'expires_at'
   | 'created_by'
   | 'readers'
   | 'loaded'
@@ -30,6 +31,7 @@ const DATASET_COLUMNS_DEFAULT: DatasetColumn[] = [
   'media_type',
   'num_items',
   'created_at',
+  'expires_at',
   'created_by',
   'readers',
   'loaded',
@@ -52,6 +54,7 @@ export const DATASET_COL_META: Record<string, ColMeta> = {
   media_type: { label: 'Type', title: 'Media type: audio, image, text, video, or document (click to sort)', sortable: true },
   num_items: { label: '# Items', title: 'Number of media items in the dataset (click to sort)', sortable: true },
   created_at: { label: 'Created', title: 'When the dataset was first imported (click to sort)', sortable: true },
+  expires_at: { label: 'Age-Off', title: 'When this dataset ages off and is automatically removed (click to sort)', sortable: true },
   created_by: { label: 'Creator', title: 'User who created this dataset (click to sort)', sortable: true },
   readers: { label: 'Readers', title: 'Users with access to this dataset (click to sort)', sortable: true },
   loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
