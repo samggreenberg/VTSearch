@@ -113,6 +113,27 @@ describe('DatasetCardComponent', () => {
     expect(component.delete.emit).toHaveBeenCalled();
   });
 
+  it('should emit browse on browse button click for audio datasets', () => {
+    spyOn(component.browse, 'emit');
+    const el = fixture.nativeElement as HTMLElement;
+    const browseBtn = el.querySelector('.browse-btn') as HTMLButtonElement;
+    expect(browseBtn.disabled).toBeFalse();
+    browseBtn.click();
+    expect(component.browse.emit).toHaveBeenCalled();
+  });
+
+  it('should disable browse button and not emit for non-audio datasets', () => {
+    component.dataset = { ...mockDataset, media_type: 'image' };
+    fixture.detectChanges();
+    spyOn(component.browse, 'emit');
+    const el = fixture.nativeElement as HTMLElement;
+    const browseBtn = el.querySelector('.browse-btn') as HTMLButtonElement;
+    expect(component.canBrowse).toBeFalse();
+    expect(browseBtn.disabled).toBeTrue();
+    component.onBrowse(new MouseEvent('click'));
+    expect(component.browse.emit).not.toHaveBeenCalled();
+  });
+
   it('should format dates', () => {
     expect(component.formatDate(1700000000)).toMatch(/\d/);
     expect(component.formatDate(null)).toBe('-');

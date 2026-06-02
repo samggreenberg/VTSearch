@@ -144,6 +144,28 @@ td.actions-col {
   }
 }
 
+.browse-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover:not(.disabled) {
+    background: var(--btn-icon-hover-bg);
+  }
+
+  &.disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
+}
+
 .security-btn {
   background: none;
   border: none;

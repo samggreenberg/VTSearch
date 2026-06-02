@@ -40,6 +40,7 @@ export class DatasetCardComponent implements OnChanges {
   @Output() stats = new EventEmitter<void>();
   @Output() delete = new EventEmitter<void>();
   @Output() load = new EventEmitter<void>();
+  @Output() browse = new EventEmitter<void>();
   @Output() security = new EventEmitter<void>();
   @Output() cancelTask = new EventEmitter<string>();
   @Output() dismissTask = new EventEmitter<string>();
@@ -47,6 +48,12 @@ export class DatasetCardComponent implements OnChanges {
 
   get isOwner(): boolean {
     return this.dataset?.created_by === this.currentUser;
+  }
+
+  // Browsing (VTSBrowse) currently only supports audio datasets; the button is
+  // shown disabled for every other media type.
+  get canBrowse(): boolean {
+    return this.dataset?.media_type === 'audio';
   }
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
@@ -128,6 +135,12 @@ export class DatasetCardComponent implements OnChanges {
   onLoad(event: MouseEvent): void {
     event.stopPropagation();
     this.load.emit();
+  }
+
+  onBrowse(event: MouseEvent): void {
+    event.stopPropagation();
+    if (!this.canBrowse) return;
+    this.browse.emit();
   }
 
   onDelete(event: MouseEvent): void {
