@@ -281,16 +281,20 @@ class TestMaliciousPickleInLoader:
 
     def test_stage_file_rejects_rce(self, client, tmp_path):
         """The /api/dataset/stage-file endpoint must not execute RCE payloads."""
-        payload = _make_malicious_pickle()
-        data = {"file": (io.BytesIO(payload), "evil.pkl")}
+        import json
+        import zipfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("medias.pkl", _make_malicious_pickle())
+            zf.writestr("meta.json", json.dumps({"format_version": 1}))
+        buf.seek(0)
+        data = {"file": (buf, "evil.pkl")}
         resp = client.post(
             "/api/dataset/stage-file",
             data=data,
             content_type="multipart/form-data",
         )
-        # Endpoint stays 200 so the client keeps the staged path for cleanup,
-        # but the peek failure is surfaced via the ``error`` field instead of
-        # silently returning count=0 with no explanation.
         assert resp.status_code == 200
         body = resp.get_json()
         assert body["count"] == 0
