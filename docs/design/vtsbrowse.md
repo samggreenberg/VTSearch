@@ -684,18 +684,27 @@ and available to any future consumer of `vtscore`.
     expired entries.
 
 ## Open follow-ups
-- **Sibling highlighting:** hovering a hex should highlight hexes containing
-  items from the same source file. Requires either source-file group ids in
-  the tile payload or a server-side lookup endpoint keyed by group id. The
-  canvas component has the rendering path ready but the data isn't wired yet.
-- **VTSearch detector handoff:** v1 is browse-only. The deferred feature is
-  letting a user select/vote items on the canvas to seed VTSearch's existing
-  train-a-detector flow (and, once a detector exists, optionally recolor hexes
-  by detector score instead of density). Adds selection + vote UI and a
-  bridge into the detector context; explicitly out of v1.
-- **Text-seeded navigation:** a query box that embeds text and flies the
-  canvas to the nearest region (reuses `embed_text_query` + cosine). Out of
-  v1 scope; the projection is the only ordering in v1.
-- **WebGL renderer** if the Canvas 2D ceiling is hit.
-- If/when independent distribution of the projection backend is required,
-  open a companion plan for **`vtscore` decoupling + PyPI publish**.
+
+**Active:**
+- **Empirical tuning pass:** choose validated defaults for the UMAP fit, the
+  hex-tile pyramid, and the canvas renderer (the knobs *§Open problems →
+  Empirical* deliberately left unset). Planned in detail, ready to execute on
+  an environment with a browser (visual layout/hover judgment can't be done in
+  the headless cloud container) — see **`docs/plans/vtsbrowse-empirical-tuning.md`**.
+- **WebGL renderer** if the Canvas 2D ceiling is hit (a trigger from the tuning
+  pass's performance review, not a standalone feature).
+- If/when independent distribution of the projection backend is required, open
+  a companion plan for **`vtscore` decoupling + PyPI publish**.
+
+**Cut (decided not to pursue):**
+- **Sibling highlighting** — *cut.* Would have highlighted hexes containing
+  items from the same source file on hover (needs source-file group ids in the
+  tile payload or a server-side lookup endpoint). The canvas has the rendering
+  path stubbed (hovered-hex stroke in `drawHex`), but the data plumbing will not
+  be wired.
+- **VTSearch detector handoff** — *cut.* Would have let a user select/vote items
+  on the canvas to seed the train-a-detector flow and recolor hexes by detector
+  score. Browse stays dataset-only; no bridge into a `DetectorContext`.
+- **Text-seeded navigation** — *cut.* Would have added a query box that embeds
+  text and pans the canvas to the nearest region. The projection remains the
+  only ordering in Browse.
