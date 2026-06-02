@@ -128,27 +128,16 @@ class TestPickleRoundTrip:
         assert result is None
         assert len(loaded_clips) == 1
 
-    def test_rejects_old_format_pickle(self, tmp_path):
-        """Old-style pickles (no wrapping 'medias' key) are rejected."""
-        old_data = {
-            1: {
-                "id": 1,
-                "media_type": "audio",
-                "duration": 1.0,
-                "file_size": 100,
-                "md5": "abc123",
-                "embedding": [0.0] * 10,
-                "filename": "clip_1.wav",
-                "category": "test",
-                "wav_bytes": b"\x00" * 100,
-            }
-        }
+    def test_rejects_non_container_file(self, tmp_path):
+        """Non-ZIP files are rejected."""
+        import zipfile
+
         pkl_path = tmp_path / "old.pkl"
-        pkl_path.write_bytes(pickle.dumps(old_data))
+        pkl_path.write_bytes(b"not a zip file")
         loaded_clips: dict = {}
         import pytest
 
-        with pytest.raises(ValueError, match="Invalid pickle format"):
+        with pytest.raises(zipfile.BadZipFile):
             load_dataset_from_pickle(pkl_path, loaded_clips)
 
 

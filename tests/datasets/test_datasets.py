@@ -373,6 +373,7 @@ class TestDemoDatasetReadiness:
         import pickle
 
         from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
+        from vtscore.datasets.container import write_container
 
         esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
         if esc50_dir.exists():
@@ -380,7 +381,7 @@ class TestDemoDatasetReadiness:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "medias": {}}))
+        write_container(pkl_file, pickle.dumps({"name": "esc50_s", "medias": {}}), {"format_version": 1})
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
@@ -406,10 +407,12 @@ class TestDemoDatasetReadiness:
             pytest.skip("ESC-50 audio dir is non-empty; cannot test empty-dir scenario")
 
         # Create the directory structure but leave it empty
+        from vtscore.datasets.container import write_container
+
         esc50_dir.mkdir(parents=True, exist_ok=True)
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "medias": {}}))
+        write_container(pkl_file, pickle.dumps({"name": "esc50_s", "medias": {}}), {"format_version": 1})
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
@@ -439,9 +442,11 @@ class TestDemoDatasetReadiness:
         if ucf101_dir.exists():
             pytest.skip("UCF-101 is present; cannot test stale-pkl scenario")
 
+        from vtscore.datasets.container import write_container
+
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / "ucf101_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "ucf101_s", "medias": {}}))
+        write_container(pkl_file, pickle.dumps({"name": "ucf101_s", "medias": {}}), {"format_version": 1})
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()

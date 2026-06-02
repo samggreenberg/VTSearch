@@ -78,15 +78,17 @@ def _make_image_clip(media_id: int, md5: str = "") -> dict:
 
 
 def _write_pickle_dataset(path, clips_dict):
-    """Write a pickle dataset file in the standard format."""
+    """Write a dataset container file in the standard ZIP format."""
+    from vtscore.datasets.container import write_container
+
     data = {
         "medias": {
             cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items()}
             for cid, media in clips_dict.items()
         }
     }
-    with open(path, "wb") as f:
-        pickle.dump(data, f)
+    pkl_bytes = pickle.dumps(data)
+    write_container(path, pkl_bytes, {"format_version": 1})
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +424,9 @@ class TestAvailableFilesEndpoint:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         test_pkl = EMBEDDINGS_DIR / "_test_combine.pkl"
-        test_pkl.write_bytes(pickle.dumps({"medias": {}}))
+        from vtscore.datasets.container import write_container
+
+        write_container(test_pkl, pickle.dumps({"medias": {}}), {"format_version": 1})
         try:
             resp = client.get("/api/dataset/available-files")
             data = resp.get_json()

@@ -255,17 +255,27 @@ class TestMaliciousPickleInLoader:
     main dataset loading functions."""
 
     def test_load_dataset_from_pickle_rejects_rce(self, tmp_path):
-        """load_dataset_from_pickle must reject an RCE payload."""
+        """load_dataset_from_pickle must reject an RCE payload inside a container."""
+        import json
+        import zipfile
+
         pkl_path = tmp_path / "evil.pkl"
-        pkl_path.write_bytes(_make_malicious_pickle())
+        with zipfile.ZipFile(str(pkl_path), "w") as zf:
+            zf.writestr("medias.pkl", _make_malicious_pickle())
+            zf.writestr("meta.json", json.dumps({"format_version": 1}))
         target = {}
         with pytest.raises(pickle.UnpicklingError, match="Forbidden pickle class"):
             load_dataset_from_pickle(pkl_path, target)
 
     def test_load_dataset_from_pickle_chunked_rejects_rce(self, tmp_path):
-        """load_dataset_from_pickle_chunked must reject an RCE payload."""
+        """load_dataset_from_pickle_chunked must reject an RCE payload inside a container."""
+        import json
+        import zipfile
+
         pkl_path = tmp_path / "evil.pkl"
-        pkl_path.write_bytes(_make_malicious_pickle())
+        with zipfile.ZipFile(str(pkl_path), "w") as zf:
+            zf.writestr("medias.pkl", _make_malicious_pickle())
+            zf.writestr("meta.json", json.dumps({"format_version": 1}))
         with pytest.raises(pickle.UnpicklingError, match="Forbidden pickle class"):
             list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10))
 
