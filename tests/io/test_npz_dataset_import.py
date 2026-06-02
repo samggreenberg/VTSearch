@@ -22,7 +22,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtscore.datasets.importers._npz_vectors import read_npz_embedder_name, read_npz_filenames_and_vectors
+from vtscore.datasets.importers._npz_vectors import read_npz_filenames_and_vectors
 from vtscore.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
     _read_npz_paths_file,
@@ -95,51 +95,6 @@ class TestReadNpzFilenamesAndVectors:
 
 
 # ---------------------------------------------------------------------------
-# read_npz_embedder_name
-# ---------------------------------------------------------------------------
-
-
-class TestReadNpzEmbedderName:
-    def test_reads_embedder_name_key(self, tmp_path):
-        npz = tmp_path / "vecs.npz"
-        np.savez(
-            npz,
-            filenames=np.array(["a.wav"]),
-            vectors=np.zeros((1, 4), dtype=np.float32),
-            embedder_name=np.array("laion-clap"),
-        )
-        assert read_npz_embedder_name(npz) == "laion-clap"
-
-    def test_reads_embedder_key_as_fallback(self, tmp_path):
-        npz = tmp_path / "vecs.npz"
-        np.savez(
-            npz,
-            filenames=np.array(["a.wav"]),
-            vectors=np.zeros((1, 4), dtype=np.float32),
-            embedder=np.array("siglip"),
-        )
-        assert read_npz_embedder_name(npz) == "siglip"
-
-    def test_returns_empty_string_when_absent(self, tmp_path):
-        npz = tmp_path / "vecs.npz"
-        np.savez(npz, filenames=np.array(["a.wav"]), vectors=np.zeros((1, 4), dtype=np.float32))
-        assert read_npz_embedder_name(npz) == ""
-
-    def test_returns_empty_string_for_missing_file(self, tmp_path):
-        assert read_npz_embedder_name(tmp_path / "missing.npz") == ""
-
-    def test_strips_whitespace(self, tmp_path):
-        npz = tmp_path / "vecs.npz"
-        np.savez(
-            npz,
-            filenames=np.array(["a.wav"]),
-            vectors=np.zeros((1, 4), dtype=np.float32),
-            embedder_name=np.array("  clap  "),
-        )
-        assert read_npz_embedder_name(npz) == "clap"
-
-
-# ---------------------------------------------------------------------------
 # server_files paths-file plumbing
 # ---------------------------------------------------------------------------
 
@@ -190,11 +145,10 @@ class TestServerFilesNpzPathsFile:
         vectors = np.arange(8, dtype=np.float32).reshape(2, 4)
         np.savez(npz, filenames=np.array([str(media_a), str(media_b)]), vectors=vectors)
 
-        paths, path_to_vector, embedder_name = _read_npz_paths_file(npz)
+        paths, path_to_vector = _read_npz_paths_file(npz)
         assert paths == [Path(str(media_a)), Path(str(media_b))]
         assert set(path_to_vector) == {str(media_a), str(media_b)}
         np.testing.assert_array_equal(path_to_vector[str(media_a)], vectors[0])
-        assert embedder_name == ""
 
     def test_relative_npz_paths_resolved_against_npz_dir(self, tmp_path):
         media = tmp_path / "data" / "x.wav"
@@ -207,34 +161,18 @@ class TestServerFilesNpzPathsFile:
             vectors=np.zeros((1, 4), dtype=np.float32),
         )
 
-        paths, vecs, embedder_name = _read_npz_paths_file(npz)
+        paths, vecs = _read_npz_paths_file(npz)
         assert paths == [media.resolve()]
         # Vector is keyed by the resolved absolute path so the staging
         # rekey step can look it up.
         assert str(media.resolve()) in vecs
-        assert embedder_name == ""
 
     def test_read_paths_and_vectors_txt_returns_empty_vectors(self, tmp_path):
         txt = tmp_path / "list.txt"
         txt.write_text("/a.wav\n")
-        paths, vecs, embedder_name = _read_paths_and_vectors(txt)
+        paths, vecs = _read_paths_and_vectors(txt)
         assert paths == [Path("/a.wav")]
         assert vecs == {}
-        assert embedder_name == ""
-
-    def test_read_npz_paths_file_returns_embedder_name(self, tmp_path):
-        media = tmp_path / "clip.wav"
-        media.write_bytes(b"data")
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(media)]),
-            vectors=np.zeros((1, 4), dtype=np.float32),
-            embedder_name=np.array("laion-clap"),
-        )
-        paths, vecs, embedder_name = _read_npz_paths_file(npz)
-        assert paths == [media]
-        assert embedder_name == "laion-clap"
 
 
 # ---------------------------------------------------------------------------
@@ -280,32 +218,6 @@ class TestServerFilesNpzRunsEndToEnd:
         for media in medias.values():
             assert media["origin"]["importer"] == "server_files"
             assert media["origin"]["params"]["paths_file"] == str(npz)
-
-    def test_npz_embedder_name_stored_in_media_and_origin(self, tmp_path):
-        """Embedder name from the NPZ is recorded on media['embedder'] and origin params."""
-        from helpers import make_raw_wav_bytes
-
-        src = tmp_path / "clip.wav"
-        src.write_bytes(make_raw_wav_bytes())
-
-        rng = np.random.default_rng(0)
-        vec = rng.standard_normal(512).astype(np.float32)
-        npz = tmp_path / "list.npz"
-        np.savez(
-            npz,
-            filenames=np.array([str(src)]),
-            vectors=vec[np.newaxis],
-            embedder_name=np.array("laion-clap"),
-        )
-
-        imp = ServerFilesDatasetImporter()
-        medias: dict = {}
-        imp.run({"paths_file": str(npz), "media_type": "audio"}, medias)
-
-        assert len(medias) == 1
-        media = next(iter(medias.values()))
-        assert media["embedder"] == "laion-clap"
-        assert media["origin"]["params"]["embedder_name"] == "laion-clap"
 
     def test_npz_per_key_layout_is_accepted(self, tmp_path):
         from helpers import make_raw_wav_bytes

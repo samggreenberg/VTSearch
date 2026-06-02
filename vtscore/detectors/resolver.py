@@ -146,7 +146,7 @@ def _auto_wire_resolvers() -> None:
                 # Keep the source alive (and its temp dir, if any) until
                 # the caller's resolve_file_context exits.
                 stack.callback(source.cleanup)
-                return source.resolve_path(origin_name, filename).path
+                return source.resolve_path(origin_name, filename)
 
             register_source_resolver(_default_source_resolver)
         except ImportError:

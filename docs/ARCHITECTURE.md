@@ -121,9 +121,7 @@ VTSearch/
 │   │   ├── load_pipeline.py        Background-task orchestration, ConcurrencyGate, clip fix-up
 │   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
 │   │   ├── downloader/             Demo dataset downloaders (audio, image, video, text, docs)
-│   │   ├── sources/                MediaSource abstraction (local_folder, http_archive, pullwrest);
-│   │   │                           all fetch/resolve ops return FetchedItem (path + optional
-│   │   │                           embedding, embedder_name, extra metadata)
+│   │   ├── sources/                MediaSource abstraction (local_folder, http_archive, pullwrest)
 │   │   └── importers/              Plugin importers (server_folder, server_files, local_folder,
 │   │                               local_files, pickle, http_archive, combine_datasets,
 │   │                               demo, synthetic, recaller)

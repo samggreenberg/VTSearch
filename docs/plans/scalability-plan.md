@@ -1,10 +1,6 @@
 # Scalability Implementation Plan
 
-**Status:** Open; none of the phases below shipped yet.  Separately, the
-CLI-specific streaming work (lazy folder enumeration, per-chunk embed, and
-streaming export — partial fixes for S20/S15/S13 on the `--autodetect` target
-side) **has** shipped; see
-[`cli-stream-massive-images.md`](cli-stream-massive-images.md).
+**Status:** Open; no fixes shipped yet.
 
 **Parent:** [`scalability.md`](scalability.md); the brainstorm that defines
 all S# IDs referenced here.

@@ -57,7 +57,6 @@ def _lib_default_core_config(_settings_path=None):
         max_concurrent_dataset_downloads=1,
         max_concurrent_dataset_embeddings=1,
         autorun_detectors=(),
-        dataset_max_age_days=None,
         safe_thresholds=False,
         calibrate_count=10,
         calibration_fraction=0.1,
@@ -89,10 +88,7 @@ def _fake_embed_audio(arg):
     except Exception:
         seed = hash(str(path)) % 2**31
     rng = np.random.RandomState(seed)
-    vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
-    # Real embedders now L2-normalize at ingest, so the fakes must too:
-    # region_similarity scores by dot product on the unit-norm assumption.
-    return vec / np.linalg.norm(vec)
+    return rng.randn(_EMBEDDING_DIM).astype(np.float32)
 
 
 def _fake_embed_text(text):
@@ -100,8 +96,7 @@ def _fake_embed_text(text):
 
     seed = int(_hl.md5(text.encode()).hexdigest(), 16) % 2**31
     rng = np.random.RandomState(seed)
-    vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
-    return vec / np.linalg.norm(vec)
+    return rng.randn(_EMBEDDING_DIM).astype(np.float32)
 
 
 _patch_embed_audio = patch("tests_lib.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio)

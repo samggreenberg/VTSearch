@@ -83,7 +83,7 @@ The 17 subpackages and what they do:
 | `vtscore.detectors` | Detector lifecycle: train, store, score, labelset sync |
 | `vtscore.eval` | Offline evaluation (text-sort, learned-sort, voting iterations) |
 | `vtscore.converters` | Cross-format converters (audio→spectrogram, ASR, OCR, …) |
-| `vtscore.exporters` | Results exporters (JSON, CSV, webhook, email); JSON/CSV/gui support CLI streaming for sources larger than RAM |
+| `vtscore.exporters` | Results exporters (JSON, CSV, webhook, email) |
 | `vtscore.labels` | Label importers + labelset sync sources |
 | `vtscore.plugins` | `PluginRegistry`, sentinel discovery, `importlib.metadata` hooks |
 | `vtscore.concurrency` | Async jobs, memory budget, long-running progress trackers |

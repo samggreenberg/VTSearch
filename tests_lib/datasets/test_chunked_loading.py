@@ -42,9 +42,8 @@ def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float
         medias_data[i] = media
 
     pkl_path = tmp_path / "test_chunked.pkl"
-    from vtscore.datasets.container import write_container
-
-    write_container(pkl_path, pickle.dumps({"medias": medias_data}), {"format_version": 1})
+    with open(pkl_path, "wb") as f:
+        pickle.dump({"medias": medias_data}, f)
     return pkl_path
 
 
@@ -68,9 +67,8 @@ def _make_pickle(tmp_path: Path, num_clips: int, inline_bytes: bool = True) -> P
         medias_data[i] = media
 
     pkl_path = tmp_path / "test_chunked.pkl"
-    from vtscore.datasets.container import write_container
-
-    write_container(pkl_path, pickle.dumps({"medias": medias_data}), {"format_version": 1})
+    with open(pkl_path, "wb") as f:
+        pickle.dump({"medias": medias_data}, f)
     return pkl_path
 
 
@@ -249,9 +247,8 @@ class TestPickleChunked:
             }
         }
         pkl_path = tmp_path / "img.pkl"
-        from vtscore.datasets.container import write_container
-
-        write_container(pkl_path, pickle.dumps({"medias": medias_data}), {"format_version": 1})
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
 
         # Full mode
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
@@ -281,9 +278,8 @@ class TestPickleChunked:
             }
         }
         pkl_path = tmp_path / "txt.pkl"
-        from vtscore.datasets.container import write_container
-
-        write_container(pkl_path, pickle.dumps({"medias": medias_data}), {"format_version": 1})
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
 
         # Full mode
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
@@ -310,9 +306,8 @@ class TestPickleChunked:
             }
         }
         pkl_path = tmp_path / "doc.pkl"
-        from vtscore.datasets.container import write_container
-
-        write_container(pkl_path, pickle.dumps({"medias": medias_data}), {"format_version": 1})
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
 
         # Full mode; was silently skipped before registry fix
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
@@ -345,9 +340,8 @@ class TestPickleChunked:
             },
         }
         pkl_path = tmp_path / "standard.pkl"
-        from vtscore.datasets.container import write_container
-
-        write_container(pkl_path, pickle.dumps({"medias": medias_data}), {"format_version": 1})
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
 
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         loaded = chunks[0]
@@ -370,13 +364,8 @@ class TestPickleChunked:
             }
         }
         pkl_path = tmp_path / "ext_doc.pkl"
-        from vtscore.datasets.container import write_container
-
-        write_container(
-            pkl_path,
-            pickle.dumps({"medias": medias_data, "document_dir": str(doc_dir)}),
-            {"format_version": 1},
-        )
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data, "document_dir": str(doc_dir)}, f)
 
         # Full mode; loads bytes from the external document_dir
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
@@ -404,9 +393,8 @@ class TestPickleChunked:
             }
         }
         pkl_path = tmp_path / "txt.pkl"
-        from vtscore.datasets.container import write_container
-
-        write_container(pkl_path, pickle.dumps({"medias": medias_data}), {"format_version": 1})
+        with open(pkl_path, "wb") as f:
+            pickle.dump({"medias": medias_data}, f)
 
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10, thin=False))
         assert len(chunks) == 1

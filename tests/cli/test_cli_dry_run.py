@@ -126,44 +126,6 @@ class TestDryRunPickle:
         out = capsys.readouterr().out
         assert "Chunk size: 250" in out
 
-    def test_dry_run_reports_streaming(self, client, tmp_path, capsys):
-        _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
-
-        from vtscore.cli import autodetect_main_chunked
-
-        autodetect_main_chunked(
-            str(dataset_path),
-            chunk_size=250,
-            settings_path=str(settings_path),
-            exporter_name="server_json_file",
-            exporter_field_values={"filepath": str(tmp_path / "out.ndjson")},
-            dry_run=True,
-            stream_results=True,
-        )
-
-        out = capsys.readouterr().out
-        assert "Streaming: yes" in out
-        assert "negatives dropped" in out
-
-    def test_dry_run_streaming_without_stream_results_has_no_streaming_line(self, client, tmp_path, capsys):
-        _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
-        settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
-
-        from vtscore.cli import autodetect_main_chunked
-
-        autodetect_main_chunked(
-            str(dataset_path),
-            chunk_size=250,
-            settings_path=str(settings_path),
-            dry_run=True,
-        )
-
-        out = capsys.readouterr().out
-        assert "Streaming:" not in out
-
     def test_dry_run_missing_dataset_file_errors(self, client, tmp_path, capsys):
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])

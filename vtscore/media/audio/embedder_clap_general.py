@@ -160,7 +160,7 @@ class AudioClapGeneralEmbedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding %s", source_repr)
             return None
 
-    def _embed_text_impl(self, text: str) -> Optional[np.ndarray]:
+    def embed_text(self, text: str) -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None or self._processor is None:

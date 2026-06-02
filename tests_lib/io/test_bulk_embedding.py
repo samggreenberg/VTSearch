@@ -76,10 +76,7 @@ class TestEmbedderDefaults:
                 self._model = True
 
             def _embed_media_impl(self, media):
-                # Encode the size in the direction (the base wrapper L2-
-                # normalizes the result, so a 1-D magnitude would be lost);
-                # first/second recovers the size after normalization.
-                return np.array([float(Path(media["media_path"]).stat().st_size), 1.0], dtype=np.float32)
+                return np.array([float(Path(media["media_path"]).stat().st_size)], dtype=np.float32)
 
         emb = _Stub()
         emb._model = True
@@ -92,7 +89,9 @@ class TestEmbedderDefaults:
         vecs = emb.embed_media_bulk(medias)
         assert len(vecs) == 3
         assert all(v is not None for v in vecs)
-        assert [round(float(v[0] / v[1])) for v in vecs] == [1, 2, 3]  # pyright: ignore[reportOptionalSubscript]
+        assert vecs[0][0] == 1.0  # pyright: ignore[reportOptionalSubscript]
+        assert vecs[1][0] == 2.0  # pyright: ignore[reportOptionalSubscript]
+        assert vecs[2][0] == 3.0  # pyright: ignore[reportOptionalSubscript]
 
     def test_default_bulk_impl_emits_per_item_progress(self, tmp_path):
         """The default bulk loop must call _on_progress on each iteration
@@ -313,9 +312,7 @@ class TestEmbedMediasDictWrapper:
                 self._model = True
 
             def _embed_media_impl(self, media):
-                # Encode the tag in the direction so it survives the base
-                # wrapper's L2-normalization; first/second recovers it.
-                return np.array([float(media["tag"]), 1.0], dtype=np.float32)
+                return np.array([float(media["tag"])], dtype=np.float32)
 
         emb = _Stub()
         emb._model = True
@@ -325,9 +322,9 @@ class TestEmbedMediasDictWrapper:
 
         assert set(out.keys()) == {1, 2, 7}
         assert all(v is not None for v in out.values())
-        assert round(float(out[1][0] / out[1][1])) == 10  # pyright: ignore[reportOptionalSubscript]
-        assert round(float(out[2][0] / out[2][1])) == 20  # pyright: ignore[reportOptionalSubscript]
-        assert round(float(out[7][0] / out[7][1])) == 70  # pyright: ignore[reportOptionalSubscript]
+        assert out[1][0] == 10.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[2][0] == 20.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[7][0] == 70.0  # pyright: ignore[reportOptionalSubscript]
 
     def test_handles_sparse_keys(self):
         """Non-contiguous keys (e.g. post-collapse_duplicates) round-trip."""
@@ -346,7 +343,7 @@ class TestEmbedMediasDictWrapper:
                 self._model = True
 
             def _embed_media_impl(self, media):
-                return np.array([float(media["tag"]), 1.0], dtype=np.float32)
+                return np.array([float(media["tag"])], dtype=np.float32)
 
         emb = _Stub()
         emb._model = True
@@ -355,7 +352,7 @@ class TestEmbedMediasDictWrapper:
         out = emb.embed_medias(medias)
         assert list(out.keys()) == [1, 3, 5]
         assert out[3] is not None
-        assert round(float(out[3][0] / out[3][1])) == 3
+        assert out[3][0] == 3.0
 
     def test_propagates_none_for_failed_embeddings(self):
         """A None vector from the underlying bulk call surfaces as None
@@ -427,11 +424,11 @@ class TestEmbedMediasDictWrapper:
                 self._model = True
 
             def _embed_media_impl(self, media):
-                return np.array([float(media["x"]), 1.0], dtype=np.float32)
+                return np.array([float(media["x"])], dtype=np.float32)
 
             def _embed_media_bulk_impl(self, medias):
                 captured.append(list(medias))
-                return [np.array([float(m["x"]), 1.0], dtype=np.float32) for m in medias]
+                return [np.array([float(m["x"])], dtype=np.float32) for m in medias]
 
         emb = _Stub()
         emb._model = True
@@ -443,6 +440,6 @@ class TestEmbedMediasDictWrapper:
         assert captured[0] == [{"x": 1}, {"x": 2}, {"x": 3}]
         assert set(out.keys()) == {10, 20, 30}
         assert all(v is not None for v in out.values())
-        assert round(float(out[10][0] / out[10][1])) == 1  # pyright: ignore[reportOptionalSubscript]
-        assert round(float(out[20][0] / out[20][1])) == 2  # pyright: ignore[reportOptionalSubscript]
-        assert round(float(out[30][0] / out[30][1])) == 3  # pyright: ignore[reportOptionalSubscript]
+        assert out[10][0] == 1.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[20][0] == 2.0  # pyright: ignore[reportOptionalSubscript]
+        assert out[30][0] == 3.0  # pyright: ignore[reportOptionalSubscript]

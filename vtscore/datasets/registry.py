@@ -123,7 +123,6 @@ def register_dataset(
     readers: list[str] | None = None,
     file_type_counts: dict[str, int] | None = None,
     ingest_started_at: float | None = None,
-    expires_at: float | None = None,
 ) -> dict[str, Any]:
     """Add a new dataset to the registry and persist.
 
@@ -134,8 +133,6 @@ def register_dataset(
             Include ``"*"`` to make it visible to all users.
         file_type_counts: Mapping of file extension to count.
         ingest_started_at: Unix timestamp when ingest began.
-        expires_at: Unix timestamp when the dataset expires.  ``None``
-            means the dataset never expires.
 
     Returns the newly created entry (with a generated ``id``).
     """
@@ -159,7 +156,6 @@ def register_dataset(
         "file_type_counts": file_type_counts or {},
         "ingest_started_at": ingest_started_at,
         "ingest_finished_at": now,
-        "expires_at": expires_at,
     }
     with _lock:
         entries = _ensure_loaded()

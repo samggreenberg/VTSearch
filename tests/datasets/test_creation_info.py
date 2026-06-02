@@ -1,5 +1,7 @@
 """Tests for dataset pickle round-trip and status endpoint."""
 
+import pickle
+
 import numpy as np
 
 from vtscore.datasets.importers import get_importer
@@ -107,13 +109,9 @@ class TestPickleRoundTrip:
             }
         }
 
-    def test_export_does_not_include_creation_info(self, tmp_path):
+    def test_export_does_not_include_creation_info(self):
         data_bytes = export_dataset_to_file(self._make_clips())
-        pkl_path = tmp_path / "test_creation.pkl"
-        pkl_path.write_bytes(data_bytes)
-        from vtscore.datasets.container import read_container
-
-        data, _meta = read_container(pkl_path)
+        data = pickle.loads(data_bytes)
         assert "creation_info" not in data
 
     def test_load_returns_none(self, tmp_path):
@@ -126,16 +124,27 @@ class TestPickleRoundTrip:
         assert result is None
         assert len(loaded_clips) == 1
 
-    def test_rejects_non_container_file(self, tmp_path):
-        """Non-ZIP files are rejected."""
-        import zipfile
-
+    def test_rejects_old_format_pickle(self, tmp_path):
+        """Old-style pickles (no wrapping 'medias' key) are rejected."""
+        old_data = {
+            1: {
+                "id": 1,
+                "media_type": "audio",
+                "duration": 1.0,
+                "file_size": 100,
+                "md5": "abc123",
+                "embedding": [0.0] * 10,
+                "filename": "clip_1.wav",
+                "category": "test",
+                "wav_bytes": b"\x00" * 100,
+            }
+        }
         pkl_path = tmp_path / "old.pkl"
-        pkl_path.write_bytes(b"not a zip file")
+        pkl_path.write_bytes(pickle.dumps(old_data))
         loaded_clips: dict = {}
         import pytest
 
-        with pytest.raises(zipfile.BadZipFile):
+        with pytest.raises(ValueError, match="Invalid pickle format"):
             load_dataset_from_pickle(pkl_path, loaded_clips)
 
 

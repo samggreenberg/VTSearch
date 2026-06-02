@@ -124,12 +124,10 @@ export class DatasetsCrudApiService {
     return loadDemoDatasetRoute(this.http, this.config.rootUrl, { body }).pipe(map((r) => r.body));
   }
 
-  /** Multipart upload; see {@link importLocalFolder}.  ``buildProjection``
-   *  opts into computing the 2-D Browse projection at ingest. */
-  loadFile(file: File, buildProjection = false): Observable<DatasetLoadStartedResponse> {
+  /** Multipart upload; see {@link importLocalFolder}. */
+  loadFile(file: File): Observable<DatasetLoadStartedResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('build_projection', buildProjection ? 'true' : 'false');
     return this.http.post<DatasetLoadStartedResponse>('/api/dataset/load-file', formData);
   }
 

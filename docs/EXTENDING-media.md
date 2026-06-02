@@ -764,24 +764,15 @@ Unlike other plugin families, media sources use a **factory pattern**.
 The `SOURCE` sentinel is a factory object with a `create_from_origin()`
 method that returns a `MediaSource` instance.
 
-All fetch and resolve methods return `FetchedItem` instead of a bare
-`Path | None`. `FetchedItem` carries the local path alongside optional
-pre-computed data that the source's API may have returned alongside the
-file — embeddings, embedder name, file size, duration, and so on. The
-ingest path uses whatever is in `FetchedItem` to avoid redundant local
-work (re-embedding from disk, re-reading for file size, etc.).
-
 ```python
 # vtscore/datasets/sources/s3/__init__.py
 
 from __future__ import annotations
 
-import tempfile
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Iterator
 
-from vtscore.datasets.sources.base import FetchedItem, MediaItem, MediaSource
+from vtscore.datasets.sources.base import MediaItem, MediaSource
 
 
 class S3MediaSource(MediaSource):
@@ -806,52 +797,24 @@ class S3MediaSource(MediaSource):
                     continue
                 yield MediaItem(key=key, filename=filename, source_name=self.name)
 
-    def fetch_item(self, key: str) -> FetchedItem:
-        """Download an item to a temp directory and return a FetchedItem."""
-        import boto3
+    def fetch_item(self, key: str) -> Path | None:
+        """Download an item to a temp directory and return the local path."""
+        import boto3, tempfile
         local = Path(tempfile.gettempdir()) / "vtsearch_s3" / key
         local.parent.mkdir(parents=True, exist_ok=True)
         if not local.exists():
             boto3.client("s3").download_file(self._bucket, key, str(local))
-        return FetchedItem(path=local)
+        return local
 
-    def resolve_path(self, origin_name: str = "", filename: str = "") -> FetchedItem:
+    def resolve_path(self, origin_name: str = "", filename: str = "") -> Path | None:
         """Resolve a media file by origin_name or filename."""
         for candidate in (origin_name, filename):
             if candidate:
                 key = f"{self._prefix}{candidate}" if self._prefix else candidate
-                item = self.fetch_item(key)
-                if item.path and item.path.exists():
-                    return item
-        return FetchedItem(path=None)
-
-    def fetch_items(self, keys: list[str]) -> dict[str, FetchedItem]:
-        """Download multiple items concurrently instead of one at a time.
-
-        Override the default loop to use a thread pool. If your backing
-        service returns embeddings or metadata alongside the file bytes,
-        populate ``FetchedItem.embedding`` / ``FetchedItem.extra`` here
-        so the ingest path can skip local re-embedding and stat calls.
-        """
-        def _fetch(key: str) -> tuple[str, FetchedItem]:
-            return key, self.fetch_item(key)
-
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            return dict(pool.map(_fetch, keys))
-
-    def resolve_paths(
-        self, entries: list[tuple[str, str]]
-    ) -> list[FetchedItem]:
-        """Resolve multiple entries concurrently.
-
-        The ingest fast-path calls ``resolve_paths`` (not ``fetch_items``),
-        so override this to parallelise the path used by re-ingestion.
-        """
-        def _resolve(pair: tuple[str, str]) -> FetchedItem:
-            return self.resolve_path(*pair)
-
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            return list(pool.map(_resolve, entries))
+                path = self.fetch_item(key)
+                if path and path.exists():
+                    return path
+        return None
 
 
 class _S3SourceFactory:
@@ -870,61 +833,33 @@ class _S3SourceFactory:
 SOURCE = _S3SourceFactory()
 ```
 
-### FetchedItem fields
-
-Every fetch and resolve method returns `FetchedItem`. The `path` field is
-always required; the rest are optional bonuses that let sources surface
-data they already have without forcing VTSearch to re-derive it.
-
-| Field | Type | When to set |
-|-------|------|-------------|
-| `path` | `Path \| None` | Always — local file path, or `None` if not found/downloadable |
-| `embedding` | `np.ndarray \| None` | When your API returns a pre-computed vector. The ingest path skips re-embedding when this is present (provided the origin has no clip params) |
-| `embedder_name` | `str` | Required alongside `embedding` — names the embedding space so vectors can be matched against the dataset |
-| `extra` | `dict[str, Any]` | Source-authoritative field overrides written into the media record (e.g. `{"file_size": 12345, "duration": 3.5, "created_at": "2024-01-01T00:00:00Z"}`) |
-
-For a simple source that just downloads files, returning
-`FetchedItem(path=local_path)` is sufficient. The other fields are only
-worth populating when your backing API already provides them in the same
-round-trip.
-
 ### MediaSource abstract interface reference
 
-**Required abstract methods** — must return `FetchedItem`, not `Path | None`:
+**Required abstract methods:**
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `list_items()` | `(extensions: list[str] \| None) -> Iterator[MediaItem]` | Yield all media items, optionally filtered |
-| `fetch_item()` | `(key: str) -> FetchedItem` | Fetch by key; `item.path` is `None` if not found |
-| `resolve_path()` | `(origin_name: str, filename: str) -> FetchedItem` | Find by origin_name or filename; `item.path` is `None` if not found |
+| `fetch_item()` | `(key: str) -> Path \| None` | Return local path for item (may download on demand) |
+| `resolve_path()` | `(origin_name: str, filename: str) -> Path \| None` | Find a file by origin_name or filename |
 
-**Optional methods** — default implementations loop over the single-item
-counterparts; override for parallelism or to surface pre-computed data:
+**Optional methods:**
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `fetch_items()` | `(keys: list[str]) -> dict[str, FetchedItem]` | Bulk form of `fetch_item`. Override to parallelise downloads or return pre-computed embeddings/metadata |
-| `resolve_paths()` | `(entries: list[tuple[str, str]]) -> list[FetchedItem]` | Bulk form of `resolve_path`, result aligned with input. The ingest fast-path calls this; override to parallelise re-ingestion |
 | `cleanup()` | `() -> None` | Release temporary resources (default: no-op) |
 
 **Data types:**
 
 | Type | Fields | Description |
 |------|--------|-------------|
-| `MediaItem` | `key`, `filename`, `source_name` | A discoverable file within a source (yielded by `list_items`) |
-| `FetchedItem` | `path`, `embedding`, `embedder_name`, `extra` | Result of any fetch or resolve call; `path` may be `None` |
+| `MediaItem` | `key`, `filename`, `source_name` | A discoverable file within a source |
 
 ### How it gets invoked
 
 `get_source_for_origin(origin_dict)` looks up the factory by matching
 `origin["importer"]` to the factory's `name`, then calls
 `factory.create_from_origin(origin)`.
-
-The ingest fast-path (`vtscore.datasets.ingest._ingest_via_source`) calls
-`resolve_paths()` once for all missing entries before the sequential
-embed loop, so any parallelism in your `resolve_paths()` override
-completes before per-item work begins. If your source's `resolve_path()`
-populates `FetchedItem.embedding`, the embed step is skipped automatically.
 
 ---
 

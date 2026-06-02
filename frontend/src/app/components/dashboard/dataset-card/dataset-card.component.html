@@ -98,9 +98,6 @@
       @case ('created_at') {
         <td>{{ formatDate(dataset.created_at) }}</td>
       }
-      @case ('expires_at') {
-        <td>{{ dataset.expires_at != null ? formatDate(dataset.expires_at) : 'Never' }}</td>
-      }
       @case ('created_by') {
         <td>{{ dataset.created_by || '-' }}</td>
       }

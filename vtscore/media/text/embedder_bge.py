@@ -179,7 +179,7 @@ class TextBGEEmbedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding passage (BGE)")
             return None
 
-    def _embed_text_impl(self, text: str) -> Optional[np.ndarray]:
+    def embed_text(self, text: str) -> Optional[np.ndarray]:
         if self._model is None:
             self.load_models()
         if self._model is None:

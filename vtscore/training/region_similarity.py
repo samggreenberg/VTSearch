@@ -37,20 +37,17 @@ def score_against_query(
 ) -> tuple[float, Optional[tuple[float, float, float, float]]]:
     """Return ``(max_cosine_similarity, best_region_box)`` for *media*.
 
-    *query_vec* **must already be L2-normalized**, as are all stored media
-    and region vectors (every embedding is normalized once at ingest - see
-    :mod:`vtscore.embedding.normalize`).  Cosine similarity therefore reduces
-    to a plain dot product, with no per-comparison normalization.  Callers
-    obtain a unit query from :meth:`MediaEmbedder.embed_text`,
-    :meth:`~MediaEmbedder.embed_media`, or a stored media embedding - all of
-    which are already unit-norm.
+    *query_vec* is the embedded query (text or example image), L2-norm
+    irrelevant - we cosine-normalise here.
 
-    For patch-region media, we score every region vector and return the max
-    along with that region's bounding box.  For legacy single-vector media,
-    we score ``media["embedding"]`` and return ``(score, (0, 0, 1, 1))``.  A
-    zero/empty query, or a missing embedding, yields ``(0.0, None)``.
+    For patch-region media, we score every region vector and return the
+    max along with that region's bounding box.  For legacy single-vector
+    media, we score ``media["embedding"]`` and return
+    ``(score, (0, 0, 1, 1))``.  Missing / zero-norm embeddings yield
+    ``(0.0, None)``.
     """
-    if float(np.linalg.norm(query_vec)) == 0:
+    q_norm = float(np.linalg.norm(query_vec))
+    if q_norm == 0:
         return 0.0, None
 
     regions = media.get("patch_regions")
@@ -59,7 +56,10 @@ def score_against_query(
         best_box: Optional[tuple[float, float, float, float]] = None
         for r in regions:
             v = np.asarray(r.vec, dtype=np.float32)
-            sim = float(v @ query_vec)
+            v_norm = float(np.linalg.norm(v))
+            if v_norm == 0:
+                continue
+            sim = float(v @ query_vec) / (q_norm * v_norm)
             if sim > best_score:
                 best_score = sim
                 best_box = r.box
@@ -69,7 +69,10 @@ def score_against_query(
     if emb is None:
         return 0.0, None
     emb_arr = np.asarray(emb, dtype=np.float32)
-    sim = float(emb_arr @ query_vec)
+    e_norm = float(np.linalg.norm(emb_arr))
+    if e_norm == 0:
+        return 0.0, None
+    sim = float(emb_arr @ query_vec) / (q_norm * e_norm)
     return sim, (0.0, 0.0, 1.0, 1.0)
 
 
@@ -122,17 +125,19 @@ def cosine_sort_with_boxes(
         results.sort(key=lambda x: x["similarity"], reverse=True)
         return results, sims
 
-    # Fast path: pure single-vector cosine via one matrix-vector product.
-    # Both the stored embeddings and *query_vec* are unit-norm (normalized
-    # once at ingest - see vtscore.embedding.normalize), so cosine is just
-    # the dot product; no per-row normalization is needed.  A zero stored
-    # embedding (left at norm 0 by l2_normalize) dots to 0.0, preserving the
-    # old "zero-norm scores 0" behaviour.  The matrix is reused from the
-    # active DatasetContext cache when available.
+    # Fast path: pure single-vector cosine - same arithmetic as the
+    # original _cosine_sort, retained verbatim so SigLIP / CLIP /
+    # SigLIP2 datasets see zero overhead from this refactor.  The matrix
+    # is reused from the active DatasetContext cache when available.
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap
 
     all_ids, all_embs = get_embedding_matrix_for_snap(snap)
-    similarities = np.dot(all_embs, query_vec)
+    q_norm = np.linalg.norm(query_vec)
+    emb_norms = np.linalg.norm(all_embs, axis=1)
+    norm_products = emb_norms * q_norm
+    safe_norms = np.where(norm_products == 0, 1.0, norm_products)
+    similarities = np.dot(all_embs, query_vec) / safe_norms
+    similarities = np.where(norm_products == 0, 0.0, similarities)
     sims_list = similarities.tolist()
     results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities, strict=True)]
     results.sort(key=lambda x: x["similarity"], reverse=True)

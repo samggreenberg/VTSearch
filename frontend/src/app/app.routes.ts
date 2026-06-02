@@ -1,6 +1,5 @@
 import { Routes } from '@angular/router';
 import { activeContextGuard } from './guards/active-context.guard';
-import { browseContextGuard } from './guards/browse-context.guard';
 
 /**
  * Routes. The label/find views encode the active (dataset, detector)
@@ -8,8 +7,6 @@ import { browseContextGuard } from './guards/browse-context.guard';
  * carry the pair correctly. The bare `/label` and `/find` paths are
  * legacy redirects (they have no pair to encode and would land on a
  * broken view), so we bounce them back to the Dashboard.
- *
- * Browse is dataset-only (no detector required): `/browse/:datasetId`.
  */
 export const routes: Routes = [
   {
@@ -35,19 +32,10 @@ export const routes: Routes = [
         (m) => m.FindViewComponent,
       ),
   },
-  {
-    path: 'browse/:datasetId',
-    canActivate: [browseContextGuard],
-    loadComponent: () =>
-      import('./components/browse-view/browse-view.component').then(
-        (m) => m.BrowseViewComponent,
-      ),
-  },
   // Legacy / malformed paths: bounce to dashboard rather than render a
   // half-pair view.
   { path: 'label', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'find', redirectTo: 'dashboard', pathMatch: 'full' },
-  { path: 'browse', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: '**', redirectTo: 'dashboard' },
 ];

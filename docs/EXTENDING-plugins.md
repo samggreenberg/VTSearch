@@ -883,46 +883,6 @@ EXPORTER = SftpLabelsetExporter()
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `export_cli()` | `(results: dict, field_values: dict) -> dict` | CLI variant; default delegates to `export()` |
-| `supports_streaming` | `property -> bool` | Whether this exporter can write results incrementally. Default `False`. |
-| `export_cli_streaming()` | `(header: dict, records: Iterator[tuple[str, dict]], field_values: dict) -> dict` | Write hits incrementally as scored chunks stream in. Required when `supports_streaming` is `True`. |
-
-#### Streaming exports (`--stream-results`)
-
-`export()` / `export_cli()` receive the **fully-materialised** results dict, so
-they buffer every hit in memory. For a media source larger than RAM (e.g. a
-folder tree of billions of images scanned via
-`--autodetect --chunk-size N --stream-results`), an exporter can instead write
-each hit as it is scored, by opting in:
-
-```python
-@property
-def supports_streaming(self) -> bool:
-    return True
-
-def export_cli_streaming(self, header, records, field_values):
-    # header = {"media_type": str,
-    #           "detectors": [{"detector_name": str, "threshold": float}, ...],
-    #           "keep_negatives": bool}
-    # records yields (detector_name, hit) tuples in CHUNK order (not globally
-    # sorted by score). Each hit is the build_media_hit() dict plus a "label"
-    # key ("good" above threshold, "bad" otherwise — "bad" only appears when
-    # keep_negatives is set).
-    path = Path(field_values["filepath"])
-    with open(path, "w") as f:
-        for detector_name, hit in records:
-            f.write(json.dumps({"detector": detector_name, **hit}) + "\n")
-    return {"message": f"Streamed to {path}"}
-```
-
-The `--stream-results` CLI path routes to `export_cli_streaming` instead of
-`export_cli`. Built-ins that implement it: `server_json_file` (NDJSON, one hit
-per line), `server_csv_file` (one CSV row per hit), and `gui` (prints each hit).
-Exporters that inherently need the whole payload at once — `email_smtp` (one
-email), `webhook` (one POST) — leave `supports_streaming` at `False`, and
-requesting `--stream-results` with them is rejected with a clear error. Write to
-a sibling `.tmp` path and `os.replace` on success so a crash mid-stream can't
-leave a half-written file at the destination. See
-`docs/plans/cli-stream-massive-images.md` for the full design.
 
 **Default class attributes:**
 

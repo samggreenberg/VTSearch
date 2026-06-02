@@ -27,12 +27,7 @@ from vtscore.datasets.loader import (
     _pop_md5_key,
     _streaming_md5,
 )
-from vtscore.security.path_validation import (
-    glob_top_level,
-    iter_glob_top_level,
-    iter_rglob_follow_symlinks,
-    rglob_follow_symlinks,
-)
+from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
 
 logger = logging.getLogger(__name__)
 
@@ -42,28 +37,6 @@ def _scan_files(folder: Path, pattern: str, recursive: bool) -> list[Path]:
     if recursive:
         return rglob_follow_symlinks(folder, pattern)
     return glob_top_level(folder, pattern)
-
-
-def _iter_scan_files(folder: Path, pattern: str, recursive: bool) -> Iterator[Path]:
-    """Stream files in *folder* matching *pattern* (generator twin of :func:`_scan_files`)."""
-    if recursive:
-        yield from iter_rglob_follow_symlinks(folder, pattern)
-    else:
-        yield from iter_glob_top_level(folder, pattern)
-
-
-def _iter_media_files(folder_path: Path, mt: Any, recursive: bool) -> Iterator[Path]:
-    """Stream every media file of type *mt* under *folder_path*, lazily.
-
-    Chains the per-extension scans in the same order the materialised loader
-    used (all of extension 1, then extension 2, …) but never holds the full
-    file list — the caller can begin building/embedding chunks before the
-    directory walk finishes.  Used by the chunked loader for the no-override
-    (massive-folder) case so peak memory stays bounded by the chunk size
-    rather than the total file count.
-    """
-    for ext in mt.file_extensions:
-        yield from _iter_scan_files(folder_path, ext, recursive)
 
 
 def _resolve_folder_load_inputs(
@@ -301,25 +274,21 @@ def _resolve_file_embedding(
     file_name: str,
     file_cm: dict[str, Any] | None,
     content_vectors: dict[str, Any] | None,
-    content_embedder_name: str = "",
 ) -> tuple[Any, str]:
     """Pick a pre-computed embedding for *file_path* if available.
 
     Resolution order: custom_metadata embedding → content_vectors[rel_path]
-    → content_vectors[basename] → ``(None, "")``.  Custom-metadata vectors
-    come back with ``embedder_id == ""``.  Content-vectors hits use
-    *content_embedder_name* so the embedder that produced the NPZ archive
-    is recorded on the media; ``""`` is returned when the caller doesn't
-    know the embedder (the framework embed stage will stamp its own name
-    when embedding is ``None``).
+    → content_vectors[basename] → ``(None, "")``.  External vectors come
+    back with ``embedder_id == ""``; the framework embed stage stamps
+    the live embedder name on items that come out at ``None`` here.
     """
     cm_embedding = _get_embedding_value(file_cm) if file_cm else None
     if cm_embedding is not None:
         return cm_embedding, ""
     if content_vectors and rel_path in content_vectors:
-        return content_vectors[rel_path], content_embedder_name
+        return content_vectors[rel_path], ""
     if content_vectors and file_name in content_vectors:
-        return content_vectors[file_name], content_embedder_name
+        return content_vectors[file_name], ""
     return None, ""
 
 
@@ -418,7 +387,6 @@ def _build_per_file_media(
     custom_metadata_map: dict[str, dict[str, Any]] | None,
     thin: bool,
     origin: dict[str, Any] | None,
-    content_embedder_name: str = "",
 ) -> dict[str, Any]:
     """Resolve any pre-computed embedding + md5 and build the per-file media dict.
 
@@ -427,9 +395,7 @@ def _build_per_file_media(
     """
     file_cm = _lookup_file_custom_metadata(rel_path, file_path.name, custom_metadata_map)
 
-    embedding, embedder_id = _resolve_file_embedding(
-        rel_path, file_path.name, file_cm, content_vectors, content_embedder_name
-    )
+    embedding, embedder_id = _resolve_file_embedding(rel_path, file_path.name, file_cm, content_vectors)
 
     cm_md5 = _get_md5_value(file_cm) if file_cm else ""
 
@@ -486,7 +452,6 @@ def load_dataset_from_folder(
     thin: bool = False,
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
     recursive: bool = True,
-    content_embedder_name: str = "",
 ) -> None:
     """Generate a dataset in-place from a flat folder of media files.
 
@@ -530,9 +495,6 @@ def load_dataset_from_folder(
             (highest priority).  The dict is attached as
             ``media["custom_metadata"]``.
         recursive: When ``True`` (default), scan subdirectories.
-        content_embedder_name: Name of the embedder that produced the
-            vectors in *content_vectors*.  Stored as ``media["embedder"]``
-            for every file whose vector comes from *content_vectors*.
 
     Raises:
         ValueError: If ``media_type`` is not recognised, if no matching
@@ -582,7 +544,6 @@ def load_dataset_from_folder(
                 custom_metadata_map=custom_metadata_map,
                 thin=thin,
                 origin=origin,
-                content_embedder_name=content_embedder_name,
             )
             medias[media_id] = built
             media_id += 1
@@ -634,7 +595,6 @@ def load_dataset_from_folder_chunked(
     thin: bool = False,
     custom_metadata_map: dict[str, dict[str, Any]] | None = None,
     recursive: bool = True,
-    content_embedder_name: str = "",
 ) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield chunks of medias from a folder of media files.
 
@@ -654,83 +614,53 @@ def load_dataset_from_folder_chunked(
 
     on_progress("loading", "Scanning media files...", 0, 0)
 
-    has_overrides = bool(content_vectors or content_md5s or custom_metadata_map)
-    if has_overrides:
-        # Precomputed maps (vectors / md5s / metadata) require a full-list
-        # cross-check for ambiguous basenames, and are themselves bounded in
-        # memory, so materialise the file list and validate as the monolithic
-        # loader does.
-        mt, media_files, total_files = _resolve_folder_load_inputs(
-            folder_path,
-            media_type,
-            recursive,
-            content_vectors,
-            content_md5s,
-            custom_metadata_map,
-        )
-        file_iter: Iterator[Path] = iter(media_files)
-    else:
-        # Massive-folder case: stream files lazily so peak memory stays bounded
-        # by the chunk size rather than the total file count.  The media type is
-        # still validated eagerly; emptiness is reported after the (lazy) walk.
-        from vtscore.media import get_by_folder_name  # noqa: PLC0415
+    mt, media_files, total_files = _resolve_folder_load_inputs(
+        folder_path,
+        media_type,
+        recursive,
+        content_vectors,
+        content_md5s,
+        custom_metadata_map,
+    )
 
-        try:
-            mt = get_by_folder_name(media_type)
-        except KeyError:
-            raise ValueError(f"Invalid media type: {media_type}")
-        total_files = 0  # unknown up front when streaming
-        file_iter = _iter_media_files(folder_path, mt, recursive)
+    _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 1
 
-    # When the total is known, report progress at ~50 evenly spaced ticks;
-    # when streaming (total unknown) fall back to a fixed file interval.
-    _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 200
+    for start in range(0, total_files, chunk_size):
+        batch = media_files[start : start + chunk_size]
+        chunk_medias: dict[int, dict[str, Any]] = {}
+        media_id = 1
 
-    chunk_medias: dict[int, dict[str, Any]] = {}
-    media_id = 1
-    chunk_index = 0
-    media_seen = 0
+        chunk_label = f" (chunk {start // chunk_size + 1})"
 
-    for global_idx, file_path in enumerate(file_iter):
-        rel_path = file_path.relative_to(folder_path).as_posix()
+        for i, file_path in enumerate(batch):
+            global_idx = start + i
+            rel_path = file_path.relative_to(folder_path).as_posix()
 
-        if global_idx % _progress_interval == 0 or (total_files and global_idx + 1 == total_files):
-            _emit_per_file_progress(
-                on_progress,
-                media_type,
-                rel_path,
-                global_idx + 1,
-                total_files,
-                chunk_label=f" (chunk {chunk_index + 1})",
+            if global_idx % _progress_interval == 0 or global_idx + 1 == total_files:
+                _emit_per_file_progress(
+                    on_progress,
+                    media_type,
+                    rel_path,
+                    global_idx + 1,
+                    total_files,
+                    chunk_label=chunk_label,
+                )
+
+            built = _build_per_file_media(
+                media_id=media_id,
+                file_path=file_path,
+                rel_path=rel_path,
+                mt=mt,
+                content_vectors=content_vectors,
+                content_md5s=content_md5s,
+                custom_metadata_map=custom_metadata_map,
+                thin=thin,
+                origin=origin,
             )
+            chunk_medias[media_id] = built
+            media_id += 1
 
-        chunk_medias[media_id] = _build_per_file_media(
-            media_id=media_id,
-            file_path=file_path,
-            rel_path=rel_path,
-            mt=mt,
-            content_vectors=content_vectors,
-            content_md5s=content_md5s,
-            custom_metadata_map=custom_metadata_map,
-            thin=thin,
-            origin=origin,
-            content_embedder_name=content_embedder_name,
-        )
-        media_id += 1
-        media_seen += 1
-
-        if len(chunk_medias) >= chunk_size:
+        if chunk_medias:
             yield chunk_medias
-            chunk_medias = {}
-            media_id = 1
-            chunk_index += 1
 
-    if chunk_medias:
-        yield chunk_medias
-
-    if media_seen == 0:
-        # Matches the monolithic loader's empty-folder contract.  Raised after
-        # the (no-op) walk so streaming callers still see the familiar error.
-        raise ValueError(f"No {media_type} files found in folder")
-
-    on_progress("idle", f"Finished chunked loading of {media_seen} {media_type} files", 0, 0)
+    on_progress("idle", f"Finished chunked loading of {total_files} {media_type} files", 0, 0)

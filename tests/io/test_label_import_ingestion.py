@@ -220,9 +220,7 @@ class TestIngestMissingClips:
         assert 1 in existing
         assert existing[1]["origin_name"] == "cat/test_001.jpg"
         assert existing[1]["origin"] == origin
-        # Ingest L2-normalizes at the write chokepoint, so the stored vector
-        # is the unit-norm form of the resolver's embedding (not the same object).
-        assert np.allclose(existing[1]["embedding"], fake_embedding / np.linalg.norm(fake_embedding))
+        assert existing[1]["embedding"] is fake_embedding
 
     def test_ingest_via_resolver_returns_neg1_for_unknown_media_type(self):
         """_ingest_via_resolver returns -1 when media type can't be determined."""

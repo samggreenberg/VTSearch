@@ -36,14 +36,6 @@
           <vt-icon type="upload" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'imports'"></vt-icon>
           Data Imports
         </button>
-        <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'server'"
-          (click)="activeSettingsTab = 'server'"
-          title="Settings fixed when the server started; shared by everyone and read-only here">
-          <vt-icon type="server" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'server'"></vt-icon>
-          Server
-        </button>
       </nav>
 
       <div class="settings-panel">
@@ -231,52 +223,6 @@
             <input type="number" class="form-input" [ngModel]="settings.autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
           </div>
 
-        }
-
-        <!-- Server Settings (read-only) -->
-        @if (activeSettingsTab === 'server') {
-          <h3>Server Settings</h3>
-          <p class="info-text">
-            These are fixed when the server starts (via config file, environment, or CLI flags)
-            and shared by everyone. They&rsquo;re shown here for reference and can&rsquo;t be changed.
-          </p>
-
-          <div class="form-group">
-            <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory</label>
-            <div class="server-value server-value--mono">{{ settings.saved_datasets_dir || '—' }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" title="Root directory where detector configurations are stored on the server">Detectors directory</label>
-            <div class="server-value server-value--mono">{{ settings.detectors_dir || '—' }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" title="Maximum number of dataset downloads the server runs in parallel">Max concurrent dataset downloads</label>
-            <div class="server-value">{{ settings.max_concurrent_dataset_downloads ?? '—' }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" title="Maximum number of dataset embedding jobs the server runs in parallel">Max concurrent dataset embeddings</label>
-            <div class="server-value">{{ settings.max_concurrent_dataset_embeddings ?? '—' }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" title="Detectors automatically run against each dataset as it is imported">Auto-run detectors</label>
-            @if (autorunDetectorsDisplay) {
-              <div class="server-value">{{ autorunDetectorsDisplay }}</div>
-            } @else {
-              <div class="server-value server-value--empty">None</div>
-            }
-          </div>
-          <div class="form-group">
-            <label class="form-label" title="Plugins hidden from pickers and listings for this deployment (still callable by name). Combines the persisted setting with any --hide-plugin CLI flags.">Hidden plugins</label>
-            @if (hiddenPluginsDisplay.length > 0) {
-              <ul class="server-list">
-                @for (row of hiddenPluginsDisplay; track row.family) {
-                  <li><span class="server-list__key">{{ row.family }}:</span> {{ row.names }}</li>
-                }
-              </ul>
-            } @else {
-              <div class="server-value server-value--empty">None</div>
-            }
-          </div>
         }
 
       </div>

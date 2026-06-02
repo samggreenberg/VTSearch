@@ -12,12 +12,6 @@ exporters work on the command line without any extra code.  Exporters whose
 :meth:`export` expects non-string values should override :meth:`export_cli` to
 handle the CLI-appropriate types.
 
-For the CLI ``--stream-results`` path (scoring a media source larger than RAM),
-an exporter can write hits incrementally instead of buffering the whole result
-set: set :attr:`~LabelsetExporter.supports_streaming` to ``True`` and implement
-:meth:`~LabelsetExporter.export_cli_streaming`.  See that method's docstring and
-``docs/plans/cli-stream-massive-images.md`` for details.
-
 Example – a minimal SFTP exporter skeleton::
 
     # vtsearch/exporters/sftp/__init__.py
@@ -52,7 +46,7 @@ verifies that every imported package is declared there.
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from typing import Any
 
 from vtscore.plugins import PluginBase, PluginField
 
@@ -73,11 +67,6 @@ class LabelsetExporter(PluginBase):
     ``/api/auto-detect`` and a flat mapping of field values supplied by the
     user via the UI.  It should return a dict with at minimum a ``"message"``
     key describing what happened (shown to the user as confirmation).
-
-    Exporters that can write results incrementally (for the CLI
-    ``--stream-results`` path on a media source larger than RAM) override
-    :attr:`supports_streaming` to return ``True`` and implement
-    :meth:`export_cli_streaming`.
     """
 
     #: Emoji or icon string shown next to the display name in the UI.
@@ -134,57 +123,3 @@ class LabelsetExporter(PluginBase):
         GUI exporter, which has no browser) should override this method.
         """
         return self.export(results, field_values)
-
-    # ------------------------------------------------------------------
-    # Streaming CLI support (massive sources)
-    # ------------------------------------------------------------------
-
-    @property
-    def supports_streaming(self) -> bool:
-        """Whether this exporter can write results incrementally.
-
-        Exporters that override :meth:`export_cli_streaming` return ``True``
-        so the ``--stream-results`` CLI path can route to them.  Exporters
-        that inherently need the whole payload at once (e.g. sending a single
-        email or webhook POST) leave this ``False``; requesting
-        ``--stream-results`` with them is rejected with a clear error.
-
-        See ``docs/plans/cli-stream-massive-images.md``.
-        """
-        return False
-
-    def export_cli_streaming(
-        self,
-        header: dict[str, Any],
-        records: Iterator[tuple[str, dict[str, Any]]],
-        field_values: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Write results incrementally as scored chunks stream in.
-
-        Unlike :meth:`export_cli`, which receives the fully-materialised
-        results dict, this method receives a lazy *records* iterator and is
-        expected to write each record to the destination as it arrives,
-        never buffering the whole set.  This is what lets ``--autodetect``
-        run against a media source with more items (and more hits) than fit
-        in RAM.
-
-        Args:
-            header: Metadata known before any hit streams, with keys
-                ``"media_type"`` (str), ``"detectors"`` (a list of
-                ``{"detector_name": str, "threshold": float}`` dicts), and
-                ``"keep_negatives"`` (bool — whether below-threshold hits are
-                included in *records*).
-            records: Yields ``(detector_name, hit)`` tuples in chunk order
-                (NOT globally sorted by score).  Each *hit* is the dict from
-                :func:`vtscore.utils.hits.build_media_hit` plus a ``"label"``
-                key (``"good"`` for above-threshold, ``"bad"`` otherwise).
-            field_values: Mapping of :attr:`ExporterField.key` → value.
-
-        Returns:
-            A status dict with a ``"message"`` key (and optionally
-            ``"filepath"``), like :meth:`export`.
-
-        Raises:
-            NotImplementedError: If the exporter does not support streaming.
-        """
-        raise NotImplementedError(f"{type(self).__name__} does not support streaming export")

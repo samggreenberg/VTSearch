@@ -379,7 +379,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         # Note: we intentionally do NOT call source.cleanup() here because
         # the extracted archive should remain cached for future resolve_file
         # calls (matching the previous behaviour of keeping resolve dirs).
-        return source.resolve_path(origin_name, filename).path
+        return source.resolve_path(origin_name, filename)
 
 
 IMPORTER = HttpArchiveDatasetImporter()

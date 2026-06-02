@@ -319,12 +319,6 @@ before JSON encoding.
 `stream_with_context` + a generator that encodes one element at a time, so
 the full payload is never in memory at once.
 
-**Partially shipped:** CLI *autodetect results* now stream via
-`--stream-results` (NDJSON / streamed CSV; see
-[`cli-stream-massive-images.md`](cli-stream-massive-images.md)).  The
-`/api/labels/export` route (this item) still buffers the full JSON; apply the
-same streaming pattern there.
-
 ---
 
 ### S14: `snapshot_medias()` full-dict copies
@@ -355,12 +349,6 @@ loading it in one shot is not feasible on typical hardware.
 **Fix direction:** Pickle datasets > some threshold (e.g. 100 k items) should
 be loaded in streaming chunks.  Embeddings should be written to a companion
 mmap'd `.npy` (see S1) instead of stored inline in the pickle.
-
-**Note:** the *folder* importer's chunked CLI path now enumerates files lazily
-(no full file list in RAM); see
-[`cli-stream-massive-images.md`](cli-stream-massive-images.md).  This item is
-specifically about the *pickle* loader, which still reads the whole file at
-once.
 
 ---
 
@@ -453,13 +441,6 @@ has unresolved labels, resolves+embeds them before scoring all N items.
 Label resolution is serial within each detector.  With 10 detectors each
 having 1 000 unresolved labels at 50 ms/label: **500 s just for resolution**,
 before any inference.
-
-**Partially shipped** (see [`cli-stream-massive-images.md`](cli-stream-massive-images.md)):
-`--autodetect --chunk-size N --stream-results` now scores chunk by chunk and
-streams hits straight to the exporter, so the *target* side no longer holds all
-N items, all hits, or the full export in RAM; folder enumeration is lazy; and
-each chunk is embedded one at a time.  **Still open:** the per-detector
-*label* resolution below is unchanged.
 
 **Fix direction:** Resolve all detectors' labels in parallel (thread pool).
 Bundle duplicate-file resolves across detectors.  Use batch embedding for

@@ -26,7 +26,6 @@ from vtsearch.routes.labels import exporters_bp, label_importers_bp, labels_bp
 from vtsearch.routes.main import main_bp
 from vtsearch.routes.media import embed_bp, media_server_bp, medias_bp
 from vtsearch.routes.processors import processors_crud_bp, processors_scoring_bp
-from vtsearch.routes.projection import projection_bp
 from vtsearch.routes.sessions import sessions_bp
 from vtsearch.routes.settings import settings_bp, settings_io_bp, sync_sources_bp
 from vtsearch.routes.sorting import sorting_bp
@@ -58,7 +57,6 @@ __all__ = [
     "media_server_bp",
     "medias_bp",
     "processors_crud_bp",
-    "projection_bp",
     "processors_scoring_bp",
     "sessions_bp",
     "settings_bp",

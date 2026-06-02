@@ -9,7 +9,7 @@
 #   ./run-tests.sh vtscore-clean  # run tests_lib/ with Flask import blocked
 #
 # Available groups: core, api, sorting, datasets, io, detectors,
-#                   downloads, integration, cli, converters, projection
+#                   downloads, integration, cli, converters
 #
 # Each group is a folder under tests/ AND tests_lib/. Marker assignment is
 # automatic: any file at tests[_lib]/<group>/test_*.py gets marked <group>
