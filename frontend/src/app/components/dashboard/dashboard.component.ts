@@ -889,12 +889,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       embedder?: string;
       clipper?: string;
       dataset_name?: string;
+      build_projection?: boolean;
     };
     const params: Record<string, string> = {};
     if (extras.embedder) params['embedder'] = extras.embedder;
     if (extras.clipper) params['clipper'] = extras.clipper;
     const userName = (extras.dataset_name || '').trim();
     if (userName) params['dataset_name'] = userName;
+    if (extras.build_projection) params['build_projection'] = 'true';
     this.datasetsCrudApi.loadDemo(demo.name, params).subscribe({
       next: (response) => {
         this.loadingTasksSvc.startProgressPolling(response.task_id);
