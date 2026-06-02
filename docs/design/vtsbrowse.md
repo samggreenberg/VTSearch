@@ -1,14 +1,15 @@
 # Design: VTSBrowse — a UMAP hexbin Dataset Browser in VTSearch
 
 > **Status:** Prerequisite shipped (app-wide L2 normalization at ingest),
-> **Flask-free projection backend** (`vtscore/projection/`: UMAP fit +
-> hex-tile pyramid), **and the Angular browse canvas** (Canvas 2D renderer,
-> pan/zoom, hover preview, tile caching, `/browse/:datasetId` route). The
-> Browse routes (`/api/projection/{build,meta,tiles}`) and projection
-> persistence are not yet built. This doc scopes VTSBrowse as a **module
-> within VTSearch** — new routes, services, and Angular components that add a
-> Browse mode alongside the existing Find and Train modes. See *§What
-> shipped* and *§Open follow-ups* at the bottom for where things stand.
+> **Flask-free projection backend** shipped (`vtscore/projection/`: UMAP fit +
+> hex-tile pyramid), **Browse routes** shipped
+> (`vtsearch/routes/projection.py`: build, meta, tiles endpoints), **and the
+> Angular browse canvas** shipped (Canvas 2D renderer, pan/zoom, hover
+> preview, tile caching, `/browse/:datasetId` route). Projection persistence
+> is not yet built. This doc scopes VTSBrowse as a **module within
+> VTSearch** — new routes, services, and Angular components that add a Browse
+> mode alongside the existing Find and Train modes. See *§What shipped* and
+> *§Open follow-ups* at the bottom for where things stand.
 >
 > **Direction change (this revision):** the original sketch was a
 > *hover-to-hear grid* that reused VTSearch's left-panel media-list. The
@@ -570,12 +571,33 @@ and available to any future consumer of `vtscore`.
   - Tests: `tests_lib/projection/` (new `projection` group/marker) —
     `test_hexbin.py`, `test_umap_projection.py`, `test_pyramid.py`.
   - **Not yet built (next phases):** persistence of the projection + pyramid
-    with the dataset artifact (the carve-out), the Browse routes in
-    `vtsearch/routes/` (`/api/projection/{build,meta,tiles}` endpoints).
+    with the dataset artifact (the carve-out).
+
+- **Browse routes (HTTP layer).** The three projection endpoints landed under
+  `vtsearch/routes/projection.py` with a `projection_bp` Blueprint:
+  - `POST /api/projection/build` — kicks off a background UMAP + pyramid build
+    via the `projection_jobs` :class:`JobManager` singleton. Returns immediately
+    with a `job_id`; if a projection is already cached on the `DatasetContext`,
+    returns `"ready"` without rebuilding. Signature-keyed caching means
+    unchanged datasets short-circuit.
+  - `GET /api/projection/meta` — returns projection/pyramid metadata (bounds,
+    zoom levels, hex sizing, point count, `projection_id`, dataset `media_type`,
+    projection `method`) when ready; build progress (job_id, current, total,
+    message) when building; `"idle"` when no build has been requested.
+  - `GET /api/projection/tiles/<level>/<tx>/<ty>` — serves a tile's hex cells
+    as JSON (delegates to `Pyramid.get_tile` + `Tile.to_payload`). Empty tiles
+    return `{"cells": []}`. Route uses `signed=True` on `tx`/`ty` converters
+    since tile indices can be negative.
+  - Schemas live in `vtsearch/schemas/projection.py`.
+  - `DatasetContext` gained `_projection` and `_pyramid` cache slots (in-memory
+    only; reset per test by `conftest.reset_state`).
+  - `projection_jobs` added to `JOB_MANAGERS` so it participates in
+    `/api/jobs/active` introspection and `reset_all_async_jobs_for_tests()`.
+  - Tests: `tests/api/test_projection.py` (7 tests covering meta, build, tiles).
 
 - **Browse canvas frontend (Stage 3).** Angular components for the Canvas 2D
   hex-tile renderer, coded against the `Tile.to_payload()` / `Pyramid.meta()`
-  contracts from the projection backend. Backend routes are not yet wired.
+  contracts from the projection backend.
   - `BrowseCanvasComponent` — Canvas 2D renderer with:
     - Affine projection-space ↔ screen-space transform (pan = translate,
       zoom = scale about cursor).
@@ -592,7 +614,7 @@ and available to any future consumer of `vtscore`.
   - `BrowseViewComponent` — routed view with status states (loading,
     building, ready, empty, error), projection build trigger, dataset
     info overlay.
-  - `ProjectionApiService` — API calls for the future
+  - `ProjectionApiService` — API calls for
     `/api/projection/{build,meta,tiles}` endpoints.
   - `TileCacheService` — LRU tile cache (512 entries) with in-flight
     request dedup, shareReplay, and neighbor/level prefetching.
@@ -604,14 +626,14 @@ and available to any future consumer of `vtscore`.
   - `ContextSwitchService` updated to navigate within `/browse` when the
     dataset pulldown changes on the browse route.
   - **Not yet wired:** sibling highlighting (needs source-file group ids
-    in the tile payload or a server-side lookup endpoint), and the
-    backend routes themselves.
+    in the tile payload or a server-side lookup endpoint).
 
 ## Open follow-ups
-- **Browse routes + projection persistence:** the Flask routes
-  (`/api/projection/{build,meta,tiles}`) and persistence of the projection +
-  pyramid with the dataset artifact are the remaining backend work before the
-  browse canvas is functional end-to-end.
+- **Projection persistence:** persistence of the projection + pyramid with
+  the dataset artifact (the carve-out from "No Persisted Vectors/MLPs") is
+  the remaining backend work. Currently the projection is recomputed on each
+  app restart; persisting it with the dataset pickle makes the "compute once,
+  never again" guarantee real.
 - **Sibling highlighting:** hovering a hex should highlight hexes containing
   items from the same source file. Requires either source-file group ids in
   the tile payload or a server-side lookup endpoint keyed by group id. The

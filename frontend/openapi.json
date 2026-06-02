@@ -2635,6 +2635,38 @@
         ],
         "type": "object"
       },
+      "HexCell": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "cx": {
+            "type": "number"
+          },
+          "cy": {
+            "type": "number"
+          },
+          "q": {
+            "type": "integer"
+          },
+          "r": {
+            "type": "integer"
+          },
+          "rep_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "cx",
+          "cy",
+          "q",
+          "r",
+          "rep_id"
+        ],
+        "type": "object"
+      },
       "ImporterFieldOptionsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3071,6 +3103,26 @@
         ],
         "type": "object"
       },
+      "LevelMeta": {
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "type": "integer"
+          },
+          "n_cells": {
+            "type": "integer"
+          },
+          "radius": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "level",
+          "n_cells",
+          "radius"
+        ],
+        "type": "object"
+      },
       "LocalizeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3439,6 +3491,112 @@
         },
         "required": [
           "processors"
+        ],
+        "type": "object"
+      },
+      "ProjectionBuildResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "projection_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "ProjectionMeta": {
+        "additionalProperties": false,
+        "properties": {
+          "base_radius": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "bounds": {
+            "default": null,
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "current": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "error": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "job_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "levels": {
+            "default": null,
+            "items": {
+              "$ref": "#/components/schemas/LevelMeta"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "media_type": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "method": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "point_count": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "projection_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "description": "idle | building | ready | error",
+            "type": "string"
+          },
+          "tile_span": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "total": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
         ],
         "type": "object"
       },
@@ -4060,6 +4218,33 @@
         },
         "required": [
           "suggestions"
+        ],
+        "type": "object"
+      },
+      "TileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/HexCell"
+            },
+            "type": "array"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "tx": {
+            "type": "integer"
+          },
+          "ty": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cells",
+          "level",
+          "tx",
+          "ty"
         ],
         "type": "object"
       },
@@ -11516,6 +11701,114 @@
         ]
       }
     },
+    "/api/projection/build": {
+      "post": {
+        "description": "Returns immediately with a ``job_id`` for polling via\n``GET /api/projection/meta``.  If a projection is already cached on\nthe context, returns it without rebuilding.",
+        "operationId": "build_projection",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionBuildResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "description": "Dataset is empty or has no embeddings."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Kick off a background UMAP + pyramid build for the active dataset.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
+    "/api/projection/meta": {
+      "get": {
+        "description": "When the projection is ready, includes bounds, zoom levels, hex sizing,\npoint count, and the dataset's media type (so the client knows which\nhover-preview behavior to use).",
+        "operationId": "projection_meta",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionMeta"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return projection/pyramid metadata and build status.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
+    "/api/projection/tiles/{level}/{tx}/{ty}": {
+      "get": {
+        "description": "Because the projection is frozen at ingest, tiles are immutable for the\nlife of the dataset and can be cached aggressively by the client.",
+        "operationId": "get_tile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Tile not found or projection not ready."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the hex cells for one tile at ``(level, tx, ty)``.",
+        "tags": [
+          "projection"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "level",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "tx",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "ty",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ]
+    },
     "/api/safe-thresholds": {
       "get": {
         "operationId": "get_safe_thresholds_route",
@@ -12633,6 +12926,10 @@
     {
       "description": "On-demand embedding of a media file (multipart) or text snippet (JSON). The dispatch route is dual-mode and not described in the spec; see the module docstring.",
       "name": "embed"
+    },
+    {
+      "description": "VTSBrowse projection: UMAP layout + hex-tile pyramid.",
+      "name": "projection"
     }
   ]
 }

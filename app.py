@@ -94,6 +94,7 @@ from vtsearch.routes import (  # noqa: E402
     main_bp,
     processors_crud_bp,
     processors_scoring_bp,
+    projection_bp,
     sessions_bp,
     settings_bp,
     settings_io_bp,
@@ -521,6 +522,7 @@ api.register_blueprint(detectors_registry_bp)
 api.register_blueprint(detector_scoring_bp)
 api.register_blueprint(detector_find_bp)
 api.register_blueprint(embed_bp)
+api.register_blueprint(projection_bp)
 app.register_blueprint(events_bp)
 
 

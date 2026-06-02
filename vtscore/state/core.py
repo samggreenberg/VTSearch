@@ -278,6 +278,9 @@ class DatasetContext:
         # we don't rebuild a 10k-row matrix per call.
         "_emb_matrix_ids",
         "_emb_matrix",
+        # VTSBrowse: cached projection + pyramid (frozen at ingest).
+        "_projection",
+        "_pyramid",
     )
 
     def __init__(self, dataset_id: str = "") -> None:
@@ -287,6 +290,8 @@ class DatasetContext:
         self.dataset_display_name: str | None = None
         self._emb_matrix_ids: list[int] | None = None
         self._emb_matrix: Any = None  # np.ndarray | None
+        self._projection: Any = None  # Projection | None
+        self._pyramid: Any = None  # Pyramid | None
 
 
 class DetectorContext:
