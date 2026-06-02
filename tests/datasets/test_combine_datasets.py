@@ -499,14 +499,16 @@ class TestStageFileEndpoint:
         """Uploading a valid .pkl file returns staging metadata."""
         from io import BytesIO
 
+        from vtscore.datasets.container import write_container
+
         ds = {1: _make_audio_clip(1), 2: _make_audio_clip(2)}
-        buf = BytesIO()
         data = {
             "medias": {
                 cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()} for cid, m in ds.items()
             }
         }
-        pickle.dump(data, buf)
+        buf = BytesIO()
+        write_container(buf, pickle.dumps(data), {"format_version": 1})
         buf.seek(0)
 
         resp = client.post(
@@ -530,8 +532,10 @@ class TestStageFileEndpoint:
         """An empty pkl returns count=0."""
         from io import BytesIO
 
+        from vtscore.datasets.container import write_container
+
         buf = BytesIO()
-        pickle.dump({"medias": {}}, buf)
+        write_container(buf, pickle.dumps({"medias": {}}), {"format_version": 1})
         buf.seek(0)
 
         resp = client.post(
@@ -557,14 +561,16 @@ class TestStageImportEndpoint:
         """Staging the pickle importer returns 200 with ok=True."""
         from io import BytesIO
 
+        from vtscore.datasets.container import write_container
+
         ds = {1: _make_audio_clip(1)}
-        buf = BytesIO()
         data = {
             "medias": {
                 cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in m.items()} for cid, m in ds.items()
             }
         }
-        pickle.dump(data, buf)
+        buf = BytesIO()
+        write_container(buf, pickle.dumps(data), {"format_version": 1})
         buf.seek(0)
 
         resp = client.post(
