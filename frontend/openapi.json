@@ -1012,6 +1012,11 @@
       "DatasetLoadDemoRequest": {
         "additionalProperties": false,
         "properties": {
+          "build_projection": {
+            "default": "false",
+            "description": "When 'true', compute + persist the 2-D Browse projection at ingest.",
+            "type": "string"
+          },
           "clipper": {
             "default": "",
             "type": "string"
@@ -4984,6 +4989,10 @@
       "import_dataset_CombineDatasetsImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5020,6 +5029,10 @@
       "import_dataset_DemoDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5135,6 +5148,10 @@
       "import_dataset_HttpArchiveDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5179,6 +5196,10 @@
       "import_dataset_LocalFilesDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5205,6 +5226,10 @@
       "import_dataset_LocalFolderDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5234,6 +5259,10 @@
       "import_dataset_ReCallerDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5278,6 +5307,10 @@
       "import_dataset_ServerFilesDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5322,6 +5355,10 @@
       "import_dataset_ServerFolderDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5369,6 +5406,10 @@
       "import_dataset_SyntheticDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
