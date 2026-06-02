@@ -16,7 +16,6 @@ from vtscore.datasets.loader import (
     ProgressCallback,
 )
 from vtscore.embedding.normalize import l2_normalize
-from vtscore.security.pickle import safe_pickle_load
 
 
 def _read_pickle_dataset(file_path: Path) -> dict[str, Any]:
