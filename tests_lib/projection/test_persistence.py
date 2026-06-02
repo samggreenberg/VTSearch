@@ -9,7 +9,7 @@ from vtscore.projection.persistence import (
     projection_sidecar_path,
     save_projection,
 )
-from vtscore.projection.pyramid import Pyramid, build_pyramid
+from vtscore.projection.pyramid import build_pyramid
 from vtscore.projection.umap_projection import Projection
 
 

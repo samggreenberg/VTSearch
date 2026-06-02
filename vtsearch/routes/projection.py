@@ -43,6 +43,29 @@ def _pkl_path_for(dataset_id: str) -> str | None:
     return entry.get("pkl_path") or None
 
 
+def _try_load_sidecar(ctx, sorted_ids: list[int]) -> dict | None:
+    """Try to restore a projection from the sidecar file.
+
+    Returns a ready-response dict on success, or ``None`` if no valid
+    sidecar is available.
+    """
+    pkl_path = _pkl_path_for(ctx.dataset_id)
+    if pkl_path is None:
+        return None
+    from vtscore.projection.persistence import load_projection
+
+    loaded = load_projection(pkl_path)
+    if loaded is None:
+        return None
+    proj, pyr = loaded
+    if set(proj.ids) != set(sorted_ids):
+        logger.info("Sidecar projection ids mismatch; will recompute.")
+        return None
+    ctx._projection = proj
+    ctx._pyramid = pyr
+    return {"status": "ready", "projection_id": pyr.projection_id}
+
+
 @projection_bp.route("/api/projection/build", methods=["POST"])
 @projection_bp.response(200, ProjectionBuildResponseSchema)
 @projection_bp.alt_response(409, description="Dataset is empty or has no embeddings.")
@@ -78,18 +101,9 @@ def build_projection():
         abort(409, message="Dataset has no embeddings — nothing to project.")
 
     # Try loading a persisted projection from the sidecar file.
-    pkl_path = _pkl_path_for(ctx.dataset_id)
-    if pkl_path is not None:
-        from vtscore.projection.persistence import load_projection
-
-        loaded = load_projection(pkl_path)
-        if loaded is not None:
-            proj, pyr = loaded
-            if set(proj.ids) == set(sorted_ids):
-                ctx._projection = proj
-                ctx._pyramid = pyr
-                return {"status": "ready", "projection_id": pyr.projection_id}
-            logger.info("Sidecar projection ids mismatch; will recompute.")
+    sidecar_result = _try_load_sidecar(ctx, sorted_ids)
+    if sidecar_result is not None:
+        return sidecar_result
 
     sig = (ctx.dataset_id, tuple(sorted_ids))
     cached = projection_jobs.cached_for(sig)
