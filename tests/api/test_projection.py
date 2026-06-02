@@ -87,7 +87,7 @@ class TestProjectionBuild:
         finally:
             ctx.medias.update(saved)
 
-    @patch("vtsearch.routes.projection.fit_projection", side_effect=_fake_fit_projection)
+    @patch("vtscore.projection.umap_projection.fit_projection", side_effect=_fake_fit_projection)
     def test_build_and_poll(self, _mock_fit, client):
         resp = client.post("/api/projection/build")
         assert resp.status_code == 200
