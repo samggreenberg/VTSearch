@@ -28,6 +28,13 @@ export interface ProjectionMeta {
   point_count: number;
   levels: LevelMeta[];
   media_type?: string;
+  // Build lifecycle (idle | building | ready | error) and progress, populated
+  // by GET /api/projection/meta while a build is in flight.
+  status?: 'idle' | 'building' | 'ready' | 'error';
+  current?: number;
+  total?: number;
+  message?: string;
+  error?: string;
 }
 
 export interface ProjectionBuildResponse {

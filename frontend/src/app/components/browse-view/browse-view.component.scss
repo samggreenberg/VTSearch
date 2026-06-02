@@ -32,6 +32,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.browse-status-detail {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
 .browse-info {
   position: absolute;
   bottom: var(--space-md);
