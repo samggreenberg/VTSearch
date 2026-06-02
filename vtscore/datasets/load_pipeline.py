@@ -612,7 +612,13 @@ def _auto_register_dataset(
     ds_dir.mkdir(parents=True, exist_ok=True)
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
     try:
-        data_bytes = export_dataset_to_file(media_dict)
+        data_bytes = export_dataset_to_file(
+            media_dict,
+            embedder=embedder,
+            clipper=clipper,
+            media_type=media_type,
+            name=name,
+        )
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
     except Exception:

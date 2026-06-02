@@ -44,22 +44,22 @@ def _pkl_path_for(dataset_id: str) -> str | None:
 
 
 def _try_load_sidecar(ctx, sorted_ids: list[int]) -> dict | None:
-    """Try to restore a projection from the sidecar file.
+    """Try to restore a projection from the dataset container or sidecar.
 
     Returns a ready-response dict on success, or ``None`` if no valid
-    sidecar is available.
+    persisted projection is available.
     """
     pkl_path = _pkl_path_for(ctx.dataset_id)
     if pkl_path is None:
         return None
-    from vtscore.projection.persistence import load_projection
+    from vtscore.datasets.container import read_projection
 
-    loaded = load_projection(pkl_path)
+    loaded = read_projection(pkl_path)
     if loaded is None:
         return None
     proj, pyr = loaded
     if set(proj.ids) != set(sorted_ids):
-        logger.info("Sidecar projection ids mismatch; will recompute.")
+        logger.info("Persisted projection ids mismatch; will recompute.")
         return None
     ctx._projection = proj
     ctx._pyramid = pyr
@@ -208,16 +208,16 @@ def get_tile(level: int, tx: int, ty: int):
 
 
 def _persist_projection(dataset_id: str, proj, pyr) -> None:
-    """Best-effort save of the projection sidecar after a build."""
+    """Best-effort save of the projection into the dataset container."""
     pkl_path = _pkl_path_for(dataset_id)
     if pkl_path is None:
         return
     try:
-        from vtscore.projection.persistence import save_projection
+        from vtscore.datasets.container import append_projection
 
-        save_projection(pkl_path, proj, pyr)
+        append_projection(pkl_path, proj, pyr)
     except Exception:
-        logger.warning("Failed to persist projection sidecar for %s", dataset_id, exc_info=True)
+        logger.warning("Failed to persist projection for %s", dataset_id, exc_info=True)
 
 
 __all__ = ["projection_bp"]

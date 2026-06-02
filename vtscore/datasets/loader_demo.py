@@ -131,7 +131,10 @@ def load_demo_dataset(  # noqa: C901
         # If the caller explicitly requested an embedder, verify the cached
         # pickle was produced by the same one.  When *embedder_name* is empty
         # (meaning "use default"), accept whatever is cached.
-        cached_embedder = _loader.read_pkl_embedder(pkl_file)
+        from vtscore.datasets.container import read_meta
+
+        cached_meta = read_meta(pkl_file)
+        cached_embedder = cached_meta.get("embedder") or _loader.read_pkl_embedder(pkl_file)
         if embedder_name and cached_embedder and embedder_name != cached_embedder:
             # Embedder mismatch - discard stale cache and re-embed below.
             on_progress("loading", f"Re-embedding {dataset_name} with {embedder_name}...", 0, 0)
@@ -242,14 +245,22 @@ def load_demo_dataset(  # noqa: C901
         }
 
     _loader.EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-    with open(pkl_file, "wb") as f:
-        pickle.dump(pkl_data, f)
 
-    # Write a lightweight sidecar that records which embedder produced this pkl.
     resolved_name = getattr(embedder, "name", "") if embedder is not None else ""
-    _loader._write_embedder_sidecar(pkl_file, resolved_name)
+    extra_pickle_keys: dict[str, Any] = {}
+    if external_dir is not None and not converter_name:
+        extra_pickle_keys[mt.dir_key] = external_dir
 
-    # Write a clipper sidecar so the demo list can check readiness.
-    _loader._write_clipper_sidecar(pkl_file, clipper_name)
+    medias_pkl_bytes = pickle.dumps(pkl_data)
+    meta = {
+        "format_version": 1,
+        "embedder": resolved_name,
+        "clipper": clipper_name,
+        "media_type": media_type_id,
+        "name": dataset_name,
+    }
+    from vtscore.datasets.container import write_container
+
+    write_container(pkl_file, medias_pkl_bytes, meta, extra_pickle_keys=extra_pickle_keys)
 
     on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)

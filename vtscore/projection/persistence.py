@@ -8,12 +8,18 @@ as a single UTF-8 JSON blob (``meta``).
 This is the persistence half of the carve-out from the "No Persisted Vectors or
 MLPs" rule (see ``docs/design/vtsbrowse.md``).  Only 2-D projection coordinates
 and the derived hex pyramid are stored — never embeddings, never MLP weights.
+
+The container module (``vtscore.datasets.container``) reuses
+:func:`_pyramid_to_meta` and :func:`_rebuild_from_npz_arrays` so the same
+serialization logic serves both the sidecar path and the in-ZIP path.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -31,15 +37,14 @@ def projection_sidecar_path(pkl_path: str | Path) -> Path:
     return Path(pkl_path).with_suffix(".projection")
 
 
-def save_projection(
-    pkl_path: str | Path,
-    projection: Projection,
-    pyramid: Pyramid,
-) -> Path:
-    """Serialize *projection* + *pyramid* to a ``.projection`` sidecar next to *pkl_path*."""
-    sidecar = projection_sidecar_path(pkl_path)
+# ---------------------------------------------------------------------------
+# Serialization helpers (shared with vtscore.datasets.container)
+# ---------------------------------------------------------------------------
 
-    meta: dict[str, Any] = {
+
+def _pyramid_to_meta(projection: Projection, pyramid: Pyramid) -> dict[str, Any]:
+    """Convert a Projection + Pyramid to a JSON-serializable dict."""
+    return {
         "projection_id": projection.projection_id,
         "method": projection.method,
         "base_radius": pyramid.base_radius,
@@ -63,6 +68,60 @@ def save_projection(
         },
     }
 
+
+def _rebuild_from_npz_arrays(
+    coords: np.ndarray,
+    ids: list[int],
+    meta_bytes: bytes,
+) -> tuple[Projection, Pyramid]:
+    """Reconstruct a Projection + Pyramid from raw npz components."""
+    meta = json.loads(meta_bytes.decode("utf-8"))
+
+    projection = Projection(
+        projection_id=meta["projection_id"],
+        ids=ids,
+        coords=coords,
+        method=meta["method"],
+    )
+
+    levels = [LevelMeta(level=lm["level"], radius=lm["radius"], n_cells=lm["n_cells"]) for lm in meta["levels"]]
+
+    tiles: dict[tuple[int, int, int], Tile] = {}
+    for key_str, cell_dicts in meta["tiles"].items():
+        parts = key_str.split(",")
+        level, tx, ty = int(parts[0]), int(parts[1]), int(parts[2])
+        cells = [
+            HexCell(q=c["q"], r=c["r"], cx=c["cx"], cy=c["cy"], count=c["count"], rep_id=c["rep_id"])
+            for c in cell_dicts
+        ]
+        tiles[(level, tx, ty)] = Tile(level=level, tx=tx, ty=ty, cells=cells)
+
+    pyramid = Pyramid(
+        projection_id=meta["projection_id"],
+        bounds=tuple(meta["bounds"]),
+        base_radius=meta["base_radius"],
+        tile_span=meta["tile_span"],
+        point_count=meta["point_count"],
+        levels=levels,
+        tiles=tiles,
+    )
+
+    return projection, pyramid
+
+
+# ---------------------------------------------------------------------------
+# Sidecar save / load
+# ---------------------------------------------------------------------------
+
+
+def save_projection(
+    pkl_path: str | Path,
+    projection: Projection,
+    pyramid: Pyramid,
+) -> Path:
+    """Serialize *projection* + *pyramid* to a ``.projection`` sidecar next to *pkl_path*."""
+    sidecar = projection_sidecar_path(pkl_path)
+    meta = _pyramid_to_meta(projection, pyramid)
     meta_bytes = json.dumps(meta, separators=(",", ":")).encode("utf-8")
 
     buf = BytesIO()
@@ -74,9 +133,6 @@ def save_projection(
     )
 
     sidecar.parent.mkdir(parents=True, exist_ok=True)
-    import os
-    import tempfile
-
     fd, tmp = tempfile.mkstemp(dir=sidecar.parent, suffix=".projection.tmp")
     try:
         with os.fdopen(fd, "wb") as f:
@@ -107,46 +163,9 @@ def load_projection(pkl_path: str | Path) -> tuple[Projection, Pyramid] | None:
             ids = npz["ids"].tolist()
             meta_bytes = npz["meta"].tobytes()
 
-        meta = json.loads(meta_bytes.decode("utf-8"))
-
-        projection = Projection(
-            projection_id=meta["projection_id"],
-            ids=ids,
-            coords=coords,
-            method=meta["method"],
-        )
-
-        levels = [LevelMeta(level=lm["level"], radius=lm["radius"], n_cells=lm["n_cells"]) for lm in meta["levels"]]
-
-        tiles: dict[tuple[int, int, int], Tile] = {}
-        for key_str, cell_dicts in meta["tiles"].items():
-            parts = key_str.split(",")
-            level, tx, ty = int(parts[0]), int(parts[1]), int(parts[2])
-            cells = [
-                HexCell(
-                    q=c["q"],
-                    r=c["r"],
-                    cx=c["cx"],
-                    cy=c["cy"],
-                    count=c["count"],
-                    rep_id=c["rep_id"],
-                )
-                for c in cell_dicts
-            ]
-            tiles[(level, tx, ty)] = Tile(level=level, tx=tx, ty=ty, cells=cells)
-
-        pyramid = Pyramid(
-            projection_id=meta["projection_id"],
-            bounds=tuple(meta["bounds"]),
-            base_radius=meta["base_radius"],
-            tile_span=meta["tile_span"],
-            point_count=meta["point_count"],
-            levels=levels,
-            tiles=tiles,
-        )
-
+        result = _rebuild_from_npz_arrays(coords, ids, meta_bytes)
         logger.info("Loaded projection sidecar: %s", sidecar)
-        return projection, pyramid
+        return result
 
     except Exception:
         logger.warning("Failed to load projection sidecar %s", sidecar, exc_info=True)
