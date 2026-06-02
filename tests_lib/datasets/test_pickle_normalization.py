@@ -6,7 +6,7 @@ raw (non-unit) embeddings.  The pickle loader is one of the ingest
 chokepoints that re-establishes the "every stored embedding is unit-norm"
 invariant, so a legacy pickle opens with unit vectors without re-embedding.
 
-See ``docs/design/vtsbrowse.md`` §Prerequisite
+See ``docs/plans/vtsbrowse.md`` §Prerequisite
 (Chokepoint placement: the pickle/import write path must be covered).
 """
 

@@ -1,7 +1,7 @@
 # Plan: VTSBrowse empirical tuning pass
 
 > **Status:** Planned, not started. This is the deferred *§Open problems →
-> Empirical* work from `docs/design/vtsbrowse.md`. It is written to be picked
+> Empirical* work from `docs/plans/vtsbrowse.md`. It is written to be picked
 > up on a **stronger environment** (one with a browser for visual judgment,
 > and ideally GPU + real demo datasets downloaded) because the core
 > deliverable — choosing good defaults — requires *looking at the rendered
@@ -214,7 +214,7 @@ Capture before/after screenshots for the write-up.
    in the write-up.
 4. **Write-up** appended to this plan's *§Results* (below, currently empty):
    the grid that was run, the winning values, and the metric/screenshot
-   evidence. Update `docs/design/vtsbrowse.md` *§Open problems → Empirical* to
+   evidence. Update `docs/plans/vtsbrowse.md` *§Open problems → Empirical* to
    "settled — see plan §Results".
 
 ## Acceptance

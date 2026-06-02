@@ -3,7 +3,7 @@
 Given a frozen :class:`~vtscore.projection.umap_projection.Projection`, build a
 multi-resolution pyramid of hexagon aggregates that the canvas streams as it
 pans and zooms.  Per *§Browse-canvas architecture* in
-``docs/design/vtsbrowse.md``:
+``docs/plans/vtsbrowse.md``:
 
 - **Zoom levels** ``z = 0 … n_levels-1``.  Level 0 is coarsest (the whole
   projection in a handful of big hexes); each deeper level *halves the hex

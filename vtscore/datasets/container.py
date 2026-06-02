@@ -6,7 +6,7 @@ Each dataset is a single ZIP file containing:
 - ``meta.json``      — embedder, clipper, media_type, timestamps, age-off
 - ``projection.npz`` — (optional, appended later) frozen 2-D layout + pyramid
 
-See ``docs/design/vtsbrowse.md`` for the persistence carve-out.
+See ``docs/plans/vtsbrowse.md`` for the persistence carve-out.
 """
 
 from __future__ import annotations
