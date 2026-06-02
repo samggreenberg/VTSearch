@@ -463,9 +463,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const dy = radius * 1.5;
     const tileSpan = this.meta.tile_span;
 
-    const qEst = Math.round((px / dx) * 2);
+    const qApprox = Math.round((px / dx) * 2);
     const rEst = Math.round(py / dy);
-    const txEst = Math.floor((qEst / 2) / tileSpan);
+    const txEst = Math.floor((qApprox / 2) / tileSpan);
     const tyEst = Math.floor(rEst / tileSpan);
 
     let best: HexCellPayload | null = null;

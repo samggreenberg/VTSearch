@@ -54,32 +54,32 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     this.top = event.screenY - 8;
     this.count = event.cell.count;
 
-    const repId = event.cell.rep_id;
+    const representativeId = event.cell.rep_id;
     switch (this.mediaType) {
       case 'audio':
         this.imageSrc = '';
         this.textContent = '';
-        this.playAudio(repId);
+        this.playAudio(representativeId);
         break;
       case 'image':
         this.stopAudio();
         this.textContent = '';
-        this.imageSrc = this.activeContext.mediaUrl(`/api/medias/${repId}/image`);
+        this.imageSrc = this.activeContext.mediaUrl(`/api/medias/${representativeId}/image`);
         break;
       case 'text':
         this.stopAudio();
         this.imageSrc = '';
-        this.loadText(repId);
+        this.loadText(representativeId);
         break;
       case 'video':
         this.stopAudio();
         this.textContent = '';
-        this.imageSrc = this.activeContext.mediaUrl(`/api/medias/${repId}/thumbnail`);
+        this.imageSrc = this.activeContext.mediaUrl(`/api/medias/${representativeId}/thumbnail`);
         break;
       default:
         this.stopAudio();
         this.imageSrc = '';
-        this.textContent = `Item #${repId}`;
+        this.textContent = `Item #${representativeId}`;
     }
   }
 
