@@ -337,6 +337,9 @@ learned_sort_jobs = JobManager("learned-sort")
 #: Background runner for ``/api/eval/train-and-score``.
 eval_jobs = JobManager("eval-train-score")
 
+#: Background runner for ``/api/projection/build`` (VTSBrowse UMAP + pyramid).
+projection_jobs = JobManager("projection")
+
 #: Logical name → :class:`JobManager` lookup used by ``/api/jobs/active`` to
 #: enumerate which (dataset_id, detector_id) pairs currently have background
 #: work in flight. The string keys are the public job-type names exposed in
@@ -345,6 +348,7 @@ eval_jobs = JobManager("eval-train-score")
 JOB_MANAGERS: dict[str, JobManager] = {
     "learned-sort": learned_sort_jobs,
     "eval": eval_jobs,
+    "projection": projection_jobs,
 }
 
 
