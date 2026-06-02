@@ -3,10 +3,12 @@
 > **Status:** Prerequisite shipped (app-wide L2 normalization at ingest),
 > **Flask-free projection backend** shipped (`vtscore/projection/`: UMAP fit +
 > hex-tile pyramid), **Browse routes** shipped
-> (`vtsearch/routes/projection.py`: build, meta, tiles endpoints), **and the
+> (`vtsearch/routes/projection.py`: build, meta, tiles endpoints), **the
 > Angular browse canvas** shipped (Canvas 2D renderer, pan/zoom, hover
-> preview, tile caching, `/browse/:datasetId` route). Projection persistence
-> is not yet built. This doc scopes VTSBrowse as a **module within
+> preview, tile caching, `/browse/:datasetId` route), **and projection
+> persistence** shipped (`.projection` sidecar file next to the dataset
+> pickle; auto-saved after build, auto-loaded on next startup).
+> This doc scopes VTSBrowse as a **module within
 > VTSearch** — new routes, services, and Angular components that add a Browse
 > mode alongside the existing Find and Train modes. See *§What shipped* and
 > *§Open follow-ups* at the bottom for where things stand.
@@ -628,12 +630,27 @@ and available to any future consumer of `vtscore`.
   - **Not yet wired:** sibling highlighting (needs source-file group ids
     in the tile payload or a server-side lookup endpoint).
 
+- **Projection persistence (sidecar file).** The `(N, 2)` projection
+  coordinates and the full hex-tile pyramid are now persisted as a
+  `.projection` sidecar file next to the dataset pickle, using NumPy's
+  compressed `.npz` container (coords and ids as native arrays; all
+  pyramid metadata, levels, tiles, and cells as a JSON blob).
+  - `vtscore/projection/persistence.py` — `save_projection(pkl_path, proj,
+    pyr)` and `load_projection(pkl_path) -> (Projection, Pyramid) | None`.
+    Atomic write via `tempfile` + `os.replace`.  `allow_pickle=False` on
+    load for safety.  Corrupt/missing sidecars return `None`.
+  - `vtsearch/routes/projection.py` — the build route now calls
+    `_try_load_sidecar()` before computing: if a sidecar exists and its
+    media-id set matches the loaded dataset, the projection is restored
+    instantly.  After a fresh UMAP + pyramid build, `_persist_projection()`
+    saves the result.  Both are best-effort (registry lookup or I/O failures
+    log a warning and fall back to recompute/skip).
+  - Tests: `tests_lib/projection/test_persistence.py` (round-trip, empty
+    projection, negative tile indices, overwrite, corrupt/missing sidecar)
+    and `tests/api/test_projection.py::TestProjectionPersistence` (route
+    loads from sidecar, skips stale sidecar, saves after build).
+
 ## Open follow-ups
-- **Projection persistence:** persistence of the projection + pyramid with
-  the dataset artifact (the carve-out from "No Persisted Vectors/MLPs") is
-  the remaining backend work. Currently the projection is recomputed on each
-  app restart; persisting it with the dataset pickle makes the "compute once,
-  never again" guarantee real.
 - **Sibling highlighting:** hovering a hex should highlight hexes containing
   items from the same source file. Requires either source-file group ids in
   the tile payload or a server-side lookup endpoint keyed by group id. The
