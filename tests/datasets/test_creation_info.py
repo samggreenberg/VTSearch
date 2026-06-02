@@ -1,7 +1,5 @@
 """Tests for dataset pickle round-trip and status endpoint."""
 
-import pickle
-
 import numpy as np
 
 from vtscore.datasets.importers import get_importer
