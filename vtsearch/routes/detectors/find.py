@@ -47,14 +47,13 @@ def _load_pkl_for_check(pkl_path: str) -> dict | None:
     any read / parse error (the check-labels endpoint silently skips
     unreadable datasets).
     """
-    from vtscore.datasets.loader import safe_pickle_load  # noqa: PLC0415
+    from vtscore.datasets.container import read_container  # noqa: PLC0415
 
     try:
-        with open(pkl_path, "rb") as f:
-            pkl_data = safe_pickle_load(f)
+        pkl_data, _meta = read_container(pkl_path)
     except Exception:
         return None
-    raw_medias = pkl_data["medias"] if isinstance(pkl_data, dict) and "medias" in pkl_data else pkl_data
+    raw_medias = pkl_data.get("medias", pkl_data)
     temp_medias: dict[int, dict] = {}
     for cid, mdata in raw_medias.items():
         mid = int(cid) if not isinstance(cid, int) else cid
@@ -263,15 +262,11 @@ def _load_find_dataset_medias(ds: dict) -> dict[int, dict]:
     Aborts with 500 on any load error.  The snapshot is owned by the
     caller and freed after scoring completes.
     """
-    from vtscore.datasets.loader import safe_pickle_load  # noqa: PLC0415
+    from vtscore.datasets.container import read_container  # noqa: PLC0415
 
     try:
-        with open(ds["pkl_path"], "rb") as f:
-            pkl_data = safe_pickle_load(f)
-        if isinstance(pkl_data, dict) and "medias" in pkl_data:
-            raw_medias = pkl_data["medias"]
-        else:
-            raw_medias = pkl_data
+        pkl_data, _meta = read_container(ds["pkl_path"])
+        raw_medias = pkl_data.get("medias", pkl_data)
 
         temp_medias: dict[int, dict] = {}
         for cid, mdata in raw_medias.items():

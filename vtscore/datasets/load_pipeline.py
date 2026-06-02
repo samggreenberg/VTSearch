@@ -611,8 +611,28 @@ def _auto_register_dataset(
     ds_dir = get_saved_datasets_dir()
     ds_dir.mkdir(parents=True, exist_ok=True)
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
+    import time as _time
+
+    from vtscore.config import CoreConfig
+
+    now = _time.time()
     try:
-        data_bytes = export_dataset_to_file(media_dict)
+        config = CoreConfig.from_settings()
+        max_age = config.dataset_max_age_days
+    except RuntimeError:
+        max_age = None
+    expires_at = now + max_age * 86400 if max_age is not None else None
+
+    try:
+        data_bytes = export_dataset_to_file(
+            media_dict,
+            embedder=embedder,
+            clipper=clipper,
+            media_type=media_type,
+            name=name,
+            created_at=now,
+            expires_at=expires_at,
+        )
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
     except Exception:
@@ -633,6 +653,7 @@ def _auto_register_dataset(
             created_by=created_by,
             file_type_counts=file_type_counts,
             ingest_started_at=ingest_started_at,
+            expires_at=expires_at,
         )
     except Exception:
         # Registry write failed; clean up the orphaned pkl so we don't
@@ -1315,7 +1336,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     clipper_params = field_values.pop("clipper_params", None)
     chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
     # Keep clipper in field_values for importers that need it (e.g. demo
-    # importer writes a .clipper sidecar for readiness tracking).
+    # importer stores it in the container metadata for readiness tracking).
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
 

@@ -3,10 +3,16 @@
 > **Status:** Prerequisite shipped (app-wide L2 normalization at ingest),
 > **Flask-free projection backend** shipped (`vtscore/projection/`: UMAP fit +
 > hex-tile pyramid), **Browse routes** shipped
-> (`vtsearch/routes/projection.py`: build, meta, tiles endpoints), **and the
+> (`vtsearch/routes/projection.py`: build, meta, tiles endpoints), **the
 > Angular browse canvas** shipped (Canvas 2D renderer, pan/zoom, hover
-> preview, tile caching, `/browse/:datasetId` route). Projection persistence
-> is not yet built. This doc scopes VTSBrowse as a **module within
+> preview, tile caching, `/browse/:datasetId` route), **projection
+> persistence** shipped (inside the dataset container), **ZIP container
+> format** shipped (single `.pkl` file containing `medias.pkl` + `meta.json`
+> + optional `projection.npz`; all legacy raw-pickle and sidecar support
+> removed), **and dataset age-off** shipped (server setting
+> `dataset_max_age_days`, `expires_at` timestamp on datasets, auto-removal
+> on load/list).
+> This doc scopes VTSBrowse as a **module within
 > VTSearch** — new routes, services, and Angular components that add a Browse
 > mode alongside the existing Find and Train modes. See *§What shipped* and
 > *§Open follow-ups* at the bottom for where things stand.
@@ -628,12 +634,56 @@ and available to any future consumer of `vtscore`.
   - **Not yet wired:** sibling highlighting (needs source-file group ids
     in the tile payload or a server-side lookup endpoint).
 
+- **Projection persistence (in-container).** The `(N, 2)` projection
+  coordinates and the full hex-tile pyramid are persisted inside the
+  dataset ZIP container as `projection.npz`, using NumPy's compressed
+  `.npz` format (coords and ids as native arrays; all pyramid metadata,
+  levels, tiles, and cells as a JSON blob).
+  - `vtscore/projection/persistence.py` — serialization helpers
+    `_pyramid_to_meta` and `_rebuild_from_npz_arrays`, shared by the
+    container module.
+  - `vtscore/datasets/container.py` — `append_projection(path, proj, pyr)`
+    and `read_projection(path)`.  `allow_pickle=False` on load for safety.
+  - `vtsearch/routes/projection.py` — the build route calls
+    `_try_load_persisted()` before computing: if a container has a
+    projection and its media-id set matches, it is restored instantly.
+    After a fresh UMAP + pyramid build, `_persist_projection()` appends
+    the result.  Both are best-effort (registry lookup or I/O failures
+    log a warning and fall back to recompute/skip).
+  - Tests: `tests_lib/projection/test_persistence.py` (round-trip, empty
+    projection, negative tile indices, overwrite) and
+    `tests/api/test_projection.py::TestProjectionPersistence` (route
+    loads from container, skips stale projection, persists after build).
+
+- **ZIP container format.** Dataset files are ZIP containers (the `.pkl`
+  extension is unchanged). The container holds `medias.pkl` (the pickled
+  media dict) + `meta.json` (embedder, clipper, media_type, name,
+  timestamps, `expires_at`) + optional `projection.npz` (appended after
+  browse build). **No legacy support:** raw pickle files and sidecar
+  files (`.embedder`, `.clipper`, `.projection`) are not supported.
+  - `vtscore/datasets/container.py` — `write_container`, `read_container`,
+    `append_projection`, `read_projection`, `read_meta`.
+  - `export_dataset_to_file()` produces ZIP containers with metadata.
+  - `_read_pickle_dataset()` reads only ZIP containers.
+  - `read_pkl_embedder/clipper` read from container `meta.json`.
+  - Demo dataset cache (`loader_demo.py`) writes ZIP containers.
+  - Find endpoint (`_load_find_dataset_medias`, `_load_pkl_for_check`)
+    reads via `read_container`.
+  - Stage-file endpoint extracts `medias.pkl` from the ZIP for peeking.
+  - Tests: `tests_lib/datasets/test_container.py`.
+
+- **Dataset age-off.** Server setting `dataset_max_age_days` (default: None
+  = never expire) stamps new datasets with an `expires_at` timestamp in
+  both the container `meta.json` and the dataset registry entry.
+  - Setting added to `ServerSettings` model, API schemas, `CoreConfig`.
+  - `_auto_register_dataset` (load pipeline) computes `expires_at =
+    now + max_age_days * 86400` and passes it to both the container and
+    the registry.
+  - Enforcement: loading an expired dataset returns HTTP 410 and
+    auto-unregisters it; listing datasets filters and auto-unregisters
+    expired entries.
+
 ## Open follow-ups
-- **Projection persistence:** persistence of the projection + pyramid with
-  the dataset artifact (the carve-out from "No Persisted Vectors/MLPs") is
-  the remaining backend work. Currently the projection is recomputed on each
-  app restart; persisting it with the dataset pickle makes the "compute once,
-  never again" guarantee real.
 - **Sibling highlighting:** hovering a hex should highlight hexes containing
   items from the same source file. Requires either source-file group ids in
   the tile payload or a server-side lookup endpoint keyed by group id. The

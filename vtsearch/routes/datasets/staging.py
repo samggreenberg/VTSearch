@@ -16,6 +16,7 @@ values raise 422.  See *Resolved questions / Plugin field endpoints*
 in the plan doc.
 """
 
+import io
 from pathlib import Path
 from uuid import uuid4
 
@@ -119,8 +120,11 @@ def stage_file():
     # instead of swallowed silently.
     error = ""
     try:
-        with open(staging_path, "rb") as f:
-            peeked = peek_pickle_dataset_summary(f)
+        import zipfile
+
+        with zipfile.ZipFile(str(staging_path), "r") as zf:
+            pkl_bytes = zf.read("medias.pkl")
+        peeked = peek_pickle_dataset_summary(io.BytesIO(pkl_bytes))
         if isinstance(peeked, dict) and "medias" in peeked:
             media_dict = peeked["medias"]
         elif isinstance(peeked, dict):
