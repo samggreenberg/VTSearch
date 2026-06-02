@@ -154,6 +154,7 @@
             "items": {
               "type": "string"
             },
+            "readOnly": true,
             "type": "array"
           },
           "calibrate_count": {
@@ -163,6 +164,7 @@
             "type": "number"
           },
           "detectors_dir": {
+            "readOnly": true,
             "type": "string"
           },
           "disable_achievements": {
@@ -207,6 +209,16 @@
             },
             "type": "object"
           },
+          "hidden_plugins": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "readOnly": true,
+            "type": "object"
+          },
           "hide_autopilot": {
             "type": "boolean"
           },
@@ -227,9 +239,11 @@
             "type": "object"
           },
           "max_concurrent_dataset_downloads": {
+            "readOnly": true,
             "type": "integer"
           },
           "max_concurrent_dataset_embeddings": {
+            "readOnly": true,
             "type": "integer"
           },
           "panel_pct_left": {
@@ -248,6 +262,7 @@
             "type": "boolean"
           },
           "saved_datasets_dir": {
+            "readOnly": true,
             "type": "string"
           },
           "show_metadata": {
@@ -12061,7 +12076,7 @@
     },
     "/api/settings": {
       "get": {
-        "description": "Augments the persisted dict with ``effective_solo_media_type``, which is\nthe resolver's view of the per-user value plus the CLI fallback. The\nfrontend reads only this key when deciding whether to hide mediaType\npickers; the raw ``solo_media_type`` / ``solo_media_type_explicit``\npair is still exposed for the settings UI to render the current state.",
+        "description": "Augments the persisted dict with the resolver-computed read-only views\n(effective solo mediaType / embedder, effective hidden plugins) via\n:func:`_with_effective`. The frontend reads the ``effective_*`` keys\nwhen deciding whether to hide pickers; the raw ``solo_media_type`` /\n``solo_media_type_explicit`` pair is still exposed for the settings UI\nto render the current state.",
         "operationId": "get_settings",
         "responses": {
           "200": {
