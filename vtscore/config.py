@@ -221,6 +221,8 @@ class CoreConfig:
     max_concurrent_dataset_embeddings: int
     autorun_detectors: tuple[str, ...]
 
+    dataset_max_age_days: int | None
+
     # Per-user settings (stored under each user's data dir)
     safe_thresholds: bool
     calibrate_count: int

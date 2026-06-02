@@ -79,6 +79,7 @@ class AppSettingsSchema(Schema):
     max_concurrent_dataset_downloads = fields.Integer(dump_only=True)
     max_concurrent_dataset_embeddings = fields.Integer(dump_only=True)
     autorun_detectors = fields.List(fields.String(), dump_only=True)
+    dataset_max_age_days = fields.Integer(load_default=None, allow_none=True)
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -167,6 +168,7 @@ class SettingsUpdateSchema(Schema):
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()
+    dataset_max_age_days = fields.Integer(allow_none=True)
 
     last_embedder_per_media_type = fields.Raw()
     import_defaults_by_media_type = fields.Raw()
