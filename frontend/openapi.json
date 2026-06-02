@@ -11,7 +11,7 @@
         },
         "description": "Default error response"
       },
-      "UNPROCESSABLE_ENTITY": {
+      "UNPROCESSABLE_CONTENT": {
         "content": {
           "application/json": {
             "schema": {
@@ -19,7 +19,7 @@
             }
           }
         },
-        "description": "Unprocessable Entity"
+        "description": "Unprocessable Content"
       }
     },
     "schemas": {
@@ -5973,7 +5973,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6047,7 +6047,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6087,7 +6087,7 @@
             "description": "Active login provider does not support login."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6182,7 +6182,7 @@
             "description": "Named detector is not flagged for autorun."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6298,7 +6298,7 @@
             "description": "Unbuildable extractor config."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6387,7 +6387,7 @@
             "description": "Extractor not found, or new name already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6449,7 +6449,7 @@
             "description": "Unbuildable localizer config."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6538,7 +6538,7 @@
             "description": "Localizer not found, or new name already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6597,7 +6597,7 @@
             "description": "Directory not found within the allowed root."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6653,7 +6653,7 @@
             "description": "Source / directory not found on disk."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6697,7 +6697,7 @@
             "description": "Source or file not found on disk."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6737,7 +6737,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6785,7 +6785,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6850,7 +6850,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7075,7 +7075,7 @@
             "description": "Invalid or missing dataset path."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "The combine_datasets importer is unavailable."
@@ -7165,7 +7165,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7238,7 +7238,7 @@
             "description": "Source not available, or directory not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7349,7 +7349,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7377,7 +7377,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7405,7 +7405,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7433,7 +7433,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7461,7 +7461,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7489,7 +7489,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7517,7 +7517,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7545,7 +7545,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7573,7 +7573,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7654,7 +7654,7 @@
             "description": "Unknown importer name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "get_field_options did not return a list."
@@ -7728,7 +7728,7 @@
             "description": "Unknown demo dataset name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "The demo importer is unavailable."
@@ -7798,7 +7798,7 @@
             "description": "Invalid or missing folder path."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7838,7 +7838,7 @@
             "description": "Unknown importer, unreloadable origin, or invalid path inside origin."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7889,7 +7889,7 @@
             "description": "Unknown demo dataset name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "The demo importer is unavailable."
@@ -7947,7 +7947,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7975,7 +7975,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8003,7 +8003,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8031,7 +8031,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8059,7 +8059,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8087,7 +8087,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8115,7 +8115,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8143,7 +8143,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8171,7 +8171,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8450,7 +8450,7 @@
             "description": "Dataset not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8504,7 +8504,7 @@
             "description": "Dataset not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8650,7 +8650,7 @@
             "description": "A detector with this name already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8797,7 +8797,7 @@
             "description": "Empty name after stripping, or media_type is 'any'."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8825,7 +8825,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8853,7 +8853,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8881,7 +8881,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8948,7 +8948,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9038,7 +9038,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Detector has no associated name."
@@ -9099,7 +9099,7 @@
             "description": "Destination already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9153,7 +9153,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9268,7 +9268,7 @@
             "description": "Detector not loaded or unknown labelset source."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9420,7 +9420,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9459,7 +9459,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9498,7 +9498,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9537,7 +9537,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9793,7 +9793,7 @@
             "description": "Detector or label element not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9847,7 +9847,7 @@
             "description": "A detector with the new name already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9955,7 +9955,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9993,7 +9993,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Evaluation computation failed (only when ``wait=true``)."
@@ -10075,7 +10075,7 @@
             "description": "Job not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Background evaluation job failed."
@@ -10153,7 +10153,7 @@
             "description": "Media not found, or its bytes are unavailable when cropping is requested."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Example sort failed."
@@ -10200,7 +10200,7 @@
             "description": "File not found at the given key."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Example sort failed."
@@ -10247,7 +10247,7 @@
             "description": "File not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Example sort failed."
@@ -10320,7 +10320,7 @@
             "description": "Unknown exporter name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Exporter raised an unexpected error."
@@ -10363,7 +10363,7 @@
             "description": "No medias loaded, bad config, or media-type mismatch."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10407,7 +10407,7 @@
             "description": "A selected dataset or detector ID is unknown / missing."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "A dataset pkl file could not be loaded."
@@ -10454,7 +10454,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10517,7 +10517,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10576,7 +10576,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10620,7 +10620,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Score-history computation failed."
@@ -10759,7 +10759,7 @@
             "description": "Unknown importer name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "get_field_options did not return a list."
@@ -10796,7 +10796,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10824,7 +10824,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10852,7 +10852,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10915,7 +10915,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11040,7 +11040,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11078,7 +11078,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11115,7 +11115,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11183,7 +11183,7 @@
             "description": "No good/bad votes available for training."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Background learned-sort job failed (only when ``wait=true``)."
@@ -11266,7 +11266,7 @@
             "description": "Job not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Background learned-sort job failed."
@@ -11309,7 +11309,7 @@
             "description": "No medias loaded, bad config, or media-type mismatch."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11412,7 +11412,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11705,7 +11705,7 @@
             "description": "Media not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11921,7 +11921,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11989,7 +11989,7 @@
             "description": "Media bytes unavailable."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12112,7 +12112,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12176,7 +12176,7 @@
             "description": "Setter-level validation failure (range, one-of, path traversal)."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12246,7 +12246,7 @@
             "description": "Unknown exporter name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Exporter raised an unexpected error."
@@ -12304,7 +12304,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12420,7 +12420,7 @@
             "description": "Unknown settings source name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12508,7 +12508,7 @@
             "description": "Empty/whitespace text, no medias, or embedder doesn't support text."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Text sort failed (embedder error or unexpected exception)."
@@ -12573,7 +12573,7 @@
             "description": "Empty or whitespace-only ``text``."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12684,7 +12684,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
