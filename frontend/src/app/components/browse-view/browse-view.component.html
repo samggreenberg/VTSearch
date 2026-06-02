@@ -17,12 +17,9 @@
         @if (buildTotal > 0) {
           <span class="browse-status-count">{{ buildProgress }} / {{ buildTotal }}</span>
         }
-      </div>
-    }
-    @case ('empty') {
-      <div class="browse-status">
-        <p class="browse-status-message">No projection available for this dataset.</p>
-        <button class="btn btn--primary" (click)="onBuild()">Build Projection</button>
+        @if (buildMessage) {
+          <span class="browse-status-detail">{{ buildMessage }}</span>
+        }
       </div>
     }
     @case ('error') {
