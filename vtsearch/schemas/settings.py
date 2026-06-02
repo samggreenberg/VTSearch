@@ -69,12 +69,21 @@ class AppSettingsSchema(Schema):
     panel_pct_left = _PerMediaTypeNumberDict()
     panel_pct_right = _PerMediaTypeNumberDict()
 
-    # Server-tier
-    saved_datasets_dir = fields.String()
-    detectors_dir = fields.String()
-    max_concurrent_dataset_downloads = fields.Integer()
-    max_concurrent_dataset_embeddings = fields.Integer()
-    autorun_detectors = fields.List(fields.String())
+    # Server-tier. These are fixed at server start (config file /
+    # environment / CLI flags) and shared across all users; the frontend
+    # surfaces them read-only in the "Server" settings tab. They are not
+    # in ``SettingsUpdateSchema``, so the API rejects attempts to change
+    # them.
+    saved_datasets_dir = fields.String(dump_only=True)
+    detectors_dir = fields.String(dump_only=True)
+    max_concurrent_dataset_downloads = fields.Integer(dump_only=True)
+    max_concurrent_dataset_embeddings = fields.Integer(dump_only=True)
+    autorun_detectors = fields.List(fields.String(), dump_only=True)
+    # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
+    # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
+    # CLI flags). Populated by the route from
+    # ``settings.get_effective_hidden_plugins()``; read-only.
+    hidden_plugins = fields.Dict(keys=fields.String(), values=fields.List(fields.String()), dump_only=True)
 
     # Per-user, ``{media_type_id: embedder_name}``; the dataset-importer
     # modal pre-selects the last embedder the user picked for each media

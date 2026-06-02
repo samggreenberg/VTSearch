@@ -510,3 +510,62 @@ class TestSettingsAPI:
         assert "saved_datasets_dir" not in data
         assert "detectors_dir" not in data
         assert "detectors_dir" not in data
+
+
+class TestServerSettingsReadOnly:
+    """The read-only "Server" settings tab is fed by GET /api/settings.
+
+    These assert the server-tier keys are exposed on read and ignored on
+    write so the frontend can render them as immutable reference values.
+    """
+
+    def test_get_settings_includes_server_tier(self, client):
+        data = client.get("/api/settings").get_json()
+        for key in (
+            "saved_datasets_dir",
+            "detectors_dir",
+            "max_concurrent_dataset_downloads",
+            "max_concurrent_dataset_embeddings",
+            "autorun_detectors",
+            "hidden_plugins",
+        ):
+            assert key in data, key
+
+    def test_hidden_plugins_reflects_persisted_setting(self, client):
+        from vtsearch import settings as settings_mod
+
+        settings_mod.set_cli_hidden_plugins(None)
+        try:
+            settings_mod.set_hidden_plugins({"converters": ["audio2image"]})
+            data = client.get("/api/settings").get_json()
+            assert data["hidden_plugins"] == {"converters": ["audio2image"]}
+        finally:
+            settings_mod.set_cli_hidden_plugins(None)
+
+    def test_hidden_plugins_unions_cli_flags(self, client):
+        from vtsearch import settings as settings_mod
+
+        settings_mod.set_cli_hidden_plugins(None)
+        try:
+            settings_mod.set_hidden_plugins({"converters": ["audio2image"]})
+            settings_mod.add_cli_hidden_plugin("converters", "video2image")
+            settings_mod.add_cli_hidden_plugin("embedders", "clap")
+            data = client.get("/api/settings").get_json()
+            # Effective view: persisted ∪ CLI, names sorted within each family.
+            assert data["hidden_plugins"]["converters"] == ["audio2image", "video2image"]
+            assert data["hidden_plugins"]["embedders"] == ["clap"]
+        finally:
+            settings_mod.set_cli_hidden_plugins(None)
+
+    def test_hidden_plugins_is_not_writable_via_api(self, client):
+        from vtsearch import settings as settings_mod
+
+        settings_mod.set_cli_hidden_plugins(None)
+        try:
+            res = client.put("/api/settings", json={"hidden_plugins": {"embedders": ["clap"]}})
+            # Unknown-on-write key is silently dropped (schema excludes it).
+            assert res.status_code == 200
+            assert settings_mod.get_hidden_plugins() == {}
+            assert res.get_json()["hidden_plugins"] == {}
+        finally:
+            settings_mod.set_cli_hidden_plugins(None)
