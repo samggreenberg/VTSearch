@@ -6,12 +6,12 @@
 > (`vtsearch/routes/projection.py`: build, meta, tiles endpoints), **the
 > Angular browse canvas** shipped (Canvas 2D renderer, pan/zoom, hover
 > preview, tile caching, `/browse/:datasetId` route), **projection
-> persistence** shipped (inside the dataset container or as a `.projection`
-> sidecar for legacy files), **ZIP container format** shipped (single `.pkl`
-> file containing `medias.pkl` + `meta.json` + optional `projection.npz`;
-> replaces raw pickle + sidecar files), **and dataset age-off** shipped
-> (server setting `dataset_max_age_days`, `expires_at` timestamp on datasets,
-> auto-removal on load/list).
+> persistence** shipped (inside the dataset container), **ZIP container
+> format** shipped (single `.pkl` file containing `medias.pkl` + `meta.json`
+> + optional `projection.npz`; all legacy raw-pickle and sidecar support
+> removed), **and dataset age-off** shipped (server setting
+> `dataset_max_age_days`, `expires_at` timestamp on datasets, auto-removal
+> on load/list).
 > This doc scopes VTSBrowse as a **module within
 > VTSearch** — new routes, services, and Angular components that add a Browse
 > mode alongside the existing Find and Train modes. See *§What shipped* and
@@ -634,42 +634,42 @@ and available to any future consumer of `vtscore`.
   - **Not yet wired:** sibling highlighting (needs source-file group ids
     in the tile payload or a server-side lookup endpoint).
 
-- **Projection persistence (sidecar file).** The `(N, 2)` projection
-  coordinates and the full hex-tile pyramid are now persisted as a
-  `.projection` sidecar file next to the dataset pickle, using NumPy's
-  compressed `.npz` container (coords and ids as native arrays; all
-  pyramid metadata, levels, tiles, and cells as a JSON blob).
-  - `vtscore/projection/persistence.py` — `save_projection(pkl_path, proj,
-    pyr)` and `load_projection(pkl_path) -> (Projection, Pyramid) | None`.
-    Atomic write via `tempfile` + `os.replace`.  `allow_pickle=False` on
-    load for safety.  Corrupt/missing sidecars return `None`.
-  - `vtsearch/routes/projection.py` — the build route now calls
-    `_try_load_sidecar()` before computing: if a sidecar exists and its
-    media-id set matches the loaded dataset, the projection is restored
-    instantly.  After a fresh UMAP + pyramid build, `_persist_projection()`
-    saves the result.  Both are best-effort (registry lookup or I/O failures
+- **Projection persistence (in-container).** The `(N, 2)` projection
+  coordinates and the full hex-tile pyramid are persisted inside the
+  dataset ZIP container as `projection.npz`, using NumPy's compressed
+  `.npz` format (coords and ids as native arrays; all pyramid metadata,
+  levels, tiles, and cells as a JSON blob).
+  - `vtscore/projection/persistence.py` — serialization helpers
+    `_pyramid_to_meta` and `_rebuild_from_npz_arrays`, shared by the
+    container module.
+  - `vtscore/datasets/container.py` — `append_projection(path, proj, pyr)`
+    and `read_projection(path)`.  `allow_pickle=False` on load for safety.
+  - `vtsearch/routes/projection.py` — the build route calls
+    `_try_load_persisted()` before computing: if a container has a
+    projection and its media-id set matches, it is restored instantly.
+    After a fresh UMAP + pyramid build, `_persist_projection()` appends
+    the result.  Both are best-effort (registry lookup or I/O failures
     log a warning and fall back to recompute/skip).
   - Tests: `tests_lib/projection/test_persistence.py` (round-trip, empty
-    projection, negative tile indices, overwrite, corrupt/missing sidecar)
-    and `tests/api/test_projection.py::TestProjectionPersistence` (route
-    loads from sidecar, skips stale sidecar, saves after build).
+    projection, negative tile indices, overwrite) and
+    `tests/api/test_projection.py::TestProjectionPersistence` (route
+    loads from container, skips stale projection, persists after build).
 
-- **ZIP container format.** Dataset files are now ZIP containers (detected
-  by magic bytes; the `.pkl` extension is unchanged for backward compat).
-  The container holds `medias.pkl` (the pickled media dict) + `meta.json`
-  (embedder, clipper, media_type, name, timestamps, `expires_at`) +
-  optional `projection.npz` (appended after browse build).
+- **ZIP container format.** Dataset files are ZIP containers (the `.pkl`
+  extension is unchanged). The container holds `medias.pkl` (the pickled
+  media dict) + `meta.json` (embedder, clipper, media_type, name,
+  timestamps, `expires_at`) + optional `projection.npz` (appended after
+  browse build). **No legacy support:** raw pickle files and sidecar
+  files (`.embedder`, `.clipper`, `.projection`) are not supported.
   - `vtscore/datasets/container.py` — `write_container`, `read_container`,
-    `append_projection`, `read_projection`, `read_meta`, `is_container`.
-  - `export_dataset_to_file()` now produces ZIP containers with metadata.
-  - `_read_pickle_dataset()` auto-detects ZIP vs raw pickle by magic bytes.
-  - `read_pkl_embedder/clipper` check ZIP `meta.json` first, then fall back
-    to legacy sidecar files.
+    `append_projection`, `read_projection`, `read_meta`.
+  - `export_dataset_to_file()` produces ZIP containers with metadata.
+  - `_read_pickle_dataset()` reads only ZIP containers.
+  - `read_pkl_embedder/clipper` read from container `meta.json`.
   - Demo dataset cache (`loader_demo.py`) writes ZIP containers.
-  - `unregister_dataset` cleans up legacy sidecars.
-  - Projection persistence integrated: `append_projection` writes into the
-    ZIP; `read_projection` reads from it (falls back to `.projection`
-    sidecar for legacy files).
+  - Find endpoint (`_load_find_dataset_medias`, `_load_pkl_for_check`)
+    reads via `read_container`.
+  - Stage-file endpoint extracts `medias.pkl` from the ZIP for peeking.
   - Tests: `tests_lib/datasets/test_container.py`.
 
 - **Dataset age-off.** Server setting `dataset_max_age_days` (default: None
