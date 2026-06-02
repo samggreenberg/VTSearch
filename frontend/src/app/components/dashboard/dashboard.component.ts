@@ -788,6 +788,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Launch the VTSBrowse view for a dataset. The browseContextGuard loads the
+   *  dataset context if needed. Browsing currently only supports audio datasets;
+   *  the dataset card disables the button for other media types. */
+  browseDataset(dataset: DatasetRegistryEntry): void {
+    this.router.navigate(['/browse', dataset.id]);
+  }
+
   loadDetector(model: DetectorRegistryEntry): void {
     this.detectorsRegistryApi.loadDetector(model.id).subscribe({
       next: () => this.loadingTasksSvc.startDetectorProgressPolling(),
