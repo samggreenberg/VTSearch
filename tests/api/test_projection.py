@@ -154,7 +154,7 @@ class TestProjectionTiles:
         ctx._pyramid = pyr
 
         found_cells = False
-        for (level, tx, ty) in pyr.tiles:
+        for level, tx, ty in pyr.tiles:
             resp = client.get(f"/api/projection/tiles/{level}/{tx}/{ty}")
             assert resp.status_code == 200
             body = resp.get_json()
