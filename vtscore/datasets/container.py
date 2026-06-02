@@ -115,8 +115,8 @@ def read_container(path: str | Path) -> tuple[dict[str, Any], dict[str, Any]]:
         return _read_legacy(p)
 
     with zipfile.ZipFile(str(p), "r") as zf:
-        with zf.open("medias.pkl") as pkl_f:
-            data = safe_pickle_load(pkl_f)
+        pkl_bytes = zf.read("medias.pkl")
+        data = safe_pickle_load(io.BytesIO(pkl_bytes))
         if not isinstance(data, dict) or "medias" not in data:
             raise ValueError(f"Invalid container {p.name}: pickle missing 'medias' key.")
 
