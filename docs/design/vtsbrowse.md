@@ -5,9 +5,13 @@
 > hex-tile pyramid), **Browse routes** shipped
 > (`vtsearch/routes/projection.py`: build, meta, tiles endpoints), **the
 > Angular browse canvas** shipped (Canvas 2D renderer, pan/zoom, hover
-> preview, tile caching, `/browse/:datasetId` route), **and projection
-> persistence** shipped (`.projection` sidecar file next to the dataset
-> pickle; auto-saved after build, auto-loaded on next startup).
+> preview, tile caching, `/browse/:datasetId` route), **projection
+> persistence** shipped (inside the dataset container or as a `.projection`
+> sidecar for legacy files), **ZIP container format** shipped (single `.pkl`
+> file containing `medias.pkl` + `meta.json` + optional `projection.npz`;
+> replaces raw pickle + sidecar files), **and dataset age-off** shipped
+> (server setting `dataset_max_age_days`, `expires_at` timestamp on datasets,
+> auto-removal on load/list).
 > This doc scopes VTSBrowse as a **module within
 > VTSearch** — new routes, services, and Angular components that add a Browse
 > mode alongside the existing Find and Train modes. See *§What shipped* and
@@ -649,6 +653,35 @@ and available to any future consumer of `vtscore`.
     projection, negative tile indices, overwrite, corrupt/missing sidecar)
     and `tests/api/test_projection.py::TestProjectionPersistence` (route
     loads from sidecar, skips stale sidecar, saves after build).
+
+- **ZIP container format.** Dataset files are now ZIP containers (detected
+  by magic bytes; the `.pkl` extension is unchanged for backward compat).
+  The container holds `medias.pkl` (the pickled media dict) + `meta.json`
+  (embedder, clipper, media_type, name, timestamps, `expires_at`) +
+  optional `projection.npz` (appended after browse build).
+  - `vtscore/datasets/container.py` — `write_container`, `read_container`,
+    `append_projection`, `read_projection`, `read_meta`, `is_container`.
+  - `export_dataset_to_file()` now produces ZIP containers with metadata.
+  - `_read_pickle_dataset()` auto-detects ZIP vs raw pickle by magic bytes.
+  - `read_pkl_embedder/clipper` check ZIP `meta.json` first, then fall back
+    to legacy sidecar files.
+  - Demo dataset cache (`loader_demo.py`) writes ZIP containers.
+  - `unregister_dataset` cleans up legacy sidecars.
+  - Projection persistence integrated: `append_projection` writes into the
+    ZIP; `read_projection` reads from it (falls back to `.projection`
+    sidecar for legacy files).
+  - Tests: `tests_lib/datasets/test_container.py`.
+
+- **Dataset age-off.** Server setting `dataset_max_age_days` (default: None
+  = never expire) stamps new datasets with an `expires_at` timestamp in
+  both the container `meta.json` and the dataset registry entry.
+  - Setting added to `ServerSettings` model, API schemas, `CoreConfig`.
+  - `_auto_register_dataset` (load pipeline) computes `expires_at =
+    now + max_age_days * 86400` and passes it to both the container and
+    the registry.
+  - Enforcement: loading an expired dataset returns HTTP 410 and
+    auto-unregisters it; listing datasets filters and auto-unregisters
+    expired entries.
 
 ## Open follow-ups
 - **Sibling highlighting:** hovering a hex should highlight hexes containing
