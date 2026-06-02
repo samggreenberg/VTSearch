@@ -1,7 +1,7 @@
 """VTSBrowse projection backend: UMAP layout + hex-tile pyramid.
 
 The Flask-free core of the VTSBrowse browse canvas (see
-``docs/design/vtsbrowse.md``).  Two stages:
+``docs/plans/vtsbrowse.md``).  Two stages:
 
 - :func:`fit_projection` (Stage 1) reduces a dataset's ``(N, d)`` embedding
   matrix to a frozen ``(N, 2)`` :class:`Projection`.

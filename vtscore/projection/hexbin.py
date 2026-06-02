@@ -12,7 +12,7 @@ spacing ``dx = r·√3`` and row spacing ``dy = 1.5·r``; odd rows are offset by
 half a column.  Anchoring in data space is what makes pure panning free in the
 renderer (membership only changes when the radius changes, i.e. across a zoom
 level), per *§Browse-canvas architecture* in
-``docs/design/vtsbrowse.md``.
+``docs/plans/vtsbrowse.md``.
 
 A bin is identified by an integer pair ``(q, r)`` where ``q = round(2·pi)``
 (d3's column index ``pi`` can be a half-integer after the edge correction, so we

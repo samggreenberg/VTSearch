@@ -49,7 +49,7 @@ When you're done with your changes, open a PR targeting `dev`. Do not ask; just 
 
 ## Follow-ups belong in the plan file, not the PR body
 
-When you finish a feature and identify follow-up work (deferred scope, known limitations, "Phase 2" items), record it in the relevant plan or design doc; typically the file under `docs/plans/` or `docs/design/` that scoped the work in the first place. Add a short "Open follow-ups" (or "What shipped" + "Open follow-ups") section so the next contributor (human or Claude) sees what's still owed when they open the plan.
+When you finish a feature and identify follow-up work (deferred scope, known limitations, "Phase 2" items), record it in the relevant design doc; typically the file under `docs/plans/` that scoped the work in the first place. Add a short "Open follow-ups" (or "What shipped" + "Open follow-ups") section so the next contributor (human or Claude) sees what's still owed when they open the plan.
 
 Do **not** stash follow-ups in the PR description as the only record. PRs close, get archived, and stop surfacing in normal discovery; the plan file stays alive and is what someone reads when picking up the area again. The PR body should describe what landed, not maintain a backlog.
 
@@ -300,5 +300,5 @@ def slow_load():
 - `docs/CLI.md` — CLI flags and autodetect workflow.
 - `docs/ML.md` — training/scoring details.
 - `docs/EXTENDING.md` + `docs/EXTENDING-plugins.md` + `docs/EXTENDING-media.md` + `docs/EXTENDING-processors.md` — how to add plugins.
-- `docs/plans/` and `docs/design/` — open and shipped design docs; check here before adding a "Phase N" feature.
+- `docs/plans/` — open and shipped design docs; check here before adding a "Phase N" feature.
 - `docs/style-guide.md` — frontend SCSS conventions.

@@ -12,7 +12,7 @@ guarantees that make that safe, all model-free:
 * :mod:`vtscore.training.region_similarity` scores with a dot product (no
   per-comparison normalization) and still guards the zero-query case.
 
-See ``docs/design/vtsbrowse.md`` §Prerequisite.
+See ``docs/plans/vtsbrowse.md`` §Prerequisite.
 """
 
 from __future__ import annotations
