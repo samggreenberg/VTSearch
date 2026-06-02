@@ -109,9 +109,13 @@ class TestPickleRoundTrip:
             }
         }
 
-    def test_export_does_not_include_creation_info(self):
+    def test_export_does_not_include_creation_info(self, tmp_path):
         data_bytes = export_dataset_to_file(self._make_clips())
-        data = pickle.loads(data_bytes)
+        pkl_path = tmp_path / "test_creation.pkl"
+        pkl_path.write_bytes(data_bytes)
+        from vtscore.datasets.container import read_container
+
+        data, _meta = read_container(pkl_path)
         assert "creation_info" not in data
 
     def test_load_returns_none(self, tmp_path):
