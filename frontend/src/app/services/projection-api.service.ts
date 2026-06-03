@@ -22,9 +22,10 @@ export class ProjectionApiService {
     return this.http.post<ProjectionBuildResponse>('/api/projection/build', {});
   }
 
-  getTile(projectionId: string, level: number, tx: number, ty: number): Observable<TilePayload> {
-    return this.http.get<TilePayload>(
-      `/api/projection/tiles/${projectionId}/${level}/${tx}/${ty}`,
-    );
+  getTile(level: number, tx: number, ty: number): Observable<TilePayload> {
+    // The backend resolves the pyramid from the active dataset context, so the
+    // tile URL is keyed only by (level, tx, ty); the projection id is tracked
+    // client-side (TileCacheService) for cache invalidation, not in the path.
+    return this.http.get<TilePayload>(`/api/projection/tiles/${level}/${tx}/${ty}`);
   }
 }
