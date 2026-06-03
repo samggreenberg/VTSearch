@@ -4,12 +4,21 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { BrowseCanvasComponent, HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
+import {
+  BrowseMinimapComponent,
+  MINIMAP_MAX_HEIGHT,
+  MINIMAP_MAX_WIDTH,
+  MINIMAP_MIN_HEIGHT,
+  MINIMAP_MIN_WIDTH,
+} from '../browse-minimap/browse-minimap.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { IconComponent } from '../icon/icon.component';
 import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
+import { SettingsStateService } from '../../services/settings-state.service';
+import { BrowseViewportService } from '../../services/browse-viewport.service';
 import type { ProjectionMeta } from '../../models/projection.models';
 
 @Component({
@@ -19,9 +28,13 @@ import type { ProjectionMeta } from '../../models/projection.models';
     CommonModule,
     BrowseCanvasComponent,
     BrowseHoverPreviewComponent,
+    BrowseMinimapComponent,
     ProgressBarComponent,
     IconComponent,
   ],
+  // Scoped per browse view so the canvas and its minimap share one viewport
+  // channel without leaking across other instances of the view.
+  providers: [BrowseViewportService],
   templateUrl: './browse-view.component.html',
   styleUrl: './browse-view.component.scss',
 })
@@ -44,6 +57,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private readonly HEX_SCALES = [0.5, 0.7, 1, 1.5, 2.2, 3];
   hexScaleIndex = 2;
 
+  /** Overview minimap show/hide + size, mirrored from the settings set. */
+  minimapVisible = true;
+  minimapWidth = 200;
+  minimapHeight = 150;
+
   private destroy$ = new Subject<void>();
   private polling = false;
 
@@ -52,9 +70,30 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     private tileCache: TileCacheService,
     private activeContext: ActiveContextService,
     private datasetsRegistryApi: DatasetsRegistryApiService,
+    private settingsState: SettingsStateService,
   ) {}
 
   ngOnInit(): void {
+    this.settingsState.settings$.pipe(takeUntil(this.destroy$)).subscribe((settings) => {
+      if (!settings) return;
+      this.minimapVisible = settings.browse_minimap_visible !== false;
+      if (settings.browse_minimap_width != null) {
+        this.minimapWidth = this.clamp(
+          settings.browse_minimap_width,
+          MINIMAP_MIN_WIDTH,
+          MINIMAP_MAX_WIDTH,
+        );
+      }
+      if (settings.browse_minimap_height != null) {
+        this.minimapHeight = this.clamp(
+          settings.browse_minimap_height,
+          MINIMAP_MIN_HEIGHT,
+          MINIMAP_MAX_HEIGHT,
+        );
+      }
+    });
+    this.settingsState.load();
+
     this.datasetsRegistryApi
       .getStatus()
       .pipe(takeUntil(this.destroy$))
@@ -102,6 +141,25 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       0,
       Math.min(this.HEX_SCALES.length - 1, this.hexScaleIndex + delta),
     );
+  }
+
+  /** Toggle the overview minimap and persist the choice. */
+  setMinimapVisible(visible: boolean): void {
+    this.minimapVisible = visible;
+    this.settingsState.update({ browse_minimap_visible: visible }).subscribe();
+  }
+
+  /** Persist the size the user dragged the minimap to. */
+  onMinimapResized(size: { width: number; height: number }): void {
+    this.minimapWidth = size.width;
+    this.minimapHeight = size.height;
+    this.settingsState
+      .update({ browse_minimap_width: size.width, browse_minimap_height: size.height })
+      .subscribe();
+  }
+
+  private clamp(value: number, lo: number, hi: number): number {
+    return Math.max(lo, Math.min(hi, value));
   }
 
   onBuild(): void {

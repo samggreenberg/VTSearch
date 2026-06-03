@@ -1,0 +1,66 @@
+:host {
+  position: absolute;
+  bottom: var(--space-md);
+  right: var(--space-md);
+  display: block;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  // The canvas dimensions drive the box size; the element sizes to its content.
+  line-height: 0;
+}
+
+canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+.minimap-close {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: var(--bg-surface);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.8;
+  transition: color var(--transition-base), opacity var(--transition-base);
+
+  &:hover {
+    color: var(--text-primary);
+    opacity: 1;
+  }
+
+  vt-icon {
+    line-height: 0;
+  }
+}
+
+// Top-left grip: the minimap is pinned to the bottom-right, so this corner is
+// the one that grows the panel.
+.minimap-resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  // A small diagonal grip drawn with a corner gradient.
+  background: linear-gradient(
+    135deg,
+    var(--text-muted) 0%,
+    var(--text-muted) 30%,
+    transparent 30%
+  );
+  opacity: 0.6;
+
+  &:hover {
+    opacity: 1;
+  }
+}

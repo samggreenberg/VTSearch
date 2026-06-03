@@ -63,6 +63,24 @@
         <span class="browse-info-label">{{ datasetName }}</span>
         <span class="browse-info-count">{{ meta?.point_count | number }} items</span>
       </div>
+      @if (minimapVisible) {
+        <vt-browse-minimap
+          [meta]="meta"
+          [width]="minimapWidth"
+          [height]="minimapHeight"
+          (closed)="setMinimapVisible(false)"
+          (resized)="onMinimapResized($event)"
+        />
+      } @else {
+        <button
+          type="button"
+          class="browse-minimap-show"
+          (click)="setMinimapVisible(true)"
+          title="Show overview"
+          aria-label="Show overview">
+          <vt-icon type="grid" [size]="16"></vt-icon>
+        </button>
+      }
     }
   }
 </div>
