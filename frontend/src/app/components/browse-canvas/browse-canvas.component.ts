@@ -490,25 +490,37 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     document.removeEventListener('mouseup', this.boundMouseUp);
   }
 
+  /**
+   * Zoom the base view by ``factor`` (>1 zooms in, narrowing the span shown),
+   * keeping the projection point under screen coords ``(anchorX, anchorY)``
+   * fixed. Defaults to the viewport centre, which is what the on-screen +/-
+   * buttons use; the wheel passes the cursor position so it zooms toward the
+   * pointer. Like the wheel path, this changes the base zoom only — level
+   * selection re-runs so the hexes keep their ~28px display size while each
+   * covers a narrower span.
+   */
+  zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
+    const [projX, projY] = this.screenToProj(anchorX, anchorY);
+    const newZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
+    // Anchor the point under the cursor using the new *effective* zoom so the
+    // display-size multiplier keeps that pixel fixed while zooming.
+    const newEffZoom = newZoom * this.displayScale;
+
+    this.transform.centerX = projX - (anchorX - this.width / 2) / newEffZoom;
+    this.transform.centerY = projY - (anchorY - this.height / 2) / newEffZoom;
+    this.transform.zoom = newZoom;
+
+    this.updateActiveLevel();
+    this.requestRedraw();
+  }
+
   private onWheel(event: WheelEvent): void {
     event.preventDefault();
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
-
-    const [projX, projY] = this.screenToProj(mx, my);
     const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
-    const newZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
-    // Anchor the point under the cursor using the new *effective* zoom so the
-    // display-size multiplier keeps that pixel fixed while wheel-zooming.
-    const newEffZoom = newZoom * this.displayScale;
-
-    this.transform.centerX = projX - (mx - this.width / 2) / newEffZoom;
-    this.transform.centerY = projY - (my - this.height / 2) / newEffZoom;
-    this.transform.zoom = newZoom;
-
-    this.updateActiveLevel();
-    this.requestRedraw();
+    this.zoomBy(factor, mx, my);
   }
 
   private onCanvasMouseMove(event: MouseEvent): void {

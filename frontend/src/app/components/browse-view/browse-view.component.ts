@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -39,6 +39,8 @@ import type { ProjectionMeta } from '../../models/projection.models';
   styleUrl: './browse-view.component.scss',
 })
 export class BrowseViewComponent implements OnInit, OnDestroy {
+  @ViewChild(BrowseCanvasComponent) private canvas?: BrowseCanvasComponent;
+
   meta: ProjectionMeta | null = null;
   mediaType = '';
   hoverEvent: HexHoverEvent | null = null;
@@ -61,6 +63,13 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   minimapVisible = true;
   minimapWidth = 200;
   minimapHeight = 150;
+
+  /**
+   * Per-click zoom step for the on-screen +/- buttons. Larger than the wheel's
+   * 1.15 per-tick factor so a single click makes a visible difference; button
+   * zoom anchors at the viewport centre (no cursor to zoom toward).
+   */
+  private readonly ZOOM_BUTTON_FACTOR = 1.4;
 
   private destroy$ = new Subject<void>();
   private polling = false;
@@ -160,6 +169,16 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   private clamp(value: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(hi, value));
+  }
+
+  /** Zoom in one step (narrower span, hexes keep their display size). */
+  zoomIn(): void {
+    this.canvas?.zoomBy(this.ZOOM_BUTTON_FACTOR);
+  }
+
+  /** Zoom out one step. */
+  zoomOut(): void {
+    this.canvas?.zoomBy(1 / this.ZOOM_BUTTON_FACTOR);
   }
 
   onBuild(): void {
