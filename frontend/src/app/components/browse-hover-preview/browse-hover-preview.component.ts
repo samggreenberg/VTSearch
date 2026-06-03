@@ -27,7 +27,6 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   left = 0;
   top = 0;
   audioSrc = '';
-  imageSrc = '';
   textContent = '';
   count = 0;
   private audioUnlocked = false;
@@ -49,36 +48,31 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   }
 
   private show(event: HexHoverEvent): void {
+    const representativeId = event.cell.rep_id;
+
+    // Image and video paint their thumbnail directly onto the hex (see
+    // browse-canvas); nothing happens on hover, so suppress the pop-up.
+    if (this.mediaType === 'image' || this.mediaType === 'video') {
+      this.hide();
+      return;
+    }
+
     this.visible = true;
     this.left = event.screenX + 16;
     this.top = event.screenY - 8;
     this.count = event.cell.count;
 
-    const representativeId = event.cell.rep_id;
     switch (this.mediaType) {
       case 'audio':
-        this.imageSrc = '';
         this.textContent = '';
         this.playAudio(representativeId);
         break;
-      case 'image':
-        this.stopAudio();
-        this.textContent = '';
-        this.imageSrc = this.activeContext.mediaUrl(`/api/medias/${representativeId}/image`);
-        break;
       case 'text':
         this.stopAudio();
-        this.imageSrc = '';
         this.loadText(representativeId);
-        break;
-      case 'video':
-        this.stopAudio();
-        this.textContent = '';
-        this.imageSrc = this.activeContext.mediaUrl(`/api/medias/${representativeId}/thumbnail`);
         break;
       default:
         this.stopAudio();
-        this.imageSrc = '';
         this.textContent = `Item #${representativeId}`;
     }
   }
@@ -86,7 +80,6 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   private hide(): void {
     this.visible = false;
     this.stopAudio();
-    this.imageSrc = '';
     this.textContent = '';
   }
 
@@ -122,7 +115,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
       .then((r) => r.json())
       .then((data) => {
         if (this.hover?.cell.rep_id === mediaId) {
-          const text = data.paragraph || data.text || '';
+          const text: string = data.content || '';
           this.textContent = text.length > 300 ? text.slice(0, 300) + '...' : text;
         }
       })

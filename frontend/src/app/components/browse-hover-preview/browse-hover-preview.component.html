@@ -5,9 +5,6 @@
     [style.top.px]="top"
   >
     <div class="hover-count">{{ count }} {{ count === 1 ? 'item' : 'items' }}</div>
-    @if (imageSrc) {
-      <img [src]="imageSrc" class="hover-image" alt="Preview" />
-    }
     @if (textContent) {
       <div class="hover-text">{{ textContent }}</div>
     }

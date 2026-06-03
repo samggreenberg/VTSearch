@@ -31,6 +31,7 @@
     @case ('ready') {
       <vt-browse-canvas
         [meta]="meta"
+        [mediaType]="mediaType"
         (hexHover)="onHexHover($event)"
       />
       <vt-browse-hover-preview
