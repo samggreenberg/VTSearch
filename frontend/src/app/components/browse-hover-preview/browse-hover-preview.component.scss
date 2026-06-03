@@ -16,14 +16,6 @@
   margin-bottom: var(--space-xs);
 }
 
-.hover-image {
-  display: block;
-  max-width: 240px;
-  max-height: 180px;
-  border-radius: var(--radius-sm);
-  object-fit: contain;
-}
-
 .hover-text {
   font-size: var(--font-sm);
   color: var(--text-primary);

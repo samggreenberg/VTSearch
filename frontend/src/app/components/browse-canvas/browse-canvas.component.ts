@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
+import { ActiveContextService } from '../../services/active-context.service';
 import type {
   HexCellPayload,
   ProjectionMeta,
@@ -56,7 +57,19 @@ export interface HexHoverEvent {
 export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
   @Input() meta: ProjectionMeta | null = null;
+  /**
+   * Active dataset media type. For ``image`` and ``video`` the representative
+   * item's thumbnail is painted directly onto each hex; other types keep the
+   * flat density (viridis) shading.
+   */
+  @Input() mediaType = '';
   @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
+
+  /** Loaded representative thumbnails, keyed by media id (insertion-ordered LRU). */
+  private thumbCache = new Map<number, HTMLImageElement>();
+  /** Media ids whose thumbnail failed to load, so we don't retry every frame. */
+  private thumbFailed = new Set<number>();
+  private readonly MAX_THUMBS = 2048;
 
   private ctx!: CanvasRenderingContext2D;
   private width = 0;
@@ -87,7 +100,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   constructor(
     private ngZone: NgZone,
     private tileCache: TileCacheService,
+    private activeContext: ActiveContextService,
   ) {}
+
+  /** True when hexes should be painted with the central item's thumbnail. */
+  private get thumbnailMode(): boolean {
+    return this.mediaType === 'image' || this.mediaType === 'video';
+  }
 
   ngOnInit(): void {
     this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
@@ -113,6 +132,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['meta'] && this.meta) {
       this.tileCache.setProjectionId(this.meta.projection_id);
+      // A new projection means new representative items; drop stale thumbnails.
+      this.thumbCache.clear();
+      this.thumbFailed.clear();
       this.fitToData();
       this.requestRedraw();
     }
@@ -125,6 +147,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+    this.thumbCache.clear();
+    this.thumbFailed.clear();
   }
 
   private resize(): void {
@@ -281,19 +305,22 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     radius: number,
     cell: HexCellPayload,
   ): void {
-    const t = Math.log(cell.count) / Math.log(this.maxCount || 2);
-    const color = this.viridisColor(Math.max(0, Math.min(1, t)));
+    this.tracePath(ctx, cx, cy, radius);
 
-    ctx.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const x = cx + radius * Math.cos(HEX_ANGLES[i]);
-      const y = cy + radius * Math.sin(HEX_ANGLES[i]);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    // Image / video: paint the central item's thumbnail clipped to the hex.
+    // Until it loads, fall back to the density shading below so the cell is
+    // never blank.
+    const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
+    if (thumb) {
+      ctx.save();
+      ctx.clip();
+      this.drawImageCover(ctx, thumb, cx, cy, radius);
+      ctx.restore();
+    } else {
+      const t = Math.log(cell.count) / Math.log(this.maxCount || 2);
+      ctx.fillStyle = this.viridisColor(Math.max(0, Math.min(1, t)));
+      ctx.fill();
     }
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
 
     const isHovered =
       this.hoveredCell && this.hoveredCell.q === cell.q && this.hoveredCell.r === cell.r;
@@ -302,9 +329,76 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.lineWidth = 2;
       ctx.stroke();
     } else {
-      ctx.strokeStyle = this.themeColor('--bg-body');
+      // Thumbnails read better with a faint dark separator than the body-bg
+      // hairline used for flat density cells.
+      ctx.strokeStyle = thumb ? 'rgba(0, 0, 0, 0.35)' : this.themeColor('--bg-body');
       ctx.lineWidth = 0.5;
       ctx.stroke();
+    }
+  }
+
+  /** Trace the hexagon outline as the current path (no fill/stroke). */
+  private tracePath(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number): void {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const x = cx + radius * Math.cos(HEX_ANGLES[i]);
+      const y = cy + radius * Math.sin(HEX_ANGLES[i]);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  /** Cover-fit an image over the hex's 2*radius square (the path must be clipped). */
+  private drawImageCover(
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    cx: number,
+    cy: number,
+    radius: number,
+  ): void {
+    const size = radius * 2;
+    const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight);
+    const dw = img.naturalWidth * scale;
+    const dh = img.naturalHeight * scale;
+    ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+  }
+
+  /**
+   * Return the loaded thumbnail for a representative media id, or null while it
+   * loads / if it failed. Kicks off the fetch on first request and redraws when
+   * the image arrives.
+   */
+  private getThumb(repId: number): HTMLImageElement | null {
+    const cached = this.thumbCache.get(repId);
+    if (cached) {
+      return cached.complete && cached.naturalWidth > 0 ? cached : null;
+    }
+    if (this.thumbFailed.has(repId)) return null;
+
+    if (this.thumbCache.size >= this.MAX_THUMBS) this.evictThumbs();
+
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => this.requestRedraw();
+    img.onerror = () => {
+      this.thumbCache.delete(repId);
+      this.thumbFailed.add(repId);
+    };
+    // The /image route serves the frame for video via its image_response hook.
+    img.src = this.activeContext.mediaUrl(`/api/medias/${repId}/image`);
+    this.thumbCache.set(repId, img);
+    return null;
+  }
+
+  /** Drop the oldest quarter of cached thumbnails (insertion-ordered LRU). */
+  private evictThumbs(): void {
+    const target = Math.floor(this.MAX_THUMBS * 0.75);
+    const toRemove = this.thumbCache.size - target;
+    let i = 0;
+    for (const key of this.thumbCache.keys()) {
+      if (i++ >= toRemove) break;
+      this.thumbCache.delete(key);
     }
   }
 
@@ -428,12 +522,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.hoveredCell = hit;
       if (hit) {
         if (hit.q !== prevQ || hit.r !== prevR) {
-          const [sx, sy] = this.projToScreen(hit.cx, hit.cy);
           this.ngZone.run(() => {
+            // Anchor the preview at the cursor, not the hex centre, so the text
+            // pop-up sits right under where the user is pointing.
             this.hexHover.emit({
               cell: hit,
-              screenX: sx + rect.left,
-              screenY: sy + rect.top,
+              screenX: event.clientX,
+              screenY: event.clientY,
             });
           });
           this.requestRedraw();
