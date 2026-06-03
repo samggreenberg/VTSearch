@@ -136,6 +136,25 @@ from vtscore.converters.runner import apply_converter_to_demo as _apply_converte
 # Export
 # ---------------------------------------------------------------------------
 
+# Pickle protocol 5 (PEP 574) serialises numpy arrays via out-of-band buffers,
+# making it both smaller and faster than the interpreter default (4 on 3.11).
+# Available on every Python we support (>=3.10), so pin it explicitly.
+_PICKLE_PROTOCOL = 5
+
+
+def _embedding_for_pickle(embedding: Any) -> np.ndarray | None:
+    """Coerce an embedding to a compact ``float32`` ndarray for serialisation.
+
+    Storing the vector as a contiguous ``float32`` array (rather than the old
+    Python ``list`` of boxed floats) roughly halves its pickled footprint and
+    avoids reconstructing hundreds of ``PyFloat`` objects per media on load —
+    the load side already runs every embedding through ``l2_normalize`` /
+    ``np.asarray``, so it accepts arrays and legacy lists alike.
+    """
+    if embedding is None:
+        return None
+    return np.ascontiguousarray(embedding, dtype=np.float32)
+
 
 def export_dataset_to_file(
     medias: dict[int, dict[str, Any]],
@@ -182,9 +201,7 @@ def export_dataset_to_file(
                 "file_size": media["file_size"],
                 "md5": media["md5"],
                 "embedder": media.get("embedder", ""),
-                "embedding": media["embedding"].tolist()
-                if isinstance(media["embedding"], np.ndarray)
-                else media["embedding"],
+                "embedding": _embedding_for_pickle(media["embedding"]),
                 "filename": media.get("filename", f"media_{cid}.wav"),
                 "category": media.get("category", "unknown"),
                 "origin": media.get("origin"),
@@ -203,7 +220,7 @@ def export_dataset_to_file(
     }
 
     pkl_buf = io.BytesIO()
-    pickle.dump(data, pkl_buf)
+    pickle.dump(data, pkl_buf, protocol=_PICKLE_PROTOCOL)
     medias_pkl_bytes = pkl_buf.getvalue()
 
     meta = {

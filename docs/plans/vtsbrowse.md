@@ -714,6 +714,19 @@ and available to any future consumer of `vtscore`.
 ## Open follow-ups
 
 **Active:**
+- **Dataset pickle size — drop inline `media_bytes` when the media is reachable
+  on disk.** The dataset container still bakes a full copy of every audio/image/
+  video blob into `medias.pkl` even when the media also carries a `media_path`
+  (or lives under an external `*_dir`). For filesystem-backed datasets this is
+  the dominant size cost. A save-time "thin if resolvable" mode (mirror of the
+  existing load-time `thin=True`) would shrink those containers dramatically, at
+  the cost of making the `.pkl` no longer fully self-contained — so it needs a
+  portability decision (always inline, never inline, or a per-export flag).
+  *Shipped alongside this note:* embeddings now serialize as compact `float32`
+  ndarrays instead of Python float lists, and the dataset pickles use protocol 5
+  — ~20% smaller containers and a faster load (no per-vector `PyFloat`
+  reconstruction). The peek summarizer (`peek_pickle_dataset_summary`) was
+  updated to stub numpy reconstruction so it stays cheap on the new format.
 - **Empirical tuning pass:** choose validated defaults for the UMAP fit, the
   hex-tile pyramid, and the canvas renderer (the knobs *§Open problems →
   Empirical* deliberately left unset). Planned in detail, ready to execute on

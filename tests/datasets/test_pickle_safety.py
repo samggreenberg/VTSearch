@@ -213,6 +213,35 @@ class TestSafePickleRoundTrip:
         assert len(loaded) == 1
         assert loaded[1]["md5"] == "abc123"
 
+    def test_embedding_stored_as_float32_array(self, tmp_path):
+        """Embeddings must serialise as compact float32 ndarrays, not Python
+        lists of boxed floats (smaller on disk, faster to load)."""
+        from vtscore.datasets.container import read_container
+
+        medias = {
+            1: {
+                "id": 1,
+                "media_type": "text",
+                "duration": 0,
+                "file_size": 0,
+                "md5": "abc",
+                # Pass a plain list to prove the exporter coerces to float32.
+                "embedding": [float(j) for j in range(16)],
+                "filename": "t.txt",
+                "category": "test",
+                "media_string": "hi",
+                "media_path": None,
+            },
+        }
+        pkl_path = tmp_path / "ds.pkl"
+        pkl_path.write_bytes(export_dataset_to_file(medias))
+
+        data, _meta = read_container(pkl_path)
+        emb = data["medias"][1]["embedding"]
+        assert isinstance(emb, np.ndarray)
+        assert emb.dtype == np.float32
+        assert emb.shape == (16,)
+
     def test_chunked_round_trip(self, tmp_path):
         """Chunked loading should also work through the restricted unpickler."""
         medias = {}
@@ -357,6 +386,38 @@ class TestPeekUnpicklerStripsAcrossProtocols:
         assert peeked["medias"][0]["media_type"] == "audio"
         assert peeked["medias"][0]["audio"] == bytearray()
         assert len(peeked["medias"][0]["audio"]) == 0
+
+    @pytest.mark.parametrize("protocol", [3, 4, 5])
+    def test_numpy_array_embeddings_stripped(self, protocol):
+        """numpy-array embeddings (the on-disk format) must peek cleanly.
+
+        A real array reduces via ``_frombuffer`` / ``_reconstruct``, both of
+        which validate their data buffer against the declared shape. Since the
+        peek stubs that buffer to empty, the unpickler must swap the numpy
+        reconstruction for a placeholder instead of calling the real callable
+        (which would raise "cannot reshape array of size 0").
+        """
+        from vtscore.security.pickle import peek_pickle_dataset_summary
+
+        rng = np.random.default_rng(0)
+        data = {
+            "medias": {
+                i: {
+                    "media_type": "audio",
+                    "embedding": rng.standard_normal(64).astype(np.float32),
+                    "filename": f"m_{i}.wav",
+                }
+                for i in range(8)
+            }
+        }
+        raw = pickle.dumps(data, protocol=protocol)
+        peeked = peek_pickle_dataset_summary(io.BytesIO(raw))
+        assert len(peeked["medias"]) == 8
+        first = next(iter(peeked["medias"].values()))
+        assert first["media_type"] == "audio"
+        assert first["filename"] == "m_0.wav"
+        # The array is replaced by an empty placeholder, never materialised.
+        assert len(first["embedding"]) == 0
 
     def test_protocol_0_floats_stripped_quickly(self):
         """Protocol 0 ASCII floats fall through to the default handler if
