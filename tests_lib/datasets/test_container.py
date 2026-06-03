@@ -152,3 +152,17 @@ class TestContainerMetaReaders:
         path = tmp_path / "dataset.pkl"
         write_container(path, _medias_pkl_bytes(), _meta())
         assert read_pkl_clipper(path) == "test_clipper"
+
+    def test_meta_readers_return_none_for_unreadable_pkl(self, tmp_path):
+        """A corrupt / legacy non-zip pkl must degrade to None, not raise.
+
+        The demo catalog reads metadata from every cached file; one unreadable
+        file used to raise ``BadZipFile`` and 500 the whole listing.
+        """
+        from vtscore.datasets.loader_pickle import read_pkl_clipper, read_pkl_embedder
+
+        path = tmp_path / "legacy.pkl"
+        # A raw (non-zip) pickle: old on-disk format, no zip magic.
+        path.write_bytes(b"\x80\x05not-a-zip-container")
+        assert read_pkl_embedder(path) is None
+        assert read_pkl_clipper(path) is None
