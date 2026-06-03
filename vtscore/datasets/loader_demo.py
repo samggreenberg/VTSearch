@@ -217,12 +217,18 @@ def load_demo_dataset(  # noqa: C901
     # from the pickle and store the dir path so reloading can find the files.
     # When a converter was applied, external_dir is no longer relevant (the
     # converted medias carry their own bytes/strings).
+    # Local import avoids a circular import at module load (loader imports
+    # loader_demo before this helper is defined).
+    from vtscore.datasets.loader import _embedding_for_pickle
+
     if external_dir is not None and not converter_name:
         pkl_data: dict[str, Any] = {
             "name": dataset_name,
             "medias": {
                 cid: {
-                    k: v.tolist() if isinstance(v, np.ndarray) else v
+                    k: _embedding_for_pickle(v)
+                    if k == "embedding"
+                    else (v.tolist() if isinstance(v, np.ndarray) else v)
                     for k, v in media.items()
                     if k not in ("media_bytes", "thumbnail_bytes")
                 }
@@ -234,7 +240,12 @@ def load_demo_dataset(  # noqa: C901
         pkl_data = {
             "name": dataset_name,
             "medias": {
-                cid: {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in media.items()}
+                cid: {
+                    k: _embedding_for_pickle(v)
+                    if k == "embedding"
+                    else (v.tolist() if isinstance(v, np.ndarray) else v)
+                    for k, v in media.items()
+                }
                 for cid, media in medias.items()
             },
         }
@@ -246,7 +257,7 @@ def load_demo_dataset(  # noqa: C901
     if external_dir is not None and not converter_name:
         extra_pickle_keys[mt.dir_key] = external_dir
 
-    medias_pkl_bytes = pickle.dumps(pkl_data)
+    medias_pkl_bytes = pickle.dumps(pkl_data, protocol=5)
     meta = {
         "format_version": 1,
         "embedder": resolved_name,

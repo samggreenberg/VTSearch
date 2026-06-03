@@ -56,7 +56,9 @@ def write_container(
         data = safe_pickle_load(io.BytesIO(medias_pickle_bytes))
         data.update(extra_pickle_keys)
         buf = io.BytesIO()
-        pickle.dump(data, buf)
+        # Match the protocol used by export_dataset_to_file (PEP 574, v5):
+        # this re-pickle round-trips the same numpy-array embeddings.
+        pickle.dump(data, buf, protocol=5)
         medias_pickle_bytes = buf.getvalue()
 
     if isinstance(dest, io.BytesIO):
