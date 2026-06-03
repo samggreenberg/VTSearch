@@ -38,24 +38,44 @@ elif [ "$current_branch" = "dev" ] || [ "$current_branch" = "main" ]; then
   notify "ℹ session-start: on $current_branch; skipping dev rebase."
 elif ! git diff-index --quiet HEAD -- 2>/dev/null; then
   skip_reason="working tree dirty (would clobber changes)"
-elif git rev-parse --verify --quiet "refs/remotes/origin/$current_branch" >/dev/null \
-    && [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$current_branch")" ]; then
-  skip_reason="local $current_branch differs from origin/$current_branch (pushed work would be orphaned)"
 else
   notify "ℹ session-start: fetching origin..."
   if ! git fetch origin --prune 2>&1 | sed 's/^/  /' >&2; then
     skip_reason="fetch failed"
   elif git merge-base --is-ancestor origin/dev HEAD 2>/dev/null; then
     notify "✓ session-start: $current_branch already includes origin/dev; nothing to do."
+  elif ! git rev-parse --verify --quiet "refs/remotes/origin/$current_branch" >/dev/null; then
+    # No origin/<branch>: a brand-new branch the harness just cut off `main`
+    # (the GitHub default). At session start, before Claude has pushed
+    # anything, EVERY commit unique to this branch relative to `dev` was
+    # inherited from `main` — there is no Claude work to preserve. That
+    # inherited history can include `main`-only cleanup/revert commits (e.g.
+    # "revert the accidental main merges") that *conflict* when replayed onto
+    # `dev`, because they try to undo work that legitimately lives on `dev`.
+    # `git cherry` flags such a revert `+` ("not patch-equivalent to dev"),
+    # which sends the cherry heuristic below down the rebase path and produces
+    # phantom conflicts — exactly the speed bump this branch was created to
+    # fix. Since nothing pushed is at risk, hard-reset to origin/dev
+    # unconditionally instead of attempting a doomed rebase.
+    notify "ℹ session-start: $current_branch has no origin counterpart (fresh branch cut off main); hard-resetting to origin/dev (inherited main-only commits carry no Claude work)..."
+    if git reset --hard origin/dev 2>&1 | sed 's/^/  /' >&2; then
+      notify "✓ session-start: hard-reset $current_branch to origin/dev."
+    else
+      skip_reason="hard-reset to origin/dev failed"
+    fi
+  elif [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$current_branch")" ]; then
+    # The branch exists on origin and HEAD differs from it: it carries real
+    # pushed work that a reset/rebase here could orphan. Stay conservative and
+    # leave it to Claude to reconcile by hand.
+    skip_reason="local $current_branch differs from origin/$current_branch (pushed work would be orphaned)"
   else
-    # Decide rebase vs hard-reset. The harness cuts new branches off `main`,
-    # so a fresh branch typically carries merge-commit duplicates of PRs that
-    # already landed on `dev`. `git cherry origin/dev HEAD` flags each
-    # unique-to-branch commit as `+` (genuinely new) or `-` (patch-equivalent
-    # to a commit already on dev). All-`-` means a rebase would just produce
-    # phantom conflicts against the already-merged work; hard-reset is the
-    # safe and correct move. Any `+` line means there's real local work to
-    # preserve, so fall back to a normal rebase.
+    # In sync with origin/<branch> but behind dev. Decide rebase vs hard-reset.
+    # `git cherry origin/dev HEAD` flags each unique-to-branch commit as `+`
+    # (genuinely new) or `-` (patch-equivalent to a commit already on dev).
+    # All-`-` means a rebase would just produce phantom conflicts against the
+    # already-merged work; hard-reset is the safe and correct move. Any `+`
+    # line means there's real pushed work to preserve, so fall back to a
+    # normal rebase.
     cherry_out=$(git cherry origin/dev HEAD 2>/dev/null || echo "")
     if [ -n "$cherry_out" ] && ! echo "$cherry_out" | grep -q '^+'; then
       dup_count=$(echo "$cherry_out" | grep -c '^-' || true)
