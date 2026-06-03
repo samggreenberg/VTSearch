@@ -369,12 +369,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * loads / if it failed. Kicks off the fetch on first request and redraws when
    * the image arrives.
    */
-  private getThumb(repId: number): HTMLImageElement | null {
-    const cached = this.thumbCache.get(repId);
+  private getThumb(representativeId: number): HTMLImageElement | null {
+    const cached = this.thumbCache.get(representativeId);
     if (cached) {
       return cached.complete && cached.naturalWidth > 0 ? cached : null;
     }
-    if (this.thumbFailed.has(repId)) return null;
+    if (this.thumbFailed.has(representativeId)) return null;
 
     if (this.thumbCache.size >= this.MAX_THUMBS) this.evictThumbs();
 
@@ -382,12 +382,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     img.decoding = 'async';
     img.onload = () => this.requestRedraw();
     img.onerror = () => {
-      this.thumbCache.delete(repId);
-      this.thumbFailed.add(repId);
+      this.thumbCache.delete(representativeId);
+      this.thumbFailed.add(representativeId);
     };
     // The /image route serves the frame for video via its image_response hook.
-    img.src = this.activeContext.mediaUrl(`/api/medias/${repId}/image`);
-    this.thumbCache.set(repId, img);
+    img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/image`);
+    this.thumbCache.set(representativeId, img);
     return null;
   }
 
