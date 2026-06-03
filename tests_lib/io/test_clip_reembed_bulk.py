@@ -144,6 +144,60 @@ class TestBulkClipReembed:
             np.testing.assert_array_equal(clip["embedding"], expected)
 
 
+class TestClipReembedLoadingProgressPassthrough:
+    """The model is loaded lazily on the first ``embed_media_bulk`` call,
+    *after* the "Embedding clips…" line is on screen. While it loads (and
+    on first run downloads weights + warms up) the embedder emits
+    descriptive ``status="loading"`` messages. Those must reach the
+    ``on_progress`` callback verbatim — with the embedder's own
+    current/total — instead of being collapsed into a frozen
+    "Embedding clips… (0/N)"; only real per-clip progress is relabelled
+    to the "embedding" phase."""
+
+    def test_loading_messages_forwarded_verbatim(self):
+        from vtscore.datasets.load_pipeline import _apply_clipper
+
+        emb = mock.MagicMock()
+        emb._on_progress = lambda *a, **kw: None
+
+        def _bulk(medias):
+            # Simulate lazy load: descriptive "loading" progress (weight
+            # load reports 0/0; warmup reports a step ratio), then real
+            # per-clip "embedding" progress.
+            emb._on_progress("loading", "Loading test model weights…", 0, 0)
+            emb._on_progress("loading", "Warming up pipeline…", 2, 3)
+            for i, _ in enumerate(medias):
+                emb._on_progress("embedding", "", i + 1, len(medias))
+            return [np.full(512, float(i + 1), dtype=np.float32) for i, _ in enumerate(medias)]
+
+        emb.embed_media_bulk.side_effect = _bulk
+
+        calls: list[tuple[int, int, str]] = []
+        clips_dict = {1: _make_audio_media(1, duration=5.1)}
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
+            _apply_clipper(
+                clips_dict,
+                "sound_tiling",
+                {"duration": 2.0},
+                on_progress=lambda cur, tot, phase: calls.append((cur, tot, phase)),
+            )
+
+        phases = [c[2] for c in calls]
+        # Loading messages reach the callback unchanged, not collapsed to
+        # the "embedding" phase.
+        assert "Loading test model weights…" in phases
+        assert "Warming up pipeline…" in phases
+        # The weight-load step carries the embedder's own (0, 0), so it no
+        # longer renders as a frozen scaled clip count.
+        weight = next(c for c in calls if c[2] == "Loading test model weights…")
+        assert weight[:2] == (0, 0)
+        warmup = next(c for c in calls if c[2] == "Warming up pipeline…")
+        assert warmup[:2] == (2, 3)
+        # Real per-clip progress is still reported under the "embedding"
+        # phase, scaled against the clip list.
+        assert "embedding" in phases
+
+
 class TestBulkClipReembedFailureFallback:
     """When ``embed_media_bulk`` returns ``None`` for a clip, or the
     whole call raises, the affected clip keeps the parent embedding it

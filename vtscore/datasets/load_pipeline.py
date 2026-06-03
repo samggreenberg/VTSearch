@@ -466,12 +466,25 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
         return
 
     def _clip_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-        if on_progress:
-            # Map the embedder's batch-level progress back to clip-list
-            # coordinates so the existing on_progress(current, total, phase)
-            # contract keeps reporting against total_clips.
-            scaled = min(total_clips, int(current * len(embed_indices) / max(1, total)))
-            on_progress(scaled, total_clips, "embedding")
+        if not on_progress:
+            return
+        if status == "loading":
+            # The model is loaded lazily on the first embed call, *after*
+            # the "Embedding clips…" line is already on screen. While it
+            # loads (and on first run downloads weights + JIT-warms up the
+            # pipeline) the embedder emits descriptive "loading" messages
+            # ("Loading … model weights…", "Warming up audio pipeline…").
+            # Forward those verbatim — with the embedder's own current/total —
+            # so the user sees what's actually happening instead of a frozen
+            # "Embedding clips… (0/N)". Scaling these load sub-steps against
+            # the clip list would be meaningless.
+            on_progress(current, total, message or "Loading model…")
+            return
+        # Real per-clip progress: map the embedder's batch-level progress back
+        # to clip-list coordinates so the existing on_progress(current, total,
+        # phase) contract keeps reporting against total_clips.
+        scaled = min(total_clips, int(current * len(embed_indices) / max(1, total)))
+        on_progress(scaled, total_clips, "embedding")
 
     original_cb = embedder._on_progress
     embedder._on_progress = _clip_progress
@@ -794,8 +807,13 @@ def _apply_clipper_stage(
             msg = "Clipping media…"
         elif phase == "converting":
             msg = "Converting media…"
-        else:
+        elif phase == "embedding":
             msg = "Embedding clips…"
+        else:
+            # A loading/warmup message forwarded verbatim from the embedder
+            # (e.g. "Loading CLAP model weights…", "Warming up audio
+            # pipeline…") while the model loads on the first embed call.
+            msg = phase
         tracker.update(
             "loading", msg, current=current, total=total, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
         )
