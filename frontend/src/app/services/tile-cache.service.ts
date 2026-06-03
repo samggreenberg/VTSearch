@@ -42,7 +42,7 @@ export class TileCacheService {
 
     if (!this.projectionId) return null;
 
-    const req$ = this.projectionApi.getTile(this.projectionId, level, tx, ty).pipe(
+    const req$ = this.projectionApi.getTile(level, tx, ty).pipe(
       tap((tile) => {
         this.inflight.delete(key);
         this.put(key, tile);
