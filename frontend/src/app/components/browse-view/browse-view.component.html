@@ -32,12 +32,33 @@
       <vt-browse-canvas
         [meta]="meta"
         [mediaType]="mediaType"
+        [displayScale]="hexDisplayScale"
         (hexHover)="onHexHover($event)"
       />
       <vt-browse-hover-preview
         [hover]="hoverEvent"
         [mediaType]="mediaType"
       />
+      <div class="browse-size">
+        <button
+          type="button"
+          class="browse-size-btn"
+          [disabled]="atMinHexSize"
+          (click)="bumpHexSize(-1)"
+          title="Smaller hexes"
+          aria-label="Smaller hexes">
+          <vt-icon type="image" [size]="11"></vt-icon>
+        </button>
+        <button
+          type="button"
+          class="browse-size-btn"
+          [disabled]="atMaxHexSize"
+          (click)="bumpHexSize(1)"
+          title="Bigger hexes"
+          aria-label="Bigger hexes">
+          <vt-icon type="image" [size]="18"></vt-icon>
+        </button>
+      </div>
       <div class="browse-info">
         <span class="browse-info-label">{{ datasetName }}</span>
         <span class="browse-info-count">{{ meta?.point_count | number }} items</span>
