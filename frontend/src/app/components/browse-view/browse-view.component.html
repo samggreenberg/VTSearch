@@ -39,25 +39,45 @@
         [hover]="hoverEvent"
         [mediaType]="mediaType"
       />
-      <div class="browse-size">
-        <button
-          type="button"
-          class="browse-size-btn"
-          [disabled]="atMinHexSize"
-          (click)="bumpHexSize(-1)"
-          title="Smaller hexes"
-          aria-label="Smaller hexes">
-          <vt-icon type="image" [size]="11"></vt-icon>
-        </button>
-        <button
-          type="button"
-          class="browse-size-btn"
-          [disabled]="atMaxHexSize"
-          (click)="bumpHexSize(1)"
-          title="Bigger hexes"
-          aria-label="Bigger hexes">
-          <vt-icon type="image" [size]="18"></vt-icon>
-        </button>
+      <div class="browse-controls">
+        <div class="browse-zoom">
+          <button
+            type="button"
+            class="browse-size-btn browse-size-btn--text"
+            (click)="zoomOut()"
+            title="Zoom out"
+            aria-label="Zoom out">
+            &minus;
+          </button>
+          <button
+            type="button"
+            class="browse-size-btn browse-size-btn--text"
+            (click)="zoomIn()"
+            title="Zoom in"
+            aria-label="Zoom in">
+            +
+          </button>
+        </div>
+        <div class="browse-size">
+          <button
+            type="button"
+            class="browse-size-btn"
+            [disabled]="atMinHexSize"
+            (click)="bumpHexSize(-1)"
+            title="Smaller hexes"
+            aria-label="Smaller hexes">
+            <vt-icon type="image" [size]="11"></vt-icon>
+          </button>
+          <button
+            type="button"
+            class="browse-size-btn"
+            [disabled]="atMaxHexSize"
+            (click)="bumpHexSize(1)"
+            title="Bigger hexes"
+            aria-label="Bigger hexes">
+            <vt-icon type="image" [size]="18"></vt-icon>
+          </button>
+        </div>
       </div>
       <div class="browse-info">
         <span class="browse-info-label">{{ datasetName }}</span>

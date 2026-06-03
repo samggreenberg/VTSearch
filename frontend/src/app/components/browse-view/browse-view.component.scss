@@ -87,12 +87,20 @@
   }
 }
 
-// On-screen hex size control. Mirrors the grouped pill look of the Find view's
-// grid-size buttons (.vc-btn), reusing the same image icon at 11px / 18px.
-.browse-size {
+// Top-right control cluster: the zoom +/- pill sits beside the hex-size pill.
+.browse-controls {
   position: absolute;
   top: var(--space-md);
   right: var(--space-md);
+  display: inline-flex;
+  gap: var(--space-sm);
+}
+
+// Zoom (true span) control and on-screen hex size control. Both mirror the
+// grouped pill look of the Find view's grid-size buttons (.vc-btn); the hex
+// pill reuses the image icon at 11px / 18px, the zoom pill uses +/- glyphs.
+.browse-zoom,
+.browse-size {
   display: inline-flex;
 }
 
@@ -137,4 +145,11 @@
   vt-icon {
     line-height: 0;
   }
+}
+
+// +/- zoom glyphs need explicit sizing since they carry no icon child.
+.browse-size-btn--text {
+  font-size: var(--font-lg);
+  font-weight: var(--weight-medium);
+  line-height: 1;
 }
