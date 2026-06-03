@@ -82,14 +82,15 @@ def _make_base_estimator(
     if kernel == "rbf":
         from sklearn.svm import SVC  # noqa: PLC0415
 
-        # ``probability=False`` here - we attach our own calibrator outside
-        # so the calibration mode is uniform across kernels.
+        # No built-in Platt scaling: we attach our own calibrator outside so
+        # the calibration mode is uniform across kernels. sklearn>=1.9 removed
+        # the ``probability`` argument (deprecated), and disabled is the
+        # default, so there is nothing to pass.
         return SVC(
             C=C,
             kernel="rbf",
             gamma="scale",
             class_weight=class_weight,
-            probability=False,
             random_state=seed,
         )
     raise ValueError(f"Unsupported SVM kernel: {kernel!r}")
