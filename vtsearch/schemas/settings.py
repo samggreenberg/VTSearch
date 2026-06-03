@@ -59,6 +59,13 @@ class AppSettingsSchema(Schema):
     autopilot_goal_diversity = fields.Integer()
     disable_achievements = fields.Boolean()
 
+    # VTSBrowse overview-minimap show/hide + size. Persisted but not shown
+    # as Settings-modal widgets; the minimap's own close button and resize
+    # handle drive these.
+    browse_minimap_visible = fields.Boolean()
+    browse_minimap_width = fields.Integer()
+    browse_minimap_height = fields.Integer()
+
     # Per-user, per-media-type
     view_mode_left = _PerMediaTypeStringDict()
     view_mode_right = _PerMediaTypeStringDict()
@@ -163,6 +170,10 @@ class SettingsUpdateSchema(Schema):
     autopilot_resort_interval = fields.Integer()
     autopilot_goal_diversity = fields.Integer()
     disable_achievements = fields.Boolean()
+
+    browse_minimap_visible = fields.Boolean()
+    browse_minimap_width = fields.Integer()
+    browse_minimap_height = fields.Integer()
 
     autorun_detectors = fields.List(fields.String())
 

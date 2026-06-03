@@ -157,6 +157,15 @@
             "readOnly": true,
             "type": "array"
           },
+          "browse_minimap_height": {
+            "type": "integer"
+          },
+          "browse_minimap_visible": {
+            "type": "boolean"
+          },
+          "browse_minimap_width": {
+            "type": "integer"
+          },
           "calibrate_count": {
             "type": "integer"
           },
@@ -4009,6 +4018,15 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "browse_minimap_height": {
+            "type": "integer"
+          },
+          "browse_minimap_visible": {
+            "type": "boolean"
+          },
+          "browse_minimap_width": {
+            "type": "integer"
           },
           "calibrate_count": {
             "type": "integer"

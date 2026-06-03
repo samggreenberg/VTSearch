@@ -14,33 +14,14 @@ import {
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { BrowseViewportService } from '../../services/browse-viewport.service';
+import { SQRT3, traceHexPath, viridisColor } from './hex-render.util';
 import type {
   HexCellPayload,
   ProjectionMeta,
   TilePayload,
   ViewTransform,
 } from '../../models/projection.models';
-
-const SQRT3 = Math.sqrt(3);
-const DEG30 = Math.PI / 6;
-const HEX_ANGLES = Array.from({ length: 6 }, (_, i) => (Math.PI / 3) * i - DEG30);
-
-const VIRIDIS: [number, number, number][] = [
-  [68, 1, 84],
-  [72, 35, 116],
-  [64, 67, 135],
-  [52, 94, 141],
-  [41, 120, 142],
-  [33, 145, 140],
-  [42, 168, 131],
-  [68, 190, 112],
-  [94, 201, 98],
-  [128, 213, 79],
-  [166, 222, 52],
-  [199, 227, 33],
-  [229, 228, 32],
-  [253, 231, 37],
-];
 
 export interface HexHoverEvent {
   cell: HexCellPayload;
@@ -104,10 +85,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private boundMouseMove = this.onMouseMove.bind(this);
   private boundMouseUp = this.onMouseUp.bind(this);
 
+  private recenterSub: Subscription | null = null;
+
   constructor(
     private ngZone: NgZone,
     private tileCache: TileCacheService,
     private activeContext: ActiveContextService,
+    private viewport: BrowseViewportService,
   ) {}
 
   /** True when hexes should be painted with the central item's thumbnail. */
@@ -129,6 +113,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
 
     this.tileLoadSub = this.tileCache.tileLoaded$.subscribe(() => {
+      this.requestRedraw();
+    });
+
+    // The minimap publishes recenter requests when the user clicks/drags it;
+    // jump the viewport centre there (keeping zoom) and redraw.
+    this.recenterSub = this.viewport.recenter$.subscribe(({ x, y }) => {
+      this.transform.centerX = x;
+      this.transform.centerY = y;
       this.requestRedraw();
     });
 
@@ -165,6 +157,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.tileLoadSub?.unsubscribe();
+    this.recenterSub?.unsubscribe();
+    this.viewport.setViewport(null);
     this.resizeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
@@ -322,6 +316,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.drawHex(ctx, sx, sy, screenRadius, cell);
     }
 
+    // Publish the region now on screen so the minimap can draw its viewport box.
+    this.viewport.setViewport(this.getVisibleBounds());
+
     this.prefetchNeighbors(visibleTiles);
   }
 
@@ -332,7 +329,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     radius: number,
     cell: HexCellPayload,
   ): void {
-    this.tracePath(ctx, cx, cy, radius);
+    traceHexPath(ctx, cx, cy, radius);
 
     // Image / video: paint the central item's thumbnail clipped to the hex.
     // Until it loads, fall back to the density shading below so the cell is
@@ -345,7 +342,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.restore();
     } else {
       const t = Math.log(cell.count) / Math.log(this.maxCount || 2);
-      ctx.fillStyle = this.viridisColor(Math.max(0, Math.min(1, t)));
+      ctx.fillStyle = viridisColor(Math.max(0, Math.min(1, t)));
       ctx.fill();
     }
 
@@ -362,18 +359,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.lineWidth = 0.5;
       ctx.stroke();
     }
-  }
-
-  /** Trace the hexagon outline as the current path (no fill/stroke). */
-  private tracePath(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number): void {
-    ctx.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const x = cx + radius * Math.cos(HEX_ANGLES[i]);
-      const y = cy + radius * Math.sin(HEX_ANGLES[i]);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
   }
 
   /** Cover-fit an image over the hex's 2*radius square (the path must be clipped). */
@@ -427,18 +412,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       if (i++ >= toRemove) break;
       this.thumbCache.delete(key);
     }
-  }
-
-  private viridisColor(t: number): string {
-    const n = VIRIDIS.length - 1;
-    const idx = t * n;
-    const lo = Math.floor(idx);
-    const hi = Math.min(lo + 1, n);
-    const frac = idx - lo;
-    const r = Math.round(VIRIDIS[lo][0] + (VIRIDIS[hi][0] - VIRIDIS[lo][0]) * frac);
-    const g = Math.round(VIRIDIS[lo][1] + (VIRIDIS[hi][1] - VIRIDIS[lo][1]) * frac);
-    const b = Math.round(VIRIDIS[lo][2] + (VIRIDIS[hi][2] - VIRIDIS[lo][2]) * frac);
-    return `rgb(${r},${g},${b})`;
   }
 
   private themeColor(varName: string): string {

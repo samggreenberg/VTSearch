@@ -59,6 +59,34 @@
   color: var(--text-primary);
 }
 
+// Shown in place of the minimap once it's hidden, so the overview can be
+// brought back. Sits in the same lower-right corner the minimap occupies.
+.browse-minimap-show {
+  position: absolute;
+  bottom: var(--space-md);
+  right: var(--space-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-base), border-color var(--transition-base);
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+
+  vt-icon {
+    line-height: 0;
+  }
+}
+
 // On-screen hex size control. Mirrors the grouped pill look of the Find view's
 // grid-size buttons (.vc-btn), reusing the same image icon at 11px / 18px.
 .browse-size {
