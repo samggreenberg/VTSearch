@@ -5,6 +5,7 @@ import { takeUntil } from 'rxjs/operators';
 import { BrowseCanvasComponent, HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
+import { IconComponent } from '../icon/icon.component';
 import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -14,7 +15,13 @@ import type { ProjectionMeta } from '../../models/projection.models';
 @Component({
   selector: 'vt-browse-view',
   standalone: true,
-  imports: [CommonModule, BrowseCanvasComponent, BrowseHoverPreviewComponent, ProgressBarComponent],
+  imports: [
+    CommonModule,
+    BrowseCanvasComponent,
+    BrowseHoverPreviewComponent,
+    ProgressBarComponent,
+    IconComponent,
+  ],
   templateUrl: './browse-view.component.html',
   styleUrl: './browse-view.component.scss',
 })
@@ -28,6 +35,14 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   buildTotal = 0;
   buildMessage = '';
   datasetName = '';
+
+  /**
+   * Discrete on-screen size multipliers for the hexes. ``1`` (index 2) is the
+   * default fit; the bigger/smaller buttons step through these. This only
+   * rescales the rendering — it never changes which vectors land in a hex.
+   */
+  private readonly HEX_SCALES = [0.5, 0.7, 1, 1.5, 2.2, 3];
+  hexScaleIndex = 2;
 
   private destroy$ = new Subject<void>();
   private polling = false;
@@ -67,6 +82,26 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   onHexHover(event: HexHoverEvent | null): void {
     this.hoverEvent = event;
+  }
+
+  get hexDisplayScale(): number {
+    return this.HEX_SCALES[this.hexScaleIndex];
+  }
+
+  get atMinHexSize(): boolean {
+    return this.hexScaleIndex === 0;
+  }
+
+  get atMaxHexSize(): boolean {
+    return this.hexScaleIndex === this.HEX_SCALES.length - 1;
+  }
+
+  /** Grow (+1) or shrink (-1) the on-screen hex size, clamped to the range. */
+  bumpHexSize(delta: 1 | -1): void {
+    this.hexScaleIndex = Math.max(
+      0,
+      Math.min(this.HEX_SCALES.length - 1, this.hexScaleIndex + delta),
+    );
   }
 
   onBuild(): void {

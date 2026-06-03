@@ -58,3 +58,55 @@
   font-weight: var(--weight-medium);
   color: var(--text-primary);
 }
+
+// On-screen hex size control. Mirrors the grouped pill look of the Find view's
+// grid-size buttons (.vc-btn), reusing the same image icon at 11px / 18px.
+.browse-size {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  display: inline-flex;
+}
+
+.browse-size-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 var(--space-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base),
+    border-color var(--transition-base);
+
+  &:not(:first-child) {
+    margin-left: -1px;
+  }
+
+  &:first-child {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+
+  &:last-child {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+    z-index: 1;
+  }
+
+  &:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
+
+  vt-icon {
+    line-height: 0;
+  }
+}

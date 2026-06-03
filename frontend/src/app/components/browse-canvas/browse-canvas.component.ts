@@ -63,6 +63,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * flat density (viridis) shading.
    */
   @Input() mediaType = '';
+  /**
+   * User-controlled on-screen size multiplier for hexes. ``1`` is the default
+   * fit. This scales rendering (positions + hex radius) only; it deliberately
+   * does NOT feed level selection, so growing/shrinking the display never
+   * changes the binning, i.e. which vectors land in a given hex.
+   */
+  @Input() displayScale = 1;
   @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
 
   /** Loaded representative thumbnails, keyed by media id (insertion-ordered LRU). */
@@ -108,6 +115,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     return this.mediaType === 'image' || this.mediaType === 'video';
   }
 
+  /**
+   * On-screen scale: the base zoom (driven by wheel/fit and feeding level
+   * selection) times the user's display-size multiplier. All projection↔screen
+   * conversions and the rendered hex radius use this; level selection uses the
+   * base ``transform.zoom`` alone so the binning is invariant to display size.
+   */
+  private get effZoom(): number {
+    return this.transform.zoom * this.displayScale;
+  }
+
   ngOnInit(): void {
     this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
 
@@ -136,6 +153,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.thumbCache.clear();
       this.thumbFailed.clear();
       this.fitToData();
+      this.requestRedraw();
+    }
+    // Display-size changes only rescale rendering; the active level (binning)
+    // is left untouched on purpose, so the same hexes are simply drawn larger
+    // or smaller.
+    if (changes['displayScale'] && !changes['displayScale'].firstChange) {
       this.requestRedraw();
     }
   }
@@ -176,7 +199,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const padH = dataH * (1 + padding * 2);
     const w = this.width || 800;
     const h = this.height || 600;
-    this.transform.zoom = Math.min(w / padW, h / padH);
+    // Fit so the *effective* zoom fills the viewport: divide out displayScale so
+    // a non-default display size still frames the whole projection on load.
+    this.transform.zoom = Math.min(w / padW, h / padH) / this.displayScale;
     this.transform.centerX = (xmin + xmax) / 2;
     this.transform.centerY = (ymin + ymax) / 2;
     this.updateActiveLevel();
@@ -195,14 +220,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private projToScreen(px: number, py: number): [number, number] {
-    const sx = (px - this.transform.centerX) * this.transform.zoom + this.width / 2;
-    const sy = (py - this.transform.centerY) * this.transform.zoom + this.height / 2;
+    const z = this.effZoom;
+    const sx = (px - this.transform.centerX) * z + this.width / 2;
+    const sy = (py - this.transform.centerY) * z + this.height / 2;
     return [sx, sy];
   }
 
   private screenToProj(sx: number, sy: number): [number, number] {
-    const px = (sx - this.width / 2) / this.transform.zoom + this.transform.centerX;
-    const py = (sy - this.height / 2) / this.transform.zoom + this.transform.centerY;
+    const z = this.effZoom;
+    const px = (sx - this.width / 2) / z + this.transform.centerX;
+    const py = (sy - this.height / 2) / z + this.transform.centerY;
     return [px, py];
   }
 
@@ -269,7 +296,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
     const level = this.activeLevel;
     const radius = this.meta.base_radius / Math.pow(2, level);
-    const screenRadius = radius * this.transform.zoom;
+    const screenRadius = radius * this.effZoom;
 
     const visibleTiles = this.getVisibleTiles();
     let allCells: HexCellPayload[] = [];
@@ -478,8 +505,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (!this.isPanning) return;
     const dx = event.clientX - this.panStartX;
     const dy = event.clientY - this.panStartY;
-    this.transform.centerX = this.panStartCenterX - dx / this.transform.zoom;
-    this.transform.centerY = this.panStartCenterY - dy / this.transform.zoom;
+    const z = this.effZoom;
+    this.transform.centerX = this.panStartCenterX - dx / z;
+    this.transform.centerY = this.panStartCenterY - dy / z;
     this.requestRedraw();
   }
 
@@ -498,9 +526,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const [projX, projY] = this.screenToProj(mx, my);
     const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
     const newZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
+    // Anchor the point under the cursor using the new *effective* zoom so the
+    // display-size multiplier keeps that pixel fixed while wheel-zooming.
+    const newEffZoom = newZoom * this.displayScale;
 
-    this.transform.centerX = projX - (mx - this.width / 2) / newZoom;
-    this.transform.centerY = projY - (my - this.height / 2) / newZoom;
+    this.transform.centerX = projX - (mx - this.width / 2) / newEffZoom;
+    this.transform.centerY = projY - (my - this.height / 2) / newEffZoom;
     this.transform.zoom = newZoom;
 
     this.updateActiveLevel();
