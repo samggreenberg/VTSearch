@@ -81,22 +81,13 @@
       </div>
     }
 
-    <div class="copy-row">
-      <select class="form-select" [(ngModel)]="copyColumn" title="Column to copy to clipboard">
-        <option value="origin+name">Origin + Name</option>
-        <option value="name">Name</option>
-        <option value="md5">MD5</option>
-        <option value="filename">Filename</option>
-        <option value="origin">Origin</option>
-      </select>
-      <select class="form-select" [(ngModel)]="copySeparator" title="Separator between copied values">
-        <option value="newline">Newline</option>
-        <option value=",">Comma</option>
-        <option value="tab">Tab</option>
-        <option value="space">Space</option>
-      </select>
-      <button class="btn btn--secondary" (click)="copyToClipboard()" title="Copy selected column values to clipboard">{{ copyButtonText }}</button>
-    </div>
+    <vt-clipboard-copy
+      mode="list"
+      [rows]="clipboardRows"
+      [columns]="clipboardColumns"
+      buttonVariant="secondary"
+      copyLabel="Copy To Clipboard"
+    ></vt-clipboard-copy>
   </div>
 
   <div class="export-actions" modal-footer>

@@ -4,6 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
+import {
+  ClipboardColumn,
+  ClipboardCopyComponent,
+} from '../../clipboard-copy/clipboard-copy.component';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import {
   AutoDetectHit,
@@ -15,7 +19,7 @@ import type { ExporterEntry } from '../../../generated/api-client/models/exporte
 @Component({
   selector: 'vt-autodetect-results-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, ClipboardCopyComponent],
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',
 })
@@ -28,9 +32,15 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   selectedExporter = '';
   exporterFields: ImporterField[] = [];
   exportFieldValues: Record<string, string> = {};
-  copyColumn = 'origin+name';
-  copySeparator = 'newline';
-  copyButtonText = 'Copy To Clipboard';
+
+  /** Columns offered by the shared clipboard control (single-column list mode). */
+  readonly clipboardColumns: ClipboardColumn[] = [
+    { key: 'origin+name', label: 'Origin + Name' },
+    { key: 'name', label: 'Name' },
+    { key: 'md5', label: 'MD5' },
+    { key: 'filename', label: 'Filename' },
+    { key: 'origin', label: 'Origin' },
+  ];
 
   private destroy$ = new Subject<void>();
 
@@ -123,44 +133,20 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
 
   onSidesChange(): void {}
 
-  async copyToClipboard(): Promise<void> {
-    const hits = this.displayHits;
-    if (hits.length === 0) return;
-
-    const separatorMap: Record<string, string> = {
-      ',': ',',
-      tab: '\t',
-      space: ' ',
-      newline: '\n',
-    };
-    const sep = separatorMap[this.copySeparator] || '\n';
-
-    const values = hits.map((hit) => {
+  /** Displayed hits flattened to `{ columnKey: value }` rows for the
+   *  shared clipboard control. */
+  get clipboardRows(): Record<string, string>[] {
+    return this.displayHits.map((hit) => {
       const origin = this.formatOrigin(hit);
       const name = hit.origin_name || hit.filename || '';
-      switch (this.copyColumn) {
-        case 'origin+name':
-          return origin ? `${origin}  ${name}` : name;
-        case 'name':
-          return name;
-        case 'md5':
-          return hit.md5 || '';
-        case 'filename':
-          return hit.filename || '';
-        case 'origin':
-          return origin;
-        default:
-          return name;
-      }
+      return {
+        'origin+name': origin ? `${origin}  ${name}` : name,
+        name,
+        md5: hit.md5 || '',
+        filename: hit.filename || '',
+        origin,
+      };
     });
-
-    try {
-      await navigator.clipboard.writeText(values.join(sep));
-      this.copyButtonText = 'Copied!';
-    } catch {
-      this.copyButtonText = 'Copy failed';
-    }
-    setTimeout(() => (this.copyButtonText = 'Copy To Clipboard'), 2000);
   }
 
   close(): void {
