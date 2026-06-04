@@ -156,7 +156,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
     """
 
     name = "server_folder"
-    display_name = "Folder"
+    display_name = "File Folder"
     description = "Browse the server's filesystem and import media files from a directory"
     icon = "\U0001f4c1"  # 📁 - frontend renders as a folder icon
     picker_view = "server_folder"
