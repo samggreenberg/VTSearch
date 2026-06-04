@@ -23,7 +23,9 @@ def restore_tabs():
 class TestBuiltinTabs:
     def test_built_in_tabs_present(self):
         ids = {t["id"] for t in list_picker_tabs()}
-        assert {"services", "server", "local", "demo"} <= ids
+        assert {"services", "server", "demo"} <= ids
+        # The Local tab is hidden along with its (browser-upload) importers.
+        assert "local" not in ids
 
     def test_built_in_tabs_have_labels_and_icons(self):
         for tab in list_picker_tabs():
@@ -67,7 +69,8 @@ class TestApiResponse:
         assert "tabs" in data
         assert isinstance(data["tabs"], list)
         ids = {t["id"] for t in data["tabs"]}
-        assert {"services", "server", "local", "demo"} <= ids
+        assert {"services", "server", "demo"} <= ids
+        assert "local" not in ids
 
     def test_tab_entries_have_id_and_label(self, client):
         resp = client.get("/api/dataset/all-importers")

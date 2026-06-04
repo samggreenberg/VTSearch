@@ -37,6 +37,7 @@ class LocalFolderDatasetImporter(DatasetImporter):
 
     name = "local_folder"
     display_name = "Folder"
+    hidden_from_picker = True
     description = "Upload a folder of media files from this computer (your browser machine) to the server."
     icon = "\U0001f4c1"  # 📁 - frontend renders as a folder icon
     ui_mode = "custom"
