@@ -24,6 +24,7 @@ const KNOWN_TYPES = new Set([
   'thumbs-up', 'thumbs-down', 'factory',
   'house', 'lightning', 'flask', 'cubes', 'database',
   'checkbox-checked', 'search', 'trophy',
+  'zoom-in', 'zoom-out', 'zoom-fit',
 ]);
 
 function emojiToType(icon: string): string {

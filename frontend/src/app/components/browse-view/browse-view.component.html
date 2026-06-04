@@ -43,19 +43,27 @@
         <div class="browse-zoom">
           <button
             type="button"
-            class="browse-size-btn browse-size-btn--text"
-            (click)="zoomOut()"
-            title="Zoom out"
-            aria-label="Zoom out">
-            &minus;
-          </button>
-          <button
-            type="button"
-            class="browse-size-btn browse-size-btn--text"
+            class="browse-size-btn"
             (click)="zoomIn()"
             title="Zoom in"
             aria-label="Zoom in">
-            +
+            <vt-icon type="zoom-in" [size]="16"></vt-icon>
+          </button>
+          <button
+            type="button"
+            class="browse-size-btn"
+            (click)="zoomToFit()"
+            title="Zoom to fit"
+            aria-label="Zoom to fit">
+            <vt-icon type="zoom-fit" [size]="16"></vt-icon>
+          </button>
+          <button
+            type="button"
+            class="browse-size-btn"
+            (click)="zoomOut()"
+            title="Zoom out"
+            aria-label="Zoom out">
+            <vt-icon type="zoom-out" [size]="16"></vt-icon>
           </button>
         </div>
         <div class="browse-size">
