@@ -922,14 +922,18 @@ export class DatasetImporterModalComponent implements OnInit {
       this.demoTabs = [solo];
     }
     // Pre-select a media-type tab so the demo table shows results instead
-    // of sitting empty.  Prefer the solo type, then ``"audio"``, then
-    // the first tab.
+    // of sitting empty.  Prefer the solo type, then the active context's
+    // guessed media type (from existing datasets/detectors), then
+    // ``"audio"``, then the first tab.
     if (this.demoTabs.length > 0) {
       const needsSelect = !this.activeTab || (solo && this.activeTab !== solo);
       if (needsSelect) {
+        const guessed = this.guessedMediaType;
         const preferred = solo && this.demoTabs.includes(solo)
           ? solo
-          : (this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0]);
+          : (guessed && this.demoTabs.includes(guessed)
+            ? guessed
+            : (this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0]));
         this.selectDemoTabWithEmbedder(preferred);
       }
     }
