@@ -17,9 +17,10 @@ def get_file_access_base_dir() -> Path | None:
     """Return the base directory for file-access validation.
 
     In single-user mode (:class:`~vtsearch.auth.DefaultLoginProvider`) this
-    returns ``None``, which causes :func:`validate_server_filepath` to fall
-    back to :data:`vtscore.config.SERVER_ROOTS[0]` (``Path.cwd()`` by
-    default).
+    returns ``None``, which causes :func:`validate_server_filepath` to confine
+    paths to :data:`vtscore.config.SERVER_ROOTS` (just ``Path.cwd()`` unless the
+    operator widens it via ``VTSEARCH_SERVER_ROOTS``).  ``None`` does *not* mean
+    "unrestricted" -- it means "use the configured server roots".
 
     In multi-user mode (any non-default provider) this returns the current
     user's data directory so that each user is confined to their own
@@ -29,22 +30,23 @@ def get_file_access_base_dir() -> Path | None:
 
     provider = get_login_provider()
     if isinstance(provider, DefaultLoginProvider):
-        return None  # single-user: unrestricted (CWD)
+        return None  # single-user: confine to the configured SERVER_ROOTS
     return get_user_data_dir()
 
 
 def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:
-    """Validate that *filepath_str* resolves within *base_dir*.
+    """Validate that *filepath_str* resolves within an allowed root.
 
     Parameters
     ----------
     filepath_str:
         User-supplied file path (absolute or relative).
     base_dir:
-        The directory the resolved path must reside in.
-        Defaults to :data:`vtscore.config.SERVER_ROOTS[0]` (which itself
-        falls back to ``Path.cwd()`` when ``VTSEARCH_SERVER_ROOTS`` is
-        unset).
+        A single directory the resolved path must reside in.  When given
+        (e.g. the per-user data dir in multi-user mode) it is the only
+        allowed root.  When ``None`` the allowed roots are
+        :data:`vtscore.config.SERVER_ROOTS` (every entry is accepted), which
+        default to ``(Path.cwd(),)`` unless ``VTSEARCH_SERVER_ROOTS`` is set.
 
     Returns
     -------
@@ -54,30 +56,35 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
     Raises
     ------
     ValueError
-        If the resolved path is outside *base_dir*.
+        If the resolved path is outside every allowed root.
     """
-    if base_dir is None:
+    if base_dir is not None:
+        roots: tuple[Path, ...] = (base_dir,)
+    else:
         from vtscore.config import SERVER_ROOTS  # noqa: PLC0415
 
-        base_dir = SERVER_ROOTS[0]
+        roots = SERVER_ROOTS
 
     path = Path(filepath_str)
 
-    # Resolve relative paths against base_dir, absolute paths as-is
+    # Resolve relative paths against the primary root, absolute paths as-is.
     if not path.is_absolute():
-        path = base_dir / path
+        path = roots[0] / path
 
     resolved = path.resolve()
-    base_resolved = base_dir.resolve()
+    for root in roots:
+        try:
+            resolved.relative_to(root.resolve())
+            return resolved
+        except ValueError:
+            continue
 
-    try:
-        resolved.relative_to(base_resolved)
-    except ValueError:
-        raise ValueError(
-            f"Path must be within '{base_resolved}'. The given path resolves outside the allowed directory."
-        )
-
-    return resolved
+    allowed = ", ".join(f"'{r.resolve()}'" for r in roots)
+    raise ValueError(
+        f"The given path resolves outside the allowed directory. Paths must be within {allowed}. "
+        f"To import media from another location, set the VTSEARCH_SERVER_ROOTS environment variable "
+        f"(os.pathsep-separated) to include it."
+    )
 
 
 def sanitize_template_value(value: str) -> str:
