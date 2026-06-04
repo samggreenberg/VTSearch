@@ -1,10 +1,11 @@
-"""Tests for Stage-2 hex-tile pyramid (``vtscore.projection.pyramid``)."""
+"""Tests for Stage-2 tile pyramid (``vtscore.projection.pyramid``)."""
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
-from vtscore.projection.pyramid import Pyramid, build_pyramid, max_useful_levels
+from vtscore.projection.pyramid import BIN_SHAPES, Pyramid, build_pyramid, max_useful_levels
 from vtscore.projection.umap_projection import Projection
 
 
@@ -182,3 +183,59 @@ def test_auto_depth_terminates_on_coincident_points():
         cells = [c for (level, _, _), t in pyr.tiles.items() if level == lvl for c in t.cells]
         assert len(cells) == 1
         assert cells[0].count == 10
+
+
+# --- Bin shape (hex vs square) -------------------------------------------------
+
+
+def test_default_bin_shape_is_hex():
+    pyr = build_pyramid(_projection(_cluster_cloud()), n_levels=2)
+    assert pyr.bin_shape == "hex"
+    assert pyr.meta()["bin_shape"] == "hex"
+
+
+def test_unknown_bin_shape_raises():
+    with pytest.raises(ValueError):
+        build_pyramid(_projection(_cluster_cloud()), bin_shape="triangle", n_levels=1)
+
+
+@pytest.mark.parametrize("bin_shape", BIN_SHAPES)
+def test_points_conserved_for_every_shape(bin_shape):
+    coords = _cluster_cloud()
+    pyr = build_pyramid(_projection(coords), bin_shape=bin_shape, n_levels=4)
+    assert pyr.bin_shape == bin_shape
+    for lvl in range(4):
+        total = sum(c.count for (level, _, _), t in pyr.tiles.items() if level == lvl for c in t.cells)
+        assert total == coords.shape[0], f"{bin_shape} level {lvl} lost points"
+
+
+@pytest.mark.parametrize("bin_shape", BIN_SHAPES)
+def test_auto_depth_resolves_to_single_cell_for_every_shape(bin_shape):
+    coords = _grid_cloud(side=4, spacing=1.0)
+    pyr = build_pyramid(_projection(coords), bin_shape=bin_shape, base_radius=4.0)
+    deepest = max(lm.level for lm in pyr.levels)
+    deepest_cells = [c for (lvl, _, _), t in pyr.tiles.items() if lvl == deepest for c in t.cells]
+    assert deepest_cells
+    assert max(c.count for c in deepest_cells) == 1
+
+
+def test_square_uses_plain_column_tile_index():
+    # The square lattice keys q as the bare column index, so cell centers sit on
+    # a regular grid: well-separated points land in distinct cells whose centers
+    # are integer multiples of the side apart.
+    coords = _grid_cloud(side=3, spacing=4.0)
+    pyr = build_pyramid(_projection(coords), bin_shape="square", base_radius=1.0)
+    deepest = max(lm.level for lm in pyr.levels)
+    cells = [c for (lvl, _, _), t in pyr.tiles.items() if lvl == deepest for c in t.cells]
+    assert sum(c.count for c in cells) == coords.shape[0]
+
+
+def test_same_projection_bins_both_shapes_independently():
+    # The Browse toggle re-bins one frozen projection two ways; both share the
+    # projection id but produce their own cells.
+    proj = _projection(_cluster_cloud(), pid="shared-pid")
+    hex_pyr = build_pyramid(proj, bin_shape="hex", n_levels=3)
+    sq_pyr = build_pyramid(proj, bin_shape="square", n_levels=3)
+    assert hex_pyr.projection_id == sq_pyr.projection_id == "shared-pid"
+    assert hex_pyr.bin_shape == "hex"
+    assert sq_pyr.bin_shape == "square"

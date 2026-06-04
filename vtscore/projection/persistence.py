@@ -21,6 +21,7 @@ def _pyramid_to_meta(projection: Projection, pyramid: Pyramid) -> dict[str, Any]
     return {
         "projection_id": projection.projection_id,
         "method": projection.method,
+        "bin_shape": pyramid.bin_shape,
         "base_radius": pyramid.base_radius,
         "tile_span": pyramid.tile_span,
         "point_count": pyramid.point_count,
@@ -78,6 +79,9 @@ def _rebuild_from_npz_arrays(
         point_count=meta["point_count"],
         levels=levels,
         tiles=tiles,
+        # Containers written before the hex/square toggle have no bin_shape; they
+        # are hex by construction, so default accordingly.
+        bin_shape=meta.get("bin_shape", "hex"),
     )
 
     return projection, pyramid

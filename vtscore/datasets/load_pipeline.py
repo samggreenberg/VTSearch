@@ -1100,12 +1100,14 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
         _progress(current, total, message or "Building 2-D projection…")
 
     proj = fit_projection(matrix, list(sorted_ids), on_progress=_on_fit_progress)
-    _progress(0, 1, "Building hex-tile pyramid…")
+    _progress(0, 1, "Building tile pyramid…")
+    # Build the default (hex) binning at ingest; the square binning is derived
+    # lazily on first toggle in the browse view, then cached/persisted there.
     pyr = build_pyramid(proj)
     _progress(1, 1, "Projection ready")
 
     ctx._projection = proj
-    ctx._pyramid = pyr
+    ctx._pyramids[pyr.bin_shape] = pyr
 
     _persist_projection_to_container(dataset_id, proj, pyr)
 

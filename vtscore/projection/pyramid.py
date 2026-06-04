@@ -25,13 +25,22 @@ HTTP tile endpoint live in the VTSearch Browse routes.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
 from vtscore.projection.hexbin import SQRT3, hex_center, hexbin_assign
+from vtscore.projection.squarebin import square_center, squarebin_assign
 from vtscore.projection.umap_projection import Projection
+
+#: The bin shapes VTSBrowse can tile a projection with.  ``"hex"`` is the
+#: default (d3-hexbin lattice); ``"square"`` is the rectangular-grid
+#: alternative.  Both share the per-level ``radius`` scale and pyramid
+#: structure — only the assignment / center / tile-index geometry differs.
+BIN_SHAPES: tuple[str, ...] = ("hex", "square")
+DEFAULT_BIN_SHAPE = "hex"
 
 
 @dataclass(frozen=True)
@@ -91,14 +100,15 @@ class Pyramid:
     projection_id: str
     bounds: tuple[float, float, float, float]
     base_radius: float
-    tile_span: float  # columns/rows of hexes per tile (projection-index units)
+    tile_span: float  # columns/rows of cells per tile (projection-index units)
     point_count: int
     levels: list[LevelMeta]
     # (level, tx, ty) -> Tile
     tiles: dict[tuple[int, int, int], Tile]
+    bin_shape: str = DEFAULT_BIN_SHAPE  # "hex" | "square" — which lattice was binned
 
     def level_radius(self, level: int) -> float:
-        """Hex radius at *level* (``base_radius / 2**level``)."""
+        """Cell radius at *level* (``base_radius / 2**level``)."""
         return self.base_radius / (2.0**level)
 
     def get_tile(self, level: int, tx: int, ty: int) -> Tile | None:
@@ -109,6 +119,7 @@ class Pyramid:
         """JSON-serializable projection/pyramid summary for ``/api/projection/meta``."""
         return {
             "projection_id": self.projection_id,
+            "bin_shape": self.bin_shape,
             "bounds": list(self.bounds),
             "base_radius": self.base_radius,
             "tile_span": self.tile_span,
@@ -126,7 +137,7 @@ def _base_radius_for(bounds: tuple[float, float, float, float], base_cols: float
     return (extent / base_cols) / SQRT3
 
 
-def _tile_index(q: np.ndarray, r: np.ndarray, tile_span: float) -> tuple[np.ndarray, np.ndarray]:
+def _hex_tile_index(q: np.ndarray, r: np.ndarray, tile_span: float) -> tuple[np.ndarray, np.ndarray]:
     """Map hex keys to integer tile coords ``(tx, ty)``.
 
     ``q`` is the doubled column key, so the column position is ``q / 2``; tiles
@@ -137,9 +148,49 @@ def _tile_index(q: np.ndarray, r: np.ndarray, tile_span: float) -> tuple[np.ndar
     return tx, ty
 
 
-def _build_level(level: int, coords: np.ndarray, ids: np.ndarray, radius: float, tile_span: float) -> list[Tile]:
-    """Aggregate *coords* into hexes at one *level* and group them into tiles."""
-    q, r = hexbin_assign(coords, radius)
+def _square_tile_index(q: np.ndarray, r: np.ndarray, tile_span: float) -> tuple[np.ndarray, np.ndarray]:
+    """Map square keys to integer tile coords ``(tx, ty)``.
+
+    ``q`` is the plain column key (no doubling), so the column position is
+    ``q``; tiles bin ``tile_span`` square columns/rows each.
+    """
+    tx = np.floor(q / tile_span).astype(np.int64)
+    ty = np.floor(r / tile_span).astype(np.int64)
+    return tx, ty
+
+
+@dataclass(frozen=True)
+class _BinGeometry:
+    """The lattice-specific functions a pyramid build needs for one bin shape."""
+
+    assign: Callable[[np.ndarray, float], tuple[np.ndarray, np.ndarray]]
+    center: Callable[[Any, Any, float], tuple[np.ndarray, np.ndarray]]
+    tile_index: Callable[[np.ndarray, np.ndarray, float], tuple[np.ndarray, np.ndarray]]
+
+
+_GEOMETRIES: dict[str, _BinGeometry] = {
+    "hex": _BinGeometry(assign=hexbin_assign, center=hex_center, tile_index=_hex_tile_index),
+    "square": _BinGeometry(assign=squarebin_assign, center=square_center, tile_index=_square_tile_index),
+}
+
+
+def _geometry_for(bin_shape: str) -> _BinGeometry:
+    try:
+        return _GEOMETRIES[bin_shape]
+    except KeyError:
+        raise ValueError(f"unknown bin_shape {bin_shape!r}; expected one of {tuple(_GEOMETRIES)}") from None
+
+
+def _build_level(
+    level: int,
+    coords: np.ndarray,
+    ids: np.ndarray,
+    radius: float,
+    tile_span: float,
+    geom: _BinGeometry,
+) -> list[Tile]:
+    """Aggregate *coords* into cells at one *level* and group them into tiles."""
+    q, r = geom.assign(coords, radius)
     keys = np.stack([q, r], axis=1)
     uniq, inverse = np.unique(keys, axis=0, return_inverse=True)
     inverse = inverse.ravel()
@@ -152,8 +203,8 @@ def _build_level(level: int, coords: np.ndarray, ids: np.ndarray, radius: float,
     order = np.argsort(inverse, kind="stable")
     seg_starts = np.cumsum(counts) - counts
 
-    centers_x, centers_y = hex_center(uniq[:, 0], uniq[:, 1], radius)
-    tx_all, ty_all = _tile_index(uniq[:, 0], uniq[:, 1], tile_span)
+    centers_x, centers_y = geom.center(uniq[:, 0], uniq[:, 1], radius)
+    tx_all, ty_all = geom.tile_index(uniq[:, 0], uniq[:, 1], tile_span)
 
     tiles: dict[tuple[int, int], list[HexCell]] = {}
     for h in range(n_hexes):
@@ -178,14 +229,22 @@ def _build_level(level: int, coords: np.ndarray, ids: np.ndarray, radius: float,
 def build_pyramid(
     projection: Projection,
     *,
+    bin_shape: str = DEFAULT_BIN_SHAPE,
     n_levels: int | None = None,
     base_cols: float = 6.0,
     base_radius: float | None = None,
     tile_span: float = 16.0,
 ) -> Pyramid:
-    """Build the hex-tile :class:`Pyramid` for a frozen *projection*.
+    """Build the tile :class:`Pyramid` for a frozen *projection*.
 
-    Zoom levels are produced ``z = 0 … L-1``, each halving the hex radius.
+    *bin_shape* selects the lattice: ``"hex"`` (default, d3-hexbin) or
+    ``"square"`` (rectangular grid).  Both share the per-level ``radius``
+    scale, the pyramid structure, and every tunable knob below; only the
+    point→cell assignment and cell geometry differ.  Re-binning the same
+    projection under the other shape is the cheap operation that backs the
+    Browse hex/square toggle (no re-fit of UMAP).
+
+    Zoom levels are produced ``z = 0 … L-1``, each halving the cell radius.
 
     - **Auto depth (default, ``n_levels=None``):** descend until every occupied
       hex holds a single clip, so the deepest level resolves the dataset to
@@ -210,6 +269,7 @@ def build_pyramid(
     if n_levels is not None and n_levels < 1:
         raise ValueError(f"n_levels must be >= 1, got {n_levels}")
 
+    geom = _geometry_for(bin_shape)
     coords = np.ascontiguousarray(projection.coords, dtype=np.float64)
     ids = np.asarray(projection.ids, dtype=np.int64)
     bounds = projection.bounds
@@ -228,7 +288,7 @@ def build_pyramid(
         if coords.shape[0] == 0:
             levels.append(LevelMeta(level=level, radius=radius, n_cells=0))
             continue
-        level_tiles = _build_level(level, coords, ids, radius, tile_span)
+        level_tiles = _build_level(level, coords, ids, radius, tile_span, geom)
         n_cells = sum(len(t.cells) for t in level_tiles)
         levels.append(LevelMeta(level=level, radius=radius, n_cells=n_cells))
         for t in level_tiles:
@@ -256,6 +316,7 @@ def build_pyramid(
         point_count=int(coords.shape[0]),
         levels=levels,
         tiles=tiles,
+        bin_shape=bin_shape,
     )
 
 

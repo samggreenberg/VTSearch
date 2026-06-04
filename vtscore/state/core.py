@@ -278,9 +278,12 @@ class DatasetContext:
         # we don't rebuild a 10k-row matrix per call.
         "_emb_matrix_ids",
         "_emb_matrix",
-        # VTSBrowse: cached projection + pyramid (frozen at ingest).
+        # VTSBrowse: cached projection (frozen at ingest) + per-bin-shape
+        # pyramids derived from it. The projection (UMAP coords) is shared
+        # across bin shapes; ``_pyramids`` maps "hex"/"square" -> Pyramid so the
+        # browse hex/square toggle can keep both binnings cached at once.
         "_projection",
-        "_pyramid",
+        "_pyramids",
     )
 
     def __init__(self, dataset_id: str = "") -> None:
@@ -291,7 +294,7 @@ class DatasetContext:
         self._emb_matrix_ids: list[int] | None = None
         self._emb_matrix: Any = None  # np.ndarray | None
         self._projection: Any = None  # Projection | None
-        self._pyramid: Any = None  # Pyramid | None
+        self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
 
 
 class DetectorContext:

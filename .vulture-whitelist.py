@@ -137,6 +137,7 @@ get_autopilot_resort_interval  # noqa: F821
 get_browse_minimap_visible  # noqa: F821
 get_browse_minimap_width  # noqa: F821
 get_browse_minimap_height  # noqa: F821
+get_browse_bin_shape  # noqa: F821
 set_dataset_max_age_days  # noqa: F821
 
 # ---------------------------------------------------------------------------

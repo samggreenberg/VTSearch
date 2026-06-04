@@ -388,6 +388,50 @@ hard part — invalidating live caches when a projection changes underneath
 them — simply does not arise, because projections don't change underneath
 anyone.
 
+### Bin shape (hex/square)
+
+Not everyone likes hexagons.  The pyramid can tile the projection as either
+**hexagons** (the default d3-hexbin lattice) or **squares**, and the browse
+canvas exposes a toggle to switch between them.  The design keeps this cheap by
+factoring binning out of the rest of the pipeline:
+
+- **The UMAP layout is shape-independent and computed once.**  Hex and square
+  are two *binnings* of the same frozen `(N, 2)` coordinates, so switching only
+  re-bins (an O(N·levels) NumPy pass), never re-fits UMAP.  Both binnings carry
+  the **same `projection_id`**.
+- **`build_pyramid(projection, *, bin_shape=...)`** dispatches the three
+  lattice-specific operations — point→cell `assign`, cell `center`, and
+  `tile_index` — through a small `_BinGeometry` record selected by `bin_shape`
+  (`"hex"` | `"square"`).  The square lattice uses a cell side of `radius·√3`
+  (the hex column spacing) so a square and a hexagon at the same pyramid level
+  share the renderer's level-of-detail picker and have a comparable on-screen
+  footprint.  Every other knob (`base_radius`, `tile_span`, auto-depth) is
+  shared.
+- **The pyramid records its `bin_shape`** (in the dataclass, in `meta()`, and in
+  the persisted JSON), so a loaded projection always knows which lattice it was
+  binned with.  Containers written before the toggle have no `bin_shape` and are
+  hex by construction, so they default to hex.
+- **Persistence is per-shape.**  Each binning is stored in its own ZIP entry —
+  `projection.npz` for hex (unchanged legacy name) and `projection_{shape}.npz`
+  for the rest — sharing the coordinates (a small duplication next to the tile
+  JSON).  Hex and square coexist in one container; appending one leaves the
+  other intact.
+- **The context caches both.**  `DatasetContext._pyramids` maps `bin_shape →
+  Pyramid`, so toggling back and forth within a session is instant after the
+  first build of each shape.  Hex is built at ingest (the projection-at-creation
+  stage); square is derived lazily on first toggle, then cached and persisted.
+- **The HTTP surface is shape-keyed.**  `POST /api/projection/build` takes
+  `{"shape": ...}`, `GET /api/projection/meta?shape=...` reports that shape's
+  status/metadata (including `bin_shape`), and tiles move to
+  `GET /api/projection/tiles/<shape>/<level>/<tx>/<ty>`.  The client tile cache
+  keys on shape too, so both binnings stay cached side by side under the one
+  shared `projection_id`.
+- **Every other control is shape-agnostic.**  Pan, zoom, on-screen cell size,
+  the minimap, and hover all run off the shared `radius`/`tile_span` metadata
+  and a shared `BinGeometry`, so they work identically in either mode.  Toggling
+  preserves the current pan/zoom: because the projection id is unchanged, the
+  canvas re-bins in place instead of re-framing to data.
+
 ### Stage 3 — Canvas renderer (client-side, **Canvas 2D**)
 
 - **Transform model.** Maintain a projection-space <-> screen-space affine
@@ -443,6 +487,7 @@ anyone.
 | Sibling highlight | **On hover** | Hovering an item highlights the other items from the same source file wherever they fall on the canvas. Requires a per-point source-file group id; see *§Interaction model*. |
 | UMAP seeding | **Unseeded (fast)** | No `random_state`; numba parallelism stays on. Safe only because the projection is frozen at ingest, so the fit never re-runs for a given dataset. |
 | Projection lifetime | **Frozen at ingest, persisted** | UMAP + pyramid computed once and stored with the dataset artifact (carve-out from "No Persisted Vectors/MLPs"; covers 2D coords + pyramid only). Never recomputed; legacy datasets compute-once on first open. Dissolves tile-cache invalidation. |
+| Bin shape | **Hex (default) or square, user-toggleable** | The projection can be tiled as hexagons or squares. The UMAP layout is shape-independent and shared; switching only re-bins the frozen coords (no re-fit). Each binning is its own `Pyramid` (carrying `bin_shape`), cached per-shape on the context and persisted in its own container entry (`projection.npz` for hex, `projection_{shape}.npz` for square). See *§Bin shape (hex/square)*. |
 
 ### Notes on frontend integration
 
@@ -714,6 +759,37 @@ and available to any future consumer of `vtscore`.
   - Enforcement: loading an expired dataset returns HTTP 410 and
     auto-unregisters it; listing datasets filters and auto-unregisters
     expired entries.
+
+- **Hex/square bin-shape toggle.** The browse canvas can tile the projection as
+  hexagons (default) or squares; a segmented toggle in the top-right control
+  cluster switches between them and the choice persists in the
+  `browse_bin_shape` server setting.
+  - Backend: new `vtscore/projection/squarebin.py` (`squarebin_assign` /
+    `square_center`, square side `radius·√3`); `build_pyramid(..., bin_shape=)`
+    dispatches assign/center/tile-index through a `_BinGeometry` record and the
+    `Pyramid` carries a `bin_shape` field (surfaced in `meta()` and the
+    persisted JSON).  `BIN_SHAPES` / `DEFAULT_BIN_SHAPE` exported from
+    `vtscore.projection`.
+  - Persistence: `container.append_projection` / `read_projection` store each
+    shape in its own entry (`projection.npz` for hex, `projection_{shape}.npz`
+    otherwise), sharing coords; both shapes coexist in one container.
+  - State: `DatasetContext._pyramid` became `_pyramids: dict[bin_shape ->
+    Pyramid]`; `clear_medias` empties it.
+  - Routes: `build` takes `{"shape"}`, `meta` takes `?shape=`, tiles move to
+    `/api/projection/tiles/<shape>/<level>/<tx>/<ty>`.  When the shared layout
+    already exists, a new shape is re-binned inline and returned `ready` (no
+    UMAP); only the first build of a dataset runs UMAP in the background.
+  - Frontend: shared `bin-geometry.ts` (`BinGeometry` for hex/square: grid
+    spacing, cell tracing, hit-test predicate) drives both the canvas and the
+    minimap; toggling preserves pan/zoom (same `projection_id` → re-bin in
+    place); `TileCacheService` keys tiles by shape so both binnings cache side
+    by side.
+  - Setting: `browse_bin_shape` (`"hex"` | `"square"`, default hex), persisted
+    like the minimap prefs (not a Settings-modal widget — driven by the canvas
+    toggle).
+  - Tests: `tests_lib/projection/test_squarebin.py`, square cases in
+    `test_pyramid.py` / `test_persistence.py`, and `TestBinShapeToggle` in
+    `tests/api/test_projection.py`.
 
 ## Open follow-ups
 

@@ -1,3 +1,6 @@
+/** How the projection pyramid tiles the 2-D layout. */
+export type BinShape = 'hex' | 'square';
+
 export interface HexCellPayload {
   q: number;
   r: number;
@@ -22,6 +25,8 @@ export interface LevelMeta {
 
 export interface ProjectionMeta {
   projection_id: string;
+  /** Which lattice this metadata's pyramid was binned with. */
+  bin_shape?: BinShape;
   bounds: [number, number, number, number];
   base_radius: number;
   tile_span: number;

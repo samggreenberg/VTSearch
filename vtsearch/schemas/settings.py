@@ -65,6 +65,7 @@ class AppSettingsSchema(Schema):
     browse_minimap_visible = fields.Boolean()
     browse_minimap_width = fields.Integer()
     browse_minimap_height = fields.Integer()
+    browse_bin_shape = fields.String()
 
     # Per-user, per-media-type
     view_mode_left = _PerMediaTypeStringDict()
@@ -174,6 +175,7 @@ class SettingsUpdateSchema(Schema):
     browse_minimap_visible = fields.Boolean()
     browse_minimap_width = fields.Integer()
     browse_minimap_height = fields.Integer()
+    browse_bin_shape = fields.String()
 
     autorun_detectors = fields.List(fields.String())
 

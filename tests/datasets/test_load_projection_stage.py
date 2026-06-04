@@ -81,14 +81,14 @@ class TestBuildProjectionStage:
 
         assert ctx._projection is not None
         assert ctx._projection.projection_id == "fake-pid"
-        assert ctx._pyramid is not None
-        assert ctx._pyramid.projection_id == "fake-pid"
+        assert ctx._pyramids.get("hex") is not None
+        assert ctx._pyramids["hex"].projection_id == "fake-pid"
         mock_persist.assert_called_once()
         # dataset_id and the freshly-built artifacts are forwarded for persistence.
         args = mock_persist.call_args.args
         assert args[0] == "ds-123"
         assert args[1] is ctx._projection
-        assert args[2] is ctx._pyramid
+        assert args[2] is ctx._pyramids["hex"]
 
     def test_empty_dataset_is_noop(self):
         ctx = DatasetContext("proj_stage_empty")
@@ -99,7 +99,7 @@ class TestBuildProjectionStage:
             _build_projection_stage(ctx, _make_tracker(), "ds-empty")
 
         assert ctx._projection is None
-        assert ctx._pyramid is None
+        assert ctx._pyramids == {}
         mock_fit.assert_not_called()
         mock_persist.assert_not_called()
 

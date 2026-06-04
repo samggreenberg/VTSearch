@@ -19,7 +19,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
-import type { ProjectionMeta } from '../../models/projection.models';
+import type { BinShape, ProjectionMeta } from '../../models/projection.models';
 
 @Component({
   selector: 'vt-browse-view',
@@ -58,6 +58,14 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   private readonly HEX_SCALES = [0.5, 0.7, 1, 1.5, 2.2, 3];
   hexScaleIndex = 2;
+
+  /**
+   * Which lattice the projection is tiled with. Mirrored from the persisted
+   * ``browse_bin_shape`` setting and flipped by the hex/square toggle. Switching
+   * re-bins the (shared, frozen) UMAP layout — it never re-fits UMAP — and keeps
+   * the canvas mounted so pan/zoom survive the switch.
+   */
+  binShape: BinShape = 'hex';
 
   /** Overview minimap show/hide + size, mirrored from the settings set. */
   minimapVisible = true;
@@ -103,8 +111,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           MINIMAP_MAX_HEIGHT,
         );
       }
+      const shape: BinShape = settings.browse_bin_shape === 'square' ? 'square' : 'hex';
+      if (shape !== this.binShape) this.switchBinShape(shape, false);
     });
     this.settingsState.load();
+    this.tileCache.setBinShape(this.binShape);
 
     this.datasetsRegistryApi
       .getStatus()
@@ -175,7 +186,67 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     return Math.max(lo, Math.min(hi, value));
   }
 
-  /** Zoom in one step (narrower span, hexes keep their display size). */
+  /** Switch the bin shape from the toggle, persisting the choice. */
+  setBinShape(shape: BinShape): void {
+    this.switchBinShape(shape, true);
+  }
+
+  /**
+   * Re-resolve the projection for *shape*. When a projection is already on
+   * screen this re-bins in place (canvas stays mounted, pan/zoom preserved);
+   * otherwise it falls back to the normal load path. *persist* writes the
+   * choice to settings (true for the toggle, false when mirroring settings).
+   */
+  private switchBinShape(shape: BinShape, persist: boolean): void {
+    if (shape === this.binShape) return;
+    this.binShape = shape;
+    this.tileCache.setBinShape(shape);
+    if (persist) this.settingsState.update({ browse_bin_shape: shape }).subscribe();
+    if (this.status === 'ready') {
+      this.ensureShape();
+    } else {
+      this.loadProjection();
+    }
+  }
+
+  /**
+   * Ensure the current bin shape's pyramid exists, then swap in its meta
+   * without leaving the ``ready`` state — so the canvas is never torn down and
+   * the user's pan/zoom carry across the toggle. The shared UMAP layout is
+   * reused, so the build call returns ready after a quick re-bin.
+   */
+  private ensureShape(): void {
+    this.projectionApi
+      .build(this.binShape)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          if (resp.status === 'ready') {
+            this.projectionApi
+              .getMeta(this.binShape)
+              .pipe(takeUntil(this.destroy$))
+              .subscribe({
+                next: (meta) => this.applyMeta(meta),
+                error: () => this.loadProjection(),
+              });
+          } else {
+            // Rare: this shape needs a full UMAP fit (no shared layout yet).
+            this.status = 'building';
+            this.buildProgress = 0;
+            this.buildTotal = 0;
+            this.buildMessage = '';
+            this.pollBuildStatus();
+          }
+        },
+        error: (err) => {
+          this.status = 'error';
+          this.errorMessage =
+            err?.error?.message || err?.error?.error || 'Failed to switch bin shape';
+        },
+      });
+  }
+
+  /** Zoom in one step (narrower span, cells keep their display size). */
   zoomIn(): void {
     this.canvas?.zoomBy(this.ZOOM_BUTTON_FACTOR);
   }
@@ -191,7 +262,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.buildTotal = 0;
     this.buildMessage = '';
     this.projectionApi
-      .build()
+      .build(this.binShape)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (resp) => {
@@ -214,7 +285,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.status = 'loading';
     this.polling = false;
     this.projectionApi
-      .getMeta()
+      .getMeta(this.binShape)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (meta) => this.applyMeta(meta),
@@ -266,7 +337,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.pollErrors = 0;
     const poll = (): void => {
       this.projectionApi
-        .getMeta()
+        .getMeta(this.binShape)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (meta) => {
