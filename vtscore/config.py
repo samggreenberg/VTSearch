@@ -62,31 +62,12 @@ def resolve_device() -> str:
         return "cpu"
 
 
-def _parse_server_roots(value: str | None) -> tuple[Path, ...]:
-    """Parse ``VTSEARCH_SERVER_ROOTS`` into a tuple of resolved Paths.
-
-    Splits on :data:`os.pathsep` (``:`` on Unix, ``;`` on Windows).  Empty
-    segments are ignored.  When the env var is unset or empty the tuple
-    contains a single entry (``Path.cwd()`` at import time) which
-    reproduces the historical "anything under CWD" behaviour exactly.
-    """
-    if not value:
-        return (Path.cwd().resolve(),)
-    roots: list[Path] = []
-    for segment in value.split(os.pathsep):
-        segment = segment.strip()
-        if segment:
-            roots.append(Path(segment).resolve())
-    return tuple(roots) if roots else (Path.cwd().resolve(),)
-
-
-# Allowed roots for the server file browser and server-path importers/exporters.
-# In single-user mode these define the directories the user is permitted to
-# read from and write to via the API.  The first entry is the default browse
-# root (what ``/api/browse`` shows when no ``path`` parameter is provided).
-# Multi-user mode is unaffected; each user is still confined to their own
-# ``data/<username>/`` subtree regardless of this setting.
-SERVER_ROOTS: tuple[Path, ...] = _parse_server_roots(os.environ.get("VTSEARCH_SERVER_ROOTS"))
+# Server-side file access is governed by the active login provider, not a
+# configurable allow-list.  In single-user / no-auth mode the lone trusted user
+# may read from and write to any server-readable path (server-path importers,
+# exporters, and the file browser are unrestricted).  In multi-user mode each
+# user is confined to their own ``data/<username>/`` subtree.  See
+# :func:`vtscore.security.path_validation.get_file_access_base_dir`.
 
 # Maximum size (in megabytes) accepted for a single HTTP request body.  Wired
 # into Flask's ``MAX_CONTENT_LENGTH`` config in ``app.py``.  ``0`` (the

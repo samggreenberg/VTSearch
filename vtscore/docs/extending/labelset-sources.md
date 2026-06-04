@@ -112,9 +112,11 @@ filepath = filepath.replace("{detector_name}", sanitize_template_value(name))
 ```
 
 When resolving paths in `load()` / `save()`, also call
-`validate_server_filepath(filepath)` so the final resolved path stays
-inside `SERVER_ROOTS`. The built-in server-JSON source's
-`resolve_filepath_for()` helper is a useful pattern to copy.
+`validate_server_filepath(filepath, base_dir=get_file_access_base_dir())`
+so the final resolved path stays inside the current user's data directory
+in multi-user mode (single-user / no-auth mode is unrestricted). The
+built-in server-JSON source's `resolve_filepath_for()` helper is a useful
+pattern to copy.
 
 ## Circular-trigger prevention (`_syncing` guard)
 

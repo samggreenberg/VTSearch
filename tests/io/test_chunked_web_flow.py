@@ -15,23 +15,13 @@ Three pieces:
 """
 
 import io
-from pathlib import Path
 from typing import Any, Iterator
 from unittest.mock import patch
 
 import numpy as np
-import pytest
 
 from vtscore.datasets.importers.base import DatasetImporter, ImporterField
 from vtscore.datasets.load_pipeline import auto_chunk_size, consume_chunks_into
-
-
-@pytest.fixture(autouse=True)
-def _permissive_server_roots(monkeypatch):
-    """server_folder's ``path`` field is now validated against SERVER_ROOTS.
-    These tests use dummy absolute paths purely to exercise route→pipeline
-    wiring, so widen the allowed roots to the filesystem root."""
-    monkeypatch.setattr("vtscore.config.SERVER_ROOTS", (Path("/"),))
 
 
 # ===========================================================================

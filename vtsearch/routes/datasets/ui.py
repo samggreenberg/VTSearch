@@ -285,13 +285,10 @@ def _resolve_browse_root(source: str) -> Path | None:
 
         base = get_file_access_base_dir()
         if base is None:
-            # Single-user mode: confine the picker to the configured server
-            # root rather than the filesystem root, so browsing/detection
-            # reject out-of-root folders the same way the importer does on
-            # load. SERVER_ROOTS[0] is the primary root, matching /api/browse.
-            from vtscore.config import SERVER_ROOTS  # noqa: PLC0415
-
-            return SERVER_ROOTS[0]
+            # Single-user / no-auth mode: root the picker at the filesystem
+            # root so the user can browse to any folder, matching the
+            # unrestricted server_folder import validation.
+            return Path("/")
         return base.resolve()
 
     return None
@@ -300,11 +297,10 @@ def _resolve_browse_root(source: str) -> Path | None:
 def _default_browse_path() -> str:
     """Initial relative sub-path the browse picker opens at.
 
-    Always the root itself (``""``). Every browse source now resolves to a
-    meaningful directory (a demo folder, the saved-datasets dir, or the
-    configured server root), so there is nothing to skip past; the old
-    ``server_fs`` home-directory shortcut only existed to save clicks when
-    the picker was rooted at the filesystem root ``/``.
+    Always the root itself (``""``). Every browse source resolves to a
+    meaningful directory (a demo folder, the saved-datasets dir, the user's
+    data dir in multi-user mode, or the filesystem root in single-user mode),
+    so there is nothing to skip past.
     """
     return ""
 

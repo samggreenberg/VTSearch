@@ -138,9 +138,9 @@ export class DatasetImporterModalComponent implements OnInit {
 
   // Server folder picker state. The user types or browses to an absolute
   // server path, stored verbatim in ``sfFolderPath``. It is sent to the
-  // detection / submit endpoints as-is; the backend resolves it against the
-  // configured server root and rejects anything outside, so the picker and
-  // the importer agree on what is in-bounds.
+  // detection / submit endpoints as-is. In single-user / no-auth mode the
+  // backend accepts any server-readable path; in multi-user mode it confines
+  // to the user's data dir and rejects anything outside.
   sfFolderPath = '';
   sfBrowseError = '';
   sfMediaType = '';
@@ -1609,8 +1609,8 @@ export class DatasetImporterModalComponent implements OnInit {
       return;
     }
     // Keep the typed value as an absolute server path (trailing slash
-    // trimmed). The backend resolves it against the configured server root
-    // and rejects anything outside.
+    // trimmed). The backend accepts any path in single-user mode and confines
+    // to the user's data dir in multi-user mode.
     this.sfFolderPath = raw.replace(/\/+$/, '') || '/';
     this.sfBrowseError = '';
     if (!this.sfDatasetNameDirty) {

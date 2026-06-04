@@ -155,9 +155,10 @@ _ALL_MEDIA_TYPES = _all_types()
 def _allow_test_tmp_paths(monkeypatch):
     """Allow tests to use system temp dirs with server file-path validation.
 
-    In production, ``validate_server_filepath`` restricts paths to
-    ``Path.cwd()``.  During tests, temp files live in the system temp
-    directory, so we widen the check to also accept that tree.
+    With ``base_dir=None`` (single-user / no-auth mode) ``validate_server_filepath``
+    is already unrestricted, so system temp paths pass unchanged.  This wrapper
+    only matters for the ``base_dir=None`` path historically; when a specific
+    ``base_dir`` is given (e.g. multi-user mode) the restriction is honoured.
     """
     import tempfile
     from pathlib import Path
@@ -170,10 +171,8 @@ def _allow_test_tmp_paths(monkeypatch):
         try:
             return _original(filepath_str, base_dir)
         except ValueError:
-            # Also allow the system temp directory (where pytest tmp_path lives),
-            # but only when base_dir was not explicitly set (i.e. only for the
-            # default CWD fallback).  When a specific base_dir is given (e.g. in
-            # multi-user mode) we must honour that restriction.
+            # When a specific base_dir is given (multi-user mode) we must honour
+            # that restriction; only widen for the unrestricted default case.
             if base_dir is not None:
                 raise
             return _original(filepath_str, Path(tempfile.gettempdir()))

@@ -29,21 +29,21 @@ form.
 
 | Function | Description |
 |----------|-------------|
-| `get_file_access_base_dir() -> Path \| None` | Resolve the per-user base directory; `None` in single-user mode |
-| `validate_server_filepath(filepath_str, base_dir=None) -> Path` | Resolve and assert containment; raises on escape |
+| `get_file_access_base_dir() -> Path \| None` | Resolve the per-user base directory; `None` (unrestricted) in single-user mode |
+| `validate_server_filepath(filepath_str, base_dir=None) -> Path` | Resolve and (when `base_dir` is given) assert containment; raises on escape |
 | `sanitize_template_value(value) -> str` | Replace path separators / `..` tokens with `_` |
 | `rglob_follow_symlinks(root, pattern) -> list[Path]` | `Path.rglob`-equivalent that descends into symlinked directories |
 | `glob_top_level(root, pattern) -> list[Path]` | Non-recursive variant; direct children of `root` only |
 
 ### `get_file_access_base_dir()`
 
-In single-user mode (`DefaultLoginProvider`) it returns `None`, which
-causes `validate_server_filepath` to fall back to
-`vtscore.config.SERVER_ROOTS[0]` - typically `Path.cwd()`, configurable
-via `VTSEARCH_SERVER_ROOTS`. In multi-user mode it returns the current
-user's data directory so each user is confined to their own
-`data/<username>/` subtree. This is the only function in the package
-that imports `vtsearch.auth`.
+In single-user / no-auth mode (`DefaultLoginProvider`) it returns `None`,
+which tells `validate_server_filepath` to apply **no** confinement: the
+lone trusted user may read from and write to any server-readable path.
+There is no per-user boundary to protect, so the app does not impose one.
+In multi-user mode it returns the current user's data directory so each
+user is confined to their own `data/<username>/` subtree. This is the only
+function in the package that imports `vtsearch.auth`.
 
 ### `validate_server_filepath(filepath_str, base_dir=None)`
 
@@ -54,12 +54,16 @@ resolved = validate_server_filepath(user_supplied_path, get_file_access_base_dir
 # resolved is the canonical Path; reading from it is safe
 ```
 
-Contract: relative paths resolve against `base_dir`, absolute are used
-as-is, `Path.resolve()` is called (follows symlinks, normalises `..`),
-and `resolved.relative_to(base_resolved)` is checked - if it raises
+Contract: when `base_dir` is `None` (the single-user / no-auth case) the
+path is **unrestricted** - relative paths resolve against the process CWD,
+absolute paths are used as-is, and the canonical `Path.resolve()` is
+returned with no containment check. When `base_dir` is a path (multi-user)
+relative paths resolve against it, absolute are used as-is, `Path.resolve()`
+is called (follows symlinks, normalises `..`), and
+`resolved.relative_to(base_resolved)` is checked - if it raises
 `ValueError`, the path escaped and we re-raise. Symlinks are followed
-during resolution, so a symlinked file inside `base_dir` whose target
-is outside is rejected.
+during resolution, so a symlinked file inside `base_dir` whose target is
+outside is rejected.
 
 ### `sanitize_template_value(value)`
 

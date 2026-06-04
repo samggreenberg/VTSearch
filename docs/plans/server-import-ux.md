@@ -1,6 +1,14 @@
 # Server / Services dataset-import UX
 
-Status: **Phase 1 shipped.** Came out of a hands-on audit of the three real-world
+Status: **Phase 1 shipped.** Single-user path confinement (item 1 below) was
+later **reversed**: in single-user / no-auth mode server-path import, export,
+and browse are now unrestricted (the lone trusted user may reach any
+server-readable path), and `SERVER_ROOTS` / `VTSEARCH_SERVER_ROOTS` were
+removed. Multi-user per-user confinement is unchanged. The "Browse-root vs.
+import-root seam" follow-up below is therefore moot for single-user mode
+(browse is now rooted at `/`, matching the unrestricted import validation).
+
+Came out of a hands-on audit of the three real-world
 import paths (Services extension plugin, server folder, server file with
 pre-computed vectors), driving the live UI. The Demo importer is well-trodden;
 these three are what real deployments use and were comparatively rough.

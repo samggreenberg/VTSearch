@@ -122,22 +122,27 @@ The interpolation helper lives at
 substitution to a user-supplied path string. Don't roll your own
 regex - `resolve_export_filepath` also sanitises substituted values
 via `sanitize_template_value` so a malicious `{detector_name}`
-containing `../` can't escape the configured `SERVER_ROOTS`.
+containing `../` can't escape the per-user data directory in
+multi-user mode.
 
 ## Server-path and URL validation
 
 Any exporter that accepts a file path **must** validate it through
 `vtscore.security.validate_server_filepath`
-([`vtscore/security/path_validation.py:35`](../../security/path_validation.py)).
-This refuses paths that resolve outside the configured
-`SERVER_ROOTS` (defaulting to the process CWD, overridable via
-`VTSEARCH_SERVER_ROOTS`):
+([`vtscore/security/path_validation.py`](../../security/path_validation.py)),
+passing the active base dir from `get_file_access_base_dir()`. In
+multi-user mode this confines the path to the current user's data
+directory; in single-user / no-auth mode the base dir is `None` and the
+path is unrestricted:
 
 ```python
-from vtscore.security.path_validation import validate_server_filepath
+from vtscore.security.path_validation import (
+    get_file_access_base_dir,
+    validate_server_filepath,
+)
 
-path = validate_server_filepath(field_values["filepath"])
-# Raises ValueError if outside SERVER_ROOTS - let it propagate.
+path = validate_server_filepath(field_values["filepath"], base_dir=get_file_access_base_dir())
+# Raises ValueError if it escapes the user's data dir (multi-user) - let it propagate.
 ```
 
 Any exporter that makes an outbound HTTP request **must** validate
