@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gc
 import hashlib
+import logging
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -16,6 +17,8 @@ from vtscore.datasets.loader import (
     ProgressCallback,
 )
 from vtscore.embedding.normalize import l2_normalize
+
+logger = logging.getLogger(__name__)
 
 
 def _read_pickle_dataset(file_path: Path) -> dict[str, Any]:
@@ -368,17 +371,28 @@ def load_dataset_from_pickle_chunked(
             yield chunk_medias
 
 
-def read_pkl_clipper(pkl_path: Path) -> str | None:
-    """Return the clipper name from the container's ``meta.json``."""
+def _read_pkl_meta_safe(pkl_path: Path) -> dict[str, Any]:
+    """Read a container's ``meta.json``, returning ``{}`` if it can't be read.
+
+    A cached ``.pkl`` may be corrupt, truncated, or a legacy non-zip pickle.
+    The demo catalog reads metadata from every cached file to report each
+    demo's embedder/clipper, so one unreadable file must not raise and take
+    down the whole listing — it degrades to "metadata unknown" instead.
+    """
     from vtscore.datasets.container import read_meta
 
-    meta = read_meta(pkl_path)
-    return meta.get("clipper") or None
+    try:
+        return read_meta(pkl_path)
+    except Exception:
+        logger.warning("Could not read container metadata from %s; treating as unknown", pkl_path, exc_info=True)
+        return {}
+
+
+def read_pkl_clipper(pkl_path: Path) -> str | None:
+    """Return the clipper name from the container's ``meta.json``, or ``None`` if unreadable."""
+    return _read_pkl_meta_safe(pkl_path).get("clipper") or None
 
 
 def read_pkl_embedder(pkl_path: Path) -> str | None:
-    """Return the embedder name from the container's ``meta.json``."""
-    from vtscore.datasets.container import read_meta
-
-    meta = read_meta(pkl_path)
-    return meta.get("embedder") or None
+    """Return the embedder name from the container's ``meta.json``, or ``None`` if unreadable."""
+    return _read_pkl_meta_safe(pkl_path).get("embedder") or None

@@ -396,6 +396,35 @@ class TestDemoDatasetReadiness:
             except OSError:
                 pass
 
+    def test_corrupt_cached_pkl_does_not_crash_demo_list(self, client):
+        """A corrupt cached pkl must not 500 the catalog; it degrades to unknown metadata.
+
+        Regression: ``read_pkl_embedder`` used to raise ``BadZipFile`` on a non-zip
+        file, and that unhandled exception 500'd ``GET /api/dataset/demo-list``
+        entirely — one bad cache file blanked the whole demo listing. The demo is
+        still listed; its embedder just reports empty.
+        """
+        from vtscore.config import EMBEDDINGS_DIR
+
+        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
+        # Not a zip container — what a truncated download or legacy raw pickle
+        # looks like on disk.
+        pkl_file.write_bytes(b"\x80\x05not-a-zip-container")
+        try:
+            resp = client.get("/api/dataset/demo-list")
+            assert resp.status_code == 200, "one corrupt cache file must not 500 the whole catalog"
+            data = resp.get_json()
+            ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
+            assert ds is not None, "the demo is still listed despite an unreadable cache file"
+            assert ds["pkl_embedder"] == "", "unreadable cache degrades to empty embedder, not an exception"
+        finally:
+            pkl_file.unlink(missing_ok=True)
+            try:
+                EMBEDDINGS_DIR.rmdir()
+            except OSError:
+                pass
+
     def test_audio_pkl_with_empty_esc50_shows_needs_download(self, client):
         """Audio pkl exists and ESC-50 audio dir exists but is empty → needs_download."""
         import pickle
