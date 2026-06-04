@@ -569,3 +569,64 @@ class TestServerSettingsReadOnly:
             assert res.get_json()["hidden_plugins"] == {}
         finally:
             settings_mod.set_cli_hidden_plugins(None)
+
+
+class TestBrowserSettings:
+    """Per-media-type VTSBrowse prefs: bin shape, colormap, and cell size."""
+
+    def test_update_browse_bin_shape_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_bin_shape": {"audio": "square", "image": "hex"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_bin_shape"]["audio"] == "square"
+        assert data["browse_bin_shape"]["image"] == "hex"
+
+        # Persisted, and a second key write merges rather than clobbers.
+        res2 = client.put("/api/settings", json={"browse_bin_shape": {"audio": "square", "video": "square"}})
+        assert res2.get_json()["browse_bin_shape"]["video"] == "square"
+        assert client.get("/api/settings").get_json()["browse_bin_shape"]["audio"] == "square"
+
+    def test_update_browse_bin_shape_invalid(self, client):
+        res = client.put("/api/settings", json={"browse_bin_shape": {"audio": "triangle"}})
+        assert res.status_code == 400
+
+    def test_update_browse_colormap_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_colormap": {"audio": "ocean", "image": "heat"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_colormap"]["audio"] == "ocean"
+        assert data["browse_colormap"]["image"] == "heat"
+        assert client.get("/api/settings").get_json()["browse_colormap"]["audio"] == "ocean"
+
+    def test_update_browse_colormap_invalid(self, client):
+        res = client.put("/api/settings", json={"browse_colormap": {"audio": "rainbow"}})
+        assert res.status_code == 400
+
+    def test_update_browse_icon_size_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_icon_size": {"audio": "XL", "image": "XS"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_icon_size"]["audio"] == "XL"
+        assert data["browse_icon_size"]["image"] == "XS"
+
+    def test_update_browse_icon_size_is_uppercased(self, client):
+        # Mirrors grid_icon_size: lowercase input is normalised to the enum.
+        res = client.put("/api/settings", json={"browse_icon_size": {"audio": "l"}})
+        assert res.status_code == 200
+        assert res.get_json()["browse_icon_size"]["audio"] == "L"
+
+    def test_update_browse_icon_size_invalid(self, client):
+        res = client.put("/api/settings", json={"browse_icon_size": {"audio": "huge"}})
+        assert res.status_code == 400
+
+    def test_get_settings_includes_browser_prefs(self, client):
+        data = client.get("/api/settings").get_json()
+        # Present as (possibly empty) dicts so the frontend can index by type.
+        for key in ("browse_bin_shape", "browse_colormap", "browse_icon_size"):
+            assert key in data
+            assert isinstance(data[key], dict)
+
+    def test_defaults_have_empty_browser_prefs(self, client):
+        data = client.get("/api/settings/defaults").get_json()
+        for key in ("browse_bin_shape", "browse_colormap", "browse_icon_size"):
+            assert data.get(key, {}) == {}
