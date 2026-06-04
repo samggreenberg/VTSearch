@@ -50,12 +50,6 @@ export class DatasetCardComponent implements OnChanges {
     return this.dataset?.created_by === this.currentUser;
   }
 
-  // Browsing (VTSBrowse) currently only supports audio datasets; the button is
-  // shown disabled for every other media type.
-  get canBrowse(): boolean {
-    return this.dataset?.media_type === 'audio';
-  }
-
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
   @Input() statsOpen = false;
@@ -139,7 +133,6 @@ export class DatasetCardComponent implements OnChanges {
 
   onBrowse(event: MouseEvent): void {
     event.stopPropagation();
-    if (!this.canBrowse) return;
     this.browse.emit();
   }
 
