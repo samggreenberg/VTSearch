@@ -76,9 +76,19 @@ def _stub_embedders(stack: ExitStack) -> None:
             stack.enter_context(patch.object(mt, "load_models"))
         if hasattr(mt, "embed_text"):
             stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_vector))
+    # Scalar methods that return one vector for one item; stub them all so no
+    # item is dropped on a None/raising embed regardless of which the loader
+    # calls (images use embed_media/embed_pil_image, text uses embed_text_passage).
+    scalar_embed_methods = (
+        "embed_media",
+        "embed_pil_image",
+        "embed_text",
+        "embed_text_passage",
+        "embed_text_enriched",
+    )
     for emb in all_embedders():
         stack.enter_context(patch.object(emb, "load_models"))
-        for meth in ("embed_media", "embed_pil_image", "embed_text", "embed_text_enriched"):
+        for meth in scalar_embed_methods:
             if hasattr(emb, meth):
                 stack.enter_context(patch.object(emb, meth, side_effect=_fake_vector))
         if hasattr(emb, "embed_media_bulk"):
