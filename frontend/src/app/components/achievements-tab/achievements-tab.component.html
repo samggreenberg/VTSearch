@@ -41,7 +41,7 @@
             </div>
             <span class="achievement-progress-label">{{ row.progressLabel }}</span>
           </div>
-          @if (row.id === 'docs_read' && docsExpanded) {
+          @if (row.id === 'docs_read' && isExpanded('docs_read')) {
             <div class="docs-panel">
               <ul class="docs-list">
                 @for (doc of docs; track doc.id) {
