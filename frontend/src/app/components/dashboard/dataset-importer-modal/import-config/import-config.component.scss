@@ -99,6 +99,15 @@
     background: var(--bg-subtle);
   }
 
+  // Keyboard highlight (``aria-activedescendant`` target).  Distinct from
+  // ``.selected`` so arrow-key users can see where focus sits even on the
+  // currently-selected row; uses an inset ring rather than a background so
+  // it reads on top of the hover/selected fill.
+  &.active {
+    background: var(--bg-subtle);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
   &.selected {
     background: var(--bg-subtle);
     font-weight: var(--weight-medium);
