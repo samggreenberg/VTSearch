@@ -167,6 +167,7 @@ def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
         max_concurrent_dataset_downloads=_settings.get_max_concurrent_dataset_downloads(),
         max_concurrent_dataset_embeddings=_settings.get_max_concurrent_dataset_embeddings(),
         autorun_detectors=tuple(_settings.get_autorun_detectors()),
+        dataset_max_age_days=_settings.get_dataset_max_age_days(),
         safe_thresholds=_settings.get_safe_thresholds(),
         calibrate_count=_settings.get_calibrate_count(),
         calibration_fraction=_settings.get_calibration_fraction(),

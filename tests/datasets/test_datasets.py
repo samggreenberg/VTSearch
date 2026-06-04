@@ -373,6 +373,7 @@ class TestDemoDatasetReadiness:
         import pickle
 
         from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
+        from vtscore.datasets.container import write_container
 
         esc50_dir = DATA_DIR / "ESC-50-master" / "audio"
         if esc50_dir.exists():
@@ -380,7 +381,7 @@ class TestDemoDatasetReadiness:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "medias": {}}))
+        write_container(pkl_file, pickle.dumps({"name": "esc50_s", "medias": {}}), {"format_version": 1})
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
@@ -388,6 +389,35 @@ class TestDemoDatasetReadiness:
             assert ds is not None
             assert ds["status"] == "needs_download", "Stale audio pkl without ESC-50 dir must be needs_download"
             assert ds["ready"] is False
+        finally:
+            pkl_file.unlink(missing_ok=True)
+            try:
+                EMBEDDINGS_DIR.rmdir()
+            except OSError:
+                pass
+
+    def test_corrupt_cached_pkl_does_not_crash_demo_list(self, client):
+        """A corrupt cached pkl must not 500 the catalog; it degrades to unknown metadata.
+
+        Regression: ``read_pkl_embedder`` used to raise ``BadZipFile`` on a non-zip
+        file, and that unhandled exception 500'd ``GET /api/dataset/demo-list``
+        entirely — one bad cache file blanked the whole demo listing. The demo is
+        still listed; its embedder just reports empty.
+        """
+        from vtscore.config import EMBEDDINGS_DIR
+
+        EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+        pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
+        # Not a zip container — what a truncated download or legacy raw pickle
+        # looks like on disk.
+        pkl_file.write_bytes(b"\x80\x05not-a-zip-container")
+        try:
+            resp = client.get("/api/dataset/demo-list")
+            assert resp.status_code == 200, "one corrupt cache file must not 500 the whole catalog"
+            data = resp.get_json()
+            ds = next((d for d in data["datasets"] if d["name"] == "esc50_s"), None)
+            assert ds is not None, "the demo is still listed despite an unreadable cache file"
+            assert ds["pkl_embedder"] == "", "unreadable cache degrades to empty embedder, not an exception"
         finally:
             pkl_file.unlink(missing_ok=True)
             try:
@@ -406,10 +436,12 @@ class TestDemoDatasetReadiness:
             pytest.skip("ESC-50 audio dir is non-empty; cannot test empty-dir scenario")
 
         # Create the directory structure but leave it empty
+        from vtscore.datasets.container import write_container
+
         esc50_dir.mkdir(parents=True, exist_ok=True)
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / "esc50_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "esc50_s", "medias": {}}))
+        write_container(pkl_file, pickle.dumps({"name": "esc50_s", "medias": {}}), {"format_version": 1})
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
@@ -439,9 +471,11 @@ class TestDemoDatasetReadiness:
         if ucf101_dir.exists():
             pytest.skip("UCF-101 is present; cannot test stale-pkl scenario")
 
+        from vtscore.datasets.container import write_container
+
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / "ucf101_s.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": "ucf101_s", "medias": {}}))
+        write_container(pkl_file, pickle.dumps({"name": "ucf101_s", "medias": {}}), {"format_version": 1})
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
@@ -529,13 +563,13 @@ class TestDemoDatasetEmbedderStatus:
     """Demo dataset status respects which embedder produced the cached pkl."""
 
     def test_ready_with_matching_embedder(self, client):
-        """pkl with sidecar matching requested embedder → ready."""
+        """Container with matching embedder in meta → ready."""
         import pickle
 
         from vtscore.config import EMBEDDINGS_DIR
         from vtscore.datasets import DEMO_DATASETS
+        from vtscore.datasets.container import write_container
 
-        # Pick a demo that has no required_folder (e.g. a text or image demo).
         demo_name = None
         for name, info in DEMO_DATASETS.items():
             if info.get("required_folder") is None:
@@ -546,9 +580,8 @@ class TestDemoDatasetEmbedderStatus:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
-        sidecar = pkl_file.with_suffix(".embedder")
-        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {}}))
-        sidecar.write_text("TestEmbedder", encoding="utf-8")
+        pkl_bytes = pickle.dumps({"name": demo_name, "medias": {}})
+        write_container(pkl_file, pkl_bytes, {"format_version": 1, "embedder": "TestEmbedder"})
         try:
             resp = client.get("/api/dataset/demo-list?embedder=TestEmbedder")
             data = resp.get_json()
@@ -559,18 +592,18 @@ class TestDemoDatasetEmbedderStatus:
             assert ds["pkl_embedder"] == "TestEmbedder"
         finally:
             pkl_file.unlink(missing_ok=True)
-            sidecar.unlink(missing_ok=True)
             try:
                 EMBEDDINGS_DIR.rmdir()
             except OSError:
                 pass
 
     def test_needs_embedding_with_mismatched_embedder(self, client):
-        """pkl with sidecar NOT matching requested embedder → needs_embedding."""
+        """Container with non-matching embedder in meta → needs_embedding."""
         import pickle
 
         from vtscore.config import EMBEDDINGS_DIR
         from vtscore.datasets import DEMO_DATASETS
+        from vtscore.datasets.container import write_container
 
         demo_name = None
         for name, info in DEMO_DATASETS.items():
@@ -582,9 +615,8 @@ class TestDemoDatasetEmbedderStatus:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
-        sidecar = pkl_file.with_suffix(".embedder")
-        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {}}))
-        sidecar.write_text("OldEmbedder", encoding="utf-8")
+        pkl_bytes = pickle.dumps({"name": demo_name, "medias": {}})
+        write_container(pkl_file, pkl_bytes, {"format_version": 1, "embedder": "OldEmbedder"})
         try:
             resp = client.get("/api/dataset/demo-list?embedder=NewEmbedder")
             data = resp.get_json()
@@ -595,7 +627,6 @@ class TestDemoDatasetEmbedderStatus:
             assert ds["pkl_embedder"] == "OldEmbedder"
         finally:
             pkl_file.unlink(missing_ok=True)
-            sidecar.unlink(missing_ok=True)
             try:
                 EMBEDDINGS_DIR.rmdir()
             except OSError:
@@ -607,6 +638,7 @@ class TestDemoDatasetEmbedderStatus:
 
         from vtscore.config import EMBEDDINGS_DIR
         from vtscore.datasets import DEMO_DATASETS
+        from vtscore.datasets.container import write_container
 
         demo_name = None
         for name, info in DEMO_DATASETS.items():
@@ -618,9 +650,8 @@ class TestDemoDatasetEmbedderStatus:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
-        sidecar = pkl_file.with_suffix(".embedder")
-        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {}}))
-        sidecar.write_text("SomeEmbedder", encoding="utf-8")
+        pkl_bytes = pickle.dumps({"name": demo_name, "medias": {}})
+        write_container(pkl_file, pkl_bytes, {"format_version": 1, "embedder": "SomeEmbedder"})
         try:
             resp = client.get("/api/dataset/demo-list")
             data = resp.get_json()
@@ -630,7 +661,6 @@ class TestDemoDatasetEmbedderStatus:
             assert ds["ready"] is True
         finally:
             pkl_file.unlink(missing_ok=True)
-            sidecar.unlink(missing_ok=True)
             try:
                 EMBEDDINGS_DIR.rmdir()
             except OSError:
@@ -643,12 +673,13 @@ class TestDemoDatasetEmbedderStatus:
         for ds in data["datasets"]:
             assert "pkl_embedder" in ds, f"Dataset '{ds['name']}' missing pkl_embedder field"
 
-    def test_no_sidecar_returns_empty_embedder(self, client):
-        """When no sidecar file exists, pkl_embedder is empty string."""
+    def test_no_embedder_in_meta_returns_empty(self, client):
+        """When container meta has no embedder, pkl_embedder is empty string."""
         import pickle
 
         from vtscore.config import EMBEDDINGS_DIR
         from vtscore.datasets import DEMO_DATASETS
+        from vtscore.datasets.container import write_container
 
         demo_name = None
         for name, info in DEMO_DATASETS.items():
@@ -660,29 +691,22 @@ class TestDemoDatasetEmbedderStatus:
 
         EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
         pkl_file = EMBEDDINGS_DIR / f"{demo_name}.pkl"
-        sidecar = pkl_file.with_suffix(".embedder")
-        # Write pkl with embedder info in media entries, no sidecar
-        pkl_file.write_bytes(
-            pickle.dumps(
-                {
-                    "name": demo_name,
-                    "medias": {1: {"embedder": "FallbackEmb", "embedding": [0.1]}},
-                }
-            )
+        pkl_bytes = pickle.dumps(
+            {
+                "name": demo_name,
+                "medias": {1: {"embedder": "FallbackEmb", "embedding": [0.1]}},
+            }
         )
-        sidecar.unlink(missing_ok=True)
+        write_container(pkl_file, pkl_bytes, {"format_version": 1})
         try:
             resp = client.get("/api/dataset/demo-list?embedder=FallbackEmb")
             data = resp.get_json()
             ds = next((d for d in data["datasets"] if d["name"] == demo_name), None)
             assert ds is not None
-            # Without a sidecar, embedder is unknown (empty string)
             assert ds["pkl_embedder"] == ""
-            # The pkl exists but we can't verify the embedder matches, so status stays ready
             assert ds["status"] == "ready"
         finally:
             pkl_file.unlink(missing_ok=True)
-            sidecar.unlink(missing_ok=True)
             try:
                 EMBEDDINGS_DIR.rmdir()
             except OSError:
@@ -853,26 +877,24 @@ class TestDemoCacheEmbedderMismatch:
     embedder differs from the one that produced the cached pickle."""
 
     def test_stale_cache_is_discarded_on_embedder_mismatch(self, tmp_path):
-        """If the sidecar says 'clip' but we request 'siglip', the cache is
+        """If the container meta says 'clip' but we request 'siglip', the cache is
         deleted and load_demo_source is called (i.e. re-embedding happens)."""
         import pickle
         from unittest.mock import MagicMock, patch
 
         from vtscore.datasets import DEMO_DATASETS
-        from vtscore.datasets.loader import _write_embedder_sidecar, load_demo_dataset
+        from vtscore.datasets.container import write_container
+        from vtscore.datasets.loader import load_demo_dataset
 
-        # Pick any demo dataset name
         demo_name = next(iter(DEMO_DATASETS))
 
         embeddings_dir = tmp_path / "embeddings"
         embeddings_dir.mkdir()
 
-        # Write a fake cached pickle with a 'clip' sidecar
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
-        pkl_file.write_bytes(pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}}))
-        _write_embedder_sidecar(pkl_file, "clip")
+        pkl_bytes = pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}})
+        write_container(pkl_file, pkl_bytes, {"format_version": 1, "embedder": "clip"})
 
-        # Create a fake embedder whose name is 'siglip'
         fake_embedder = MagicMock()
         fake_embedder.name = "siglip"
 
@@ -889,12 +911,11 @@ class TestDemoCacheEmbedderMismatch:
         ):
             load_demo_dataset(demo_name, medias, embedder_name="siglip")
 
-            # The old pkl should have been deleted and load_demo_source called
             mock_get.assert_called_once_with("siglip")
             mock_mt.load_demo_source.assert_called_once()
 
     def test_matching_embedder_uses_cache(self, tmp_path):
-        """When the sidecar matches the requested embedder, the cache is used
+        """When the container meta matches the requested embedder, the cache is used
         without re-embedding."""
         import pickle
         from unittest.mock import patch
@@ -902,7 +923,8 @@ class TestDemoCacheEmbedderMismatch:
         import numpy as np
 
         from vtscore.datasets import DEMO_DATASETS
-        from vtscore.datasets.loader import _write_embedder_sidecar, load_demo_dataset
+        from vtscore.datasets.container import write_container
+        from vtscore.datasets.loader import load_demo_dataset
 
         demo_name = next(iter(DEMO_DATASETS))
 
@@ -910,19 +932,16 @@ class TestDemoCacheEmbedderMismatch:
         embeddings_dir.mkdir()
 
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
-        pkl_file.write_bytes(
-            pickle.dumps(
-                {
-                    "name": demo_name,
-                    "medias": {1: {"embedding": [0.1, 0.2], "file": "/fake/file.png"}},
-                }
-            )
+        pkl_bytes = pickle.dumps(
+            {
+                "name": demo_name,
+                "medias": {1: {"embedding": [0.1, 0.2], "file": "/fake/file.png"}},
+            }
         )
-        _write_embedder_sidecar(pkl_file, "clip")
+        write_container(pkl_file, pkl_bytes, {"format_version": 1, "embedder": "clip"})
 
         medias: dict = {}
 
-        # Patch load_dataset_from_pickle to populate medias (simulating a valid load)
         def fake_load(path, m):
             m[1] = {"embedding": np.array([0.1, 0.2]), "file": "/fake/file.png"}
 
@@ -932,11 +951,10 @@ class TestDemoCacheEmbedderMismatch:
         ):
             load_demo_dataset(demo_name, medias, embedder_name="clip")
 
-        # Cache was used; media was loaded
         assert 1 in medias
 
-    def test_no_sidecar_accepts_cache(self, tmp_path):
-        """When no sidecar exists (old pickle), accept the cache regardless of
+    def test_no_embedder_in_meta_accepts_cache(self, tmp_path):
+        """When container meta has no embedder, accept the cache regardless of
         the requested embedder to avoid unnecessary re-downloads."""
         import pickle
         from unittest.mock import patch
@@ -944,6 +962,7 @@ class TestDemoCacheEmbedderMismatch:
         import numpy as np
 
         from vtscore.datasets import DEMO_DATASETS
+        from vtscore.datasets.container import write_container
         from vtscore.datasets.loader import load_demo_dataset
 
         demo_name = next(iter(DEMO_DATASETS))
@@ -952,15 +971,13 @@ class TestDemoCacheEmbedderMismatch:
         embeddings_dir.mkdir()
 
         pkl_file = embeddings_dir / f"{demo_name}.pkl"
-        pkl_file.write_bytes(
-            pickle.dumps(
-                {
-                    "name": demo_name,
-                    "medias": {1: {"embedding": [0.1], "file": "/fake/file.png"}},
-                }
-            )
+        pkl_bytes = pickle.dumps(
+            {
+                "name": demo_name,
+                "medias": {1: {"embedding": [0.1], "file": "/fake/file.png"}},
+            }
         )
-        # No sidecar written; simulates a legacy pickle
+        write_container(pkl_file, pkl_bytes, {"format_version": 1})
 
         medias: dict = {}
 
@@ -973,7 +990,6 @@ class TestDemoCacheEmbedderMismatch:
         ):
             load_demo_dataset(demo_name, medias, embedder_name="siglip")
 
-        # Cache was used despite requesting a different embedder (no sidecar to verify)
         assert 1 in medias
 
 

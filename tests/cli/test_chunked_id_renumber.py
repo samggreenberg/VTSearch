@@ -50,8 +50,9 @@ def _make_audio_media(media_id: int) -> dict:
 
 
 def _write_pickle_dataset(path: Path, medias: dict) -> None:
-    with open(path, "wb") as f:
-        pickle.dump({"medias": medias}, f)
+    from vtscore.datasets.container import write_container
+
+    write_container(path, pickle.dumps({"medias": medias}), {"format_version": 1})
 
 
 def _settings_file_with_detector(tmp_path: Path, detector_name: str) -> Path:

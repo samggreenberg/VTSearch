@@ -59,6 +59,13 @@ class AppSettingsSchema(Schema):
     autopilot_goal_diversity = fields.Integer()
     disable_achievements = fields.Boolean()
 
+    # VTSBrowse overview-minimap show/hide + size. Persisted but not shown
+    # as Settings-modal widgets; the minimap's own close button and resize
+    # handle drive these.
+    browse_minimap_visible = fields.Boolean()
+    browse_minimap_width = fields.Integer()
+    browse_minimap_height = fields.Integer()
+
     # Per-user, per-media-type
     view_mode_left = _PerMediaTypeStringDict()
     view_mode_right = _PerMediaTypeStringDict()
@@ -69,12 +76,22 @@ class AppSettingsSchema(Schema):
     panel_pct_left = _PerMediaTypeNumberDict()
     panel_pct_right = _PerMediaTypeNumberDict()
 
-    # Server-tier
-    saved_datasets_dir = fields.String()
-    detectors_dir = fields.String()
-    max_concurrent_dataset_downloads = fields.Integer()
-    max_concurrent_dataset_embeddings = fields.Integer()
-    autorun_detectors = fields.List(fields.String())
+    # Server-tier. These are fixed at server start (config file /
+    # environment / CLI flags) and shared across all users; the frontend
+    # surfaces them read-only in the "Server" settings tab. They are not
+    # in ``SettingsUpdateSchema``, so the API rejects attempts to change
+    # them.
+    saved_datasets_dir = fields.String(dump_only=True)
+    detectors_dir = fields.String(dump_only=True)
+    max_concurrent_dataset_downloads = fields.Integer(dump_only=True)
+    max_concurrent_dataset_embeddings = fields.Integer(dump_only=True)
+    autorun_detectors = fields.List(fields.String(), dump_only=True)
+    dataset_max_age_days = fields.Integer(load_default=None, allow_none=True)
+    # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
+    # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
+    # CLI flags). Populated by the route from
+    # ``settings.get_effective_hidden_plugins()``; read-only.
+    hidden_plugins = fields.Dict(keys=fields.String(), values=fields.List(fields.String()), dump_only=True)
 
     # Per-user, ``{media_type_id: embedder_name}``; the dataset-importer
     # modal pre-selects the last embedder the user picked for each media
@@ -154,10 +171,15 @@ class SettingsUpdateSchema(Schema):
     autopilot_goal_diversity = fields.Integer()
     disable_achievements = fields.Boolean()
 
+    browse_minimap_visible = fields.Boolean()
+    browse_minimap_width = fields.Integer()
+    browse_minimap_height = fields.Integer()
+
     autorun_detectors = fields.List(fields.String())
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()
+    dataset_max_age_days = fields.Integer(allow_none=True)
 
     last_embedder_per_media_type = fields.Raw()
     import_defaults_by_media_type = fields.Raw()

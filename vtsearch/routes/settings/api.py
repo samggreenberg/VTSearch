@@ -79,6 +79,9 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "autopilot_goal_diversity": settings.set_autopilot_goal_diversity,
     "autorun_detectors": settings.set_autorun_detectors,
     "import_defaults_by_media_type": settings.set_import_defaults_by_media_type,
+    "browse_minimap_visible": settings.set_browse_minimap_visible,
+    "browse_minimap_width": settings.set_browse_minimap_width,
+    "browse_minimap_height": settings.set_browse_minimap_height,
 }
 
 
@@ -189,21 +192,39 @@ def _apply_dir(key: str, value: str, setter) -> None:
     setter(value.strip())
 
 
+def _with_effective(data: dict) -> dict:
+    """Overlay the resolver-computed (read-only) views onto *data*.
+
+    Centralises the augmentation shared by the GET and PUT responses:
+
+    * ``effective_solo_media_type`` / ``effective_solo_embedder_per_media_type``
+      - the per-user values layered over their CLI fallbacks; the frontend
+      reads these to decide whether to hide mediaType / embedder pickers.
+    * ``hidden_plugins`` - the persisted server setting unioned with any
+      ``--hide-plugin`` CLI flags, normalised to sorted lists so the
+      "Server" settings tab can render what's actually in force.
+    """
+    data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
+    data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
+    data["hidden_plugins"] = {
+        family: sorted(names) for family, names in settings.get_effective_hidden_plugins().items()
+    }
+    return data
+
+
 @settings_bp.route("/api/settings", methods=["GET"])
 @settings_bp.response(200, AppSettingsSchema)
 def get_settings():
     """Return the merged server + per-user settings dict.
 
-    Augments the persisted dict with ``effective_solo_media_type``, which is
-    the resolver's view of the per-user value plus the CLI fallback. The
-    frontend reads only this key when deciding whether to hide mediaType
-    pickers; the raw ``solo_media_type`` / ``solo_media_type_explicit``
-    pair is still exposed for the settings UI to render the current state.
+    Augments the persisted dict with the resolver-computed read-only views
+    (effective solo mediaType / embedder, effective hidden plugins) via
+    :func:`_with_effective`. The frontend reads the ``effective_*`` keys
+    when deciding whether to hide pickers; the raw ``solo_media_type`` /
+    ``solo_media_type_explicit`` pair is still exposed for the settings UI
+    to render the current state.
     """
-    data = settings.get_all()
-    data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
-    data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
-    return data
+    return _with_effective(settings.get_all())
 
 
 #: Keys whose value is computed on read and silently ignored on write
@@ -289,10 +310,7 @@ def update_settings(body: dict):
     for key, value in body.items():
         _apply_one_key(key, value)
 
-    data = settings.get_all()
-    data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
-    data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
-    return data
+    return _with_effective(settings.get_all())
 
 
 @settings_bp.route("/api/settings/defaults", methods=["GET"])

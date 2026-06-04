@@ -130,8 +130,9 @@ class TestThinLoadFromPickle:
             (audio_dir / "test.wav").write_bytes(wav_bytes)
 
         pkl_path = tmp_path / "test.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump(pkl_data, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps(pkl_data), {"format_version": 1})
         return pkl_path
 
     def test_thin_pickle_skips_inline_bytes(self, tmp_path):
@@ -203,8 +204,9 @@ class TestPickleNullEmbedding:
         if include_bytes:
             media["media_bytes"] = wav_bytes
         pkl_path = tmp_path / "test.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"medias": {1: media}}, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": {1: media}}), {"format_version": 1})
         return pkl_path
 
     def test_full_mode_skips_explicit_none_embedding(self, tmp_path, capsys):
@@ -265,8 +267,9 @@ class TestPickleNullEmbedding:
             "media_bytes": wav_bytes,
         }
         pkl_path = tmp_path / "mixed.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"medias": {1: good, 2: bad}}, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": {1: good, 2: bad}}), {"format_version": 1})
 
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=False)
@@ -306,8 +309,9 @@ class TestPickleNullEmbedding:
             }
         }
         pkl_path = tmp_path / "chunked.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump(pkl_data, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps(pkl_data), {"format_version": 1})
 
         chunks = list(load_dataset_from_pickle_chunked(pkl_path, chunk_size=10))
         loaded = {cid: m for chunk in chunks for cid, m in chunk.items()}
@@ -339,8 +343,9 @@ class TestPickleMD5Preservation:
             }
         }
         pkl_path = tmp_path / "test.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump(pkl_data, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps(pkl_data), {"format_version": 1})
 
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=False)
@@ -365,8 +370,9 @@ class TestPickleMD5Preservation:
             }
         }
         pkl_path = tmp_path / "test.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump(pkl_data, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps(pkl_data), {"format_version": 1})
 
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=False)
@@ -392,8 +398,9 @@ class TestPickleMD5Preservation:
             }
         }
         pkl_path = tmp_path / "test.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump(pkl_data, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps(pkl_data), {"format_version": 1})
 
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=True)
@@ -443,8 +450,9 @@ class TestThinImporters:
             }
         }
         pkl_path = tmp_path / "test.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump(pkl_data, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps(pkl_data), {"format_version": 1})
 
         from vtscore.datasets.importers.pickle import PickleDatasetImporter
 

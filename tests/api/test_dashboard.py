@@ -742,8 +742,9 @@ class TestFindProgress:
                 "origin_name": f"prog_{i}.wav",
             }
         pkl_path = tmp_path / "prog_ds.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"medias": ds_medias}, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": ds_medias}), {"format_version": 1})
 
         ds = register_dataset(name="prog-ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
 

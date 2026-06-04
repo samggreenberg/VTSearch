@@ -1,0 +1,13 @@
+@if (visible) {
+  <div
+    class="hover-popup"
+    [style.left.px]="left"
+    [style.top.px]="top"
+  >
+    <div class="hover-count">{{ count }} {{ count === 1 ? 'item' : 'items' }}</div>
+    @if (textContent) {
+      <div class="hover-text">{{ textContent }}</div>
+    }
+  </div>
+}
+<audio #audioEl [src]="audioSrc" style="display: none"></audio>

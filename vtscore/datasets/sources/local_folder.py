@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Iterator
 
-from vtscore.datasets.sources.base import MediaItem, MediaSource
+from vtscore.datasets.sources.base import FetchedItem, MediaItem, MediaSource
 
 __all__ = ["LocalFolderSource"]
 
@@ -54,29 +54,27 @@ class LocalFolderSource(MediaSource):
                     source_name=self.name,
                 )
 
-    def fetch_item(self, key: str) -> Path | None:
-        """Return the file path for *key* (a relative path within the folder).
+    def fetch_item(self, key: str) -> FetchedItem:
+        """Return a :class:`FetchedItem` for *key* (a relative path within the folder).
 
-        Returns ``None`` if the file doesn't exist or escapes the folder root.
+        ``item.path`` is ``None`` if the file doesn't exist or escapes the root.
         """
         candidate = (self._folder / key).resolve()
         # Prevent path traversal
         try:
             candidate.relative_to(self._folder.resolve())
         except ValueError:
-            return None
-        if candidate.is_file():
-            return candidate
-        return None
+            return FetchedItem(path=None)
+        return FetchedItem(path=candidate if candidate.is_file() else None)
 
-    def resolve_path(self, origin_name: str = "", filename: str = "") -> Path | None:
+    def resolve_path(self, origin_name: str = "", filename: str = "") -> FetchedItem:
         """Resolve by trying *origin_name* then *filename* as relative paths."""
         for name in [origin_name, filename]:
             if name:
-                result = self.fetch_item(name)
-                if result is not None:
-                    return result
-        return None
+                item = self.fetch_item(name)
+                if item.path is not None:
+                    return item
+        return FetchedItem(path=None)
 
 
 class _LocalFolderSourceFactory:

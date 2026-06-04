@@ -130,6 +130,11 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_hidden_plugins`.
     hidden_plugins: dict[str, list[str]] = Field(default_factory=dict)
 
+    # Maximum age (in days) for datasets created on this server.  New
+    # datasets are stamped with an ``expires_at`` timestamp based on this
+    # value.  ``None`` (the default) means datasets never expire.
+    dataset_max_age_days: int | None = None
+
 
 class UserSettings(BaseModel):
     """Per-user settings persisted in ``<user_data_dir>/user_settings.json``."""
@@ -168,6 +173,18 @@ class UserSettings(BaseModel):
     autopilot_hard_reds: Annotated[int, _clamp_min(1)] = 4
     autopilot_resort_interval: Annotated[int, _clamp_min(1)] = 10
     autopilot_goal_diversity: Annotated[int, _clamp_min(1)] = 40
+
+    # VTSBrowse overview minimap (the small heatmap + viewport box in the
+    # lower-right of the browse canvas). These persist the user's last
+    # show/hide choice and the size they dragged it to so the overview
+    # comes back the same way on the next visit. They are stored in the
+    # settings set but are deliberately NOT surfaced as Settings-modal
+    # widgets - the controls live on the minimap itself (a close button
+    # and a corner resize handle). Width/height are in CSS pixels, clamped
+    # to a sane on-screen range.
+    browse_minimap_visible: bool = True
+    browse_minimap_width: Annotated[int, _clamp(120, 600)] = 200
+    browse_minimap_height: Annotated[int, _clamp(90, 450)] = 150
 
     view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
     view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)

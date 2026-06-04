@@ -42,6 +42,16 @@ export class AchievementsService {
   private inFlight = false;
   private disabled = false;
 
+  /**
+   * Milestones already pushed to {@link unlock$} this session, keyed by
+   * `categoryId:tierIdx`. The server keeps returning a milestone in
+   * `pending_announcements` until the user opens the panel (which ACKs it),
+   * so without this guard every `refresh()` — fired after votes, finds, and
+   * navigation — would re-pop a toast for an already-shown unlock. The toast
+   * fires once per real unlock; the notification dot stays server-driven.
+   */
+  private readonly emittedUnlocks = new Set<string>();
+
   constructor() {
     this.settingsState.settings$.subscribe((s) => {
       const next = !!s?.disable_achievements;
@@ -49,8 +59,11 @@ export class AchievementsService {
       this.disabled = next;
       if (flipped) {
         // Disabled: drop the cached state so the UI doesn't show
-        // counters/unlocks from before the toggle.
+        // counters/unlocks from before the toggle. Clear the emitted set
+        // too: a later re-enable wipes server counters, so nothing should
+        // be remembered as already-toasted across the reset.
         this.state$.next(EMPTY_STATE);
+        this.emittedUnlocks.clear();
       }
     });
   }
@@ -89,6 +102,9 @@ export class AchievementsService {
         this.inFlight = false;
         this.state$.next(next);
         for (const p of next.pending_announcements) {
+          const key = `${p.id}:${p.tier_idx}`;
+          if (this.emittedUnlocks.has(key)) continue;
+          this.emittedUnlocks.add(key);
           this.unlock$.next(p);
         }
       });

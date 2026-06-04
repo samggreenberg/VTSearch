@@ -318,7 +318,7 @@ def example_sort_origin(body: dict):
     crop_params = body.get("crop_params") if isinstance(body.get("crop_params"), dict) else None
 
     try:
-        file_path = source.fetch_item(key)
+        file_path = source.fetch_item(key).path
         if file_path is None:
             abort(404, message=f"File not found: {key}")
 

@@ -1,0 +1,155 @@
+.browse-layout {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-body);
+}
+
+.browse-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+}
+
+.browse-status-message {
+  font-size: var(--font-xl);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.browse-status-error {
+  color: var(--color-bad);
+}
+
+.browse-status-count {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.browse-status-detail {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.browse-info {
+  position: absolute;
+  bottom: var(--space-md);
+  left: var(--space-md);
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.browse-info-label {
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+
+// Shown in place of the minimap once it's hidden, so the overview can be
+// brought back. Sits in the same lower-right corner the minimap occupies.
+.browse-minimap-show {
+  position: absolute;
+  bottom: var(--space-md);
+  right: var(--space-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-base), border-color var(--transition-base);
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+
+  vt-icon {
+    line-height: 0;
+  }
+}
+
+// Top-right control cluster: the zoom +/- pill sits beside the hex-size pill.
+.browse-controls {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  display: inline-flex;
+  gap: var(--space-sm);
+}
+
+// Zoom (true span) control and on-screen hex size control. Both mirror the
+// grouped pill look of the Find view's grid-size buttons (.vc-btn); the hex
+// pill reuses the image icon at 11px / 18px, the zoom pill uses +/- glyphs.
+.browse-zoom,
+.browse-size {
+  display: inline-flex;
+}
+
+.browse-size-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 var(--space-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base),
+    border-color var(--transition-base);
+
+  &:not(:first-child) {
+    margin-left: -1px;
+  }
+
+  &:first-child {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+
+  &:last-child {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+    z-index: 1;
+  }
+
+  &:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
+
+  vt-icon {
+    line-height: 0;
+  }
+}
+
+// +/- zoom glyphs need explicit sizing since they carry no icon child.
+.browse-size-btn--text {
+  font-size: var(--font-lg);
+  font-weight: var(--weight-medium);
+  line-height: 1;
+}

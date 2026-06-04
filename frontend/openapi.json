@@ -11,7 +11,7 @@
         },
         "description": "Default error response"
       },
-      "UNPROCESSABLE_ENTITY": {
+      "UNPROCESSABLE_CONTENT": {
         "content": {
           "application/json": {
             "schema": {
@@ -19,7 +19,7 @@
             }
           }
         },
-        "description": "Unprocessable Entity"
+        "description": "Unprocessable Content"
       }
     },
     "schemas": {
@@ -154,7 +154,17 @@
             "items": {
               "type": "string"
             },
+            "readOnly": true,
             "type": "array"
+          },
+          "browse_minimap_height": {
+            "type": "integer"
+          },
+          "browse_minimap_visible": {
+            "type": "boolean"
+          },
+          "browse_minimap_width": {
+            "type": "integer"
           },
           "calibrate_count": {
             "type": "integer"
@@ -162,7 +172,13 @@
           "calibration_fraction": {
             "type": "number"
           },
+          "dataset_max_age_days": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
           "detectors_dir": {
+            "readOnly": true,
             "type": "string"
           },
           "disable_achievements": {
@@ -207,6 +223,16 @@
             },
             "type": "object"
           },
+          "hidden_plugins": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "readOnly": true,
+            "type": "object"
+          },
           "hide_autopilot": {
             "type": "boolean"
           },
@@ -227,9 +253,11 @@
             "type": "object"
           },
           "max_concurrent_dataset_downloads": {
+            "readOnly": true,
             "type": "integer"
           },
           "max_concurrent_dataset_embeddings": {
+            "readOnly": true,
             "type": "integer"
           },
           "panel_pct_left": {
@@ -248,6 +276,7 @@
             "type": "boolean"
           },
           "saved_datasets_dir": {
+            "readOnly": true,
             "type": "string"
           },
           "show_metadata": {
@@ -992,6 +1021,11 @@
       "DatasetLoadDemoRequest": {
         "additionalProperties": false,
         "properties": {
+          "build_projection": {
+            "default": "false",
+            "description": "When 'true', compute + persist the 2-D Browse projection at ingest.",
+            "type": "string"
+          },
           "clipper": {
             "default": "",
             "type": "string"
@@ -2635,6 +2669,38 @@
         ],
         "type": "object"
       },
+      "HexCell": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "cx": {
+            "type": "number"
+          },
+          "cy": {
+            "type": "number"
+          },
+          "q": {
+            "type": "integer"
+          },
+          "r": {
+            "type": "integer"
+          },
+          "rep_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "cx",
+          "cy",
+          "q",
+          "r",
+          "rep_id"
+        ],
+        "type": "object"
+      },
       "ImporterFieldOptionsRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3071,6 +3137,26 @@
         ],
         "type": "object"
       },
+      "LevelMeta": {
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "type": "integer"
+          },
+          "n_cells": {
+            "type": "integer"
+          },
+          "radius": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "level",
+          "n_cells",
+          "radius"
+        ],
+        "type": "object"
+      },
       "LocalizeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3439,6 +3525,112 @@
         },
         "required": [
           "processors"
+        ],
+        "type": "object"
+      },
+      "ProjectionBuildResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "projection_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "ProjectionMeta": {
+        "additionalProperties": false,
+        "properties": {
+          "base_radius": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "bounds": {
+            "default": null,
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "current": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "error": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "job_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "levels": {
+            "default": null,
+            "items": {
+              "$ref": "#/components/schemas/LevelMeta"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "media_type": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "method": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "point_count": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "projection_id": {
+            "default": null,
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "description": "idle | building | ready | error",
+            "type": "string"
+          },
+          "tile_span": {
+            "default": null,
+            "nullable": true,
+            "type": "number"
+          },
+          "total": {
+            "default": null,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
         ],
         "type": "object"
       },
@@ -3827,11 +4019,24 @@
             },
             "type": "array"
           },
+          "browse_minimap_height": {
+            "type": "integer"
+          },
+          "browse_minimap_visible": {
+            "type": "boolean"
+          },
+          "browse_minimap_width": {
+            "type": "integer"
+          },
           "calibrate_count": {
             "type": "integer"
           },
           "calibration_fraction": {
             "type": "number"
+          },
+          "dataset_max_age_days": {
+            "nullable": true,
+            "type": "integer"
           },
           "detectors_dir": {
             "type": "string"
@@ -4060,6 +4265,33 @@
         },
         "required": [
           "suggestions"
+        ],
+        "type": "object"
+      },
+      "TileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/HexCell"
+            },
+            "type": "array"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "tx": {
+            "type": "integer"
+          },
+          "ty": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cells",
+          "level",
+          "tx",
+          "ty"
         ],
         "type": "object"
       },
@@ -4775,6 +5007,10 @@
       "import_dataset_CombineDatasetsImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -4811,6 +5047,10 @@
       "import_dataset_DemoDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -4926,6 +5166,10 @@
       "import_dataset_HttpArchiveDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -4970,6 +5214,10 @@
       "import_dataset_LocalFilesDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -4996,6 +5244,10 @@
       "import_dataset_LocalFolderDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5025,6 +5277,10 @@
       "import_dataset_ReCallerDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5069,6 +5325,10 @@
       "import_dataset_ServerFilesDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5113,6 +5373,10 @@
       "import_dataset_ServerFolderDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5160,6 +5424,10 @@
       "import_dataset_SyntheticDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
+          "build_projection": {
+            "default": null,
+            "nullable": true
+          },
           "clipper": {
             "default": null,
             "nullable": true
@@ -5723,7 +5991,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -5797,7 +6065,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -5837,7 +6105,7 @@
             "description": "Active login provider does not support login."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -5932,7 +6200,7 @@
             "description": "Named detector is not flagged for autorun."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6048,7 +6316,7 @@
             "description": "Unbuildable extractor config."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6137,7 +6405,7 @@
             "description": "Extractor not found, or new name already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6199,7 +6467,7 @@
             "description": "Unbuildable localizer config."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6288,7 +6556,7 @@
             "description": "Localizer not found, or new name already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6347,7 +6615,7 @@
             "description": "Directory not found within the allowed root."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6403,7 +6671,7 @@
             "description": "Source / directory not found on disk."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6447,7 +6715,7 @@
             "description": "Source or file not found on disk."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6487,7 +6755,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6535,7 +6803,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6600,7 +6868,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6825,7 +7093,7 @@
             "description": "Invalid or missing dataset path."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "The combine_datasets importer is unavailable."
@@ -6915,7 +7183,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -6988,7 +7256,7 @@
             "description": "Source not available, or directory not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7099,7 +7367,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7127,7 +7395,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7155,7 +7423,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7183,7 +7451,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7211,7 +7479,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7239,7 +7507,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7267,7 +7535,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7295,7 +7563,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7323,7 +7591,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7404,7 +7672,7 @@
             "description": "Unknown importer name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "get_field_options did not return a list."
@@ -7478,7 +7746,7 @@
             "description": "Unknown demo dataset name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "The demo importer is unavailable."
@@ -7548,7 +7816,7 @@
             "description": "Invalid or missing folder path."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7588,7 +7856,7 @@
             "description": "Unknown importer, unreloadable origin, or invalid path inside origin."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7639,7 +7907,7 @@
             "description": "Unknown demo dataset name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "The demo importer is unavailable."
@@ -7697,7 +7965,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7725,7 +7993,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7753,7 +8021,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7781,7 +8049,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7809,7 +8077,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7837,7 +8105,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7865,7 +8133,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7893,7 +8161,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -7921,7 +8189,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8200,7 +8468,7 @@
             "description": "Dataset not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8254,7 +8522,7 @@
             "description": "Dataset not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8400,7 +8668,7 @@
             "description": "A detector with this name already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8547,7 +8815,7 @@
             "description": "Empty name after stripping, or media_type is 'any'."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8575,7 +8843,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8603,7 +8871,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8631,7 +8899,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8698,7 +8966,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8788,7 +9056,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Detector has no associated name."
@@ -8849,7 +9117,7 @@
             "description": "Destination already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -8903,7 +9171,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9018,7 +9286,7 @@
             "description": "Detector not loaded or unknown labelset source."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9170,7 +9438,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9209,7 +9477,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9248,7 +9516,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9287,7 +9555,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9543,7 +9811,7 @@
             "description": "Detector or label element not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9597,7 +9865,7 @@
             "description": "A detector with the new name already exists."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9705,7 +9973,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9743,7 +10011,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Evaluation computation failed (only when ``wait=true``)."
@@ -9825,7 +10093,7 @@
             "description": "Job not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Background evaluation job failed."
@@ -9903,7 +10171,7 @@
             "description": "Media not found, or its bytes are unavailable when cropping is requested."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Example sort failed."
@@ -9950,7 +10218,7 @@
             "description": "File not found at the given key."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Example sort failed."
@@ -9997,7 +10265,7 @@
             "description": "File not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Example sort failed."
@@ -10070,7 +10338,7 @@
             "description": "Unknown exporter name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Exporter raised an unexpected error."
@@ -10113,7 +10381,7 @@
             "description": "No medias loaded, bad config, or media-type mismatch."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10157,7 +10425,7 @@
             "description": "A selected dataset or detector ID is unknown / missing."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "A dataset pkl file could not be loaded."
@@ -10204,7 +10472,7 @@
             "description": "Detector not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10267,7 +10535,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10326,7 +10594,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10370,7 +10638,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Score-history computation failed."
@@ -10467,6 +10735,69 @@
         ]
       }
     },
+    "/api/label-importers/field-options/{importer_name}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "label_importer_field_options",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImporterFieldOptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImporterFieldOptionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Unknown or non-dynamic field key."
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "get_field_options did not return a list."
+          },
+          "501": {
+            "description": "Importer does not implement get_field_options."
+          },
+          "502": {
+            "description": "Remote service backing dynamic options raised an error."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return dropdown options for a dynamic-options field on a label importer.",
+        "tags": [
+          "label_importers"
+        ]
+      }
+    },
     "/api/label-importers/import/holder": {
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
@@ -10483,7 +10814,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10511,7 +10842,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10539,7 +10870,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10602,7 +10933,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10727,7 +11058,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10765,7 +11096,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10802,7 +11133,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -10870,7 +11201,7 @@
             "description": "No good/bad votes available for training."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Background learned-sort job failed (only when ``wait=true``)."
@@ -10953,7 +11284,7 @@
             "description": "Job not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Background learned-sort job failed."
@@ -10996,7 +11327,7 @@
             "description": "No medias loaded, bad config, or media-type mismatch."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11099,7 +11430,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11392,7 +11723,7 @@
             "description": "Media not found."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11453,6 +11784,114 @@
         ]
       }
     },
+    "/api/projection/build": {
+      "post": {
+        "description": "Returns immediately with a ``job_id`` for polling via\n``GET /api/projection/meta``.  If a projection is already cached on\nthe context, returns it without rebuilding.",
+        "operationId": "build_projection",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionBuildResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "description": "Dataset is empty or has no embeddings."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Kick off a background UMAP + pyramid build for the active dataset.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
+    "/api/projection/meta": {
+      "get": {
+        "description": "When the projection is ready, includes bounds, zoom levels, hex sizing,\npoint count, and the dataset's media type (so the client knows which\nhover-preview behavior to use).",
+        "operationId": "projection_meta",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionMeta"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return projection/pyramid metadata and build status.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
+    "/api/projection/tiles/{level}/{tx}/{ty}": {
+      "get": {
+        "description": "Because the projection is frozen at ingest, tiles are immutable for the\nlife of the dataset and can be cached aggressively by the client.",
+        "operationId": "get_tile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Tile not found or projection not ready."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the hex cells for one tile at ``(level, tx, ty)``.",
+        "tags": [
+          "projection"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "level",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "tx",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "ty",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ]
+    },
     "/api/safe-thresholds": {
       "get": {
         "operationId": "get_safe_thresholds_route",
@@ -11500,7 +11939,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11568,7 +12007,7 @@
             "description": "Media bytes unavailable."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11691,7 +12130,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11705,7 +12144,7 @@
     },
     "/api/settings": {
       "get": {
-        "description": "Augments the persisted dict with ``effective_solo_media_type``, which is\nthe resolver's view of the per-user value plus the CLI fallback. The\nfrontend reads only this key when deciding whether to hide mediaType\npickers; the raw ``solo_media_type`` / ``solo_media_type_explicit``\npair is still exposed for the settings UI to render the current state.",
+        "description": "Augments the persisted dict with the resolver-computed read-only views\n(effective solo mediaType / embedder, effective hidden plugins) via\n:func:`_with_effective`. The frontend reads the ``effective_*`` keys\nwhen deciding whether to hide pickers; the raw ``solo_media_type`` /\n``solo_media_type_explicit`` pair is still exposed for the settings UI\nto render the current state.",
         "operationId": "get_settings",
         "responses": {
           "200": {
@@ -11755,7 +12194,7 @@
             "description": "Setter-level validation failure (range, one-of, path traversal)."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11825,7 +12264,7 @@
             "description": "Unknown exporter name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Exporter raised an unexpected error."
@@ -11883,7 +12322,7 @@
         },
         "responses": {
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -11999,7 +12438,7 @@
             "description": "Unknown settings source name."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12087,7 +12526,7 @@
             "description": "Empty/whitespace text, no medias, or embedder doesn't support text."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "500": {
             "description": "Text sort failed (embedder error or unexpected exception)."
@@ -12152,7 +12591,7 @@
             "description": "Empty or whitespace-only ``text``."
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12263,7 +12702,7 @@
             "description": "OK"
           },
           "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_ENTITY"
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -12570,6 +13009,10 @@
     {
       "description": "On-demand embedding of a media file (multipart) or text snippet (JSON). The dispatch route is dual-mode and not described in the spec; see the module docstring.",
       "name": "embed"
+    },
+    {
+      "description": "VTSBrowse projection: UMAP layout + hex-tile pyramid.",
+      "name": "projection"
     }
   ]
 }

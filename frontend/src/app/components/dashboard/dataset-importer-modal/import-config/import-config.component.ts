@@ -62,7 +62,32 @@ export class ImportConfigComponent {
   /** Whether the custom dropdown is currently expanded. */
   open = false;
 
+  /** Index of the keyboard-highlighted option while the popup is open
+   *  (the ``aria-activedescendant`` target).  ``-1`` when the popup is
+   *  closed or no option is highlighted. */
+  activeIndex = -1;
+
   constructor(private hostEl: ElementRef<HTMLElement>) {}
+
+  /** ``id`` for the popup ``role="listbox"`` element, derived from the
+   *  trigger's id so it stays unique across the multiple flows the modal
+   *  may render at once. */
+  get listboxId(): string {
+    return `${this.mediaTypeFieldId}-listbox`;
+  }
+
+  /** ``id`` for the option at ``index`` so the combobox trigger can
+   *  point ``aria-activedescendant`` at the highlighted row. */
+  optionId(index: number): string {
+    return `${this.mediaTypeFieldId}-option-${index}`;
+  }
+
+  /** ``id`` of the currently active option, or ``null`` when the popup
+   *  is closed / nothing is highlighted (so ``aria-activedescendant`` is
+   *  dropped from the DOM rather than dangling). */
+  get activeDescendantId(): string | null {
+    return this.open && this.activeIndex >= 0 ? this.optionId(this.activeIndex) : null;
+  }
 
   /** Label for an option in the media-type dropdown.  Falls back to the
    *  option value when no label is supplied (e.g. the parent's
@@ -78,13 +103,93 @@ export class ImportConfigComponent {
   }
 
   toggle(): void {
-    this.open = !this.open;
+    if (this.open) {
+      this.close();
+    } else {
+      this.openPopup();
+    }
+  }
+
+  /** Open the popup and seed the keyboard highlight on the current
+   *  selection (or the first option) so arrow keys have a starting
+   *  point. */
+  private openPopup(): void {
+    this.open = true;
+    const selected = this.mediaTypeOptions.indexOf(this.mediaType);
+    this.activeIndex = selected >= 0 ? selected : 0;
+  }
+
+  private close(): void {
+    this.open = false;
+    this.activeIndex = -1;
   }
 
   select(opt: string): void {
-    this.open = false;
+    this.close();
     if (opt !== this.mediaType) {
       this.mediaTypeChange.emit(opt);
+    }
+  }
+
+  /** Move the keyboard highlight to ``index`` (clamped) and scroll it
+   *  into view within the popup. */
+  private setActiveIndex(index: number): void {
+    const last = this.mediaTypeOptions.length - 1;
+    if (last < 0) return;
+    this.activeIndex = Math.max(0, Math.min(last, index));
+    // Defer until the ``[id]`` binding has flushed so the lookup hits the
+    // freshly-highlighted row.
+    queueMicrotask(() => {
+      const el = this.hostEl.nativeElement.querySelector(`#${CSS.escape(this.optionId(this.activeIndex))}`);
+      (el as HTMLElement | null)?.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  /** Keyboard handling for the combobox trigger.  Implements the
+   *  WAI-ARIA select-only combobox pattern: arrows / Home / End move the
+   *  ``aria-activedescendant`` highlight, Enter / Space commit it, and
+   *  Escape dismisses; DOM focus stays on the trigger throughout. */
+  onTriggerKeydown(event: KeyboardEvent): void {
+    if (!this.open) {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Spacebar'].includes(event.key)) {
+        event.preventDefault();
+        this.openPopup();
+      }
+      return;
+    }
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.setActiveIndex(this.activeIndex + 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.setActiveIndex(this.activeIndex - 1);
+        break;
+      case 'Home':
+        event.preventDefault();
+        this.setActiveIndex(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        this.setActiveIndex(this.mediaTypeOptions.length - 1);
+        break;
+      case 'Enter':
+      case ' ':
+      case 'Spacebar':
+        event.preventDefault();
+        if (this.activeIndex >= 0) {
+          this.select(this.mediaTypeOptions[this.activeIndex]);
+        }
+        break;
+      case 'Escape':
+        event.preventDefault();
+        this.close();
+        break;
+      case 'Tab':
+        this.close();
+        break;
     }
   }
 
@@ -94,12 +199,6 @@ export class ImportConfigComponent {
     if (!this.open) return;
     const target = event.target as Node | null;
     if (target && this.hostEl.nativeElement.contains(target)) return;
-    this.open = false;
-  }
-
-  /** Close on Escape so keyboard users can dismiss the popup. */
-  @HostListener('document:keydown.escape')
-  onEscape(): void {
-    if (this.open) this.open = false;
+    this.close();
   }
 }

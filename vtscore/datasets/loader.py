@@ -6,7 +6,7 @@ live in dedicated sibling modules; this file holds the shared helpers,
 (``from vtscore.datasets.loader import ...``) continue to work.
 
 * :mod:`vtscore.datasets.loader_folder` - folder loaders
-* :mod:`vtscore.datasets.loader_pickle` - pickle loaders, sidecars, image embed
+* :mod:`vtscore.datasets.loader_pickle` - pickle/container loaders, image embed
 * :mod:`vtscore.datasets.loader_demo` - demo dataset loader
 
 All public functions that perform I/O accept an optional ``on_progress``
@@ -118,8 +118,6 @@ from vtscore.datasets.loader_folder import (  # noqa: E402, F401
     load_dataset_from_folder_chunked,
 )
 from vtscore.datasets.loader_pickle import (  # noqa: E402, F401
-    _write_clipper_sidecar,
-    _write_embedder_sidecar,
     load_dataset_from_pickle,
     load_dataset_from_pickle_chunked,
     read_pkl_clipper,
@@ -138,24 +136,62 @@ from vtscore.converters.runner import apply_converter_to_demo as _apply_converte
 # Export
 # ---------------------------------------------------------------------------
 
+# Pickle protocol 5 (PEP 574) serialises numpy arrays via out-of-band buffers,
+# making it both smaller and faster than the interpreter default (4 on 3.11).
+# Available on every Python we support (>=3.10), so pin it explicitly.
+_PICKLE_PROTOCOL = 5
+
+
+def _embedding_for_pickle(embedding: Any) -> np.ndarray | None:
+    """Coerce an embedding to a compact ``float32`` ndarray for serialisation.
+
+    Storing the vector as a contiguous ``float32`` array (rather than the old
+    Python ``list`` of boxed floats) roughly halves its pickled footprint and
+    avoids reconstructing hundreds of ``PyFloat`` objects per media on load —
+    the load side already runs every embedding through ``l2_normalize`` /
+    ``np.asarray``, so it accepts arrays and legacy lists alike.
+    """
+    if embedding is None:
+        return None
+    return np.ascontiguousarray(embedding, dtype=np.float32)
+
 
 def export_dataset_to_file(
     medias: dict[int, dict[str, Any]],
+    *,
+    embedder: str = "",
+    clipper: str = "",
+    media_type: str = "",
+    name: str = "",
+    created_at: float | None = None,
+    expires_at: float | None = None,
+    extra_pickle_keys: dict[str, Any] | None = None,
 ) -> bytes:
-    """Serialise the current media dataset to a pickle-formatted byte string.
+    """Serialise the current media dataset to a ZIP container byte string.
 
-    Converts the in-memory ``medias`` dict to a portable format (converting any
-    ``numpy.ndarray`` embeddings to plain Python lists) and returns it as bytes
-    suitable for writing to a ``.pkl`` file or sending as an HTTP response.
-
-    The resulting bytes can be reloaded with :func:`load_dataset_from_pickle`.
+    The container holds ``medias.pkl`` (the pickled media dict) and
+    ``meta.json`` (embedder, clipper, timestamps, age-off).  Reloadable
+    with :func:`load_dataset_from_pickle` which auto-detects both this
+    format and legacy raw pickles.
 
     Args:
         medias: Mapping of media ID to media data dict.
+        embedder: Name of the embedder used to produce the embeddings.
+        clipper: Name of the clipper used (audio datasets).
+        media_type: Media type identifier.
+        name: Dataset display name.
+        created_at: Unix timestamp of creation (defaults to now).
+        expires_at: Unix timestamp when the dataset expires (``None`` = never).
+        extra_pickle_keys: Additional top-level keys for the pickle dict
+            (e.g. ``audio_dir``, ``video_dir``).
 
     Returns:
-        Raw bytes of the pickled dataset dict.
+        Raw bytes of the ZIP container.
     """
+    import time
+
+    from vtscore.datasets.container import write_container
+
     data: dict[str, Any] = {
         "medias": {
             cid: {
@@ -165,9 +201,7 @@ def export_dataset_to_file(
                 "file_size": media["file_size"],
                 "md5": media["md5"],
                 "embedder": media.get("embedder", ""),
-                "embedding": media["embedding"].tolist()
-                if isinstance(media["embedding"], np.ndarray)
-                else media["embedding"],
+                "embedding": _embedding_for_pickle(media["embedding"]),
                 "filename": media.get("filename", f"media_{cid}.wav"),
                 "category": media.get("category", "unknown"),
                 "origin": media.get("origin"),
@@ -185,7 +219,25 @@ def export_dataset_to_file(
         }
     }
 
-    buf = io.BytesIO()
-    pickle.dump(data, buf)
-    buf.seek(0)
-    return buf.getvalue()
+    pkl_buf = io.BytesIO()
+    pickle.dump(data, pkl_buf, protocol=_PICKLE_PROTOCOL)
+    medias_pkl_bytes = pkl_buf.getvalue()
+
+    meta = {
+        "format_version": 1,
+        "embedder": embedder,
+        "clipper": clipper,
+        "media_type": media_type,
+        "name": name,
+        "created_at": created_at or time.time(),
+        "expires_at": expires_at,
+    }
+
+    out_buf = io.BytesIO()
+    write_container(
+        out_buf,
+        medias_pkl_bytes,
+        meta,
+        extra_pickle_keys=extra_pickle_keys,
+    )
+    return out_buf.getvalue()

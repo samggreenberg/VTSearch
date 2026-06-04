@@ -39,6 +39,11 @@ export class DatasetImporterModalComponent implements OnInit {
   selectedImporter: ImporterInfo | null = null;
   formValues: Record<string, any> = {};
   selectedFile: File | null = null;
+  /** "Build the 2-D Browse projection at ingest" toggle, shared across
+   *  every import flow (only one is visible at a time, so a single field
+   *  carries the choice and persists it when the user switches flows).
+   *  Defaults off per the opt-in cost tradeoff. */
+  buildProjection = false;
   submitting = false;
   error = '';
   /** Whether the user has manually edited the generic-form dataset_name
@@ -917,14 +922,18 @@ export class DatasetImporterModalComponent implements OnInit {
       this.demoTabs = [solo];
     }
     // Pre-select a media-type tab so the demo table shows results instead
-    // of sitting empty.  Prefer the solo type, then ``"audio"``, then
-    // the first tab.
+    // of sitting empty.  Prefer the solo type, then the active context's
+    // guessed media type (from existing datasets/detectors), then
+    // ``"audio"``, then the first tab.
     if (this.demoTabs.length > 0) {
       const needsSelect = !this.activeTab || (solo && this.activeTab !== solo);
       if (needsSelect) {
+        const guessed = this.guessedMediaType;
         const preferred = solo && this.demoTabs.includes(solo)
           ? solo
-          : (this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0]);
+          : (guessed && this.demoTabs.includes(guessed)
+            ? guessed
+            : (this.demoTabs.includes('audio') ? 'audio' : this.demoTabs[0]));
         this.selectDemoTabWithEmbedder(preferred);
       }
     }
@@ -1174,6 +1183,7 @@ export class DatasetImporterModalComponent implements OnInit {
       embedder: this.selectedDemoEmbedder,
       clipper: this.selectedDemoClipper,
       dataset_name: userName,
+      build_projection: this.buildProjection,
     } as any);
     this.closed.emit();
   }
@@ -1499,6 +1509,7 @@ export class DatasetImporterModalComponent implements OnInit {
         formData.append('clipper_params', JSON.stringify(this.lfClipperParamValues));
       }
     }
+    formData.append('build_projection', this.buildProjection ? 'true' : 'false');
   }
 
   // --- Server folder browser ---
@@ -1974,6 +1985,7 @@ export class DatasetImporterModalComponent implements OnInit {
     if (this.sfSourceSpecs.length > 0) {
       params['source_specs'] = this.sfSourceSpecs;
     }
+    params['build_projection'] = this.buildProjection ? 'true' : 'false';
 
     this.datasetsCrudApi.runImporter('server_folder', params).subscribe({
       next: () => {
@@ -2016,11 +2028,12 @@ export class DatasetImporterModalComponent implements OnInit {
     if (this.formSourceSpecs.length > 0) {
       submitValues['source_specs'] = this.formSourceSpecs;
     }
+    submitValues['build_projection'] = this.buildProjection ? 'true' : 'false';
 
     // If there's a file field, use loadFile; otherwise runImporter
     const fileField = this.selectedImporter.fields?.find((f) => f.field_type === 'file');
     if (fileField && this.selectedFile) {
-      this.datasetsCrudApi.loadFile(this.selectedFile).subscribe({
+      this.datasetsCrudApi.loadFile(this.selectedFile, this.buildProjection).subscribe({
         next: () => {
           this.submitting = false;
           this.maybeOfferSaveImportDefaults('form');

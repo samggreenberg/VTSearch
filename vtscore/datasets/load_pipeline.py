@@ -185,6 +185,18 @@ def _origin_to_str(origin: dict | None) -> str:
     return importer_name
 
 
+def _parse_bool(value: Any) -> bool:
+    """Coerce a request-supplied flag to ``bool``.
+
+    Accepts native bools, the ``"true"``/``"false"`` strings that
+    checkbox fields serialize to (per :class:`PluginField`), and ``None``
+    (treated as ``False``).
+    """
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() == "true"
+
+
 def _normalize_media_type(value: str) -> str:
     """Normalize a media type string (folder_import_name or type_id) to a canonical type_id."""
     value = (value or "").strip()
@@ -454,12 +466,25 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
         return
 
     def _clip_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-        if on_progress:
-            # Map the embedder's batch-level progress back to clip-list
-            # coordinates so the existing on_progress(current, total, phase)
-            # contract keeps reporting against total_clips.
-            scaled = min(total_clips, int(current * len(embed_indices) / max(1, total)))
-            on_progress(scaled, total_clips, "embedding")
+        if not on_progress:
+            return
+        if status == "loading":
+            # The model is loaded lazily on the first embed call, *after*
+            # the "Embedding clips…" line is already on screen. While it
+            # loads (and on first run downloads weights + JIT-warms up the
+            # pipeline) the embedder emits descriptive "loading" messages
+            # ("Loading … model weights…", "Warming up audio pipeline…").
+            # Forward those verbatim — with the embedder's own current/total —
+            # so the user sees what's actually happening instead of a frozen
+            # "Embedding clips… (0/N)". Scaling these load sub-steps against
+            # the clip list would be meaningless.
+            on_progress(current, total, message or "Loading model…")
+            return
+        # Real per-clip progress: map the embedder's batch-level progress back
+        # to clip-list coordinates so the existing on_progress(current, total,
+        # phase) contract keeps reporting against total_clips.
+        scaled = min(total_clips, int(current * len(embed_indices) / max(1, total)))
+        on_progress(scaled, total_clips, "embedding")
 
     original_cb = embedder._on_progress
     embedder._on_progress = _clip_progress
@@ -611,8 +636,28 @@ def _auto_register_dataset(
     ds_dir = get_saved_datasets_dir()
     ds_dir.mkdir(parents=True, exist_ok=True)
     pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
+    import time as _time
+
+    from vtscore.config import CoreConfig
+
+    now = _time.time()
     try:
-        data_bytes = export_dataset_to_file(media_dict)
+        config = CoreConfig.from_settings()
+        max_age = config.dataset_max_age_days
+    except RuntimeError:
+        max_age = None
+    expires_at = now + max_age * 86400 if max_age is not None else None
+
+    try:
+        data_bytes = export_dataset_to_file(
+            media_dict,
+            embedder=embedder,
+            clipper=clipper,
+            media_type=media_type,
+            name=name,
+            created_at=now,
+            expires_at=expires_at,
+        )
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
     except Exception:
@@ -633,6 +678,7 @@ def _auto_register_dataset(
             created_by=created_by,
             file_type_counts=file_type_counts,
             ingest_started_at=ingest_started_at,
+            expires_at=expires_at,
         )
     except Exception:
         # Registry write failed; clean up the orphaned pkl so we don't
@@ -761,8 +807,13 @@ def _apply_clipper_stage(
             msg = "Clipping media…"
         elif phase == "converting":
             msg = "Converting media…"
-        else:
+        elif phase == "embedding":
             msg = "Embedding clips…"
+        else:
+            # A loading/warmup message forwarded verbatim from the embedder
+            # (e.g. "Loading CLAP model weights…", "Warming up audio
+            # pipeline…") while the model loads on the first embed call.
+            msg = phase
         tracker.update(
             "loading", msg, current=current, total=total, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS
         )
@@ -981,6 +1032,84 @@ def _build_diversity_tree_stage(ctx: DatasetContext, tracker) -> None:
     build_diversity_tree_for_context(ctx, on_progress=_progress)
 
 
+def _persist_projection_to_container(dataset_id: str, proj, pyr) -> None:
+    """Best-effort save of the freshly-built projection into the dataset container.
+
+    Mirrors ``vtsearch.routes.projection._persist_projection`` but resolves
+    the container path through the dataset registry from inside the load
+    pipeline.  Failures are swallowed (logged): the in-memory projection is
+    already cached on the context, and a missing on-disk copy just means the
+    next Browse open recomputes it.
+    """
+    from vtscore.datasets.registry import get_dataset  # noqa: PLC0415
+
+    entry = get_dataset(dataset_id)
+    if entry is None:
+        return
+    pkl_path = entry.get("pkl_path")
+    if not pkl_path:
+        return
+    try:
+        from vtscore.datasets.container import append_projection  # noqa: PLC0415
+
+        append_projection(pkl_path, proj, pyr)
+    except Exception:
+        traceback.print_exc()
+
+
+def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> None:
+    """Compute + persist the 2-D UMAP projection at ingest (opt-in).
+
+    Runs inline as a load stage (after the dataset is registered) so the
+    Browse canvas opens instantly instead of paying for the UMAP fit lazily
+    on first visit.  This mirrors the on-demand
+    ``POST /api/projection/build`` path: fit UMAP on the cached embedding
+    matrix, build the hex-tile pyramid, cache both on the context, and
+    persist them into the dataset container.
+
+    Best-effort by contract: the dataset is already registered and usable
+    before this runs, so any failure here (including a cancellation during
+    the fit) must leave the dataset intact and merely fall back to the lazy
+    Browse-time build.  The caller wraps this in a try/except for that
+    reason.
+    """
+    from vtscore.embedding.matrix import get_embedding_matrix  # noqa: PLC0415
+    from vtscore.projection import build_pyramid, fit_projection  # noqa: PLC0415
+
+    def _progress(current: int, total: int, message: str) -> None:
+        tracker.check_cancelled()
+        tracker.update(
+            "loading",
+            message,
+            current=current,
+            total=total,
+            step=_TOTAL_LOAD_STEPS,
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
+
+    try:
+        sorted_ids, matrix = get_embedding_matrix(ctx)
+    except ValueError:
+        return
+    if matrix.size == 0:
+        return
+
+    _progress(0, 0, "Building 2-D projection…")
+
+    def _on_fit_progress(status: str, message: str, current: int, total: int) -> None:
+        _progress(current, total, message or "Building 2-D projection…")
+
+    proj = fit_projection(matrix, list(sorted_ids), on_progress=_on_fit_progress)
+    _progress(0, 1, "Building hex-tile pyramid…")
+    pyr = build_pyramid(proj)
+    _progress(1, 1, "Projection ready")
+
+    ctx._projection = proj
+    ctx._pyramid = pyr
+
+    _persist_projection_to_container(dataset_id, proj, pyr)
+
+
 def _register_and_migrate(
     ctx: DatasetContext,
     tracker,
@@ -1108,6 +1237,7 @@ def _run_origin_load_in_background(
     embedder: str = "",
     created_by: str = "",
     media_type: str = "",
+    build_projection: bool = False,
 ) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
@@ -1216,6 +1346,17 @@ def _run_origin_load_in_background(
                     context_id, registry_entry_id = _register_and_migrate(
                         ctx, tracker, task_id, origin, name, clipper, embedder, created_by, ingest_started_at
                     )
+                    # Opt-in: compute + persist the 2-D Browse projection now,
+                    # so the Browse canvas opens instantly instead of building
+                    # UMAP lazily on first visit.  Best-effort and runs after
+                    # registration: the dataset is already saved and usable, so
+                    # a failure (or a cancel during the fit) leaves it intact
+                    # and just defers the projection to the lazy Browse path.
+                    if build_projection:
+                        try:
+                            _build_projection_stage(ctx, tracker, context_id)
+                        except Exception:
+                            traceback.print_exc()
                     # Embedder warm-up is fire-and-forget so the dashboard row goes
                     # green immediately.  Text sort waits behind its own progress
                     # bar on first use if the model isn't ready yet.
@@ -1315,9 +1456,10 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     clipper_params = field_values.pop("clipper_params", None)
     chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
     # Keep clipper in field_values for importers that need it (e.g. demo
-    # importer writes a .clipper sidecar for readiness tracking).
+    # importer stores it in the container metadata for readiness tracking).
     field_values["clipper"] = clipper_name
     embedder_name = field_values.get("embedder", "")
+    build_projection = _parse_bool(field_values.pop("build_projection", None))
 
     # Extract media_type from field_values so in-progress tasks can expose it
     # to the frontend (used for guessing the type in subsequent add dialogs).
@@ -1342,6 +1484,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         embedder=embedder_name,
         created_by=created_by,
         media_type=media_type_hint,
+        build_projection=build_projection,
     )
 
 

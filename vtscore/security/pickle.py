@@ -36,6 +36,40 @@ _PICKLE_SAFE_CLASSES: set[tuple[str, str]] = {
 }
 
 
+# numpy reconstruction callables. A real array reduces either via
+# ``_frombuffer(buffer, dtype, shape, order)`` (protocol >=5) or via
+# ``_reconstruct(...)`` + a BUILD/``__setstate__`` that carries the raw bytes
+# (older protocols). Both consume the array's data buffer — which the peek
+# unpickler stubs out to empty — so calling the real callables raises (e.g.
+# "cannot reshape array of size 0"). The peek path swaps them for a stub.
+_PICKLE_NUMPY_RECONSTRUCT: set[tuple[str, str]] = {
+    ("numpy.core.multiarray", "_reconstruct"),
+    ("numpy.core.multiarray", "scalar"),
+    ("numpy", "_core.multiarray._reconstruct"),
+    ("numpy._core.multiarray", "_reconstruct"),
+    ("numpy._core.multiarray", "scalar"),
+    ("numpy.core.numeric", "_frombuffer"),
+    ("numpy._core.numeric", "_frombuffer"),
+}
+
+
+class _PeekStubArray(list):
+    """Placeholder a peek substitutes for a numpy array.
+
+    Subclasses ``list`` so it reads as an empty sequence (``len() == 0``), and
+    swallows ``__setstate__`` so the BUILD opcode that would feed an array its
+    (stubbed-empty) raw bytes is a no-op instead of a buffer-size error.
+    """
+
+    def __setstate__(self, state: object) -> None:
+        pass
+
+
+def _peek_stub_numpy(*args: Any, **kwargs: Any) -> _PeekStubArray:
+    """Stand-in for numpy's array/scalar reconstruction during a peek."""
+    return _PeekStubArray()
+
+
 class RestrictedUnpickler(pickle.Unpickler):
     """An ``Unpickler`` that refuses to instantiate classes outside an allowlist.
 
@@ -93,6 +127,10 @@ class _PeekUnpickler(pickle._Unpickler):
     dispatch: dict[int, Any] = pickle._Unpickler.dispatch.copy()
 
     def find_class(self, module: str, name: str) -> Any:
+        # Swap numpy's array/scalar reconstruction for a stub: the real
+        # callables validate their data buffer, which this peek has emptied.
+        if (module, name) in _PICKLE_NUMPY_RECONSTRUCT:
+            return _peek_stub_numpy
         if (module, name) in _PICKLE_SAFE_CLASSES:
             return pickle._Unpickler.find_class(self, module, name)
         raise pickle.UnpicklingError(

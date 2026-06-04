@@ -6,7 +6,7 @@ entirely by the frontend JavaScript, and in CLI mode it prints to stdout.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 from vtscore.exporters.base import LabelsetExporter
 
@@ -92,6 +92,42 @@ class DisplayLabelsetExporter(LabelsetExporter):
             print("\n".join(lines))
         return {
             "message": (f"Printed {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s) to stdout."),
+        }
+
+    @property
+    def supports_streaming(self) -> bool:
+        return True
+
+    def export_cli_streaming(
+        self,
+        header: dict[str, Any],
+        records: Iterator[tuple[str, dict[str, Any]]],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Print each hit's origin/name to stdout as it streams in.
+
+        Bounded memory: only the current hit is held, so this works on a
+        media source far larger than RAM.  Only above-threshold hits stream
+        unless ``--keep-negatives`` was set, so (matching :meth:`export_cli`)
+        the printed list is the predicted-Good set.
+        """
+        detector_count = len(header.get("detectors", []))
+        total_hits = 0
+        printed_header = False
+        for detector_name, hit in records:
+            if hit.get("label") == "bad":
+                continue
+            if not printed_header:
+                print("Predicted Good:\n")
+                printed_header = True
+            origin_str = _format_origin(hit)
+            name = hit.get("origin_name") or hit.get("filename", "")
+            print(f"  {origin_str}  {name}" if origin_str else f"  {name}")
+            total_hits += 1
+        if total_hits == 0:
+            print("No items predicted as Good.")
+        return {
+            "message": (f"Printed {total_hits} hit(s) across {detector_count} detector(s) to stdout."),
         }
 
 

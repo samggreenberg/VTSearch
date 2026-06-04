@@ -549,8 +549,9 @@ class TestMultiFindCrossDatasetFallback:
             }
 
         pkl_path = tmp_path / "target.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"medias": target_medias}, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": target_medias}), {"format_version": 1})
 
         # Register the target dataset
         ds = register_dataset(
@@ -657,8 +658,9 @@ class TestMultiFindCrossDatasetFallback:
             }
 
         pkl_path = tmp_path / "mt_target.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"medias": target_medias}, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": target_medias}), {"format_version": 1})
 
         ds = register_dataset(name="mt_ds", media_type="audio", num_items=5, pkl_path=str(pkl_path))
 
@@ -746,8 +748,9 @@ class TestMultiFindCrossDatasetFallback:
             }
 
         pkl_path = tmp_path / "nr_target.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"medias": target_medias}, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": target_medias}), {"format_version": 1})
 
         ds = register_dataset(name="nr_ds", media_type="image", num_items=5, pkl_path=str(pkl_path))
 
@@ -857,8 +860,9 @@ class TestFindCheckLabels:
             }
 
         pkl_path = tmp_path / "cl_match.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"medias": medias}, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": medias}), {"format_version": 1})
 
         ds = register_dataset(name="cl_match_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
 
@@ -916,8 +920,9 @@ class TestFindCheckLabels:
             }
 
         pkl_path = tmp_path / "cl_diff.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"medias": medias}, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": medias}), {"format_version": 1})
 
         ds = register_dataset(name="cl_diff_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
 
@@ -1002,8 +1007,9 @@ class TestFindCheckLabels:
             }
 
         pkl_path = tmp_path / "cl_part.pkl"
-        with open(pkl_path, "wb") as f:
-            pickle.dump({"medias": medias}, f)
+        from vtscore.datasets.container import write_container
+
+        write_container(pkl_path, pickle.dumps({"medias": medias}), {"format_version": 1})
 
         ds = register_dataset(name="cl_part_ds", media_type="audio", num_items=3, pkl_path=str(pkl_path))
 
