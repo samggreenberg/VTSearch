@@ -789,8 +789,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Launch the VTSBrowse view for a dataset. The browseContextGuard loads the
-   *  dataset context if needed. Browsing currently only supports audio datasets;
-   *  the dataset card disables the button for other media types. */
+   *  dataset context if needed. Browsing works for any media type — the UMAP
+   *  projection and hex-tile pyramid are embedding-based and media-agnostic. */
   browseDataset(dataset: DatasetRegistryEntry): void {
     this.router.navigate(['/browse', dataset.id]);
   }

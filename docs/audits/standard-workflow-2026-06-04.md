@@ -61,8 +61,8 @@ It's a document dataset surfaced under Image (top row, sorted by item count). Ei
 
 ### Browse / projection
 
-**[P1 · `browse-projection-contradiction`] The import offers a Browse projection that the dashboard then refuses to open.**
-The dataset-import Advanced panel shows a **"Build 2-D Browse projection now"** checkbox for image datasets (`import-advanced.component.html`), but on the dashboard the loaded image dataset's Browse/eye button is **disabled** with tooltip *"Browsing is only available for audio datasets."* This is confirmed-intentional gating (`dashboard.component.ts:792` — "Browsing currently only supports audio datasets") — so a user can pay to build a UMAP projection for an image dataset they can never browse. Resolve the contradiction: either **(a)** hide/disable the "Build projection" checkbox for media types Browse can't open, or **(b)** lift the audio-only gate (the projection + hex-tile pyramid is embedding-based and media-agnostic; `tests/projection` already covers it). The two surfaces currently disagree.
+**[P1 · `browse-projection-contradiction`] The import offers a Browse projection that the dashboard then refuses to open. — FIXED**
+The dataset-import Advanced panel shows a **"Build 2-D Browse projection now"** checkbox for image datasets (`import-advanced.component.html`), but on the dashboard the loaded image dataset's Browse/eye button was **disabled** with tooltip *"Browsing is only available for audio datasets."* This was confirmed-intentional gating (`dashboard.component.ts` — "Browsing currently only supports audio datasets") — so a user could pay to build a UMAP projection for an image dataset they could never browse. Resolved via option **(b)**: lifted the audio-only gate. The projection + hex-tile pyramid is embedding-based and media-agnostic, and the hover preview already adapts per media type (audio loops the clip, text loads a paragraph snippet, image/video paint thumbnails onto the hex, everything else falls back to `Item #N`). `DatasetCardComponent.canBrowse` is gone; the Browse button is enabled for every media type.
 
 ### Achievements / toasts
 
@@ -109,7 +109,7 @@ The dev server log contains only the 6 boot lines — no access logs, no progres
 
 ## Prioritized recommendations
 
-1. **Fix the Browse/projection contradiction** (`browse-projection-contradiction`, P1) — pick (a) hide the checkbox or (b) enable image browse. Users will hit this immediately.
+1. ~~**Fix the Browse/projection contradiction** (`browse-projection-contradiction`, P1) — pick (a) hide the checkbox or (b) enable image browse. Users will hit this immediately.~~ **Fixed:** lifted the audio-only gate (option b); Browse now opens for any media type.
 2. ~~**Make the demo picker context-aware** (`demo-mediatype-default`, P1) — default MediaType to the active/last-used type; stop forcing Audio.~~ **Fixed:** `buildDemoTabs()` now prefers the active context's `guessedMediaType` over the audio fallback.
 3. **Give the MediaType dropdown real listbox/option a11y** (`mediatype-dropdown-a11y`, P1) — align it with the Embedder combobox pattern.
 4. **De-dupe achievement unlock toasts** (`achievement-toast-replay`, P2) — fire once per real unlock; don't replay on every navigation; don't occlude the Labels panel.

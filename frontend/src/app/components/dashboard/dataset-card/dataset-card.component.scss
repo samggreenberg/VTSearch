@@ -156,13 +156,8 @@ td.actions-col {
   justify-content: center;
   transition: color var(--transition-base), background var(--transition-base);
 
-  &:hover:not(.disabled) {
+  &:hover {
     background: var(--btn-icon-hover-bg);
-  }
-
-  &.disabled {
-    opacity: var(--opacity-disabled);
-    cursor: not-allowed;
   }
 }
 
