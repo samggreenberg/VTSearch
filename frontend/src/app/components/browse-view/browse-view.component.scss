@@ -148,13 +148,6 @@
   }
 }
 
-// +/- zoom glyphs need explicit sizing since they carry no icon child.
-.browse-size-btn--text {
-  font-size: var(--font-lg);
-  font-weight: var(--weight-medium);
-  line-height: 1;
-}
-
 // Hex/square glyph buttons carry a unicode shape rather than an icon child.
 .browse-size-btn--glyph {
   font-size: var(--font-md);

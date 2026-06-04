@@ -540,6 +540,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * selection re-runs so the hexes keep their ~28px display size while each
    * covers a narrower span.
    */
+  /**
+   * Frame the whole projection: pick a zoom and pan so the current data just
+   * fits in the viewport (the same framing used on first load), then redraw.
+   */
+  zoomToFit(): void {
+    this.fitToData();
+    this.requestRedraw();
+    this.refreshHoverAfterZoom();
+  }
+
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
     const [projX, projY] = this.screenToProj(anchorX, anchorY);
     const newZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));

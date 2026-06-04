@@ -298,6 +298,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.canvas?.zoomBy(1 / this.ZOOM_BUTTON_FACTOR);
   }
 
+  /** Choose a zoom and pan so the current data just fits in view. */
+  zoomToFit(): void {
+    this.canvas?.zoomToFit();
+  }
+
   /**
    * Issue the right build request for the current mode: a subset build (UMAP
    * over just the handed-off ids) when in subset mode, else the full-dataset
