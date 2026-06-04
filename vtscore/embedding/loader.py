@@ -67,18 +67,66 @@ def default_concurrent_downloads() -> int:
     return max(1, min(4, os.cpu_count() or 1))
 
 
+# A single CPU embed job holds an embedder model plus an N x D fp32 working
+# set; budgeting ~4 GiB of total RAM per concurrent job keeps memory-starved
+# boxes at one worker while letting roomy workstations run a few in parallel.
+_RAM_BYTES_PER_CPU_EMBED = 4 * 1024 * 1024 * 1024
+
+# Upper bound on the CPU embed default regardless of how big the box is; a
+# hand override in ``data/settings.json`` can still go higher (clamped to 16).
+_MAX_CPU_EMBED_DEFAULT = 4
+
+
+def _total_memory_bytes() -> int:
+    """Best-effort total physical RAM in bytes, or ``0`` if it can't be read.
+
+    Uses ``MemTotal`` (Linux ``/proc/meminfo``) with an ``SC_PHYS_PAGES``
+    sysconf fallback. Total (not *available*) RAM is the right signal for a
+    startup default: it's stable, whereas free memory swings with whatever
+    else happens to be running when the setting is first resolved.
+    """
+    try:
+        with open("/proc/meminfo", encoding="ascii") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    try:
+        pages = os.sysconf("SC_PHYS_PAGES")
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        if pages > 0 and page_size > 0:
+            return pages * page_size
+    except (OSError, ValueError):
+        pass
+    return 0
+
+
 def default_concurrent_embeddings() -> int:
     """Default for ``max_concurrent_dataset_embeddings`` derived from hardware.
 
-    The embed phase is CPU/GPU- and RAM-bound. On CPU-only boxes one worker
-    keeps the box hot without thrashing; with GPUs we allow one task per
-    visible CUDA device (capped at 2) so two datasets can embed in parallel
-    on a multi-GPU rig without overcommitting a single device's VRAM.
+    The embed phase is CPU/GPU- and RAM-bound, so the default scales with the
+    scarcer of the two resources:
+
+    * **GPU boxes** allow one task per visible CUDA device (capped at 2) so two
+      datasets can embed in parallel on a multi-GPU rig without overcommitting a
+      single device's VRAM.
+    * **CPU-only boxes** allow roughly one job per 4 cores and one job per
+      ``_RAM_BYTES_PER_CPU_EMBED`` of total RAM, whichever is smaller, capped at
+      :data:`_MAX_CPU_EMBED_DEFAULT`. Constrained machines (few cores or little
+      RAM) still resolve to 1 - preserving the old fully-serial behaviour where
+      a second concurrent embed would thrash or OOM - while workstations get
+      genuine parallel embedding with no config change. When total RAM can't be
+      read we fall back to 1 rather than guess generously.
     """
     gpus = _detect_cuda_devices()
-    if gpus <= 0:
-        return 1
-    return max(1, min(2, gpus))
+    if gpus > 0:
+        return max(1, min(2, gpus))
+
+    by_cpu = (os.cpu_count() or 1) // 4
+    total_ram = _total_memory_bytes()
+    by_ram = total_ram // _RAM_BYTES_PER_CPU_EMBED if total_ram else 1
+    return max(1, min(_MAX_CPU_EMBED_DEFAULT, by_cpu, by_ram))
 
 
 def initialize_models() -> None:
