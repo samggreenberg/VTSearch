@@ -40,9 +40,9 @@ Severity: **P1** = should fix, user-visible/contradictory · **P2** = papercut/p
 
 ### Dataset import / demo picker
 
-**[P1 · `demo-mediatype-default`] Demo MediaType filter is context-blind — always defaults to Audio.**
+**[P1 · `demo-mediatype-default`] Demo MediaType filter is context-blind — always defaults to Audio.** *(FIXED)*
 Opening "Add Dataset → Demo → Downloaded Media" always lands on **Audio** (shows ESC-50/GTZAN/UrbanSound). I hit this twice: even on the *second* import, with an Image dataset **and** an Image detector already active, it still defaulted to Audio and I had to manually switch the MediaType dropdown to Image. It should default to the active context's media type (or the last-used type).
-*Pointer:* `frontend/src/app/components/dashboard/dataset-importer-modal/import-config/import-config.component.*`
+*Fix:* `buildDemoTabs()` now prefers the dashboard-supplied `guessedMediaType` (the active context's single media type) ahead of the `'audio'` fallback, so a loaded Image dataset/detector lands the demo picker on Image. See `dataset-importer-modal.component.ts`.
 
 **[P1 · `mediatype-dropdown-a11y`] MediaType dropdown is inaccessible (and undriveable by a11y tooling).**
 The MediaType selector renders its options as `<li class="media-type-option">` with no `role="option"`, no owning `role="listbox"` semantics — the options never appear in the accessibility tree (a screen reader sees an empty popup; I had to click them via JS). Contrast with the **Embedder** select in the same modal's Advanced panel, which *is* a proper accessible combobox with option roles. Two different dropdown patterns in one form; make the MediaType one match.
@@ -110,7 +110,7 @@ The dev server log contains only the 6 boot lines — no access logs, no progres
 ## Prioritized recommendations
 
 1. **Fix the Browse/projection contradiction** (`browse-projection-contradiction`, P1) — pick (a) hide the checkbox or (b) enable image browse. Users will hit this immediately.
-2. **Make the demo picker context-aware** (`demo-mediatype-default`, P1) — default MediaType to the active/last-used type; stop forcing Audio.
+2. ~~**Make the demo picker context-aware** (`demo-mediatype-default`, P1) — default MediaType to the active/last-used type; stop forcing Audio.~~ **Fixed:** `buildDemoTabs()` now prefers the active context's `guessedMediaType` over the audio fallback.
 3. **Give the MediaType dropdown real listbox/option a11y** (`mediatype-dropdown-a11y`, P1) — align it with the Embedder combobox pattern.
 4. **De-dupe achievement unlock toasts** (`achievement-toast-replay`, P2) — fire once per real unlock; don't replay on every navigation; don't occlude the Labels panel.
 5. **Signal that "# MEDIA" is an estimate** (`media-count-estimate`, P2) — "~N" or a range; or compute the true per-slice count.
