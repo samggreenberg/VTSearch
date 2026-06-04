@@ -233,10 +233,11 @@ def _resolve_browse_root(source: str) -> Path | None:
 
     * ``demo:<name>``: the ``required_folder`` of the named demo dataset.
     * ``folder``: the configured ``saved_datasets_dir``.
-    * ``server_fs``: the whole server filesystem (single-user mode) or the
-      current user's data directory (multi-user mode). Matches the actual
-      runtime scope of the ``server_folder``/``server_files`` importers,
-      which accept any absolute path readable by the server process.
+    * ``server_fs``: the configured server root (single-user mode) or the
+      current user's data directory (multi-user mode). Matches the scope
+      the ``server_folder``/``server_files`` importers enforce at import
+      time, so the picker can never browse to a folder the importer would
+      later reject.
 
     Returns ``None`` if the source is unrecognised or the directory does not
     exist.
@@ -263,33 +264,28 @@ def _resolve_browse_root(source: str) -> Path | None:
 
         base = get_file_access_base_dir()
         if base is None:
-            return Path("/")
+            # Single-user mode: confine the picker to the configured server
+            # root rather than the filesystem root, so browsing/detection
+            # reject out-of-root folders the same way the importer does on
+            # load. SERVER_ROOTS[0] is the primary root, matching /api/browse.
+            from vtscore.config import SERVER_ROOTS  # noqa: PLC0415
+
+            return SERVER_ROOTS[0]
         return base.resolve()
 
     return None
 
 
-def _default_browse_path(source: str, root: Path) -> str:
-    """Pick a sensible initial relative path for *source* under *root*.
+def _default_browse_path() -> str:
+    """Initial relative sub-path the browse picker opens at.
 
-    For ``server_fs`` in single-user mode (root == ``/``) we start the
-    picker at the server user's home directory if it exists, saving the
-    user three or four clicks to drill down from ``/``. Falls back to the
-    root itself otherwise.
+    Always the root itself (``""``). Every browse source now resolves to a
+    meaningful directory (a demo folder, the saved-datasets dir, or the
+    configured server root), so there is nothing to skip past; the old
+    ``server_fs`` home-directory shortcut only existed to save clicks when
+    the picker was rooted at the filesystem root ``/``.
     """
-    if source != "server_fs":
-        return ""
-    try:
-        home = Path.home().resolve()
-    except (RuntimeError, OSError):
-        return ""
-    try:
-        rel = home.relative_to(root)
-    except ValueError:
-        return ""
-    if not home.is_dir():
-        return ""
-    return str(rel) if str(rel) != "." else ""
+    return ""
 
 
 @datasets_ui_bp.route("/api/browse-media-files")
@@ -356,7 +352,7 @@ def browse_media_files(query: dict):
         "directories": directories,
         "files": files,
         "root_path": str(root),
-        "default_path": _default_browse_path(source, root),
+        "default_path": _default_browse_path(),
     }
 
 

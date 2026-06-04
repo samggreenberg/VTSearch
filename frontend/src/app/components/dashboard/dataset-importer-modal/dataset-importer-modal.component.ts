@@ -136,12 +136,12 @@ export class DatasetImporterModalComponent implements OnInit {
    *  auto-overwriting it from the picked folder name). */
   private lfDatasetNameDirty = false;
 
-  // Server folder picker state. The user types an absolute server path; we
-  // split it into ``sfBrowseRootPath`` (always ``/`` here) and ``sfBrowsePath``
-  // (the typed path with the leading slash stripped) so the existing
-  // detection / submit / dataset-name helpers keep working unchanged.
-  sfBrowsePath = '';
-  sfBrowseRootPath = '';
+  // Server folder picker state. The user types or browses to an absolute
+  // server path, stored verbatim in ``sfFolderPath``. It is sent to the
+  // detection / submit endpoints as-is; the backend resolves it against the
+  // configured server root and rejects anything outside, so the picker and
+  // the importer agree on what is in-bounds.
+  sfFolderPath = '';
   sfBrowseError = '';
   sfMediaType = '';
   sfMediaTypeOptions: string[] = [];
@@ -1338,7 +1338,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
   sfOnRecursiveChange(recursive: boolean): void {
     this.sfRecursive = recursive;
-    if (this.sfBrowseRootPath) {
+    if (this.sfFolderPath) {
       this.sfRunDetection();
     }
   }
@@ -1559,8 +1559,7 @@ export class DatasetImporterModalComponent implements OnInit {
 
   openServerFolderBrowser(importer?: ImporterInfo): void {
     this.selectedImporter = importer || this.importers.find((i) => i.name === 'server_folder') || null;
-    this.sfBrowsePath = '';
-    this.sfBrowseRootPath = '';
+    this.sfFolderPath = '';
     this.sfBrowseError = '';
     this.sfDetection = null;
     this.sfSubmitting = false;
@@ -1592,9 +1591,8 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   /** Current value of the editable absolute-path input. Two-way bound to
-   *  the typed path input; ``sfApplyPathInput`` splits it into the
-   *  ``sfBrowseRootPath`` / ``sfBrowsePath`` pair the submit + detection
-   *  helpers already consume. */
+   *  the typed path input; ``sfApplyPathInput`` stores it in
+   *  ``sfFolderPath`` for the submit + detection helpers to consume. */
   sfPathInputValue = '';
 
   /** Apply the value typed into the absolute-path input. The path is not
@@ -1602,8 +1600,7 @@ export class DatasetImporterModalComponent implements OnInit {
   sfApplyPathInput(): void {
     const raw = (this.sfPathInputValue || '').trim();
     if (!raw) {
-      this.sfBrowsePath = '';
-      this.sfBrowseRootPath = '';
+      this.sfFolderPath = '';
       this.sfBrowseError = '';
       this.sfDetection = null;
       if (!this.sfDatasetNameDirty) {
@@ -1611,12 +1608,10 @@ export class DatasetImporterModalComponent implements OnInit {
       }
       return;
     }
-    // Treat the typed value as an absolute server path. Anchor the root
-    // at "/" and put the rest into sfBrowsePath so sfAbsolutePath returns
-    // the user-typed value verbatim.
-    const rel = raw.replace(/^\/+/, '').replace(/\/+$/, '');
-    this.sfBrowseRootPath = '/';
-    this.sfBrowsePath = rel;
+    // Keep the typed value as an absolute server path (trailing slash
+    // trimmed). The backend resolves it against the configured server root
+    // and rejects anything outside.
+    this.sfFolderPath = raw.replace(/\/+$/, '') || '/';
     this.sfBrowseError = '';
     if (!this.sfDatasetNameDirty) {
       this.sfDatasetName = this.sfDerivedDatasetName();
@@ -1635,7 +1630,7 @@ export class DatasetImporterModalComponent implements OnInit {
    *  and apply it to the sf-* form (output media-type + source specs). */
   private sfRunDetection(): void {
     const token = ++this.sfDetectionToken;
-    this.datasetsCrudApi.detectMediaType('server_fs', this.sfBrowsePath, this.sfRecursive).subscribe({
+    this.datasetsCrudApi.detectMediaType('server_fs', this.sfFolderPath, this.sfRecursive).subscribe({
       next: (res) => {
         if (token !== this.sfDetectionToken) return;
         this.sfDetection = res;
@@ -1669,8 +1664,8 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Derive a default dataset name from the currently selected server folder.
    *  Returns the leaf path component, or empty string when at the root. */
   private sfDerivedDatasetName(): string {
-    if (!this.sfBrowsePath) return '';
-    const parts = this.sfBrowsePath.split('/').filter(Boolean);
+    if (!this.sfFolderPath) return '';
+    const parts = this.sfFolderPath.split('/').filter(Boolean);
     return parts.length > 0 ? parts[parts.length - 1] : '';
   }
 
@@ -1680,11 +1675,7 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   get sfAbsolutePath(): string {
-    if (!this.sfBrowseRootPath) return '';
-    if (!this.sfBrowsePath) return this.sfBrowseRootPath;
-    // Avoid "//foo" when the picker is rooted at the filesystem root.
-    if (this.sfBrowseRootPath === '/') return '/' + this.sfBrowsePath;
-    return this.sfBrowseRootPath + '/' + this.sfBrowsePath;
+    return this.sfFolderPath;
   }
 
   sfOnMediaTypeChange(mediaType: string): void {

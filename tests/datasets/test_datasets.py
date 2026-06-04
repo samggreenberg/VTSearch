@@ -128,33 +128,34 @@ class TestDatasetEndpoints:
             file_names2 = [f["name"] for f in data2["files"]]
             assert "sound.wav" in file_names2
 
-    def test_browse_media_files_server_fs_lists_filesystem(self, client, tmp_path):
-        """``source=server_fs`` should let the picker walk the whole filesystem.
+    def test_browse_media_files_server_fs_confined_to_server_root(self, client, tmp_path, monkeypatch):
+        """``source=server_fs`` is confined to the configured server root.
 
-        The single-user mode root is ``/`` so any directory readable by the
-        server process should be listable via its absolute path stripped of
-        the leading slash.
+        In single-user mode the picker is rooted at ``SERVER_ROOTS[0]`` (not
+        the filesystem root ``/``) so it can never list a folder the
+        ``server_folder`` importer would reject at load time. Browsing the
+        root lists its subdirectories; a path that escapes the root is
+        rejected here rather than only at import.
         """
+        import vtscore.config
+
         sub = tmp_path / "subdir"
         sub.mkdir()
         (sub / "track.wav").write_bytes(b"RIFF" + b"\x00" * 64)
+        monkeypatch.setattr(vtscore.config, "SERVER_ROOTS", (tmp_path.resolve(),))
 
-        # tmp_path is absolute (e.g. /tmp/pytest-of-user/.../test_x0).
-        # Strip the leading "/" to get the relative path under "/".
-        rel = str(tmp_path).lstrip("/")
-        resp = client.get(f"/api/browse-media-files?source=server_fs&path={rel}")
+        resp = client.get("/api/browse-media-files?source=server_fs&path=")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["root_path"] == "/"
+        assert data["root_path"] == str(tmp_path.resolve())
         dir_names = [d["name"] for d in data["directories"]]
-        file_names = [f["name"] for f in data["files"]]
         assert "subdir" in dir_names
-        # No media files at this level.
-        assert "track.wav" not in file_names
-
-        # default_path is reported on every server_fs response. It points
-        # at the server user's home dir when it exists.
+        # default_path is reported on every server_fs response.
         assert "default_path" in data
+
+        # A traversal that escapes the server root is rejected outright.
+        resp = client.get("/api/browse-media-files?source=server_fs&path=../../etc")
+        assert resp.status_code == 400
 
     def test_select_browsed_file_copies_to_example_media(self, client, tmp_path):
         """POST /api/browse-media-files/select copies the file to example_media."""
@@ -259,6 +260,31 @@ class TestDatasetEndpoints:
         """GET /api/dataset/detect-media-type returns 404 for an unknown source."""
         resp = client.get("/api/dataset/detect-media-type?source=demo:nonexistent_xyz&path=")
         assert resp.status_code == 404
+
+    def test_detect_media_type_server_fs_confined_to_server_root(self, client, tmp_path, monkeypatch):
+        """``server_fs`` detection is confined to the configured server root.
+
+        Detection used to run from ``/``, so it would happily scan a folder
+        the importer rejects at load. It must now reject an absolute path that
+        resolves outside ``SERVER_ROOTS`` exactly as the importer does, while
+        still detecting media inside the root via its absolute path.
+        """
+        import vtscore.config
+
+        root = tmp_path / "media"
+        root.mkdir()
+        (root / "a.wav").write_bytes(b"RIFF")
+        (root / "b.wav").write_bytes(b"RIFF")
+        monkeypatch.setattr(vtscore.config, "SERVER_ROOTS", (tmp_path.resolve(),))
+
+        # In-root absolute path is detected.
+        resp = client.get(f"/api/dataset/detect-media-type?source=server_fs&path={root}")
+        assert resp.status_code == 200
+        assert resp.get_json()["dominant"] == "audio"
+
+        # An absolute path outside the server root is rejected, not scanned.
+        resp = client.get("/api/dataset/detect-media-type?source=server_fs&path=/etc")
+        assert resp.status_code == 400
 
     def test_detect_media_type_directory_cap(self, tmp_path):
         """The helper stops walking after ``max_dirs`` directories, even when
