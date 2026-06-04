@@ -145,7 +145,10 @@ app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-
 
 from flask_smorest import Api  # noqa: E402
 
-from vtsearch.openapi_postprocess import assign_operation_ids  # noqa: E402
+from vtsearch.openapi_postprocess import (  # noqa: E402
+    assign_operation_ids,
+    normalize_unprocessable_response,
+)
 
 api = Api(app)
 
@@ -163,6 +166,7 @@ _apispec_to_dict = api.spec.to_dict
 def _to_dict_with_operation_ids() -> dict:
     spec = _apispec_to_dict()
     assign_operation_ids(app, spec)
+    normalize_unprocessable_response(spec)
     return spec
 
 
