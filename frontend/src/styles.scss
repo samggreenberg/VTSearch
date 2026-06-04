@@ -14,6 +14,13 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
+  // Render the whole app at 110%, exactly as if the user had hit Ctrl/Cmd-"+".
+  // `zoom` scales everything uniformly (fonts, px paddings/borders, images,
+  // canvases, layout), so it matches real browser zoom without having to touch
+  // the hundreds of px-pinned values across components. Desktop-only app, and
+  // `zoom` is supported in all current desktop browsers (Chrome, Firefox 126+,
+  // Safari 18+), so no fallback is needed.
+  zoom: 1.1;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg-body);
   color: var(--text-primary);
