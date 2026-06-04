@@ -106,9 +106,7 @@ def download_ucsf_documents(  # noqa: C901
             try:
                 _core.download_file_with_progress(url, pdf_path, 0, on_progress)
                 downloaded += 1
-                on_progress(
-                    "downloading", f"Downloaded {doc_id}.pdf", downloaded, total_docs
-                )
+                on_progress("downloading", f"Downloaded {doc_id}.pdf", downloaded, total_docs)
             except Exception:
                 # Skip failed downloads silently.
                 pdf_path.unlink(missing_ok=True)
