@@ -1,7 +1,12 @@
 :host {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  // `100%` (of html/body, both height:100%), NOT `100vh`: `vh` units ignore the
+  // ancestor `zoom`, so `100vh` under the 110% root zoom renders ~10% taller
+  // than the real viewport and overflows it, pushing fixed/bottom-anchored UI
+  // (e.g. the browse minimap) off-screen. `100%` flows through the box tree and
+  // is scaled correctly by the zoom.
+  height: 100%;
   overflow: hidden;
 }
 
