@@ -408,29 +408,32 @@ def preview_detector_label(name: str, element_id: str):
 def _in_memory_thumbnail_response(media: dict, media_type: str):
     """Build a small thumbnail send_file from an in-memory media dict.
 
-    Images: serves the cached ``media_bytes``. Audio/video/document: defers
-    to the media-type's ``image_response`` (cached waveform / midframe PNG).
-    Returns ``None`` if no thumbnail can be produced from memory.
+    Images: serve the resolved media bytes via the media type's
+    ``media_response``, which lazily reads from ``media_path`` / ``media_url``
+    when ``media_bytes`` is not held in memory (thin-loaded datasets, e.g. a
+    local folder import). This mirrors the center viewer's
+    ``/api/medias/<id>/image`` byte resolution so a thumbnail never 404s for an
+    item the center can display. Audio/video/document: defer to the media
+    type's ``image_response`` (cached waveform / midframe PNG). Returns
+    ``None`` if no thumbnail can be produced.
     """
-    if media_type == "image":
-        media_bytes = media.get("media_bytes")
-        if not media_bytes:
-            return None
-        filename = media.get("filename", "") or ""
-        suffix = Path(filename).suffix.lower()
-        mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or "image/jpeg"
-        return send_file(
-            io.BytesIO(media_bytes),
-            mimetype=mimetype,
-            download_name=f"media_{media.get('id', 0)}{suffix or '.jpg'}",
-        )
-
     from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     try:
         mt = get_media_type(media_type)
     except KeyError:
         return None
+
+    if media_type == "image":
+        resp = mt.media_response(media)
+        if not isinstance(resp.data, (bytes, bytearray)) or not resp.data:
+            return None
+        return send_file(
+            io.BytesIO(resp.data),
+            mimetype=resp.mimetype,
+            download_name=resp.download_name,
+        )
+
     image_response_fn = getattr(mt, "image_response", None)
     if image_response_fn is None:
         return None
