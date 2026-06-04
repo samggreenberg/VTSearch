@@ -118,12 +118,17 @@ class TestSettingsModule:
         assert "max_concurrent_dataset_downloads" not in raw
 
     def test_max_concurrent_embeddings_default_from_hardware(self, isolated_settings):
-        """CPU-only boxes default to 1; CUDA boxes default to min(2, gpu_count)."""
-        from vtscore.embedding.loader import _detect_cuda_devices
+        """The default mirrors the hardware-derived value and is not persisted.
 
-        gpus = _detect_cuda_devices()
-        expected = max(1, min(2, gpus)) if gpus > 0 else 1
-        assert settings_mod.get_max_concurrent_dataset_embeddings() == expected
+        The concrete scaling (GPU count, CPU cores, total RAM) is unit-tested in
+        ``tests_lib/embedding/test_concurrency_defaults.py``; here we only assert
+        the settings layer surfaces that value and doesn't write it to disk.
+        """
+        from vtscore.embedding.loader import default_concurrent_embeddings
+
+        assert settings_mod.get_max_concurrent_dataset_embeddings() == default_concurrent_embeddings()
+        raw = isolated_settings.read_text() if isolated_settings.exists() else ""
+        assert "max_concurrent_dataset_embeddings" not in raw
 
     def test_max_concurrent_explicit_value_wins_over_hardware_default(self, isolated_settings):
         """An explicit ``set_*`` call overrides the hardware-derived default."""
