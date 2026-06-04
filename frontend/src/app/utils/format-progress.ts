@@ -135,6 +135,8 @@ const EMBEDDER_PRETTY: Record<string, string> = {
   xclip: 'X-CLIP',
   'x-clip': 'X-CLIP',
   whisper: 'Whisper',
+  whisper_encoder: 'Whisper',
+  paraspeechclap: 'ParaSpeechCLAP',
   ast: 'AST',
   e5: 'E5',
   bge: 'BGE',

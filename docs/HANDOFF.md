@@ -120,7 +120,7 @@ Five media types are supported:
 
 | Media type | Default embedder | Model ID | Alternatives |
 |-----------|-----------------|----------|-------------|
-| Audio | CLAP | `laion/clap-htsat-unfused` | CLAP Music (`laion/larger_clap_music_and_speech`) |
+| Audio | CLAP | `laion/clap-htsat-unfused` | CLAP Music (`laion/larger_clap_music_and_speech`), ParaSpeechCLAP speech-style (`ajd12342/paraspeechclap-combined`) |
 | Image | SigLIP | `google/siglip-base-patch16-224` | CLIP (`openai/clip-vit-base-patch32`) |
 | Video | X-CLIP | `microsoft/xclip-base-patch32` | None |
 | Text | E5 | `intfloat/e5-base-v2` | BGE (`BAAI/bge-base-en-v1.5`) |

@@ -164,9 +164,12 @@ DEP001 = [
 # import them directly for embedder weight-loading progress and EUPE
 # preprocessing transforms. Declaring them as first-party doesn't add
 # anything: the install path already pins them through the parent.
+# ``huggingface_hub`` ships with ``transformers`` and is imported directly by
+# the ParaSpeechCLAP embedder (``hf_hub_download`` for its checkpoint file).
 DEP003 = [
     "safetensors",
     "torchvision",
+    "huggingface_hub",
 ]
 # DEP002: declared but not imported. Tools we run via their CLIs
 # (pytest, ruff, …), runtime helpers loaded by name (gunicorn), or

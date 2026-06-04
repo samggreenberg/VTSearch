@@ -8,6 +8,7 @@ landed. Once a plan ships and its design notes are absorbed into
 Open the file for status; this index is just a filename list so it
 can't drift.
 
+- [audio-embedders.md](audio-embedders.md): Audio embedder candidates (CLAP / SpeechCLAP / AudioCLIP / Omni-Embed); ParaSpeechCLAP shipped
 - [browser-vision-testing.md](browser-vision-testing.md): Browser-vision testing via the Claude Chrome extension (style audit, edge states, e2e flows, long-op observability)
 - [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect with converters and clippers
 - [cli-stream-massive-images.md](cli-stream-massive-images.md): CLI streaming for massive media sources

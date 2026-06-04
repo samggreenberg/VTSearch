@@ -149,6 +149,7 @@ These are only downloaded if explicitly selected:
 | Model | Media type | HuggingFace ID | Approx. size |
 |-------|-----------|----------------|-------------|
 | CLAP Music & Speech | Audio | `laion/larger_clap_music_and_speech` | ~1.3 GB |
+| ParaSpeechCLAP (speech style) | Audio | `microsoft/wavlm-large` + `ibm-granite/granite-embedding-278m-multilingual` + `ajd12342/paraspeechclap-combined` | ~4.5 GB |
 | BGE | Text | `BAAI/bge-base-en-v1.5` | ~440 MB |
 
 All model downloads use `token=False`; no HuggingFace account or API
