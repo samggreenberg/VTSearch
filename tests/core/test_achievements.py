@@ -58,6 +58,17 @@ class TestEmptyState:
             "api",
         }
         assert all(d["read"] is False for d in state["docs"])
+        # media_types / hours breakdowns are present and all-unticked.
+        assert [m["id"] for m in state["media_types"]] == [
+            "audio",
+            "image",
+            "text",
+            "video",
+            "document",
+        ]
+        assert all(m["seen"] is False for m in state["media_types"])
+        assert [h["hour"] for h in state["hours"]] == list(range(24))
+        assert all(h["seen"] is False for h in state["hours"])
 
     def test_known_categories_present(self):
         ids = {a["id"] for a in achievements.get_full_state()["achievements"]}
@@ -235,6 +246,18 @@ class TestMediaTypesTouched:
         assert mt_state["tier_idx"] == 3  # Platinum
         assert mt_state["next_threshold"] is None
 
+    def test_media_types_breakdown_marks_seen(self):
+        achievements.record_vote("det", "audio")
+        achievements.record_vote("det", "video")
+        seen = {m["id"]: m["seen"] for m in achievements.get_full_state()["media_types"]}
+        assert seen == {
+            "audio": True,
+            "image": False,
+            "text": False,
+            "video": True,
+            "document": False,
+        }
+
 
 class TestHoursVoted:
     def test_first_vote_credits_one_hour(self):
@@ -258,6 +281,14 @@ class TestHoursVoted:
         assert hv["counter"] == 24
         assert hv["tier_idx"] == 3  # Platinum at 24
         assert hv["next_threshold"] is None
+
+    def test_hours_breakdown_marks_seen(self):
+        for hour in (0, 9, 23):
+            achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, hour))
+        hours = achievements.get_full_state()["hours"]
+        assert [h["hour"] for h in hours] == list(range(24))
+        seen_hours = {h["hour"] for h in hours if h["seen"]}
+        assert seen_hours == {0, 9, 23}
 
 
 class TestVoteStreak:
@@ -642,7 +673,7 @@ class TestActionHooks:
 
         The app applies labels to every media item in Find mode, but those are
         system-generated scores (the user did not cast them), so they must not
-        inflate the Votes Cast or Marathoner achievements.
+        inflate the Get Out the Vote or Marathoner achievements.
         """
         from helpers import setup_trainable_model_in_registry
         from vtsearch.state import snapshot_medias

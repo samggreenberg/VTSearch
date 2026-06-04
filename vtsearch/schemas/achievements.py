@@ -42,6 +42,17 @@ class _DocEntrySchema(Schema):
     read = fields.Boolean(required=True)
 
 
+class _MediaTypeEntrySchema(Schema):
+    id = fields.String(required=True)
+    name = fields.String(required=True)
+    seen = fields.Boolean(required=True, metadata={"description": "Whether the user has voted on this media type."})
+
+
+class _HourEntrySchema(Schema):
+    hour = fields.Integer(required=True, metadata={"description": "Hour of day, UTC (0-23)."})
+    seen = fields.Boolean(required=True, metadata={"description": "Whether the user has voted in this hour bucket."})
+
+
 class AchievementStateSchema(Schema):
     """Response for ``GET /api/achievements``."""
 
@@ -49,6 +60,8 @@ class AchievementStateSchema(Schema):
     achievements = fields.List(fields.Nested(_AchievementEntrySchema), required=True)
     pending_announcements = fields.List(fields.Nested(_PendingAnnouncementSchema), required=True)
     docs = fields.List(fields.Nested(_DocEntrySchema), required=True)
+    media_types = fields.List(fields.Nested(_MediaTypeEntrySchema), required=True)
+    hours = fields.List(fields.Nested(_HourEntrySchema), required=True)
 
 
 class AcknowledgeRequestSchema(Schema):

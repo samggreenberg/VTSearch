@@ -9,6 +9,11 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import type { AchievementEntry } from '../../generated/api-client/models/achievement-entry';
 import type { AchievementState } from '../../generated/api-client/models/achievement-state';
 import type { DocEntry } from '../../generated/api-client/models/doc-entry';
+import type { MediaTypeEntry } from '../../generated/api-client/models/media-type-entry';
+import type { HourEntry } from '../../generated/api-client/models/hour-entry';
+
+/** Achievement rows that carry an expandable detail panel. */
+const EXPANDABLE_IDS = new Set(['docs_read', 'media_types_touched', 'hours_voted']);
 
 const TIER_NAMES = ['Bronze', 'Silver', 'Gold', 'Platinum'];
 
@@ -30,10 +35,13 @@ interface AchievementRow extends AchievementEntry {
 export class AchievementsTabComponent implements OnInit, OnDestroy {
   rows: AchievementRow[] = [];
   docs: DocEntry[] = [];
+  mediaTypes: MediaTypeEntry[] = [];
+  hours: HourEntry[] = [];
   loading = true;
   totalScore = 0;
 
-  docsExpanded = false;
+  /** Ids of achievement rows whose detail panel is currently expanded. */
+  private readonly expandedIds = new Set<string>();
   phraseInput = '';
   phraseStatus: { kind: 'idle' | 'success' | 'already' | 'wrong'; message: string } = {
     kind: 'idle',
@@ -67,8 +75,22 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  toggleDocsExpanded(): void {
-    this.docsExpanded = !this.docsExpanded;
+  /** Whether *id*'s row supports an expandable detail panel. */
+  isExpandable(id: string): boolean {
+    return EXPANDABLE_IDS.has(id);
+  }
+
+  /** Whether *id*'s detail panel is currently open. */
+  isExpanded(id: string): boolean {
+    return this.expandedIds.has(id);
+  }
+
+  toggleExpanded(id: string): void {
+    if (this.expandedIds.has(id)) {
+      this.expandedIds.delete(id);
+    } else {
+      this.expandedIds.add(id);
+    }
   }
 
   docRawUrl(docId: string): string {
@@ -104,6 +126,8 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
   private applyState(state: AchievementState): void {
     this.rows = state.achievements.map((a) => this.toRow(a));
     this.docs = state.docs;
+    this.mediaTypes = state.media_types;
+    this.hours = state.hours;
     this.loading = state.achievements.length === 0;
     this.totalScore = state.achievements.reduce(
       (sum, a) => sum + (a.tier_idx >= 0 ? 1 << a.tier_idx : 0),
