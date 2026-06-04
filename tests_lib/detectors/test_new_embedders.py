@@ -355,6 +355,114 @@ class TestAudioWhisperEncoderEmbedderProperties:
         assert WHISPER_SAMPLE_RATE == 16000
 
 
+class TestAudioParaSpeechClapEmbedderProperties:
+    """Verify AudioParaSpeechClapEmbedder class properties and registration."""
+
+    def test_name(self):
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+
+        emb = AudioParaSpeechClapEmbedder()
+        assert emb.name == "paraspeechclap"
+
+    def test_media_type_id(self):
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+
+        emb = AudioParaSpeechClapEmbedder()
+        assert emb.media_type_id == "audio"
+
+    def test_supports_text_is_true(self):
+        """Unlike ast/whisper, ParaSpeechCLAP has a paired text tower."""
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+
+        emb = AudioParaSpeechClapEmbedder()
+        assert emb.supports_text is True
+
+    def test_is_not_default(self):
+        """CLAP remains the default audio embedder; ParaSpeechCLAP is opt-in."""
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+
+        emb = AudioParaSpeechClapEmbedder()
+        assert emb.is_default is False
+
+    def test_description_wrappers_non_empty(self):
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+
+        emb = AudioParaSpeechClapEmbedder()
+        wrappers = emb.description_wrappers
+        assert len(wrappers) > 0
+        assert all("{text}" in w for w in wrappers)
+
+    def test_registered_in_registry(self):
+        from vtscore.media import get_embedder
+
+        emb = get_embedder("paraspeechclap")
+        assert emb.name == "paraspeechclap"
+        assert emb.media_type_id == "audio"
+
+    def test_listed_in_embedders_for_type(self):
+        from vtscore.media import embedders_for_type
+
+        embedders = embedders_for_type("audio")
+        names = [e.name for e in embedders]
+        assert "paraspeechclap" in names
+
+    def test_to_dict(self):
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+
+        emb = AudioParaSpeechClapEmbedder()
+        d = emb.to_dict()
+        assert d == {
+            "name": "paraspeechclap",
+            "display_name": "ParaSpeechCLAP (speech style)",
+            "media_type_id": "audio",
+            "is_default": False,
+            "supports_text": True,
+            "supports_patch_regions": False,
+            "license_notice": None,
+        }
+
+    def test_load_models_idempotent(self):
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+
+        emb = AudioParaSpeechClapEmbedder()
+        emb._model = MagicMock()
+        emb._feature_extractor = MagicMock()
+        emb._tokenizer = MagicMock()
+        emb.load_models()
+        assert isinstance(emb._model, MagicMock)
+
+    def test_embed_media_returns_none_when_not_loaded(self):
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+
+        emb = AudioParaSpeechClapEmbedder()
+        with patch.object(emb, "load_models"):
+            result = emb.embed_media({"media_path": "/nonexistent.wav"})
+        assert result is None
+
+    def test_embed_text_returns_none_when_not_loaded(self):
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+
+        emb = AudioParaSpeechClapEmbedder()
+        with patch.object(emb, "load_models"):
+            result = emb.embed_text("a deep, raspy voice")
+        assert result is None
+
+    def test_uses_correct_model_ids(self):
+        from vtscore.config import (
+            PARASPEECHCLAP_CHECKPOINT_REPO,
+            PARASPEECHCLAP_EMBED_DIM,
+            PARASPEECHCLAP_SAMPLE_RATE,
+            PARASPEECHCLAP_SPEECH_MODEL_ID,
+            PARASPEECHCLAP_TEXT_MODEL_ID,
+        )
+
+        assert PARASPEECHCLAP_SPEECH_MODEL_ID == "microsoft/wavlm-large"
+        assert PARASPEECHCLAP_TEXT_MODEL_ID == "ibm-granite/granite-embedding-278m-multilingual"
+        assert PARASPEECHCLAP_CHECKPOINT_REPO == "ajd12342/paraspeechclap-combined"
+        assert PARASPEECHCLAP_EMBED_DIM == 768
+        assert PARASPEECHCLAP_SAMPLE_RATE == 16000
+
+
 class TestTextBGEEmbedderProperties:
     """Verify TextBGEEmbedder class properties and registration."""
 
@@ -746,8 +854,8 @@ class TestAllEmbeddersRegistration:
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
         # variants for dinov2, dinov3, eupe) + 1 face embedder
         # + 1 vision-only video embedder (videomae)
-        # + 3 audio embedders (ast, clap_general, whisper_encoder).
-        assert len(embedders) == 20
+        # + 4 audio embedders (ast, clap_general, whisper_encoder, paraspeechclap).
+        assert len(embedders) == 21
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -757,7 +865,7 @@ class TestAllEmbeddersRegistration:
         dicts = all_embedders_dict()
         by_name = {d["name"]: d for d in dicts}
         # Cross-modal embedders advertise text support.
-        for name in ("siglip", "siglip2", "clip", "clap", "clap_general", "xclip"):
+        for name in ("siglip", "siglip2", "clip", "clap", "clap_general", "paraspeechclap", "xclip"):
             assert by_name[name]["supports_text"] is True, name
         # Vision-only / patch-based and speech-only embedders do not.
         for name in (
@@ -783,6 +891,7 @@ class TestAllEmbeddersRegistration:
             "clap_general",
             "ast",
             "whisper_encoder",
+            "paraspeechclap",
             "siglip",
             "siglip2",
             "clip",
@@ -805,7 +914,7 @@ class TestAllEmbeddersRegistration:
         from vtscore.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("audio")}
-        assert names == {"clap", "clap_music", "clap_general", "ast", "whisper_encoder"}
+        assert names == {"clap", "clap_music", "clap_general", "ast", "whisper_encoder", "paraspeechclap"}
 
     def test_embedders_for_image(self):
         from vtscore.media import embedders_for_type
@@ -853,8 +962,8 @@ class TestAllEmbeddersRegistration:
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
         # variants for dinov2, dinov3, eupe) + 1 face embedder
         # + 1 vision-only video embedder (videomae)
-        # + 3 audio embedders (ast, clap_general, whisper_encoder).
-        assert len(dicts) == 20
+        # + 4 audio embedders (ast, clap_general, whisper_encoder, paraspeechclap).
+        assert len(dicts) == 21
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
@@ -877,6 +986,7 @@ class TestEmbedderSentinelDiscovery:
         from vtscore.media.audio import embedder_clap
         from vtscore.media.audio import embedder_clap_general
         from vtscore.media.audio import embedder_clap_music
+        from vtscore.media.audio import embedder_paraspeechclap
         from vtscore.media.audio import embedder_whisper
         from vtscore.media.image import embedder_siglip
         from vtscore.media.text import embedder_bge
@@ -892,6 +1002,7 @@ class TestEmbedderSentinelDiscovery:
             embedder_clap,
             embedder_clap_general,
             embedder_clap_music,
+            embedder_paraspeechclap,
             embedder_whisper,
             embedder_siglip,
             embedder_bge,
@@ -1116,6 +1227,12 @@ class TestNewEmbeddersInheritance:
         from vtscore.media.embedder import MediaEmbedder
 
         assert issubclass(AudioWhisperEncoderEmbedder, MediaEmbedder)
+
+    def test_paraspeechclap_is_media_embedder(self):
+        from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
+        from vtscore.media.embedder import MediaEmbedder
+
+        assert issubclass(AudioParaSpeechClapEmbedder, MediaEmbedder)
 
     def test_embed_text_enriched_works(self):
         """embed_text_enriched (inherited from base) should work with mocked embed_text."""

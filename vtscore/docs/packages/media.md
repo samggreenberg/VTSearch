@@ -311,7 +311,7 @@ Each lives under `vtscore/media/<type>/` and self-registers:
 
 | Type     | Folder                       | Default embedder                | Other embedders ship in-tree                            |
 |----------|------------------------------|---------------------------------|---------------------------------------------------------|
-| audio    | `vtscore/media/audio/`       | `clap` (`laion/clap-htsat-unfused`) | `clap_general`, `clap_music`, `ast`, `whisper_encoder` |
+| audio    | `vtscore/media/audio/`       | `clap` (`laion/clap-htsat-unfused`) | `clap_general`, `clap_music`, `ast`, `whisper_encoder`, `paraspeechclap` |
 | image    | `vtscore/media/image/`       | `siglip` (`google/siglip-base-patch16-224`) | `clip`, `siglip2`, `dinov2_single`, `dinov2_patch`, `dinov3_single`, `dinov3_patch`, `eupe_single`, `eupe_patch`, `face` |
 | text     | `vtscore/media/text/`        | `e5` (`intfloat/multilingual-e5-base`) | `bge`                                            |
 | video    | `vtscore/media/video/`       | `xclip` (`microsoft/xclip-base-patch32`) | `videomae`, `languagebind`                       |

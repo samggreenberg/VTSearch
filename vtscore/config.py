@@ -148,6 +148,20 @@ AST_MODEL_ID = "MIT/ast-finetuned-audioset-10-10-0.4593"
 AST_SAMPLE_RATE = 16000  # AST expects 16 kHz mono
 WHISPER_MODEL_ID = "openai/whisper-base"
 WHISPER_SAMPLE_RATE = 16000  # Whisper expects 16 kHz mono
+# ParaSpeechCLAP: dual-encoder speech↔text "style" CLAP (MIT-licensed).
+# Unlike the AST / Whisper speech embedders, it has a paired text tower, so
+# text queries like "a deep, raspy voice" or "a whispered, anxious style" land
+# in the same space as the speech embeddings.  Reconstructed from the upstream
+# checkpoint via ``_paraspeechclap_model.py`` (WavLM speech + Granite text +
+# projection heads); the ``combined`` variant covers both speaker-level
+# (pitch/texture/clarity) and utterance-level (emotion/speaking-style) attributes.
+PARASPEECHCLAP_SPEECH_MODEL_ID = "microsoft/wavlm-large"
+PARASPEECHCLAP_TEXT_MODEL_ID = "ibm-granite/granite-embedding-278m-multilingual"
+PARASPEECHCLAP_CHECKPOINT_REPO = "ajd12342/paraspeechclap-combined"
+PARASPEECHCLAP_CHECKPOINT_FILE = "paraspeechclap-combined.pth.tar"
+PARASPEECHCLAP_EMBED_DIM = 768
+PARASPEECHCLAP_SAMPLE_RATE = 16000  # WavLM expects 16 kHz mono
+PARASPEECHCLAP_MAX_SAMPLES = 16000 * 30  # cap clips at 30 s to bound CPU memory/latency
 BGE_MODEL_ID = "BAAI/bge-base-en-v1.5"
 LANGUAGEBIND_VIDEO_MODEL_ID = "LanguageBind/LanguageBind_Video_V1.5_FT"
 VIDEOMAE_MODEL_ID = "OpenGVLab/VideoMAEv2-Base"
