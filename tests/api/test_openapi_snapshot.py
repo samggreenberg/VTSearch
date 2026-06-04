@@ -42,13 +42,7 @@ class TestUnprocessableResponseNormalization:
                 }
             },
             "paths": {
-                "/api/thing": {
-                    "post": {
-                        "responses": {
-                            "422": {"$ref": "#/components/responses/UNPROCESSABLE_ENTITY"}
-                        }
-                    }
-                }
+                "/api/thing": {"post": {"responses": {"422": {"$ref": "#/components/responses/UNPROCESSABLE_ENTITY"}}}}
             },
         }
 
@@ -76,10 +70,7 @@ class TestUnprocessableResponseNormalization:
         normalize_unprocessable_response(spec)
 
         assert set(spec["components"]["responses"]) == {"UNPROCESSABLE_CONTENT"}
-        assert (
-            spec["components"]["responses"]["UNPROCESSABLE_CONTENT"]["description"]
-            == "Unprocessable Content"
-        )
+        assert spec["components"]["responses"]["UNPROCESSABLE_CONTENT"]["description"] == "Unprocessable Content"
 
 
 def _all_refs(node) -> set[str]:
