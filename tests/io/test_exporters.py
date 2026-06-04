@@ -48,6 +48,30 @@ EMPTY_RESULTS = {
 }
 
 
+def _multi_user_provider(user_dir: Path):
+    """A LoginProvider that confines every request to *user_dir*.
+
+    Path confinement only applies in multi-user mode; single-user / no-auth
+    mode is unrestricted. These tests force multi-user mode to exercise the
+    boundary.
+    """
+    from vtsearch.auth import LoginProvider
+
+    class _Provider(LoginProvider):
+        name = "test_multi_exporter"
+
+        def get_user(self, request):
+            return "testuser"
+
+        def is_authenticated(self, request):
+            return True
+
+        def get_user_data_dir(self, username, base_data_dir):
+            return user_dir
+
+    return _Provider()
+
+
 # ---------------------------------------------------------------------------
 # ExporterField
 # ---------------------------------------------------------------------------
@@ -619,31 +643,49 @@ class TestExportEndpoint:
         # bodies surfaces as 422 (``exporter_name`` required).
         assert res.status_code == 422
 
-    def test_path_traversal_absolute_rejected(self, client):
-        """Absolute paths outside the allowed directory must be rejected."""
-        res = client.post(
-            "/api/exporters/export",
-            json={
-                "exporter_name": "server_json_file",
-                "field_values": {"filepath": "/etc/passwd"},
-                "results": SAMPLE_RESULTS,
-            },
-        )
-        assert res.status_code == 400
-        msg = res.get_json()["message"].lower()
-        assert "outside" in msg or "must be within" in msg
+    def test_path_traversal_absolute_rejected(self, client, tmp_path):
+        """In multi-user mode, absolute paths outside the user dir are rejected."""
+        from vtsearch.auth import get_login_provider, set_login_provider
 
-    def test_path_traversal_relative_rejected(self, client):
-        """Relative paths that escape the base directory must be rejected."""
-        res = client.post(
-            "/api/exporters/export",
-            json={
-                "exporter_name": "server_json_file",
-                "field_values": {"filepath": "../../../etc/shadow"},
-                "results": SAMPLE_RESULTS,
-            },
-        )
-        assert res.status_code == 400
+        user_dir = tmp_path / "testuser"
+        user_dir.mkdir()
+        original = get_login_provider()
+        try:
+            set_login_provider(_multi_user_provider(user_dir))
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_json_file",
+                    "field_values": {"filepath": "/etc/passwd"},
+                    "results": SAMPLE_RESULTS,
+                },
+            )
+            assert res.status_code == 400
+            msg = res.get_json()["message"].lower()
+            assert "outside" in msg or "must be within" in msg
+        finally:
+            set_login_provider(original)
+
+    def test_path_traversal_relative_rejected(self, client, tmp_path):
+        """In multi-user mode, relative paths that escape the user dir are rejected."""
+        from vtsearch.auth import get_login_provider, set_login_provider
+
+        user_dir = tmp_path / "testuser"
+        user_dir.mkdir()
+        original = get_login_provider()
+        try:
+            set_login_provider(_multi_user_provider(user_dir))
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_json_file",
+                    "field_values": {"filepath": "../../../etc/shadow"},
+                    "results": SAMPLE_RESULTS,
+                },
+            )
+            assert res.status_code == 400
+        finally:
+            set_login_provider(original)
 
     def test_export_oserror_returns_500_and_logs_traceback(self, client, caplog):
         """An OSError from an exporter should return 500 and log the full traceback."""
