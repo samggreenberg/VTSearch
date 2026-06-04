@@ -33,6 +33,7 @@
         [meta]="meta"
         [mediaType]="mediaType"
         [displayScale]="hexDisplayScale"
+        [colormap]="colormap"
         (hexHover)="onHexHover($event)"
       />
       <vt-browse-hover-preview
@@ -118,6 +119,7 @@
           [meta]="meta"
           [width]="minimapWidth"
           [height]="minimapHeight"
+          [colormap]="colormap"
           (closed)="setMinimapVisible(false)"
           (resized)="onMinimapResized($event)"
         />

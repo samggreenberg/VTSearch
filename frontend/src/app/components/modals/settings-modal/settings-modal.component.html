@@ -38,6 +38,14 @@
         </button>
         <button
           class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'browser'"
+          (click)="activeSettingsTab = 'browser'"
+          title="VTSBrowse projection-browser look per media type: bin shape, density colormap, and cell size">
+          <vt-icon type="grid" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'browser'"></vt-icon>
+          Browser
+        </button>
+        <button
+          class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'server'"
           (click)="activeSettingsTab = 'server'"
           title="Settings fixed when the server started; shared by everyone and read-only here">
@@ -231,6 +239,63 @@
             <input type="number" class="form-input" [ngModel]="settings.autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
           </div>
 
+        }
+
+        <!-- Browser (VTSBrowse projection browser) -->
+        @if (activeSettingsTab === 'browser') {
+          <h3>Browser</h3>
+          <p class="info-text">
+            How the VTSBrowse projection browser looks, per media type. The same controls
+            live on the browse canvas itself; changes here are remembered for next time.
+          </p>
+          @if (mediaTypes.length > 0) {
+            <div class="view-tabs">
+              @for (mt of mediaTypes; track mt.type_id) {
+                <button
+                  class="view-tab"
+                  [class.view-tab--active]="activeBrowseTab === mt.type_id"
+                  (click)="activeBrowseTab = mt.type_id"
+                  [title]="'Browser settings for ' + mt.name + ' datasets'">
+                  {{ mt.name }}
+                </button>
+              }
+            </div>
+            <div class="view-tab-content browser-tab-content">
+              <div class="form-group">
+                <label class="form-label" title="Tile the projection as hexagons or squares">Bin shape</label>
+                <div class="toggle-group">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseBinShape(activeBrowseTab) === 'hex'" (click)="onBrowseBinShapeChange(activeBrowseTab, 'hex')" title="Tile the projection with hexagons">
+                    Hexagons
+                  </button>
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseBinShape(activeBrowseTab) === 'square'" (click)="onBrowseBinShapeChange(activeBrowseTab, 'square')" title="Tile the projection with squares">
+                    Squares
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap</label>
+                <select class="form-select" [ngModel]="getBrowseColormap(activeBrowseTab)" (ngModelChange)="onBrowseColormapChange(activeBrowseTab, $event)" aria-label="Browser colormap">
+                  <option value="auto">Auto (match theme)</option>
+                  <option value="heat">Heat (red → yellow)</option>
+                  <option value="ocean">Ocean (blue)</option>
+                  <option value="gray">Grayscale</option>
+                </select>
+                <p class="form-hint">Darker bins mean more items in light mode; brighter bins mean more in dark mode.</p>
+              </div>
+              <div class="form-group">
+                <label class="form-label" title="On-screen size of the projection cells">Cell size</label>
+                <select class="form-select" [ngModel]="getBrowseIconSize(activeBrowseTab)" (ngModelChange)="onBrowseIconSizeChange(activeBrowseTab, $event)" aria-label="Browser cell size">
+                  <option value="XS">XS</option>
+                  <option value="S">S</option>
+                  <option value="M">M</option>
+                  <option value="L">L</option>
+                  <option value="XL">XL</option>
+                </select>
+              </div>
+            </div>
+          } @else {
+            <p class="empty-state">No media types registered.</p>
+          }
         }
 
         <!-- Server Settings (read-only) -->

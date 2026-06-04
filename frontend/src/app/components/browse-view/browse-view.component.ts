@@ -21,7 +21,10 @@ import { DatasetsRegistryApiService } from '../../services/datasets-registry-api
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
+import { BROWSE_COLORMAP_IDS, type BrowseColormapId } from '../browse-canvas/hex-render.util';
 import type { BinShape, ProjectionMeta } from '../../models/projection.models';
+import type { AppSettings } from '../../generated/api-client/models/app-settings';
+import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 
 @Component({
   selector: 'vt-browse-view',
@@ -54,12 +57,28 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   datasetName = '';
 
   /**
-   * Discrete on-screen size multipliers for the hexes. ``1`` (index 2) is the
-   * default fit; the bigger/smaller buttons step through these. This only
-   * rescales the rendering — it never changes which vectors land in a hex.
+   * Discrete on-screen size multipliers for the hexes, one per named icon
+   * size (XS…XL). ``M`` (index 2, scale 1) is the default fit; the
+   * bigger/smaller buttons step through these and the Settings → Browser tab
+   * picks one by name. This only rescales the rendering — it never changes
+   * which vectors land in a hex. The persisted per-media value is the size
+   * *label* (see {@link ICON_SIZES}), not the multiplier.
    */
-  private readonly HEX_SCALES = [0.5, 0.7, 1, 1.5, 2.2, 3];
+  private readonly HEX_SCALES = [0.5, 0.75, 1, 1.6, 2.5];
+  /** Named icon sizes, index-aligned with {@link HEX_SCALES}. */
+  static readonly ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL'] as const;
   hexScaleIndex = 2;
+
+  /**
+   * Density colormap preset for the flat (non-thumbnail) shading, mirrored
+   * from the per-media ``browse_colormap`` setting and passed to the canvas
+   * and minimap. ``auto`` follows the theme (Ocean in light, Heat in dark).
+   */
+  colormap: BrowseColormapId = 'auto';
+
+  /** Last settings snapshot, kept so per-media browser prefs can be
+   *  re-resolved when the active media type becomes known after load. */
+  private lastSettings: AppSettings | null = null;
 
   /**
    * Which lattice the projection is tiled with. Mirrored from the persisted
@@ -110,6 +129,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.settingsState.settings$.pipe(takeUntil(this.destroy$)).subscribe((settings) => {
       if (!settings) return;
+      this.lastSettings = settings;
       this.minimapVisible = settings.browse_minimap_visible !== false;
       if (settings.browse_minimap_width != null) {
         this.minimapWidth = this.clamp(
@@ -125,8 +145,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           MINIMAP_MAX_HEIGHT,
         );
       }
-      const shape: BinShape = settings.browse_bin_shape === 'square' ? 'square' : 'hex';
-      if (shape !== this.binShape) this.switchBinShape(shape, false);
+      this.applyBrowsePrefsForMediaType();
     });
     this.settingsState.load();
 
@@ -157,6 +176,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         next: (status) => {
           if (!this.subset) this.datasetName = status.display_name || '';
           this.mediaType = status.media_type || '';
+          this.applyBrowsePrefsForMediaType();
         },
       });
 
@@ -202,12 +222,65 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     return this.hexScaleIndex === this.HEX_SCALES.length - 1;
   }
 
-  /** Grow (+1) or shrink (-1) the on-screen hex size, clamped to the range. */
+  /** Grow (+1) or shrink (-1) the on-screen hex size, clamped to the range,
+   *  and persist the new size as the per-media ``browse_icon_size``. */
   bumpHexSize(delta: 1 | -1): void {
-    this.hexScaleIndex = Math.max(
+    const next = Math.max(
       0,
       Math.min(this.HEX_SCALES.length - 1, this.hexScaleIndex + delta),
     );
+    if (next === this.hexScaleIndex) return;
+    this.hexScaleIndex = next;
+    this.persistBrowsePref('browse_icon_size', BrowseViewComponent.ICON_SIZES[next]);
+  }
+
+  /**
+   * Re-resolve the per-media browser preferences (bin shape, colormap, icon
+   * size) for the active media type from the last settings snapshot. Called
+   * when settings arrive and again once the media type is known (it lands
+   * after the initial settings push), so a saved-per-type choice is applied
+   * even though the two facts arrive out of order.
+   */
+  private applyBrowsePrefsForMediaType(): void {
+    const s = this.lastSettings;
+    if (!s) return;
+    const mt = this.mediaType;
+
+    const cmap = mt ? this.perMediaValue(s.browse_colormap, mt) : '';
+    this.colormap =
+      cmap && (BROWSE_COLORMAP_IDS as readonly string[]).includes(cmap)
+        ? (cmap as BrowseColormapId)
+        : 'auto';
+
+    const sizeLabel = mt ? this.perMediaValue(s.browse_icon_size, mt) : '';
+    const sizeIdx = (BrowseViewComponent.ICON_SIZES as readonly string[]).indexOf(sizeLabel);
+    this.hexScaleIndex = sizeIdx >= 0 ? sizeIdx : 2;
+
+    const shape: BinShape = this.perMediaValue(s.browse_bin_shape, mt) === 'square' ? 'square' : 'hex';
+    if (shape !== this.binShape) this.switchBinShape(shape, false);
+  }
+
+  /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */
+  private perMediaValue(map: { [key: string]: string } | undefined, mt: string): string {
+    if (!map || !mt) return '';
+    return map[mt] ?? '';
+  }
+
+  /** Persist a per-media browser preference, merging into the current map so
+   *  other media types' choices are preserved, and update the local snapshot
+   *  so subsequent reads stay consistent before the PUT round-trips. */
+  private persistBrowsePref(
+    key: 'browse_bin_shape' | 'browse_colormap' | 'browse_icon_size',
+    value: string,
+  ): void {
+    const mt = this.mediaType;
+    if (!mt) return;
+    const existing = (this.lastSettings?.[key] as { [k: string]: string } | undefined) || {};
+    const next = { ...existing, [mt]: value };
+    if (this.lastSettings) {
+      (this.lastSettings as Record<string, unknown>)[key] = next;
+    }
+    this.settingsState.update({ [key]: next } as SettingsUpdate).subscribe();
   }
 
   /** Toggle the overview minimap and persist the choice. */
@@ -244,7 +317,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (shape === this.binShape) return;
     this.binShape = shape;
     this.tileCache.setBinShape(shape);
-    if (persist) this.settingsState.update({ browse_bin_shape: shape }).subscribe();
+    if (persist) this.persistBrowsePref('browse_bin_shape', shape);
     if (this.status === 'ready') {
       this.ensureShape();
     } else {
@@ -370,7 +443,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /** Route a freshly-fetched meta to the right state, auto-building if absent. */
   private applyMeta(meta: ProjectionMeta): void {
     this.meta = meta;
-    if (meta.media_type) this.mediaType = meta.media_type;
+    if (meta.media_type) {
+      this.mediaType = meta.media_type;
+      this.applyBrowsePrefsForMediaType();
+    }
     this.tileCache.setProjectionId(meta.projection_id);
 
     if (meta.point_count > 0) {
@@ -407,7 +483,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           next: (meta) => {
             this.pollErrors = 0;
             this.meta = meta;
-            if (meta.media_type) this.mediaType = meta.media_type;
+            if (meta.media_type) {
+              this.mediaType = meta.media_type;
+              this.applyBrowsePrefsForMediaType();
+            }
             this.tileCache.setProjectionId(meta.projection_id);
             if (meta.point_count > 0) {
               this.polling = false;

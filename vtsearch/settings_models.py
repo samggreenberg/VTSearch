@@ -29,11 +29,17 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
 
 __all__ = [
+    "BinShape",
+    "BrowseColormap",
+    "BrowseIconSize",
     "FocusMode",
     "GridIconSize",
     "ServerSettings",
     "Theme",
     "UserSettings",
+    "VALID_BIN_SHAPES",
+    "VALID_BROWSE_COLORMAPS",
+    "VALID_BROWSE_ICON_SIZES",
     "VALID_FOCUS_MODES",
     "VALID_GRID_ICON_SIZES",
     "VALID_PANEL_PX",
@@ -48,11 +54,19 @@ ViewMode = Literal["grid", "list"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
 BinShape = Literal["hex", "square"]
+# VTSBrowse density colormap preset. ``auto`` follows the active theme (Ocean
+# in light mode, Heat in dark/high-viz); the rest lock to a specific map.
+BrowseColormap = Literal["auto", "heat", "ocean", "gray"]
+# VTSBrowse on-screen cell size, shared label set with the grid icon size.
+BrowseIconSize = Literal["XS", "S", "M", "L", "XL"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_VIEW_MODES: tuple[str, ...] = ("grid", "list")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
+VALID_BIN_SHAPES: tuple[str, ...] = ("hex", "square")
+VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
+VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_PANEL_PX: tuple[int, int] = (150, 500)
 
 
@@ -187,11 +201,23 @@ class UserSettings(BaseModel):
     browse_minimap_width: Annotated[int, _clamp(120, 600)] = 200
     browse_minimap_height: Annotated[int, _clamp(90, 450)] = 150
 
-    # VTSBrowse bin shape: tile the projection as hexagons (default) or
-    # squares. Persisted so the user's last choice comes back on the next
-    # visit. Driven by the hex/square toggle on the browse canvas, not a
-    # Settings-modal widget.
-    browse_bin_shape: BinShape = "hex"
+    # VTSBrowse per-media-type display preferences. Each is a
+    # ``{media_type_id: value}`` dict so a user can tune the projection
+    # browser independently for, say, audio vs. image datasets. Empty
+    # entries fall back to the per-type default on the frontend (hex,
+    # ``auto`` colormap, ``M`` size). Driven by the toolbar toggles on the
+    # browse canvas AND the Settings → Browser tab; both write the same
+    # maps keyed by the active dataset's media type.
+    #
+    # - ``browse_bin_shape``: tile the projection as hexagons (default) or
+    #   squares, per media type.
+    # - ``browse_colormap``: density colormap preset (``auto`` follows the
+    #   theme — Ocean in light mode, Heat in dark/high-viz).
+    # - ``browse_icon_size``: on-screen cell size (XS…XL), the named form of
+    #   the canvas's bigger/smaller buttons.
+    browse_bin_shape: dict[str, BinShape] = Field(default_factory=dict)
+    browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
+    browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
 
     view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
     view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)
