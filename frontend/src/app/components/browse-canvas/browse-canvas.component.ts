@@ -15,7 +15,8 @@ import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
-import { SQRT3, traceCellPath, densityColor } from './hex-render.util';
+import { densityColor } from './hex-render.util';
+import { binGeometry, BinGeometry } from './bin-geometry';
 import type {
   HexCellPayload,
   ProjectionMeta,
@@ -67,6 +68,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private transform: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
   private activeLevel = 0;
   private maxCount = 1;
+  // The projection id the view was last framed for. Hex and square share one
+  // projection id, so toggling bin shape re-bins without re-fitting to data —
+  // the pan/zoom is preserved. Only a genuinely new projection re-frames.
+  private lastProjectionId = '';
 
   private isPanning = false;
   private panStartX = 0;
@@ -110,9 +115,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     private viewport: BrowseViewportService,
   ) {}
 
-  /** True when hexes should be painted with the central item's thumbnail. */
+  /** True when cells should be painted with the central item's thumbnail. */
   private get thumbnailMode(): boolean {
     return this.mediaType === 'image' || this.mediaType === 'video';
+  }
+
+  /** Geometry (hex or square) for the active projection's bin shape. */
+  private get geom(): BinGeometry {
+    return binGeometry(this.meta?.bin_shape);
   }
 
   /**
@@ -157,10 +167,18 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['meta'] && this.meta) {
       this.tileCache.setProjectionId(this.meta.projection_id);
-      // A new projection means new representative items; drop stale thumbnails.
-      this.thumbCache.clear();
-      this.thumbFailed.clear();
-      this.fitToData();
+      // A bin-shape toggle delivers fresh meta for the *same* projection id
+      // (hex and square share one UMAP layout). In that case keep the current
+      // pan/zoom and just re-bin visually; only a genuinely new projection
+      // re-frames to data and drops stale representative thumbnails.
+      if (this.meta.projection_id !== this.lastProjectionId) {
+        this.lastProjectionId = this.meta.projection_id;
+        this.thumbCache.clear();
+        this.thumbFailed.clear();
+        this.fitToData();
+      } else {
+        this.updateActiveLevel();
+      }
       this.requestRedraw();
     }
     // Display-size changes only rescale rendering; the active level (binning)
@@ -263,11 +281,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (!this.meta) return [];
     const level = this.activeLevel;
     const radius = this.meta.base_radius / Math.pow(2, level);
-    const dx = radius * SQRT3;
-    const dy = radius * 1.5;
+    const geom = this.geom;
     const tileSpan = this.meta.tile_span;
-    const tileW = tileSpan * dx;
-    const tileH = tileSpan * dy;
+    const tileW = tileSpan * geom.dx(radius);
+    const tileH = tileSpan * geom.dy(radius);
 
     const [vxmin, vymin, vxmax, vymax] = this.getVisibleBounds();
     const txMin = Math.floor(vxmin / tileW - 1);
@@ -350,10 +367,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     radius: number,
     cell: HexCellPayload,
   ): void {
-    // A cell with one item is drawn as a disc (slightly smaller than the hex);
-    // multi-item cells stay hexes so they tile the space.
+    // A cell with one item is drawn as a disc (slightly smaller than the cell);
+    // multi-item cells keep their full shape so they tile the space.
     const single = cell.count === 1;
-    traceCellPath(ctx, cx, cy, radius, single);
+    this.geom.traceCell(ctx, cx, cy, radius, single);
 
     // Image / video: paint the central item's thumbnail clipped to the cell.
     // Until it loads, fall back to the density shading below so the cell is
@@ -622,14 +639,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const [px, py] = this.screenToProj(sx, sy);
     const level = this.activeLevel;
     const radius = this.meta.base_radius / Math.pow(2, level);
-    const dx = radius * SQRT3;
-    const dy = radius * 1.5;
-    const tileSpan = this.meta.tile_span;
+    const geom = this.geom;
+    const tileW = this.meta.tile_span * geom.dx(radius);
+    const tileH = this.meta.tile_span * geom.dy(radius);
 
-    const qApprox = Math.round((px / dx) * 2);
-    const rEst = Math.round(py / dy);
-    const txEst = Math.floor((qApprox / 2) / tileSpan);
-    const tyEst = Math.floor(rEst / tileSpan);
+    const txEst = Math.floor(px / tileW);
+    const tyEst = Math.floor(py / tileH);
 
     let best: HexCellPayload | null = null;
     let bestDist = Infinity;
@@ -650,7 +665,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       }
     }
 
-    if (best && bestDist < radius * radius) {
+    if (best && geom.contains(best.cx - px, best.cy - py, radius)) {
       return best;
     }
     return null;

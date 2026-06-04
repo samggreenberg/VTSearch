@@ -122,35 +122,53 @@ def read_meta(path: str | Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _projection_entry_name(bin_shape: str) -> str:
+    """ZIP entry name holding the projection binned as *bin_shape*.
+
+    Each bin shape (hex / square) is stored in its own entry so a container can
+    hold both at once and the Browse hex/square toggle can load whichever the
+    user picks without re-binning.  Hex keeps the legacy ``projection.npz`` name
+    so containers written before the toggle still load unchanged.
+    """
+    return "projection.npz" if bin_shape == "hex" else f"projection_{bin_shape}.npz"
+
+
 def append_projection(
     path: str | Path,
     projection: Any,
     pyramid: Any,
 ) -> None:
-    """Append (or replace) the projection inside an existing container."""
+    """Append (or replace) the projection for *pyramid*'s bin shape in a container.
+
+    Only the entry for this pyramid's ``bin_shape`` is touched; a pyramid
+    already stored for the other shape is left intact, so hex and square
+    pyramids coexist in one container.
+    """
     p = Path(path)
+    entry_name = _projection_entry_name(pyramid.bin_shape)
     npz_bytes = _serialize_projection(projection, pyramid)
 
     with zipfile.ZipFile(str(p), "a") as zf:
-        if "projection.npz" in zf.namelist():
-            _rewrite_without(p, "projection.npz")
+        if entry_name in zf.namelist():
+            _rewrite_without(p, entry_name)
             with zipfile.ZipFile(str(p), "a") as zf2:
-                zf2.writestr("projection.npz", npz_bytes)
+                zf2.writestr(entry_name, npz_bytes)
         else:
-            zf.writestr("projection.npz", npz_bytes)
+            zf.writestr(entry_name, npz_bytes)
 
-    logger.info("Appended projection to container: %s", p)
+    logger.info("Appended %s projection to container: %s", pyramid.bin_shape, p)
 
 
-def read_projection(path: str | Path) -> tuple[Any, Any] | None:
-    """Read the projection + pyramid from a container, or ``None``."""
+def read_projection(path: str | Path, bin_shape: str = "hex") -> tuple[Any, Any] | None:
+    """Read the projection + pyramid for *bin_shape* from a container, or ``None``."""
+    entry_name = _projection_entry_name(bin_shape)
     try:
         with zipfile.ZipFile(str(path), "r") as zf:
-            if "projection.npz" not in zf.namelist():
+            if entry_name not in zf.namelist():
                 return None
-            npz_bytes = zf.read("projection.npz")
+            npz_bytes = zf.read(entry_name)
     except Exception:
-        logger.warning("Failed to read projection from container %s", path, exc_info=True)
+        logger.warning("Failed to read %s projection from container %s", bin_shape, path, exc_info=True)
         return None
 
     return _deserialize_projection(npz_bytes)

@@ -14,7 +14,8 @@ import {
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
-import { SQRT3, traceCellPath, densityColor } from '../browse-canvas/hex-render.util';
+import { densityColor } from '../browse-canvas/hex-render.util';
+import { binGeometry } from '../browse-canvas/bin-geometry';
 import { IconComponent } from '../icon/icon.component';
 import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
 
@@ -162,8 +163,9 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   private overviewTiles(level: number): { tx: number; ty: number }[] {
     if (!this.meta) return [];
     const radius = this.meta.base_radius / Math.pow(2, level);
-    const tileW = this.meta.tile_span * radius * SQRT3;
-    const tileH = this.meta.tile_span * radius * 1.5;
+    const geom = binGeometry(this.meta.bin_shape);
+    const tileW = this.meta.tile_span * geom.dx(radius);
+    const tileH = this.meta.tile_span * geom.dy(radius);
     const [xmin, ymin, xmax, ymax] = this.meta.bounds;
     const txMin = Math.floor(xmin / tileW) - 1;
     const txMax = Math.ceil(xmax / tileW) + 1;
@@ -227,10 +229,11 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       const cells = this.overviewCells(level);
       let maxCount = 1;
       for (const c of cells) if (c.count > maxCount) maxCount = c.count;
-      const hexR = (this.meta!.base_radius / Math.pow(2, level)) * f.scale;
+      const geom = binGeometry(this.meta!.bin_shape);
+      const cellR = (this.meta!.base_radius / Math.pow(2, level)) * f.scale;
       for (const cell of cells) {
         const [sx, sy] = this.projToMap(cell.cx, cell.cy, f);
-        traceCellPath(ctx, sx, sy, hexR, cell.count === 1);
+        geom.traceCell(ctx, sx, sy, cellR, cell.count === 1);
         const t = Math.log(cell.count) / Math.log(maxCount || 2);
         ctx.fillStyle = densityColor(Math.max(0, Math.min(1, t)));
         ctx.fill();

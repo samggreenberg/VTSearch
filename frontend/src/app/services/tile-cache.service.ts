@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, of, Subject } from 'rxjs';
 import { tap, shareReplay, catchError } from 'rxjs/operators';
 import { ProjectionApiService } from './projection-api.service';
-import type { TilePayload } from '../models/projection.models';
+import type { BinShape, TilePayload } from '../models/projection.models';
 
 interface CacheEntry {
   tile: TilePayload;
@@ -17,6 +17,10 @@ export class TileCacheService {
   private inflight = new Map<string, Observable<TilePayload>>();
   private readonly MAX_ENTRIES = 512;
   private projectionId = '';
+  // The bin shape (hex/square) tiles are currently fetched for. It is part of
+  // the cache key, so switching shapes keeps both binnings cached side by side
+  // (they share one projection id, so the id alone can't tell them apart).
+  private binShape: BinShape = 'hex';
 
   readonly tileLoaded$ = new Subject<TilePayload>();
 
@@ -26,6 +30,10 @@ export class TileCacheService {
       this.inflight.clear();
       this.projectionId = id;
     }
+  }
+
+  setBinShape(shape: BinShape): void {
+    this.binShape = shape;
   }
 
   getTile(level: number, tx: number, ty: number): Observable<TilePayload> | null {
@@ -42,7 +50,7 @@ export class TileCacheService {
 
     if (!this.projectionId) return null;
 
-    const req$ = this.projectionApi.getTile(level, tx, ty).pipe(
+    const req$ = this.projectionApi.getTile(this.binShape, level, tx, ty).pipe(
       tap((tile) => {
         this.inflight.delete(key);
         this.put(key, tile);
@@ -81,7 +89,7 @@ export class TileCacheService {
   }
 
   private key(level: number, tx: number, ty: number): string {
-    return `${level}:${tx}:${ty}`;
+    return `${this.binShape}:${level}:${tx}:${ty}`;
   }
 
   private put(key: string, tile: TilePayload): void {

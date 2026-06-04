@@ -100,7 +100,8 @@
 // grouped pill look of the Find view's grid-size buttons (.vc-btn); the hex
 // pill reuses the image icon at 11px / 18px, the zoom pill uses +/- glyphs.
 .browse-zoom,
-.browse-size {
+.browse-size,
+.browse-shape {
   display: inline-flex;
 }
 
@@ -131,7 +132,7 @@
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   }
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled):not(.browse-size-btn--active) {
     color: var(--text-primary);
     border-color: var(--text-primary);
     z-index: 1;
@@ -152,4 +153,21 @@
   font-size: var(--font-lg);
   font-weight: var(--weight-medium);
   line-height: 1;
+}
+
+// Hex/square glyph buttons carry a unicode shape rather than an icon child.
+.browse-size-btn--glyph {
+  font-size: var(--font-md);
+  line-height: 1;
+}
+
+// The selected bin shape reads as pressed: filled accent surface that stays
+// lit even when not hovered, so the active lattice is obvious at a glance.
+// Mirrors the Find view's ``.vc-btn--active`` treatment.
+.browse-size-btn--active {
+  background: var(--accent-color);
+  color: var(--toggle-active-text);
+  border-color: var(--accent-color);
+  box-shadow: inset 0 1px 3px var(--shadow-dropdown);
+  z-index: 1;
 }

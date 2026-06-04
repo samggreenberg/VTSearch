@@ -49,6 +49,7 @@ def test_round_trip(tmp_path):
     assert proj2.ids == proj.ids
     np.testing.assert_array_equal(proj2.coords, proj.coords)
 
+    assert pyr2.bin_shape == pyr.bin_shape == "hex"
     assert pyr2.projection_id == pyr.projection_id
     assert pyr2.base_radius == pyr.base_radius
     assert pyr2.tile_span == pyr.tile_span
@@ -65,6 +66,41 @@ def test_round_trip(tmp_path):
         t2 = pyr2.tiles[key]
         assert t1.level == t2.level
         assert len(t1.cells) == len(t2.cells)
+
+
+def test_hex_and_square_coexist_in_one_container(tmp_path):
+    """Both bin shapes persist to their own entry and read back independently."""
+    path = _make_container(tmp_path)
+
+    proj = _make_projection(pid="shared-pid")
+    hex_pyr = build_pyramid(proj, bin_shape="hex", n_levels=3)
+    sq_pyr = build_pyramid(proj, bin_shape="square", n_levels=3)
+
+    append_projection(path, proj, hex_pyr)
+    append_projection(path, proj, sq_pyr)
+
+    hex_loaded = read_projection(path, "hex")
+    sq_loaded = read_projection(path, "square")
+    assert hex_loaded is not None
+    assert sq_loaded is not None
+    assert hex_loaded[1].bin_shape == "hex"
+    assert sq_loaded[1].bin_shape == "square"
+    # Appending one shape leaves the other's entry intact.
+    assert set(hex_loaded[1].tiles.keys()) == set(hex_pyr.tiles.keys())
+    assert set(sq_loaded[1].tiles.keys()) == set(sq_pyr.tiles.keys())
+    # Default read targets hex.
+    assert read_projection(path)[1].bin_shape == "hex"
+
+
+def test_square_only_container_has_no_hex_entry(tmp_path):
+    """A container with only a square projection returns None for hex."""
+    path = _make_container(tmp_path)
+    proj = _make_projection()
+    sq_pyr = build_pyramid(proj, bin_shape="square", n_levels=2)
+    append_projection(path, proj, sq_pyr)
+
+    assert read_projection(path, "hex") is None
+    assert read_projection(path, "square") is not None
 
 
 def test_missing_projection_returns_none(tmp_path):

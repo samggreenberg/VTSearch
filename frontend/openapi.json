@@ -171,6 +171,9 @@
             "readOnly": true,
             "type": "array"
           },
+          "browse_bin_shape": {
+            "type": "string"
+          },
           "browse_minimap_height": {
             "type": "integer"
           },
@@ -3572,6 +3575,12 @@
             "nullable": true,
             "type": "number"
           },
+          "bin_shape": {
+            "default": null,
+            "description": "hex | square",
+            "nullable": true,
+            "type": "string"
+          },
           "bounds": {
             "default": null,
             "items": {
@@ -4032,6 +4041,9 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "browse_bin_shape": {
+            "type": "string"
           },
           "browse_minimap_height": {
             "type": "integer"
@@ -11839,7 +11851,7 @@
     },
     "/api/projection/build": {
       "post": {
-        "description": "Returns immediately with a ``job_id`` for polling via\n``GET /api/projection/meta``.  If a projection is already cached on\nthe context, returns it without rebuilding.",
+        "description": "Body: ``{\"shape\": \"hex\" | \"square\"}`` (defaults to hex).\n\nReturns immediately.  If the pyramid for this shape is already cached or\npersisted, returns ``\"ready\"``.  If the shared UMAP layout already exists\n(e.g. the other shape was built first), the new shape is re-binned inline\nand returned ready \u2014 no UMAP re-fit.  Only the first build of a dataset,\nwhere no layout exists yet, runs UMAP in the background and returns a\n``job_id`` for polling via ``GET /api/projection/meta``.",
         "operationId": "build_projection",
         "responses": {
           "200": {
@@ -11859,7 +11871,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Kick off a background UMAP + pyramid build for the active dataset.",
+        "summary": "Kick off (or short-circuit) a build of the requested bin shape.",
         "tags": [
           "projection"
         ]
@@ -11867,7 +11879,7 @@
     },
     "/api/projection/meta": {
       "get": {
-        "description": "When the projection is ready, includes bounds, zoom levels, hex sizing,\npoint count, and the dataset's media type (so the client knows which\nhover-preview behavior to use).",
+        "description": "Query: ``?shape=hex|square`` (defaults to hex).\n\nWhen the requested shape's pyramid is ready, includes bounds, zoom levels,\ncell sizing, point count, the dataset's media type, and the ``bin_shape``\nthe canvas should render.",
         "operationId": "projection_meta",
         "responses": {
           "200": {
@@ -11884,13 +11896,13 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return projection/pyramid metadata and build status.",
+        "summary": "Return projection/pyramid metadata and build status for a bin shape.",
         "tags": [
           "projection"
         ]
       }
     },
-    "/api/projection/tiles/{level}/{tx}/{ty}": {
+    "/api/projection/tiles/{shape}/{level}/{tx}/{ty}": {
       "get": {
         "description": "Because the projection is frozen at ingest, tiles are immutable for the\nlife of the dataset and can be cached aggressively by the client.",
         "operationId": "get_tile",
@@ -11912,12 +11924,21 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return the hex cells for one tile at ``(level, tx, ty)``.",
+        "summary": "Return the cells for one tile of the *shape* pyramid at ``(level, tx, ty)``.",
         "tags": [
           "projection"
         ]
       },
       "parameters": [
+        {
+          "in": "path",
+          "name": "shape",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
         {
           "in": "path",
           "name": "level",
@@ -13064,7 +13085,7 @@
       "name": "embed"
     },
     {
-      "description": "VTSBrowse projection: UMAP layout + hex-tile pyramid.",
+      "description": "VTSBrowse projection: UMAP layout + hex/square tile pyramid.",
       "name": "projection"
     }
   ]

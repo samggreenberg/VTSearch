@@ -47,6 +47,7 @@ Theme = Literal["dark", "light", "highviz", "system"]
 ViewMode = Literal["grid", "list"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
+BinShape = Literal["hex", "square"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_VIEW_MODES: tuple[str, ...] = ("grid", "list")
@@ -185,6 +186,12 @@ class UserSettings(BaseModel):
     browse_minimap_visible: bool = True
     browse_minimap_width: Annotated[int, _clamp(120, 600)] = 200
     browse_minimap_height: Annotated[int, _clamp(90, 450)] = 150
+
+    # VTSBrowse bin shape: tile the projection as hexagons (default) or
+    # squares. Persisted so the user's last choice comes back on the next
+    # visit. Driven by the hex/square toggle on the browse canvas, not a
+    # Settings-modal widget.
+    browse_bin_shape: BinShape = "hex"
 
     view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
     view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)

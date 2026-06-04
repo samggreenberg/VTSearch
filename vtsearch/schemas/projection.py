@@ -16,6 +16,7 @@ class ProjectionMetaSchema(Schema):
 
     status = fields.String(required=True, metadata={"description": "idle | building | ready | error"})
     projection_id = fields.String(load_default=None)
+    bin_shape = fields.String(load_default=None, metadata={"description": "hex | square"})
     bounds = fields.List(fields.Float(), load_default=None)
     base_radius = fields.Float(load_default=None)
     tile_span = fields.Float(load_default=None)
