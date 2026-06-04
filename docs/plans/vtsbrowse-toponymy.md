@@ -53,6 +53,14 @@ topic_model = Toponymy(
 topic_model.fit(objects, embedding_vectors, clusterable_vectors)
 ```
 
+**Guiding principle: follow Toponymy's examples wherever possible.** Adopt their
+example/default configuration rather than inventing our own knobs —
+`ToponymyClusterer(min_clusters=4, verbose=...)`, `keyphrase_method=
+"information_weighted"`, `exemplar_method="central"`, `metric="cosine"` on the
+clustering UMAP, `ENGLISH_STOP_WORDS`, etc. We only diverge where VTSearch
+*forces* it (the `object_to_text` hook for audio, the namer selection, and the
+map-rendering layer). This keeps our decision surface small and tracks upstream.
+
 `fit(objects, embedding_vectors, clusterable_vectors, exemplar_method="central",
 keyphrase_method="information_weighted", subtopic_method="central")`:
 
@@ -66,7 +74,7 @@ keyphrase_method="information_weighted", subtopic_method="central")`:
 
 | Toponymy requires | What it's for | How we supply it |
 |---|---|---|
-| `clusterable_vectors: np.ndarray (n, k)` | The multiresolution clustering (docs say use UMAP/t-SNE here). | **We already have it:** the frozen `Projection.coords` from `vtscore/projection/umap_projection.py`. Reuse the existing browse layout directly. *(Decision: cluster in the 2-D map vs. a separate higher-D UMAP — quality tradeoff; see below.)* |
+| `clusterable_vectors: np.ndarray (n, k)` | The multiresolution clustering (docs say use UMAP/t-SNE here). | **A dedicated higher-D UMAP**, computed at build time from the CLAP matrix (`umap.UMAP(n_components≈5, metric="cosine")`, mirroring Toponymy's examples) — *not* the frozen 2-D browse layout. The 2-D layout stays for rendering + sign anchors; clustering gets the richer ~5-D map. Both reductions derive from the same embedding matrix. (Our embeddings are L2-normalized at ingest, so cosine ≡ euclidean here; we keep `cosine` to match their example.) |
 | `embedding_vectors: np.ndarray (n, d)` | Aligning keyphrases/exemplars to clusters. | **We already have it:** the in-memory CLAP matrix from `vtscore/embedding/matrix.py:get_embedding_matrix(ctx)`. |
 | `text_embedding_model: TextEmbedderProtocol` | Embeds keyphrase *strings*; alignment to clusters. | A thin adapter over the active embedder's text branch (`MediaEmbedder.embed_text`, `vtscore/media/embedder.py:678`). For **CLAP this is ideal**: keyphrase strings land in the *same* space as `embedding_vectors`, so cross-modal keyphrase→audio-cluster alignment is meaningful. Requires `embedder.supports_text`. |
 | `clusterer` | Hierarchy. | Use the bundled `ToponymyClusterer()` (multiresolution, `fast_hdbscan`-based). **This replaces our hand-rolled region tree.** |
@@ -74,10 +82,10 @@ keyphrase_method="information_weighted", subtopic_method="central")`:
 | `llm_wrapper: LLMWrapper` (required) | The actual naming. | Map our `browse_llm_*` settings to a bundled namer (see *§The LLM*). |
 | `objects: List[Any]` | Keyphrase source + exemplar display. | Our list of audio media (ids/dicts), paired with `object_to_text`. |
 
-So **two of the three `fit` inputs we already produce** (the projection coords
-and the embedding matrix), the clusterer/keyphrase-builder/prompting are
-provided, and the contrastive + hierarchical naming we were going to build is
-the library's whole point.
+So `embedding_vectors` we already have (the CLAP matrix), `clusterable_vectors`
+is one extra higher-D UMAP fit at build time, the
+clusterer/keyphrase-builder/prompting are provided, and the contrastive +
+hierarchical naming we were going to build is the library's whole point.
 
 ### The one real gap: `object_to_text` (audio → a little text)
 
@@ -159,7 +167,9 @@ write. What remains is VTSearch-specific:
 ### G2 — Run inside the build job, extract a sign list
 Run Toponymy in the existing background build (`_start_umap_build` in
 `vtsearch/routes/projection.py`), right after `build_pyramid`, where the
-embedding matrix and projection are in hand. From Toponymy's fitted topic tree
+embedding matrix and projection are in hand. Fit the dedicated higher-D
+clustering UMAP here (one extra reduction from the same matrix), then pass it
+as `clusterable_vectors`. From Toponymy's fitted topic tree
 (`topic_tree.py` / cluster layers) extract, per layer:
 - the topic **name** (string),
 - the cluster **membership** → compute an **anchor** = the projected coords of
@@ -206,11 +216,11 @@ toggle. Add `RegionLabelPayload` to `models/projection.models.ts`.
    cost is the dependency footprint (esp. `datasets`, `fast_hdbscan`,
    `vectorizers`, `apricot-select`). *Leaning: adopt — reimplementing it well is
    a lot of subtle work.*
-2. **`clusterable_vectors`: reuse the frozen 2-D map vs. compute a separate
-   higher-D UMAP for clustering.** Toponymy examples often cluster in ~5–10D and
-   name with full embeddings; clustering in 2-D is cheaper and keeps signs
-   consistent with what's drawn, but is a quality compromise. *Leaning: start
-   with the 2-D map; revisit if cluster quality is poor.*
+2. ~~`clusterable_vectors` source~~ **RESOLVED:** cluster on a **dedicated
+   higher-D UMAP** (`n_components≈5`, `metric="cosine"`), not the 2-D browse
+   layout — following Toponymy's examples and naming with the full embeddings.
+   The 2-D layout stays for rendering + anchors. Remaining sub-knob: the exact
+   `n_components` (start 5, per their richer examples).
 3. **Default `object_to_text` for audio:** CLAP top-k zero-shot tags (and the
    vocabulary + k behind them) vs. Whisper-first for speech. *Leaning: CLAP tags
    as the general default, Whisper when the dataset is speech.*
