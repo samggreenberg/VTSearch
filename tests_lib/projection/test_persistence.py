@@ -89,7 +89,9 @@ def test_hex_and_square_coexist_in_one_container(tmp_path):
     assert set(hex_loaded[1].tiles.keys()) == set(hex_pyr.tiles.keys())
     assert set(sq_loaded[1].tiles.keys()) == set(sq_pyr.tiles.keys())
     # Default read targets hex.
-    assert read_projection(path)[1].bin_shape == "hex"
+    default_loaded = read_projection(path)
+    assert default_loaded is not None
+    assert default_loaded[1].bin_shape == "hex"
 
 
 def test_square_only_container_has_no_hex_entry(tmp_path):

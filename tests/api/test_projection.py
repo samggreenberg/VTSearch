@@ -274,9 +274,14 @@ class TestBinShapeToggle:
     """Hex/square bin-shape selection across build, meta, and tiles."""
 
     def _seed_hex(self, ctx, pid: str = "shape-pid"):
-        """Cache a hex projection + pyramid on the context and return them."""
+        """Cache a hex projection + pyramid on the context and return them.
+
+        The projection must span the *whole* embedding matrix (every media id),
+        since that's what the inline re-bin path checks before reusing the
+        shared layout for the other shape.
+        """
         rng = np.random.default_rng(13)
-        ids = sorted(ctx.medias.keys())[:6]
+        ids = sorted(ctx.medias.keys())
         coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
         proj = Projection(pid, ids, coords, "pca")
         pyr = build_pyramid(proj, bin_shape="hex", n_levels=2)
