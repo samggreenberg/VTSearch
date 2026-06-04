@@ -24,13 +24,13 @@
               class="achievement-tier"
               [attr.data-tier-idx]="row.tier_idx"
               [title]="row.lockReason || null">{{ row.tierName }}</span>
-            @if (row.id === 'docs_read') {
+            @if (isExpandable(row.id)) {
               <button
                 type="button"
-                class="docs-expand-toggle"
-                (click)="toggleDocsExpanded()"
-                [attr.aria-expanded]="docsExpanded">
-                {{ docsExpanded ? 'Collapse' : 'Expand' }}
+                class="expand-toggle"
+                (click)="toggleExpanded(row.id)"
+                [attr.aria-expanded]="isExpanded(row.id)">
+                {{ isExpanded(row.id) ? 'Collapse' : 'Expand' }}
               </button>
             }
           </div>
@@ -41,7 +41,7 @@
             </div>
             <span class="achievement-progress-label">{{ row.progressLabel }}</span>
           </div>
-          @if (row.id === 'docs_read' && docsExpanded) {
+          @if (row.id === 'docs_read' && isExpanded('docs_read')) {
             <div class="docs-panel">
               <ul class="docs-list">
                 @for (doc of docs; track doc.id) {
@@ -81,6 +81,34 @@
                   {{ phraseStatus.message }}
                 </p>
               }
+            </div>
+          }
+          @if (row.id === 'media_types_touched' && isExpanded('media_types_touched')) {
+            <div class="detail-panel">
+              <ul class="ticks-list">
+                @for (mt of mediaTypes; track mt.id) {
+                  <li class="ticks-list-item" [class.ticks-list-item--on]="mt.seen">
+                    <span class="ticks-list-status" [attr.aria-label]="mt.seen ? 'voted' : 'not yet'">
+                      {{ mt.seen ? '✓' : '○' }}
+                    </span>
+                    <span class="ticks-list-name">{{ mt.name }}</span>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+          @if (row.id === 'hours_voted' && isExpanded('hours_voted')) {
+            <div class="detail-panel">
+              <ul class="hours-grid">
+                @for (h of hours; track h.hour) {
+                  <li
+                    class="hour-chip"
+                    [class.hour-chip--on]="h.seen"
+                    [attr.aria-label]="(h.seen ? 'voted at ' : 'no vote at ') + h.hour + ':00 UTC'">
+                    {{ h.hour.toString().padStart(2, '0') }}
+                  </li>
+                }
+              </ul>
             </div>
           }
         </div>

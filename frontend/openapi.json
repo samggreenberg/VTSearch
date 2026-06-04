@@ -38,6 +38,18 @@
             },
             "type": "array"
           },
+          "hours": {
+            "items": {
+              "$ref": "#/components/schemas/_HourEntry"
+            },
+            "type": "array"
+          },
+          "media_types": {
+            "items": {
+              "$ref": "#/components/schemas/_MediaTypeEntry"
+            },
+            "type": "array"
+          },
           "pending_announcements": {
             "items": {
               "$ref": "#/components/schemas/_PendingAnnouncement"
@@ -54,6 +66,8 @@
         "required": [
           "achievements",
           "docs",
+          "hours",
+          "media_types",
           "pending_announcements",
           "tier_names"
         ],
@@ -4854,6 +4868,24 @@
         ],
         "type": "object"
       },
+      "_HourEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "hour": {
+            "description": "Hour of day, UTC (0-23).",
+            "type": "integer"
+          },
+          "seen": {
+            "description": "Whether the user has voted in this hour bucket.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hour",
+          "seen"
+        ],
+        "type": "object"
+      },
       "_LabelSet": {
         "additionalProperties": true,
         "properties": {
@@ -4866,6 +4898,27 @@
         },
         "required": [
           "labels"
+        ],
+        "type": "object"
+      },
+      "_MediaTypeEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "seen": {
+            "description": "Whether the user has voted on this media type.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "seen"
         ],
         "type": "object"
       },
