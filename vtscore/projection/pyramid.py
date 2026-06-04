@@ -178,23 +178,36 @@ def _build_level(level: int, coords: np.ndarray, ids: np.ndarray, radius: float,
 def build_pyramid(
     projection: Projection,
     *,
-    n_levels: int = 6,
+    n_levels: int | None = None,
     base_cols: float = 6.0,
     base_radius: float | None = None,
     tile_span: float = 16.0,
 ) -> Pyramid:
     """Build the hex-tile :class:`Pyramid` for a frozen *projection*.
 
-    ``n_levels`` zoom levels are produced (``z = 0 … n_levels-1``), each
-    halving the hex radius.  ``base_radius`` (level 0) defaults to a value
-    sized so the projection's larger extent spans ~``base_cols`` hex columns;
-    pass it explicitly to override.  ``tile_span`` is the number of hex
-    columns/rows grouped into one tile.  All of these are tunable knobs, not
-    baked constants (see *§Open problems* in the design doc).
+    Zoom levels are produced ``z = 0 … L-1``, each halving the hex radius.
 
-    Empty projections yield a pyramid with no tiles.
+    - **Auto depth (default, ``n_levels=None``):** descend until every occupied
+      hex holds a single clip, so the deepest level resolves the dataset to
+      one-clip-per-hex and hover-to-hear can audition individual sounds.
+      Descent also stops if a radius halving no longer separates any points
+      (co-located clips) and is capped at :func:`max_useful_levels` as a
+      runaway guard.  This is the production path: a closed-form level count
+      can't be used because occupied-hex growth depends on the (unknown a
+      priori) shape of the projected cloud — clustered, manifold-like
+      embeddings grow far slower per level than a uniform 2-D fill would, so a
+      fixed estimate systematically bottoms out before reaching single clips.
+    - **Fixed depth (``n_levels`` an int):** produce exactly that many levels.
+
+    ``base_radius`` (level 0) defaults to a value sized so the projection's
+    larger extent spans ~``base_cols`` hex columns; pass it explicitly to
+    override.  ``tile_span`` is the number of hex columns/rows grouped into one
+    tile.  All of these are tunable knobs, not baked constants (see
+    *§Open problems* in the design doc).
+
+    Empty projections yield a pyramid with no tiles (one level when auto).
     """
-    if n_levels < 1:
+    if n_levels is not None and n_levels < 1:
         raise ValueError(f"n_levels must be >= 1, got {n_levels}")
 
     coords = np.ascontiguousarray(projection.coords, dtype=np.float64)
@@ -202,10 +215,15 @@ def build_pyramid(
     bounds = projection.bounds
     r0 = base_radius if base_radius is not None else _base_radius_for(bounds, base_cols)
 
+    adaptive = n_levels is None
+    max_levels = max_useful_levels(int(coords.shape[0])) if adaptive else n_levels
+
     levels: list[LevelMeta] = []
     tiles: dict[tuple[int, int, int], Tile] = {}
 
-    for level in range(n_levels):
+    prev_n_cells: int | None = None
+    prev_max_count: int | None = None
+    for level in range(max_levels):
         radius = r0 / (2.0**level)
         if coords.shape[0] == 0:
             levels.append(LevelMeta(level=level, radius=radius, n_cells=0))
@@ -215,6 +233,20 @@ def build_pyramid(
         levels.append(LevelMeta(level=level, radius=radius, n_cells=n_cells))
         for t in level_tiles:
             tiles[(t.level, t.tx, t.ty)] = t
+
+        if adaptive:
+            max_count = max((c.count for t in level_tiles for c in t.cells), default=0)
+            # Fully resolved: every hex holds a single clip, so deeper levels
+            # would only reproduce this one at finer (wasted) radii.
+            if max_count <= 1:
+                break
+            # No progress across a radius halving — neither the hex count nor
+            # the densest cell improved — means the remaining co-located clips
+            # can never be separated; stop rather than grind to the cap.
+            if n_cells == prev_n_cells and max_count == prev_max_count:
+                break
+            prev_n_cells = n_cells
+            prev_max_count = max_count
 
     return Pyramid(
         projection_id=projection.projection_id,
@@ -227,17 +259,21 @@ def build_pyramid(
     )
 
 
-def max_useful_levels(point_count: int, base_cols: float = 6.0) -> int:
-    """A reasonable ``n_levels`` ceiling for *point_count* clips.
+def max_useful_levels(point_count: int) -> int:
+    """A generous ``n_levels`` ceiling for *point_count* clips.
 
-    Heuristic: keep descending until a level could resolve roughly one clip per
-    hex.  Each level multiplies the hex count by ~4 (radius halves in 2-D), and
-    level 0 spans ~``base_cols**2`` hexes, so ``log4(point_count / base_cols**2)``
-    extra levels suffice.  Clamped to ``[1, 12]``.  Advisory only — callers
-    pass the result as ``n_levels`` to :func:`build_pyramid`.
+    Used by :func:`build_pyramid`'s auto-depth path purely as a runaway guard:
+    the build descends until each hex holds a single clip, and this only bounds
+    how deep it may ever go (e.g. when many clips project to the same point and
+    can never be separated).  Sized off ``log2`` of the point count with
+    headroom and clamped to ``[1, 14]`` — deep enough that any non-degenerate
+    cloud separates before the cap, while over-estimating stays harmless because
+    the adaptive descent stops as soon as the data resolves.
+
+    The old heuristic assumed each level quadruples the occupied-hex count (a
+    uniform 2-D fill); real, clustered embeddings grow far slower (~2x), so that
+    estimate stopped one or more levels short of single-clip resolution.
     """
     if point_count <= 1:
         return 1
-    level0_hexes = max(base_cols * base_cols, 1.0)
-    extra = math.log(max(point_count / level0_hexes, 1.0), 4.0)
-    return max(1, min(12, 1 + int(math.ceil(extra))))
+    return max(1, min(14, 1 + int(math.ceil(math.log(point_count, 2.0)))))
