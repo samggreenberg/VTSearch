@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { BrowseCanvasComponent, HexHoverEvent } from '../browse-canvas/browse-canvas.component';
@@ -19,6 +20,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
+import { BrowseSubsetService } from '../../services/browse-subset.service';
 import type { BinShape, ProjectionMeta } from '../../models/projection.models';
 
 @Component({
@@ -67,6 +69,16 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   binShape: BinShape = 'hex';
 
+  /**
+   * Subset mode: browse an ephemeral UMAP fit over just a handful of media
+   * (the positives of a Find run) instead of the full dataset. Set from the
+   * `?subset=1` query param plus a handoff from {@link BrowseSubsetService}.
+   * `subsetIds` is kept on the component so re-resolving the projection (e.g.
+   * a bin-shape switch) re-sends the same ids without a fresh handoff.
+   */
+  subset = false;
+  subsetIds: number[] = [];
+
   /** Overview minimap show/hide + size, mirrored from the settings set. */
   minimapVisible = true;
   minimapWidth = 200;
@@ -91,6 +103,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     private activeContext: ActiveContextService,
     private datasetsRegistryApi: DatasetsRegistryApiService,
     private settingsState: SettingsStateService,
+    private route: ActivatedRoute,
+    private browseSubset: BrowseSubsetService,
   ) {}
 
   ngOnInit(): void {
@@ -115,6 +129,25 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       if (shape !== this.binShape) this.switchBinShape(shape, false);
     });
     this.settingsState.load();
+
+    // Subset mode: the Find view handed off a set of positive ids to project
+    // on their own. Detect it from the query param + the in-memory handoff.
+    this.subset = this.route.snapshot.queryParamMap.get('subset') === '1';
+    if (this.subset) {
+      const handoff = this.browseSubset.take();
+      if (handoff && handoff.ids.length > 0) {
+        this.subsetIds = handoff.ids;
+        this.datasetName = handoff.label;
+      } else {
+        // No handoff (e.g. a hard reload): the ephemeral subset is gone.
+        this.status = 'error';
+        this.errorMessage =
+          'This subset projection has expired. Re-run Find and click Browse to rebuild it.';
+        this.tileCache.setBinShape(this.binShape);
+        return;
+      }
+    }
+    this.tileCache.setSubset(this.subset);
     this.tileCache.setBinShape(this.binShape);
 
     this.datasetsRegistryApi
@@ -122,18 +155,23 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (status) => {
-          this.datasetName = status.display_name || '';
+          if (!this.subset) this.datasetName = status.display_name || '';
           this.mediaType = status.media_type || '';
         },
       });
 
     this.loadProjection();
 
-    this.activeContext.pair$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => {
-        this.loadProjection();
-      });
+    // The full-dataset projection re-resolves when the active pair changes via
+    // the top bar. A subset projection is tied to the ids that produced it, so
+    // ignore pair changes in subset mode.
+    if (!this.subset) {
+      this.activeContext.pair$
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(() => {
+          this.loadProjection();
+        });
+    }
   }
 
   ngOnDestroy(): void {
@@ -149,6 +187,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   get hexDisplayScale(): number {
     return this.HEX_SCALES[this.hexScaleIndex];
+  }
+
+  /** Noun for the item-count chip — "positives" for a Find-subset browse. */
+  get countNoun(): string {
+    return this.subset ? 'positives' : 'items';
   }
 
   get atMinHexSize(): boolean {
@@ -216,14 +259,13 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * reused, so the build call returns ready after a quick re-bin.
    */
   private ensureShape(): void {
-    this.projectionApi
-      .build(this.binShape)
+    this.buildRequest()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (resp) => {
           if (resp.status === 'ready') {
             this.projectionApi
-              .getMeta(this.binShape)
+              .getMeta(this.binShape, this.subset)
               .pipe(takeUntil(this.destroy$))
               .subscribe({
                 next: (meta) => this.applyMeta(meta),
@@ -256,13 +298,30 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.canvas?.zoomBy(1 / this.ZOOM_BUTTON_FACTOR);
   }
 
+  /**
+   * Issue the right build request for the current mode: a subset build (UMAP
+   * over just the handed-off ids) when in subset mode, else the full-dataset
+   * build.
+   */
+  private buildRequest() {
+    return this.subset
+      ? this.projectionApi.buildSubset(this.binShape, this.subsetIds)
+      : this.projectionApi.build(this.binShape);
+  }
+
   onBuild(): void {
+    if (this.subset && this.subsetIds.length === 0) {
+      // Nothing to rebuild (e.g. Retry after the handoff expired).
+      this.status = 'error';
+      this.errorMessage =
+        'This subset projection has expired. Re-run Find and click Browse to rebuild it.';
+      return;
+    }
     this.status = 'building';
     this.buildProgress = 0;
     this.buildTotal = 0;
     this.buildMessage = '';
-    this.projectionApi
-      .build(this.binShape)
+    this.buildRequest()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (resp) => {
@@ -285,7 +344,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.status = 'loading';
     this.polling = false;
     this.projectionApi
-      .getMeta(this.binShape)
+      .getMeta(this.binShape, this.subset)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (meta) => this.applyMeta(meta),
@@ -337,7 +396,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.pollErrors = 0;
     const poll = (): void => {
       this.projectionApi
-        .getMeta(this.binShape)
+        .getMeta(this.binShape, this.subset)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (meta) => {

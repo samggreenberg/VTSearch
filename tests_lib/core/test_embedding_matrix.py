@@ -14,6 +14,7 @@ import pytest
 from vtscore.embedding.matrix import (
     get_embedding_matrix,
     get_embedding_matrix_for_snap,
+    get_embedding_submatrix,
     invalidate_embedding_matrix,
 )
 from vtscore.state.core import DatasetContext, set_thread_dataset_context
@@ -55,6 +56,49 @@ class TestGetEmbeddingMatrixRaisesOnNoneEmbedding:
         assert mat[0, 0] == 1.0
         assert mat[1, 0] == 2.0
         assert mat[2, 0] == 3.0
+
+
+class TestGetEmbeddingSubmatrix:
+    """Subset matrix builder for VTSBrowse subset projections."""
+
+    def _ctx(self) -> DatasetContext:
+        ctx = DatasetContext("test_submatrix")
+        for cid in (1, 2, 3, 4):
+            ctx.medias[cid] = {"id": cid, "embedding": np.full(4, float(cid), dtype=np.float32)}
+        return ctx
+
+    def test_returns_only_requested_ids_sorted(self):
+        ctx = self._ctx()
+        ids, mat = get_embedding_submatrix(ctx, [3, 1])
+        assert ids == [1, 3]
+        assert mat.shape == (2, 4)
+        assert mat[0, 0] == 1.0
+        assert mat[1, 0] == 3.0
+
+    def test_dedups_and_drops_unknown_ids(self):
+        ctx = self._ctx()
+        ids, mat = get_embedding_submatrix(ctx, [2, 2, 99])
+        assert ids == [2]
+        assert mat.shape == (1, 4)
+
+    def test_empty_when_no_match(self):
+        ctx = self._ctx()
+        ids, mat = get_embedding_submatrix(ctx, [99, 100])
+        assert ids == []
+        assert mat.shape == (0, 0)
+
+    def test_raises_on_none_embedding(self):
+        ctx = self._ctx()
+        ctx.medias[2]["embedding"] = None
+        with pytest.raises(ValueError, match=r"media 2.*has no embedding"):
+            get_embedding_submatrix(ctx, [1, 2])
+
+    def test_does_not_populate_cache(self):
+        """Subset builds must not poison the context-wide matrix cache."""
+        ctx = self._ctx()
+        get_embedding_submatrix(ctx, [1, 2])
+        assert ctx._emb_matrix is None
+        assert ctx._emb_matrix_ids is None
 
 
 class TestGetEmbeddingMatrixForSnapRaisesOnNoneEmbedding:

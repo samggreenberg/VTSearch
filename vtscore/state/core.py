@@ -284,6 +284,17 @@ class DatasetContext:
         # browse hex/square toggle can keep both binnings cached at once.
         "_projection",
         "_pyramids",
+        # VTSBrowse subset projection: an ephemeral UMAP fit over just a subset
+        # of this dataset's media ids (e.g. the positives of a Find run),
+        # computed on demand and never persisted.  Held alongside the full
+        # projection so a user can browse the whole dataset and a subset
+        # independently.  ``_subset_ids`` is the sorted id list the cached
+        # subset layout was fit against (cache key); ``_subset_job_id`` tracks
+        # the in-flight background UMAP build for status polling.
+        "_subset_projection",
+        "_subset_pyramids",
+        "_subset_ids",
+        "_subset_job_id",
     )
 
     def __init__(self, dataset_id: str = "") -> None:
@@ -295,6 +306,10 @@ class DatasetContext:
         self._emb_matrix: Any = None  # np.ndarray | None
         self._projection: Any = None  # Projection | None
         self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
+        self._subset_projection: Any = None  # Projection | None (ephemeral subset UMAP)
+        self._subset_pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid (subset)
+        self._subset_ids: list[int] | None = None  # sorted ids the subset layout is fit on
+        self._subset_job_id: str | None = None  # in-flight subset build job id
 
 
 class DetectorContext:

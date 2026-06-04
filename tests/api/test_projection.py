@@ -361,3 +361,88 @@ class TestBinShapeToggle:
         assert sq_loaded is not None
         assert hex_loaded[1].bin_shape == "hex"
         assert sq_loaded[1].bin_shape == "square"
+
+
+class TestProjectionSubset:
+    """Subset projection: UMAP a handful of ids (the positives of a Find run).
+
+    Driven by ``POST /api/projection/build`` with an ``ids`` body and the
+    ``?subset=1`` selector on ``meta``/``tiles``.  The subset layout is
+    ephemeral (never persisted) and lives alongside the full projection.
+    """
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_subset_build_and_poll(self, _mock_fit, client):
+        ctx = get_active_context()
+        ids = sorted(ctx.medias.keys())[:4]
+
+        resp = client.post("/api/projection/build", json={"ids": ids})
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] in ("building", "ready")
+        _wait_projection()
+
+        meta = client.get("/api/projection/meta?subset=1").get_json()
+        assert meta["status"] == "ready"
+        assert meta["point_count"] == len(ids)
+        assert ctx._subset_projection is not None
+        assert ctx._subset_ids == ids
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_subset_does_not_clobber_full(self, _mock_fit, client):
+        """A full build and a subset build coexist in separate slots."""
+        ctx = get_active_context()
+        client.post("/api/projection/build")
+        _wait_projection()
+        full_proj = ctx._projection
+        assert full_proj is not None
+
+        ids = sorted(ctx.medias.keys())[:3]
+        client.post("/api/projection/build", json={"ids": ids})
+        _wait_projection()
+
+        # Full projection is untouched; subset is its own (smaller) layout.
+        assert ctx._projection is full_proj
+        assert ctx._subset_projection is not None
+        assert ctx._subset_projection is not full_proj
+        assert len(ctx._subset_projection.ids) == len(ids)
+
+        # Full meta still reports the full point count, not the subset's.
+        full_meta = client.get("/api/projection/meta").get_json()
+        assert full_meta["status"] == "ready"
+        assert full_meta["point_count"] == len(ctx.medias)
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_subset_tiles_served_with_flag(self, _mock_fit, client):
+        ctx = get_active_context()
+        ids = sorted(ctx.medias.keys())[:4]
+        client.post("/api/projection/build", json={"ids": ids})
+        _wait_projection()
+
+        pyr = ctx._subset_pyramids["hex"]
+        for level, tx, ty in pyr.tiles:
+            resp = client.get(f"/api/projection/tiles/hex/{level}/{tx}/{ty}?subset=1")
+            assert resp.status_code == 200
+            assert resp.get_json()["level"] == level
+            break
+        # Without the subset flag the full pyramid isn't built, so 404.
+        assert client.get("/api/projection/tiles/hex/0/0/0").status_code == 404
+
+    def test_subset_empty_ids_returns_409(self, client):
+        resp = client.post("/api/projection/build", json={"ids": []})
+        assert resp.status_code == 409
+
+    def test_subset_bad_ids_returns_400(self, client):
+        assert client.post("/api/projection/build", json={"ids": "nope"}).status_code == 400
+        assert client.post("/api/projection/build", json={"ids": ["a", "b"]}).status_code == 400
+
+    def test_subset_unknown_ids_returns_409(self, client):
+        """Ids that aren't in the dataset yield nothing to project."""
+        resp = client.post("/api/projection/build", json={"ids": [999990, 999991]})
+        assert resp.status_code == 409
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_subset_meta_idle_without_build(self, _mock_fit, client):
+        """Subset meta is idle until a subset build runs (even if full is ready)."""
+        client.post("/api/projection/build")
+        _wait_projection()
+        assert client.get("/api/projection/meta?subset=1").get_json()["status"] == "idle"

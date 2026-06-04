@@ -21,6 +21,10 @@ export class TileCacheService {
   // the cache key, so switching shapes keeps both binnings cached side by side
   // (they share one projection id, so the id alone can't tell them apart).
   private binShape: BinShape = 'hex';
+  // Whether tiles are fetched from the ephemeral subset projection (the
+  // positives of a Find run) rather than the full-dataset projection. The two
+  // have distinct projection ids, so the cache invalidates on switch.
+  private subset = false;
 
   readonly tileLoaded$ = new Subject<TilePayload>();
 
@@ -34,6 +38,10 @@ export class TileCacheService {
 
   setBinShape(shape: BinShape): void {
     this.binShape = shape;
+  }
+
+  setSubset(subset: boolean): void {
+    this.subset = subset;
   }
 
   getTile(level: number, tx: number, ty: number): Observable<TilePayload> | null {
@@ -50,7 +58,7 @@ export class TileCacheService {
 
     if (!this.projectionId) return null;
 
-    const req$ = this.projectionApi.getTile(this.binShape, level, tx, ty).pipe(
+    const req$ = this.projectionApi.getTile(this.binShape, level, tx, ty, this.subset).pipe(
       tap((tile) => {
         this.inflight.delete(key);
         this.put(key, tile);

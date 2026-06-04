@@ -56,6 +56,8 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Input() disabled = false;
   @Output() mediaSelected = new EventEmitter<number>();
   @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  /** Find mode: browse the positive results as their own UMAP projection. */
+  @Output() browse = new EventEmitter<void>();
 
   goodIds: number[] = [];
   badIds: number[] = [];
@@ -158,6 +160,10 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   onExport(): void {
     this.showExport = true;
+  }
+
+  onBrowse(): void {
+    this.browse.emit();
   }
 
   onDetectorRenamed(newName: string): void {
