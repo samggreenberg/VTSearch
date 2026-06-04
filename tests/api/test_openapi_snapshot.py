@@ -18,15 +18,15 @@ from vtsearch.openapi_postprocess import normalize_unprocessable_response
 class TestUnprocessableResponseNormalization:
     """The 422 response component is pinned regardless of Python version."""
 
-    def test_spec_uses_canonical_422_name(self):
-        spec = app_module.api.spec.to_dict()
+    def test_spec_uses_canonical_422_name(self, client):
+        spec = client.get("/api/openapi.json").get_json()
         responses = spec["components"]["responses"]
         assert "UNPROCESSABLE_CONTENT" in responses
         assert "UNPROCESSABLE_ENTITY" not in responses
         assert responses["UNPROCESSABLE_CONTENT"]["description"] == "Unprocessable Content"
 
-    def test_no_refs_point_at_legacy_name(self):
-        spec = app_module.api.spec.to_dict()
+    def test_no_refs_point_at_legacy_name(self, client):
+        spec = client.get("/api/openapi.json").get_json()
         legacy_ref = "#/components/responses/UNPROCESSABLE_ENTITY"
         assert legacy_ref not in _all_refs(spec)
 
