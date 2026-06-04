@@ -14,16 +14,22 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  // Render the whole app at 110%, exactly as if the user had hit Ctrl/Cmd-"+".
-  // `zoom` scales everything uniformly (fonts, px paddings/borders, images,
-  // canvases, layout), so it matches real browser zoom without having to touch
-  // the hundreds of px-pinned values across components. Desktop-only app, and
-  // `zoom` is supported in all current desktop browsers (Chrome, Firefox 126+,
-  // Safari 18+), so no fallback is needed.
-  zoom: 1.1;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg-body);
   color: var(--text-primary);
+}
+
+// Render the whole app at 110%, exactly as if the user had hit Ctrl/Cmd-"+".
+// `zoom` scales everything uniformly (fonts, px paddings/borders, images,
+// canvases, layout), so it matches real browser zoom without having to touch
+// the hundreds of px-pinned values across components. Desktop-only app, and
+// `zoom` is supported in all current desktop browsers (Chrome, Firefox 126+,
+// Safari 18+), so no fallback is needed.
+//
+// Applied to `html` ALONE, not `html, body`: `zoom` compounds through the box
+// tree, so a rule on both elements multiplies to 1.21x (body nested in html).
+html {
+  zoom: 1.1;
 }
 
 // Honor OS-level "reduce motion" requests (also a useful escape hatch for

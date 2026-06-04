@@ -96,6 +96,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // projection id, so toggling bin shape re-bins without re-fitting to data —
   // the pan/zoom is preserved. Only a genuinely new projection re-frames.
   private lastProjectionId = '';
+  // Whether the current framing was fit against the canvas's real measured size.
+  // `meta` can arrive (and trigger the initial `fitToData`) before the canvas
+  // has laid out, in which case the fit runs against the 800x600 fallback and
+  // the published viewport bounds are wrong. We refit once on the first real
+  // `resize()`; this flag stops later window resizes from clobbering the user's
+  // pan/zoom.
+  private fittedAgainstRealSize = false;
 
   private isPanning = false;
   private panStartX = 0;
@@ -258,6 +265,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     canvas.style.width = `${this.width}px`;
     canvas.style.height = `${this.height}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    // The initial fit may have run against the 800x600 fallback (meta arrived
+    // before layout). Now that the real size is known, refit to it so the
+    // framing and the viewport bounds published to the minimap match the actual
+    // canvas. Only on the first real measurement — a later window resize keeps
+    // the user's pan/zoom.
+    if (!this.fittedAgainstRealSize && this.meta && this.width > 0 && this.height > 0) {
+      this.fitToData();
+    }
     this.requestRedraw();
   }
 
@@ -276,6 +291,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.transform.zoom = Math.min(w / padW, h / padH) / this.displayScale;
     this.transform.centerX = (xmin + xmax) / 2;
     this.transform.centerY = (ymin + ymax) / 2;
+    // Mark whether this fit used the real canvas size (vs the 800x600 fallback),
+    // so `resize()` knows whether a corrective refit is still owed.
+    this.fittedAgainstRealSize = this.width > 0 && this.height > 0;
     this.updateActiveLevel();
   }
 

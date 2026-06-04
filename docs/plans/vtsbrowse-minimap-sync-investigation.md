@@ -1,5 +1,82 @@
 # VTSBrowse minimap "viewed rectangle" mis-sync — investigation handoff
 
+> **Status: RESOLVED** (browser-confirmed and fixed). Driving a real browser on
+> the ESC-50 (S) audio dataset reproduced the mis-sync and pinned **two
+> independent root causes** — see *§Resolution* immediately below. The original
+> static-analysis handoff is kept underneath for the record.
+
+## Resolution (what was actually wrong, browser-confirmed)
+
+Running the app and instrumenting the live DOM/canvas on the ESC-50 audio
+projection surfaced two distinct, compounding defects. Both are fixed.
+
+### Root cause 1 — layout overflowed the window, hiding the minimap
+
+`frontend/src/styles.scss` set `zoom: 1.1` on the selector `html, body`. Because
+`body` nests inside `html`, the zoom **compounded to 1.21×** (the comment intends
+110%). On top of that, `app.component.scss` framed the shell with
+`height: 100vh`, and **`vh` units ignore an ancestor `zoom`**, so `100vh`
+resolved to `896 × 1.1 ≈ 1084px` and overflowed the real 896px window. The app
+shell was taller than the viewport, so the lower-right minimap (and the bottom
+of the canvas) were pushed **off-screen** — the "rectangle doesn't match" report
+was partly "you can't even see the minimap / it's clipped."
+
+Measured live: `100vh` = 1084px while `innerHeight` = 896; `app-root` rect =
+1084 vs computed height 896 (the 1.21× scale).
+
+**Fix:**
+- `styles.scss`: apply `zoom: 1.1` to **`html` alone** (not `html, body`) so it
+  no longer compounds — the app now renders at the intended 110%.
+- `app.component.scss`: `:host { height: 100vh }` → `height: 100%`. `100%` flows
+  through the `html`/`body` (both `height: 100%`) box tree and is scaled
+  correctly by the zoom, where `vh` is not. After the fix `app-root` rect = 896 =
+  window at multiple window sizes, and the minimap is always on-screen.
+
+### Root cause 2 — the canvas never refit to its real size (the rectangle bug)
+
+`fitToData()` ran **only** on the first `ngOnChanges(meta)`. Because the canvas is
+created via `@case('ready')` with `[meta]` **already bound**, that first
+`ngOnChanges` fires while `this.width === 0` (ResizeObserver hasn't delivered the
+real size yet), so the fit used the hardcoded **800×600 fallback** and was
+*never corrected*. The published `getVisibleBounds()` was therefore sized for
+800×600 but applied to the real ~1215×842 canvas — the minimap rectangle came
+out ~2× the data extent, with all four borders falling **outside** the 200×150
+minimap (only a faint 0.15-alpha wash, no visible rectangle). This is hypothesis
+2 from the original handoff, confirmed: the published bounds were wrong, not the
+rectangle transform.
+
+**Fix (browse-canvas.component.ts):** track `fittedAgainstRealSize`; in
+`resize()`, the first time the real size is known (and `meta` is present), call
+`fitToData()` once to reframe against the actual canvas, then redraw/republish.
+A `fittedAgainstRealSize` guard stops later window resizes from clobbering the
+user's pan/zoom. Verified in-browser: data fills the canvas on load; the
+rectangle is correctly sized, visible, and tracks pan **and** zoom; and a window
+resize after a clean fit preserves pan/zoom (the rect stays put and merely
+resizes to the new viewport instead of snapping back to whole-view).
+
+### Open follow-ups
+
+- **"Whole projection in view" reads as no rectangle.** When the canvas shows the
+  entire projection, the viewport rect (plus aspect-ratio letterboxing margin) is
+  slightly larger than the minimap in every direction, so its borders clip just
+  off-canvas and the user sees only a faint wash — semantically correct (you *are*
+  viewing everything) but not obviously a "rectangle." Optional polish: clamp the
+  rect to the minimap edges, or show an explicit "entire projection in view"
+  affordance.
+- **No automated regression guard.** The defects were lifecycle/CSS issues, not
+  pure-math errors (the transform math was always correct — its *inputs* were
+  wrong), so a pure-function unit test would not have caught them, and frontend
+  specs don't execute in this repo (no Karma/Chrome). A real guard would need an
+  integration/browser harness. Recorded here rather than shipped as a
+  non-executing spec.
+- **`overviewTiles()` `> 1024` runaway guard** (original hypothesis 3) did **not**
+  fire for this dataset — the overview heatmap painted fully. Left as-is; revisit
+  only if a pathological extent shows a half-blank minimap.
+
+---
+
+## Original static-analysis handoff (pre-browser)
+
 > **Status:** Investigated headlessly (no browser in this environment), root
 > cause **not yet confirmed**. This note records the static-analysis findings so
 > the next Claude — running where the rendered canvas can actually be *seen and
