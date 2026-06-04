@@ -348,6 +348,41 @@ class TestSetupLogging:
             setup_logging()
 
 
+class TestWerkzeugAccessLogLevel:
+    """werkzeug's INFO records are the dev-server access log. setup_logging
+    keeps them quiet by default (the ``no-access-log`` fix) but lets them
+    through once the level is raised to INFO/DEBUG, while huggingface_hub
+    stays pinned to ERROR regardless."""
+
+    def test_werkzeug_silenced_at_default_warning(self):
+        try:
+            setup_logging(level="WARNING")
+            assert logging.getLogger("werkzeug").level == logging.ERROR
+        finally:
+            setup_logging()
+
+    def test_werkzeug_follows_info_level(self):
+        try:
+            setup_logging(level="INFO")
+            assert logging.getLogger("werkzeug").level == logging.INFO
+        finally:
+            setup_logging()
+
+    def test_werkzeug_follows_debug_level(self):
+        try:
+            setup_logging(level="DEBUG")
+            assert logging.getLogger("werkzeug").level == logging.DEBUG
+        finally:
+            setup_logging()
+
+    def test_huggingface_hub_stays_quiet_even_at_debug(self):
+        try:
+            setup_logging(level="DEBUG")
+            assert logging.getLogger("huggingface_hub").level == logging.ERROR
+        finally:
+            setup_logging()
+
+
 class TestTransformersVocabTokenFilter:
     """Filter installed by setup_logging() drops only the bos/eos/pad
     vocab-range warning from transformers; everything else passes through."""

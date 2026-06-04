@@ -589,6 +589,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VTSearch \u2014 media explorer web app")
     parser.add_argument("--local", action="store_true", help="Run in local development mode")
     parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        dest="verbose",
+        help=(
+            "Increase log verbosity. -v turns on INFO logging, which includes "
+            "the dev-server access log (one line per HTTP request); -vv turns "
+            "on DEBUG. Only raises the level set by VTSEARCH_LOG_LEVEL, never "
+            "lowers it. Applies to both the web server and --autodetect."
+        ),
+    )
+    parser.add_argument(
         "--login",
         type=str,
         choices=["trivial", "api_key"],
@@ -894,6 +907,20 @@ if __name__ == "__main__":
         # No importer/exporter specified but there are unknown args; let
         # argparse report the error.
         parser.parse_args()
+
+    # -v/--verbose bumps the log level for this process. setup_logging() already
+    # ran at import time with the env-driven default (WARNING); re-run it at the
+    # higher level so the dev-server access log (werkzeug INFO) and our own
+    # INFO/DEBUG records start showing. Only raise verbosity, never lower it
+    # below an explicit VTSEARCH_LOG_LEVEL=debug, so -v on top of a debug env
+    # doesn't quiet things back down. Applies before both the autodetect CLI
+    # and server branches below.
+    verbose = getattr(args, "verbose", 0) or 0
+    if verbose:
+        target = logging.DEBUG if verbose >= 2 else logging.INFO
+        # Lower numeric level == more verbose; keep whichever is more verbose.
+        effective = min(target, logging.getLogger().level)
+        setup_logging(level=logging.getLevelName(effective))
 
     # --solo-media-type applies to both the autodetect CLI path and the
     # server path: validate and stash before any code reads the resolver.
