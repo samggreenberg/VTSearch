@@ -107,7 +107,7 @@ def download_ucsf_documents(  # noqa: C901
                 _core.download_file_with_progress(url, pdf_path, 0, on_progress)
                 downloaded += 1
                 on_progress(
-                    "downloading", f"Downloaded {doc_id}.pdf ({downloaded}/{total_docs})", downloaded, total_docs
+                    "downloading", f"Downloaded {doc_id}.pdf", downloaded, total_docs
                 )
             except Exception:
                 # Skip failed downloads silently.

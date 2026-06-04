@@ -158,7 +158,7 @@ class TextE5Embedder(MediaEmbedder):
             return [None] * len(medias)
 
         total = len(medias)
-        self._on_progress("embedding", f"Embedding E5 {len(ready_indices)}/{total}...", 0, total)
+        self._on_progress("embedding", "Embedding E5...", 0, total)
         with self._embed_lock:
             try:
                 vectors = self._model.encode(
@@ -173,7 +173,7 @@ class TextE5Embedder(MediaEmbedder):
         results: list[Optional[np.ndarray]] = [None] * len(medias)
         for slot, vec in zip(ready_indices, vectors):
             results[slot] = np.asarray(vec)
-        self._on_progress("embedding", f"Embedding E5 {total}/{total}...", total, total)
+        self._on_progress("embedding", "Embedding E5...", total, total)
         return results
 
     def embed_text_passage(self, text: str) -> Optional[np.ndarray]:
