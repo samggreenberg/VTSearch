@@ -33,8 +33,13 @@ timeout = int(os.environ.get("VTSEARCH_TIMEOUT", "0"))
 graceful_timeout = 30
 keepalive = 5
 
-accesslog = None
 errorlog = "-"
 loglevel = os.environ.get("VTSEARCH_LOG_LEVEL", "warning").lower()
+
+# Access log mirrors the dev server (see vtsearch.logging_config.setup_logging):
+# quiet by default, on once the operator opts into INFO/DEBUG. At warning+ we
+# leave it disabled; at info/debug we stream gunicorn's access log to stdout so
+# request activity is visible in production logs too.
+accesslog = "-" if loglevel in ("debug", "info") else None
 
 proc_name = "vtsearch"

@@ -102,8 +102,8 @@ Arriving from a Find specifically to grab hits, the export defaults to All (838 
 **[P3 · `header-data-lag`] Header "Data:" label lags the loaded/active dataset.**
 After loading Caltech-101 (S) it stayed "Data: Select a dataset" until I entered a view, even though the New-Detector modal correctly knew the active media type was Image. The dashboard's row-checkbox selection and the header's "active dataset" are two separate notions of "selected", which can read as out-of-sync.
 
-**[P3 · `no-access-log`] No server-side request/activity logging in local mode.**
-The dev server log contains only the 6 boot lines — no access logs, no progress lines — for an entire session that downloaded, embedded ~1250 images, ran Find, and exported. Fine if intentional, but it makes "what did the server just do?" debugging harder; a quiet-by-default access log (or a `--verbose`) would help.
+**[P3 · `no-access-log`] No server-side request/activity logging in local mode.** **Fixed.**
+The dev server log contained only the 6 boot lines — no access logs, no progress lines — for an entire session that downloaded, embedded ~1250 images, ran Find, and exported. Root cause: `setup_logging()` pinned the `werkzeug` logger to `ERROR` unconditionally, so the access log was unreachable even with `VTSEARCH_LOG_LEVEL` turned up. `werkzeug` now follows the configured level (silenced at WARNING+, on at INFO/DEBUG), and a `-v`/`-vv` flag on `python app.py` raises the level for the session (`-v` → INFO + access log, `-vv` → DEBUG). gunicorn mirrors it: `VTSEARCH_LOG_LEVEL=info`/`debug` enables its access log too.
 
 ---
 

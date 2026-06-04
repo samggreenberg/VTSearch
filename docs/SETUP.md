@@ -425,7 +425,7 @@ VTSearch reads several optional environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (set this in production) |
-| `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `INFO`/`DEBUG` also enable the per-request access log. `python app.py -v`/`-vv` is the CLI shortcut. |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
 | `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn; triggers model init / settings sync at import time |
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
