@@ -115,6 +115,18 @@ export function rgbString(c: RGB): string {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
+/**
+ * Build a CSS gradient stop list (``rgb(...) p%, …``) from a colormap ramp,
+ * low → high. Lets the on-screen legend build its swatch from the same colours
+ * the canvas fills cells with, so the two can't drift.
+ */
+export function gradientStops(ramp: readonly (readonly [number, number, number])[]): string {
+  const n = Math.max(ramp.length - 1, 1);
+  return ramp
+    .map(([r, g, b], i) => `rgb(${r},${g},${b}) ${Math.round((i / n) * 100)}%`)
+    .join(', ');
+}
+
 /** Map a normalized density ``t`` in [0, 1] to an ``rgb(...)`` string on *ramp*. */
 export function densityColor(t: number, ramp: RGB[]): string {
   const n = ramp.length - 1;
