@@ -16,11 +16,11 @@ from typing import Iterator
 def get_file_access_base_dir() -> Path | None:
     """Return the base directory for file-access validation.
 
-    In single-user mode (:class:`~vtsearch.auth.DefaultLoginProvider`) this
-    returns ``None``, which causes :func:`validate_server_filepath` to confine
-    paths to :data:`vtscore.config.SERVER_ROOTS` (just ``Path.cwd()`` unless the
-    operator widens it via ``VTSEARCH_SERVER_ROOTS``).  ``None`` does *not* mean
-    "unrestricted" -- it means "use the configured server roots".
+    In single-user / no-auth mode (:class:`~vtsearch.auth.DefaultLoginProvider`)
+    this returns ``None``, which tells :func:`validate_server_filepath` to apply
+    **no** confinement: the lone trusted user may read from and write to any
+    server-readable path.  There is no per-user boundary to protect, so the app
+    does not impose one.
 
     In multi-user mode (any non-default provider) this returns the current
     user's data directory so that each user is confined to their own
@@ -30,23 +30,24 @@ def get_file_access_base_dir() -> Path | None:
 
     provider = get_login_provider()
     if isinstance(provider, DefaultLoginProvider):
-        return None  # single-user: confine to the configured SERVER_ROOTS
+        return None  # single-user / no-auth: unrestricted file access
     return get_user_data_dir()
 
 
 def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:
-    """Validate that *filepath_str* resolves within an allowed root.
+    """Resolve *filepath_str*, optionally asserting it stays within *base_dir*.
 
     Parameters
     ----------
     filepath_str:
         User-supplied file path (absolute or relative).
     base_dir:
-        A single directory the resolved path must reside in.  When given
-        (e.g. the per-user data dir in multi-user mode) it is the only
-        allowed root.  When ``None`` the allowed roots are
-        :data:`vtscore.config.SERVER_ROOTS` (every entry is accepted), which
-        default to ``(Path.cwd(),)`` unless ``VTSEARCH_SERVER_ROOTS`` is set.
+        The single directory the resolved path must reside in.  When ``None``
+        (the single-user / no-auth case; see :func:`get_file_access_base_dir`)
+        the path is **unrestricted**: it is resolved (relative paths against the
+        process CWD) and returned without any containment check.  When a path is
+        given (the per-user data dir in multi-user mode) it is the only allowed
+        root and an escape raises.
 
     Returns
     -------
@@ -56,35 +57,28 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
     Raises
     ------
     ValueError
-        If the resolved path is outside every allowed root.
+        If *base_dir* is given and the resolved path escapes it.
     """
-    if base_dir is not None:
-        roots: tuple[Path, ...] = (base_dir,)
-    else:
-        from vtscore.config import SERVER_ROOTS  # noqa: PLC0415
-
-        roots = SERVER_ROOTS
-
     path = Path(filepath_str)
 
-    # Resolve relative paths against the primary root, absolute paths as-is.
+    if base_dir is None:
+        # Single-user / no-auth mode: every server-readable path is allowed.
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        return path.resolve()
+
+    # Multi-user: confine to base_dir.  Resolve relative paths against it.
     if not path.is_absolute():
-        path = roots[0] / path
+        path = base_dir / path
 
     resolved = path.resolve()
-    for root in roots:
-        try:
-            resolved.relative_to(root.resolve())
-            return resolved
-        except ValueError:
-            continue
-
-    allowed = ", ".join(f"'{r.resolve()}'" for r in roots)
-    raise ValueError(
-        f"The given path resolves outside the allowed directory. Paths must be within {allowed}. "
-        f"To import media from another location, set the VTSEARCH_SERVER_ROOTS environment variable "
-        f"(os.pathsep-separated) to include it."
-    )
+    try:
+        resolved.relative_to(base_dir.resolve())
+    except ValueError:
+        raise ValueError(
+            f"The given path resolves outside the allowed directory. Paths must be within '{base_dir.resolve()}'."
+        ) from None
+    return resolved
 
 
 def sanitize_template_value(value: str) -> str:

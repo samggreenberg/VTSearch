@@ -113,10 +113,12 @@ one directly when running outside an app context, or call
 
 **Validate filesystem paths at the boundary.** Any plugin that accepts
 a user-supplied server path must run it through
-`vtscore.security.validate_server_filepath` ([`vtscore/security/path_validation.py:35`](../../security/path_validation.py))
-so a malicious path can't escape the configured `SERVER_ROOTS`. When
-splicing a template variable like `{detector_name}` into a path, also
-call `sanitize_template_value` ([`vtscore/security/path_validation.py:82`](../../security/path_validation.py)).
+`vtscore.security.validate_server_filepath` ([`vtscore/security/path_validation.py`](../../security/path_validation.py)),
+passing `base_dir=get_file_access_base_dir()`, so a malicious path can't
+escape the current user's data directory in multi-user mode (single-user
+/ no-auth mode is unrestricted). When splicing a template variable like
+`{detector_name}` into a path, also call `sanitize_template_value`
+([`vtscore/security/path_validation.py`](../../security/path_validation.py)).
 
 **Validate URLs.** Any plugin that makes an outbound HTTP request must
 call `vtscore.security.validate_url` ([`vtscore/security/url_validation.py:30`](../../security/url_validation.py))

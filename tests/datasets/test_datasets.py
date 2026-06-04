@@ -159,34 +159,30 @@ class TestDatasetEndpoints:
             file_names2 = [f["name"] for f in data2["files"]]
             assert "sound.wav" in file_names2
 
-    def test_browse_media_files_server_fs_confined_to_server_root(self, client, tmp_path, monkeypatch):
-        """``source=server_fs`` is confined to the configured server root.
+    def test_browse_media_files_server_fs_unrestricted_single_user(self, client, tmp_path):
+        """``source=server_fs`` is unrestricted in single-user / no-auth mode.
 
-        In single-user mode the picker is rooted at ``SERVER_ROOTS[0]`` (not
-        the filesystem root ``/``) so it can never list a folder the
-        ``server_folder`` importer would reject at load time. Browsing the
-        root lists its subdirectories; a path that escapes the root is
-        rejected here rather than only at import.
+        The picker is rooted at the filesystem root (``/``) so the user can
+        browse to any absolute folder on the server, matching the now
+        unrestricted ``server_folder`` import validation.
         """
-        import vtscore.config
-
         sub = tmp_path / "subdir"
         sub.mkdir()
         (sub / "track.wav").write_bytes(b"RIFF" + b"\x00" * 64)
-        monkeypatch.setattr(vtscore.config, "SERVER_ROOTS", (tmp_path.resolve(),))
 
+        # Browsing with no sub-path reports the filesystem root.
         resp = client.get("/api/browse-media-files?source=server_fs&path=")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["root_path"] == str(tmp_path.resolve())
-        dir_names = [d["name"] for d in data["directories"]]
-        assert "subdir" in dir_names
+        assert data["root_path"] == "/"
         # default_path is reported on every server_fs response.
         assert "default_path" in data
 
-        # A traversal that escapes the server root is rejected outright.
-        resp = client.get("/api/browse-media-files?source=server_fs&path=../../etc")
-        assert resp.status_code == 400
+        # An arbitrary absolute path (well outside the CWD) is browsable.
+        resp = client.get(f"/api/browse-media-files?source=server_fs&path={tmp_path}")
+        assert resp.status_code == 200
+        dir_names = [d["name"] for d in resp.get_json()["directories"]]
+        assert "subdir" in dir_names
 
     def test_select_browsed_file_copies_to_example_media(self, client, tmp_path):
         """POST /api/browse-media-files/select copies the file to example_media."""
@@ -292,30 +288,21 @@ class TestDatasetEndpoints:
         resp = client.get("/api/dataset/detect-media-type?source=demo:nonexistent_xyz&path=")
         assert resp.status_code == 404
 
-    def test_detect_media_type_server_fs_confined_to_server_root(self, client, tmp_path, monkeypatch):
-        """``server_fs`` detection is confined to the configured server root.
+    def test_detect_media_type_server_fs_unrestricted_single_user(self, client, tmp_path):
+        """``server_fs`` detection runs against any absolute path in single-user mode.
 
-        Detection used to run from ``/``, so it would happily scan a folder
-        the importer rejects at load. It must now reject an absolute path that
-        resolves outside ``SERVER_ROOTS`` exactly as the importer does, while
-        still detecting media inside the root via its absolute path.
+        With no per-user boundary to enforce, detection scans whatever absolute
+        folder the user supplies, matching the unrestricted importer.
         """
-        import vtscore.config
-
         root = tmp_path / "media"
         root.mkdir()
         (root / "a.wav").write_bytes(b"RIFF")
         (root / "b.wav").write_bytes(b"RIFF")
-        monkeypatch.setattr(vtscore.config, "SERVER_ROOTS", (tmp_path.resolve(),))
 
-        # In-root absolute path is detected.
+        # An absolute path well outside the CWD is detected, not rejected.
         resp = client.get(f"/api/dataset/detect-media-type?source=server_fs&path={root}")
         assert resp.status_code == 200
         assert resp.get_json()["dominant"] == "audio"
-
-        # An absolute path outside the server root is rejected, not scanned.
-        resp = client.get("/api/dataset/detect-media-type?source=server_fs&path=/etc")
-        assert resp.status_code == 400
 
     def test_detect_media_type_directory_cap(self, tmp_path):
         """The helper stops walking after ``max_dirs`` directories, even when

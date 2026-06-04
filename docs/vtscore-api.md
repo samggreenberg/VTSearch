@@ -69,9 +69,6 @@ DEVICE: str
 def resolve_device() -> str:
     """Resolve DEVICE='auto' to the concrete torch device string for this host."""
 
-SERVER_ROOTS: tuple[Path, ...]
-"""Allowed filesystem roots for server-path importers. Honours $VTSEARCH_SERVER_ROOTS."""
-
 MAX_UPLOAD_MB: int
 """HTTP request size cap in MB; 0 = unlimited. Honours $VTSEARCH_MAX_UPLOAD_MB."""
 
@@ -1089,12 +1086,13 @@ def cap_workers_by_memory(
 Defensive helpers. Used at every external-input boundary; no app coupling.
 
 ```python
-def get_file_access_base_dir() -> Path:
-    """The single base directory under which validate_server_filepath permits paths."""
+def get_file_access_base_dir() -> Path | None:
+    """Per-user base dir validate_server_filepath confines to; None (unrestricted)
+    in single-user / no-auth mode."""
 
-def validate_server_filepath(filepath_str: str, base_dir: Path) -> Path:
-    """Resolve `filepath_str` and assert it stays inside `base_dir`.
-    Raises on escape attempts."""
+def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:
+    """Resolve `filepath_str`. When `base_dir` is given, assert it stays inside
+    `base_dir` (raises on escape); when None, the path is unrestricted."""
 
 def sanitize_template_value(value: str) -> str:
     """Sanitise a value before substituting it into a filesystem-path template."""

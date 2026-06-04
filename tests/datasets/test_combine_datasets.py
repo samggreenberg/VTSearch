@@ -476,13 +476,39 @@ class TestCombineEndpoint:
         data = resp.get_json()
         assert data["ok"] is True
 
-    def test_path_traversal_rejected(self, client):
-        """Paths outside the allowed directory must be rejected."""
-        resp = client.post(
-            "/api/dataset/combine",
-            json={"datasets": ["/etc/passwd", "/etc/shadow"]},
-        )
-        assert resp.status_code == 400
+    def test_path_traversal_rejected(self, client, tmp_path):
+        """In multi-user mode, paths outside the user dir must be rejected.
+
+        Path confinement only applies in multi-user mode; single-user / no-auth
+        mode is unrestricted, so this forces multi-user to exercise the boundary.
+        """
+        from vtsearch.auth import LoginProvider, get_login_provider, set_login_provider
+
+        user_dir = tmp_path / "testuser"
+        user_dir.mkdir()
+
+        class _Provider(LoginProvider):
+            name = "test_multi_combine"
+
+            def get_user(self, request):
+                return "testuser"
+
+            def is_authenticated(self, request):
+                return True
+
+            def get_user_data_dir(self, username, base_data_dir):
+                return user_dir
+
+        original = get_login_provider()
+        try:
+            set_login_provider(_Provider())
+            resp = client.post(
+                "/api/dataset/combine",
+                json={"datasets": ["/etc/passwd", "/etc/shadow"]},
+            )
+            assert resp.status_code == 400
+        finally:
+            set_login_provider(original)
 
 
 # ---------------------------------------------------------------------------

@@ -635,7 +635,12 @@ class TestVoteEdgeCases:
 
 
 class TestPathTraversalPrevention:
-    """Label-file endpoints must reject paths outside the data directory."""
+    """Label-file endpoints must reject paths outside the user's data dir.
+
+    Path confinement only applies in multi-user mode; single-user / no-auth
+    mode is unrestricted, so these tests force multi-user mode (a provider
+    confined to a tmp dir) to exercise the boundary.
+    """
 
     def _make_label_file(self, paths):
         """Build an in-memory label JSON file with the given file paths."""
@@ -645,29 +650,65 @@ class TestPathTraversalPrevention:
         content = json.dumps({"labels": labels}).encode("utf-8")
         return io.BytesIO(content)
 
+    def _multi_user_provider(self, user_dir):
+        """A LoginProvider that confines every request to *user_dir*."""
+        from vtsearch.auth import LoginProvider
+
+        class _Provider(LoginProvider):
+            name = "test_multi_traversal"
+
+            def get_user(self, request):
+                return "testuser"
+
+            def is_authenticated(self, request):
+                return True
+
+            def get_user_data_dir(self, username, base_data_dir):
+                return user_dir
+
+        return _Provider()
+
     # -- /api/label-file-sort ------------------------------------------------
 
-    def test_label_file_sort_rejects_absolute_escape(self, client):
-        """Absolute paths outside DATA_DIR must be skipped."""
-        buf = self._make_label_file(["/etc/passwd", "/etc/shadow"])
-        resp = client.post(
-            "/api/label-file-sort",
-            data={"file": (buf, "labels.json")},
-            content_type="multipart/form-data",
-        )
-        # All paths rejected → too few valid files → 400
-        assert resp.status_code == 400
-        # Migrated to flask-smorest: handler-level rejects surface under
-        # ``message``, not the legacy ``error`` key.
-        message = resp.get_json()["message"]
-        assert "2 valid" in message or "loaded 0" in message
+    def test_label_file_sort_rejects_absolute_escape(self, client, tmp_path):
+        """Absolute paths outside the user dir must be skipped."""
+        from vtsearch.auth import get_login_provider, set_login_provider
 
-    def test_label_file_sort_rejects_relative_traversal(self, client):
-        """Relative paths that traverse out of DATA_DIR must be skipped."""
-        buf = self._make_label_file(["../../etc/passwd", "../../../etc/shadow"])
-        resp = client.post(
-            "/api/label-file-sort",
-            data={"file": (buf, "labels.json")},
-            content_type="multipart/form-data",
-        )
-        assert resp.status_code == 400
+        user_dir = tmp_path / "testuser"
+        user_dir.mkdir()
+        original = get_login_provider()
+        try:
+            set_login_provider(self._multi_user_provider(user_dir))
+            buf = self._make_label_file(["/etc/passwd", "/etc/shadow"])
+            resp = client.post(
+                "/api/label-file-sort",
+                data={"file": (buf, "labels.json")},
+                content_type="multipart/form-data",
+            )
+            # All paths rejected → too few valid files → 400
+            assert resp.status_code == 400
+            # Migrated to flask-smorest: handler-level rejects surface under
+            # ``message``, not the legacy ``error`` key.
+            message = resp.get_json()["message"]
+            assert "2 valid" in message or "loaded 0" in message
+        finally:
+            set_login_provider(original)
+
+    def test_label_file_sort_rejects_relative_traversal(self, client, tmp_path):
+        """Relative paths that traverse out of the user dir must be skipped."""
+        from vtsearch.auth import get_login_provider, set_login_provider
+
+        user_dir = tmp_path / "testuser"
+        user_dir.mkdir()
+        original = get_login_provider()
+        try:
+            set_login_provider(self._multi_user_provider(user_dir))
+            buf = self._make_label_file(["../../etc/passwd", "../../../etc/shadow"])
+            resp = client.post(
+                "/api/label-file-sort",
+                data={"file": (buf, "labels.json")},
+                content_type="multipart/form-data",
+            )
+            assert resp.status_code == 400
+        finally:
+            set_login_provider(original)

@@ -20,8 +20,39 @@ from __future__ import annotations
 
 import json
 import threading
+from contextlib import contextmanager
 
 import pytest
+
+
+@contextmanager
+def _multi_user_mode(user_dir):
+    """Activate a multi-user login provider confined to *user_dir*.
+
+    Path confinement only applies in multi-user mode; single-user / no-auth
+    mode is unrestricted. Tests that exercise the ``../`` traversal boundary
+    must run inside this context.
+    """
+    from vtsearch.auth import LoginProvider, get_login_provider, set_login_provider
+
+    class _Provider(LoginProvider):
+        name = "test_multi_sync"
+
+        def get_user(self, request):
+            return "alice"
+
+        def is_authenticated(self, request):
+            return True
+
+        def get_user_data_dir(self, username, base_data_dir):
+            return user_dir
+
+    original = get_login_provider()
+    set_login_provider(_Provider())
+    try:
+        yield
+    finally:
+        set_login_provider(original)
 
 
 # ---------------------------------------------------------------------------
@@ -249,29 +280,30 @@ class TestServerFileSettingsSource:
         assert "alice.settings.json" in result
         assert "{username}" not in result
 
-    def test_resolved_template_path_outside_base_dir_rejected(self, monkeypatch):
+    def test_resolved_template_path_outside_base_dir_rejected(self, tmp_path):
         """Regression for ``logical-bug-audit.md`` C9.
 
         A template containing ``../`` survives per-value sanitization (because
         no template variable is involved), so the resolved path must also be
         validated against the file-access base directory before any file
-        operation runs.
+        operation runs. Confinement is multi-user-only, so force that mode.
         """
         from vtsearch.settings_io.sources import get_settings_source
 
-        monkeypatch.setattr("vtsearch.auth.get_current_user", lambda: "alice")
-
+        user_dir = tmp_path / "alice"
+        user_dir.mkdir()
         traversal_template = "../../../../etc/{username}.settings.json"
 
-        src = get_settings_source("server_json_file")
-        with pytest.raises(ValueError, match="outside the allowed directory"):
-            src._normalize({"filepath": traversal_template})
+        with _multi_user_mode(user_dir):
+            src = get_settings_source("server_json_file")
+            with pytest.raises(ValueError, match="outside the allowed directory"):
+                src._normalize({"filepath": traversal_template})
 
-        src = get_settings_source("server_json_file")
-        with pytest.raises(ValueError, match="outside the allowed directory"):
-            src.load({"filepath": traversal_template})
-        with pytest.raises(ValueError, match="outside the allowed directory"):
-            src.save({"volume": 0.5}, {"filepath": traversal_template})
+            src = get_settings_source("server_json_file")
+            with pytest.raises(ValueError, match="outside the allowed directory"):
+                src.load({"filepath": traversal_template})
+            with pytest.raises(ValueError, match="outside the allowed directory"):
+                src.save({"volume": 0.5}, {"filepath": traversal_template})
 
 
 # ---------------------------------------------------------------------------
@@ -359,40 +391,43 @@ class TestServerFileLabelsetSource:
         with pytest.raises(ValueError, match="labels"):
             src.load({"filepath": str(filepath)})
 
-    def test_resolved_template_path_outside_base_dir_rejected(self):
+    def test_resolved_template_path_outside_base_dir_rejected(self, tmp_path):
         """Regression for ``logical-bug-audit.md`` C9.
 
         A template containing ``../`` survives per-value sanitization (because
         the sanitized detector_name has no separators), so the resolved path
         must also be validated against the file-access base directory before
-        any file operation runs.
+        any file operation runs. Confinement is multi-user-only, so force that mode.
         """
         from vtscore.datasets.labelset import LabelSet
         from vtscore.labels.sources import get_labelset_source
         from vtscore.labels.sources.server_json_file import resolve_filepath_for
 
+        user_dir = tmp_path / "alice"
+        user_dir.mkdir()
         traversal_template = "../../../../etc/{detector_name}.labels.json"
 
-        with pytest.raises(ValueError, match="outside the allowed directory"):
-            resolve_filepath_for(
-                {"filepath": traversal_template},
-                detector_id="abc",
-                detector_name="evil",
-            )
+        with _multi_user_mode(user_dir):
+            with pytest.raises(ValueError, match="outside the allowed directory"):
+                resolve_filepath_for(
+                    {"filepath": traversal_template},
+                    detector_id="abc",
+                    detector_name="evil",
+                )
 
-        src = get_labelset_source("server_json_file")
+            src = get_labelset_source("server_json_file")
 
-        # The base-class normalize also validates when no template
-        # variable is present (so a bare "../" template is rejected too).
-        with pytest.raises(ValueError, match="outside the allowed directory"):
-            src._normalize({"filepath": "../../../../etc/passwd"})
+            # The base-class normalize also validates when no template
+            # variable is present (so a bare "../" template is rejected too).
+            with pytest.raises(ValueError, match="outside the allowed directory"):
+                src._normalize({"filepath": "../../../../etc/passwd"})
 
-        with pytest.raises(ValueError, match="outside the allowed directory"):
-            src.load({"filepath": "../../../../etc/passwd"})
-        with pytest.raises(ValueError, match="outside the allowed directory"):
-            src.load_full({"filepath": "../../../../etc/passwd"})
-        with pytest.raises(ValueError, match="outside the allowed directory"):
-            src.save(LabelSet([]), {"filepath": "../../../../etc/passwd"})
+            with pytest.raises(ValueError, match="outside the allowed directory"):
+                src.load({"filepath": "../../../../etc/passwd"})
+            with pytest.raises(ValueError, match="outside the allowed directory"):
+                src.load_full({"filepath": "../../../../etc/passwd"})
+            with pytest.raises(ValueError, match="outside the allowed directory"):
+                src.save(LabelSet([]), {"filepath": "../../../../etc/passwd"})
 
 
 # ---------------------------------------------------------------------------

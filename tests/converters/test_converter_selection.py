@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -810,8 +809,6 @@ class TestEffectiveSourceSpecs:
         assert specs[0].source_type == "image"
 
     def test_rejects_invalid_converter(self):
-        import pytest
-
         from vtscore.datasets.importers.server_folder import IMPORTER
 
         with pytest.raises(ValueError, match="Unknown converter"):
@@ -827,8 +824,6 @@ class TestEffectiveSourceSpecs:
     def test_rejects_target_mismatch(self):
         """A converter whose target_type doesn't match the output media_type
         is rejected; e.g. video2audio applied to an image-output dataset."""
-        import pytest
-
         from vtscore.datasets.importers.server_folder import IMPORTER
 
         with pytest.raises(ValueError, match="produces"):
@@ -844,8 +839,6 @@ class TestEffectiveSourceSpecs:
     def test_rejects_direct_row_with_wrong_type(self):
         """A no-converter row whose source_type differs from the output type
         is rejected; that's the form a stale UI submission would take."""
-        import pytest
-
         from vtscore.datasets.importers.server_folder import IMPORTER
 
         with pytest.raises(ValueError, match="does not match"):
@@ -902,12 +895,6 @@ class TestConverterAcceptsParams:
 
 
 class TestImportAPISourceSpecs:
-    @pytest.fixture(autouse=True)
-    def _permissive_server_roots(self, monkeypatch):
-        """server_folder's ``path`` field is validated against SERVER_ROOTS;
-        the dummy ``/tmp/test`` path here only exercises route wiring."""
-        monkeypatch.setattr("vtscore.config.SERVER_ROOTS", (Path("/"),))
-
     def test_import_endpoint_passes_source_specs(self, client):
         with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_run:
             resp = client.post(
@@ -966,8 +953,6 @@ class TestServerFilesEffectiveSourceSpecs:
         assert specs[1].params == {"n_clips": "5"}
 
     def test_rejects_target_mismatch(self):
-        import pytest
-
         from vtscore.datasets.importers.server_files import IMPORTER
 
         with pytest.raises(ValueError, match="produces"):
