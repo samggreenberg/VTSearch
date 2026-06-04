@@ -14,7 +14,7 @@ import {
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
-import { SQRT3, traceHexPath, viridisColor } from '../browse-canvas/hex-render.util';
+import { SQRT3, traceCellPath, densityColor } from '../browse-canvas/hex-render.util';
 import { IconComponent } from '../icon/icon.component';
 import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
 
@@ -26,13 +26,15 @@ export const MINIMAP_MAX_HEIGHT = 450;
 
 /**
  * Lower-right overview for the browse canvas: a density heatmap of the whole
- * projection at its coarsest level, with a rectangle marking the region the
- * main canvas is currently showing. Clicking/dragging the minimap recenters
- * the main view; a corner handle resizes it and a close button hides it.
+ * projection, with a rectangle marking the region the main canvas is currently
+ * showing. Clicking/dragging the minimap recenters the main view; a corner
+ * handle resizes it and a close button hides it.
  *
- * The heatmap reads the coarsest (level 0) hex tiles — the fewest, largest
- * bins — straight from the shared :class:`TileCacheService`, so it reuses
- * whatever the main canvas has already fetched and never holds its own copy.
+ * The heatmap picks the pyramid level whose hexes land near a small target
+ * on-screen size, so the whole projection is shown as a fine-grained field of
+ * many hexes (not the handful of level-0 bins). Tiles for that level are read
+ * straight from the shared :class:`TileCacheService`, so it reuses whatever the
+ * main canvas has already fetched and never holds its own copy.
  */
 @Component({
   selector: 'vt-browse-minimap',
@@ -83,7 +85,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
     this.resizeCanvas();
 
-    // Coarse tiles arrive asynchronously; repaint as the cache fills. The
+    // Overview tiles arrive asynchronously; repaint as the cache fills. The
     // viewport box updates on every pan/zoom the main canvas publishes.
     this.tileLoadSub = this.tileCache.tileLoaded$.subscribe(() => this.requestRedraw());
     this.viewportSub = this.viewport.viewport$.subscribe((b) => {
@@ -91,7 +93,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       this.requestRedraw();
     });
 
-    this.requestCoarseTiles();
+    this.requestOverviewTiles();
     this.requestRedraw();
   }
 
@@ -102,7 +104,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       this.requestRedraw();
     }
     if (changes['meta'] && !changes['meta'].firstChange) {
-      this.requestCoarseTiles();
+      this.requestOverviewTiles();
       this.requestRedraw();
     }
   }
@@ -125,19 +127,41 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
-  // --- Coarse-tile coverage -------------------------------------------------
+  // --- Overview-tile coverage -----------------------------------------------
 
-  /** Fetch every level-0 tile spanning the projection bounds (idempotent). */
-  private requestCoarseTiles(): void {
+  /**
+   * Target on-screen radius (minimap px) for the overview's hexes. Small enough
+   * that the whole projection reads as a fine field of many bins rather than
+   * the few large level-0 hexes, while still resolving structure at a glance.
+   */
+  private static readonly OVERVIEW_TARGET_HEX_PX = 5;
+
+  /**
+   * Pyramid level to render in the overview: the one whose hexes are nearest
+   * the small target on-screen size for the current minimap scale. Deeper than
+   * level 0 (so the map is finer-grained), clamped to the available levels.
+   */
+  private overviewLevel(f: { scale: number }): number {
+    if (!this.meta || this.meta.levels.length === 0) return 0;
+    const basePx = this.meta.base_radius * f.scale; // level-0 hex radius in px
+    const ideal = Math.log2(basePx / BrowseMinimapComponent.OVERVIEW_TARGET_HEX_PX);
+    return Math.max(0, Math.min(this.meta.levels.length - 1, Math.round(ideal)));
+  }
+
+  /** Fetch every tile of the overview level spanning the bounds (idempotent). */
+  private requestOverviewTiles(): void {
     if (!this.meta || this.meta.point_count === 0) return;
-    for (const { tx, ty } of this.coarseTiles()) {
-      this.tileCache.getTile(0, tx, ty)?.subscribe();
+    const f = this.fit();
+    if (!f) return;
+    const level = this.overviewLevel(f);
+    for (const { tx, ty } of this.overviewTiles(level)) {
+      this.tileCache.getTile(level, tx, ty)?.subscribe();
     }
   }
 
-  private coarseTiles(): { tx: number; ty: number }[] {
+  private overviewTiles(level: number): { tx: number; ty: number }[] {
     if (!this.meta) return [];
-    const radius = this.meta.base_radius; // level 0 = coarsest, largest hexes
+    const radius = this.meta.base_radius / Math.pow(2, level);
     const tileW = this.meta.tile_span * radius * SQRT3;
     const tileH = this.meta.tile_span * radius * 1.5;
     const [xmin, ymin, xmax, ymax] = this.meta.bounds;
@@ -199,15 +223,16 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
 
     const f = this.fit();
     if (f) {
-      const cells = this.coarseCells();
+      const level = this.overviewLevel(f);
+      const cells = this.overviewCells(level);
       let maxCount = 1;
       for (const c of cells) if (c.count > maxCount) maxCount = c.count;
-      const hexR = this.meta!.base_radius * f.scale;
+      const hexR = (this.meta!.base_radius / Math.pow(2, level)) * f.scale;
       for (const cell of cells) {
         const [sx, sy] = this.projToMap(cell.cx, cell.cy, f);
-        traceHexPath(ctx, sx, sy, hexR);
+        traceCellPath(ctx, sx, sy, hexR, cell.count === 1);
         const t = Math.log(cell.count) / Math.log(maxCount || 2);
-        ctx.fillStyle = viridisColor(Math.max(0, Math.min(1, t)));
+        ctx.fillStyle = densityColor(Math.max(0, Math.min(1, t)));
         ctx.fill();
       }
       this.drawViewportRect(ctx, f);
@@ -219,11 +244,11 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     ctx.strokeRect(0.5, 0.5, this.width - 1, this.height - 1);
   }
 
-  /** Pull all cached level-0 cells covering the extent. */
-  private coarseCells(): HexCellPayload[] {
+  /** Pull all cached cells of the overview *level* covering the extent. */
+  private overviewCells(level: number): HexCellPayload[] {
     const out: HexCellPayload[] = [];
-    for (const { tx, ty } of this.coarseTiles()) {
-      const tile = this.tileCache.getCached(0, tx, ty);
+    for (const { tx, ty } of this.overviewTiles(level)) {
+      const tile = this.tileCache.getCached(level, tx, ty);
       if (tile) out.push(...tile.cells);
     }
     return out;

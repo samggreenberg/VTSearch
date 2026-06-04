@@ -8,33 +8,30 @@ const DEG30 = Math.PI / 6;
 /** Pointy-top hexagon vertex angles (matches the projection's hex layout). */
 export const HEX_ANGLES = Array.from({ length: 6 }, (_, i) => (Math.PI / 3) * i - DEG30);
 
-const VIRIDIS: [number, number, number][] = [
-  [68, 1, 84],
-  [72, 35, 116],
-  [64, 67, 135],
-  [52, 94, 141],
-  [41, 120, 142],
-  [33, 145, 140],
-  [42, 168, 131],
-  [68, 190, 112],
-  [94, 201, 98],
-  [128, 213, 79],
-  [166, 222, 52],
-  [199, 227, 33],
-  [229, 228, 32],
-  [253, 231, 37],
+// Dark-red → yellow density ramp. The low end is a deep red rather than black
+// so that pure black stays free to mean "nothing here" (None): empty space on
+// the canvas reads as absence, while any occupied hex is at least dark red.
+const HEATMAP: [number, number, number][] = [
+  [90, 0, 0],
+  [140, 12, 0],
+  [185, 28, 0],
+  [220, 60, 0],
+  [240, 105, 0],
+  [250, 150, 5],
+  [255, 195, 25],
+  [255, 235, 70],
 ];
 
-/** Map a normalized density ``t`` in [0, 1] to a viridis ``rgb(...)`` string. */
-export function viridisColor(t: number): string {
-  const n = VIRIDIS.length - 1;
+/** Map a normalized density ``t`` in [0, 1] to a darkred→yellow ``rgb(...)`` string. */
+export function densityColor(t: number): string {
+  const n = HEATMAP.length - 1;
   const idx = t * n;
   const lo = Math.floor(idx);
   const hi = Math.min(lo + 1, n);
   const frac = idx - lo;
-  const r = Math.round(VIRIDIS[lo][0] + (VIRIDIS[hi][0] - VIRIDIS[lo][0]) * frac);
-  const g = Math.round(VIRIDIS[lo][1] + (VIRIDIS[hi][1] - VIRIDIS[lo][1]) * frac);
-  const b = Math.round(VIRIDIS[lo][2] + (VIRIDIS[hi][2] - VIRIDIS[lo][2]) * frac);
+  const r = Math.round(HEATMAP[lo][0] + (HEATMAP[hi][0] - HEATMAP[lo][0]) * frac);
+  const g = Math.round(HEATMAP[lo][1] + (HEATMAP[hi][1] - HEATMAP[lo][1]) * frac);
+  const b = Math.round(HEATMAP[lo][2] + (HEATMAP[hi][2] - HEATMAP[lo][2]) * frac);
   return `rgb(${r},${g},${b})`;
 }
 
@@ -53,4 +50,34 @@ export function traceHexPath(
     else ctx.lineTo(x, y);
   }
   ctx.closePath();
+}
+
+/**
+ * A hex's inscribed-circle radius as a fraction of its circumradius
+ * (``radius``). A disc of this radius is the largest circle that fits inside
+ * the hex, so a singleton drawn as a disc reads slightly smaller than the hex
+ * it replaces.
+ */
+export const HEX_INRADIUS_RATIO = SQRT3 / 2;
+
+/**
+ * Trace one cell's outline as the current path. A cell holding a single media
+ * item (``single``) is drawn as the hex's inscribed disc — barely smaller than
+ * the hex, and visibly so since a disc has less area than the hex around it —
+ * so singletons read as distinct dots. Every other cell keeps the full hex.
+ */
+export function traceCellPath(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  single: boolean,
+): void {
+  if (single) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * HEX_INRADIUS_RATIO, 0, Math.PI * 2);
+    ctx.closePath();
+  } else {
+    traceHexPath(ctx, cx, cy, radius);
+  }
 }

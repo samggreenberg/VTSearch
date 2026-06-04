@@ -15,7 +15,7 @@ import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
-import { SQRT3, traceHexPath, viridisColor } from './hex-render.util';
+import { SQRT3, traceCellPath, densityColor } from './hex-render.util';
 import type {
   HexCellPayload,
   ProjectionMeta,
@@ -41,7 +41,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   /**
    * Active dataset media type. For ``image`` and ``video`` the representative
    * item's thumbnail is painted directly onto each hex; other types keep the
-   * flat density (viridis) shading.
+   * flat density (darkred→yellow) shading.
    */
   @Input() mediaType = '';
   /**
@@ -350,9 +350,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     radius: number,
     cell: HexCellPayload,
   ): void {
-    traceHexPath(ctx, cx, cy, radius);
+    // A cell with one item is drawn as a disc (slightly smaller than the hex);
+    // multi-item cells stay hexes so they tile the space.
+    const single = cell.count === 1;
+    traceCellPath(ctx, cx, cy, radius, single);
 
-    // Image / video: paint the central item's thumbnail clipped to the hex.
+    // Image / video: paint the central item's thumbnail clipped to the cell.
     // Until it loads, fall back to the density shading below so the cell is
     // never blank.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
@@ -363,7 +366,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.restore();
     } else {
       const t = Math.log(cell.count) / Math.log(this.maxCount || 2);
-      ctx.fillStyle = viridisColor(Math.max(0, Math.min(1, t)));
+      ctx.fillStyle = densityColor(Math.max(0, Math.min(1, t)));
       ctx.fill();
     }
 
