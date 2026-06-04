@@ -9,9 +9,13 @@
       type="button"
       [id]="mediaTypeFieldId"
       class="form-select media-type-trigger"
+      role="combobox"
       [attr.aria-haspopup]="'listbox'"
       [attr.aria-expanded]="open"
+      [attr.aria-controls]="listboxId"
+      [attr.aria-activedescendant]="activeDescendantId"
       (click)="toggle()"
+      (keydown)="onTriggerKeydown($event)"
     >
       <span class="media-type-trigger-content">
         @if (iconFor(mediaType)) {
@@ -22,14 +26,22 @@
       <span class="media-type-chevron" aria-hidden="true">▾</span>
     </button>
     @if (open) {
-      <ul class="media-type-options" role="listbox">
-        @for (opt of mediaTypeOptions; track opt) {
+      <ul
+        class="media-type-options"
+        role="listbox"
+        [id]="listboxId"
+        aria-label="Dataset MediaType"
+      >
+        @for (opt of mediaTypeOptions; track opt; let i = $index) {
           <li
             class="media-type-option"
             role="option"
+            [id]="optionId(i)"
             [class.selected]="opt === mediaType"
+            [class.active]="i === activeIndex"
             [attr.aria-selected]="opt === mediaType"
             (click)="select(opt)"
+            (mouseenter)="activeIndex = i"
           >
             @if (iconFor(opt)) {
               <vt-icon [icon]="iconFor(opt)" [size]="16"></vt-icon>
