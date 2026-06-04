@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from vtscore.datasets.importers.base import SourceSpec
 
@@ -899,6 +902,12 @@ class TestConverterAcceptsParams:
 
 
 class TestImportAPISourceSpecs:
+    @pytest.fixture(autouse=True)
+    def _permissive_server_roots(self, monkeypatch):
+        """server_folder's ``path`` field is validated against SERVER_ROOTS;
+        the dummy ``/tmp/test`` path here only exercises route wiring."""
+        monkeypatch.setattr("vtscore.config.SERVER_ROOTS", (Path("/"),))
+
     def test_import_endpoint_passes_source_specs(self, client):
         with patch("vtsearch.routes.datasets.staging._run_importer_in_background") as mock_run:
             resp = client.post(
