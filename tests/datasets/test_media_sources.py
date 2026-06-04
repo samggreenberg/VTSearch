@@ -570,19 +570,6 @@ class TestExampleSortOriginEndpoint:
 
 
 class TestServerFilesSource:
-    def _make_npz(self, tmp_path, paths_and_vecs, embedder_name=""):
-        """Create a .npz archive with given paths and vectors."""
-        import numpy as np
-
-        names = np.array([str(p) for p in paths_and_vecs])
-        vecs = np.stack([v for _, v in paths_and_vecs.items()])
-        kwargs = {"filenames": names, "vectors": vecs}
-        if embedder_name:
-            kwargs["embedder_name"] = np.array(embedder_name)
-        npz = tmp_path / "list.npz"
-        np.savez(npz, **kwargs)
-        return npz
-
     def test_fetch_item_returns_path_and_embedding(self, tmp_path):
         import numpy as np
         from vtscore.datasets.sources.server_files import ServerFilesSource

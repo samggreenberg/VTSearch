@@ -203,6 +203,12 @@ class TestDryRunPickle:
 
 
 class TestDryRunImporter:
+    @pytest.fixture(autouse=True)
+    def _permissive_server_roots(self, monkeypatch):
+        """server_folder's ``path`` field is validated against SERVER_ROOTS;
+        these dry-run tests use dummy absolute paths to exercise CLI wiring."""
+        monkeypatch.setattr("vtscore.config.SERVER_ROOTS", (Path("/"),))
+
     def test_dry_run_importer_prints_params(self, client, tmp_path, capsys):
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])

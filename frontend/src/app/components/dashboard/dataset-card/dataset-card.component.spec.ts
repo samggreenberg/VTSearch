@@ -122,16 +122,15 @@ describe('DatasetCardComponent', () => {
     expect(component.browse.emit).toHaveBeenCalled();
   });
 
-  it('should disable browse button and not emit for non-audio datasets', () => {
+  it('should emit browse for non-audio datasets too', () => {
     component.dataset = { ...mockDataset, media_type: 'image' };
     fixture.detectChanges();
     spyOn(component.browse, 'emit');
     const el = fixture.nativeElement as HTMLElement;
     const browseBtn = el.querySelector('.browse-btn') as HTMLButtonElement;
-    expect(component.canBrowse).toBeFalse();
-    expect(browseBtn.disabled).toBeTrue();
-    component.onBrowse(new MouseEvent('click'));
-    expect(component.browse.emit).not.toHaveBeenCalled();
+    expect(browseBtn.disabled).toBeFalse();
+    browseBtn.click();
+    expect(component.browse.emit).toHaveBeenCalled();
   });
 
   it('should format dates', () => {

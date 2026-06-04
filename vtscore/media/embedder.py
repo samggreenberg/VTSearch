@@ -655,7 +655,7 @@ class MediaEmbedder(ABC):
         total = len(medias)
         results: list[Optional[np.ndarray]] = []
         for i, m in enumerate(medias):
-            self._on_progress("embedding", f"Embedding {i + 1}/{total}...", i + 1, total)
+            self._on_progress("embedding", "Embedding...", i + 1, total)
             results.append(self.embed_media(m))
         return results
 
@@ -758,7 +758,7 @@ class MediaEmbedder(ABC):
         total = len(medias)
         results: list[Optional["PatchEmbedOutput"]] = []  # noqa: F821
         for i, m in enumerate(medias):
-            self._on_progress("embedding", f"Patch-embedding {i + 1}/{total}...", i + 1, total)
+            self._on_progress("embedding", "Patch-embedding...", i + 1, total)
             results.append(self.patch_forward(m))
         return results
 

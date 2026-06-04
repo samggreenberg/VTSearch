@@ -220,6 +220,23 @@ banner text (`LOCAL` vs. `PRODUCTION`); the bind address is the same either
 way. This entry point uses Flask's built-in dev server and is not
 recommended for production.
 
+**Verbose logging** (`-v` / `--verbose`): logging defaults to `WARNING`, which
+keeps the console quiet — including the per-request access log. Pass `-v` to
+raise the level to `INFO`, which turns on the dev-server access log (one
+`GET /api/... 200` line per request) plus VTSearch's own INFO records; `-vv`
+raises it to `DEBUG`. The flag only raises verbosity, so `-v` on top of
+`VTSEARCH_LOG_LEVEL=debug` stays at DEBUG. It applies to both the web server and
+`--autodetect`:
+
+```bash
+python app.py -v             # INFO + access log
+python app.py -vv            # DEBUG
+VTSEARCH_LOG_LEVEL=info python app.py   # same as -v, via env
+```
+
+Under gunicorn there is no `-v` flag; set `VTSEARCH_LOG_LEVEL=info` (or `debug`)
+to get the same access log.
+
 **Production (gunicorn)**: run the WSGI app under the bundled config:
 
 ```bash

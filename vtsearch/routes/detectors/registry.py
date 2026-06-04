@@ -360,8 +360,7 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
 
                 def _embed_progress(name: str, done: int, total: int) -> None:
                     tracker.check_cancelled()
-                    msg = f"{base_msg} ({done}/{total})" if total else base_msg
-                    tracker.update("loading", msg, done, total, step=1, total_steps=1)
+                    tracker.update("loading", base_msg, done, total, step=1, total_steps=1)
 
                 # ``populate_label_embeddings`` clears the cache when it detects
                 # the embedder change, so this rebuilds against the new embedder
@@ -551,7 +550,7 @@ def load_detector_route(body: dict):  # noqa: C901
                                 tracker.check_cancelled()
                                 tracker.update(
                                     "loading",
-                                    f"Embedding labels… ({done}/{total})",
+                                    "Embedding labels…",
                                     done,
                                     total,
                                     step=3,

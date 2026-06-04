@@ -262,7 +262,7 @@ def download_kth(on_progress: Optional[ProgressCallback] = None) -> Path:
 
         try:
             url = f"{_core.KTH_BASE_URL}{zip_name}"
-            on_progress("downloading", f"Downloading KTH {action} ({i + 1}/{total})...", i, total)
+            on_progress("downloading", f"Downloading KTH {action}...", i, total)
             _core.download_file_with_progress(url, zip_path, 0, on_progress)
 
             on_progress("downloading", f"Extracting KTH {action}...", i + 1, total)

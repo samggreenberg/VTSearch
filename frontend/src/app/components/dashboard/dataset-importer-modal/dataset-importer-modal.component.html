@@ -92,6 +92,27 @@
 
     <ng-container sfAfter>
       <div class="form-group">
+        <button
+          type="button"
+          class="btn btn--secondary"
+          (click)="sfBrowserOpen = !sfBrowserOpen"
+          title="Browse the server's filesystem and pick a folder"
+        >{{ sfBrowserOpen ? 'Hide browser' : 'Browse…' }}</button>
+        @if (sfBrowserOpen) {
+          <div class="sf-folder-browser-panel">
+            <vt-folder-browser
+              [browse]="sfFolderBrowseFn"
+              [showFiles]="true"
+              [showPathFooter]="true"
+              rootLabel="Server root"
+              (pathChange)="onSfFolderPicked($event)"
+            ></vt-folder-browser>
+            <p class="form-hint">Navigate into a folder to select it; its media is imported.</p>
+          </div>
+        }
+      </div>
+
+      <div class="form-group">
         <label class="form-label" for="sf-recursive" title="When enabled, subdirectories of the chosen folder are scanned recursively. When disabled, only files directly inside the chosen folder are imported.">
           <input
             id="sf-recursive"
@@ -251,14 +272,12 @@
             </label>
 
             @if (field.field_type === 'server_path') {
-              <input
-                [id]="'field-' + field.key"
-                type="text"
-                class="form-input"
-                [ngModel]="formValues[field.key] || ''"
-                (ngModelChange)="formOnServerPathSelected(field.key, $event)"
+              <vt-file-browser
+                [value]="formValues[field.key] || ''"
+                [extensions]="field.accept || ''"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
-              />
+                (pathSelected)="formOnServerPathSelected(field.key, $event)"
+              ></vt-file-browser>
             } @else if (field.field_type === 'file') {
               <input
                 [id]="'field-' + field.key"
@@ -382,7 +401,7 @@
   @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="submit()" [disabled]="submitting">
+      <button class="btn btn--primary" (click)="submit()" [disabled]="submitting || !formCanSubmit">
         @if (submitting) {
           Importing...
         } @else {

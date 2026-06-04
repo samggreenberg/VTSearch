@@ -104,7 +104,7 @@ def _validate_field_value(field_type: str, value: str) -> None:
         from vtscore.security.url_validation import validate_url  # noqa: PLC0415
 
         validate_url(value)
-    elif field_type == "server_path":
+    elif field_type in ("server_path", "folder"):
         from vtscore.security.path_validation import (  # noqa: PLC0415
             get_file_access_base_dir,
             validate_server_filepath,

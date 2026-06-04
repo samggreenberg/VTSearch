@@ -149,7 +149,7 @@ class TextBGEEmbedder(MediaEmbedder):
             return [None] * len(medias)
 
         total = len(medias)
-        self._on_progress("embedding", f"Embedding BGE {len(ready_indices)}/{total}...", 0, total)
+        self._on_progress("embedding", "Embedding BGE...", 0, total)
         with self._embed_lock:
             try:
                 vectors = self._model.encode(
@@ -164,7 +164,7 @@ class TextBGEEmbedder(MediaEmbedder):
         results: list[Optional[np.ndarray]] = [None] * len(medias)
         for slot, vec in zip(ready_indices, vectors):
             results[slot] = np.asarray(vec)
-        self._on_progress("embedding", f"Embedding BGE {total}/{total}...", total, total)
+        self._on_progress("embedding", "Embedding BGE...", total, total)
         return results
 
     def embed_text_passage(self, text: str) -> Optional[np.ndarray]:

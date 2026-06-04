@@ -66,6 +66,69 @@ class TestValidateServerFilepath:
         with pytest.raises(ValueError, match="must be within"):
             validate_server_filepath("escape_link/passwd", base_dir=tmp_path)
 
+    def test_accepts_path_in_any_configured_root(self, tmp_path, monkeypatch):
+        """With base_dir=None, a path inside ANY of SERVER_ROOTS is accepted."""
+        root_a = tmp_path / "a"
+        root_b = tmp_path / "b"
+        root_a.mkdir()
+        root_b.mkdir()
+        # SERVER_ROOTS is imported lazily inside the function, so patch the source.
+        monkeypatch.setattr("vtscore.config.SERVER_ROOTS", (root_a, root_b))
+
+        # A path under the *second* configured root must validate, not just the first.
+        target = root_b / "media" / "clip.wav"
+        result = validate_server_filepath(str(target))
+        assert result == target.resolve()
+
+    def test_rejects_path_outside_all_roots(self, tmp_path, monkeypatch):
+        root_a = tmp_path / "a"
+        root_a.mkdir()
+        monkeypatch.setattr("vtscore.config.SERVER_ROOTS", (root_a,))
+        with pytest.raises(ValueError, match="must be within"):
+            validate_server_filepath(str(tmp_path / "outside" / "x.wav"))
+
+
+class TestFolderFieldValidation:
+    """The server_folder importer's ``folder`` field must be path-validated
+    just like the server_files ``server_path`` field (unified policy)."""
+
+    def test_folder_field_outside_roots_rejected(self, tmp_path, monkeypatch):
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.plugins.normalize import normalize_field_values
+
+        root = tmp_path / "allowed"
+        root.mkdir()
+        monkeypatch.setattr("vtscore.config.SERVER_ROOTS", (root,))
+        # Single-user (default provider) -> base_dir is None -> SERVER_ROOTS apply.
+        from vtsearch.auth import DefaultLoginProvider, get_login_provider, set_login_provider
+
+        original = get_login_provider()
+        try:
+            set_login_provider(DefaultLoginProvider())
+            imp = ServerFolderDatasetImporter()
+            with pytest.raises(ValueError, match="must be within"):
+                normalize_field_values(imp, {"path": "/tmp/outside_the_root", "media_type": "image"})
+        finally:
+            set_login_provider(original)
+
+    def test_folder_field_inside_root_accepted(self, tmp_path, monkeypatch):
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.plugins.normalize import normalize_field_values
+
+        root = tmp_path / "allowed"
+        (root / "media").mkdir(parents=True)
+        monkeypatch.setattr("vtscore.config.SERVER_ROOTS", (root,))
+        from vtsearch.auth import DefaultLoginProvider, get_login_provider, set_login_provider
+
+        original = get_login_provider()
+        try:
+            set_login_provider(DefaultLoginProvider())
+            imp = ServerFolderDatasetImporter()
+            out = normalize_field_values(imp, {"path": str(root / "media"), "media_type": "image"})
+            assert out["path"] == str(root / "media")
+        finally:
+            set_login_provider(original)
+
 
 # ---------------------------------------------------------------------------
 # get_file_access_base_dir

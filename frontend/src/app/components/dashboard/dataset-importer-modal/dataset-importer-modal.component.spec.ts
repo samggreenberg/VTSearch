@@ -475,6 +475,29 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.filteredDemos.length).toBe(0);
   });
 
+  it('should default the demo media-type tab to the active context type when known', () => {
+    flushImporters();
+    // The dashboard passes the active context's single media type (e.g. an
+    // Image dataset/detector already loaded) as guessedMediaType.
+    component.guessedMediaType = 'image';
+
+    component.openDemoPicker();
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+
+    // buildDemoTabs pre-selects the guessed type instead of falling back to
+    // audio, so the image embedder/clipper fetches fire for that tab.
+    httpMock.expectOne(req =>
+      req.url === '/api/embedders' && req.params.get('media_type') === 'image',
+    ).flush({ embedders: mockImageEmbedders });
+    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req =>
+      req.url === '/api/dataset/demo-list' && req.params.get('embedder') === mockImageEmbedders[0].name,
+    ).flush({ datasets: mockDemos });
+
+    expect(component.activeTab).toBe('image');
+  });
+
   it('should filter demos by the explicitly selected media-type tab', () => {
     flushImporters();
     openAndFlushDemoPicker();

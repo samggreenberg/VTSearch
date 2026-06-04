@@ -4,8 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
-import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
+import {
+  ClipboardColumn,
+  ClipboardCopyComponent,
+} from '../../clipboard-copy/clipboard-copy.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
@@ -26,7 +29,13 @@ export interface ColumnDef {
 @Component({
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ModalComponent,
+    FieldHintIconComponent,
+    ClipboardCopyComponent,
+  ],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })
@@ -47,17 +56,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   /** Column definitions with selection state, built dynamically from API response. */
   columns: ColumnDef[] = [];
 
-  /** Filter which labels to show/export. */
-  labelFilter: 'good' | 'bad' | 'both' | 'corrections' = 'both';
-
-  /** Delimiter for text export. */
-  delimiter = ',';
-  delimiterOptions = [
-    { value: ',', label: 'Comma (,)' },
-    { value: '\t', label: 'Tab (\u21E5)' },
-    { value: '|', label: 'Pipe (|)' },
-    { value: ';', label: 'Semicolon (;)' },
-  ];
+  /** Filter which labels to show/export. Defaults to good-only. */
+  labelFilter: 'good' | 'bad' | 'both' | 'corrections' = 'good';
 
   /** Active export tab: 'clipboard' or an exporter name. */
   activeTab = 'clipboard';
@@ -66,9 +66,6 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   selectedExporter: ExporterEntry | null = null;
   formValues: Record<string, string> = {};
   submitting = false;
-
-  /** Copy feedback. */
-  copySuccess = false;
 
   /** Dataset display name for default filenames. */
   private datasetName = '';
@@ -218,30 +215,19 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return cols;
   }
 
-  /** Build delimited text from labels using selected columns. */
-  buildExportText(): string {
-    const cols = this.exportColumns;
-    if (cols.length === 0) return '';
-    const header = cols.map((c) => c.label).join(this.delimiter);
-    const rows = this.filteredLabels.map((entry) =>
-      cols.map((c) => this.getCellValue(entry, c)).join(this.delimiter),
-    );
-    return [header, ...rows].join('\n');
+  /** Columns passed to the shared clipboard control (table mode). */
+  get clipboardColumns(): ClipboardColumn[] {
+    return this.exportColumns.map((c) => ({ key: c.key, label: c.label }));
   }
 
-  /** Copy delimited text to clipboard. */
-  copyToClipboard(): void {
-    const text = this.buildExportText();
-    navigator.clipboard.writeText(text).then(
-      () => {
-        this.copySuccess = true;
-        this.status = `Copied ${this.filteredLabels.length} rows to clipboard.`;
-        setTimeout(() => (this.copySuccess = false), 2000);
-      },
-      () => {
-        this.error = 'Failed to copy to clipboard';
-      },
-    );
+  /** Labels flattened to `{ columnKey: value }` rows for the clipboard control. */
+  get clipboardRows(): Record<string, string>[] {
+    const cols = this.exportColumns;
+    return this.filteredLabels.map((entry) => {
+      const row: Record<string, string> = {};
+      for (const c of cols) row[c.key] = this.getCellValue(entry, c);
+      return row;
+    });
   }
 
   /** Build a descriptive default filename for export.
