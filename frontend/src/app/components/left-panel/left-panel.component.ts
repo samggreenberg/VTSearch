@@ -109,7 +109,6 @@ export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
   mediaTypeName = 'Media';
   textSortAvailable = true;
   private mediaTypeInfos: MediaTypeInfo[] = [];
-  private currentTypeId = '';
   private embedderInfos: EmbedderInfo[] = [];
   private readonly destroy$ = new Subject<void>();
 
@@ -157,13 +156,22 @@ export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
     this.destroy$.complete();
   }
 
+  /**
+   * Re-derive the media-type label shown in the grid header from the current
+   * grid contents.  Always recomputes (no memo on the type id) so the header
+   * never lags behind the grid: it resets to ``'Media'`` when the grid empties,
+   * and upgrades from the capitalized fallback to the proper display name once
+   * the media-type metadata finishes loading (which can arrive *after* the
+   * first batch of medias).
+   */
   private updateMediaTypeName(): void {
     const typeId = this.medias.length > 0 ? this.medias[0].media_type : '';
-    if (typeId && typeId !== this.currentTypeId) {
-      this.currentTypeId = typeId;
-      const info = this.mediaTypeInfos.find((mt) => mt.type_id === typeId);
-      this.mediaTypeName = info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1);
+    if (!typeId) {
+      this.mediaTypeName = 'Media';
+      return;
     }
+    const info = this.mediaTypeInfos.find((mt) => mt.type_id === typeId);
+    this.mediaTypeName = info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1);
   }
 
   /**
