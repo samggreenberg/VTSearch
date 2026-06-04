@@ -134,6 +134,10 @@ get_audio_playing  # noqa: F821
 get_swipe_animation  # noqa: F821
 get_hide_autopilot  # noqa: F821
 get_autopilot_resort_interval  # noqa: F821
+get_browse_minimap_visible  # noqa: F821
+get_browse_minimap_width  # noqa: F821
+get_browse_minimap_height  # noqa: F821
+set_dataset_max_age_days  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # DetectorContext attributes written in ``vtsearch/routes/detectors/registry.py``
