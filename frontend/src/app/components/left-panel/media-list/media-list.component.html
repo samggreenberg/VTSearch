@@ -19,7 +19,7 @@
       }
     }
   </div>
-} @else if (useVirtualScroll) {
+} @else if (useListVirtual) {
   <!-- Virtual scrolling for large datasets in list mode -->
   <cdk-virtual-scroll-viewport [itemSize]="listItemHeight" class="media-list virtual-scroll-viewport">
     <ng-container *cdkVirtualFor="let item of cachedOrderedItems; trackBy: trackByMediaId">
@@ -41,6 +41,39 @@
         (contextRequest)="onMediaContextRequest($event)"
       />
     </ng-container>
+  </cdk-virtual-scroll-viewport>
+} @else if (useGridVirtual) {
+  <!-- Virtual scrolling for large galleries: cards are chunked into rows so
+       only the visible rows are mounted, instead of every thumbnail at once. -->
+  <cdk-virtual-scroll-viewport [itemSize]="gridRowHeight" class="media-list virtual-scroll-viewport grid-virtual">
+    <div
+      class="grid-virtual-row"
+      *cdkVirtualFor="let row of gridRows; trackBy: trackByGridRow"
+      [style.height.px]="gridRowHeight"
+      [style.--grid-goal-width]="gridGoalWidth + 'px'"
+      [style.grid-template-columns]="row.kind === 'threshold' ? null : 'repeat(' + gridColumns + ', var(--grid-goal-width, 80px))'"
+    >
+      @if (row.kind === 'threshold') {
+        <div class="media-threshold-line" title="Decision boundary between predicted good and bad items" aria-label="Good/Bad threshold">
+          <span class="threshold-label">threshold</span>
+        </div>
+      } @else {
+        @for (item of row.items; track trackByMediaId($index, item)) {
+          <vt-media-item
+            [media]="item.media"
+            [active]="selectedId === item.media.id"
+            [voteLabel]="getVoteLabel(item.media.id)"
+            [score]="item.score"
+            [bestRegion]="item.bestRegion"
+            [viewMode]="viewMode"
+            [focusMode]="focusMode"
+            (select)="onMediaSelect($event)"
+            (vote)="onMediaVote($event)"
+            (contextRequest)="onMediaContextRequest($event)"
+          />
+        }
+      }
+    </div>
   </cdk-virtual-scroll-viewport>
 } @else {
   <!-- Plain DOM rendering for small datasets or grid mode -->
