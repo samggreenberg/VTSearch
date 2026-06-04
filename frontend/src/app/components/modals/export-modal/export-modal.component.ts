@@ -56,8 +56,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   /** Column definitions with selection state, built dynamically from API response. */
   columns: ColumnDef[] = [];
 
-  /** Filter which labels to show/export. */
-  labelFilter: 'good' | 'bad' | 'both' | 'corrections' = 'both';
+  /** Filter which labels to show/export. Defaults to good-only. */
+  labelFilter: 'good' | 'bad' | 'both' | 'corrections' = 'good';
 
   /** Active export tab: 'clipboard' or an exporter name. */
   activeTab = 'clipboard';
