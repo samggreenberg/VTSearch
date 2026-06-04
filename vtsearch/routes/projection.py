@@ -46,6 +46,40 @@ def _resolve_shape(value: str | None) -> str:
     return shape
 
 
+def _is_subset(value: str | None) -> bool:
+    """Whether a request targets the ephemeral subset projection."""
+    return str(value).lower() in ("1", "true", "yes")
+
+
+def _subset_meta(ctx, bin_shape: str) -> dict:
+    """Return projection/pyramid metadata + build status for the subset layout."""
+    from vtscore.concurrency.async_jobs import projection_jobs
+
+    pyr = ctx._subset_pyramids.get(bin_shape)
+    if pyr is not None:
+        meta = pyr.meta()
+        meta["status"] = "ready"
+        meta["media_type"] = _media_type_for(ctx)
+        meta["method"] = ctx._subset_projection.method if ctx._subset_projection else None
+        return meta
+
+    if ctx._subset_job_id:
+        job = projection_jobs.get(ctx._subset_job_id)
+        if job is not None:
+            if job.status in ("running", "pending"):
+                return {
+                    "status": "building",
+                    "job_id": job.job_id,
+                    "current": job.current,
+                    "total": job.total,
+                    "message": job.message,
+                }
+            if job.status == "error":
+                return {"status": "error", "error": job.error or "projection build failed"}
+
+    return {"status": "idle"}
+
+
 def _media_type_for(ctx) -> str:
     """Return the media type of the first item in the dataset, or ``""``."""
     if not ctx.medias:
@@ -178,6 +212,106 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str) -> dic
     return {"status": "building", "job_id": job.job_id}
 
 
+def _dispatch_subset_build(ctx, ids_raw, bin_shape: str) -> dict:
+    """Validate the request body's ``ids`` and route to the subset build."""
+    if not isinstance(ids_raw, list):
+        abort(400, message="`ids` must be a list of media ids.")
+    try:
+        requested = [int(c) for c in ids_raw]
+    except (TypeError, ValueError):
+        abort(400, message="`ids` must be a list of integer media ids.")
+    if not requested:
+        abort(409, message="No items selected — nothing to project.")
+    if not ctx.medias:
+        abort(409, message="Dataset is empty — nothing to project.")
+    try:
+        return _build_subset(ctx, requested, bin_shape)
+    except ValueError as exc:
+        abort(409, message=str(exc))
+
+
+def _build_subset(ctx, requested_ids: list[int], bin_shape: str) -> dict:
+    """Build (or reuse) an ephemeral UMAP projection over just *requested_ids*.
+
+    Unlike the full-dataset path, the subset projection is computed from only
+    the high-dimensional vectors of the requested ids (e.g. the positives of a
+    Find run), held in dedicated ``_subset_*`` slots on the context, and never
+    persisted.  The shared 2-D layout is reused across bin shapes, so a shape
+    toggle re-bins in milliseconds instead of re-fitting UMAP.
+    """
+    from vtscore.embedding.matrix import get_embedding_submatrix
+    from vtscore.projection import build_pyramid
+
+    sorted_ids, matrix = get_embedding_submatrix(ctx, requested_ids)
+    if matrix.size == 0:
+        abort(409, message="None of the selected items have embeddings — nothing to project.")
+
+    if ctx._subset_ids == sorted_ids:
+        # Same subset: serve the cached pyramid, or re-bin the shared layout.
+        pyr = ctx._subset_pyramids.get(bin_shape)
+        if pyr is not None:
+            return {"status": "ready", "projection_id": pyr.projection_id}
+        proj = ctx._subset_projection
+        if proj is not None:
+            pyr = build_pyramid(proj, bin_shape=bin_shape)
+            ctx._subset_pyramids[bin_shape] = pyr
+            return {"status": "ready", "projection_id": pyr.projection_id}
+    else:
+        # A different subset was requested: drop the stale layout before fitting.
+        ctx._subset_projection = None
+        ctx._subset_pyramids = {}
+        ctx._subset_ids = sorted_ids
+        ctx._subset_job_id = None
+
+    return _start_subset_umap_build(ctx, sorted_ids, matrix, bin_shape)
+
+
+def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str) -> dict:
+    """Start (or reuse) the background subset UMAP fit + pyramid build."""
+    from vtscore.concurrency.async_jobs import projection_jobs
+    from vtscore.projection import build_pyramid, fit_projection
+    from vtscore.state.core import thread_dataset_context
+
+    sig = (ctx.dataset_id, "subset", bin_shape, tuple(sorted_ids))
+
+    job_cached = projection_jobs.cached_for(sig)
+    if job_cached is not None and job_cached.result is not None:
+        proj, pyr = job_cached.result
+        ctx._subset_projection = proj
+        ctx._subset_pyramids[bin_shape] = pyr
+        return {"status": "ready", "projection_id": pyr.projection_id}
+
+    # Already building this exact subset + shape?  Reuse the in-flight job
+    # instead of queueing a duplicate fit.
+    if ctx._subset_job_id:
+        existing = projection_jobs.get(ctx._subset_job_id)
+        if existing is not None and existing.signature == sig and existing.status in ("running", "pending"):
+            return {"status": "building", "job_id": existing.job_id}
+
+    mat_copy = matrix.copy()
+    ids_copy = list(sorted_ids)
+
+    def _run(job):
+        with thread_dataset_context(ctx):
+
+            def _on_progress(status, message, current, total):
+                job.update_progress(current, total, message)
+
+            proj = fit_projection(mat_copy, ids_copy, on_progress=_on_progress)
+            job.update_progress(0, 1, "building pyramid")
+            pyr = build_pyramid(proj, bin_shape=bin_shape)
+            job.update_progress(1, 1, "done")
+
+            ctx._subset_projection = proj
+            ctx._subset_pyramids[bin_shape] = pyr
+            job.result = (proj, pyr)
+            # Subset projections are ephemeral — never persisted.
+
+    job = projection_jobs.start(sig, _run, dataset_id=ctx.dataset_id)
+    ctx._subset_job_id = job.job_id
+    return {"status": "building", "job_id": job.job_id}
+
+
 @projection_bp.route("/api/projection/build", methods=["POST"])
 @projection_bp.response(200, ProjectionBuildResponseSchema)
 @projection_bp.alt_response(409, description="Dataset is empty or has no embeddings.")
@@ -199,6 +333,11 @@ def build_projection():
     ctx = get_active_context()
     body = request.get_json(silent=True) or {}
     shape = _resolve_shape(body.get("shape"))
+
+    # Subset build: project only the supplied media ids (e.g. the positive
+    # results of a Find run), fitting UMAP on just their high-d vectors.
+    if body.get("ids") is not None:
+        return _dispatch_subset_build(ctx, body["ids"], shape)
 
     cached = ctx._pyramids.get(shape)
     if cached is not None:
@@ -239,6 +378,9 @@ def projection_meta():
     ctx = get_active_context()
     shape = _resolve_shape(request.args.get("shape"))
 
+    if _is_subset(request.args.get("subset")):
+        return _subset_meta(ctx, shape)
+
     pyr = ctx._pyramids.get(shape)
     if pyr is not None:
         meta = pyr.meta()
@@ -248,6 +390,10 @@ def projection_meta():
         return meta
 
     job = projection_jobs.current()
+    # A subset build shares the single projection runner; don't report its
+    # progress as the full-dataset build's status.
+    if job is not None and job.job_id == ctx._subset_job_id:
+        job = None
     if job is not None and job.dataset_id == ctx.dataset_id:
         if job.status in ("running", "pending"):
             return {
@@ -279,7 +425,10 @@ def get_tile(shape: str, level: int, tx: int, ty: int):
 
     shape = _resolve_shape(shape)
     ctx = get_active_context()
-    pyr = ctx._pyramids.get(shape)
+    if _is_subset(request.args.get("subset")):
+        pyr = ctx._subset_pyramids.get(shape)
+    else:
+        pyr = ctx._pyramids.get(shape)
     if pyr is None:
         abort(404, message="Projection not built yet — call POST /api/projection/build first.")
 

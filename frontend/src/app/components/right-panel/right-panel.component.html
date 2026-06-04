@@ -85,6 +85,9 @@
 
   <div class="export-row">
     <button class="panel-btn export-btn" [disabled]="disabled" (click)="onExport()" title="Export labeled items to clipboard, file, email, or webhook">Export</button>
+    @if (mode === 'find') {
+      <button class="panel-btn browse-btn" [disabled]="disabled || goodIds.length === 0" (click)="onBrowse()" title="Browse the positive results as their own 2-D UMAP projection (builds on click)">Browse</button>
+    }
   </div>
 </aside>
 

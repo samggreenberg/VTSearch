@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { Subject, Subscription } from 'rxjs';
 import { finalize, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
@@ -16,6 +17,7 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
+import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { ProgressEvent } from '../../models/api.models';
 import { formatProgressMessage } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
@@ -70,6 +72,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     public sortState: SortStateService,
     private settingsState: SettingsStateService,
     private progressEvents: ProgressEventsService,
+    private browseSubset: BrowseSubsetService,
+    private router: Router,
   ) {}
 
   ngOnInit(): void {
@@ -389,6 +393,28 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // vote state has already been reconciled from the POST response inside
     // submitToggleVote, so a follow-up GET /api/votes only refreshes counts.
     this.voteState.loadVotes();
+  }
+
+  /**
+   * Browse the positive results of this Find run as their own UMAP projection.
+   * The positives are the current "good" list (the above-threshold items plus
+   * any manual corrections). We stash the ids for the browse view and navigate
+   * to `/browse/:datasetId?subset=1`, where they're UMAP'd on their own.
+   */
+  onBrowse(): void {
+    const datasetId = this.activeContext.datasetId;
+    if (!datasetId) return;
+    const ids = Array.from(this.voteState.goodVotes);
+    if (ids.length === 0) return;
+    const modelId = this.activeContext.modelId;
+    const detectorName =
+      this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
+    this.browseSubset.set({
+      datasetId,
+      ids,
+      label: `${detectorName} — positives`,
+    });
+    this.router.navigate(['/browse', datasetId], { queryParams: { subset: 1 } });
   }
 
   /** Cancel the find-label scoring run; the HTTP request will surface
