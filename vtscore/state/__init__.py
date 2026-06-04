@@ -123,9 +123,15 @@ def get_media(media_id: int) -> dict[str, Any] | None:
 def clear_medias() -> None:
     """Clear all loaded medias from the active dataset's context.
 
-    Drops the cached embedding matrix, diversity tree, dataset display
-    name override, and the per-step progress model cache so RAM is
-    released immediately rather than waiting for the next access.
+    Drops the cached embedding matrix, the 2-D projection + hex-tile
+    pyramid, diversity tree, dataset display name override, and the
+    per-step progress model cache so RAM is released immediately rather
+    than waiting for the next access.
+
+    Clearing ``_projection``/``_pyramid`` is also a correctness guard: the
+    build route serves a non-``None`` ``_pyramid`` without re-checking the
+    media-id signature, so a stale pyramid left over a reload-with-changed-
+    contents would otherwise be returned for the new data.
     """
     from vtscore.detectors.labeling_progress import clear_progress_cache
 
@@ -134,6 +140,8 @@ def clear_medias() -> None:
         ctx.medias.clear()
         ctx._emb_matrix_ids = None
         ctx._emb_matrix = None
+        ctx._projection = None
+        ctx._pyramid = None
         ctx.diversity_tree = None
         ctx.dataset_display_name = None
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the

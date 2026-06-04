@@ -73,6 +73,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
   private polling = false;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private pollErrors = 0;
+  private static readonly MAX_POLL_ERRORS = 5;
 
   constructor(
     private projectionApi: ProjectionApiService,
@@ -125,6 +128,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    if (this.pollTimer) clearTimeout(this.pollTimer);
     this.tileCache.clear();
   }
 
@@ -259,12 +263,14 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private pollBuildStatus(): void {
     if (this.polling) return;
     this.polling = true;
+    this.pollErrors = 0;
     const poll = (): void => {
       this.projectionApi
         .getMeta()
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (meta) => {
+            this.pollErrors = 0;
             this.meta = meta;
             if (meta.media_type) this.mediaType = meta.media_type;
             this.tileCache.setProjectionId(meta.projection_id);
@@ -282,13 +288,23 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             this.buildProgress = meta.current ?? 0;
             this.buildTotal = meta.total ?? 0;
             this.buildMessage = meta.message ?? '';
-            setTimeout(poll, 1000);
+            this.pollTimer = setTimeout(poll, 1000);
           },
           error: () => {
-            setTimeout(poll, 2000);
+            this.pollErrors += 1;
+            // Give up after a run of failures rather than retrying forever.
+            if (this.pollErrors >= BrowseViewComponent.MAX_POLL_ERRORS) {
+              this.polling = false;
+              this.status = 'error';
+              this.errorMessage = 'Lost contact with the server while building the projection.';
+              return;
+            }
+            // Exponential backoff: 2s, 4s, 8s, … capped at 30s.
+            const delay = Math.min(2000 * 2 ** (this.pollErrors - 1), 30000);
+            this.pollTimer = setTimeout(poll, delay);
           },
         });
     };
-    setTimeout(poll, 1000);
+    this.pollTimer = setTimeout(poll, 1000);
   }
 }
