@@ -36,84 +36,84 @@ The full "train here, find there" loop on **image** media (SigLIP):
 
 ## Findings
 
-Severity: **P1** = should fix, user-visible/contradictory · **P2** = papercut/polish · **P3** = nit.
+Severity: **P1** = should fix, user-visible/contradictory · **P2** = papercut/polish · **P3** = nit. Each finding carries a unique `slug` (in its heading) to refer to it by.
 
 ### Dataset import / demo picker
 
-**[P1] Demo MediaType filter is context-blind — always defaults to Audio.**
+**[P1 · `demo-mediatype-default`] Demo MediaType filter is context-blind — always defaults to Audio.**
 Opening "Add Dataset → Demo → Downloaded Media" always lands on **Audio** (shows ESC-50/GTZAN/UrbanSound). I hit this twice: even on the *second* import, with an Image dataset **and** an Image detector already active, it still defaulted to Audio and I had to manually switch the MediaType dropdown to Image. It should default to the active context's media type (or the last-used type).
 *Pointer:* `frontend/src/app/components/dashboard/dataset-importer-modal/import-config/import-config.component.*`
 
-**[P1] MediaType dropdown is inaccessible (and undriveable by a11y tooling).**
+**[P1 · `mediatype-dropdown-a11y`] MediaType dropdown is inaccessible (and undriveable by a11y tooling).**
 The MediaType selector renders its options as `<li class="media-type-option">` with no `role="option"`, no owning `role="listbox"` semantics — the options never appear in the accessibility tree (a screen reader sees an empty popup; I had to click them via JS). Contrast with the **Embedder** select in the same modal's Advanced panel, which *is* a proper accessible combobox with option roles. Two different dropdown patterns in one form; make the MediaType one match.
 *Pointer:* `import-config.component.html` (search `media-type-option`).
 
-**[P2] Advertised "# MEDIA" is a precise-looking number that's ~37–40% low.**
+**[P2 · `media-count-estimate`] Advertised "# MEDIA" is a precise-looking number that's ~37–40% low.**
 The picker shows exact integers — Caltech-101 (S) = **300**, (M) = **600** — but the loader actually embedded **412** and **838** respectively. The count is a documented *approximation* (`vtscore/media/base.py:145` — "actual count after loading may differ"), but it's presented as an exact value with no "~", so a user budgeting time/RAM for "300" is surprised by 412 (and a ~17 min vs ~longer embed). Show "~300", a range, or compute the real per-slice count.
 
-**[P2] Add-Dataset modal opens with no importer category selected.**
+**[P2 · `importer-no-default-category`] Add-Dataset modal opens with no importer category selected.**
 The modal opens to a large empty body ("Select what type of dataset to add.") until you pick Services/Server/Local/Demo. Defaulting to Demo (the most common first-run path) or the last-used category would remove a click and the empty state.
 
-**[P3] "UCSF Documents" (scanned pages) sits at the top of the *Image* media-type list.**
+**[P3 · `ucsf-docs-under-image`] "UCSF Documents" (scanned pages) sits at the top of the *Image* media-type list.**
 It's a document dataset surfaced under Image (top row, sorted by item count). Either it's mis-categorized or the doc/image overlap needs a clearer label so users don't think it's photos.
 
 ### Browse / projection
 
-**[P1] The import offers a Browse projection that the dashboard then refuses to open.**
+**[P1 · `browse-projection-contradiction`] The import offers a Browse projection that the dashboard then refuses to open.**
 The dataset-import Advanced panel shows a **"Build 2-D Browse projection now"** checkbox for image datasets (`import-advanced.component.html`), but on the dashboard the loaded image dataset's Browse/eye button is **disabled** with tooltip *"Browsing is only available for audio datasets."* This is confirmed-intentional gating (`dashboard.component.ts:792` — "Browsing currently only supports audio datasets") — so a user can pay to build a UMAP projection for an image dataset they can never browse. Resolve the contradiction: either **(a)** hide/disable the "Build projection" checkbox for media types Browse can't open, or **(b)** lift the audio-only gate (the projection + hex-tile pyramid is embedding-based and media-agnostic; `tests/projection` already covers it). The two surfaces currently disagree.
 
 ### Achievements / toasts
 
-**[P2] Achievement unlock toasts re-fire on every navigation (and after votes).**
+**[P2 · `achievement-toast-replay`] Achievement unlock toasts re-fire on every navigation (and after votes).**
 The three "Bronze: …" toasts ("Detectors Trained", "Days Active", "Media Types Touched") reappeared on dashboard load, again on entering the `/label` view, and again after voting — i.e. 3–4 times in the first minute of the standard flow. While visible they stack top-center and **overlap the right-hand Labels panel**, then auto-dismiss after a few seconds. Root cause: `achievement-unlock-host.component.ts` subscribes to `achievements.unlocks` in `ngOnInit`, and the host is mounted per-view, so each navigation re-subscribes and the stream replays the already-shown milestones. Fix: emit only genuinely-new unlocks (dedupe by milestone id across the session) and/or host the unlock toaster once at the app shell instead of per-view.
 
 ### Training / labeling
 
-**[P3] During "Find Initial Bads", keyboard focus sits on the *Good* button.**
+**[P3 · `bads-phase-focus`] During "Find Initial Bads", keyboard focus sits on the *Good* button.**
 The phase's primary action is **Bad**, but focus defaults to **Good** — pressing Enter would mislabel. Default focus should follow the phase's expected action (or be on neither button).
 
 ### Find results + export
 
-**[P2] "Goods (126)" over-reports relative to ground truth.**
+**[P2 · `goods-overreport`] "Goods (126)" over-reports relative to ground truth.**
 Find labeled 126 items "good", but the Caltech-101 (M) airplanes category only holds ~24 true airplanes; the auto threshold leans toward recall, so the down-list goods include near-airplane shapes. Reasonable behaviour, but "Goods (126)" reads as 126 confident hits. Surface the score/threshold (or a confidence band) in the hits header so users calibrate trust.
 
-**[P2] Two separate clipboard-export implementations.**
+**[P2 · `duplicate-clipboard-export`] Two separate clipboard-export implementations.**
 `export-modal.component` (used here, from the right-panel Export) and `autodetect-results-modal.component` each implement their own clipboard copy with **different** column models and separator vocabularies (`copyColumn`/`copySeparator` = `origin+name`/`newline` in one; column checkboxes + Comma/Tab/Pipe/Semicolon radios in the other). Worth unifying onto one component to avoid drift.
 
-**[P3] Export column headers mix Title Case with raw field keys.**
+**[P3 · `export-header-casing`] Export column headers mix Title Case with raw field keys.**
 Columns are `Label, MD5, Filename, Category, Dimensions, File Size, clipper, name` — the last two leak lowercase internal keys. Re-label "clipper" → "Clipper" and "name" → "Source"/"Origin".
 
-**[P3] The "name" column is ambiguous next to "Filename".**
+**[P3 · `export-name-ambiguous`] The "name" column is ambiguous next to "Filename".**
 The column titled **name** contains the demo origin id (`caltech101_m`), which reads like it should be the item's name/filename — confusing right beside the actual "Filename" column.
 
-**[P3] "File Size" exports raw bytes while the UI shows KB.**
+**[P3 · `export-filesize-units`] "File Size" exports raw bytes while the UI shows KB.**
 Export rows carry `8165`, `10423` (bytes); the focus-view metadata panel shows the same field as `5.7 KB`. Pick one, offer both, or at least title the column "File Size (bytes)".
 
-**[P3] Find-results export defaults Categories to "All".**
+**[P3 · `export-default-all`] Find-results export defaults Categories to "All".**
 Arriving from a Find specifically to grab hits, the export defaults to All (838 rows = hits + misses); the user then switches to Good. Defaulting to Good (or remembering the last choice) for a Find-originated export saves a step.
 
 ### Global / cosmetic
 
-**[P3] Logo "Email us" link has a typo and no recipient.**
+**[P3 · `mailto-typo`] Logo "Email us" link has a typo and no recipient.**
 `frontend/src/app/app.component.html:97`: the `mailto:` subject hard-codes the word "Issue" misspelled with a tripled "s", and the `mailto:` has an empty to-address, so "Email us" opens a blank-recipient compose window.
 
-**[P3] Header "Data:" label lags the loaded/active dataset.**
+**[P3 · `header-data-lag`] Header "Data:" label lags the loaded/active dataset.**
 After loading Caltech-101 (S) it stayed "Data: Select a dataset" until I entered a view, even though the New-Detector modal correctly knew the active media type was Image. The dashboard's row-checkbox selection and the header's "active dataset" are two separate notions of "selected", which can read as out-of-sync.
 
-**[P3] No server-side request/activity logging in local mode.**
+**[P3 · `no-access-log`] No server-side request/activity logging in local mode.**
 The dev server log contains only the 6 boot lines — no access logs, no progress lines — for an entire session that downloaded, embedded ~1250 images, ran Find, and exported. Fine if intentional, but it makes "what did the server just do?" debugging harder; a quiet-by-default access log (or a `--verbose`) would help.
 
 ---
 
 ## Prioritized recommendations
 
-1. **Fix the Browse/projection contradiction** (P1) — pick (a) hide the checkbox or (b) enable image browse. Users will hit this immediately.
-2. **Make the demo picker context-aware** (P1) — default MediaType to the active/last-used type; stop forcing Audio.
-3. **Give the MediaType dropdown real listbox/option a11y** (P1) — align it with the Embedder combobox pattern.
-4. **De-dupe achievement unlock toasts** (P2) — fire once per real unlock; don't replay on every navigation; don't occlude the Labels panel.
-5. **Signal that "# MEDIA" is an estimate** (P2) — "~N" or a range; or compute the true per-slice count.
-6. **Export polish** (P2/P3) — unify the two clipboard exporters, fix column labels ("clipper"/"name"), reconcile File Size units, default Find exports to Good.
-7. **Tiny wins** (P3) — fix the misspelled mailto subject (tripled "s") + add a recipient; set sensible default focus in the Bads phase; default the Add-Dataset modal to a category.
+1. **Fix the Browse/projection contradiction** (`browse-projection-contradiction`, P1) — pick (a) hide the checkbox or (b) enable image browse. Users will hit this immediately.
+2. **Make the demo picker context-aware** (`demo-mediatype-default`, P1) — default MediaType to the active/last-used type; stop forcing Audio.
+3. **Give the MediaType dropdown real listbox/option a11y** (`mediatype-dropdown-a11y`, P1) — align it with the Embedder combobox pattern.
+4. **De-dupe achievement unlock toasts** (`achievement-toast-replay`, P2) — fire once per real unlock; don't replay on every navigation; don't occlude the Labels panel.
+5. **Signal that "# MEDIA" is an estimate** (`media-count-estimate`, P2) — "~N" or a range; or compute the true per-slice count.
+6. **Export polish** (`duplicate-clipboard-export`, `export-header-casing`, `export-name-ambiguous`, `export-filesize-units`, `export-default-all`, P2/P3) — unify the two clipboard exporters, fix column labels ("clipper"/"name"), reconcile File Size units, default Find exports to Good.
+7. **Tiny wins** (`mailto-typo`, `bads-phase-focus`, `importer-no-default-category`, P3) — fix the misspelled mailto subject (tripled "s") + add a recipient; set sensible default focus in the Bads phase; default the Add-Dataset modal to a category.
 
 ## Reproduction notes
 
