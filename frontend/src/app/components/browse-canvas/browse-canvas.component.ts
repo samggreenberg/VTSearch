@@ -67,6 +67,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   @Input() colormap: BrowseColormapId = 'auto';
   @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
+  /**
+   * The densest visible cell's item count, emitted whenever it changes. Density
+   * shading is renormalized to this per frame (yellow = this many items, the
+   * darkest red = 1), so the legend reads it to label the ramp with live
+   * numbers that track pan/zoom.
+   */
+  @Output() densityMaxChanged = new EventEmitter<number>();
 
   /** Loaded representative thumbnails, keyed by media id (insertion-ordered LRU). */
   private thumbCache = new Map<number, HTMLImageElement>();
@@ -82,6 +89,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private transform: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
   private activeLevel = 0;
   private maxCount = 1;
+  // Last maxCount pushed out via densityMaxChanged, so the legend is only
+  // notified when the top of the scale actually moves (not every frame).
+  private lastEmittedMax = 0;
   // The projection id the view was last framed for. Hex and square share one
   // projection id, so toggling bin shape re-bins without re-fitting to data —
   // the pan/zoom is preserved. Only a genuinely new projection re-frames.
@@ -374,6 +384,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.maxCount = 1;
     for (const cell of allCells) {
       if (cell.count > this.maxCount) this.maxCount = cell.count;
+    }
+    if (this.maxCount !== this.lastEmittedMax) {
+      this.lastEmittedMax = this.maxCount;
+      this.ngZone.run(() => this.densityMaxChanged.emit(this.maxCount));
     }
 
     // Resolve the colormap against the live theme once per frame, not per cell.

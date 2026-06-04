@@ -1,0 +1,80 @@
+// Vertical color key pinned to the middle of the canvas's right edge. Sits
+// clear of the top-right control cluster and the bottom-right minimap. Purely
+// informational, so it never intercepts pan/zoom on the canvas beneath it.
+.browse-legend {
+  position: absolute;
+  right: var(--space-md);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.browse-legend-title {
+  font-size: var(--font-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+// The swatch and its tick labels share one height so the labels line up with
+// the gradient they annotate.
+.browse-legend-body {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-xs);
+  height: 140px;
+}
+
+// The swatch itself: a tall, narrow stripe carrying the density ramp (dense at
+// the top).
+.browse-legend-bar {
+  width: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+// Ramp tick labels are absolutely placed at their fractional height up the bar
+// and centered on that mark, so each number sits beside the color it denotes.
+.browse-legend-ticks {
+  position: relative;
+  min-width: 2.5ch;
+
+  .browse-legend-tick {
+    position: absolute;
+    left: 0;
+    transform: translateY(50%);
+  }
+}
+
+.browse-legend-tick {
+  font-size: var(--font-xs);
+  line-height: 1;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// The one-item swatch: a dot in the colormap's dedicated single colour, the
+// same shape a lone cell is drawn as on the canvas.
+.browse-legend-single {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.browse-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  flex: none;
+}

@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { BrowseCanvasComponent, HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
+import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
 import {
   BrowseMinimapComponent,
   MINIMAP_MAX_HEIGHT,
@@ -33,6 +34,7 @@ import type { SettingsUpdate } from '../../generated/api-client/models/settings-
     CommonModule,
     BrowseCanvasComponent,
     BrowseHoverPreviewComponent,
+    BrowseLegendComponent,
     BrowseMinimapComponent,
     ProgressBarComponent,
     IconComponent,
@@ -49,6 +51,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   meta: ProjectionMeta | null = null;
   mediaType = '';
   hoverEvent: HexHoverEvent | null = null;
+  /**
+   * Top of the density scale for the legend: the densest cell currently in
+   * view, pushed up from the canvas. The legend labels the yellow end with it.
+   */
+  densityMax = 1;
   status: 'loading' | 'building' | 'ready' | 'error' = 'loading';
   errorMessage = '';
   buildProgress = 0;
@@ -203,6 +210,19 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   onHexHover(event: HexHoverEvent | null): void {
     this.hoverEvent = event;
+  }
+
+  onDensityMaxChanged(max: number): void {
+    this.densityMax = max;
+  }
+
+  /**
+   * The density legend only makes sense when cells are shaded by count. For
+   * image/video the canvas paints representative thumbnails instead, so the
+   * color ramp doesn't apply and the legend is hidden.
+   */
+  get showLegend(): boolean {
+    return this.mediaType !== 'image' && this.mediaType !== 'video';
   }
 
   get hexDisplayScale(): number {
