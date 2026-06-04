@@ -172,7 +172,22 @@
             "type": "array"
           },
           "browse_bin_shape": {
-            "type": "string"
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "browse_colormap": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "browse_icon_size": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
           },
           "browse_minimap_height": {
             "type": "integer"
@@ -4042,9 +4057,9 @@
             },
             "type": "array"
           },
-          "browse_bin_shape": {
-            "type": "string"
-          },
+          "browse_bin_shape": {},
+          "browse_colormap": {},
+          "browse_icon_size": {},
           "browse_minimap_height": {
             "type": "integer"
           },
