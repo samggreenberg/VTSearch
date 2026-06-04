@@ -16,6 +16,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS
+from vtscore.datasets.demo_counts import exact_demo_count
 from vtscore.datasets.loader import read_pkl_clipper, read_pkl_embedder
 from vtscore.datasets.load_pipeline import _origin_to_str
 from vtsearch.routes._shared import format_mtime
@@ -90,8 +91,15 @@ def _downgrade_for_mismatch(
     return status, pkl_embedder, pkl_clipper
 
 
-def _calculate_demo_num_files(dataset_info: dict) -> int:
-    """Compute the file count for a demo dataset from its slice configuration."""
+def _estimate_demo_num_files(dataset_info: dict) -> int:
+    """Estimate the file count for a demo dataset from its slice configuration.
+
+    Used as a fallback for demo datasets whose exact count has not been
+    measured into ``DEMO_MEDIA_COUNTS``.  Multiplies a single per-category
+    average by the slice fraction, so it is only exact when every category has
+    the same number of items; uneven sources (e.g. Caltech-101) need a recorded
+    exact count instead.
+    """
     num_categories = len(dataset_info["categories"])
     items_per_category = dataset_info.get("items_per_category") or 0
     slice_frac_start = dataset_info.get("slice_frac_start")
@@ -114,6 +122,19 @@ def _calculate_demo_num_files(dataset_info: dict) -> int:
         else:
             per_cat = 40
     return num_categories * per_cat
+
+
+def _demo_num_files(dataset_id: str, dataset_info: dict) -> int:
+    """Resolve the advertised ``# Media`` count for a demo dataset.
+
+    Prefers the exact, pre-measured count in ``DEMO_MEDIA_COUNTS`` so the
+    figure shown before download is accurate; falls back to the per-category
+    estimate for datasets that have not been measured yet.
+    """
+    exact = exact_demo_count(dataset_id)
+    if exact is not None:
+        return exact
+    return _estimate_demo_num_files(dataset_info)
 
 
 def _calculate_demo_download_size_mb(status: str, pkl_file: Path, dataset_info: dict) -> float:
@@ -171,7 +192,7 @@ def demo_dataset_list(query: dict):
                 "label": dataset_info.get("label", name),
                 "status": status,
                 "ready": status == "ready",
-                "num_files": _calculate_demo_num_files(dataset_info),
+                "num_files": _demo_num_files(name, dataset_info),
                 "download_size_mb": round(_calculate_demo_download_size_mb(status, pkl_file, dataset_info), 1),
                 "description": dataset_info.get("description", ""),
                 "media_type": media_type,

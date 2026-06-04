@@ -51,6 +51,12 @@ The MediaType selector renders its options as `<li class="media-type-option">` w
 **[P2 · `media-count-estimate`] Advertised "# MEDIA" is a precise-looking number that's ~37–40% low.**
 The picker shows exact integers — Caltech-101 (S) = **300**, (M) = **600** — but the loader actually embedded **412** and **838** respectively. The count is a documented *approximation* (`vtscore/media/base.py:145` — "actual count after loading may differ"), but it's presented as an exact value with no "~", so a user budgeting time/RAM for "300" is surprised by 412 (and a ~17 min vs ~longer embed). Show "~300", a range, or compute the real per-slice count.
 
+> **Resolved (exact-count approach).** Root cause: `_calculate_demo_num_files` multiplied a single per-category *average* (`items_per_category`) by the slice fraction, which only matches when categories are uniform; Caltech-101's uneven classes (`airplanes`=800, `watch`=239, most ~60–130) made the average undershoot the true per-category sum. Rather than label it "~", the true totals are now measured ahead of time and written down in `vtscore/datasets/demo_counts.py` (`DEMO_MEDIA_COUNTS`); the demo-list route prefers that exact value and only falls back to the estimate for not-yet-measured ids. `scripts/compute_demo_counts.py <id>…` measures any source's count (from a cached pkl if present, else a stub-embedded collection pass — no model weights/GPU) for the download-one-at-a-time fill-in.
+
+Measured so far (the estimate was sometimes *over*-counting badly, not just under): caltech101 (300→412 …), reuters21578 (40000→9555), 20newsgroups (14250→8358), arxiv_abstracts (24000→200), eurosat (27000, ±a few per slice), oxford_flowers_102 (8160→8189), ucf101 (1320→405), bbc_news (2225, already matched). Each source's S/M/L slices verified to partition (S+M+L==A).
+
+**Open follow-up:** populate `DEMO_MEDIA_COUNTS` for the remaining uneven sources by downloading each and running the script: caltech256, stanford_dogs, places365, urbansound8k, gtzan, speech_commands_v2, hmdb51, kth, ucf101_full, ucsf_documents, dbpedia (and the deliberately-skipped giants food101/ag_news/wikipedia if ever wanted). Class-balanced sources (AG News, IMDB, DBpedia, Food-101 at 1000/cat, ESC-50 at 40/cat) are already exact under the estimate and need no entry.
+
 **[Not a bug · `importer-no-default-category`] Add-Dataset modal opens with no importer category selected.**
 The modal opens to a large empty body ("Select what type of dataset to add.") until you pick Services/Server/Local/Demo.
 
@@ -113,7 +119,7 @@ The dev server log contained only the 6 boot lines — no access logs, no progre
 2. ~~**Make the demo picker context-aware** (`demo-mediatype-default`, P1) — default MediaType to the active/last-used type; stop forcing Audio.~~ **Fixed:** `buildDemoTabs()` now prefers the active context's `guessedMediaType` over the audio fallback.
 3. **Give the MediaType dropdown real listbox/option a11y** (`mediatype-dropdown-a11y`, P1) — align it with the Embedder combobox pattern.
 4. **De-dupe achievement unlock toasts** (`achievement-toast-replay`, P2) — fire once per real unlock; don't replay on every navigation; don't occlude the Labels panel.
-5. **Signal that "# MEDIA" is an estimate** (`media-count-estimate`, P2) — "~N" or a range; or compute the true per-slice count.
+5. ~~**Signal that "# MEDIA" is an estimate** (`media-count-estimate`, P2) — "~N" or a range; or compute the true per-slice count.~~ **Done:** true counts written down in `DEMO_MEDIA_COUNTS` and served exactly; Caltech-101 seeded, remaining sources fill in via `scripts/compute_demo_counts.py`.
 6. **Export polish** (`duplicate-clipboard-export`, `export-header-casing`, `export-name-ambiguous`, `export-filesize-units`, `export-default-all`, P2/P3) — unify the two clipboard exporters, fix column labels ("clipper"/"name"), reconcile File Size units, default Find exports to Good.
 7. **Tiny wins** (`mailto-typo`, `bads-phase-focus`, P3) — fix the misspelled mailto subject (tripled "s") + add a recipient; set sensible default focus in the Bads phase. (`importer-no-default-category` was investigated and is **not a bug** — the empty state is the correct fallback when the default Service category has no entries.)
 
