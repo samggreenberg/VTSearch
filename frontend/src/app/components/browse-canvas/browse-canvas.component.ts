@@ -76,6 +76,15 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private hoveredCell: HexCellPayload | null = null;
   private hoverDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Last known cursor position over the canvas (canvas-relative mx/my plus the
+  // viewport clientX/clientY) and whether the pointer is currently inside.
+  // Used to re-resolve the hover after a zoom changes which hex sits under a
+  // stationary cursor, so the preview/highlight don't go stale.
+  private lastMouseX = 0;
+  private lastMouseY = 0;
+  private lastClientX = 0;
+  private lastClientY = 0;
+  private pointerInside = false;
 
   private tileLoadSub: Subscription | null = null;
   private rafId = 0;
@@ -84,6 +93,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private boundMouseMove = this.onMouseMove.bind(this);
   private boundMouseUp = this.onMouseUp.bind(this);
+  // Stable references for the canvas listeners so ngOnDestroy can remove them
+  // (inline .bind(this) creates a fresh function each call, which
+  // removeEventListener can never match).
+  private boundMouseDown = this.onMouseDown.bind(this);
+  private boundWheel = this.onWheel.bind(this);
+  private boundCanvasMouseMove = this.onCanvasMouseMove.bind(this);
+  private boundCanvasMouseLeave = this.onCanvasMouseLeave.bind(this);
 
   private recenterSub: Subscription | null = null;
 
@@ -131,10 +147,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
     this.ngZone.runOutsideAngular(() => {
       const el = this.canvasRef.nativeElement;
-      el.addEventListener('mousedown', this.onMouseDown.bind(this));
-      el.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
-      el.addEventListener('mousemove', this.onCanvasMouseMove.bind(this));
-      el.addEventListener('mouseleave', this.onCanvasMouseLeave.bind(this));
+      el.addEventListener('mousedown', this.boundMouseDown);
+      el.addEventListener('wheel', this.boundWheel, { passive: false });
+      el.addEventListener('mousemove', this.boundCanvasMouseMove);
+      el.addEventListener('mouseleave', this.boundCanvasMouseLeave);
     });
   }
 
@@ -162,6 +178,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.resizeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
+    const el = this.canvasRef.nativeElement;
+    el.removeEventListener('mousedown', this.boundMouseDown);
+    el.removeEventListener('wheel', this.boundWheel);
+    el.removeEventListener('mousemove', this.boundCanvasMouseMove);
+    el.removeEventListener('mouseleave', this.boundCanvasMouseLeave);
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
     this.thumbCache.clear();
@@ -512,6 +533,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
     this.updateActiveLevel();
     this.requestRedraw();
+    this.refreshHoverAfterZoom();
   }
 
   private onWheel(event: WheelEvent): void {
@@ -528,35 +550,62 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
+    this.lastMouseX = mx;
+    this.lastMouseY = my;
+    this.lastClientX = event.clientX;
+    this.lastClientY = event.clientY;
+    this.pointerInside = true;
 
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
-
     this.hoverDebounceTimer = setTimeout(() => {
-      const hit = this.hitTest(mx, my);
-      const prevQ = this.hoveredCell?.q;
-      const prevR = this.hoveredCell?.r;
-      this.hoveredCell = hit;
-      if (hit) {
-        if (hit.q !== prevQ || hit.r !== prevR) {
-          this.ngZone.run(() => {
-            // Anchor the preview at the cursor, not the hex centre, so the text
-            // pop-up sits right under where the user is pointing.
-            this.hexHover.emit({
-              cell: hit,
-              screenX: event.clientX,
-              screenY: event.clientY,
-            });
-          });
-          this.requestRedraw();
-        }
-      } else if (prevQ != null) {
-        this.ngZone.run(() => this.hexHover.emit(null));
-        this.requestRedraw();
-      }
+      this.emitHoverHit(mx, my, event.clientX, event.clientY);
     }, 30);
   }
 
+  /**
+   * Resolve the hex under the canvas-relative point ``(mx, my)`` and emit a
+   * hover event when it differs from the currently-hovered cell (clearing it
+   * when the point now hits empty space). ``clientX/clientY`` anchor the
+   * preview pop-up at the cursor. Shared by the mouse-move handler and the
+   * post-zoom refresh.
+   */
+  private emitHoverHit(mx: number, my: number, clientX: number, clientY: number): void {
+    const hit = this.hitTest(mx, my);
+    const prevQ = this.hoveredCell?.q;
+    const prevR = this.hoveredCell?.r;
+    this.hoveredCell = hit;
+    if (hit) {
+      if (hit.q !== prevQ || hit.r !== prevR) {
+        this.ngZone.run(() => {
+          this.hexHover.emit({ cell: hit, screenX: clientX, screenY: clientY });
+        });
+        this.requestRedraw();
+      }
+    } else if (prevQ != null) {
+      this.ngZone.run(() => this.hexHover.emit(null));
+      this.requestRedraw();
+    }
+  }
+
+  /**
+   * After a zoom (which can re-bin to a different level), the hex under a
+   * stationary cursor changes — re-resolve the hover so the preview and the
+   * highlighted hex track the new cell instead of going stale. When the
+   * pointer is off the canvas (e.g. the user clicked a +/- button), there is
+   * nothing to hover, so clear any lingering preview.
+   */
+  private refreshHoverAfterZoom(): void {
+    if (this.pointerInside) {
+      this.emitHoverHit(this.lastMouseX, this.lastMouseY, this.lastClientX, this.lastClientY);
+    } else if (this.hoveredCell) {
+      this.hoveredCell = null;
+      this.ngZone.run(() => this.hexHover.emit(null));
+      this.requestRedraw();
+    }
+  }
+
   private onCanvasMouseLeave(): void {
+    this.pointerInside = false;
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.hoveredCell) {
       this.hoveredCell = null;

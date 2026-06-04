@@ -29,7 +29,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   audioSrc = '';
   textContent = '';
   count = 0;
-  private audioUnlocked = false;
+  private textLoadAbort: AbortController | null = null;
 
   constructor(private activeContext: ActiveContextService) {}
 
@@ -45,6 +45,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopAudio();
+    this.textLoadAbort?.abort();
   }
 
   private show(event: HexHoverEvent): void {
@@ -80,6 +81,8 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   private hide(): void {
     this.visible = false;
     this.stopAudio();
+    this.textLoadAbort?.abort();
+    this.textLoadAbort = null;
     this.textContent = '';
   }
 
@@ -93,9 +96,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
       if (!el) return;
       el.loop = true;
       el.load();
-      el.play().catch(() => {
-        this.audioUnlocked = false;
-      });
+      el.play().catch(() => {});
     });
   }
 
@@ -110,8 +111,13 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
 
   private loadText(mediaId: number): void {
     this.textContent = `Loading...`;
+    // Cancel any in-flight text load so a slow earlier response can't clobber
+    // the preview after the cursor has moved to another hex.
+    this.textLoadAbort?.abort();
+    const abort = new AbortController();
+    this.textLoadAbort = abort;
     const url = this.activeContext.mediaUrl(`/api/medias/${mediaId}/paragraph`);
-    fetch(url)
+    fetch(url, { signal: abort.signal })
       .then((r) => r.json())
       .then((data) => {
         if (this.hover?.cell.rep_id === mediaId) {
@@ -119,20 +125,11 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
           this.textContent = text.length > 300 ? text.slice(0, 300) + '...' : text;
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
         if (this.hover?.cell.rep_id === mediaId) {
           this.textContent = `Item #${mediaId}`;
         }
       });
-  }
-
-  onCanvasClick(): void {
-    if (!this.audioUnlocked) {
-      this.audioUnlocked = true;
-      const el = this.audioRef?.nativeElement;
-      if (el && this.audioSrc) {
-        el.play().catch(() => {});
-      }
-    }
   }
 }
