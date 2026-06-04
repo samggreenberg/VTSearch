@@ -192,7 +192,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
     """
 
     name = "server_files"
-    display_name = "Files Manifest"
+    display_name = "Manifest"
     description = (
         "Read a server-side file listing media paths (text file, one per line, "
         "OR a .npz archive that also supplies pre-computed embedding vectors) "

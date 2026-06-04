@@ -59,7 +59,7 @@ Click the hamburger menu (☰) in the top-left. You get two choices:
   existing datasets. Each importer asks for the fields it needs
   (path, URL, media type) in a small form.
 
-  The **Files Manifest** importer also accepts a `.npz` archive of
+  The **Files → Manifest** importer also accepts a `.npz` archive of
   pre-computed embedding vectors so you can import media you have
   already embedded offline without paying for embedding twice. See
   [Pre-computed embeddings (.npz)](#pre-computed-embeddings-npz) below.
@@ -79,7 +79,7 @@ Subsequent datasets of the same type reuse the cached model.
 If you have already embedded your media offline - for example with
 your own script using the same model VTSearch uses - you can skip the
 server-side re-embedding step by handing VTSearch a NumPy `.npz`
-archive of pre-computed vectors. The **Files Manifest** importer
+archive of pre-computed vectors. The **Files → Manifest** importer
 accepts this: instead of a `.txt`/`.list` paths file, point the
 *Paths File* field at a `.npz`. The archive holds both the media-file
 paths AND their vectors; VTSearch reads the paths from disk and reuses
