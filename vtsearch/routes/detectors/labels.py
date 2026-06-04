@@ -426,7 +426,7 @@ def _in_memory_thumbnail_response(media: dict, media_type: str):
 
     if media_type == "image":
         resp = mt.media_response(media)
-        if not resp.data:
+        if not isinstance(resp.data, (bytes, bytearray)) or not resp.data:
             return None
         return send_file(
             io.BytesIO(resp.data),
