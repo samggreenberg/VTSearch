@@ -15,7 +15,14 @@ import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
-import { densityColor } from './hex-render.util';
+import {
+  densityColor,
+  resolveColormap,
+  rgbString,
+  type BrowseColormapId,
+  type CanvasTheme,
+  type ResolvedColormap,
+} from './hex-render.util';
 import { binGeometry, BinGeometry } from './bin-geometry';
 import type {
   HexCellPayload,
@@ -52,6 +59,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * changes the binning, i.e. which vectors land in a given hex.
    */
   @Input() displayScale = 1;
+  /**
+   * Density colormap preset for the flat (non-thumbnail) shading. ``auto``
+   * follows the theme (Ocean in light mode, Heat in dark); the others lock to
+   * a specific map. Resolved to concrete colours against the live theme at
+   * draw time, so a theme switch repaints with the right ramp.
+   */
+  @Input() colormap: BrowseColormapId = 'auto';
   @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
 
   /** Loaded representative thumbnails, keyed by media id (insertion-ordered LRU). */
@@ -95,6 +109,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private rafId = 0;
   private needsRedraw = false;
   private resizeObserver: ResizeObserver | null = null;
+  // Repaints when the document theme flips (explicit switch or an OS
+  // dark/light change while on "system"), so the colormap and background
+  // track the live theme without the parent having to feed it in.
+  private themeObserver: MutationObserver | null = null;
 
   private boundMouseMove = this.onMouseMove.bind(this);
   private boundMouseUp = this.onMouseUp.bind(this);
@@ -155,6 +173,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     });
     this.resizeObserver.observe(this.canvasRef.nativeElement.parentElement!);
 
+    this.themeObserver = new MutationObserver(() => this.requestRedraw());
+    this.themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+
     this.ngZone.runOutsideAngular(() => {
       const el = this.canvasRef.nativeElement;
       el.addEventListener('mousedown', this.boundMouseDown);
@@ -187,6 +211,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (changes['displayScale'] && !changes['displayScale'].firstChange) {
       this.requestRedraw();
     }
+    // A colormap change only affects flat (non-thumbnail) shading; repaint.
+    if (changes['colormap'] && !changes['colormap'].firstChange) {
+      this.requestRedraw();
+    }
   }
 
   ngOnDestroy(): void {
@@ -194,6 +222,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.recenterSub?.unsubscribe();
     this.viewport.setViewport(null);
     this.resizeObserver?.disconnect();
+    this.themeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     const el = this.canvasRef.nativeElement;
@@ -347,11 +376,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       if (cell.count > this.maxCount) this.maxCount = cell.count;
     }
 
+    // Resolve the colormap against the live theme once per frame, not per cell.
+    const cmap = resolveColormap(this.colormap, this.effectiveTheme());
+
     for (const cell of allCells) {
       const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
       if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
       if (sy < -screenRadius * 2 || sy > this.height + screenRadius * 2) continue;
-      this.drawHex(ctx, sx, sy, screenRadius, cell);
+      this.drawHex(ctx, sx, sy, screenRadius, cell, cmap);
     }
 
     // Publish the region now on screen so the minimap can draw its viewport box.
@@ -366,6 +398,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     cy: number,
     radius: number,
     cell: HexCellPayload,
+    cmap: ResolvedColormap,
   ): void {
     // A cell with one item is drawn as a disc (slightly smaller than the cell);
     // multi-item cells keep their full shape so they tile the space.
@@ -381,9 +414,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.clip();
       this.drawImageCover(ctx, thumb, cx, cy, radius);
       ctx.restore();
+    } else if (single) {
+      // Singletons get the colormap's dedicated one-item colour, decoupled
+      // from the density ramp so a lone dot reads as "exactly one".
+      ctx.fillStyle = rgbString(cmap.single);
+      ctx.fill();
     } else {
       const t = Math.log(cell.count) / Math.log(this.maxCount || 2);
-      ctx.fillStyle = densityColor(Math.max(0, Math.min(1, t)));
+      ctx.fillStyle = densityColor(Math.max(0, Math.min(1, t)), cmap.ramp);
       ctx.fill();
     }
 
@@ -457,6 +495,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private themeColor(varName: string): string {
     return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  }
+
+  /** The effective theme in force, read from the document's ``data-theme``. */
+  private effectiveTheme(): CanvasTheme {
+    const t = document.documentElement.getAttribute('data-theme');
+    return t === 'light' || t === 'highviz' ? t : 'dark';
   }
 
   private prefetchNeighbors(visibleTiles: { tx: number; ty: number }[]): void {

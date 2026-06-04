@@ -14,7 +14,13 @@ import {
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
-import { densityColor } from '../browse-canvas/hex-render.util';
+import {
+  densityColor,
+  resolveColormap,
+  rgbString,
+  type BrowseColormapId,
+  type CanvasTheme,
+} from '../browse-canvas/hex-render.util';
 import { binGeometry } from '../browse-canvas/bin-geometry';
 import { IconComponent } from '../icon/icon.component';
 import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
@@ -49,6 +55,8 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   @Input() meta: ProjectionMeta | null = null;
   @Input() width = 200;
   @Input() height = 150;
+  /** Density colormap preset; mirrors the main canvas so the overview matches. */
+  @Input() colormap: BrowseColormapId = 'auto';
   /** Hide request from the close button. */
   @Output() closed = new EventEmitter<void>();
   /** Final size after a resize drag, for persistence. */
@@ -62,6 +70,8 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   private viewportSub: Subscription | null = null;
   private rafId = 0;
   private needsRedraw = false;
+  // Repaints when the document theme flips, matching the main canvas.
+  private themeObserver: MutationObserver | null = null;
 
   private resizing = false;
   private resizeStartX = 0;
@@ -94,6 +104,12 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       this.requestRedraw();
     });
 
+    this.themeObserver = new MutationObserver(() => this.requestRedraw());
+    this.themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+
     this.requestOverviewTiles();
     this.requestRedraw();
   }
@@ -108,11 +124,15 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       this.requestOverviewTiles();
       this.requestRedraw();
     }
+    if (changes['colormap'] && !changes['colormap'].firstChange) {
+      this.requestRedraw();
+    }
   }
 
   ngOnDestroy(): void {
     this.tileLoadSub?.unsubscribe();
     this.viewportSub?.unsubscribe();
+    this.themeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.detachResizeListeners();
     this.detachNavListeners();
@@ -231,11 +251,17 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       for (const c of cells) if (c.count > maxCount) maxCount = c.count;
       const geom = binGeometry(this.meta!.bin_shape);
       const cellR = (this.meta!.base_radius / Math.pow(2, level)) * f.scale;
+      const cmap = resolveColormap(this.colormap, this.effectiveTheme());
       for (const cell of cells) {
         const [sx, sy] = this.projToMap(cell.cx, cell.cy, f);
-        geom.traceCell(ctx, sx, sy, cellR, cell.count === 1);
-        const t = Math.log(cell.count) / Math.log(maxCount || 2);
-        ctx.fillStyle = densityColor(Math.max(0, Math.min(1, t)));
+        const single = cell.count === 1;
+        geom.traceCell(ctx, sx, sy, cellR, single);
+        if (single) {
+          ctx.fillStyle = rgbString(cmap.single);
+        } else {
+          const t = Math.log(cell.count) / Math.log(maxCount || 2);
+          ctx.fillStyle = densityColor(Math.max(0, Math.min(1, t)), cmap.ramp);
+        }
         ctx.fill();
       }
       this.drawViewportRect(ctx, f);
@@ -280,6 +306,12 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
 
   private themeColor(varName: string): string {
     return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  }
+
+  /** The effective theme in force, read from the document's ``data-theme``. */
+  private effectiveTheme(): CanvasTheme {
+    const t = document.documentElement.getAttribute('data-theme');
+    return t === 'light' || t === 'highviz' ? t : 'dark';
   }
 
   // --- Click / drag to recenter --------------------------------------------

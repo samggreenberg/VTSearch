@@ -65,7 +65,13 @@ class AppSettingsSchema(Schema):
     browse_minimap_visible = fields.Boolean()
     browse_minimap_width = fields.Integer()
     browse_minimap_height = fields.Integer()
-    browse_bin_shape = fields.String()
+
+    # VTSBrowse per-media-type display prefs (bin shape, density colormap,
+    # on-screen cell size). ``{media_type_id: value}`` dicts driven by the
+    # browse-canvas toolbar and the Settings → Browser tab.
+    browse_bin_shape = _PerMediaTypeStringDict()
+    browse_colormap = _PerMediaTypeStringDict()
+    browse_icon_size = _PerMediaTypeStringDict()
 
     # Per-user, per-media-type
     view_mode_left = _PerMediaTypeStringDict()
@@ -175,7 +181,13 @@ class SettingsUpdateSchema(Schema):
     browse_minimap_visible = fields.Boolean()
     browse_minimap_width = fields.Integer()
     browse_minimap_height = fields.Integer()
-    browse_bin_shape = fields.String()
+
+    # Per-media-type dicts; the setters in ``settings.py`` validate each
+    # value against its enum (BinShape / BrowseColormap / BrowseIconSize),
+    # so these are declared ``Raw`` here like the other per-media settings.
+    browse_bin_shape = fields.Raw()
+    browse_colormap = fields.Raw()
+    browse_icon_size = fields.Raw()
 
     autorun_detectors = fields.List(fields.String())
 

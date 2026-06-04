@@ -83,6 +83,8 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "browse_minimap_width": settings.set_browse_minimap_width,
     "browse_minimap_height": settings.set_browse_minimap_height,
     "browse_bin_shape": settings.set_browse_bin_shape,
+    "browse_colormap": settings.set_browse_colormap,
+    "browse_icon_size": settings.set_browse_icon_size,
 }
 
 

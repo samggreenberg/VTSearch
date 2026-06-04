@@ -6,10 +6,10 @@
 // captures exactly those differences behind one `BinGeometry` interface so the
 // canvas and minimap stay shape-agnostic.
 
-import { SQRT3, traceCellPath as traceHexCellPath, densityColor } from './hex-render.util';
+import { SQRT3, traceCellPath as traceHexCellPath, densityColor, resolveColormap } from './hex-render.util';
 import type { BinShape } from '../../models/projection.models';
 
-export { SQRT3, densityColor };
+export { SQRT3, densityColor, resolveColormap };
 export type { BinShape };
 
 export interface BinGeometry {

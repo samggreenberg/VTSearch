@@ -36,6 +36,8 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   embeddersByType: Record<string, EmbedderInfo[]> = {};
   activeSettingsTab = 'appearance';
   activeViewTab = '';
+  /** Active media-type tab within the Browser settings tab. */
+  activeBrowseTab = '';
   loading = true;
   error = '';
   showImporterModal = false;
@@ -94,6 +96,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
           } else {
             this.activeViewTab = this.mediaTypes[0].type_id;
           }
+          this.activeBrowseTab = this.mediaTypes[0].type_id;
         }
         this.loading = false;
       },
@@ -271,6 +274,54 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     const dict = this.settings[side];
     if (!dict) return 'click';
     return dict[typeId] ?? 'click';
+  }
+
+  // --- Browser tab: per-media-type projection-browser preferences ---
+
+  /** Read a per-media-type browser setting for *typeId*, or *fallback*. */
+  private getBrowsePref(
+    key: 'browse_bin_shape' | 'browse_colormap' | 'browse_icon_size',
+    typeId: string,
+    fallback: string,
+  ): string {
+    const dict = this.settings[key] as Record<string, string> | undefined;
+    return (dict && dict[typeId]) || fallback;
+  }
+
+  /** Write a per-media-type browser setting and persist. */
+  private setBrowsePref(
+    key: 'browse_bin_shape' | 'browse_colormap' | 'browse_icon_size',
+    typeId: string,
+    value: string,
+  ): void {
+    const dict = { ...((this.settings[key] as Record<string, string> | undefined) || {}) };
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)[key] = dict;
+    this.save();
+  }
+
+  getBrowseBinShape(typeId: string): string {
+    return this.getBrowsePref('browse_bin_shape', typeId, 'hex');
+  }
+
+  onBrowseBinShapeChange(typeId: string, value: string): void {
+    this.setBrowsePref('browse_bin_shape', typeId, value);
+  }
+
+  getBrowseColormap(typeId: string): string {
+    return this.getBrowsePref('browse_colormap', typeId, 'auto');
+  }
+
+  onBrowseColormapChange(typeId: string, value: string): void {
+    this.setBrowsePref('browse_colormap', typeId, value);
+  }
+
+  getBrowseIconSize(typeId: string): string {
+    return this.getBrowsePref('browse_icon_size', typeId, 'M');
+  }
+
+  onBrowseIconSizeChange(typeId: string, value: string): void {
+    this.setBrowsePref('browse_icon_size', typeId, value);
   }
 
   onNumberChange(key: string, value: number): void {
