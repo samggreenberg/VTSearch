@@ -217,9 +217,7 @@ class UserSettings(BaseModel):
     #   the canvas's bigger/smaller buttons.
     browse_bin_shape: dict[str, BinShape] = Field(default_factory=dict)
     browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
-    browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(
-        default_factory=dict
-    )
+    browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
 
     view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
     view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)
