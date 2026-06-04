@@ -51,8 +51,10 @@ The MediaType selector renders its options as `<li class="media-type-option">` w
 **[P2 · `media-count-estimate`] Advertised "# MEDIA" is a precise-looking number that's ~37–40% low.**
 The picker shows exact integers — Caltech-101 (S) = **300**, (M) = **600** — but the loader actually embedded **412** and **838** respectively. The count is a documented *approximation* (`vtscore/media/base.py:145` — "actual count after loading may differ"), but it's presented as an exact value with no "~", so a user budgeting time/RAM for "300" is surprised by 412 (and a ~17 min vs ~longer embed). Show "~300", a range, or compute the real per-slice count.
 
-**[P2 · `importer-no-default-category`] Add-Dataset modal opens with no importer category selected.**
-The modal opens to a large empty body ("Select what type of dataset to add.") until you pick Services/Server/Local/Demo. Defaulting to Demo (the most common first-run path) or the last-used category would remove a click and the empty state.
+**[Not a bug · `importer-no-default-category`] Add-Dataset modal opens with no importer category selected.**
+The modal opens to a large empty body ("Select what type of dataset to add.") until you pick Services/Server/Local/Demo.
+
+> **Not a bug.** On the real server the default importer category is a **Service**, and none of the configured Services are available in this audit environment — so the modal correctly falls back to the empty "Select what type of dataset to add." state. The empty body is the expected behaviour when the default Service category has no entries to show, not a missing default.
 
 **[P3 · `ucsf-docs-under-image`] "UCSF Documents" (scanned pages) sits at the top of the *Image* media-type list.**
 It's a document dataset surfaced under Image (top row, sorted by item count). Either it's mis-categorized or the doc/image overlap needs a clearer label so users don't think it's photos.
@@ -113,7 +115,7 @@ The dev server log contains only the 6 boot lines — no access logs, no progres
 4. **De-dupe achievement unlock toasts** (`achievement-toast-replay`, P2) — fire once per real unlock; don't replay on every navigation; don't occlude the Labels panel.
 5. **Signal that "# MEDIA" is an estimate** (`media-count-estimate`, P2) — "~N" or a range; or compute the true per-slice count.
 6. **Export polish** (`duplicate-clipboard-export`, `export-header-casing`, `export-name-ambiguous`, `export-filesize-units`, `export-default-all`, P2/P3) — unify the two clipboard exporters, fix column labels ("clipper"/"name"), reconcile File Size units, default Find exports to Good.
-7. **Tiny wins** (`mailto-typo`, `bads-phase-focus`, `importer-no-default-category`, P3) — fix the misspelled mailto subject (tripled "s") + add a recipient; set sensible default focus in the Bads phase; default the Add-Dataset modal to a category.
+7. **Tiny wins** (`mailto-typo`, `bads-phase-focus`, P3) — fix the misspelled mailto subject (tripled "s") + add a recipient; set sensible default focus in the Bads phase. (`importer-no-default-category` was investigated and is **not a bug** — the empty state is the correct fallback when the default Service category has no entries.)
 
 ## Reproduction notes
 
