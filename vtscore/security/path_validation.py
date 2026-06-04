@@ -76,8 +76,7 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
         resolved.relative_to(base_dir.resolve())
     except ValueError:
         raise ValueError(
-            f"The given path resolves outside the allowed directory. "
-            f"Paths must be within '{base_dir.resolve()}'."
+            f"The given path resolves outside the allowed directory. Paths must be within '{base_dir.resolve()}'."
         ) from None
     return resolved
 
