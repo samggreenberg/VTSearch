@@ -51,6 +51,8 @@ The MediaType selector renders its options as `<li class="media-type-option">` w
 **[P2] Advertised "# MEDIA" is a precise-looking number that's ~37–40% low.**
 The picker shows exact integers — Caltech-101 (S) = **300**, (M) = **600** — but the loader actually embedded **412** and **838** respectively. The count is a documented *approximation* (`vtscore/media/base.py:145` — "actual count after loading may differ"), but it's presented as an exact value with no "~", so a user budgeting time/RAM for "300" is surprised by 412 (and a ~17 min vs ~longer embed). Show "~300", a range, or compute the real per-slice count.
 
+> **Resolved (exact-count approach).** Root cause: `_calculate_demo_num_files` multiplied a single per-category *average* (`items_per_category`) by the slice fraction, which only matches when categories are uniform; Caltech-101's uneven classes (`airplanes`=800, `watch`=239, most ~60–130) made the average undershoot the true per-category sum. Rather than label it "~", the true totals are now measured ahead of time and written down in `vtscore/datasets/demo_counts.py` (`DEMO_MEDIA_COUNTS`); the demo-list route prefers that exact value and only falls back to the estimate for not-yet-measured ids. Caltech-101 is seeded (412/838/1704/2954 — S/M verified against the cached pkls, L/A from the same real per-category sizes via the loader's exact slice formula). `scripts/compute_demo_counts.py <id>…` measures any other source's count (from a cached pkl if present, else a stub-embedded collection pass) for the download-one-at-a-time fill-in. **Open follow-up:** populate `DEMO_MEDIA_COUNTS` for the remaining ~18 sources (run the script as each is downloaded); uniform sources like ESC-50/Food-101 are already exact under the estimate and need no entry.
+
 **[P2] Add-Dataset modal opens with no importer category selected.**
 The modal opens to a large empty body ("Select what type of dataset to add.") until you pick Services/Server/Local/Demo. Defaulting to Demo (the most common first-run path) or the last-used category would remove a click and the empty state.
 
@@ -111,7 +113,7 @@ The dev server log contains only the 6 boot lines — no access logs, no progres
 2. **Make the demo picker context-aware** (P1) — default MediaType to the active/last-used type; stop forcing Audio.
 3. **Give the MediaType dropdown real listbox/option a11y** (P1) — align it with the Embedder combobox pattern.
 4. **De-dupe achievement unlock toasts** (P2) — fire once per real unlock; don't replay on every navigation; don't occlude the Labels panel.
-5. **Signal that "# MEDIA" is an estimate** (P2) — "~N" or a range; or compute the true per-slice count.
+5. ~~**Signal that "# MEDIA" is an estimate** (P2)~~ — **done**: true counts written down in `DEMO_MEDIA_COUNTS` and served exactly; Caltech-101 seeded, remaining sources fill in via `scripts/compute_demo_counts.py`.
 6. **Export polish** (P2/P3) — unify the two clipboard exporters, fix column labels ("clipper"/"name"), reconcile File Size units, default Find exports to Good.
 7. **Tiny wins** (P3) — fix the misspelled mailto subject (tripled "s") + add a recipient; set sensible default focus in the Bads phase; default the Add-Dataset modal to a category.
 

@@ -38,6 +38,37 @@ class TestDatasetEndpoints:
         # Should return available demo datasets
         assert "demos" in data or isinstance(data, dict)
 
+    def test_demo_list_advertises_exact_measured_count(self, client):
+        """demo-list serves the written-down exact count, not the estimate.
+
+        Caltech-101's uneven category sizes made the per-category-average
+        estimate ~37-40% low (S advertised 300, loader produced 412). The
+        route must now report the measured value from DEMO_MEDIA_COUNTS.
+        """
+        from vtscore.datasets.demo_counts import DEMO_MEDIA_COUNTS
+
+        resp = client.get("/api/dataset/demo-list")
+        assert resp.status_code == 200
+        by_name = {d["name"]: d for d in resp.get_json()["datasets"]}
+
+        for did, expected in DEMO_MEDIA_COUNTS.items():
+            if did in by_name:  # media type may be unregistered in a given build
+                assert by_name[did]["num_files"] == expected, did
+
+    def test_demo_list_falls_back_to_estimate_for_unmeasured(self, client):
+        """Datasets absent from DEMO_MEDIA_COUNTS still get the slice estimate."""
+        from vtscore.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.demo_counts import DEMO_MEDIA_COUNTS
+        from vtsearch.routes.datasets.ui import _estimate_demo_num_files
+
+        resp = client.get("/api/dataset/demo-list")
+        by_name = {d["name"]: d for d in resp.get_json()["datasets"]}
+
+        unmeasured = [n for n in by_name if n not in DEMO_MEDIA_COUNTS]
+        assert unmeasured, "expected at least one demo without a measured count"
+        for did in unmeasured:
+            assert by_name[did]["num_files"] == _estimate_demo_num_files(DEMO_DATASETS[did]), did
+
     def test_demo_categories_returns_categories(self, client):
         """GET /api/dataset/demo-categories/<name> returns categories for a valid demo."""
         from vtscore.datasets import DEMO_DATASETS
