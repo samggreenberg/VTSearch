@@ -212,6 +212,24 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str) -> dic
     return {"status": "building", "job_id": job.job_id}
 
 
+def _dispatch_subset_build(ctx, ids_raw, bin_shape: str) -> dict:
+    """Validate the request body's ``ids`` and route to the subset build."""
+    if not isinstance(ids_raw, list):
+        abort(400, message="`ids` must be a list of media ids.")
+    try:
+        requested = [int(c) for c in ids_raw]
+    except (TypeError, ValueError):
+        abort(400, message="`ids` must be a list of integer media ids.")
+    if not requested:
+        abort(409, message="No items selected — nothing to project.")
+    if not ctx.medias:
+        abort(409, message="Dataset is empty — nothing to project.")
+    try:
+        return _build_subset(ctx, requested, bin_shape)
+    except ValueError as exc:
+        abort(409, message=str(exc))
+
+
 def _build_subset(ctx, requested_ids: list[int], bin_shape: str) -> dict:
     """Build (or reuse) an ephemeral UMAP projection over just *requested_ids*.
 
@@ -318,22 +336,8 @@ def build_projection():
 
     # Subset build: project only the supplied media ids (e.g. the positive
     # results of a Find run), fitting UMAP on just their high-d vectors.
-    ids_raw = body.get("ids")
-    if ids_raw is not None:
-        if not isinstance(ids_raw, list):
-            abort(400, message="`ids` must be a list of media ids.")
-        try:
-            requested = [int(c) for c in ids_raw]
-        except (TypeError, ValueError):
-            abort(400, message="`ids` must be a list of integer media ids.")
-        if not requested:
-            abort(409, message="No items selected — nothing to project.")
-        if not ctx.medias:
-            abort(409, message="Dataset is empty — nothing to project.")
-        try:
-            return _build_subset(ctx, requested, shape)
-        except ValueError as exc:
-            abort(409, message=str(exc))
+    if body.get("ids") is not None:
+        return _dispatch_subset_build(ctx, body["ids"], shape)
 
     cached = ctx._pyramids.get(shape)
     if cached is not None:
