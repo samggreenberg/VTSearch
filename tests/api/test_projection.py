@@ -88,7 +88,7 @@ class TestProjectionBuild:
         finally:
             ctx.medias.update(saved)
 
-    @patch("vtscore.projection.umap_projection.fit_projection", side_effect=_fake_fit_projection)
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
     def test_build_and_poll(self, _mock_fit, client):
         resp = client.post("/api/projection/build")
         assert resp.status_code == 200
@@ -180,7 +180,7 @@ class TestProjectionPersistence:
                 return_value=str(fake_pkl),
             ),
             patch(
-                "vtscore.projection.umap_projection.fit_projection",
+                "vtscore.projection.fit_projection",
                 side_effect=_fake_fit_projection,
             ),
         ):
@@ -193,7 +193,7 @@ class TestProjectionPersistence:
             assert ctx._pyramids.get("hex") is not None
             assert ctx._pyramids["hex"].projection_id != "stale-pid"
 
-    @patch("vtscore.projection.umap_projection.fit_projection", side_effect=_fake_fit_projection)
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
     def test_build_persists_to_container(self, _mock_fit, client, tmp_path):
         """After a fresh build, the projection is persisted into the container."""
         import pickle as _pickle
@@ -335,7 +335,7 @@ class TestBinShapeToggle:
         assert client.get("/api/projection/tiles/triangle/0/0/0").status_code == 400
         assert client.post("/api/projection/build", json={"shape": "triangle"}).status_code == 400
 
-    @patch("vtscore.projection.umap_projection.fit_projection", side_effect=_fake_fit_projection)
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
     def test_square_persisted_alongside_hex(self, _mock_fit, client, tmp_path):
         """Building both shapes leaves both pyramids readable from the container."""
         import pickle as _pickle
