@@ -565,15 +565,19 @@ and available to any future consumer of `vtscore`.
     NumPy (no d3 dependency): `hexbin_assign(points, radius) -> (q, r)` integer
     cell keys (`q = round(2*pi)` to keep d3's half-integer column index
     integral) and `hex_center(q, r, radius)` to invert.
-  - `pyramid.py` — `build_pyramid(projection, ...) -> Pyramid` (Stage 2). Builds
-    `n_levels` zoom levels (each halving the hex radius), aggregating per hex:
-    axial key, center, **count** (density), and a **representative media id**
-    (member nearest the cell centroid, ties broken to the smaller id). Hexes are
-    grouped into `(level, tx, ty)` **tiles**; `Tile.to_payload()` /
-    `Pyramid.meta()` emit JSON-friendly dicts for the future tile/meta endpoints.
-    Tunable knobs (`n_levels`, `base_cols`/`base_radius`, `tile_span`) are
-    parameters, not baked constants, per *§Open problems*; `max_useful_levels()`
-    is an advisory `n_levels` ceiling.
+  - `pyramid.py` — `build_pyramid(projection, ...) -> Pyramid` (Stage 2). By
+    default (**auto-depth**, `n_levels=None`) it descends — each level halving the
+    hex radius — until every occupied hex holds a single clip, so the deepest
+    level resolves one-clip-per-hex (enabling hover-to-hear of individual
+    sounds); it stops early when a halving no longer separates any co-located
+    clips, capped by `max_useful_levels()` as a runaway guard. Pass an int
+    `n_levels` for fixed depth. Each level aggregates per hex: axial key, center,
+    **count** (density), and a **representative media id** (member nearest the
+    cell centroid, ties broken to the smaller id). Hexes are grouped into
+    `(level, tx, ty)` **tiles**; `Tile.to_payload()` / `Pyramid.meta()` emit
+    JSON-friendly dicts for the tile/meta endpoints. Tunable knobs
+    (`base_cols`/`base_radius`, `tile_span`) are parameters, not baked constants,
+    per *§Open problems*.
   - **New dependency:** `umap-learn` (added to `[project.dependencies]` with the
     `umap-learn -> umap` deptry module-name mapping). Imported lazily so the
     package import never triggers numba's JIT until a fit runs.

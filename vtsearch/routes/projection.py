@@ -78,7 +78,7 @@ def build_projection():
     """
     from vtscore.concurrency.async_jobs import projection_jobs
     from vtscore.embedding.matrix import get_embedding_matrix
-    from vtscore.projection import build_pyramid, fit_projection, max_useful_levels
+    from vtscore.projection import build_pyramid, fit_projection
     from vtscore.state.core import get_active_context, thread_dataset_context
 
     ctx = get_active_context()
@@ -118,7 +118,6 @@ def build_projection():
 
     def _run(job):
         with thread_dataset_context(ctx):
-            n_levels = max_useful_levels(len(ids_copy))
 
             def _on_progress(status, message, current, total):
                 job.update_progress(current, total, message)
@@ -129,7 +128,7 @@ def build_projection():
                 on_progress=_on_progress,
             )
             job.update_progress(0, 1, "building pyramid")
-            pyr = build_pyramid(proj, n_levels=n_levels)
+            pyr = build_pyramid(proj)
             job.update_progress(1, 1, "done")
 
             ctx._projection = proj

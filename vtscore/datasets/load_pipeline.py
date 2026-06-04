@@ -1074,7 +1074,7 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
     reason.
     """
     from vtscore.embedding.matrix import get_embedding_matrix  # noqa: PLC0415
-    from vtscore.projection import build_pyramid, fit_projection, max_useful_levels  # noqa: PLC0415
+    from vtscore.projection import build_pyramid, fit_projection  # noqa: PLC0415
 
     def _progress(current: int, total: int, message: str) -> None:
         tracker.check_cancelled()
@@ -1095,14 +1095,13 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
         return
 
     _progress(0, 0, "Building 2-D projection…")
-    n_levels = max_useful_levels(len(sorted_ids))
 
     def _on_fit_progress(status: str, message: str, current: int, total: int) -> None:
         _progress(current, total, message or "Building 2-D projection…")
 
     proj = fit_projection(matrix, list(sorted_ids), on_progress=_on_fit_progress)
     _progress(0, 1, "Building hex-tile pyramid…")
-    pyr = build_pyramid(proj, n_levels=n_levels)
+    pyr = build_pyramid(proj)
     _progress(1, 1, "Projection ready")
 
     ctx._projection = proj

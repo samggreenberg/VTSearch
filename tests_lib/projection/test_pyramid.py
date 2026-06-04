@@ -121,6 +121,64 @@ def test_coincident_points_use_fallback_radius():
 def test_max_useful_levels_bounds():
     assert max_useful_levels(0) == 1
     assert max_useful_levels(1) == 1
-    assert 1 <= max_useful_levels(100) <= 12
+    assert 1 <= max_useful_levels(100) <= 14
     assert max_useful_levels(10_000) >= max_useful_levels(100)
-    assert max_useful_levels(10**9) <= 12
+    assert max_useful_levels(10**9) <= 14
+    # Generous enough that a dense small cloud separates before the cap: the old
+    # log4 ceiling bottomed out at 3 levels for ~245 clips (the ESC-50 demo),
+    # leaving ~5 clips merged per hex at max zoom.  log2 sizing gives real
+    # headroom.
+    assert max_useful_levels(245) >= 8
+
+
+def _grid_cloud(side: int = 4, spacing: float = 1.0) -> np.ndarray:
+    """``side x side`` distinct points on a regular grid (deterministic)."""
+    xs, ys = np.meshgrid(np.arange(side) * spacing, np.arange(side) * spacing)
+    return np.stack([xs.ravel(), ys.ravel()], axis=1).astype(np.float32)
+
+
+def test_auto_depth_resolves_to_single_clip_hexes():
+    # The fix: with no explicit n_levels, the build descends until every hex
+    # holds exactly one clip, so hover-to-hear can audition individual sounds.
+    coords = _grid_cloud(side=4, spacing=1.0)  # 16 well-separated points
+    pyr = build_pyramid(_projection(coords), base_radius=4.0)
+    deepest = max(lm.level for lm in pyr.levels)
+    deepest_cells = [c for (lvl, _, _), t in pyr.tiles.items() if lvl == deepest for c in t.cells]
+    assert deepest_cells, "deepest level has no cells"
+    assert max(c.count for c in deepest_cells) == 1, "deepest level still merges clips"
+    assert sum(c.count for c in deepest_cells) == coords.shape[0]
+    # Coarser levels genuinely aggregate — this isn't a one-level pyramid.
+    assert pyr.levels[0].n_cells < coords.shape[0]
+
+
+def test_fixed_shallow_depth_still_merges_clips():
+    # Contrast: a too-shallow fixed depth leaves clips merged — exactly the
+    # bottoming-out the auto path now avoids.
+    coords = _grid_cloud(side=4, spacing=1.0)
+    pyr = build_pyramid(_projection(coords), n_levels=2, base_radius=4.0)
+    assert len(pyr.levels) == 2  # explicit depth is honored exactly
+    cells = [c for t in pyr.tiles.values() for c in t.cells]
+    assert max(c.count for c in cells) > 1
+
+
+def test_auto_depth_stops_early_for_separated_data():
+    # Three points 100 apart resolve at the very first level; the build must not
+    # grind all the way to the cap.
+    coords = np.array([[0.0, 0.0], [100.0, 0.0], [0.0, 100.0]], dtype=np.float32)
+    pyr = build_pyramid(_projection(coords))
+    assert len(pyr.levels) <= 2
+    cells = [c for t in pyr.tiles.values() for c in t.cells]
+    assert max(c.count for c in cells) == 1
+
+
+def test_auto_depth_terminates_on_coincident_points():
+    # Identical points can never be separated by any radius; the build must stop
+    # (saturation guard) rather than descend to the cap.
+    coords = np.zeros((10, 2), dtype=np.float32)
+    pyr = build_pyramid(_projection(coords))
+    assert len(pyr.levels) < max_useful_levels(10)
+    # Every level holds the same single, unsplittable hex of all 10 clips.
+    for lvl in {level for level, _, _ in pyr.tiles}:
+        cells = [c for (level, _, _), t in pyr.tiles.items() if level == lvl for c in t.cells]
+        assert len(cells) == 1
+        assert cells[0].count == 10

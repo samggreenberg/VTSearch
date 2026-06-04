@@ -65,14 +65,17 @@ The knobs, their current values, and their source of truth as of this plan:
 
 | Knob | Current default | Notes |
 |------|-----------------|-------|
-| `n_levels` | from `max_useful_levels(N)` in the route (`projection.py:121`) | Clamped `[1, 12]`. Heuristic `1 + ceil(log4(N / base_cols²))`. |
+| `n_levels` | **auto-depth** (`None`) | Default `None` makes `build_pyramid` descend until every occupied hex holds a single clip (one-clip-per-hex at deepest zoom), stopping early on co-located clips. Pass an int for fixed depth. |
+| `max_useful_levels(N)` | `1 + ceil(log2 N)`, clamped `[1, 14]` | Runaway-guard **ceiling** for the auto-depth descent only — not the operating depth. Replaced the old `log4(N / base_cols²)` heuristic, which assumed uniform 2-D fill and bottomed out ~1 level short of single clips for clustered embeddings (e.g. ~3 levels / ~5 clips-per-hex for the 245-clip ESC-50 demo). |
 | `base_cols` | `6.0` | Level-0 spans ~6 hex columns across the larger extent. Drives `base_radius`. |
 | `base_radius` | derived (`None` → `_base_radius_for`) | Override path exists but unused. |
 | `tile_span` | `16.0` | Hex columns/rows per tile. Payload-size vs round-trip-count tradeoff. |
 
-`max_useful_levels`/`build_pyramid` are called in
-`vtsearch/routes/projection.py:121,132` with only `n_levels` passed;
-`base_cols`/`tile_span` use the function defaults.
+`build_pyramid(proj)` is called with **no** `n_levels` (auto-depth) in
+`vtsearch/routes/projection.py:131` and `vtscore/datasets/load_pipeline.py:1104`;
+`base_cols`/`tile_span` use the function defaults. Auto-depth resolves the
+former `n_levels` tuning question — the descent self-terminates at single-clip
+resolution rather than relying on a closed-form estimate.
 
 ### Canvas renderer (Stage 3) — `frontend/src/app/components/browse-canvas/browse-canvas.component.ts`
 
@@ -109,8 +112,9 @@ internal) vs *stay constants*. A reasonable cut:
 - **Server settings** (`ServerSettings` + `CoreConfig`, like `dataset_max_age_days`):
   `projection_n_neighbors`, `projection_min_dist`. These materially change the
   map and a user/operator might want to set them per deployment.
-- **Derived, not exposed:** `n_levels` (already auto from `max_useful_levels`),
-  `base_radius` (derived from `base_cols`).
+- **Derived, not exposed:** `n_levels` (auto-depth — descends to single-clip
+  resolution; `max_useful_levels` is only the guard ceiling), `base_radius`
+  (derived from `base_cols`).
 - **Constants for now, revisit only if the sweep says so:** `base_cols`,
   `tile_span`, `min_n_for_umap`.
 
