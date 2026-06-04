@@ -99,7 +99,7 @@ def bulk_embed_image_files(
             chunk_indices.append(idx)
             chunk_images.append(img)
 
-        on_progress("embedding", f"Embedding {label} {end}/{total}...", end, total)
+        on_progress("embedding", f"Embedding {label}...", end, total)
 
         if not chunk_images:
             start = end
@@ -166,7 +166,7 @@ def bulk_patch_forward_image_files(
             chunk_indices.append(idx)
             chunk_images.append(img)
 
-        on_progress("embedding", f"Patch-embedding {label} {end}/{total}...", end, total)
+        on_progress("embedding", f"Patch-embedding {label}...", end, total)
 
         if not chunk_images:
             start = end
