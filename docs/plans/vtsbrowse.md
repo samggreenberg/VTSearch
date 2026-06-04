@@ -793,6 +793,23 @@ and available to any future consumer of `vtscore`.
 
 ## Open follow-ups
 
+**Shipped:**
+- **Browse a Find run's positives as their own UMAP.** The Find right panel has
+  a `Browse` button next to `Export` (find mode only, disabled when the good
+  list is empty). It UMAPs *only* the positive items' high-d vectors — not the
+  whole-dataset layout filtered to the subset — into a fresh, ephemeral
+  projection. Backend: `POST /api/projection/build` takes an optional `ids`
+  list; the result lives in `_subset_*` slots on `DatasetContext` and is
+  **never persisted**; `meta`/`tiles` take `?subset=1` to serve it alongside
+  the full projection. Frontend: `BrowseSubsetService` hands the positive ids
+  (the current "good" list) from the Find view to the Browse view, which
+  threads subset mode through build/meta/tiles.
+  - *Known limitation:* the id handoff is in-memory, so a hard reload of
+    `/browse/:datasetId?subset=1` loses the subset and shows a "re-run Find"
+    message (the ephemeral projection would have to be recomputed anyway). If
+    reload-survival is wanted, persist the subset id list against a token in
+    the URL and rebuild from it on load.
+
 **Active:**
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable
   on disk.** The dataset container still bakes a full copy of every audio/image/
