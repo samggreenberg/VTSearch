@@ -269,6 +269,30 @@ class TestProjectionTiles:
 
         assert found_cells, "Expected at least one tile with cells"
 
+    def test_served_tile_is_cacheable(self, client):
+        ctx = get_active_context()
+        rng = np.random.default_rng(7)
+        ids = list(ctx.medias.keys())[:4]
+        coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+        proj = Projection("tile-cache-hdr", ids, coords, "pca")
+        ctx._projection = proj
+        ctx._pyramids = {"hex": build_pyramid(proj, n_levels=2)}
+
+        resp = client.get("/api/projection/tiles/hex/0/999/999")
+        assert resp.status_code == 200
+        # Frozen tiles are immutable for the dataset's life, so the browser may
+        # reuse them without a round-trip — but only keyed by the dataset header.
+        assert "max-age=" in resp.headers["Cache-Control"]
+        assert "immutable" in resp.headers["Cache-Control"]
+        assert "X-Dataset-Id" in resp.headers["Vary"]
+
+    def test_not_built_404_is_not_cached(self, client):
+        # A projection that isn't built yet will exist later, so the negative
+        # response must not be frozen into the browser's cache.
+        resp = client.get("/api/projection/tiles/hex/0/0/0")
+        assert resp.status_code == 404
+        assert "immutable" not in resp.headers.get("Cache-Control", "")
+
 
 class TestBinShapeToggle:
     """Hex/square bin-shape selection across build, meta, and tiles."""
