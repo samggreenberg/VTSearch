@@ -23,3 +23,4 @@ can't drift.
 - [scalability-plan.md](scalability-plan.md): Scalability implementation plan (phases 1–4)
 - [vtsbrowse.md](vtsbrowse.md): VTSBrowse — UMAP hexbin dataset browser
 - [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): VTSBrowse projection empirical tuning
+- [audio-annotation.md](audio-annotation.md): Audio event annotation tool for ALM evaluation (microvent/multivent-raw)
