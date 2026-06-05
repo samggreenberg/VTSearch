@@ -62,6 +62,38 @@ class TestSettingsAPI:
         # SettingsUpdate schema catches the type mismatch → 422.
         assert res.status_code == 422
 
+    def test_update_inclusion_no_detector_browse_mode(self, client):
+        """A bulk settings save without an identified detector must not 400.
+
+        Reproduces the VTSBrowser theme-switch bug: the browser has a dataset
+        loaded but no detector, so Angular's ``activeContextInterceptor``
+        sends ``X-Dataset-Id`` but omits ``X-Detector-Id``. The settings-modal
+        ``save()`` echoes the whole settings blob back on every change
+        (including ``inclusion``, which routes to the active detector
+        context). With no detector identified, the route resolves the frozen
+        request-missing detector sentinel; applying ``inclusion`` used to
+        raise ``RequestMissingContextError`` → 400. The inclusion cache write
+        is now skipped when no detector is present (the value still persists
+        to the per-user settings store).
+        """
+        from vtscore.state.core import set_thread_detector_context
+
+        # Drop the thread-local detector context the conftest installs so the
+        # resolver falls through to the request-missing sentinel, matching a
+        # production Flask request thread with no detector.
+        set_thread_detector_context(None)
+        res = client.put(
+            "/api/settings",
+            json={"theme": "dark", "inclusion": 3},
+            headers={"X-Detector-Id": ""},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["inclusion"] == 3
+
+        # The value still persisted to the per-user settings store.
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["inclusion"] == 3
+
     def test_update_volume_invalid(self, client):
         res = client.put(
             "/api/settings",

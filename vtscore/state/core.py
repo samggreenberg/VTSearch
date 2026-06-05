@@ -856,7 +856,19 @@ def _get_inclusion() -> int | None:
 
 
 def _set_inclusion(value: int | None) -> None:
-    get_active_detector_context().inclusion = value
+    ctx = get_active_detector_context()
+    # ``inclusion`` is cached per-detector for fast reads, but its canonical
+    # persisted home is the per-user settings store (written by the caller's
+    # ``_persist_setting`` hook). When a Flask request identifies no detector
+    # (e.g. the VTSBrowser, which has a dataset but no loaded detector), the
+    # active context is the frozen request-missing sentinel; there is no
+    # detector to cache the value on, so skip the cache write rather than
+    # raising ``RequestMissingContextError``. The user-settings persist still
+    # runs, so an inclusion value echoed back by a bulk settings save is a
+    # harmless no-op instead of a 400.
+    if is_request_missing_detector_context(ctx):
+        return
+    ctx.inclusion = value
 
 
 # ---------------------------------------------------------------------------
