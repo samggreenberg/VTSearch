@@ -20,9 +20,10 @@ export interface BinGeometry {
   dy(radius: number): number;
   /**
    * Trace one cell's outline as the current path at screen coords `(cx, cy)`
-   * with the given screen `radius`. A `single`-item cell is drawn as the
-   * cell's inscribed disc so singletons read as distinct dots; every other
-   * cell keeps its full shape so it tiles the space.
+   * with the given screen `radius`. A `single`-item cell is drawn with a
+   * distinct shape so singletons stand out — a disc in hex mode, a
+   * rounded-corner rectangle in square mode — while every other (pile) cell
+   * keeps its full hexagon / square so it tiles the space.
    */
   traceCell(
     ctx: CanvasRenderingContext2D,
@@ -48,6 +49,11 @@ const HEX_GEOMETRY: BinGeometry = {
   contains: (ox, oy, radius) => ox * ox + oy * oy < radius * radius,
 };
 
+// Corner radius of a square-mode singleton, as a fraction of its half-side. A
+// singleton is drawn as a rounded-corner rectangle (vs the pile's sharp square)
+// so the two read as distinct shapes even before the colormap border lands.
+const SQUARE_SINGLE_CORNER_RATIO = 0.35;
+
 // Square cell of side `radius·√3` (matching the hex column spacing so the two
 // lattices have a comparable on-screen footprint and share the level picker).
 // Centered on lattice points, so columns and rows are spaced one side apart.
@@ -59,7 +65,8 @@ const SQUARE_GEOMETRY: BinGeometry = {
     const half = (radius * SQRT3) / 2;
     ctx.beginPath();
     if (single) {
-      ctx.arc(cx, cy, half, 0, Math.PI * 2);
+      // Rounded-corner rectangle: the rect-mode counterpart of the hex's disc.
+      ctx.roundRect(cx - half, cy - half, half * 2, half * 2, half * SQUARE_SINGLE_CORNER_RATIO);
     } else {
       ctx.rect(cx - half, cy - half, half * 2, half * 2);
     }

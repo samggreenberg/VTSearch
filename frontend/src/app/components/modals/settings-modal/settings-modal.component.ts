@@ -17,6 +17,7 @@ import { EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
 import { VtDialogService } from '../../../services/dialog.service';
+import { DEFAULT_THUMBNAIL_BORDER, MAX_THUMBNAIL_BORDER } from '../../browse-canvas/hex-render.util';
 
 @Component({
   selector: 'vt-settings-modal',
@@ -38,6 +39,8 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   activeViewTab = '';
   /** Active media-type tab within the Browser settings tab. */
   activeBrowseTab = '';
+  /** Upper bound for the pile-thumbnail border number input (template-bound). */
+  readonly maxThumbnailBorder = MAX_THUMBNAIL_BORDER;
   loading = true;
   error = '';
   showImporterModal = false;
@@ -322,6 +325,28 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   onBrowseIconSizeChange(typeId: string, value: string): void {
     this.setBrowsePref('browse_icon_size', typeId, value);
+  }
+
+  /** Pile-thumbnail border width (CSS px) for *typeId*, defaulting to the
+   *  feature default when the user hasn't set one for this media type. */
+  getBrowseThumbnailBorder(typeId: string): number {
+    const dict = this.settings.browse_thumbnail_border as Record<string, number> | undefined;
+    const value = dict?.[typeId];
+    return value == null ? DEFAULT_THUMBNAIL_BORDER : value;
+  }
+
+  /** Write the per-media-type pile-thumbnail border width, clamped to the
+   *  shared 0..MAX range, and persist. */
+  onBrowseThumbnailBorderChange(typeId: string, value: number | string): void {
+    let n = typeof value === 'string' ? parseInt(value, 10) : value;
+    if (!Number.isFinite(n)) n = 0;
+    n = Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, Math.round(n)));
+    const dict = {
+      ...((this.settings.browse_thumbnail_border as Record<string, number> | undefined) || {}),
+    };
+    dict[typeId] = n;
+    (this.settings as Record<string, unknown>)['browse_thumbnail_border'] = dict;
+    this.save();
   }
 
   onNumberChange(key: string, value: number): void {

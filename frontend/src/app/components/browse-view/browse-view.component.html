@@ -34,6 +34,7 @@
         [mediaType]="mediaType"
         [displayScale]="hexDisplayScale"
         [colormap]="colormap"
+        [thumbnailBorder]="thumbnailBorder"
         (hexHover)="onHexHover($event)"
         (densityMaxChanged)="onDensityMaxChanged($event)"
       />
@@ -41,9 +42,7 @@
         [hover]="hoverEvent"
         [mediaType]="mediaType"
       />
-      @if (showLegend) {
-        <vt-browse-legend [maxCount]="densityMax" [colormap]="colormap" />
-      }
+      <vt-browse-legend [maxCount]="densityMax" [colormap]="colormap" />
       <div class="browse-controls">
         <div class="browse-zoom">
           <button

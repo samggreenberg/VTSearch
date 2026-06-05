@@ -292,6 +292,19 @@
                   <option value="XL">XL</option>
                 </select>
               </div>
+              <div class="form-group">
+                <label class="form-label" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border</label>
+                <input
+                  class="form-input"
+                  type="number"
+                  min="0"
+                  [max]="maxThumbnailBorder"
+                  step="1"
+                  [ngModel]="getBrowseThumbnailBorder(activeBrowseTab)"
+                  (ngModelChange)="onBrowseThumbnailBorderChange(activeBrowseTab, $event)"
+                  aria-label="Browser thumbnail border width" />
+                <p class="form-hint">Only affects datasets that show thumbnails (image, video). Draws a colored band around each stacked tile; its color shows how many items are piled there. Set to 0 to hide it.</p>
+              </div>
             </div>
           } @else {
             <p class="empty-state">No media types registered.</p>

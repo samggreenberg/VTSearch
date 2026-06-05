@@ -31,6 +31,13 @@ class _PerMediaTypeNumberDict(fields.Dict):
         super().__init__(keys=fields.String(), values=fields.Float(), **kwargs)
 
 
+class _PerMediaTypeIntDict(fields.Dict):
+    """``{media_type_id: int}`` dict (used for pixel-width settings)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(keys=fields.String(), values=fields.Integer(), **kwargs)
+
+
 class AppSettingsSchema(Schema):
     """Full settings dict returned by ``GET /api/settings`` and ``/defaults``.
 
@@ -72,6 +79,8 @@ class AppSettingsSchema(Schema):
     browse_bin_shape = _PerMediaTypeStringDict()
     browse_colormap = _PerMediaTypeStringDict()
     browse_icon_size = _PerMediaTypeStringDict()
+    # Pile-thumbnail border width in CSS px, per media type (0 disables).
+    browse_thumbnail_border = _PerMediaTypeIntDict()
 
     # Per-user, per-media-type
     view_mode_left = _PerMediaTypeStringDict()
@@ -188,6 +197,7 @@ class SettingsUpdateSchema(Schema):
     browse_bin_shape = fields.Raw()
     browse_colormap = fields.Raw()
     browse_icon_size = fields.Raw()
+    browse_thumbnail_border = fields.Raw()
 
     autorun_detectors = fields.List(fields.String())
 
