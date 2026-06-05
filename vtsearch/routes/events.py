@@ -28,9 +28,9 @@ def progress_events() -> Response:
         stream_with_context(stream_progress_events()),
         mimetype="text/event-stream",
     )
-    # Long-lived; bypass the @after_request no-store header (already set,
-    # which is fine for SSE) and disable proxy buffering so events flush
-    # immediately instead of pooling behind nginx / gunicorn.
+    # Long-lived stream: set our own Cache-Control so the global @after_request
+    # hook defers instead of stamping no-store, and disable proxy buffering so
+    # events flush immediately instead of pooling behind nginx / gunicorn.
     response.headers["Cache-Control"] = "no-cache"
     response.headers["X-Accel-Buffering"] = "no"
     response.headers["Connection"] = "keep-alive"
