@@ -657,9 +657,8 @@ class TestBrowserSettings:
         data = res.get_json()
         assert data["browse_thumbnail_border"]["image"] == 3
         assert data["browse_thumbnail_border"]["video"] == 0
-        # Persisted, and a second key write merges rather than clobbers.
-        res2 = client.put("/api/settings", json={"browse_thumbnail_border": {"audio": 4}})
-        assert res2.get_json()["browse_thumbnail_border"]["audio"] == 4
+        # The written value persists across a fresh read (the frontend sends the
+        # full merged map; the backend stores it verbatim).
         assert client.get("/api/settings").get_json()["browse_thumbnail_border"]["image"] == 3
 
     def test_update_browse_thumbnail_border_clamped(self, client):
