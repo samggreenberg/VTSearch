@@ -1,338 +1,259 @@
-# Design: VTSBrowse Toponymy — street signs for the browse map
+# Design: VTSBrowse Toponymy — distinguishing street signs for the browse map
 
 > **Status:** Design only — nothing implemented yet. This doc scopes adding
 > **named region labels ("street signs")** to the VTSBrowse canvas so a user
 > panning a UMAP map of audio (or any media) sees human-readable names on the
-> dense regions — "dog barking", "jazz piano", "applause" — instead of an
-> anonymous density field. It builds directly on the shipped VTSBrowse
-> pipeline (`docs/plans/vtsbrowse.md`): UMAP projection → hex/square pyramid →
-> Canvas 2D renderer.
+> regions. It builds on the shipped VTSBrowse pipeline
+> (`docs/plans/vtsbrowse.md`): UMAP projection → hex/square pyramid → Canvas 2D
+> renderer.
 >
-> **Key decision (locked with the user):** the label *source* is **pluggable**
-> between two backends, selectable per environment, because some deployments
-> have an LLM available and some don't:
->
-> - **Backend A — zero-shot vocabulary (no LLM, fully local, default).** Match
->   each region's centroid against a vocabulary of candidate text labels using
->   the embedder's *own* shared text space (CLAP/CLIP/SigLIP `embed_text`).
->   This is the CLIP zero-shot-classification trick applied to map regions.
-> - **Backend C — multimodal LLM over representative clips (optional).** Send a
->   region's representative items (or their transcripts) to a configured LLM
->   and ask for a short label. Richer, free-form names; requires outbound API
->   access + config; not available unless an endpoint is set.
->
-> Both backends sit behind a common `RegionLabeler` interface and are chosen
-> via a server setting. The frontend renders whatever labels exist and is
-> agnostic to which backend produced them.
+> **Revision history.**
+> - *v1* proposed a from-scratch labeler with a fixed-vocabulary argmax. That
+>   was flat tagging, not toponymy.
+> - *v2* corrected the model to contrastive, hierarchy-aware naming but still
+>   hand-rolled the clustering / keyphrase / naming machinery.
+> - **v3 (this revision): adopt the Tutte Institute `toponymy` library**
+>   (<https://github.com/TutteInstitute/toponymy>, Healy & McInnes) rather than
+>   reimplement it. The library *is* the contrastive, hierarchy-aware,
+>   LLM-naming pipeline we were describing; it is explicitly pluggable for
+>   non-text data. We supply the audio-specific glue and the map-rendering
+>   layer. This collapses three of our hand-rolled stages into "configure
+>   Toponymy."
 
-## Problem / Goal
+## What toponymy actually is (unchanged — the requirement the library meets)
 
-VTSBrowse already answers *"where is the structure?"* — UMAP clusters similar
-media, the hexbin pyramid draws density. It does **not** answer *"what is each
-region?"*. The user has to hover-audition a representative clip per hex to find
-out. **Toponymy** = giving names to places on a map. We want a "place" on the
-browse map to carry a readable **sign**, shown at an appropriate zoom level-of-
-detail, so the map is legible at a glance.
+A place-name distinguishes a place from its neighbors. For clusters that means
+naming region `01` by what separates it from its **parent** `0` and its
+**siblings** `00`, `02` — not by its absolute-top feature (which it usually
+*inherited* from the parent and *shares* with siblings). Naming is **top-down**
+and **collision-aware**, and the LLM's job is to **invent a distinguishing
+axis** a fixed vocabulary can't contain. The `toponymy` library implements
+exactly this: balanced multiresolution clustering → contrastive
+(`information_weighted`) keyphrase extraction per cluster → central exemplar
+selection → an LLM that synthesizes keyphrases + exemplars + sub-topic names
+into a concise distinguishing name, layer by layer.
 
-This is purely additive: a dataset-only, read-only enrichment of an existing
-frozen projection. No labels/votes/training/detector apparatus is introduced
-(consistent with VTSBrowse's browse-only scope).
+## Using the `toponymy` library
 
-### What this is NOT
-
-- Not per-hex captions. A "place" is coarser than a hex; signs sit on regions.
-- Not a new clustering UI, not interactive re-labeling, not search-by-label
-  (those are possible follow-ups; see *§Open follow-ups*).
-- Not mobile/responsive (VTSearch is desktop-only).
-
-## What already exists (and what we reuse)
-
-| Piece | Where | Reuse |
-|-------|-------|-------|
-| Frozen 2-D layout | `vtscore/projection/umap_projection.py` `Projection` | Anchor positions for signs come from here. |
-| Hex/square pyramid | `vtscore/projection/pyramid.py` `Pyramid`/`HexCell` | Multi-resolution structure; `rep_id` gives representative items for Backend C. |
-| Embedding matrix (in-memory) | `vtscore/embedding/matrix.py` `get_embedding_matrix(ctx)` | Region centroids (Backend A) and representative selection are computed from this **at build time**. |
-| Shared text space | `MediaEmbedder.supports_text` / `embed_text` (`vtscore/media/embedder.py:492,678`), `embed_text_query` (`vtscore/embedding/helpers.py:86`) | Backend A scores vocabulary terms against region centroids in the embedder's own space. |
-| Whisper ASR | `vtscore/converters/audio2text.py` | Optional transcript input for Backend C on speech datasets. |
-| Build job + persistence | `vtsearch/routes/projection.py` (`_start_umap_build`, `_persist_projection`), `vtscore/projection/persistence.py`, `vtscore/datasets/container.py` (`append_projection`/`read_projection`) | Labels are computed inside the same background build and persisted alongside the pyramid. |
-| Canvas renderer | `frontend/src/app/components/browse-canvas/browse-canvas.component.ts` | Where signs get drawn with LOD + collision handling. |
-| Plugin registry pattern | `vtscore/plugins/__init__.py` `PluginRegistry` | Template for a `RegionLabeler` registry. |
-| Server settings | `vtsearch/settings_models.py` `ServerSettings` (Pydantic) | Where the labeler choice + LLM endpoint config live. |
-
-## The two genuinely new pieces
-
-Everything above is reused. Two things do not exist yet:
-
-1. **A notion of a labeled *region* per zoom level** (coarser than a hex).
-2. **The signs on screen** (text overlays with LOD + de-clutter).
-
-Plus the pluggable labeling itself. The rest of this doc specs those.
-
----
-
-## Stage 0 — Define "places": regions per zoom level
-
-The hex pyramid is *geometric* binning, not semantic clustering: one perceptual
-blob spans many adjacent hexes, so we can't just label every hex. We need a
-coarser, nested decomposition that maps onto zoom levels.
-
-**Chosen approach: a hierarchical region tree, computed once at build time.**
-
-- Run a hierarchy over the embedding matrix (recommended: **recursive
-  bisecting k-means** on the high-d embeddings, or agglomerative if N is small;
-  HDBSCAN is a candidate but its variable cluster count is harder to map to
-  fixed zoom levels — see *§Decisions to lock*). Each tree node is a region.
-- Each region records, **in memory only**:
-  - `member_ids` (the media ids it contains),
-  - `centroid` (mean of member embeddings, L2-normalized) — **never persisted**
-    (it is an embedding; see the No-Persisted-Vectors rule),
-  - `anchor` = the 2-D coords of the medoid (member nearest the centroid) — a
-    plain coordinate, persistable,
-  - `level` — the depth at which this region's sign should appear, aligned to a
-    pyramid zoom level so signs thin out as you zoom out.
-- Map tree depth → pyramid level so the top of the tree (a handful of big
-  regions) shows at coarse zoom, leaves at fine zoom. Reuse
-  `max_useful_levels(N)` as the depth cap.
-
-The region tree is a transient build-time artifact. **Only the labeled output
-survives** (Stage 2): a flat list of `RegionLabel(level, anchor_x, anchor_y,
-text, score, source)`. Centroids and member lists are discarded after
-labeling, keeping us compliant with the No-Persisted-Vectors rule.
-
----
-
-## Stage 1 — The pluggable labeler
+The entry point is:
 
 ```python
-# vtscore/projection/labeling/base.py  (new package)
+from toponymy import Toponymy, KeyphraseBuilder
+from toponymy.clustering import ToponymyClusterer
+from toponymy.llm_wrappers import OpenAINamer  # or Ollama/VLLM/LlamaCpp/Anthropic/...
 
-@dataclass(frozen=True)
-class RegionLabel:
-    level: int          # pyramid zoom level this sign belongs to
-    anchor_x: float     # placement in projection (data) space
-    anchor_y: float
-    text: str           # the street sign, e.g. "jazz piano"
-    score: float        # confidence (cosine for A; model/heuristic for C)
-    source: str         # labeler id that produced it ("zeroshot" | "llm")
-
-
-class RegionLabeler(ABC):
-    """Turns regions (centroids + representative ids) into RegionLabels."""
-
-    @property
-    @abstractmethod
-    def name(self) -> str: ...          # "zeroshot" | "llm" | ...
-
-    @abstractmethod
-    def available(self, *, media_type: str, embedder: MediaEmbedder) -> bool:
-        """Can this labeler run for this dataset right now?
-        A: embedder.supports_text. C: an LLM endpoint is configured."""
-
-    @abstractmethod
-    def label_regions(
-        self,
-        regions: list[Region],          # in-memory: centroid + member/rep ids + level + anchor
-        *,
-        ctx: DatasetContext,
-        media_type: str,
-        embedder: MediaEmbedder,
-        on_progress: ProgressCallback | None = None,
-    ) -> list[RegionLabel]: ...
+topic_model = Toponymy(
+    llm_wrapper=<a LLMWrapper>,
+    text_embedding_model=<TextEmbedderProtocol>,
+    clusterer=ToponymyClusterer(),                 # default; multiresolution
+    keyphrase_builder=KeyphraseBuilder(object_to_text=<callable>),
+    object_description="audio clips",
+    corpus_description="<dataset description>",
+)
+topic_model.fit(objects, embedding_vectors, clusterable_vectors)
 ```
 
-Discovery mirrors the embedder system: a `PluginRegistry` over
-`vtscore/projection/labeling/` keyed on a `LABELER = <instance>` sentinel, so
-adding a third backend later is drop-in. A `signature()` per labeler (vocab
-hash for A; model id + prompt version for C) feeds cache invalidation (Stage 2).
+**Guiding principle: follow Toponymy's examples wherever possible.** Adopt their
+example/default configuration rather than inventing our own knobs —
+`ToponymyClusterer(min_clusters=4, verbose=...)`, `keyphrase_method=
+"information_weighted"`, `exemplar_method="central"`, `metric="cosine"` on the
+clustering UMAP, `ENGLISH_STOP_WORDS`, etc. We only diverge where VTSearch
+*forces* it (the `object_to_text` hook for audio, the namer selection, and the
+map-rendering layer). This keeps our decision surface small and tracks upstream.
 
-### Backend A — zero-shot vocabulary (`labeling/zeroshot.py`, default)
+`fit(objects, embedding_vectors, clusterable_vectors, exemplar_method="central",
+keyphrase_method="information_weighted", subtopic_method="central")`:
 
-1. `available()` ⇔ `embedder.supports_text` (true for CLAP/CLAP-Music,
-   ParaSpeechCLAP, CLIP/SigLIP, X-CLIP; **false** for Whisper, AST, DINOv2/v3 —
-   for those, A is unavailable and we fall back to C or no signs).
-2. Resolve a **vocabulary** for the media type (Stage 1a). Embed each term once
-   via `embed_text` (reuses the `embed_text_query` LRU), forming a `(V, d)`
-   matrix in the embedder's own space.
-3. Per region: `scores = centroid @ vocab_matrix.T`; take argmax. Attach the
-   term as `text` and the cosine as `score`. Optionally require a margin/
-   threshold; below it, emit no sign (a "mixed" region stays anonymous rather
-   than mislabeled).
-4. Fully local, deterministic, cheap (one matmul over V terms × R regions).
+- **`clusterable_vectors`** → `clusterer.fit_predict(...)` (the multiresolution
+  clustering).
+- **`embedding_vectors`** → keyphrase/exemplar alignment.
+- **`objects`** → `keyphrase_builder.fit_transform(objects)` and exemplar
+  display.
 
-#### Stage 1a — vocabularies
+### Requirements → how VTSearch meets each
 
-- Ship a **default vocabulary per media type** as a small data file
-  (e.g. `vtscore/projection/labeling/vocab/audio.txt`). For audio, an AudioSet/
-  ESC-50-style class list (~300–500 sound classes) is a strong starting point;
-  music → genres + instruments; image → an open-vocab noun list; text/document
-  → TBD (keyword extraction may beat a fixed vocab — see *§Decisions to lock*).
-- Allow a **user override**: a dataset- or server-level custom vocabulary
-  (so a bird-call corpus can ship species names). Surfaced as a setting /
-  optional uploaded list. Vocab content is hashed into the labeler signature so
-  changing it invalidates cached labels.
+| Toponymy requires | What it's for | How we supply it |
+|---|---|---|
+| `clusterable_vectors: np.ndarray (n, k)` | The multiresolution clustering (docs say use UMAP/t-SNE here). | **A dedicated higher-D UMAP**, computed at build time from the CLAP matrix (`umap.UMAP(n_components≈5, metric="cosine")`, mirroring Toponymy's examples) — *not* the frozen 2-D browse layout. The 2-D layout stays for rendering + sign anchors; clustering gets the richer ~5-D map. Both reductions derive from the same embedding matrix. (Our embeddings are L2-normalized at ingest, so cosine ≡ euclidean here; we keep `cosine` to match their example.) |
+| `embedding_vectors: np.ndarray (n, d)` | Aligning keyphrases/exemplars to clusters. | **We already have it:** the in-memory CLAP matrix from `vtscore/embedding/matrix.py:get_embedding_matrix(ctx)`. |
+| `text_embedding_model: TextEmbedderProtocol` | Embeds keyphrase *strings*; alignment to clusters. | A thin adapter over the active embedder's text branch (`MediaEmbedder.embed_text`, `vtscore/media/embedder.py:678`). For **CLAP this is ideal**: keyphrase strings land in the *same* space as `embedding_vectors`, so cross-modal keyphrase→audio-cluster alignment is meaningful. Requires `embedder.supports_text`. |
+| `clusterer` | Hierarchy. | Use the bundled `ToponymyClusterer()` (multiresolution, `fast_hdbscan`-based). **This replaces our hand-rolled region tree.** |
+| `keyphrase_builder` | Contrastive keyphrases. | `KeyphraseBuilder(object_to_text=<callable>)` — see the gap below. `information_weighted` (default) does the contrastive selection. **Replaces our hand-rolled evidence extraction.** |
+| `llm_wrapper: LLMWrapper` (required) | The actual naming. | Map our `browse_llm_*` settings to a bundled namer (see *§The LLM*). |
+| `objects: List[Any]` | Keyphrase source + exemplar display. | Our list of audio media (ids/dicts), paired with `object_to_text`. |
 
-### Backend C — multimodal LLM over representatives (`labeling/llm.py`, optional)
+So `embedding_vectors` we already have (the CLAP matrix), `clusterable_vectors`
+is one extra higher-D UMAP fit at build time, the
+clusterer/keyphrase-builder/prompting are provided, and the contrastive +
+hierarchical naming we were going to build is the library's whole point.
 
-1. `available()` ⇔ an LLM endpoint is configured (Stage 1b). If not, C never
-   appears as a choice.
-2. Per region, select a few **representatives** (region medoid + nearest
-   members; the pyramid already computes a `rep_id` we can reuse). Cap at ~3–5
-   per region to bound cost.
-3. Build the model input. Two sub-modes by media type / capability:
-   - **Audio-capable LLM:** attach the representative clips directly, prompt
-     *"These short audio clips all come from one cluster of a sound map. Reply
-     with a 1–4 word label naming what they have in common."*
-   - **Text fallback (speech / no audio support):** run the existing Whisper
-     converter on the representatives and send transcripts instead.
-4. Parse the short label; store as `text`, `source="llm"`, a heuristic
-   `score`. Batch across regions to amortize latency; this runs **once** at
-   build, never on the request path.
+### The one real gap: `object_to_text` (audio → a little text)
 
-#### Stage 1b — LLM configuration (provider-agnostic)
+`KeyphraseBuilder(object_to_text: Callable[[Any], str])` and the exemplar
+functions' `object_to_text_function: Callable[[List[Any]], List[str]]` are the
+**official non-text hook** (default: identity, i.e. objects-are-strings).
+Toponymy needs *some text per object* to (a) mine contrastive keyphrases and
+(b) show exemplars to the LLM. Audio has no words; this callable is where we
+turn a clip into a short text. In availability order:
 
-- Define a thin `LlmCaptioner` seam with **one shipped implementation: an
-  OpenAI-compatible HTTP client** (works against many hosted providers and
-  local servers — vLLM, llama.cpp, Ollama's OpenAI-compat endpoint — so a
-  fully-local LLM deployment is also "has an LLM"). Keep it dependency-light
-  (plain `requests`/`httpx`, no new heavy SDK).
-- Config split across the two settings tiers / env:
-  - `ServerSettings.browse_llm_endpoint` (URL), `browse_llm_model` (model id) —
-    non-secret, in `data/settings.json`.
-  - **API key via environment variable** (e.g. `VTSEARCH_BROWSE_LLM_API_KEY`) —
-    never written to settings/JSON/disk, consistent with secret-handling norms.
-- Outbound network: requires the environment's network policy to permit the
-  endpoint. Document this; degrade gracefully (no signs / fall back to A) when
-  the call fails.
+1. **CLAP zero-shot tags (general audio, no LLM, no captioner) — primary.** For
+   each clip, the top-k vocabulary terms by CLAP similarity, e.g. `"dog,
+   barking, animal, outdoors"`. CLAP already gives us this for free; it shrinks
+   the dreaded "audio→text" problem to per-clip tagging. Toponymy's
+   `information_weighted` keyphrases then do the *contrastive* work of finding
+   which of those tags distinguish each cluster, and the LLM names it. The LLM
+   never has to caption audio — it names from tags + sibling context.
+2. **Whisper transcripts (speech) — when present.** Reuse
+   `vtscore/converters/audio2text.py`; transcripts are natural per-clip text.
+3. **A dedicated audio-captioning model — optional, heavy.** Richest per-clip
+   text; a follow-up, not v1.
 
-### Choosing a backend
+This also cleanly generalizes: for image datasets the same hook yields CLIP/
+SigLIP zero-shot tags; for text datasets `object_to_text` is the identity and
+Toponymy works as designed.
 
-- New server setting `browse_labeler: "none" | "zeroshot" | "llm"`
-  (`vtsearch/settings_models.py`, Literal + default).
-- **Default = `"zeroshot"`** when the active embedder supports text, else
-  `"none"`. `"llm"` is only selectable when an endpoint is configured.
-- The build job asks the registry for the chosen labeler; if it's unavailable
-  for the dataset (e.g. `zeroshot` on a text-less embedder, or `llm` with no
-  endpoint), it falls back: `llm → zeroshot → none`, logging the downgrade.
-- The meta endpoint advertises which labelers are *available* for the active
-  dataset so the settings UI can disable impossible choices.
+### The LLM
+
+`Toponymy.__init__` **requires** an `llm_wrapper` (no default), and naming
+quality comes from it. The library ships wrappers covering every deployment
+shape, so we don't write our own client:
+
+- **Self-hosted / OpenAI-compatible:** `OpenAINamer(base_url=..., api_key=...,
+  model=...)`, `OllamaNamer(host=...)`, `VLLMNamer(...)`,
+  `LlamaCppNamer(model_path=...)`, `HuggingFaceNamer(model=...)` (in-process).
+- **Hosted APIs:** `OpenAINamer`, `AnthropicNamer`, `CohereNamer`,
+  `GoogleGeminiNamer`, `AzureAINamer` (+ async/batch variants).
+
+The client libraries are **optional extras** of `toponymy` (install only the
+one an environment uses), which matches "some environments have an LLM, some
+don't."
+
+**No-LLM environments.** The `LLMWrapper` ABC is tiny — two methods,
+`_call_llm(prompt, temperature, max_tokens) -> str` and
+`_call_llm_with_system_prompt(...) -> str`. We can ship a **`KeyphraseNamer`**:
+a trivial in-process `LLMWrapper` whose `_call_llm` returns the cluster's top
+`information_weighted` keyphrase instead of calling a model. This gives an
+honest no-LLM fallback that **still uses Toponymy's contrastive clustering and
+keyphrase machinery** — just without the LLM's phrasing/abstraction. (Or, for a
+small local model, point `LlamaCppNamer`/`HuggingFaceNamer` at a GGUF/HF model;
+also fully local.) The `browse_labeler` setting therefore becomes a choice of
+**namer**, not of pipeline.
+
+### Dependency footprint (a real decision)
+
+`toponymy==0.5.2` (Python ≥3.10; we run 3.11 ✓). Core deps **already in
+VTSearch**: numpy, scikit-learn, transformers (→tokenizers), pandas, scipy,
+numba (via umap-learn), tqdm. **New transitive deps it adds:** `datasets`
+(HuggingFace — the heaviest surprise), `vectorizers`, `fast_hdbscan`,
+`apricot-select`, `tenacity`, `httpx`. Plus the per-environment LLM client
+extra (`openai`/`anthropic`/`ollama`/…). Moderate but non-trivial; `deptry`
+will require adding `toponymy` to `pyproject.toml` dependencies. **This weight
+is the main argument against adoption** and is the first decision to lock.
 
 ---
 
-## Stage 2 — Compute at build, persist strings only
+## What we still build (the glue + the map layer)
 
-Labeling runs **inside the existing projection build job** (`_start_umap_build`
-in `vtsearch/routes/projection.py`), right after `build_pyramid`, because that
-is exactly where the in-memory embedding matrix is already in hand. Flow:
+Adopting Toponymy removes the clustering/keyphrase/naming code we'd otherwise
+write. What remains is VTSearch-specific:
 
-```
-fit_projection → build_pyramid → build_region_tree(matrix, projection)
-              → labeler.label_regions(...) → list[RegionLabel]
-              → persist (pyramid + labels + labeler signature)
-```
+### G1 — Adapters & config
+- `object_to_text` provider (CLAP zero-shot tags / Whisper) — see the gap above.
+- `TextEmbedderProtocol` adapter over `MediaEmbedder.embed_text`.
+- Namer selection from settings (`browse_labeler` + `browse_llm_*`), including
+  the `KeyphraseNamer` no-LLM fallback. Fallback order
+  `llm → keyphrase → none`.
 
-**Persistence** extends the container's projection record
-(`vtscore/projection/persistence.py` + `vtscore/datasets/container.py`):
+### G2 — Run inside the build job, extract a sign list
+Run Toponymy in the existing background build (`_start_umap_build` in
+`vtsearch/routes/projection.py`), right after `build_pyramid`, where the
+embedding matrix and projection are in hand. Fit the dedicated higher-D
+clustering UMAP here (one extra reduction from the same matrix), then pass it
+as `clusterable_vectors`. From Toponymy's fitted topic tree
+(`topic_tree.py` / cluster layers) extract, per layer:
+- the topic **name** (string),
+- the cluster **membership** → compute an **anchor** = the projected coords of
+  the cluster medoid (using our frozen layout),
+- a **level** = layer index mapped to a pyramid zoom level.
 
-- Add a `labels` block to the projection meta JSON: the `RegionLabel` list
-  (all plain scalars/strings) plus a `labeler_signature`
-  (`{labeler, vocab_hash | model_id, prompt_version}`).
-- **No vectors persisted.** `RegionLabel` carries only text + 2-D anchors +
-  scalar score. Centroids/member lists are build-time-only. This is allowed:
-  the No-Persisted-Vectors rule forbids embeddings and MLP weights, not derived
-  text — same category as the already-persisted pyramid geometry.
-- **Invalidation:** labels are valid only while `(projection_id,
-  labeler_signature)` matches the current setting. On Browse load, if the
-  persisted labels' signature differs from the active labeler/vocab/model, treat
-  labels as absent and recompute (mirrors how a never-persisted bin shape is
-  re-binned). Switching `browse_labeler` therefore re-labels lazily on next
-  visit without touching the (still-valid) frozen layout.
-- **Subset projections** (Find→Browse) are ephemeral and never persisted;
-  labels for them are computed in-memory and dropped, same as their pyramids.
+Produce a flat `RegionLabel(level, anchor_x, anchor_y, text, score, source)`
+list. *(To verify during implementation: the exact attributes Toponymy exposes
+for per-layer cluster membership + names; `topic_tree.py`/`cluster_layer.py`.)*
 
----
+### G3 — Persist strings only
+Extend the projection record (`vtscore/projection/persistence.py`,
+`vtscore/datasets/container.py`): add a `labels` block (the `RegionLabel` list
++ a `labeler_signature` = `{namer, object_to_text_mode, model_id,
+toponymy_version}`).
+- **No vectors persisted** — only text + 2-D anchors + scalar score. Centroids,
+  keyphrases, the topic model itself are build-time-only. Allowed: the
+  No-Persisted-Vectors rule forbids embeddings/MLP weights, not derived text.
+- **Invalidation:** labels valid only while `(projection_id,
+  labeler_signature)` matches the active setting; otherwise recompute on next
+  Browse load.
+- **Subset projections** (Find→Browse): labels in-memory only, never persisted.
 
-## Stage 3 — API
+### G4 — API
+In `vtsearch/routes/projection.py`: meta gains `available_labelers`, `labeler`,
+`has_labels`; new `GET /api/projection/labels?shape=&subset=` returns the whole
+`RegionLabel` list (tiny — one per topic node). Schema in
+`vtsearch/schemas/projection.py`.
 
-Two small additions to `vtsearch/routes/projection.py`:
-
-1. **Meta** (`GET /api/projection/meta`) gains:
-   - `available_labelers: ["zeroshot", ...]` (capability for this dataset),
-   - `labeler: "zeroshot"` (which produced the current labels, or `null`),
-   - `has_labels: bool`.
-2. **Labels endpoint** (new): `GET /api/projection/labels?shape=&subset=` →
-   `{ labels: [{level, x, y, text, score}, ...] }`. Returned whole (label
-   counts are tiny vs. tiles — tens to low hundreds), so no tiling needed; the
-   client filters by level client-side. Schema in
-   `vtsearch/schemas/projection.py`.
-
-A `POST /api/projection/relabel` (recompute with the current setting without
-re-fitting UMAP) is a nice-to-have; not required for v1 since switching the
-setting triggers lazy recompute on next load.
-
----
-
-## Stage 4 — Frontend: draw the signs
-
-In `frontend/src/app/components/browse-canvas/browse-canvas.component.ts`:
-
-- Fetch labels once via a new `ProjectionApiService.getLabels(shape, subset)`;
-  cache like meta.
-- Render `RegionLabel`s whose `level` matches (or brackets) the current LOD
-  level, transformed through the same projection→screen affine the hexes use.
-- **De-clutter:** greedy collision avoidance (drop/ζfade lower-`score` signs
-  that would overlap a higher one); fade signs in/out across zoom transitions so
-  coarse names dissolve into finer ones as you descend.
-- **Style:** a subtle semi-transparent "sign" pill with a text label, legible
-  over the density colormap; respect theme (`BrowseColormap`/theme tokens).
-  Desktop-only, no touch sizing.
-- A show/hide-signs toggle in the Browse toolbar (user setting), defaulting on
-  when labels exist.
-
-Models: extend `frontend/src/app/models/projection.models.ts` with a
-`RegionLabelPayload` interface.
+### G5 — Frontend signs
+In `browse-canvas.component.ts`: fetch labels once; render those whose `level`
+matches the current LOD through the existing projection→screen affine; greedy
+collision de-clutter; fade across zoom (coarse names dissolve into finer ones —
+correct now, since a child topic is a refinement of its parent). Subtle
+semi-transparent sign pill, theme-aware, desktop-only; show/hide toolbar
+toggle. Add `RegionLabelPayload` to `models/projection.models.ts`.
 
 ---
 
 ## Decisions to lock (before coding)
 
-These are the open design choices; each wants a call before implementation:
-
-1. **Region decomposition algorithm.** Recursive bisecting k-means (predictable
-   per-level counts, maps cleanly to zoom) vs. HDBSCAN (finds natural clusters,
-   variable count, harder LOD mapping) vs. just labeling coarse-level hexes
-   (cheapest, least semantic). *Leaning: recursive k-means.*
-2. **Text/document datasets.** For text, classic toponymy uses TF-IDF/keyword
-   extraction over the items themselves, which may beat a fixed vocab. Do we
-   special-case text (keyword labeler) or force the vocab path? *Leaning: a
-   third `keywords` labeler later; out of scope for the audio-first v1.*
-3. **Default vocabulary for audio.** AudioSet (~500 classes) vs. a smaller
-   curated list. Larger = more coverage but noisier argmax.
-4. **Sign density / LOD policy.** How many signs on screen at once; one level of
-   signs at a time vs. blending two.
-5. **LLM transport.** Confirm OpenAI-compatible HTTP is the one shipped client
-   (covers hosted + local servers) and that no new SDK dependency is added.
+1. **Adopt `toponymy` at all** vs. a slim in-house reimplementation. The
+   library gives us the correct contrastive/hierarchical pipeline for free; the
+   cost is the dependency footprint (esp. `datasets`, `fast_hdbscan`,
+   `vectorizers`, `apricot-select`). *Leaning: adopt — reimplementing it well is
+   a lot of subtle work.*
+2. ~~`clusterable_vectors` source~~ **RESOLVED:** cluster on a **dedicated
+   higher-D UMAP** (`n_components≈5`, `metric="cosine"`), not the 2-D browse
+   layout — following Toponymy's examples and naming with the full embeddings.
+   The 2-D layout stays for rendering + anchors. Remaining sub-knob: the exact
+   `n_components` (start 5, per their richer examples).
+3. **Default `object_to_text` for audio:** CLAP top-k zero-shot tags (and the
+   vocabulary + k behind them) vs. Whisper-first for speech. *Leaning: CLAP tags
+   as the general default, Whisper when the dataset is speech.*
+4. **No-LLM fallback:** ship the `KeyphraseNamer` passthrough vs. require a
+   small local model (LlamaCpp/HF). *Leaning: `KeyphraseNamer` — zero infra.*
+5. **Async/batch namers** for large datasets (the library has `Async*`/`Batch*`
+   variants) — wire later if naming latency matters.
 
 ## Phasing
 
-- **Phase 1 (audio-first, no LLM): Stages 0 + 1(A) + 2 + 3 + 4.** Region tree,
-  zero-shot CLAP-vocab labeler, persistence, API, canvas signs. Ships a working
-  "street signs" experience on any text-capable audio embedder with zero new
-  network/infra. This is the recommended first slice.
-- **Phase 2: Backend C (LLM) + the labeler switch + config.** Adds
-  `labeling/llm.py`, the OpenAI-compatible client, settings, capability
-  advertising, and fallback. Lights up only where an LLM endpoint is configured.
-- **Phase 3 (follow-ups):** text/document `keywords` labeler; search-by-sign
-  (click a sign → seed a Find); user-editable signs; relabel endpoint.
+- **Phase 1 (no LLM): Toponymy + `KeyphraseNamer` + CLAP `object_to_text` +
+  G1–G5.** A full contrastive, hierarchical, library-backed sign layer with
+  zero external infra — names are the top contrastive keyphrase per topic.
+- **Phase 2: real LLM namers + the setting switch + config.** Swap
+  `KeyphraseNamer` for `OpenAINamer(base_url=...)` / `OllamaNamer` / local
+  model, selected by `browse_labeler`/`browse_llm_*`. Everything else
+  (clustering, keyphrases, persistence, API, canvas) is unchanged.
+- **Phase 3 (follow-ups):** audio-captioning `object_to_text`; image/text
+  datasets (the same hooks generalize); search-by-sign; user-editable signs.
 
 ## Testing notes
 
-- Library-tier tests (`tests_lib/projection/`) for: region-tree determinism
-  (seed all RNG), zero-shot labeler against a stubbed text-embedder, persistence
-  round-trip of `RegionLabel`s, and signature-based invalidation. These must
-  stay Flask-free (`./run-tests.sh vtscore-clean`).
-- App-tier tests (`tests/`) for the meta/labels endpoints and the
-  build→label→persist→reload path; stub the LLM client (no real network).
-- Seed every RNG (k-means init, any sampling) per the flaky-test rules.
+- Library-tier (`tests_lib/projection/`, Flask-free): the `object_to_text`
+  provider (CLAP tags, seeded), the `TextEmbedderProtocol` adapter, the
+  `KeyphraseNamer`, `RegionLabel` extraction from a fitted topic tree (stub or
+  tiny fixture), persistence round-trip, signature invalidation. Toponymy's own
+  clustering/keyphrase correctness is the library's responsibility — we test
+  *our glue*, mocking the LLM.
+- App-tier (`tests/`): meta/labels endpoints; build→fit→persist→reload; LLM
+  namer stubbed (no real network).
+- Seed every RNG; never hit a real LLM endpoint in tests.
+- `deptry` will fail until `toponymy` is added to `pyproject.toml`; the LLM
+  client extras stay optional/per-deployment.
 
 ## Open follow-ups
 
