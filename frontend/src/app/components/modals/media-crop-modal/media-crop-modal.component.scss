@@ -5,7 +5,7 @@
   min-height: 120px;
   max-height: 50vh;
   margin-bottom: var(--space-lg);
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--bg-subtle);
   border-radius: var(--radius-md);
   padding: var(--space-md);
 }
@@ -25,12 +25,12 @@
 .generic-preview {
   font-family: monospace;
   font-size: var(--font-md);
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--text-secondary);
 }
 
 .filename {
   font-size: var(--font-md);
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--text-secondary);
   text-align: center;
   margin-bottom: var(--space-xl);
   word-break: break-all;
@@ -44,10 +44,11 @@
   button {
     padding: var(--space-md) var(--space-xl);
     border-radius: var(--radius-md);
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-secondary);
     cursor: pointer;
     font-size: var(--font-lg);
-    background: white;
+    background: var(--bg-secondary-btn);
+    color: var(--text-primary);
 
     &:disabled {
       opacity: var(--opacity-disabled);
@@ -56,12 +57,12 @@
 
     &.primary {
       background: var(--accent);
-      color: white;
+      color: var(--btn-primary-text);
       border-color: transparent;
     }
 
     &.secondary {
-      background: white;
+      background: var(--bg-secondary-btn);
     }
 
     &.cancel {
