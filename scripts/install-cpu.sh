@@ -23,7 +23,7 @@ vts_progress_step "Checking Python version (>= 3.10)"
 source "$SCRIPT_DIR/_check-python.sh"
 
 vts_progress_step "Upgrading pip / setuptools / wheel"
-pip install --upgrade pip setuptools wheel --progress-bar on
+pip install --upgrade pip "setuptools<82" wheel --progress-bar on
 
 vts_progress_step "Installing runtime + dev dependencies (this may take several minutes)"
 pip install -r "$REPO_ROOT/requirements/base.txt" --progress-bar on
