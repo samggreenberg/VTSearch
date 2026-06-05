@@ -549,7 +549,9 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     server boot; there is no server-wide user to sync for.
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
+    print("  Loading ML libraries...", end="", flush=True)
     initialize_models()
+    print(" done", flush=True)
     # ``--solo-media-type`` (process-level CLI fallback) tells us which
     # mediaType's default embedder to warm even if no datasets or detectors
     # are registered yet. Per-user explicit values are not consulted here
