@@ -167,6 +167,9 @@ class MultiventDatasetImporter(DatasetImporter):
 
         _log.info("Multivent importer: %d audio windows ready in %s", len(content_vectors), cache_dir)
 
+        if not content_vectors:
+            return
+
         origin = self.build_origin(field_values)
         load_dataset_from_folder(
             cache_dir,
