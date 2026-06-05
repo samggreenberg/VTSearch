@@ -262,8 +262,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const canvas = this.canvasRef.nativeElement;
     canvas.width = this.width * this.dpr;
     canvas.height = this.height * this.dpr;
-    canvas.style.width = `${this.width}px`;
-    canvas.style.height = `${this.height}px`;
+    // getBoundingClientRect() returns viewport-coordinate px (CSS layout × root zoom).
+    // canvas.style.width/height must be in CSS px, so divide out the root zoom to
+    // avoid the canvas being visually double-scaled (once by html{zoom:N}, once by
+    // the explicit style override), which would shift hit-test coordinates off the
+    // cursor by the zoom factor.
+    const rootZoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    canvas.style.width = `${this.width / rootZoom}px`;
+    canvas.style.height = `${this.height / rootZoom}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     // The initial fit may have run against the 800x600 fallback (meta arrived
     // before layout). Now that the real size is known, refit to it so the
