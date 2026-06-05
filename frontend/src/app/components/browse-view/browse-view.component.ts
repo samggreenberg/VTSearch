@@ -229,15 +229,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.densityMax = max;
   }
 
-  /**
-   * The density legend only makes sense when cells are shaded by count. For
-   * image/video the canvas paints representative thumbnails instead, so the
-   * color ramp doesn't apply and the legend is hidden.
-   */
-  get showLegend(): boolean {
-    return this.mediaType !== 'image' && this.mediaType !== 'video';
-  }
-
   get hexDisplayScale(): number {
     return this.HEX_SCALES[this.hexScaleIndex];
   }
