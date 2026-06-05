@@ -108,6 +108,15 @@ export class BrowsePrepService {
           }
           this.startProjection(datasetId);
         },
+        complete: () => {
+          // The switch was superseded/cancelled before emitting (e.g. a
+          // competing context switch). Don't leave the prep latched in the
+          // loading phase, which would keep the dashboard disabled forever.
+          const s = this.stateSubject.value;
+          if (s && s.datasetId === datasetId && s.phase === 'loading') {
+            this.clear();
+          }
+        },
       });
   }
 
