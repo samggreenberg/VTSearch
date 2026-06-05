@@ -347,10 +347,14 @@ def _no_cache_api(response):
     Without this, concurrent or rapid-fire fetches to the same endpoint
     (e.g. ``/api/datasets/registry``) can receive stale cached data,
     causing the frontend to miss newly loaded datasets.
+
+    Endpoints serving genuinely immutable data (e.g. frozen projection
+    tiles) opt out by setting their own ``Cache-Control`` in the view; we
+    defer to that rather than clobbering it with ``no-store``.
     """
     from flask import request
 
-    if request.path.startswith("/api/"):
+    if request.path.startswith("/api/") and "Cache-Control" not in response.headers:
         response.headers["Cache-Control"] = "no-store"
     return response
 

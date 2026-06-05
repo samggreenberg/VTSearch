@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from flask import request
+from flask import after_this_request, request
 from flask_smorest import Blueprint, abort
 
 from vtsearch.schemas.projection import (
@@ -431,6 +431,19 @@ def get_tile(shape: str, level: int, tx: int, ty: int):
         pyr = ctx._pyramids.get(shape)
     if pyr is None:
         abort(404, message="Projection not built yet — call POST /api/projection/build first.")
+
+    # Tiles are frozen at ingest, so let the browser serve repeat visits from its
+    # HTTP cache without a round-trip — this is what keeps the hex grid from
+    # blanking when you pan/zoom back over ground you've already seen. The tile
+    # URL omits the dataset id (it rides on the X-Dataset-Id header), so we must
+    # Vary on it or the cache could hand one dataset's tiles to another. Scoped
+    # to this response only, and registered after the 404 check so a not-yet-built
+    # projection is never cached. ``?subset`` is already part of the URL.
+    @after_this_request
+    def _cache_tile(response):  # type: ignore[unused-ignore]
+        response.headers["Cache-Control"] = "private, max-age=3600, immutable"
+        response.vary.add("X-Dataset-Id")
+        return response
 
     tile = pyr.get_tile(level, tx, ty)
     if tile is None:
