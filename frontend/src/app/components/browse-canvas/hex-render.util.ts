@@ -46,14 +46,15 @@ const HEAT_RAMP: RGB[] = [
   [255, 235, 70],
 ];
 
-// "Ocean": light-blue → dark-navy, with a neutral light grey for singletons.
+// "Ocean": medium-blue → dark-navy, with a neutral mid grey for singletons.
 // Darkness rises with density, which reads naturally on a light background
 // (more ink = more items) and keeps the hues disjoint from Heat's red/yellow —
 // so "this bin is blue" unambiguously means light mode + lots, and "yellow"
-// means dark mode + lots. This is the light-mode default.
+// means dark mode + lots. This is the light-mode default. The low end starts
+// at a clearly-saturated blue (not the near-white ColorBrewer "Blues" tail)
+// so even sparse cells separate from the ``#f0f2f5`` light-mode background;
+// the earlier pale start made one-item discs and low-density bins vanish.
 const OCEAN_RAMP: RGB[] = [
-  [222, 235, 247],
-  [198, 219, 239],
   [158, 202, 225],
   [107, 174, 214],
   [66, 146, 198],
@@ -61,7 +62,9 @@ const OCEAN_RAMP: RGB[] = [
   [8, 81, 156],
   [8, 48, 107],
 ];
-const OCEAN_SINGLE: RGB = [200, 205, 214];
+// A mid neutral grey — distinct from the blue ramp so a lone dot reads as
+// "exactly one", and dark enough to stay legible on the light-mode background.
+const OCEAN_SINGLE: RGB = [150, 158, 172];
 
 // "Grayscale": a neutral luminance ramp that always moves *away* from the
 // background so density stays legible — darker as it grows on a light canvas,
