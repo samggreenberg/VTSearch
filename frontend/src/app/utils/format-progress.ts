@@ -118,7 +118,7 @@ export interface ProgressHeader {
 }
 
 /** Which load flow this progress event belongs to. */
-export type ProgressKind = 'dataset' | 'detector';
+export type ProgressKind = 'dataset' | 'detector' | 'projection';
 
 const EMBEDDER_PRETTY: Record<string, string> = {
   siglip: 'SigLIP',
@@ -169,12 +169,25 @@ export function formatProgressHeader(
   const prog = progress ?? {};
   const status = (prog.status ?? '').toLowerCase();
   const message = prog.message ?? '';
-  const what = kind === 'detector' ? 'Loading detector' : 'Loading dataset';
+  const what =
+    kind === 'detector'
+      ? 'Loading detector'
+      : kind === 'projection'
+        ? 'Building projection'
+        : 'Loading dataset';
 
   let phase = '';
   let subtitle = '';
 
-  if (status === 'downloading') {
+  if (kind === 'projection') {
+    if (/pyramid|tiling|binning/i.test(message)) {
+      phase = 'tiling layout';
+      subtitle = 'Binning the 2-D layout into the hex/square tile pyramid.';
+    } else {
+      phase = 'running UMAP';
+      subtitle = 'Projecting embeddings to 2-D so the dataset can be browsed as a map.';
+    }
+  } else if (status === 'downloading') {
     if (/extract/i.test(message)) {
       phase = 'unpacking archive';
       subtitle = 'Extracting the downloaded archive into the dataset cache.';

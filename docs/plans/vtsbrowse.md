@@ -817,6 +817,22 @@ and available to any future consumer of `vtscore`.
 ## Open follow-ups
 
 **Shipped:**
+- **Load + project on the dashboard before entering Browse.** The dashboard's
+  per-row `Browse` button no longer navigates straight to `/browse/:id` and
+  lets the browse view discover a missing load/projection. It now mirrors the
+  Train button: `BrowsePrepService` (`frontend/src/app/services/browse-prep.service.ts`)
+  loads the dataset (if needed) and builds its `hex` projection — surfacing
+  progress inline on the dataset's grid row (load phase via the existing SSE
+  loading-task row; projection phase via a synthesized row polling
+  `GET /api/projection/meta`) — and only navigates once both are ready. A load
+  or projection failure is shown inline on the row (Dismiss to clear); we never
+  leave the dashboard for a half-prepared browse window. The `browseContextGuard`
+  and the browse view's own `loadProjection()` stay as the fallback for
+  deep-links / top-bar pulldown navigation (they find the projection already
+  built and render instantly). *Known limitation:* the prep always builds the
+  `hex` shape; if the user's per-media `browse_bin_shape` is `square`, the browse
+  view re-bins the (already-fit) shared layout in-view — a millisecond rebin, no
+  UMAP re-fit.
 - **Browse a Find run's positives as their own UMAP.** The Find right panel has
   a `Browse` button next to `Export` (find mode only, disabled when the good
   list is empty). It UMAPs *only* the positive items' high-d vectors — not the
