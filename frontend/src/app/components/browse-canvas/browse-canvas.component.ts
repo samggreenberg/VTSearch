@@ -160,12 +160,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     return binGeometry(this.meta?.bin_shape);
   }
 
-  /**
-   * On-screen scale: the base zoom (driven by wheel/fit and feeding level
-   * selection) times the user's display-size multiplier. All projection↔screen
-   * conversions and the rendered hex radius use this; level selection uses the
-   * base ``transform.zoom`` alone so the binning is invariant to display size.
-   */
+  /** On-screen scale: base zoom × display-size multiplier. Used for all
+   * projection↔screen conversions, rendered hex radius, and level selection. */
   private get effZoom(): number {
     return this.transform.zoom * this.displayScale;
   }
@@ -222,10 +218,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       }
       this.requestRedraw();
     }
-    // Display-size changes only rescale rendering; the active level (binning)
-    // is left untouched on purpose, so the same hexes are simply drawn larger
-    // or smaller.
+    // Display-size changes rescale rendering and require a level re-selection:
+    // effZoom = transform.zoom * displayScale, so a larger displayScale raises
+    // the effective zoom and should switch to a finer pyramid level to keep
+    // hexes near the 28px target, not blow them up.
     if (changes['displayScale'] && !changes['displayScale'].firstChange) {
+      this.updateActiveLevel();
       this.requestRedraw();
     }
     // A colormap change only affects flat (non-thumbnail) shading; repaint.
@@ -307,7 +305,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (!this.meta || this.meta.levels.length === 0) return;
     const targetScreenRadius = 28;
     const idealLevel = Math.log2(
-      (this.meta.base_radius * this.transform.zoom) / targetScreenRadius,
+      (this.meta.base_radius * this.effZoom) / targetScreenRadius,
     );
     this.activeLevel = Math.max(
       0,
