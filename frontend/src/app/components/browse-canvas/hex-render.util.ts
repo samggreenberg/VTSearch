@@ -31,6 +31,16 @@ export type BrowseColormapId = 'auto' | 'heat' | 'ocean' | 'gray';
 /** All selectable colormap ids, in pulldown order (``auto`` first). */
 export const BROWSE_COLORMAP_IDS: readonly BrowseColormapId[] = ['auto', 'heat', 'ocean', 'gray'];
 
+/**
+ * Default width (CSS px) of the colormap-coloured border drawn around
+ * multi-item ("pile") thumbnails, applied per media type when the user hasn't
+ * set ``browse_thumbnail_border`` for that type. ``0`` would disable it.
+ */
+export const DEFAULT_THUMBNAIL_BORDER = 2;
+
+/** Max selectable pile-thumbnail border width (CSS px); mirrors the backend clamp. */
+export const MAX_THUMBNAIL_BORDER = 8;
+
 // "Heat": dark-red → yellow. The low end is a deep red rather than black so
 // that black stays free to mean "nothing here" — empty space reads as absence
 // while any occupied cell is at least dark red. Brightness rises with density,

@@ -66,6 +66,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * draw time, so a theme switch repaints with the right ramp.
    */
   @Input() colormap: BrowseColormapId = 'auto';
+  /**
+   * Width (CSS px) of the colormap-coloured border painted around multi-item
+   * ("pile") thumbnails. The band's colour is the density colour for the cell's
+   * item count, so it reads as how tall the stack under the tile is. ``0``
+   * disables it (cells fall back to the faint dark separator). Only takes effect
+   * in {@link thumbnailMode} (image/video); singletons never get the band.
+   */
+  @Input() thumbnailBorder = 0;
   @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
   /**
    * The densest visible cell's item count, emitted whenever it changes. Density
@@ -228,6 +236,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     }
     // A colormap change only affects flat (non-thumbnail) shading; repaint.
     if (changes['colormap'] && !changes['colormap'].firstChange) {
+      this.requestRedraw();
+    }
+    // The pile-thumbnail border width only changes how thumbnail cells are
+    // stroked; a repaint picks it up without re-binning or re-fetching tiles.
+    if (changes['thumbnailBorder'] && !changes['thumbnailBorder'].firstChange) {
       this.requestRedraw();
     }
   }
@@ -467,6 +480,18 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.stroke();
+    } else if (thumb && !single && this.thumbnailBorder > 0) {
+      // Pile thumbnail: a band whose colormap colour encodes how many items are
+      // stacked under this tile. Clipped to the cell so the full width sits just
+      // inside the thumbnail edge rather than bleeding onto neighbours (a
+      // centred stroke would spill half its width outward).
+      const t = Math.log(cell.count) / Math.log(this.maxCount || 2);
+      ctx.save();
+      ctx.clip();
+      ctx.strokeStyle = densityColor(Math.max(0, Math.min(1, t)), cmap.ramp);
+      ctx.lineWidth = this.thumbnailBorder * 2;
+      ctx.stroke();
+      ctx.restore();
     } else {
       // Thumbnails read better with a faint dark separator than the body-bg
       // hairline used for flat density cells.

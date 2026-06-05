@@ -651,14 +651,43 @@ class TestBrowserSettings:
         res = client.put("/api/settings", json={"browse_icon_size": {"audio": "huge"}})
         assert res.status_code == 400
 
+    def test_update_browse_thumbnail_border_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_thumbnail_border": {"image": 3, "video": 0}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_thumbnail_border"]["image"] == 3
+        assert data["browse_thumbnail_border"]["video"] == 0
+        # Persisted, and a second key write merges rather than clobbers.
+        res2 = client.put("/api/settings", json={"browse_thumbnail_border": {"audio": 4}})
+        assert res2.get_json()["browse_thumbnail_border"]["audio"] == 4
+        assert client.get("/api/settings").get_json()["browse_thumbnail_border"]["image"] == 3
+
+    def test_update_browse_thumbnail_border_clamped(self, client):
+        # Out-of-range values are clamped into 0..8 rather than rejected.
+        res = client.put("/api/settings", json={"browse_thumbnail_border": {"image": 100, "video": -5}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_thumbnail_border"]["image"] == 8
+        assert data["browse_thumbnail_border"]["video"] == 0
+
     def test_get_settings_includes_browser_prefs(self, client):
         data = client.get("/api/settings").get_json()
         # Present as (possibly empty) dicts so the frontend can index by type.
-        for key in ("browse_bin_shape", "browse_colormap", "browse_icon_size"):
+        for key in (
+            "browse_bin_shape",
+            "browse_colormap",
+            "browse_icon_size",
+            "browse_thumbnail_border",
+        ):
             assert key in data
             assert isinstance(data[key], dict)
 
     def test_defaults_have_empty_browser_prefs(self, client):
         data = client.get("/api/settings/defaults").get_json()
-        for key in ("browse_bin_shape", "browse_colormap", "browse_icon_size"):
+        for key in (
+            "browse_bin_shape",
+            "browse_colormap",
+            "browse_icon_size",
+            "browse_thumbnail_border",
+        ):
             assert data.get(key, {}) == {}

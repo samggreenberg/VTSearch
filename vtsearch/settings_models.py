@@ -29,6 +29,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
 
 __all__ = [
+    "BROWSE_THUMBNAIL_BORDER_PX",
     "BinShape",
     "BrowseColormap",
     "BrowseIconSize",
@@ -68,6 +69,9 @@ VALID_BIN_SHAPES: tuple[str, ...] = ("hex", "square")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
 VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_PANEL_PX: tuple[int, int] = (150, 500)
+# Allowed range (CSS px) for the VTSBrowse pile-thumbnail border width. ``0``
+# disables the border; values are clamped into this range on read/write.
+BROWSE_THUMBNAIL_BORDER_PX: tuple[int, int] = (0, 8)
 
 
 def _clamp(lo: float, hi: float):
@@ -215,9 +219,17 @@ class UserSettings(BaseModel):
     #   theme — Ocean in light mode, Heat in dark/high-viz).
     # - ``browse_icon_size``: on-screen cell size (XS…XL), the named form of
     #   the canvas's bigger/smaller buttons.
+    # - ``browse_thumbnail_border``: width in CSS px of the colormap-coloured
+    #   border drawn around multi-item ("pile") thumbnails. The band's colour is
+    #   the density colour for the pile's item count, so its hue/brightness reads
+    #   as the stack height under the tile. Only affects media types that paint
+    #   thumbnails (image, video); ``0`` disables it. Clamped to 0..8 px.
     browse_bin_shape: dict[str, BinShape] = Field(default_factory=dict)
     browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
     browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
+    browse_thumbnail_border: dict[str, Annotated[int, _clamp(*BROWSE_THUMBNAIL_BORDER_PX)]] = Field(
+        default_factory=dict
+    )
 
     view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
     view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)

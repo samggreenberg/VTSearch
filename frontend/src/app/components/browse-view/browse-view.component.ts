@@ -22,7 +22,12 @@ import { DatasetsRegistryApiService } from '../../services/datasets-registry-api
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
-import { BROWSE_COLORMAP_IDS, type BrowseColormapId } from '../browse-canvas/hex-render.util';
+import {
+  BROWSE_COLORMAP_IDS,
+  DEFAULT_THUMBNAIL_BORDER,
+  MAX_THUMBNAIL_BORDER,
+  type BrowseColormapId,
+} from '../browse-canvas/hex-render.util';
 import type { BinShape, ProjectionMeta } from '../../models/projection.models';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -82,6 +87,14 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * and minimap. ``auto`` follows the theme (Ocean in light, Heat in dark).
    */
   colormap: BrowseColormapId = 'auto';
+
+  /**
+   * Width (CSS px) of the colormap-coloured border drawn around multi-item
+   * pile thumbnails, mirrored from the per-media ``browse_thumbnail_border``
+   * setting and passed to the canvas. Only image/video datasets paint
+   * thumbnails, so it has no visible effect for other media types.
+   */
+  thumbnailBorder = DEFAULT_THUMBNAIL_BORDER;
 
   /** Last settings snapshot, kept so per-media browser prefs can be
    *  re-resolved when the active media type becomes known after load. */
@@ -278,6 +291,13 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
     const shape: BinShape = this.perMediaValue(s.browse_bin_shape, mt) === 'square' ? 'square' : 'hex';
     if (shape !== this.binShape) this.switchBinShape(shape, false);
+
+    const borderMap = s.browse_thumbnail_border as { [key: string]: number } | undefined;
+    const rawBorder = mt && borderMap ? borderMap[mt] : undefined;
+    this.thumbnailBorder =
+      rawBorder == null
+        ? DEFAULT_THUMBNAIL_BORDER
+        : Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, rawBorder));
   }
 
   /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */
