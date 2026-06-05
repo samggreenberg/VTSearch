@@ -53,7 +53,7 @@
         @if (taskProgressInfo.eta) {
           <span class="progress-eta">{{ taskProgressInfo.eta }}</span>
         }
-        <button class="btn btn--cancel btn--sm" (click)="onCancelTask($event)" title="Cancel this dataset load">Cancel</button>
+        <button class="btn btn--cancel btn--sm" (click)="onCancelTask($event)" [title]="taskKind === 'projection' ? 'Cancel building the projection' : 'Cancel this dataset load'">Cancel</button>
       </div>
     </div>
   </td>

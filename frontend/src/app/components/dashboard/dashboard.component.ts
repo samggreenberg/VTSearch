@@ -18,6 +18,7 @@ import { TopBarStateService } from '../../services/top-bar-state.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { DashboardModalsService } from '../../services/dashboard-modals.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
+import { BrowsePrepService } from '../../services/browse-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { DatasetRegistryEntry, DemoDataset, DetectorRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
 import { ProgressEventsService } from '../../services/progress-events.service';
@@ -169,6 +170,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private newThingFlows: NewThingFlowsService,
     public modals: DashboardModalsService,
     public loadingTasksSvc: DashboardLoadingTasksService,
+    public browsePrep: BrowsePrepService,
     private progressEvents: ProgressEventsService,
     private settingsState: SettingsStateService,
     columnsService: DashboardColumnsService,
@@ -788,11 +790,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Launch the VTSBrowse view for a dataset. The browseContextGuard loads the
-   *  dataset context if needed. Browsing works for any media type — the UMAP
-   *  projection and hex-tile pyramid are embedding-based and media-agnostic. */
+  /** Launch the VTSBrowse view for a dataset. Loads the dataset (if needed)
+   *  AND builds its projection first — with progress shown inline on the
+   *  dataset's row — so missing loads or projections surface here on the
+   *  dashboard, not after we've navigated into the browse window. Only once
+   *  both are ready does `BrowsePrepService` navigate to `/browse/:id`.
+   *  Browsing works for any media type — the UMAP projection and hex-tile
+   *  pyramid are embedding-based and media-agnostic. */
   browseDataset(dataset: DatasetRegistryEntry): void {
-    this.router.navigate(['/browse', dataset.id]);
+    this.browsePrep.prepareAndBrowse(dataset.id);
+  }
+
+  /** Cancel a dataset load row. Routes the browse-prep projection row to
+   *  `BrowsePrepService`; everything else is a real SSE load task. */
+  onCancelDatasetTask(taskId: string): void {
+    if (this.browsePrep.ownsTask(taskId)) {
+      this.browsePrep.cancel();
+    } else {
+      this.loadingTasksSvc.cancelLoadingTask(taskId);
+    }
+  }
+
+  /** Dismiss an errored dataset row (see `onCancelDatasetTask`). */
+  onDismissDatasetTask(taskId: string): void {
+    if (this.browsePrep.ownsTask(taskId)) {
+      this.browsePrep.dismiss();
+    } else {
+      this.loadingTasksSvc.dismissLoadingTask(taskId);
+    }
   }
 
   loadDetector(model: DetectorRegistryEntry): void {
@@ -989,6 +1014,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (
       this.trainLoading ||
       this.findLoading ||
+      this.browsePrep.preparing ||
       this.contextSwitch.switching ||
       this.datasetState.loading
     );
