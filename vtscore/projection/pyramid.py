@@ -364,9 +364,7 @@ def _level_membership(
     q, r = geom.assign(coords, radius)
     tx_all, ty_all = geom.tile_index(q, r, pyr.tile_span)
 
-    for txx, tyy, qq, rr, mid in zip(
-        tx_all.tolist(), ty_all.tolist(), q.tolist(), r.tolist(), ids.tolist()
-    ):
+    for txx, tyy, qq, rr, mid in zip(tx_all.tolist(), ty_all.tolist(), q.tolist(), r.tolist(), ids.tolist()):
         tile_cells = index.setdefault((int(txx), int(tyy)), {})
         tile_cells.setdefault((int(qq), int(rr)), []).append(int(mid))
 
