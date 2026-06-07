@@ -126,7 +126,7 @@ def _umap_layout(
 
     def _fit() -> None:
         try:
-            fit_result.append(reducer.fit_transform(mat))
+            fit_result.append(np.asarray(reducer.fit_transform(mat)))
         except Exception as exc:  # surfaced via fit_error below
             fit_error.append(exc)
 
