@@ -429,13 +429,18 @@ def remove_from_subset(body: dict):
     Re-bins the frozen subset layout onto its existing grid minus the removed
     points: the remaining points keep their exact 2-D positions and bins, only
     counts/representatives change.  The ``projection_id`` (layout identity) is
-    preserved so the canvas keeps the user's pan/zoom; a bumped
-    ``content_version`` busts the otherwise-immutable tile cache.  Returns the
-    updated subset meta for *shape*.
+    preserved and a bumped ``content_version`` busts the otherwise-immutable
+    tile cache.  The served ``bounds`` shrink to the survivors' extent so the
+    client re-frames to what's left (zoom-to-fit, minimap) instead of keeping
+    dead space where the culled points were — safe because bin assignment is
+    origin-independent; bounds only drive client framing.  Returns the updated
+    subset meta for *shape*.
 
     Powers the Browser's "Remove from Good" cull, which marks the items Bad via
     ``/api/medias/vote-bulk`` and then calls this to make them disappear.
     """
+    from dataclasses import replace
+
     from vtscore.projection import rebin_like
     from vtscore.projection import remove_ids as _remove_ids
     from vtscore.state.core import get_active_context
@@ -453,8 +458,11 @@ def remove_from_subset(body: dict):
     ctx._subset_ids = list(new_proj.ids)
     ctx._subset_job_id = None
     ctx._subset_content_version = getattr(ctx, "_subset_content_version", 0) + 1
-    # Re-bin every shape that was already built, each on its own preserved grid.
-    ctx._subset_pyramids = {s: rebin_like(new_proj, pyr) for s, pyr in ctx._subset_pyramids.items()}
+    # Re-bin every shape that was already built, each on its own preserved grid,
+    # then stamp the survivors' extent over rebin_like's kept template bounds.
+    ctx._subset_pyramids = {
+        s: replace(rebin_like(new_proj, pyr), bounds=new_proj.bounds) for s, pyr in ctx._subset_pyramids.items()
+    }
 
     return _subset_meta(ctx, shape)
 

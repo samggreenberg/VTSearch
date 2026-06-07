@@ -29,4 +29,24 @@ export class BrowseViewportService {
   requestRecenter(x: number, y: number): void {
     this.recenter$.next({ x, y });
   }
+
+  /**
+   * Arm a one-shot zoom-to-fit for the next meta the canvas receives. Used by
+   * the Remove-from-Good cull: the same projection id comes back (so the
+   * canvas would normally hold the user's pan/zoom), but the survivors'
+   * bounds have shrunk and the old framing leaves dead space where the culled
+   * cluster was — re-frame to what's left instead.
+   */
+  requestFitOnNextMeta(): void {
+    this.pendingFit = true;
+  }
+
+  /** Consume the one-shot fit request, returning whether it was set. */
+  consumeFitOnNextMeta(): boolean {
+    const fit = this.pendingFit;
+    this.pendingFit = false;
+    return fit;
+  }
+
+  private pendingFit = false;
 }

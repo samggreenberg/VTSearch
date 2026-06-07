@@ -1061,9 +1061,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get findHint(): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
-    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and a detector';
-    if (nDatasets === 0) return 'Select a dataset';
-    if (nModels === 0) return 'Select a detector';
+    // "row above": selection means checking a table row — a dataset can be
+    // loaded (named in the top bar) while its row is unchecked, so a bare
+    // "select a dataset" reads as already satisfied.
+    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and a detector row above';
+    if (nDatasets === 0) return 'Select a dataset row in the table above';
+    if (nModels === 0) return 'Select a detector row in the table above';
     if (!this.findMediaTypesMatch()) return 'Media type mismatch';
     if (this.hasUntrainedModel()) return 'Selected detector has no training labels';
     return 'Score selected datasets with selected detectors';
@@ -1072,7 +1075,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get labelHint(): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
-    if (nDatasets === 0) return 'Select a dataset';
+    if (nDatasets === 0) return 'Select a dataset row in the table above';
     if (nDatasets > 1) return 'Select exactly 1 dataset';
     if (nModels === 0) return 'Create a new detector and start training';
     if (nModels > 1) return 'Select exactly 1 detector';

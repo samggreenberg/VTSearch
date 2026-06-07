@@ -147,8 +147,12 @@
   overflow: hidden;
 }
 
+// ``flex-basis: 0`` (not ``auto``) is load-bearing: the docked minimap sets an
+// explicit pixel height on its canvas from a ResizeObserver, so a content-sized
+// basis would feed that height back into this row and ratchet it until it
+// swallows the whole panel, crushing the selection list above to nothing.
 .browse-side-meta {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 180px;
   display: flex;
   align-items: stretch;

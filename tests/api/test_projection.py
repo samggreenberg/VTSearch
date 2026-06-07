@@ -531,6 +531,37 @@ class TestSubsetRemove:
         np.testing.assert_array_equal(after.coords[after.ids.index(keep_id)], keep_coord)
 
     @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_remove_shrinks_bounds_to_survivors(self, _mock_fit, client):
+        """Served bounds track the surviving points so the client re-frames.
+
+        ``rebin_like`` keeps the template's bounds (grid identity), but the
+        route stamps the reduced projection's extent over them — otherwise the
+        browse canvas's post-cull zoom-to-fit and the minimap keep framing
+        dead space where the culled points used to be.
+        """
+        ctx = get_active_context()
+        ids = sorted(ctx.medias.keys())[:6]
+        client.post("/api/projection/build", json={"ids": ids})
+        _wait_projection()
+
+        proj = ctx._subset_projection
+        bounds_before = ctx._subset_pyramids["hex"].bounds
+        # Remove the point at the extreme right of the layout so the surviving
+        # extent provably shrinks along x.
+        xmax_idx = int(np.argmax(proj.coords[:, 0]))
+        removed = [proj.ids[xmax_idx]]
+
+        meta = client.post("/api/projection/subset/remove", json={"ids": removed}).get_json()
+
+        survivors = ctx._subset_projection
+        assert tuple(meta["bounds"]) == survivors.bounds
+        assert tuple(meta["bounds"]) != tuple(bounds_before)
+        assert meta["bounds"][2] < bounds_before[2]  # xmax shrank
+        # The stored pyramid serves the same shrunken bounds on later meta GETs.
+        again = client.get("/api/projection/meta", query_string={"subset": "1"}).get_json()
+        assert tuple(again["bounds"]) == survivors.bounds
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
     def test_remove_bumps_version_each_call(self, _mock_fit, client):
         ctx = get_active_context()
         ids = sorted(ctx.medias.keys())[:6]

@@ -21,6 +21,14 @@
   height: 100%;
   box-shadow: none;
   border-radius: var(--radius-sm);
+
+  // Out of flow so the explicit pixel size the ResizeObserver writes onto the
+  // canvas can never feed back into the host's (and the side panel's) layout —
+  // the panel cell drives the canvas size, never the reverse.
+  canvas {
+    position: absolute;
+    inset: 0;
+  }
 }
 
 canvas {

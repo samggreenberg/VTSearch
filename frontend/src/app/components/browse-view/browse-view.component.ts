@@ -184,6 +184,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     private router: Router,
     private browseSubset: BrowseSubsetService,
     private selection: BrowseSelectionService,
+    private browseViewport: BrowseViewportService,
     private mediasApi: MediasApiService,
     private dialog: VtDialogService,
     private toast: ToastService,
@@ -544,7 +545,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   onReproject(): void {
     if (this.subset && this.subsetIds.length === 0) return;
-    this.selection.clear();
+    // The same items come back in new positions, and selection is id-based —
+    // arm the one-shot survive mark so the canvas keeps it when the fresh
+    // projection id lands, instead of treating the re-fit as a new projection.
+    this.selection.markSurviveProjectionChange();
     this.status = 'building';
     this.buildProgress = 0;
     this.buildTotal = 0;
@@ -562,6 +566,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         this.pollBuildStatus();
       },
       error: (err) => {
+        // Disarm: no new projection is coming, so the mark would otherwise
+        // linger and wrongly exempt the next genuine projection change.
+        this.selection.consumeSurviveProjectionChange();
         this.status = 'error';
         this.errorMessage =
           err?.error?.message || err?.error?.error || 'Failed to start re-projection';
@@ -605,7 +612,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * remaining items keep their exact 2-D positions and bins — the server
    * re-bins the frozen layout in place (no UMAP re-fit), returning the same
    * ``projection_id`` with a bumped ``content_version`` so only the tile cache
-   * refreshes while the canvas holds the user's pan/zoom.
+   * refreshes. The canvas then zooms to fit the survivors (via the one-shot
+   * fit request below), since the old framing leaves dead space wherever the
+   * culled items used to be.
    */
   private dropFromBrowse(removedIds: number[]): void {
     const removed = new Set(removedIds);
@@ -625,7 +634,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       .subsetRemove(this.binShape, removedIds)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (meta) => this.applyMeta(meta),
+        next: (meta) => {
+          // The survivors' bounds shrank; re-frame to them rather than leaving
+          // dead space where the culled cluster was.
+          this.browseViewport.requestFitOnNextMeta();
+          this.applyMeta(meta);
+        },
         error: () =>
           this.toast.error({
             message: 'Items were removed from Good, but the browse view could not refresh.',
