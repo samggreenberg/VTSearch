@@ -32,6 +32,16 @@ export class BrowseSelectionService {
     return this.selected.size;
   }
 
+  /** A snapshot array of the currently-selected media ids (insertion order). */
+  ids(): number[] {
+    return Array.from(this.selected);
+  }
+
+  /** Remove a single id from the selection. */
+  remove(id: number): void {
+    if (this.selected.delete(id)) this.bump();
+  }
+
   /** A monotonically increasing token that changes on every mutation. */
   get version(): number {
     return this._version;

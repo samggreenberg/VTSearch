@@ -189,13 +189,7 @@
             },
             "type": "object"
           },
-          "browse_minimap_height": {
-            "type": "integer"
-          },
-          "browse_minimap_visible": {
-            "type": "boolean"
-          },
-          "browse_minimap_width": {
+          "browse_panel_width": {
             "type": "integer"
           },
           "browse_thumbnail_border": {
@@ -4075,13 +4069,7 @@
           "browse_bin_shape": {},
           "browse_colormap": {},
           "browse_icon_size": {},
-          "browse_minimap_height": {
-            "type": "integer"
-          },
-          "browse_minimap_visible": {
-            "type": "boolean"
-          },
-          "browse_minimap_width": {
+          "browse_panel_width": {
             "type": "integer"
           },
           "browse_thumbnail_border": {},

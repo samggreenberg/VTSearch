@@ -193,17 +193,14 @@ class UserSettings(BaseModel):
     autopilot_resort_interval: Annotated[int, _clamp_min(1)] = 10
     autopilot_goal_diversity: Annotated[int, _clamp_min(1)] = 40
 
-    # VTSBrowse overview minimap (the small heatmap + viewport box in the
-    # lower-right of the browse canvas). These persist the user's last
-    # show/hide choice and the size they dragged it to so the overview
-    # comes back the same way on the next visit. They are stored in the
-    # settings set but are deliberately NOT surfaced as Settings-modal
-    # widgets - the controls live on the minimap itself (a close button
-    # and a corner resize handle). Width/height are in CSS pixels, clamped
-    # to a sane on-screen range.
-    browse_minimap_visible: bool = True
-    browse_minimap_width: Annotated[int, _clamp(120, 600)] = 200
-    browse_minimap_height: Annotated[int, _clamp(90, 450)] = 150
+    # VTSBrowse side-panel width (CSS px). The browse view docks a
+    # selection panel (selected-item grid + the legend and overview
+    # minimap) to the right of the canvas, separated by a draggable
+    # divider; this persists the width the user dragged it to so the
+    # panel comes back the same way on the next visit. Not surfaced as a
+    # Settings-modal widget - the divider drives it. Clamped to a sane
+    # on-screen range.
+    browse_panel_width: Annotated[int, _clamp(260, 800)] = 360
 
     # VTSBrowse per-media-type display preferences. Each is a
     # ``{media_type_id: value}`` dict so a user can tune the projection

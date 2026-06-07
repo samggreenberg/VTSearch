@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, OnDestroy, NgZone, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -7,13 +7,7 @@ import { BrowseCanvasComponent, HexHoverEvent } from '../browse-canvas/browse-ca
 import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
 import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
 import { BrowseSelectionPanelComponent } from '../browse-selection-panel/browse-selection-panel.component';
-import {
-  BrowseMinimapComponent,
-  MINIMAP_MAX_HEIGHT,
-  MINIMAP_MAX_WIDTH,
-  MINIMAP_MIN_HEIGHT,
-  MINIMAP_MIN_WIDTH,
-} from '../browse-minimap/browse-minimap.component';
+import { BrowseMinimapComponent } from '../browse-minimap/browse-minimap.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { IconComponent } from '../icon/icon.component';
 import { ProjectionApiService } from '../../services/projection-api.service';
@@ -56,6 +50,9 @@ import type { SettingsUpdate } from '../../generated/api-client/models/settings-
 })
 export class BrowseViewComponent implements OnInit, OnDestroy {
   @ViewChild(BrowseCanvasComponent) private canvas?: BrowseCanvasComponent;
+  /** The 3-column grid (canvas | divider | side panel); the divider drag
+   *  measures against its box. Only present in the ``ready`` state. */
+  @ViewChild('content') private content?: ElementRef<HTMLElement>;
 
   meta: ProjectionMeta | null = null;
   mediaType = '';
@@ -122,10 +119,20 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   subset = false;
   subsetIds: number[] = [];
 
-  /** Overview minimap show/hide + size, mirrored from the settings set. */
-  minimapVisible = true;
-  minimapWidth = 200;
-  minimapHeight = 150;
+  /**
+   * Width (CSS px) of the docked side panel (selection list + legend +
+   * overview minimap), mirrored from the ``browse_panel_width`` setting and
+   * driven by the draggable divider between the canvas and the panel.
+   */
+  panelWidth = 360;
+  /** Clamp + divider geometry, mirroring the Find view's panel dividers. */
+  private static readonly PANEL_MIN = 260;
+  private static readonly PANEL_MAX = 800;
+  private static readonly CANVAS_MIN = 200;
+  private static readonly DIVIDER_WIDTH = 8;
+  private dragging = false;
+  private boundPanelMove = this.onPanelMouseMove.bind(this);
+  private boundPanelUp = this.onPanelMouseUp.bind(this);
 
   /**
    * Per-click zoom step for the on-screen +/- buttons. Larger than the wheel's
@@ -148,25 +155,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     private settingsState: SettingsStateService,
     private route: ActivatedRoute,
     private browseSubset: BrowseSubsetService,
+    private ngZone: NgZone,
   ) {}
 
   ngOnInit(): void {
     this.settingsState.settings$.pipe(takeUntil(this.destroy$)).subscribe((settings) => {
       if (!settings) return;
       this.lastSettings = settings;
-      this.minimapVisible = settings.browse_minimap_visible !== false;
-      if (settings.browse_minimap_width != null) {
-        this.minimapWidth = this.clamp(
-          settings.browse_minimap_width,
-          MINIMAP_MIN_WIDTH,
-          MINIMAP_MAX_WIDTH,
-        );
-      }
-      if (settings.browse_minimap_height != null) {
-        this.minimapHeight = this.clamp(
-          settings.browse_minimap_height,
-          MINIMAP_MIN_HEIGHT,
-          MINIMAP_MAX_HEIGHT,
+      if (settings.browse_panel_width != null) {
+        this.panelWidth = this.clamp(
+          settings.browse_panel_width,
+          BrowseViewComponent.PANEL_MIN,
+          BrowseViewComponent.PANEL_MAX,
         );
       }
       this.applyBrowsePrefsForMediaType();
@@ -222,6 +222,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.destroy$.next();
     this.destroy$.complete();
     if (this.pollTimer) clearTimeout(this.pollTimer);
+    document.removeEventListener('mousemove', this.boundPanelMove);
+    document.removeEventListener('mouseup', this.boundPanelUp);
     this.tileCache.clear();
   }
 
@@ -318,23 +320,44 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.settingsState.update({ [key]: next } as SettingsUpdate).subscribe();
   }
 
-  /** Toggle the overview minimap and persist the choice. */
-  setMinimapVisible(visible: boolean): void {
-    this.minimapVisible = visible;
-    this.settingsState.update({ browse_minimap_visible: visible }).subscribe();
-  }
-
-  /** Persist the size the user dragged the minimap to. */
-  onMinimapResized(size: { width: number; height: number }): void {
-    this.minimapWidth = size.width;
-    this.minimapHeight = size.height;
-    this.settingsState
-      .update({ browse_minimap_width: size.width, browse_minimap_height: size.height })
-      .subscribe();
-  }
-
   private clamp(value: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(hi, value));
+  }
+
+  /** Largest the side panel can grow to while leaving the canvas its minimum. */
+  private panelMax(): number {
+    const layoutWidth = this.content?.nativeElement.getBoundingClientRect().width ?? 0;
+    const fit = layoutWidth - BrowseViewComponent.DIVIDER_WIDTH - BrowseViewComponent.CANVAS_MIN;
+    return Math.min(BrowseViewComponent.PANEL_MAX, Math.max(BrowseViewComponent.PANEL_MIN, fit));
+  }
+
+  // --- Side-panel divider drag (mirrors the Find view's panel dividers) ----
+
+  onDividerMouseDown(event: MouseEvent): void {
+    event.preventDefault();
+    this.dragging = true;
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('mousemove', this.boundPanelMove);
+      document.addEventListener('mouseup', this.boundPanelUp);
+    });
+  }
+
+  private onPanelMouseMove(event: MouseEvent): void {
+    if (!this.dragging || !this.content) return;
+    const rect = this.content.nativeElement.getBoundingClientRect();
+    // The panel is on the right, so its width grows as the cursor moves left.
+    const width = this.clamp(rect.right - event.clientX, BrowseViewComponent.PANEL_MIN, this.panelMax());
+    this.ngZone.run(() => {
+      this.panelWidth = width;
+    });
+  }
+
+  private onPanelMouseUp(): void {
+    if (!this.dragging) return;
+    this.dragging = false;
+    document.removeEventListener('mousemove', this.boundPanelMove);
+    document.removeEventListener('mouseup', this.boundPanelUp);
+    this.settingsState.update({ browse_panel_width: Math.round(this.panelWidth) }).subscribe();
   }
 
   /** Switch the bin shape from the toggle, persisting the choice. */

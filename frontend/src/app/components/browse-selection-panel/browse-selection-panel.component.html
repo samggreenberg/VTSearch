@@ -1,0 +1,75 @@
+<div class="bsp">
+  <div class="bsp-header">
+    <h3 class="bsp-title" [title]="'Items you have selected on the canvas (' + count + ')'">
+      Selection ({{ count | number }})
+    </h3>
+    <button
+      type="button"
+      class="bsp-clear"
+      [disabled]="count === 0"
+      (click)="clear()"
+      title="Clear the whole selection">
+      Clear
+    </button>
+  </div>
+
+  <div class="bsp-toolbar">
+    <span class="bsp-sort-label" title="Choose how the selected items are ordered">Sort:</span>
+    <label for="bsp-sort-select" class="sr-only">Sort selected items</label>
+    <select
+      id="bsp-sort-select"
+      class="bsp-sort-select"
+      [ngModel]="sortMode"
+      (ngModelChange)="onSortChange($event)"
+      title="Order selected items by when they were selected, name, or ID">
+      <option value="time-desc">Newest first</option>
+      <option value="time-asc">Oldest first</option>
+      <option value="name-asc">Name A–Z</option>
+      <option value="name-desc">Name Z–A</option>
+      <option value="id-asc">ID ↑</option>
+    </select>
+    <vt-view-controls
+      side="right"
+      [currentMediaType]="mediaType"
+      [showFocus]="false"
+      class="bsp-view-controls" />
+  </div>
+
+  <div
+    class="bsp-list"
+    [class.grid-layout]="isGrid"
+    [style.--grid-goal-width]="gridGoalWidth + 'px'">
+    @if (count === 0) {
+      <p class="bsp-empty">Nothing selected. Click bins on the canvas to add items.</p>
+    }
+    @for (entry of sortedEntries; track trackById($index, entry)) {
+      <div
+        class="bsp-entry"
+        [class.bsp-entry-grid]="isGrid"
+        role="button"
+        tabindex="0"
+        [attr.aria-label]="'Selected: ' + entry.name + ' (click to remove)'"
+        title="Click to remove from selection"
+        (click)="onEntryClick(entry.id)"
+        (keydown)="onEntryKeydown($event, entry.id)">
+        @if (hasThumbnailUrl(entry.id)) {
+          <span class="bsp-thumb-wrap">
+            <img
+              class="bsp-thumb"
+              [src]="thumbnailUrl(entry.id)"
+              [alt]="entry.name"
+              loading="lazy"
+              (error)="onThumbnailError(thumbnailUrl(entry.id))" />
+          </span>
+        } @else if (placeholderIcon(entry.id)) {
+          <span class="bsp-placeholder">{{ placeholderIcon(entry.id) }}</span>
+        }
+        @if (isGrid) {
+          <span class="bsp-name-grid">{{ entry.name }}</span>
+        } @else {
+          <span class="bsp-name">{{ entry.name }}</span>
+        }
+      </div>
+    }
+  </div>
+</div>
