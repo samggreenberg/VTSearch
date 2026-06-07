@@ -20,6 +20,12 @@ type IconSize = (typeof ICON_SIZES)[number];
 export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   @Input() side: 'left' | 'right' = 'left';
   @Input() currentMediaType = '';
+  /**
+   * Whether to show the click/hover focus toggle. The VTSBrowse selection
+   * panel reuses this control for its Grid/List + size buttons but has no
+   * good/bad voting, so it hides the focus group with ``[showFocus]="false"``.
+   */
+  @Input() showFocus = true;
 
   viewMode: 'grid' | 'list' = 'list';
   focusMode: 'click' | 'hover' = 'click';

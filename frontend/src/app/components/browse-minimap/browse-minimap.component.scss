@@ -11,6 +11,18 @@
   line-height: 0;
 }
 
+// Docked in the side panel's meta-row: fill the cell instead of floating, and
+// let the ResizeObserver size the canvas to match. No drop shadow — the panel
+// already frames it.
+:host(.dock) {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  box-shadow: none;
+  border-radius: var(--radius-sm);
+}
+
 canvas {
   display: block;
   cursor: crosshair;

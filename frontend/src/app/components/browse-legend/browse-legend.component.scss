@@ -1,11 +1,6 @@
-// Vertical color key pinned to the middle of the canvas's right edge. Sits
-// clear of the top-right control cluster and the bottom-right minimap. Purely
-// informational, so it never intercepts pan/zoom on the canvas beneath it.
+// Vertical color key for the density shading. Docked in the browse side
+// panel's bottom meta-row beside the overview minimap. Purely informational.
 .browse-legend {
-  position: absolute;
-  right: var(--space-md);
-  top: 50%;
-  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -15,7 +10,6 @@
   border-radius: var(--radius-md);
   padding: var(--space-sm);
   pointer-events: none;
-  opacity: 0.9;
 }
 
 .browse-legend-title {

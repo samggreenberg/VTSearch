@@ -134,9 +134,7 @@ get_audio_playing  # noqa: F821
 get_swipe_animation  # noqa: F821
 get_hide_autopilot  # noqa: F821
 get_autopilot_resort_interval  # noqa: F821
-get_browse_minimap_visible  # noqa: F821
-get_browse_minimap_width  # noqa: F821
-get_browse_minimap_height  # noqa: F821
+get_browse_panel_width  # noqa: F821
 get_browse_bin_shape  # noqa: F821
 get_browse_colormap  # noqa: F821
 get_browse_icon_size  # noqa: F821

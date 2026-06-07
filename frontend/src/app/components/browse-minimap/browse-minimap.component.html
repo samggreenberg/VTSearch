@@ -1,14 +1,16 @@
 <canvas #canvas (mousedown)="onCanvasDown($event)"></canvas>
-<button
-  type="button"
-  class="minimap-close"
-  (click)="closed.emit()"
-  title="Hide overview"
-  aria-label="Hide overview">
-  <vt-icon type="x-circle" [size]="14"></vt-icon>
-</button>
-<span
-  class="minimap-resize"
-  (mousedown)="onResizeDown($event)"
-  title="Resize overview"
-  aria-hidden="true"></span>
+@if (!dock) {
+  <button
+    type="button"
+    class="minimap-close"
+    (click)="closed.emit()"
+    title="Hide overview"
+    aria-label="Hide overview">
+    <vt-icon type="x-circle" [size]="14"></vt-icon>
+  </button>
+  <span
+    class="minimap-resize"
+    (mousedown)="onResizeDown($event)"
+    title="Resize overview"
+    aria-hidden="true"></span>
+}

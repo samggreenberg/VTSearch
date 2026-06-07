@@ -66,12 +66,9 @@ class AppSettingsSchema(Schema):
     autopilot_goal_diversity = fields.Integer()
     disable_achievements = fields.Boolean()
 
-    # VTSBrowse overview-minimap show/hide + size. Persisted but not shown
-    # as Settings-modal widgets; the minimap's own close button and resize
-    # handle drive these.
-    browse_minimap_visible = fields.Boolean()
-    browse_minimap_width = fields.Integer()
-    browse_minimap_height = fields.Integer()
+    # VTSBrowse side-panel width (CSS px). Persisted but not shown as a
+    # Settings-modal widget; the panel's draggable divider drives it.
+    browse_panel_width = fields.Integer()
 
     # VTSBrowse per-media-type display prefs (bin shape, density colormap,
     # on-screen cell size). ``{media_type_id: value}`` dicts driven by the
@@ -187,9 +184,7 @@ class SettingsUpdateSchema(Schema):
     autopilot_goal_diversity = fields.Integer()
     disable_achievements = fields.Boolean()
 
-    browse_minimap_visible = fields.Boolean()
-    browse_minimap_width = fields.Integer()
-    browse_minimap_height = fields.Integer()
+    browse_panel_width = fields.Integer()
 
     # Per-media-type dicts; the setters in ``settings.py`` validate each
     # value against its enum (BinShape / BrowseColormap / BrowseIconSize),

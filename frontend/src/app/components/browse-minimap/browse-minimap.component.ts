@@ -2,6 +2,7 @@ import {
   Component,
   ElementRef,
   EventEmitter,
+  HostBinding,
   Input,
   NgZone,
   OnChanges,
@@ -57,10 +58,20 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   @Input() height = 150;
   /** Density colormap preset; mirrors the main canvas so the overview matches. */
   @Input() colormap: BrowseColormapId = 'auto';
-  /** Hide request from the close button. */
+  /**
+   * Docked mode: the minimap fills its container (the browse side panel's
+   * meta-row) and sizes its canvas to fit via a {@link ResizeObserver},
+   * rather than floating over the canvas at an explicit size. In this mode
+   * the close button and corner resize handle are hidden — the panel owns
+   * the geometry — but click/drag-to-navigate stays live.
+   */
+  @Input() @HostBinding('class.dock') dock = false;
+  /** Hide request from the close button (floating mode only). */
   @Output() closed = new EventEmitter<void>();
-  /** Final size after a resize drag, for persistence. */
+  /** Final size after a resize drag, for persistence (floating mode only). */
   @Output() resized = new EventEmitter<{ width: number; height: number }>();
+
+  private resizeObserver: ResizeObserver | null = null;
 
   private ctx!: CanvasRenderingContext2D;
   private dpr = 1;
@@ -90,10 +101,12 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     private ngZone: NgZone,
     private tileCache: TileCacheService,
     private viewport: BrowseViewportService,
+    private host: ElementRef<HTMLElement>,
   ) {}
 
   ngOnInit(): void {
     this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
+    if (this.dock) this.startDockSizing();
     this.resizeCanvas();
 
     // Overview tiles arrive asynchronously; repaint as the cache fills. The
@@ -133,9 +146,32 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.tileLoadSub?.unsubscribe();
     this.viewportSub?.unsubscribe();
     this.themeObserver?.disconnect();
+    this.resizeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.detachResizeListeners();
     this.detachNavListeners();
+  }
+
+  /**
+   * Docked mode: track the host element's box and resize the canvas to fill
+   * it, so the overview grows/shrinks with the side panel's divider drag. The
+   * observer fires outside Angular, so the resize never triggers change
+   * detection — only a canvas repaint.
+   */
+  private startDockSizing(): void {
+    const el = this.host.nativeElement;
+    this.ngZone.runOutsideAngular(() => {
+      this.resizeObserver = new ResizeObserver(() => {
+        const w = Math.max(MINIMAP_MIN_WIDTH, Math.round(el.clientWidth));
+        const h = Math.max(MINIMAP_MIN_HEIGHT, Math.round(el.clientHeight));
+        if (w === this.width && h === this.height) return;
+        this.width = w;
+        this.height = h;
+        this.resizeCanvas();
+        this.requestRedraw();
+      });
+      this.resizeObserver.observe(el);
+    });
   }
 
   private resizeCanvas(): void {
