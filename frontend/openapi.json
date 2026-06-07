@@ -2719,6 +2719,15 @@
           "cy": {
             "type": "number"
           },
+          "member_ids": {
+            "default": null,
+            "description": "All media ids aggregated in this cell (for selection).",
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          },
           "q": {
             "type": "integer"
           },

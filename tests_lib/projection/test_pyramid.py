@@ -114,7 +114,7 @@ def test_tile_member_ids_partition_each_tile(bin_shape):
 
     # Across one level, every point is recovered exactly once.
     level0_members: list[int] = []
-    for (level, tx, ty) in pyr.tiles:
+    for level, tx, ty in pyr.tiles:
         if level != 0:
             continue
         for member_list in tile_member_ids(pyr, proj, level, tx, ty).values():
