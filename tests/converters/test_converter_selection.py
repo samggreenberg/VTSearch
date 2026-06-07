@@ -726,7 +726,7 @@ class TestFolderImporterWithConverters:
 
 # ===========================================================================
 # Multi-media import: SourceSpec + effective_source_specs + API plumbing.
-# See docs/plans/multi-media-import.md.
+# See docs/EXTENDING-media.md.
 # ===========================================================================
 
 

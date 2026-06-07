@@ -160,7 +160,7 @@ export class DatasetImporterModalComponent implements OnInit {
   private sfDatasetNameDirty = false;
   /** Multi-media import rows for the server_folder picker.  Each row is a
    *  ``(source_type, converter|null, params)`` triple; see
-   *  ``docs/plans/multi-media-import.md``. */
+   *  ``docs/EXTENDING-media.md``. */
   sfSourceSpecs: SourceSpec[] = [];
 
   /** Auto-detect result for the local-folder / local-files picker.  Set

@@ -1,7 +1,7 @@
 """Server-folder importer – scans a directory of media files and embeds them.
 
-The importer participates in the new multi-media flow (see
-:doc:`/docs/plans/multi-media-import`).  The user picks an output media
+The importer participates in the multi-media flow (see
+:doc:`/docs/EXTENDING-media`).  The user picks an output media
 type and an ordered list of :class:`~vtscore.datasets.importers.base.SourceSpec`
 rows that declare which media types to scan for.  Each row is either:
 
@@ -138,7 +138,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
     The user supplies an absolute filesystem path (on the **server**) plus
     an output media type and a list of :class:`SourceSpec` rows describing
     which source types to scan for (and which converters to apply).  See
-    :doc:`/docs/plans/multi-media-import` for the full design.
+    :doc:`/docs/EXTENDING-media` for the full design.
 
     When the output media type is ``"image"``, any ``*.pdf`` files in the
     folder are also processed: each page is rendered as a separate image.
