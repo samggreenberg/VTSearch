@@ -477,9 +477,18 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const isHovered =
       this.hoveredCell && this.hoveredCell.q === cell.q && this.hoveredCell.r === cell.r;
     if (isHovered) {
+      // Clip so the highlight replaces the cell's own edge pixels rather than
+      // bleeding outward onto its neighbours. A centred stroke straddles the
+      // path (half its width spills over the next cell, which later cells then
+      // paint over inconsistently); clipping keeps the full stroke inside, so
+      // doubling the width yields a 2px band that reads as an inset border and
+      // never changes the cell's footprint.
+      ctx.save();
+      ctx.clip();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 4;
       ctx.stroke();
+      ctx.restore();
     } else if (thumb && !single && this.thumbnailBorder > 0) {
       // Pile thumbnail: a band whose colormap colour encodes how many items are
       // stacked under this tile. Clipped to the cell so the full width sits just
