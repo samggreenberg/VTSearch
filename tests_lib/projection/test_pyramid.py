@@ -123,6 +123,27 @@ def test_tile_member_ids_partition_each_tile(bin_shape):
     assert all_recovered == set(ids)
 
 
+def test_tile_member_ids_caches_per_level():
+    """The first tile fetched at a level fills the shared per-level cache."""
+    coords = _cluster_cloud()
+    proj = _projection(coords)
+    pyr = build_pyramid(proj, n_levels=4)
+    assert pyr._member_index == {}
+
+    # Pick a real, populated tile at level 1.
+    level = 1
+    (_lvl, tx, ty) = next(key for key in pyr.tiles if key[0] == level)
+    members = tile_member_ids(pyr, proj, level, tx, ty)
+    assert members  # non-empty for a real tile
+
+    # Level 1 is now cached, holding *every* level-1 tile (not just the one asked for).
+    assert level in pyr._member_index
+    assert set(pyr._member_index[level]) == {(t, u) for (lvl, t, u) in pyr.tiles if lvl == level}
+
+    # A second fetch returns the same cached object — no recompute.
+    assert tile_member_ids(pyr, proj, level, tx, ty) is pyr._member_index[level][(tx, ty)]
+
+
 def test_tile_member_ids_empty_for_missing_tile():
     proj = _projection(_cluster_cloud())
     pyr = build_pyramid(proj, n_levels=3)
