@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Rectangle
 
 LOCAL_TZ = ZoneInfo("America/New_York")
 WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -54,6 +55,33 @@ for d in range(7):
         xs.append(h)
         ys.append(d)
         sizes.append(c / max_count * 600 + 10)
+
+# Highlight standard working hours: 09:00-17:00, Mon-Fri.
+# Hour bucket h is centered at x=h and spans [h, h+1); the 09:00-17:00 window
+# covers buckets 9..16, so the box edges sit at x=8.5 and x=16.5. Mon-Fri are
+# rows 0..4 (Mon=0 at top after invert_yaxis), so y edges sit at -0.5 and 4.5.
+working_box = Rectangle(
+    (8.5, -0.5),
+    16.5 - 8.5,
+    4.5 - (-0.5),
+    fill=False,
+    edgecolor="#d29922",
+    linewidth=2.0,
+    linestyle="--",
+    zorder=5,
+)
+ax.add_patch(working_box)
+ax.annotate(
+    "Working hours (9-5, M-F)",
+    xy=(8.5, -0.5),
+    xytext=(0, 4),
+    textcoords="offset points",
+    fontsize=8,
+    color="#d29922",
+    fontweight="bold",
+    ha="left",
+    va="bottom",
+)
 
 ax.scatter(xs, ys, s=sizes, color="#238636", alpha=0.85, edgecolors="white", linewidths=0.5)
 
