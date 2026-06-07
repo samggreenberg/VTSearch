@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import threading
+
 import numpy as np
 import pytest
 
+import vtscore.projection.umap_projection as up
 from vtscore.projection.umap_projection import Projection, fit_projection
 
 
@@ -90,3 +93,58 @@ def test_progress_callback_invoked():
     )
     assert seen  # at least one milestone reported
     assert all(evt[0] == "projecting" for evt in seen)
+
+
+def test_umap_fit_emits_elapsed_heartbeats(monkeypatch):
+    """While the (blocking) UMAP fit runs, fit_projection ticks elapsed-seconds
+    heartbeats so the browse view never shows dead airtime.
+
+    Synchronization is event-based (not sleep-based): a fake reducer blocks
+    until the test has observed at least one heartbeat, then releases.
+    """
+    import umap
+
+    release = threading.Event()  # lets the fake fit finish
+    saw_heartbeat = threading.Event()
+
+    class _FakeReducer:
+        def __init__(self, **_kwargs):
+            pass
+
+        def fit_transform(self, mat):
+            release.wait(timeout=5)
+            return np.zeros((mat.shape[0], 2), dtype=np.float32)
+
+    monkeypatch.setattr(umap, "UMAP", _FakeReducer)
+    monkeypatch.setattr(up, "_HEARTBEAT_SECONDS", 0.02)
+
+    seen: list[tuple[str, str, int, int]] = []
+
+    def _on_progress(status, message, current, total):
+        seen.append((status, message, current, total))
+        if "elapsed" in message:
+            saw_heartbeat.set()
+
+    n, d = 12, 8
+    result: list[Projection] = []
+
+    def _run():
+        result.append(fit_projection(_matrix(n, d), list(range(n)), on_progress=_on_progress))
+
+    worker = threading.Thread(target=_run, name="fit-under-test")
+    worker.start()
+    try:
+        assert saw_heartbeat.wait(timeout=5), "expected at least one elapsed heartbeat"
+    finally:
+        release.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+
+    proj = result[0]
+    assert proj.method == "umap"
+    assert proj.coords.shape == (n, 2)
+    # Heartbeats are indeterminate (total == 0) so the frontend bar animates
+    # instead of freezing at 0/N for the whole fit.
+    heartbeats = [evt for evt in seen if "elapsed" in evt[1]]
+    assert heartbeats
+    assert all(total == 0 for *_rest, total in heartbeats)
