@@ -24,6 +24,8 @@ never pulls in numba's JIT until an actual fit runs.
 
 from __future__ import annotations
 
+import threading
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -32,6 +34,14 @@ import numpy as np
 
 # Matches the ingest progress-callback shape (status, message, current, total).
 ProgressCallback = Callable[[str, str, int, int], None]
+
+# How often the UMAP fit emits a "still working" heartbeat.  UMAP's
+# ``fit_transform`` is one opaque blocking call (the epoch loop runs inside
+# numba with no per-epoch Python callback), so there's no real fraction to
+# report; instead we tick elapsed seconds on this cadence so the UI shows a
+# live counter and an animated bar instead of dead airtime.  The browse view
+# polls ``/api/projection/meta`` once a second, so a 1 s heartbeat lines up.
+_HEARTBEAT_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -134,7 +144,10 @@ def fit_projection(
         _progress("projecting", "PCA fallback done", n, n)
         return Projection(projection_id, list(ids), coords, "pca")
 
-    _progress("projecting", f"UMAP fit ({n} points)", 0, n)
+    # total=0 keeps the frontend bar in its animated *indeterminate* state for
+    # the whole fit (a non-zero total would freeze it at 0/N — the dead airtime
+    # this code exists to kill); the message carries the live elapsed-seconds.
+    _progress("projecting", f"UMAP fit ({n} points)", 0, 0)
     import umap
 
     reducer = umap.UMAP(
@@ -144,6 +157,32 @@ def fit_projection(
         metric="euclidean",
         random_state=random_state,
     )
-    coords = np.ascontiguousarray(reducer.fit_transform(mat), dtype=np.float32)
+
+    # UMAP's fit is a single blocking call with no per-epoch hook, so we run it
+    # on a worker thread and tick an elapsed-seconds heartbeat from here while
+    # it's alive.  Anything the worker raises is re-raised in this thread.
+    fit_result: list[np.ndarray] = []
+    fit_error: list[Exception] = []
+
+    def _fit() -> None:
+        try:
+            fit_result.append(reducer.fit_transform(mat))
+        except Exception as exc:  # surfaced via fit_error below
+            fit_error.append(exc)
+
+    worker = threading.Thread(target=_fit, name="umap-fit", daemon=True)
+    started = time.monotonic()
+    worker.start()
+    while True:
+        worker.join(timeout=_HEARTBEAT_SECONDS)
+        if not worker.is_alive():
+            break
+        elapsed = int(time.monotonic() - started)
+        _progress("projecting", f"UMAP fit ({n} points) — {elapsed}s elapsed", 0, 0)
+
+    if fit_error:
+        raise fit_error[0]
+
+    coords = np.ascontiguousarray(fit_result[0], dtype=np.float32)
     _progress("projecting", "UMAP fit done", n, n)
     return Projection(projection_id, list(ids), coords, "umap")
