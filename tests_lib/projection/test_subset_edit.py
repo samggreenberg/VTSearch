@@ -63,7 +63,7 @@ def test_rebin_like_keeps_bins_for_survivors():
     assert rebinned.tile_span == template.tile_span
     assert rebinned.bounds == template.bounds
     assert len(rebinned.levels) == len(template.levels)
-    assert rebinned.point_count == proj.point_count - len(removed)
+    assert rebinned.point_count == len(proj.ids) - len(removed)
 
     # Each surviving id lands in the SAME (q, r) cell it occupied before.
     for level in range(len(template.levels)):
