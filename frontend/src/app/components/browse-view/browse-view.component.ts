@@ -1,6 +1,6 @@
 import { Component, ElementRef, OnInit, OnDestroy, NgZone, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { BrowseCanvasComponent, HexHoverEvent } from '../browse-canvas/browse-canvas.component';
@@ -18,6 +18,9 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
+import { MediasApiService } from '../../services/medias-api.service';
+import { VtDialogService } from '../../services/dialog.service';
+import { ToastService } from '../../services/toast.service';
 import {
   BROWSE_COLORMAP_IDS,
   DEFAULT_THUMBNAIL_BORDER,
@@ -154,7 +157,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     private datasetsRegistryApi: DatasetsRegistryApiService,
     private settingsState: SettingsStateService,
     private route: ActivatedRoute,
+    private router: Router,
     private browseSubset: BrowseSubsetService,
+    private selection: BrowseSelectionService,
+    private mediasApi: MediasApiService,
+    private dialog: VtDialogService,
+    private toast: ToastService,
     private ngZone: NgZone,
   ) {}
 
@@ -474,6 +482,74 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             err?.error?.message || err?.error?.error || 'Failed to start projection build';
         },
       });
+  }
+
+  /**
+   * Cull the hand-selected items from a Find-positives browse: confirm, mark
+   * them Bad in the detector's labels (so they leave the Find view's Good
+   * list), then drop them from this browse by re-fitting the subset over the
+   * reduced id set. Subset mode only — wired up via the selection panel's
+   * ``canRemoveGood`` affordance, which is itself gated on ``subset``.
+   */
+  onRemoveGood(): void {
+    const ids = this.selection.ids();
+    if (ids.length === 0) return;
+    const n = ids.length;
+    this.dialog
+      .confirmDestructive(
+        `Remove ${n} item${n === 1 ? '' : 's'} from Good?`,
+        "(They'll be marked Bad in the Find results and removed from this browse. The underlying media is unaffected.)",
+        'Remove',
+      )
+      .then((ok) => {
+        if (!ok) return;
+        this.mediasApi
+          .voteBulk(ids, 'bad')
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: () => this.applyRemoval(ids),
+            error: () =>
+              this.toast.error({ message: 'Failed to remove the selected items from Good.' }),
+          });
+      });
+  }
+
+  /**
+   * After the server has marked *removedIds* Bad, drop them from the subset
+   * and re-fit the projection. A subset build with a different id set re-runs
+   * UMAP (see ``vtsearch/routes/projection.py``), so the canvas reflects the
+   * smaller set; we clear the selection since those items no longer exist here.
+   */
+  private applyRemoval(removedIds: number[]): void {
+    const removed = new Set(removedIds);
+    this.subsetIds = this.subsetIds.filter((id) => !removed.has(id));
+    this.selection.clear();
+    this.toast.success({
+      message: `Removed ${removedIds.length} item${removedIds.length === 1 ? '' : 's'} from Good.`,
+    });
+    if (this.subsetIds.length === 0) {
+      this.status = 'error';
+      this.errorMessage = 'All positives were removed. Re-run Find to start over.';
+      return;
+    }
+    // Re-fit the subset projection over the reduced id set.
+    this.onBuild();
+  }
+
+  /**
+   * Return to the Find view this browse was launched from, preserving the
+   * cull: the flag tells the Find view to skip its automatic re-scoring (which
+   * would re-promote the removed items) and just show the updated labels.
+   */
+  backToFind(): void {
+    const datasetId = this.activeContext.datasetId;
+    const detectorId = this.activeContext.modelId;
+    this.browseSubset.markReturningToFind();
+    if (datasetId && detectorId) {
+      this.router.navigate(['/find', datasetId, detectorId]);
+    } else {
+      this.router.navigate(['/dashboard']);
+    }
   }
 
   private loadProjection(): void {

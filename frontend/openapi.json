@@ -3404,6 +3404,56 @@
         ],
         "type": "object"
       },
+      "MediaVoteBulkRequest": {
+        "properties": {
+          "ids": {
+            "description": "Media ids to apply the target vote to.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "target": {
+            "description": "Absolute target state applied to every id: ``good``, ``bad``, or ``none``. Idempotent.",
+            "enum": [
+              "good",
+              "bad",
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "ids",
+          "target"
+        ],
+        "type": "object"
+      },
+      "MediaVoteBulkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "description": "How many ids actually changed state (idempotent re-applies and missing ids excluded).",
+            "type": "integer"
+          },
+          "missing": {
+            "description": "Requested ids that were not present in the loaded dataset.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed",
+          "missing",
+          "ok"
+        ],
+        "type": "object"
+      },
       "MediaVoteRequest": {
         "properties": {
           "region_box": {
@@ -11549,6 +11599,47 @@
           }
         },
         "summary": "Return a lightweight listing of all loaded medias.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
+    "/api/medias/vote-bulk": {
+      "post": {
+        "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics, then the detector\nlabelset is persisted **once** rather than per id.  Bulk votes are\nimage-level (no region boxes).  Powers the Browser's \"Remove from Good\"\ncull, which marks a hand-selected set of false-positives ``bad`` and\ndrops them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
+        "operationId": "vote_media_bulk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaVoteBulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaVoteBulkResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ids supplied."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Apply one absolute vote target to many medias in a single request.",
         "tags": [
           "medias"
         ]

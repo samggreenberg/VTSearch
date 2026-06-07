@@ -22,6 +22,7 @@ export interface BrowseSubset {
 @Injectable({ providedIn: 'root' })
 export class BrowseSubsetService {
   private pending: BrowseSubset | null = null;
+  private returningToFind = false;
 
   set(subset: BrowseSubset): void {
     this.pending = subset;
@@ -32,5 +33,24 @@ export class BrowseSubsetService {
     const s = this.pending;
     this.pending = null;
     return s;
+  }
+
+  /**
+   * Flag the reverse handoff: the user clicked "Back to Find" from the browse
+   * view after culling false-positives. The Find view consumes this on init
+   * to SKIP its automatic re-run of detector scoring — which would otherwise
+   * re-promote the just-removed items back to Good with the unchanged model —
+   * and instead just refresh the (already-updated) vote lists. Single-shot,
+   * like {@link take}.
+   */
+  markReturningToFind(): void {
+    this.returningToFind = true;
+  }
+
+  /** Read and clear the returning-to-Find flag (single-shot). */
+  consumeReturningToFind(): boolean {
+    const r = this.returningToFind;
+    this.returningToFind = false;
+    return r;
   }
 }

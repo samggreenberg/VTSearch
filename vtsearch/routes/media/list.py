@@ -32,6 +32,8 @@ from vtsearch.schemas.media import (
     MediaBatchResponseSchema,
     MediaIdsListResponseSchema,
     MediaParagraphResponseSchema,
+    MediaVoteBulkRequestSchema,
+    MediaVoteBulkResponseSchema,
     MediaVoteRequestSchema,
     MediaVoteResponseSchema,
 )
@@ -593,6 +595,66 @@ def vote_media(body: dict, media_id: int):
         logging.getLogger(__name__).exception("vote_media: labelset source scheduling failed")
 
     return {"ok": True, "state": new_state, "click_time": click_time}
+
+
+@medias_bp.route("/api/medias/vote-bulk", methods=["POST"])
+@medias_bp.arguments(MediaVoteBulkRequestSchema)
+@medias_bp.response(200, MediaVoteBulkResponseSchema)
+@medias_bp.alt_response(400, description="No ids supplied.")
+@require_dataset_header
+@require_detector_header
+def vote_media_bulk(body: dict):
+    """Apply one absolute vote target to many medias in a single request.
+
+    Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to
+    ``target`` with the same idempotent semantics, then the detector
+    labelset is persisted **once** rather than per id.  Bulk votes are
+    image-level (no region boxes).  Powers the Browser's "Remove from Good"
+    cull, which marks a hand-selected set of false-positives ``bad`` and
+    drops them from the browse.
+
+    Ids that aren't in the loaded dataset are skipped and reported back in
+    ``missing``; ``changed`` counts only the ids whose state actually moved
+    (idempotent re-applies don't count).
+    """
+    target = body["target"]
+    ids = body["ids"]
+    if not ids:
+        abort(400, message="No ids supplied")
+
+    changed = 0
+    missing: list[int] = []
+    for media_id in ids:
+        if get_media(media_id) is None:
+            missing.append(media_id)
+            continue
+        old, new, _click_time = set_vote(media_id, target)
+        if old != new:
+            changed += 1
+
+    # Persist the resulting labelset once for the whole batch.  Mirrors the
+    # single-vote route's H30 handling: a write failure surfaces as a 500
+    # rather than leaving the in-memory votes silently un-persisted.
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+
+    try:
+        sync_labels_to_loaded_detector()
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).exception("vote_media_bulk: detector label sync failed")
+        abort(500, message=f"Failed to persist votes to detector store: {exc}")
+
+    from vtscore.labels.sync import sync_to_labelset_source
+
+    try:
+        sync_to_labelset_source()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("vote_media_bulk: labelset source scheduling failed")
+
+    return {"ok": True, "changed": changed, "missing": missing}
 
 
 @medias_bp.route("/api/medias/add-to-pile", methods=["POST"])

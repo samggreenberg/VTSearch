@@ -13,6 +13,19 @@
     </button>
   </div>
 
+  @if (canRemoveGood) {
+    <div class="bsp-actions">
+      <button
+        type="button"
+        class="btn btn--danger btn--sm bsp-remove-good"
+        [disabled]="count === 0"
+        (click)="onRemoveGood()"
+        title="Mark the selected items Bad in the Find results and remove them from this browse">
+        Remove from Good ({{ count | number }})
+      </button>
+    </div>
+  }
+
   <div class="bsp-toolbar">
     <span class="bsp-sort-label" title="Choose how the selected items are ordered">Sort:</span>
     <label for="bsp-sort-select" class="sr-only">Sort selected items</label>
