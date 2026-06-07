@@ -1,8 +1,11 @@
 # User-Docs Screenshots
 
-**Status:** Proposed. Drafted 2026-06-07. No shots captured yet (the
-drafting session has no browser; capture happens in a later
-browser-ready session).
+**Status:** Proposed. Drafted 2026-06-07. Capture harness not built yet
+(no browser in the drafting session). **In-app embed plumbing shipped**
+2026-06-07: the user guide's images now render in the in-app Help panel,
+theme-matched to the viewer (see "Doc-embedding convention" and "What
+shipped" below). One seed pair (`dashboard-loaded.{light,dark}.png`) is a
+placeholder until the harness runs in a browser-ready session.
 
 **Goal.** Add inline screenshots to the **user-facing** docs and build a
 system that can **regenerate every shot with one command** when the GUI
@@ -166,14 +169,37 @@ clean scripting (canvas drag to draw a region). If it proves too fiddly
 to script deterministically, it's the single candidate to fall back to a
 hand-driven capture — noted here, not yet decided.
 
-## Doc-embedding convention
+## Doc-embedding convention (locked 2026-06-07)
 
-Use a `<picture>` or theme-suffixed link per doc; in plain GitHub
-markdown a single light shot is shown with the dark one linked, or both
-shown side by side under a section. Each embed gets descriptive alt text
-(= the manifest `caption`) for accessibility. Exact markdown form to be
-settled when the first shots exist; the manifest already carries enough
-(`embeddedIn`, `caption`) to generate or lint the embeds.
+One image is shown, always matching the **viewer's** theme — never both
+side by side. The embed is a `<picture>` whose default `<img>` is the
+light variant and whose `<source media="(prefers-color-scheme: dark)">`
+is the dark variant:
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/<id>.dark.png" />
+  <img src="assets/<id>.light.png" alt="<caption>" width="720" />
+</picture>
+```
+
+This one form covers both render targets:
+
+- **GitHub / GitLab:** the `<picture>` element makes the platform pick the
+  variant matching the reader's site appearance via `prefers-color-scheme`.
+- **In-app Help panel:** the panel renders the same markdown but does *not*
+  rely on `prefers-color-scheme` (the app theme is a `data-theme`
+  attribute set by `ThemeService`, which can differ from the OS). Instead
+  `keyboard-help-modal.component.ts` post-processes the rendered HTML:
+  collapses each `<picture>` to its `<img>`, swaps the `*.light.*` /
+  `*.dark.*` suffix to the app's current *effective* theme (light → light,
+  dark/high-viz → dark), resolves the relative `assets/…` path against the
+  guide's served dir (`/assets/docs/`), and re-renders live when the user
+  switches themes.
+
+Image files are served to the app by an `angular.json` asset glob copying
+`docs/user/assets/**` → `/assets/docs/assets`. Each embed carries
+descriptive alt text (= the manifest `caption`) for accessibility.
 
 ## Build order
 
@@ -187,14 +213,30 @@ settled when the first shots exist; the manifest already carries enough
 5. Fill out the full shot list.
 6. Embed in USER_GUIDE.md, then README.md + demos.md.
 
+## What shipped
+
+- **In-app theme-matched embeds (2026-06-07).** The Help panel's user
+  guide renders embedded screenshots, showing the single variant that
+  matches the viewer's current app theme and swapping live on theme
+  change. Touched: `frontend/.../keyboard-help-modal.component.ts` (image
+  post-processing + theme subscription), its `.scss` (image styling),
+  `angular.json` (asset glob for `docs/user/assets/**`), and the
+  `<picture>` embed convention above. A seed pair
+  (`dashboard-loaded.{light,dark}.png`, placeholder art) proves the
+  pipeline end to end.
+
 ## Open follow-ups
 
+- **Real screenshots.** The seed `dashboard-loaded` pair is placeholder
+  art. The capture harness (below) must replace it and fill out the rest
+  of the shot list.
 - **chromium provisioning.** The harness needs Playwright + chromium;
   the standard test container has neither (CLAUDE.md "No Chrome/Chromium
   available"). Decide whether `refresh.sh` installs Playwright on demand
   or assumes a provisioned browser env. Keep it out of `run-tests.sh`.
-- **Markdown embed form** for dual-theme images on GitHub (side-by-side
-  vs. light-shown/dark-linked vs. `<picture>` with `prefers-color-scheme`).
+- ~~**Markdown embed form** for dual-theme images.~~ Resolved
+  2026-06-07: `<picture>` + `prefers-color-scheme` (see "Doc-embedding
+  convention").
 - **`region-voting` scriptability** — confirm the canvas drag can be
   driven deterministically; fall back to hand-capture only if not.
 - **Pixel-diff tolerance** for `check.sh` (font hinting / AA can cause

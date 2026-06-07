@@ -206,6 +206,14 @@
     border-top: 1px solid var(--border);
     margin: var(--space-xl) 0;
   }
+  ::ng-deep img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: var(--space-md) auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
   ::ng-deep table {
     border-collapse: collapse;
     margin: 0 0 var(--space-md);

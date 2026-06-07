@@ -38,6 +38,11 @@
                 "glob": "**/*.md",
                 "input": "../docs/user",
                 "output": "/assets/docs"
+              },
+              {
+                "glob": "**/*",
+                "input": "../docs/user/assets",
+                "output": "/assets/docs/assets"
               }
             ],
             "styles": [
