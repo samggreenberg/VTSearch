@@ -76,6 +76,57 @@ gh api repos/samggreenberg/vtsearch/branches/main/protection
 gh api repos/samggreenberg/vtsearch/rulesets
 ```
 
+## Protecting `dev` (lighter than `main`)
+
+`dev` is the integration branch where day-to-day work merges before it's
+promoted to `main`. It should **not** carry the same owner-only gate as `main`,
+or you become the required reviewer for every change (including every Claude
+PR). The goal here is just a guardrail: **no direct or force pushes — everything
+goes through a PR — but no mandatory approver**, so routine work keeps flowing.
+
+GitHub UI: **Settings → Rules → Rulesets → New branch ruleset**
+
+1. **Name**: `protect-dev`
+2. **Enforcement status**: `Active`
+3. **Bypass list**: empty (add `samggreenberg` only if you want an escape hatch).
+4. **Target branches**: `Include by pattern` → `dev`.
+5. Enable:
+   - ☑ **Restrict deletions** (no deleting `dev`).
+   - ☑ **Require a pull request before merging**
+     - Required approvals: **0** (a PR is required, but no review is mandated).
+     - ☐ Do **not** enable "Require review from Code Owners" — that would pull
+       you into every `dev` PR via `.github/CODEOWNERS`.
+   - ☑ **Block force pushes**
+
+Equivalent classic protection via `gh` (run as `samggreenberg`):
+
+```bash
+gh api -X PUT repos/samggreenberg/vtsearch/branches/dev/protection \
+  --input - <<'JSON'
+{
+  "required_status_checks": null,
+  "enforce_admins": false,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 0,
+    "require_code_owner_reviews": false
+  },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
+```
+
+`"required_approving_review_count": 0` with a non-null
+`required_pull_request_reviews` block means "a PR is required, but it can merge
+without a formal approval." `"restrictions": null` keeps push access as-is (any
+write collaborator can open/merge PRs); `allow_force_pushes: false` is the
+guardrail.
+
+If you later want reviews on `dev` too, bump the count to `1` (any collaborator
+can satisfy it) — but leave `require_code_owner_reviews` off unless you
+specifically want to be the gate.
+
 ## Note on collaborator write access
 
 Branch protection governs `main` specifically; the 7 collaborators keep `write`
