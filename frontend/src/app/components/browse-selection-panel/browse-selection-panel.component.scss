@@ -1,0 +1,42 @@
+// Selection count + Clear, pinned to the canvas's top-left corner (clear of the
+// top-right controls, the right-edge legend, and the bottom corners). Unlike the
+// other overlays it takes clicks, so it opts back into pointer events.
+.browse-selection {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  display: inline-flex;
+  gap: var(--space-sm);
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
+  pointer-events: auto;
+  opacity: 0.95;
+}
+
+.browse-selection-count {
+  font-size: var(--font-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.browse-selection-clear {
+  font-size: var(--font-xs);
+  line-height: 1;
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-base), border-color var(--transition-base);
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+}

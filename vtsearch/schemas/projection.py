@@ -47,6 +47,11 @@ class HexCellSchema(Schema):
     cy = fields.Float(required=True)
     count = fields.Integer(required=True)
     rep_id = fields.Integer(required=True)
+    member_ids = fields.List(
+        fields.Integer(),
+        load_default=None,
+        metadata={"description": "All media ids aggregated in this cell (for selection)."},
+    )
 
 
 class TileResponseSchema(Schema):

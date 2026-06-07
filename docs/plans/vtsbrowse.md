@@ -817,6 +817,36 @@ and available to any future consumer of `vtscore`.
 ## Open follow-ups
 
 **Shipped:**
+- **Item selection on the canvas (tracking only).** Supersedes the v1
+  "no selection" scope (*§Locked decisions* / *§Interaction model*). Selection
+  is held at the *media-id* granularity in `BrowseSelectionService`
+  (`frontend/src/app/services/browse-selection.service.ts`, provided per
+  `BrowseViewComponent`, in-memory and session-scoped). A plain **click** toggles
+  the bin under the cursor — an unselected bin fully selects its contents, a
+  partially- or fully-selected bin fully clears them — and **Shift+drag** draws a
+  marquee that adds every bin whose centre falls inside it (plain drag still
+  pans). The canvas renders each bin's derived state (none / partial / full):
+  unselected bins are dimmed when a selection exists, fully-selected bins get a
+  solid accent ring, partially-selected bins a dashed one (memoized per cell
+  against `selection.version` so a pan stays O(visible cells)). A floating
+  `vt-browse-selection-panel` (top-left) shows the live count + a Clear button.
+  Selection clears when the projection changes (media-type switch / rebuild) but
+  survives a hex/square toggle, since ids are shape-independent.
+  - Backend: bins store only `count` + `rep_id`, so the full member id list per
+    cell is re-derived on demand (`tile_member_ids` in `vtscore/projection/pyramid.py`)
+    and attached to each cell in the tile payload (`member_ids`) — nothing new is
+    persisted; it rides the immutable, HTTP-cached tile.
+  - *Open follow-ups:*
+    - **Act on the selection.** This effort only *tracks* and *displays* the
+      selection; the next pass wires it to an action (export the subset, seed a
+      detector, build a subset projection from it, etc.). The selected ids are a
+      plain `Set<number>` ready to hand off.
+    - **Per-tile membership recompute cost.** `tile_member_ids` re-bins the whole
+      coordinate array per tile request (O(N) each), fine for typical datasets and
+      cached after first fetch, but a per-(projection, level) assignment cache
+      would cut the first-viewport cost on very large datasets.
+    - **Minimap selection overlay.** The minimap does not yet show which region is
+      selected; a faint accent wash over selected cells there would aid orientation.
 - **Load + project on the dashboard before entering Browse.** The dashboard's
   per-row `Browse` button no longer navigates straight to `/browse/:id` and
   lets the browse view discover a missing load/projection. It now mirrors the

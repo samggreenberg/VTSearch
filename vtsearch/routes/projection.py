@@ -425,10 +425,13 @@ def get_tile(shape: str, level: int, tx: int, ty: int):
 
     shape = _resolve_shape(shape)
     ctx = get_active_context()
-    if _is_subset(request.args.get("subset")):
+    subset = _is_subset(request.args.get("subset"))
+    if subset:
         pyr = ctx._subset_pyramids.get(shape)
+        proj = ctx._subset_projection
     else:
         pyr = ctx._pyramids.get(shape)
+        proj = ctx._projection
     if pyr is None:
         abort(404, message="Projection not built yet — call POST /api/projection/build first.")
 
@@ -449,7 +452,20 @@ def get_tile(shape: str, level: int, tx: int, ty: int):
     if tile is None:
         return {"level": level, "tx": tx, "ty": ty, "cells": []}
 
-    return tile.to_payload()
+    payload = tile.to_payload()
+    # Attach each cell its full member id list so the canvas can render
+    # per-cell selection state and toggle a whole bin. The pyramid keeps only
+    # counts + representatives, so this is re-derived on demand from the frozen
+    # layout (see ``tile_member_ids``); it rides along on the immutable,
+    # HTTP-cached tile response.
+    if proj is not None and payload["cells"]:
+        from vtscore.projection import tile_member_ids
+
+        members = tile_member_ids(pyr, proj, level, tx, ty)
+        for cell in payload["cells"]:
+            cell["member_ids"] = members.get((cell["q"], cell["r"]), [])
+
+    return payload
 
 
 def _persist_projection(dataset_id: str, proj, pyr) -> None:

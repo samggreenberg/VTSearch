@@ -6,6 +6,7 @@ import { takeUntil } from 'rxjs/operators';
 import { BrowseCanvasComponent, HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
 import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
+import { BrowseSelectionPanelComponent } from '../browse-selection-panel/browse-selection-panel.component';
 import {
   BrowseMinimapComponent,
   MINIMAP_MAX_HEIGHT,
@@ -21,6 +22,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
+import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import {
   BROWSE_COLORMAP_IDS,
@@ -40,13 +42,15 @@ import type { SettingsUpdate } from '../../generated/api-client/models/settings-
     BrowseCanvasComponent,
     BrowseHoverPreviewComponent,
     BrowseLegendComponent,
+    BrowseSelectionPanelComponent,
     BrowseMinimapComponent,
     ProgressBarComponent,
     IconComponent,
   ],
-  // Scoped per browse view so the canvas and its minimap share one viewport
-  // channel without leaking across other instances of the view.
-  providers: [BrowseViewportService],
+  // Scoped per browse view so the canvas, its minimap, and the selection panel
+  // share one viewport channel and one selection set without leaking across
+  // other instances of the view.
+  providers: [BrowseViewportService, BrowseSelectionService],
   templateUrl: './browse-view.component.html',
   styleUrl: './browse-view.component.scss',
 })
