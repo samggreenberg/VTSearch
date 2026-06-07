@@ -566,3 +566,97 @@ class TestSubsetRemove:
     def test_remove_empty_ids_rejected(self, client):
         resp = client.post("/api/projection/subset/remove", json={"ids": []})
         assert resp.status_code == 422
+
+
+class TestForceReproject:
+    """``force`` re-fits UMAP over the displayed items into a fresh layout.
+
+    Powers the Browser's "Re-project" button: unlike a plain rebuild (which
+    short-circuits on the cached/persisted layout) it always runs a new fit and
+    returns a new ``projection_id``.
+    """
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_force_full_rebuild_makes_new_layout(self, _mock_fit, client):
+        ctx = get_active_context()
+        client.post("/api/projection/build")
+        _wait_projection()
+        first_id = ctx._pyramids["hex"].projection_id
+
+        # A plain rebuild short-circuits on the cached pyramid (same id)...
+        again = client.post("/api/projection/build").get_json()
+        assert again["status"] == "ready"
+        assert again["projection_id"] == first_id
+
+        # ...but force re-fits into a brand-new layout.
+        resp = client.post("/api/projection/build", json={"force": True})
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] in ("building", "ready")
+        _wait_projection()
+        assert ctx._pyramids["hex"].projection_id != first_id
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_force_full_replaces_persisted(self, _mock_fit, client, tmp_path):
+        import pickle as _pickle
+
+        from vtscore.datasets.container import read_projection, write_container
+
+        fake_pkl = tmp_path / "reproject_persist.pkl"
+        write_container(fake_pkl, _pickle.dumps({"medias": {}}), {"format_version": 1})
+
+        with patch("vtsearch.routes.projection._pkl_path_for", return_value=str(fake_pkl)):
+            client.post("/api/projection/build")
+            _wait_projection()
+            first = read_projection(fake_pkl, "hex")
+            assert first is not None
+            first_id = first[0].projection_id
+
+            client.post("/api/projection/build", json={"force": True})
+            _wait_projection()
+            second = read_projection(fake_pkl, "hex")
+            assert second is not None
+            assert second[0].projection_id != first_id
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_force_full_drops_stale_other_shape(self, _mock_fit, client, tmp_path):
+        import pickle as _pickle
+
+        from vtscore.datasets.container import read_projection, write_container
+
+        fake_pkl = tmp_path / "reproject_shapes.pkl"
+        write_container(fake_pkl, _pickle.dumps({"medias": {}}), {"format_version": 1})
+
+        with patch("vtsearch.routes.projection._pkl_path_for", return_value=str(fake_pkl)):
+            client.post("/api/projection/build", json={"shape": "hex"})
+            _wait_projection()
+            client.post("/api/projection/build", json={"shape": "square"})
+            _wait_projection()
+            assert read_projection(fake_pkl, "square") is not None
+
+            # Force-rebuild hex: the stale square entry must be dropped so it
+            # can't resurrect the old (now-superseded) shared coordinates.
+            client.post("/api/projection/build", json={"shape": "hex", "force": True})
+            _wait_projection()
+            assert read_projection(fake_pkl, "square") is None
+            assert read_projection(fake_pkl, "hex") is not None
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_force_subset_refits_same_ids(self, _mock_fit, client):
+        ctx = get_active_context()
+        ids = sorted(ctx.medias.keys())[:5]
+        client.post("/api/projection/build", json={"ids": ids})
+        _wait_projection()
+        first_id = ctx._subset_projection.projection_id
+
+        # Same ids without force → cached, same layout id.
+        again = client.post("/api/projection/build", json={"ids": ids}).get_json()
+        assert again["status"] == "ready"
+        assert again["projection_id"] == first_id
+
+        # Same ids with force → fresh fit, new id, unchanged membership.
+        resp = client.post("/api/projection/build", json={"ids": ids, "force": True})
+        assert resp.status_code == 200
+        _wait_projection()
+        after = ctx._subset_projection
+        assert after.projection_id != first_id
+        assert after.ids == ids

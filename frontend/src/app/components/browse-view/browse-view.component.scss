@@ -37,13 +37,30 @@
   color: var(--text-muted);
 }
 
-// Top-left affordance that returns to the Find view this browse came from
-// (subset mode only). Anchored to ``.browse-main`` like the other overlays.
-.browse-back {
+// Top-left overlay cluster, anchored to ``.browse-main`` like the other
+// overlays. Stacks the (subset-only) Back affordance above the Re-project
+// button so the two never overlap regardless of mode.
+.browse-tools-left {
   position: absolute;
   top: var(--space-md);
   left: var(--space-md);
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+// Re-fit UMAP over the displayed items into a fresh layout. The icon sits
+// inline with the label; mirrors the secondary-button look of ``.browse-back``.
+.browse-reproject {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+
+  vt-icon {
+    line-height: 0;
+  }
 }
 
 .browse-info {

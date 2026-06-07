@@ -6,7 +6,9 @@ import numpy as np
 
 from vtscore.datasets.container import (
     append_projection,
+    read_container,
     read_projection,
+    remove_projections,
     write_container,
 )
 from vtscore.projection.pyramid import build_pyramid
@@ -160,3 +162,28 @@ def test_overwrite_existing(tmp_path):
     loaded = read_projection(path)
     assert loaded is not None
     assert loaded[0].projection_id == "second"
+
+
+def test_remove_projections_clears_all_shapes(tmp_path):
+    """``remove_projections`` drops every bin shape's entry (for a forced re-fit)."""
+    path = _make_container(tmp_path)
+    proj = _make_projection(pid="to-remove")
+    append_projection(path, proj, build_pyramid(proj, bin_shape="hex", n_levels=2))
+    append_projection(path, proj, build_pyramid(proj, bin_shape="square", n_levels=2))
+    assert read_projection(path, "hex") is not None
+    assert read_projection(path, "square") is not None
+
+    remove_projections(path)
+
+    assert read_projection(path, "hex") is None
+    assert read_projection(path, "square") is None
+    # The medias payload survives — only the projection entries are dropped.
+    _, meta = read_container(path)
+    assert meta["format_version"] == 1
+
+
+def test_remove_projections_no_entries_is_noop(tmp_path):
+    """Removing projections from a container that has none is a harmless no-op."""
+    path = _make_container(tmp_path)
+    remove_projections(path)  # must not raise
+    assert read_projection(path) is None

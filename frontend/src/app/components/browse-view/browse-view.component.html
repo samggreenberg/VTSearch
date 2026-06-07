@@ -31,15 +31,27 @@
     @case ('ready') {
       <div class="browse-content" #content [style.--browse-panel-width]="panelWidth + 'px'">
         <div class="browse-main">
-          @if (subset) {
+          <div class="browse-tools-left">
+            @if (subset) {
+              <button
+                type="button"
+                class="btn btn--secondary btn--sm browse-back"
+                (click)="backToFind()"
+                title="Return to the Find view (keeps any items you removed from Good)">
+                &larr; Back to Find
+              </button>
+            }
             <button
               type="button"
-              class="btn btn--secondary btn--sm browse-back"
-              (click)="backToFind()"
-              title="Return to the Find view (keeps any items you removed from Good)">
-              &larr; Back to Find
+              class="btn btn--secondary btn--sm browse-reproject"
+              (click)="onReproject()"
+              [title]="subset
+                ? 'Re-project the displayed items into a fresh 2-D layout'
+                : 'Re-project all items into a fresh 2-D layout'">
+              <vt-icon type="shuffle" [size]="14"></vt-icon>
+              Re-project
             </button>
-          }
+          </div>
           <vt-browse-canvas
             [meta]="meta"
             [mediaType]="mediaType"
