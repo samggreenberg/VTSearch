@@ -96,6 +96,54 @@ def _pca_layout(matrix: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(coords, dtype=np.float32)
 
 
+def _umap_layout(
+    mat: np.ndarray,
+    *,
+    n_neighbors: int,
+    min_dist: float,
+    random_state: int | None,
+    on_heartbeat: Callable[[int], None],
+) -> np.ndarray:
+    """Run UMAP on *mat*, ticking ``on_heartbeat(elapsed_seconds)`` while it runs.
+
+    UMAP's ``fit_transform`` is a single blocking call with no per-epoch hook,
+    so it runs on a worker thread and the caller's thread emits an
+    elapsed-seconds heartbeat on each ``_HEARTBEAT_SECONDS`` tick.  Anything the
+    worker raises is re-raised here.
+    """
+    import umap
+
+    reducer = umap.UMAP(
+        n_components=2,
+        n_neighbors=min(n_neighbors, mat.shape[0] - 1),
+        min_dist=min_dist,
+        metric="euclidean",
+        random_state=random_state,
+    )
+
+    fit_result: list[np.ndarray] = []
+    fit_error: list[Exception] = []
+
+    def _fit() -> None:
+        try:
+            fit_result.append(reducer.fit_transform(mat))
+        except Exception as exc:  # surfaced via fit_error below
+            fit_error.append(exc)
+
+    worker = threading.Thread(target=_fit, name="umap-fit", daemon=True)
+    started = time.monotonic()
+    worker.start()
+    while True:
+        worker.join(timeout=_HEARTBEAT_SECONDS)
+        if not worker.is_alive():
+            break
+        on_heartbeat(int(time.monotonic() - started))
+
+    if fit_error:
+        raise fit_error[0]
+    return np.ascontiguousarray(fit_result[0], dtype=np.float32)
+
+
 def fit_projection(
     matrix: np.ndarray,
     ids: list[int],
@@ -148,41 +196,16 @@ def fit_projection(
     # the whole fit (a non-zero total would freeze it at 0/N — the dead airtime
     # this code exists to kill); the message carries the live elapsed-seconds.
     _progress("projecting", f"UMAP fit ({n} points)", 0, 0)
-    import umap
 
-    reducer = umap.UMAP(
-        n_components=2,
-        n_neighbors=min(n_neighbors, n - 1),
-        min_dist=min_dist,
-        metric="euclidean",
-        random_state=random_state,
-    )
-
-    # UMAP's fit is a single blocking call with no per-epoch hook, so we run it
-    # on a worker thread and tick an elapsed-seconds heartbeat from here while
-    # it's alive.  Anything the worker raises is re-raised in this thread.
-    fit_result: list[np.ndarray] = []
-    fit_error: list[Exception] = []
-
-    def _fit() -> None:
-        try:
-            fit_result.append(reducer.fit_transform(mat))
-        except Exception as exc:  # surfaced via fit_error below
-            fit_error.append(exc)
-
-    worker = threading.Thread(target=_fit, name="umap-fit", daemon=True)
-    started = time.monotonic()
-    worker.start()
-    while True:
-        worker.join(timeout=_HEARTBEAT_SECONDS)
-        if not worker.is_alive():
-            break
-        elapsed = int(time.monotonic() - started)
+    def _heartbeat(elapsed: int) -> None:
         _progress("projecting", f"UMAP fit ({n} points) — {elapsed}s elapsed", 0, 0)
 
-    if fit_error:
-        raise fit_error[0]
-
-    coords = np.ascontiguousarray(fit_result[0], dtype=np.float32)
+    coords = _umap_layout(
+        mat,
+        n_neighbors=n_neighbors,
+        min_dist=min_dist,
+        random_state=random_state,
+        on_heartbeat=_heartbeat,
+    )
     _progress("projecting", "UMAP fit done", n, n)
     return Projection(projection_id, list(ids), coords, "umap")
