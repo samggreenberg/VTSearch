@@ -47,16 +47,6 @@
   }
 }
 
-.file-item-name {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .item-meta {
   font-size: var(--font-2xs);
   color: var(--text-secondary);
