@@ -295,6 +295,7 @@ class DatasetContext:
         "_subset_pyramids",
         "_subset_ids",
         "_subset_job_id",
+        "_subset_content_version",
     )
 
     def __init__(self, dataset_id: str = "") -> None:
@@ -310,6 +311,12 @@ class DatasetContext:
         self._subset_pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid (subset)
         self._subset_ids: list[int] | None = None  # sorted ids the subset layout is fit on
         self._subset_job_id: str | None = None  # in-flight subset build job id
+        # Bumped on each in-place edit of the subset layout (e.g. removing
+        # false-positives from a Find browse).  The layout/``projection_id`` is
+        # kept stable so the canvas preserves the viewport; this counter changes
+        # only the tile cache key/URL so stale tiles aren't served (the tile URL
+        # is otherwise cached ``immutable``).  Reset to 0 on a fresh subset fit.
+        self._subset_content_version: int = 0
 
 
 class DetectorContext:

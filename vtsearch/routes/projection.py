@@ -19,6 +19,7 @@ from flask_smorest import Blueprint, abort
 from vtsearch.schemas.projection import (
     ProjectionBuildResponseSchema,
     ProjectionMetaSchema,
+    SubsetRemoveRequestSchema,
     TileResponseSchema,
 )
 
@@ -61,6 +62,7 @@ def _subset_meta(ctx, bin_shape: str) -> dict:
         meta["status"] = "ready"
         meta["media_type"] = _media_type_for(ctx)
         meta["method"] = ctx._subset_projection.method if ctx._subset_projection else None
+        meta["content_version"] = getattr(ctx, "_subset_content_version", 0)
         return meta
 
     if ctx._subset_job_id:
@@ -262,6 +264,7 @@ def _build_subset(ctx, requested_ids: list[int], bin_shape: str) -> dict:
         ctx._subset_pyramids = {}
         ctx._subset_ids = sorted_ids
         ctx._subset_job_id = None
+        ctx._subset_content_version = 0  # fresh layout — reset the tile cache token
 
     return _start_subset_umap_build(ctx, sorted_ids, matrix, bin_shape)
 
@@ -361,6 +364,46 @@ def build_projection():
     return _start_umap_build(ctx, sorted_ids, matrix, shape)
 
 
+@projection_bp.route("/api/projection/subset/remove", methods=["POST"])
+@projection_bp.arguments(SubsetRemoveRequestSchema)
+@projection_bp.response(200, ProjectionMetaSchema)
+@projection_bp.alt_response(409, description="No subset projection is currently built.")
+def remove_from_subset(body: dict):
+    """Drop ids from the current subset browse **without re-fitting UMAP**.
+
+    Re-bins the frozen subset layout onto its existing grid minus the removed
+    points: the remaining points keep their exact 2-D positions and bins, only
+    counts/representatives change.  The ``projection_id`` (layout identity) is
+    preserved so the canvas keeps the user's pan/zoom; a bumped
+    ``content_version`` busts the otherwise-immutable tile cache.  Returns the
+    updated subset meta for *shape*.
+
+    Powers the Browser's "Remove from Good" cull, which marks the items Bad via
+    ``/api/medias/vote-bulk`` and then calls this to make them disappear.
+    """
+    from vtscore.projection import rebin_like
+    from vtscore.projection import remove_ids as _remove_ids
+    from vtscore.state.core import get_active_context
+
+    ctx = get_active_context()
+    shape = _resolve_shape(body.get("shape"))
+    ids = body["ids"]
+
+    proj = ctx._subset_projection
+    if proj is None:
+        abort(409, message="No subset projection to update — build it first.")
+
+    new_proj = _remove_ids(proj, ids)
+    ctx._subset_projection = new_proj
+    ctx._subset_ids = list(new_proj.ids)
+    ctx._subset_job_id = None
+    ctx._subset_content_version = getattr(ctx, "_subset_content_version", 0) + 1
+    # Re-bin every shape that was already built, each on its own preserved grid.
+    ctx._subset_pyramids = {s: rebin_like(new_proj, pyr) for s, pyr in ctx._subset_pyramids.items()}
+
+    return _subset_meta(ctx, shape)
+
+
 @projection_bp.route("/api/projection/meta", methods=["GET"])
 @projection_bp.response(200, ProjectionMetaSchema)
 def projection_meta():
@@ -387,6 +430,7 @@ def projection_meta():
         meta["status"] = "ready"
         meta["media_type"] = _media_type_for(ctx)
         meta["method"] = ctx._projection.method if ctx._projection else None
+        meta["content_version"] = 0  # full-dataset layouts are never edited in place
         return meta
 
     job = projection_jobs.current()

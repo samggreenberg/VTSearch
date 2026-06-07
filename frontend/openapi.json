@@ -3663,6 +3663,11 @@
             "nullable": true,
             "type": "array"
           },
+          "content_version": {
+            "default": 0,
+            "description": "Monotonic version of the projection's membership. Stays at 0 for full-dataset projections; bumped when items are removed from a subset browse in place. Combined with ``projection_id`` to bust the immutable tile cache without re-framing the canvas.",
+            "type": "integer"
+          },
           "current": {
             "default": null,
             "nullable": true,
@@ -4239,6 +4244,32 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "SubsetRemoveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Media ids to drop from the current subset browse.",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "shape": {
+            "default": "hex",
+            "description": "Bin shape whose updated meta to return (hex | square).",
+            "enum": [
+              "hex",
+              "square"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "ids"
         ],
         "type": "object"
       },
@@ -12007,6 +12038,47 @@
           }
         },
         "summary": "Return projection/pyramid metadata and build status for a bin shape.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
+    "/api/projection/subset/remove": {
+      "post": {
+        "description": "Re-bins the frozen subset layout onto its existing grid minus the removed\npoints: the remaining points keep their exact 2-D positions and bins, only\ncounts/representatives change.  The ``projection_id`` (layout identity) is\npreserved so the canvas keeps the user's pan/zoom; a bumped\n``content_version`` busts the otherwise-immutable tile cache.  Returns the\nupdated subset meta for *shape*.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
+        "operationId": "remove_from_subset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubsetRemoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionMeta"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "description": "No subset projection is currently built."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Drop ids from the current subset browse **without re-fitting UMAP**.",
         "tags": [
           "projection"
         ]

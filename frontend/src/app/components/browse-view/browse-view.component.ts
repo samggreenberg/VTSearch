@@ -503,11 +503,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       )
       .then((ok) => {
         if (!ok) return;
+        // 1) Mark them Bad in the detector's labels (one bulk request).
         this.mediasApi
           .voteBulk(ids, 'bad')
           .pipe(takeUntil(this.destroy$))
           .subscribe({
-            next: () => this.applyRemoval(ids),
+            next: () => this.dropFromBrowse(ids),
             error: () =>
               this.toast.error({ message: 'Failed to remove the selected items from Good.' }),
           });
@@ -515,25 +516,36 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * After the server has marked *removedIds* Bad, drop them from the subset
-   * and re-fit the projection. A subset build with a different id set re-runs
-   * UMAP (see ``vtsearch/routes/projection.py``), so the canvas reflects the
-   * smaller set; we clear the selection since those items no longer exist here.
+   * Drop *removedIds* from the browse after they've been marked Bad. The
+   * remaining items keep their exact 2-D positions and bins — the server
+   * re-bins the frozen layout in place (no UMAP re-fit), returning the same
+   * ``projection_id`` with a bumped ``content_version`` so only the tile cache
+   * refreshes while the canvas holds the user's pan/zoom.
    */
-  private applyRemoval(removedIds: number[]): void {
+  private dropFromBrowse(removedIds: number[]): void {
     const removed = new Set(removedIds);
-    this.subsetIds = this.subsetIds.filter((id) => !removed.has(id));
+    const remaining = this.subsetIds.filter((id) => !removed.has(id));
     this.selection.clear();
     this.toast.success({
       message: `Removed ${removedIds.length} item${removedIds.length === 1 ? '' : 's'} from Good.`,
     });
-    if (this.subsetIds.length === 0) {
+    this.subsetIds = remaining;
+    if (remaining.length === 0) {
+      // Nothing left to project; the cull emptied the browse.
       this.status = 'error';
-      this.errorMessage = 'All positives were removed. Re-run Find to start over.';
+      this.errorMessage = 'All positives were removed. Go back to Find to start over.';
       return;
     }
-    // Re-fit the subset projection over the reduced id set.
-    this.onBuild();
+    this.projectionApi
+      .subsetRemove(this.binShape, removedIds)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (meta) => this.applyMeta(meta),
+        error: () =>
+          this.toast.error({
+            message: 'Items were removed from Good, but the browse view could not refresh.',
+          }),
+      });
   }
 
   /**
@@ -582,6 +594,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.applyBrowsePrefsForMediaType();
     }
     this.tileCache.setProjectionId(meta.projection_id);
+    this.tileCache.setContentVersion(meta.content_version ?? 0);
 
     if (meta.point_count > 0) {
       this.status = 'ready';

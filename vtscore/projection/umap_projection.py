@@ -27,7 +27,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -67,6 +67,29 @@ class Projection:
         xmin, ymin = self.coords.min(axis=0)
         xmax, ymax = self.coords.max(axis=0)
         return (float(xmin), float(ymin), float(xmax), float(ymax))
+
+
+def remove_ids(projection: Projection, remove: Iterable[int]) -> Projection:
+    """Return *projection* with *remove* ids (and their points) dropped.
+
+    The remaining points keep their **exact** 2-D coordinates — this never
+    re-fits the layout.  The ``projection_id`` is deliberately preserved so the
+    layout keeps its identity (the browse canvas reads it to decide whether to
+    re-frame the viewport: a content edit must not move points on screen).  Tile
+    freshness is handled separately by a content-version cache token, since the
+    counts/membership do change.
+
+    Used to cull hand-selected false-positives from a Find-positives subset
+    browse without re-running UMAP.
+    """
+    remove_set = {int(i) for i in remove}
+    keep = [i for i, mid in enumerate(projection.ids) if int(mid) not in remove_set]
+    new_ids = [int(projection.ids[i]) for i in keep]
+    if projection.coords.shape[0]:
+        new_coords = np.ascontiguousarray(projection.coords[keep], dtype=np.float32)
+    else:
+        new_coords = projection.coords
+    return Projection(projection.projection_id, new_ids, new_coords, projection.method)
 
 
 def _trivial_layout(n: int) -> np.ndarray:

@@ -40,6 +40,14 @@ export interface ProjectionMeta {
   point_count: number;
   levels: LevelMeta[];
   media_type?: string;
+  /**
+   * Membership version of this projection. 0 for full-dataset layouts; bumped
+   * when items are removed from a subset browse in place. Combined with
+   * ``projection_id`` to form the tile cache token, so an in-place edit busts
+   * the immutable tile cache without changing the layout identity (which would
+   * make the canvas re-frame the viewport).
+   */
+  content_version?: number;
   // Build lifecycle (idle | building | ready | error) and progress, populated
   // by GET /api/projection/meta while a build is in flight.
   status?: 'idle' | 'building' | 'ready' | 'error';
