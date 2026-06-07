@@ -56,11 +56,11 @@
             [mediaType]="mediaType"
           />
           @if (contextMenuOpen) {
-            <vt-media-context-menu
+            <vt-browse-bin-popup
               [x]="contextMenuX"
               [y]="contextMenuY"
-              [items]="contextMenuItems"
-              (actionSelected)="onContextMenuAction($event)"
+              [memberIds]="contextMembers"
+              [mediaType]="mediaType"
               (dismissed)="dismissContextMenu()"
             />
           }

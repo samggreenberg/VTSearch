@@ -38,15 +38,12 @@ export interface HexHoverEvent {
   screenY: number;
 }
 
-/** A right-click on the canvas, carrying everything the view needs to open a
- *  context menu and act on the spot under the cursor. */
+/** A right-click on the canvas, carrying what the view needs to open the bin
+ *  popup over the spot under the cursor. */
 export interface BrowseContextMenuEvent {
-  /** Viewport coords (clientX/clientY) the menu anchors to. */
+  /** Viewport coords (clientX/clientY) the popup anchors to. */
   clientX: number;
   clientY: number;
-  /** Canvas-relative coords — the anchor for the menu's "zoom in/out here". */
-  canvasX: number;
-  canvasY: number;
   /** Member media ids of the bin under the cursor; empty over blank space. */
   members: number[];
 }
@@ -101,7 +98,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   @Input() marqueeMode = false;
   @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
-  /** A right-click on the canvas; the view opens a context menu in response. */
+  /** A right-click on the canvas; the view opens the bin popup in response. */
   @Output() contextMenu = new EventEmitter<BrowseContextMenuEvent>();
   /**
    * The densest visible cell's item count, emitted whenever it changes. Density
@@ -937,12 +934,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.zoomBy(BrowseCanvasComponent.DOUBLE_CLICK_ZOOM, mx, my);
   }
 
-  /** Right-click: suppress the native menu and ask the view to open ours,
-   *  carrying the cursor anchor and the bin (if any) under it. */
+  /** Right-click: suppress the native menu and ask the view to open the bin
+   *  popup, carrying the cursor anchor and the bin (if any) under it. */
   private onContextMenu(event: MouseEvent): void {
     event.preventDefault();
     const [mx, my] = this.canvasXY(event);
-    // Close any hover preview so it doesn't sit under the menu.
+    // Close any hover preview so it doesn't sit under the popup.
     this.clearHover();
     const cell = this.hitTest(mx, my);
     const members = cell ? this.cellMembers(cell) : [];
@@ -950,8 +947,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.contextMenu.emit({
         clientX: event.clientX,
         clientY: event.clientY,
-        canvasX: mx,
-        canvasY: my,
         members,
       }),
     );

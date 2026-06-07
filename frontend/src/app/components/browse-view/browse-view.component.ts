@@ -9,10 +9,7 @@ import {
   HexHoverEvent,
 } from '../browse-canvas/browse-canvas.component';
 import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
-import {
-  MediaContextMenuComponent,
-  MediaContextMenuItem,
-} from '../left-panel/media-item/media-context-menu.component';
+import { BrowseBinPopupComponent } from '../browse-bin-popup/browse-bin-popup.component';
 import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
 import { BrowseSelectionPanelComponent } from '../browse-selection-panel/browse-selection-panel.component';
 import { BrowseMinimapComponent } from '../browse-minimap/browse-minimap.component';
@@ -51,7 +48,7 @@ import type { SettingsUpdate } from '../../generated/api-client/models/settings-
     BrowseMinimapComponent,
     ProgressBarComponent,
     IconComponent,
-    MediaContextMenuComponent,
+    BrowseBinPopupComponent,
   ],
   // Scoped per browse view so the canvas, its minimap, and the selection panel
   // share one viewport channel and one selection set without leaking across
@@ -162,23 +159,14 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   private readonly ZOOM_BUTTON_FACTOR = 1.4;
 
-  /**
-   * Zoom step for the right-click menu's "Zoom in/out here". A decisive jump
-   * (mirrors the double-click factor) since it's a deliberate one-shot action,
-   * anchored at the spot the user right-clicked rather than the viewport centre.
-   */
-  private readonly CONTEXT_ZOOM_FACTOR = 2.0;
-
-  /** Right-click context-menu state. Open flag + viewport anchor for the menu,
-   *  the canvas-relative anchor for its zoom actions, and the bin (member ids)
-   *  the menu was summoned over. */
+  /** Bin-popup state: open flag, the viewport anchor it opens at, and the
+   *  member ids of the bin the user right-clicked. Right-clicking a bin pops a
+   *  scrollable list of its items (hear on hover, click to select) instead of an
+   *  action menu; right-clicking empty space closes it. */
   contextMenuOpen = false;
   contextMenuX = 0;
   contextMenuY = 0;
-  contextMenuItems: MediaContextMenuItem[] = [];
-  private ctxCanvasX = 0;
-  private ctxCanvasY = 0;
-  private ctxMembers: number[] = [];
+  contextMembers: number[] = [];
 
   private destroy$ = new Subject<void>();
   private polling = false;
@@ -483,57 +471,19 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.canvas?.zoomToFit();
   }
 
-  // --- Right-click context menu -------------------------------------------
+  // --- Right-click bin popup ----------------------------------------------
 
-  /** Open the canvas context menu at the cursor, with bin actions when the
-   *  right-click landed on a bin plus the always-available zoom/clear actions. */
+  /** Right-click on the canvas: pop the bin's item list at the cursor when it
+   *  landed on a bin; close any open popup when it hit empty space. */
   onCanvasContextMenu(event: BrowseContextMenuEvent): void {
-    this.ctxCanvasX = event.canvasX;
-    this.ctxCanvasY = event.canvasY;
-    this.ctxMembers = event.members;
+    if (event.members.length === 0) {
+      this.dismissContextMenu();
+      return;
+    }
+    this.contextMembers = event.members;
     this.contextMenuX = event.clientX;
     this.contextMenuY = event.clientY;
-    this.contextMenuItems = this.buildContextMenuItems(event.members);
     this.contextMenuOpen = true;
-  }
-
-  private buildContextMenuItems(members: number[]): MediaContextMenuItem[] {
-    const items: MediaContextMenuItem[] = [];
-    if (members.length > 0) {
-      const anySelected = this.selection.selectedCountIn(members) > 0;
-      items.push({
-        id: 'toggle-bin',
-        label: anySelected ? 'Deselect this bin' : 'Select this bin',
-      });
-    }
-    items.push(
-      { id: 'zoom-in', label: 'Zoom in here' },
-      { id: 'zoom-out', label: 'Zoom out here' },
-      { id: 'zoom-fit', label: 'Zoom to fit' },
-      { id: 'clear', label: 'Clear selection', disabled: this.selection.size === 0 },
-    );
-    return items;
-  }
-
-  onContextMenuAction(action: string): void {
-    this.dismissContextMenu();
-    switch (action) {
-      case 'toggle-bin':
-        if (this.ctxMembers.length > 0) this.selection.toggleBin(this.ctxMembers);
-        break;
-      case 'zoom-in':
-        this.canvas?.zoomBy(this.CONTEXT_ZOOM_FACTOR, this.ctxCanvasX, this.ctxCanvasY);
-        break;
-      case 'zoom-out':
-        this.canvas?.zoomBy(1 / this.CONTEXT_ZOOM_FACTOR, this.ctxCanvasX, this.ctxCanvasY);
-        break;
-      case 'zoom-fit':
-        this.canvas?.zoomToFit();
-        break;
-      case 'clear':
-        this.selection.clear();
-        break;
-    }
   }
 
   dismissContextMenu(): void {
