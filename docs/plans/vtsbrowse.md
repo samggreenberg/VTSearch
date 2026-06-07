@@ -835,16 +835,17 @@ and available to any future consumer of `vtscore`.
   - Backend: bins store only `count` + `rep_id`, so the full member id list per
     cell is re-derived on demand (`tile_member_ids` in `vtscore/projection/pyramid.py`)
     and attached to each cell in the tile payload (`member_ids`) — nothing new is
-    persisted; it rides the immutable, HTTP-cached tile.
+    persisted; it rides the immutable, HTTP-cached tile. The re-derivation is
+    backed by a per-(projection, level) membership cache (`_level_membership` /
+    `Pyramid._member_index`): one O(N) re-bin per level, shared across all that
+    level's tiles, held in-memory only (never persisted; re-derived from the
+    frozen coords on the next load), so panning a level after the first tile is a
+    dict lookup rather than a fresh O(N) scan.
   - *Open follow-ups:*
     - **Act on the selection.** This effort only *tracks* and *displays* the
       selection; the next pass wires it to an action (export the subset, seed a
       detector, build a subset projection from it, etc.). The selected ids are a
       plain `Set<number>` ready to hand off.
-    - **Per-tile membership recompute cost.** `tile_member_ids` re-bins the whole
-      coordinate array per tile request (O(N) each), fine for typical datasets and
-      cached after first fetch, but a per-(projection, level) assignment cache
-      would cut the first-viewport cost on very large datasets.
     - **Minimap selection overlay.** The minimap does not yet show which region is
       selected; a faint accent wash over selected cells there would aid orientation.
 - **Load + project on the dashboard before entering Browse.** The dashboard's

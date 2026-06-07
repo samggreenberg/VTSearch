@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -106,6 +106,13 @@ class Pyramid:
     # (level, tx, ty) -> Tile
     tiles: dict[tuple[int, int, int], Tile]
     bin_shape: str = DEFAULT_BIN_SHAPE  # "hex" | "square" — which lattice was binned
+    # In-memory, process-scoped membership cache: level -> {(tx, ty): {(q, r): [ids]}}.
+    # Lazily filled by ``tile_member_ids`` (one O(N) re-bin per level, shared across
+    # that level's tiles) and never persisted — the frozen coords re-imply it on the
+    # next load. Excluded from equality/repr so it stays a pure cache.
+    _member_index: dict[int, dict[tuple[int, int], dict[tuple[int, int], list[int]]]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
     def level_radius(self, level: int) -> float:
         """Cell radius at *level* (``base_radius / 2**level``)."""
@@ -320,6 +327,53 @@ def build_pyramid(
     )
 
 
+def _level_membership(
+    pyr: Pyramid,
+    projection: Projection,
+    level: int,
+) -> dict[tuple[int, int], dict[tuple[int, int], list[int]]]:
+    """All of *level*'s membership, ``{(tx, ty): {(q, r): [ids]}}``, cached in-memory.
+
+    A :class:`HexCell` stores only its ``count`` (density) and a single
+    ``rep_id`` — the per-cell member lists are computed during the build and
+    discarded, since persisting them would bloat the container with an index
+    that the frozen 2-D coordinates already imply.  So we re-derive them here by
+    re-binning *projection*'s coordinates at *level*'s radius.
+
+    A single :func:`_geometry_for` assignment pass already partitions *every*
+    point into its ``(tx, ty)`` tile and ``(q, r)`` cell, so we build the whole
+    level at once and memoize it on ``pyr._member_index``.  The first tile
+    fetched at a level pays the O(N) re-bin; every other tile at that level is
+    then a dict lookup — turning a per-tile O(N) scan into one O(N) pass per
+    level.  The cache is process-scoped and never persisted; the frozen layout
+    re-derives it on the next load.
+    """
+    cached = pyr._member_index.get(level)
+    if cached is not None:
+        return cached
+
+    coords = np.ascontiguousarray(projection.coords, dtype=np.float64)
+    index: dict[tuple[int, int], dict[tuple[int, int], list[int]]] = {}
+    if coords.shape[0] == 0:
+        pyr._member_index[level] = index
+        return index
+
+    ids = np.asarray(projection.ids, dtype=np.int64)
+    geom = _geometry_for(pyr.bin_shape)
+    radius = pyr.level_radius(level)
+    q, r = geom.assign(coords, radius)
+    tx_all, ty_all = geom.tile_index(q, r, pyr.tile_span)
+
+    for txx, tyy, qq, rr, mid in zip(
+        tx_all.tolist(), ty_all.tolist(), q.tolist(), r.tolist(), ids.tolist()
+    ):
+        tile_cells = index.setdefault((int(txx), int(tyy)), {})
+        tile_cells.setdefault((int(qq), int(rr)), []).append(int(mid))
+
+    pyr._member_index[level] = index
+    return index
+
+
 def tile_member_ids(
     pyr: Pyramid,
     projection: Projection,
@@ -329,33 +383,14 @@ def tile_member_ids(
 ) -> dict[tuple[int, int], list[int]]:
     """Media ids per cell for one tile, re-derived from the frozen layout.
 
-    A :class:`HexCell` stores only its ``count`` (density) and a single
-    ``rep_id`` — the per-cell member lists are computed during the build and
-    discarded, since persisting them would bloat the container with an index
-    that the frozen 2-D coordinates already imply.  The browse canvas needs the
-    full membership to render per-cell selection state (none / partial / full)
-    and to toggle a whole bin's contents, so we recompute it on demand here by
-    re-binning *projection*'s coordinates at *level*'s radius and grouping the
-    points that land in the requested ``(tx, ty)`` tile.
-
-    Returned keyed by ``(q, r)`` so the tile endpoint can hand each cell its
-    members.  Tiles are immutable for the dataset's life (the projection is
-    frozen at ingest), so this is computed once per tile and then HTTP-cached.
+    The browse canvas needs each cell's full membership to render per-cell
+    selection state (none / partial / full) and to toggle a whole bin's
+    contents.  Returned keyed by ``(q, r)`` so the tile endpoint can hand each
+    cell its members.  Backed by the per-level cache in :func:`_level_membership`
+    (computed once per level, shared across that level's tiles); the result is
+    also immutable for the dataset's life, so the tile endpoint HTTP-caches it.
     """
-    coords = np.ascontiguousarray(projection.coords, dtype=np.float64)
-    if coords.shape[0] == 0:
-        return {}
-    ids = np.asarray(projection.ids, dtype=np.int64)
-    geom = _geometry_for(pyr.bin_shape)
-    radius = pyr.level_radius(level)
-    q, r = geom.assign(coords, radius)
-    tx_all, ty_all = geom.tile_index(q, r, pyr.tile_span)
-    mask = (tx_all == tx) & (ty_all == ty)
-
-    members: dict[tuple[int, int], list[int]] = {}
-    for qq, rr, mid in zip(q[mask].tolist(), r[mask].tolist(), ids[mask].tolist()):
-        members.setdefault((int(qq), int(rr)), []).append(int(mid))
-    return members
+    return _level_membership(pyr, projection, level).get((tx, ty), {})
 
 
 def max_useful_levels(point_count: int) -> int:
