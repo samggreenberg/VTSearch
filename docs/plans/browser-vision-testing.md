@@ -1,6 +1,13 @@
 # Browser-Vision Testing
 
-**Status:** Proposed. Drafted 2026-05-27. No runs executed yet.
+**Status:** Active playbook. First round of all four tasks ran 2026-05-27/28;
+the task bodies below are reusable templates for future rounds. Completed runs
+(findings live in the linked reports, not here):
+
+- ~~Task 1 — Rendered style audit~~ → [`reviews/2026-05-27-style-audit.md`](../reviews/2026-05-27-style-audit.md)
+- ~~Task 2 — Empty / edge-state sweep~~ → [`reviews/2026-05-28-edge-states.md`](../reviews/2026-05-28-edge-states.md)
+- ~~Task 3 — End-to-end flow walkthrough~~ → [`reviews/2026-05-28-e2e-flows.md`](../reviews/2026-05-28-e2e-flows.md)
+- ~~Task 4 — Long-running-op observability~~ → [`reviews/2026-05-28-longops.md`](../reviews/2026-05-28-longops.md)
 
 **Scope:** Exercise VTSearch through the Claude Chrome extension on a
 CPU-only Linux laptop, using Claude's ability to *see* the rendered
