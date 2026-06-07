@@ -709,6 +709,31 @@ def _terminate_listeners(pids: "list[int]", port: int) -> bool:
     return _wait_for_free(port)
 
 
+def _acquire_single_instance_lock(port: int):
+    """Fail fast if another ``python app.py`` is already running on ``port``.
+
+    Closes the gap :func:`_preflight_port` cannot: during the first instance's
+    minute-long model load the port is not bound yet, so a second launch in
+    that window slips past the port check and loads the model stack (~17 GB) a
+    second time, OOM-killing the job. The lock here is taken before any model
+    load, so the duplicate dies in milliseconds. Returns a handle the caller
+    must hold for the process lifetime.
+    """
+    from vtscore.single_instance import AlreadyRunningError, acquire
+
+    try:
+        return acquire(port)
+    except AlreadyRunningError as exc:
+        print(
+            f"\u26d4 {exc}. Refusing to start a second copy, which would reload "
+            f"the model stack and risk OOM-killing the job. Stop the first "
+            f"instance (e.g. `fuser -k {port}/tcp`), or set VTSEARCH_RUNDIR to "
+            f"isolate this one.",
+            flush=True,
+        )
+        sys.exit(1)
+
+
 def _preflight_port(port: int) -> None:
     """Warn-and-prompt if ``port`` is already bound before we try to bind it.
 
@@ -1310,6 +1335,12 @@ if __name__ == "__main__":
                 flush=True,
             )
 
+        # Single-instance lock FIRST -- before the model load -- so a
+        # duplicate launch fails in milliseconds. _preflight_port only
+        # catches an already-*listening* instance; this also covers the
+        # model-loading window when the port is briefly still free. Held
+        # for the process lifetime (released on exit).
+        _instance_lock = _acquire_single_instance_lock(5000)  # noqa: F841
         # Catch a leftover instance before the expensive model load, so the
         # user is prompted up front instead of after a long startup.
         _preflight_port(5000)
