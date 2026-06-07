@@ -298,14 +298,29 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const [xmin, ymin, xmax, ymax] = this.meta.bounds;
     const dataW = xmax - xmin || 1;
     const dataH = ymax - ymin || 1;
-    const padding = 0.1;
-    const padW = dataW * (1 + padding * 2);
-    const padH = dataH * (1 + padding * 2);
+    // Small breathing room beyond the bins themselves.
+    const padding = 0.05;
     const w = this.width || 800;
     const h = this.height || 600;
-    // Fit so the *effective* zoom fills the viewport: divide out displayScale so
-    // a non-default display size still frames the whole projection on load.
-    this.transform.zoom = Math.min(w / padW, h / padH) / this.displayScale;
+    // `bounds` is the extent of the bin *centres*, but each edge bin is drawn out
+    // to its circumradius beyond its centre, so framing on the centres alone clips
+    // the edge bins. Add the bin circumradius (in projection units) as margin. The
+    // active level — and therefore the radius — depends on the zoom we're solving
+    // for, so iterate a few times from the no-margin fit to a fixed point (the
+    // level is quantised and clamps at 0, so this settles immediately).
+    let zoom =
+      Math.min(w / (dataW * (1 + padding * 2)), h / (dataH * (1 + padding * 2))) /
+      this.displayScale;
+    for (let i = 0; i < 3; i++) {
+      const level = this.levelForEffZoom(zoom * this.displayScale);
+      const r = this.meta.base_radius / Math.pow(2, level);
+      const padW = dataW + 2 * (r + dataW * padding);
+      const padH = dataH + 2 * (r + dataH * padding);
+      // Fit so the *effective* zoom fills the viewport: divide out displayScale so
+      // a non-default display size still frames the whole projection on load.
+      zoom = Math.min(w / padW, h / padH) / this.displayScale;
+    }
+    this.transform.zoom = zoom;
     this.transform.centerX = (xmin + xmax) / 2;
     this.transform.centerY = (ymin + ymax) / 2;
     // Mark whether this fit used the real canvas size (vs the 800x600 fallback),
@@ -314,16 +329,23 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.updateActiveLevel();
   }
 
-  private updateActiveLevel(): void {
-    if (!this.meta || this.meta.levels.length === 0) return;
+  /** Pyramid level whose bins render closest to the target on-screen radius at
+   * the given effective zoom. Shared by live level selection and fit framing. */
+  private levelForEffZoom(effZoom: number): number {
+    if (!this.meta || this.meta.levels.length === 0) return 0;
     const targetScreenRadius = 28;
     const idealLevel = Math.log2(
-      (this.meta.base_radius * this.effZoom) / targetScreenRadius,
+      (this.meta.base_radius * effZoom) / targetScreenRadius,
     );
-    this.activeLevel = Math.max(
+    return Math.max(
       0,
       Math.min(this.meta.levels.length - 1, Math.round(idealLevel)),
     );
+  }
+
+  private updateActiveLevel(): void {
+    if (!this.meta || this.meta.levels.length === 0) return;
+    this.activeLevel = this.levelForEffZoom(this.effZoom);
   }
 
   private projToScreen(px: number, py: number): [number, number] {
