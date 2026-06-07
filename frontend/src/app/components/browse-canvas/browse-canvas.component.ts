@@ -80,6 +80,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * in {@link thumbnailMode} (image/video); singletons never get the band.
    */
   @Input() thumbnailBorder = 0;
+  /**
+   * GUI parallel to the Shift modifier: when on, a plain left-drag rubber-bands
+   * a selection marquee instead of panning, so the region-select gesture is
+   * discoverable without knowing the Shift+drag hotkey. Shift+drag keeps working
+   * regardless. Toggled by the region-select button in the browse toolbar.
+   */
+  @Input() marqueeMode = false;
   @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
   /**
    * The densest visible cell's item count, emitted whenever it changes. Density
@@ -266,6 +273,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (changes['displayScale'] && !changes['displayScale'].firstChange) {
       this.updateActiveLevel();
       this.requestRedraw();
+    }
+    // Entering region-select mode: drop any hover preview/highlight that was
+    // showing, since hover is suppressed while the mode is on.
+    if (changes['marqueeMode'] && this.marqueeMode) {
+      this.clearHover();
     }
     // A colormap change only affects flat (non-thumbnail) shading; repaint.
     if (changes['colormap'] && !changes['colormap'].firstChange) {
@@ -773,9 +785,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.panStartY = event.clientY;
     this.dragMoved = false;
 
-    if (event.shiftKey) {
-      // Shift+drag: rubber-band a region to add to the selection. Suppress any
-      // hover preview while marqueeing so it doesn't flicker over the rectangle.
+    if (event.shiftKey || this.marqueeMode) {
+      // Shift+drag (or the region-select toggle): rubber-band a region to add to
+      // the selection. Suppress any hover preview while marqueeing so it doesn't
+      // flicker over the rectangle.
       event.preventDefault();
       const [mx, my] = this.canvasXY(event);
       this.isMarquee = true;
@@ -930,7 +943,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private onCanvasMouseMove(event: MouseEvent): void {
-    if (this.isPanning || this.isMarquee) return;
+    // No hover while panning or marqueeing (mid-drag), and none at all in
+    // region-select mode: the cursor is a crosshair for drawing a box, so a
+    // hover preview/highlight popping up under it would just be noise.
+    if (this.isPanning || this.isMarquee || this.marqueeMode) return;
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
@@ -990,6 +1006,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private onCanvasMouseLeave(): void {
     this.pointerInside = false;
+    this.clearHover();
+  }
+
+  /** Drop any pending/active hover: cancel the debounce, clear the highlighted
+   *  cell, and tell the preview to close. Safe to call when nothing is hovered. */
+  private clearHover(): void {
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.hoveredCell) {
       this.hoveredCell = null;

@@ -113,6 +113,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   binShape: BinShape = 'hex';
 
   /**
+   * Region-select mode: the GUI parallel to the Shift+drag hotkey. When on, a
+   * plain left-drag on the canvas rubber-bands a selection marquee instead of
+   * panning. The toolbar button surfaces (and toggles) it so the gesture is
+   * discoverable; Shift+drag keeps working whether or not this is on. Not
+   * persisted — it's a transient interaction mode, reset on each visit.
+   */
+  marqueeMode = false;
+
+  /**
    * Subset mode: browse an ephemeral UMAP fit over just a handful of media
    * (the positives of a Find run) instead of the full dataset. Set from the
    * `?subset=1` query param plus a handoff from {@link BrowseSubsetService}.
@@ -425,6 +434,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             err?.error?.message || err?.error?.error || 'Failed to switch bin shape';
         },
       });
+  }
+
+  /** Toggle region-select mode (drag-to-marquee without holding Shift). */
+  toggleMarqueeMode(): void {
+    this.marqueeMode = !this.marqueeMode;
   }
 
   /** Zoom in one step (narrower span, cells keep their display size). */

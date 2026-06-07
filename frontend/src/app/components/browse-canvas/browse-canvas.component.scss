@@ -18,4 +18,14 @@
       cursor: grabbing;
     }
   }
+
+  // Region-select toggle on: a plain drag paints a marquee rather than panning,
+  // so the cursor reads as "draw a box" instead of "grab to pan".
+  &.marquee-active canvas {
+    cursor: crosshair;
+
+    &:active {
+      cursor: crosshair;
+    }
+  }
 }
