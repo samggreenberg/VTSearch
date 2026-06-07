@@ -12045,7 +12045,7 @@
     },
     "/api/projection/subset/remove": {
       "post": {
-        "description": "Re-bins the frozen subset layout onto its existing grid minus the removed\npoints: the remaining points keep their exact 2-D positions and bins, only\ncounts/representatives change.  The ``projection_id`` (layout identity) is\npreserved so the canvas keeps the user's pan/zoom; a bumped\n``content_version`` busts the otherwise-immutable tile cache.  Returns the\nupdated subset meta for *shape*.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
+        "description": "Re-bins the frozen subset layout onto its existing grid minus the removed\npoints: the remaining points keep their exact 2-D positions and bins, only\ncounts/representatives change.  The ``projection_id`` (layout identity) is\npreserved and a bumped ``content_version`` busts the otherwise-immutable\ntile cache.  The served ``bounds`` shrink to the survivors' extent so the\nclient re-frames to what's left (zoom-to-fit, minimap) instead of keeping\ndead space where the culled points were \u2014 safe because bin assignment is\norigin-independent; bounds only drive client framing.  Returns the updated\nsubset meta for *shape*.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
         "operationId": "remove_from_subset",
         "requestBody": {
           "content": {
