@@ -38,6 +38,11 @@ export interface HexHoverEvent {
   screenY: number;
 }
 
+/** How much larger the hovered cell is drawn relative to its neighbours so it
+ *  lifts off the grid. The border is reserved for selection state, so hover is
+ *  signalled by this size bump + a soft drop shadow instead of a ring. */
+const HOVER_RADIUS_SCALE = 1.18;
+
 @Component({
   selector: 'vt-browse-canvas',
   standalone: true,
@@ -207,8 +212,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.requestRedraw();
     });
 
-    // Repaint when the selection changes so the per-cell rings and the dimming
-    // of unselected cells track the live set.
+    // Repaint when the selection changes so the per-cell selection rings track
+    // the live set. Unselected cells are left untouched — a selection elsewhere
+    // never dims or otherwise alters them.
     this.selectionSub = this.selection.changed$.subscribe(() => this.requestRedraw());
 
     this.resizeObserver = new ResizeObserver(() => {
@@ -481,11 +487,34 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
     const selectionActive = this.selection.size > 0;
 
+    // The hovered cell is deferred and redrawn last (enlarged, on top of its
+    // neighbours) so the hover read-out is a size bump rather than a border —
+    // leaving the border free to encode selection state.
+    let hovered: { cell: HexCellPayload; sx: number; sy: number } | null = null;
     for (const cell of allCells) {
       const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
       if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
       if (sy < -screenRadius * 2 || sy > this.height + screenRadius * 2) continue;
+      if (
+        this.hoveredCell &&
+        this.hoveredCell.q === cell.q &&
+        this.hoveredCell.r === cell.r
+      ) {
+        hovered = { cell, sx, sy };
+        continue;
+      }
       this.drawHex(ctx, sx, sy, screenRadius, cell, cmap, selectionActive);
+    }
+    if (hovered) {
+      this.drawHoveredHex(
+        ctx,
+        hovered.sx,
+        hovered.sy,
+        screenRadius,
+        hovered.cell,
+        cmap,
+        selectionActive,
+      );
     }
 
     if (this.marquee) this.drawMarquee(ctx);
@@ -565,33 +594,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.fill();
     }
 
-    // When a selection exists, dim every bin with no selected member so the
-    // selected ones pop. Clipped so the wash stays inside the cell footprint.
+    // The border encodes selection state only: an inset accent ring, solid when
+    // every member is selected and dashed when only some are. Unselected bins
+    // keep their plain border regardless of what's selected elsewhere, so the
+    // grid never re-shades when the selection changes.
     const selState = selectionActive ? this.selStateFor(cell) : 0;
-    if (selectionActive && selState === 0) {
-      ctx.save();
-      ctx.clip();
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-      ctx.fill();
-      ctx.restore();
-    }
-
-    const isHovered =
-      this.hoveredCell && this.hoveredCell.q === cell.q && this.hoveredCell.r === cell.r;
-    if (isHovered) {
-      // Clip so the highlight replaces the cell's own edge pixels rather than
-      // bleeding outward onto its neighbours. A centred stroke straddles the
-      // path (half its width spills over the next cell, which later cells then
-      // paint over inconsistently); clipping keeps the full stroke inside, so
-      // doubling the width yields a 2px band that reads as an inset border and
-      // never changes the cell's footprint.
-      ctx.save();
-      ctx.clip();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 4;
-      ctx.stroke();
-      ctx.restore();
-    } else if (selState > 0) {
+    if (selState > 0) {
       // Selected bin: an inset accent ring (solid when every member is
       // selected, dashed when only some are — the "partial" state). Clipped so
       // the band sits just inside the cell rather than bleeding onto neighbours.
@@ -621,6 +629,34 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.lineWidth = 0.5;
       ctx.stroke();
     }
+  }
+
+  /** Redraw the hovered cell on top of its neighbours, enlarged and with a soft
+   *  drop shadow so it lifts off the grid. Hover is signalled this way (not by a
+   *  border) so the cell's border can stay dedicated to selection state. */
+  private drawHoveredHex(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    radius: number,
+    cell: HexCellPayload,
+    cmap: ResolvedColormap,
+    selectionActive: boolean,
+  ): void {
+    const bumped = radius * HOVER_RADIUS_SCALE;
+    // Cast a single clean drop shadow from an opaque base shape first, then
+    // paint the real (shadow-free) cell on top so the fill/border don't each
+    // stack their own shadow.
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = Math.max(4, radius * 0.3);
+    ctx.shadowOffsetY = Math.max(1, radius * 0.1);
+    this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
+    ctx.fillStyle = this.themeColor('--bg-body');
+    ctx.fill();
+    ctx.restore();
+
+    this.drawHex(ctx, cx, cy, bumped, cell, cmap, selectionActive);
   }
 
   /** Cover-fit an image over the hex's 2*radius square (the path must be clipped). */
