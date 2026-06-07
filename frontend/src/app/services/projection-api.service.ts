@@ -44,20 +44,34 @@ export class ProjectionApiService {
     return this.http.post<ProjectionBuildResponse>('/api/projection/build', { shape, ids });
   }
 
+  /**
+   * Remove ids from the current subset projection in place — no UMAP re-fit.
+   * The server re-bins the frozen layout minus those points and returns the
+   * updated meta (same ``projection_id``, bumped ``content_version``).
+   */
+  subsetRemove(shape: BinShape, ids: number[]): Observable<ProjectionMeta> {
+    return this.http.post<ProjectionMeta>('/api/projection/subset/remove', { shape, ids });
+  }
+
   getTile(
     shape: BinShape,
     level: number,
     tx: number,
     ty: number,
     subset = false,
+    cacheToken = '',
   ): Observable<TilePayload> {
     // The backend resolves the pyramid from the active dataset context, so the
-    // tile URL is keyed by (shape, level, tx, ty); the projection id is tracked
-    // client-side (TileCacheService) for cache invalidation, not in the path.
+    // tile URL is keyed by (shape, level, tx, ty). Tiles are served
+    // ``immutable``, so ``cacheToken`` (``<projection_id>:<content_version>``)
+    // rides along as ``?v=`` to give each projection — and each in-place edit of
+    // a subset — a distinct URL, busting the HTTP cache when content changes.
     const url = `/api/projection/tiles/${shape}/${level}/${tx}/${ty}`;
-    if (subset) {
-      return this.http.get<TilePayload>(url, { params: { subset: '1' } });
-    }
-    return this.http.get<TilePayload>(url);
+    const params: Record<string, string> = {};
+    if (subset) params['subset'] = '1';
+    if (cacheToken) params['v'] = cacheToken;
+    return Object.keys(params).length
+      ? this.http.get<TilePayload>(url, { params })
+      : this.http.get<TilePayload>(url);
   }
 }

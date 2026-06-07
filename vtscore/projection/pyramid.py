@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
@@ -325,6 +325,30 @@ def build_pyramid(
         tiles=tiles,
         bin_shape=bin_shape,
     )
+
+
+def rebin_like(projection: Projection, template: Pyramid) -> Pyramid:
+    """Re-bin *projection* onto *template*'s exact grid, without re-fitting UMAP.
+
+    Reuses the template pyramid's ``base_radius``, ``tile_span``, ``bin_shape``,
+    level count **and** ``bounds`` so every surviving point lands in the same
+    ``(q, r)`` cell — and the canvas's coord→screen transform (driven by
+    ``bounds``) is unchanged, so nothing moves on screen.  Only counts,
+    representatives, and now-empty cells differ.  This is the cheap operation
+    behind removing items from a subset browse: the 2-D layout is frozen; we
+    just recompute which items fall in which (unchanged) bins.
+    """
+    pyr = build_pyramid(
+        projection,
+        bin_shape=template.bin_shape,
+        n_levels=len(template.levels),
+        base_radius=template.base_radius,
+        tile_span=template.tile_span,
+    )
+    # Keep the original extent so the client never re-frames; bins are assigned
+    # from absolute coords + radius (origin-independent), so a stable ``bounds``
+    # is purely a metadata/transform concern, not a binning one.
+    return replace(pyr, bounds=template.bounds)
 
 
 def _level_membership(

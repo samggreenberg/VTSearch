@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -44,6 +44,17 @@ interface SelectionEntry {
 export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   /** Active media type, used to resolve the per-type view-mode + size prefs. */
   @Input() mediaType = '';
+
+  /**
+   * Whether to offer the "Remove from Good" cull action. Only meaningful when
+   * browsing a Find run's positives (subset mode): the action marks the
+   * selected items Bad in the detector's labels and drops them from the
+   * browse. The browse view owns the actual mutation + re-projection.
+   */
+  @Input() canRemoveGood = false;
+
+  /** Emitted when the user confirms the "Remove from Good" cull. */
+  @Output() removeGood = new EventEmitter<void>();
 
   count = 0;
   sortMode: SelectionSortMode = 'time-desc';
@@ -150,6 +161,12 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   clear(): void {
     this.selection.clear();
+  }
+
+  /** Ask the browse view to mark the selected items Bad and remove them. */
+  onRemoveGood(): void {
+    if (this.count === 0) return;
+    this.removeGood.emit();
   }
 
   /** Clicking a selected item drops it from the selection. */

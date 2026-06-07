@@ -62,6 +62,26 @@ export class MediasApiService {
     );
   }
 
+  /**
+   * Apply one absolute vote target to many medias in a single request.
+   *
+   * Mirrors {@link vote} for a batch (idempotent, image-level — no region
+   * boxes), persisting the detector labelset once server-side.  Used by the
+   * Browser's "Remove from Good" cull.  Stays on plain HttpClient (like
+   * {@link addToPile}) because the bulk route isn't modelled in the generated
+   * client; the active-context interceptor still attaches the dataset /
+   * detector headers the route requires.
+   */
+  voteBulk(
+    ids: number[],
+    target: 'good' | 'bad' | 'none',
+  ): Observable<{ ok: boolean; changed: number; missing: number[] }> {
+    return this.http.post<{ ok: boolean; changed: number; missing: number[] }>(
+      '/api/medias/vote-bulk',
+      { ids, target },
+    );
+  }
+
   /** Multipart upload; stays on plain HttpClient because ng-openapi-gen
    *  doesn't model multipart bodies (the generated function's ``$Params``
    *  has no ``body`` field at all). */

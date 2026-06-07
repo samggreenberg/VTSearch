@@ -496,3 +496,73 @@ class TestProjectionSubset:
         client.post("/api/projection/build")
         _wait_projection()
         assert client.get("/api/projection/meta?subset=1").get_json()["status"] == "idle"
+
+
+class TestSubsetRemove:
+    """``POST /api/projection/subset/remove``: cull ids without re-fitting UMAP."""
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_remove_drops_ids_and_keeps_coords(self, _mock_fit, client):
+        ctx = get_active_context()
+        ids = sorted(ctx.medias.keys())[:5]
+        client.post("/api/projection/build", json={"ids": ids})
+        _wait_projection()
+
+        before = ctx._subset_projection
+        proj_id_before = before.projection_id
+        # Coordinates of an id we will KEEP must be byte-for-byte unchanged.
+        keep_id = ids[-1]
+        keep_coord = before.coords[before.ids.index(keep_id)].copy()
+
+        removed = ids[:2]
+        resp = client.post("/api/projection/subset/remove", json={"ids": removed})
+        assert resp.status_code == 200
+        meta = resp.get_json()
+
+        # Same layout identity, bumped content version, smaller point count.
+        assert meta["projection_id"] == proj_id_before
+        assert meta["content_version"] == 1
+        assert meta["point_count"] == len(ids) - len(removed)
+
+        after = ctx._subset_projection
+        assert set(after.ids) == set(ids) - set(removed)
+        assert ctx._subset_ids == sorted(set(ids) - set(removed))
+        # The kept point did not move — no re-fit happened.
+        np.testing.assert_array_equal(after.coords[after.ids.index(keep_id)], keep_coord)
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_remove_bumps_version_each_call(self, _mock_fit, client):
+        ctx = get_active_context()
+        ids = sorted(ctx.medias.keys())[:6]
+        client.post("/api/projection/build", json={"ids": ids})
+        _wait_projection()
+
+        m1 = client.post("/api/projection/subset/remove", json={"ids": [ids[0]]}).get_json()
+        m2 = client.post("/api/projection/subset/remove", json={"ids": [ids[1]]}).get_json()
+        assert m1["content_version"] == 1
+        assert m2["content_version"] == 2
+        assert m2["projection_id"] == m1["projection_id"]
+
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_remove_rebuilds_both_shapes(self, _mock_fit, client):
+        ctx = get_active_context()
+        ids = sorted(ctx.medias.keys())[:6]
+        client.post("/api/projection/build", json={"ids": ids})
+        _wait_projection()
+        # Build the square binning too, so both shapes are present.
+        client.post("/api/projection/build", json={"ids": ids, "shape": "square"})
+        _wait_projection()
+        assert set(ctx._subset_pyramids) == {"hex", "square"}
+
+        client.post("/api/projection/subset/remove", json={"ids": [ids[0]], "shape": "square"})
+        # Both shapes re-binned over the reduced layout.
+        assert ctx._subset_pyramids["hex"].point_count == len(ids) - 1
+        assert ctx._subset_pyramids["square"].point_count == len(ids) - 1
+
+    def test_remove_without_subset_returns_409(self, client):
+        resp = client.post("/api/projection/subset/remove", json={"ids": [1]})
+        assert resp.status_code == 409
+
+    def test_remove_empty_ids_rejected(self, client):
+        resp = client.post("/api/projection/subset/remove", json={"ids": []})
+        assert resp.status_code == 422

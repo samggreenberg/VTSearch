@@ -103,8 +103,15 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       });
 
-    // Run find-label to score and label all medias
-    this.runFindLabel();
+    // Run find-label to score and label all medias — unless we're returning
+    // from the Browser after a "Remove from Good" cull. In that case the
+    // backend vote lists already reflect the removed items (now Bad), and the
+    // loadVotes() above refreshes them; re-running find here would re-score
+    // with the unchanged model and re-promote those items to Good, undoing
+    // the cull. Keep the cull instead (the user's decision).
+    if (!this.browseSubset.consumeReturningToFind()) {
+      this.runFindLabel();
+    }
 
     // Reload + rescore when the active pair changes via the top-bar
     // switcher or a route-param swap (`/find/:ds/:det` → `/find/:ds2/:det2`).

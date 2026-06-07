@@ -37,6 +37,15 @@
   color: var(--text-muted);
 }
 
+// Top-left affordance that returns to the Find view this browse came from
+// (subset mode only). Anchored to ``.browse-main`` like the other overlays.
+.browse-back {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  z-index: 2;
+}
+
 .browse-info {
   position: absolute;
   bottom: var(--space-md);

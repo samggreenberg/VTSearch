@@ -31,6 +31,15 @@
     @case ('ready') {
       <div class="browse-content" #content [style.--browse-panel-width]="panelWidth + 'px'">
         <div class="browse-main">
+          @if (subset) {
+            <button
+              type="button"
+              class="btn btn--secondary btn--sm browse-back"
+              (click)="backToFind()"
+              title="Return to the Find view (keeps any items you removed from Good)">
+              &larr; Back to Find
+            </button>
+          }
           <vt-browse-canvas
             [meta]="meta"
             [mediaType]="mediaType"
@@ -129,6 +138,8 @@
           <vt-browse-selection-panel
             class="browse-side-selection"
             [mediaType]="mediaType"
+            [canRemoveGood]="subset"
+            (removeGood)="onRemoveGood()"
           />
           <div class="browse-side-meta">
             <vt-browse-legend [maxCount]="densityMax" [colormap]="colormap" />

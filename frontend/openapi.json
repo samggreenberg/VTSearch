@@ -3404,6 +3404,56 @@
         ],
         "type": "object"
       },
+      "MediaVoteBulkRequest": {
+        "properties": {
+          "ids": {
+            "description": "Media ids to apply the target vote to.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "target": {
+            "description": "Absolute target state applied to every id: ``good``, ``bad``, or ``none``. Idempotent.",
+            "enum": [
+              "good",
+              "bad",
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "ids",
+          "target"
+        ],
+        "type": "object"
+      },
+      "MediaVoteBulkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "description": "How many ids actually changed state (idempotent re-applies and missing ids excluded).",
+            "type": "integer"
+          },
+          "missing": {
+            "description": "Requested ids that were not present in the loaded dataset.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed",
+          "missing",
+          "ok"
+        ],
+        "type": "object"
+      },
       "MediaVoteRequest": {
         "properties": {
           "region_box": {
@@ -3612,6 +3662,11 @@
             },
             "nullable": true,
             "type": "array"
+          },
+          "content_version": {
+            "default": 0,
+            "description": "Monotonic version of the projection's membership. Stays at 0 for full-dataset projections; bumped when items are removed from a subset browse in place. Combined with ``projection_id`` to bust the immutable tile cache without re-framing the canvas.",
+            "type": "integer"
           },
           "current": {
             "default": null,
@@ -4189,6 +4244,32 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "SubsetRemoveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Media ids to drop from the current subset browse.",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "shape": {
+            "default": "hex",
+            "description": "Bin shape whose updated meta to return (hex | square).",
+            "enum": [
+              "hex",
+              "square"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "ids"
         ],
         "type": "object"
       },
@@ -11554,6 +11635,47 @@
         ]
       }
     },
+    "/api/medias/vote-bulk": {
+      "post": {
+        "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics, then the detector\nlabelset is persisted **once** rather than per id.  Bulk votes are\nimage-level (no region boxes).  Powers the Browser's \"Remove from Good\"\ncull, which marks a hand-selected set of false-positives ``bad`` and\ndrops them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
+        "operationId": "vote_media_bulk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaVoteBulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaVoteBulkResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ids supplied."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Apply one absolute vote target to many medias in a single request.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
     "/api/medias/{media_id}/audio": {
       "get": {
         "description": "Returns an ``audio/wav`` file response on success (HTTP 200), or a 404\nJSON envelope if the media does not exist or its bytes are unavailable.",
@@ -11916,6 +12038,47 @@
           }
         },
         "summary": "Return projection/pyramid metadata and build status for a bin shape.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
+    "/api/projection/subset/remove": {
+      "post": {
+        "description": "Re-bins the frozen subset layout onto its existing grid minus the removed\npoints: the remaining points keep their exact 2-D positions and bins, only\ncounts/representatives change.  The ``projection_id`` (layout identity) is\npreserved so the canvas keeps the user's pan/zoom; a bumped\n``content_version`` busts the otherwise-immutable tile cache.  Returns the\nupdated subset meta for *shape*.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
+        "operationId": "remove_from_subset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubsetRemoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionMeta"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "description": "No subset projection is currently built."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Drop ids from the current subset browse **without re-fitting UMAP**.",
         "tags": [
           "projection"
         ]
