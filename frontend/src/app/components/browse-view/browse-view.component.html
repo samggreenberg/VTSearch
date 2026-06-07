@@ -36,9 +36,17 @@
               <button
                 type="button"
                 class="btn btn--secondary btn--sm browse-back"
-                (click)="backToFind()"
+                (click)="back()"
                 title="Return to the Find view (keeps any items you removed from Good)">
                 &larr; Back to Find
+              </button>
+            } @else {
+              <button
+                type="button"
+                class="btn btn--secondary btn--sm browse-back"
+                (click)="back()"
+                title="Return to the dashboard">
+                &larr; Back to Dashboard
               </button>
             }
             <button

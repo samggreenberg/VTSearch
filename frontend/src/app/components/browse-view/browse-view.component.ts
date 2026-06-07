@@ -634,11 +634,24 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Return to wherever this browse was launched from: the Find view for a
+   * subset (Find-positives) browse, or the dashboard for a full-dataset
+   * browse.
+   */
+  back(): void {
+    if (this.subset) {
+      this.backToFind();
+      return;
+    }
+    this.router.navigate(['/dashboard']);
+  }
+
+  /**
    * Return to the Find view this browse was launched from, preserving the
    * cull: the flag tells the Find view to skip its automatic re-scoring (which
    * would re-promote the removed items) and just show the updated labels.
    */
-  backToFind(): void {
+  private backToFind(): void {
     const datasetId = this.activeContext.datasetId;
     const detectorId = this.activeContext.modelId;
     this.browseSubset.markReturningToFind();

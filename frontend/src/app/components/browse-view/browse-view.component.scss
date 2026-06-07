@@ -38,8 +38,9 @@
 }
 
 // Top-left overlay cluster, anchored to ``.browse-main`` like the other
-// overlays. Stacks the (subset-only) Back affordance above the Re-project
-// button so the two never overlap regardless of mode.
+// overlays. Stacks the Back affordance (to Find in subset mode, to the
+// dashboard in full-dataset mode) above the Re-project button so the two
+// never overlap regardless of mode.
 .browse-tools-left {
   position: absolute;
   top: var(--space-md);
