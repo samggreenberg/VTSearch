@@ -38,6 +38,19 @@ export interface HexHoverEvent {
   screenY: number;
 }
 
+/** A right-click on the canvas, carrying everything the view needs to open a
+ *  context menu and act on the spot under the cursor. */
+export interface BrowseContextMenuEvent {
+  /** Viewport coords (clientX/clientY) the menu anchors to. */
+  clientX: number;
+  clientY: number;
+  /** Canvas-relative coords — the anchor for the menu's "zoom in/out here". */
+  canvasX: number;
+  canvasY: number;
+  /** Member media ids of the bin under the cursor; empty over blank space. */
+  members: number[];
+}
+
 /** How much larger the hovered cell is drawn relative to its neighbours so it
  *  lifts off the grid. The border is reserved for selection state, so hover is
  *  signalled by this size bump + a soft drop shadow instead of a ring. */
@@ -88,6 +101,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   @Input() marqueeMode = false;
   @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
+  /** A right-click on the canvas; the view opens a context menu in response. */
+  @Output() contextMenu = new EventEmitter<BrowseContextMenuEvent>();
   /**
    * The densest visible cell's item count, emitted whenever it changes. Density
    * shading is renormalized to this per frame (yellow = this many items, the
@@ -136,6 +151,18 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private dragMoved = false;
   private static readonly CLICK_MOVE_THRESHOLD = 4;
 
+  // A single click toggles the bin under the cursor, but a double-click zooms in
+  // there — so the toggle is deferred by the double-click window and dropped if a
+  // second click lands. Without the defer, every double-click would also flip the
+  // bin's selection on its way to zooming.
+  private clickTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingToggleX = 0;
+  private pendingToggleY = 0;
+  private static readonly DBLCLICK_MS = 250;
+  // How hard a double-click zooms in about the cursor. Larger than the wheel's
+  // 1.15/tick so the gesture lands a decisive jump, matching the map idiom.
+  private static readonly DOUBLE_CLICK_ZOOM = 2.0;
+
   // Shift+drag draws a marquee rectangle (canvas-relative screen coords) that
   // adds every bin whose centre falls inside it to the selection — the fast path
   // for grabbing a region, since plain drag is reserved for panning.
@@ -176,6 +203,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private boundWheel = this.onWheel.bind(this);
   private boundCanvasMouseMove = this.onCanvasMouseMove.bind(this);
   private boundCanvasMouseLeave = this.onCanvasMouseLeave.bind(this);
+  private boundDblClick = this.onDblClick.bind(this);
+  private boundContextMenu = this.onContextMenu.bind(this);
 
   private recenterSub: Subscription | null = null;
   private selectionSub: Subscription | null = null;
@@ -241,6 +270,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       el.addEventListener('wheel', this.boundWheel, { passive: false });
       el.addEventListener('mousemove', this.boundCanvasMouseMove);
       el.addEventListener('mouseleave', this.boundCanvasMouseLeave);
+      el.addEventListener('dblclick', this.boundDblClick);
+      el.addEventListener('contextmenu', this.boundContextMenu);
     });
   }
 
@@ -299,11 +330,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.themeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
+    if (this.clickTimer) clearTimeout(this.clickTimer);
     const el = this.canvasRef.nativeElement;
     el.removeEventListener('mousedown', this.boundMouseDown);
     el.removeEventListener('wheel', this.boundWheel);
     el.removeEventListener('mousemove', this.boundCanvasMouseMove);
     el.removeEventListener('mouseleave', this.boundCanvasMouseLeave);
+    el.removeEventListener('dblclick', this.boundDblClick);
+    el.removeEventListener('contextmenu', this.boundContextMenu);
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
     this.thumbCache.clear();
@@ -781,6 +815,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
+    // A fresh press settles any single-click toggle still waiting out the
+    // double-click window (so quick clicks on different bins each register). The
+    // second press of a double-click (detail >= 2) is exempt: flushing there
+    // would commit the very toggle the double-click means to drop.
+    if (event.detail < 2) this.flushPendingToggle();
     this.panStartX = event.clientX;
     this.panStartY = event.clientY;
     this.dragMoved = false;
@@ -844,11 +883,78 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const wasPanning = this.isPanning;
     this.isPanning = false;
     // A press that never crossed the move threshold is a click: toggle the bin
-    // under the cursor (no modifier — Shift is reserved for the marquee).
+    // under the cursor (no modifier — Shift is reserved for the marquee). The
+    // toggle is deferred so a double-click (which zooms) doesn't also select.
     if (wasPanning && !this.dragMoved && !event.shiftKey) {
-      const [mx, my] = this.canvasXY(event);
-      this.toggleCellAt(mx, my);
+      if (event.detail >= 2) {
+        // Second release of a double-click: the dblclick handler zooms, so drop
+        // the pending single-click toggle rather than flipping the bin.
+        this.cancelPendingToggle();
+      } else {
+        const [mx, my] = this.canvasXY(event);
+        this.scheduleToggle(mx, my);
+      }
     }
+  }
+
+  /**
+   * Schedule a single-click bin toggle, deferred by the double-click window so a
+   * double-click (which zooms in) doesn't also flip the bin's selection. Any
+   * pending toggle is committed first, so two quick clicks on *different* bins
+   * each register rather than the second cancelling the first.
+   */
+  private scheduleToggle(mx: number, my: number): void {
+    this.flushPendingToggle();
+    this.pendingToggleX = mx;
+    this.pendingToggleY = my;
+    this.clickTimer = setTimeout(() => {
+      this.clickTimer = null;
+      this.toggleCellAt(mx, my);
+    }, BrowseCanvasComponent.DBLCLICK_MS);
+  }
+
+  /** Run a pending single-click toggle now (if any) and clear the timer. */
+  private flushPendingToggle(): void {
+    if (this.clickTimer === null) return;
+    clearTimeout(this.clickTimer);
+    this.clickTimer = null;
+    this.toggleCellAt(this.pendingToggleX, this.pendingToggleY);
+  }
+
+  /** Drop a pending single-click toggle without running it (double-click path). */
+  private cancelPendingToggle(): void {
+    if (this.clickTimer === null) return;
+    clearTimeout(this.clickTimer);
+    this.clickTimer = null;
+  }
+
+  /** Double-click zooms in about the cursor (map idiom). Shift/region-select are
+   *  reserved for the marquee, so they don't zoom. */
+  private onDblClick(event: MouseEvent): void {
+    if (event.shiftKey || this.marqueeMode) return;
+    this.cancelPendingToggle();
+    const [mx, my] = this.canvasXY(event);
+    this.zoomBy(BrowseCanvasComponent.DOUBLE_CLICK_ZOOM, mx, my);
+  }
+
+  /** Right-click: suppress the native menu and ask the view to open ours,
+   *  carrying the cursor anchor and the bin (if any) under it. */
+  private onContextMenu(event: MouseEvent): void {
+    event.preventDefault();
+    const [mx, my] = this.canvasXY(event);
+    // Close any hover preview so it doesn't sit under the menu.
+    this.clearHover();
+    const cell = this.hitTest(mx, my);
+    const members = cell ? this.cellMembers(cell) : [];
+    this.ngZone.run(() =>
+      this.contextMenu.emit({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        canvasX: mx,
+        canvasY: my,
+        members,
+      }),
+    );
   }
 
   /** Canvas-relative ``[x, y]`` for a mouse event. */

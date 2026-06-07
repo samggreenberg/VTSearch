@@ -49,11 +49,21 @@
             [marqueeMode]="marqueeMode"
             (hexHover)="onHexHover($event)"
             (densityMaxChanged)="onDensityMaxChanged($event)"
+            (contextMenu)="onCanvasContextMenu($event)"
           />
           <vt-browse-hover-preview
             [hover]="hoverEvent"
             [mediaType]="mediaType"
           />
+          @if (contextMenuOpen) {
+            <vt-media-context-menu
+              [x]="contextMenuX"
+              [y]="contextMenuY"
+              [items]="contextMenuItems"
+              (actionSelected)="onContextMenuAction($event)"
+              (dismissed)="dismissContextMenu()"
+            />
+          }
           <div class="browse-controls">
             <div class="browse-select" role="group" aria-label="Region select">
               <button
