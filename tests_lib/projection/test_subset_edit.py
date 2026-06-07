@@ -67,16 +67,8 @@ def test_rebin_like_keeps_bins_for_survivors():
 
     # Each surviving id lands in the SAME (q, r) cell it occupied before.
     for level in range(len(template.levels)):
-        before = {
-            mid: (q, r)
-            for (q, r), members in _members(template, proj, level).items()
-            for mid in members
-        }
-        after = {
-            mid: (q, r)
-            for (q, r), members in _members(rebinned, reduced, level).items()
-            for mid in members
-        }
+        before = {mid: (q, r) for (q, r), members in _members(template, proj, level).items() for mid in members}
+        after = {mid: (q, r) for (q, r), members in _members(rebinned, reduced, level).items() for mid in members}
         for mid in reduced.ids:
             assert after[mid] == before[mid], f"id {mid} moved bins at level {level}"
 
