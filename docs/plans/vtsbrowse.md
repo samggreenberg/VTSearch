@@ -862,6 +862,24 @@ and available to any future consumer of `vtscore`.
       plain `Set<number>` ready to hand off.
     - **Minimap selection overlay.** The minimap does not yet show which region is
       selected; a faint accent wash over selected cells there would aid orientation.
+- **Double-click + right-click on the canvas.** Two map-idiom gestures on top of
+  the existing pan / wheel-zoom / click-to-select model
+  (`browse-canvas.component.ts`). A **double-click** zooms in about the cursor
+  (`DOUBLE_CLICK_ZOOM`, via the shared `zoomBy(factor, anchor)`); a plain
+  **single click** still toggles the bin, but the toggle is now *deferred by the
+  double-click window* (`DBLCLICK_MS`, 250 ms) so a double-click zooms without
+  also flipping the bin's selection — a fresh press commits any pending toggle so
+  quick clicks on different bins each register. A **right-click** suppresses the
+  native menu and emits `contextMenu` with the cursor anchor + the bin's member
+  ids; the view (`browse-view.component.ts`) renders the shared
+  `vt-media-context-menu` with *Select/Deselect this bin* (when over a bin),
+  *Zoom in/out here* (anchored at the click), *Zoom to fit*, and *Clear
+  selection* (disabled when the set is empty). Shift / region-select mode are
+  reserved for the marquee, so neither double-click nor its zoom fire there.
+  - *Open follow-ups:* the context menu is the natural home for the deferred
+    selection *actions* (export the subset, seed a detector, build a subset
+    projection) once those land — add them as items rather than new toolbar
+    buttons.
 - **Load + project on the dashboard before entering Browse.** The dashboard's
   per-row `Browse` button no longer navigates straight to `/browse/:id` and
   lets the browse view discover a missing load/projection. It now mirrors the
