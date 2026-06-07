@@ -29,7 +29,7 @@
       </div>
     }
     @case ('ready') {
-      <div class="browse-content" #content [style.--browse-panel-width.px]="panelWidth">
+      <div class="browse-content" #content [style.--browse-panel-width]="panelWidth + 'px'">
         <div class="browse-main">
           <vt-browse-canvas
             [meta]="meta"

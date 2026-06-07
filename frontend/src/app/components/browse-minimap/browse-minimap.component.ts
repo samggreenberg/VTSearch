@@ -168,6 +168,9 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
         this.width = w;
         this.height = h;
         this.resizeCanvas();
+        // A large size change can shift the overview pyramid level, so make
+        // sure the tiles for the new level are requested before repainting.
+        this.requestOverviewTiles();
         this.requestRedraw();
       });
       this.resizeObserver.observe(el);
