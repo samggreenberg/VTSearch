@@ -77,7 +77,6 @@ Canonical roles:
 - **Accent:** `--accent` (primary), `--accent-hover`, `--accent-light`, `--accent-highlight-bg`, `--accent-highlight-border`
 - **Status:** `--color-good` (success/green), `--color-bad` (error/red), `--text-warning`, `--badge-embedding`
 - **Status rows (red/yellow/green sets):** `--status-{color}-{border|dot|label|sub}`
-- **Per-detector accent:** `--detector-accent`, `--detector-accent-bg` (driven by `--detector-hue` set inline on the component)
 
 If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` - don't introduce a hex literal "just this once."
 
@@ -330,19 +329,7 @@ Don't write per-component focus / disabled CSS. The base classes handle both:
 - `.btn:disabled { opacity: 0.5; cursor: not-allowed; }`
 - `.form-input:focus { border-color: var(--accent); }`
 
-### 3.4 Per-detector hue
-
-Components that should tint themselves by detector identity bind an inline style:
-
-```html
-<div class="detector-card" [style.--detector-hue]="detectorHue(detector.name)">
-  ...
-</div>
-```
-
-Then reference `var(--detector-accent)` and `var(--detector-accent-bg)` in the SCSS. The hue is theme-resolved - in highviz it falls back to the global accent so the high-contrast yellow isn't diluted.
-
-### 3.5 Theme overrides inside a component
+### 3.4 Theme overrides inside a component
 
 Avoid them. The right answer is almost always "use a theme variable." If a component genuinely needs a per-theme tweak (rare), wrap the override in `[data-theme="light"]` or `[data-theme="highviz"]` and add a comment explaining why a token-based solution didn't work.
 

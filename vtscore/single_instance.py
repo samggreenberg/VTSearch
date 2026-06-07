@@ -9,6 +9,7 @@ stale lock behind.
 Linux/POSIX only (``fcntl``), consistent with the rest of the server, which
 already relies on ``/proc`` and POSIX semantics.
 """
+
 from __future__ import annotations
 
 import errno

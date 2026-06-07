@@ -3,19 +3,17 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
-import { DetectorSwatchComponent } from '../../detector-swatch/detector-swatch.component';
 import {
   ProgressHeader,
   formatProgressHeader,
   isProgressIndeterminate,
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
-import { detectorHue } from '../../../utils/detector-color';
 
 @Component({
   selector: 'vt-detector-card',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProgressBarComponent, DetectorSwatchComponent],
+  imports: [CommonModule, FormsModule, ProgressBarComponent],
   templateUrl: './detector-card.component.html',
   styleUrl: './detector-card.component.scss',
 })
@@ -25,11 +23,6 @@ export class DetectorCardComponent implements OnChanges {
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
   @Input() loadingTask?: LoadingTask;
-
-  @HostBinding('style.--detector-hue')
-  get hueStyle(): string {
-    return String(detectorHue(this.detector?.name || ''));
-  }
 
   @HostBinding('class.loading-error')
   get hasLoadingError(): boolean {

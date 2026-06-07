@@ -33,10 +33,6 @@
     font-weight: var(--weight-semibold);
   }
 
-  .trigger-swatch {
-    flex: 0 0 auto;
-  }
-
   .trigger-value {
     flex: 1 1 auto;
     min-width: 0;
@@ -147,18 +143,6 @@
     &.is-focused,
     &:hover {
       background: var(--accent-highlight-bg);
-    }
-  }
-
-  // Detector rows use the per-detector hue (`--detector-hue` is bound inline
-  // per row); dataset rows keep the global accent so the two pulldowns don't
-  // compete for the eye.
-  :host(.kind-detector) &.is-active {
-    background: var(--detector-accent-bg);
-
-    &.is-focused,
-    &:hover {
-      background: var(--detector-accent-bg);
     }
   }
 
