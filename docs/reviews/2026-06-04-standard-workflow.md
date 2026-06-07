@@ -40,7 +40,7 @@ Severity: **P1** = should fix, user-visible/contradictory · **P2** = papercut/p
 
 ### Dataset import / demo picker
 
-**[P1 · `demo-mediatype-default`] Demo MediaType filter is context-blind — always defaults to Audio.** *(FIXED)*
+**~~[P1 · `demo-mediatype-default`] Demo MediaType filter is context-blind — always defaults to Audio.~~** *(FIXED)*
 Opening "Add Dataset → Demo → Downloaded Media" always lands on **Audio** (shows ESC-50/GTZAN/UrbanSound). I hit this twice: even on the *second* import, with an Image dataset **and** an Image detector already active, it still defaulted to Audio and I had to manually switch the MediaType dropdown to Image. It should default to the active context's media type (or the last-used type).
 *Fix:* `buildDemoTabs()` now prefers the dashboard-supplied `guessedMediaType` (the active context's single media type) ahead of the `'audio'` fallback, so a loaded Image dataset/detector lands the demo picker on Image. See `dataset-importer-modal.component.ts`.
 
@@ -67,12 +67,12 @@ It's a document dataset surfaced under Image (top row, sorted by item count). Ei
 
 ### Browse / projection
 
-**[P1 · `browse-projection-contradiction`] The import offers a Browse projection that the dashboard then refuses to open. — FIXED**
+**~~[P1 · `browse-projection-contradiction`] The import offers a Browse projection that the dashboard then refuses to open.~~ — FIXED**
 The dataset-import Advanced panel shows a **"Build 2-D Browse projection now"** checkbox for image datasets (`import-advanced.component.html`), but on the dashboard the loaded image dataset's Browse/eye button was **disabled** with tooltip *"Browsing is only available for audio datasets."* This was confirmed-intentional gating (`dashboard.component.ts` — "Browsing currently only supports audio datasets") — so a user could pay to build a UMAP projection for an image dataset they could never browse. Resolved via option **(b)**: lifted the audio-only gate. The projection + hex-tile pyramid is embedding-based and media-agnostic, and the hover preview already adapts per media type (audio loops the clip, text loads a paragraph snippet, image/video paint thumbnails onto the hex, everything else falls back to `Item #N`). `DatasetCardComponent.canBrowse` is gone; the Browse button is enabled for every media type.
 
 ### Achievements / toasts
 
-**[P2 · `achievement-toast-replay`] Achievement unlock toasts re-fire on every navigation (and after votes). — FIXED**
+**~~[P2 · `achievement-toast-replay`] Achievement unlock toasts re-fire on every navigation (and after votes).~~ — FIXED**
 The three "Bronze: …" toasts ("Detectors Trained", "Days Active", "Media Types Touched") reappeared on dashboard load, again on entering the `/label` view, and again after voting — i.e. 3–4 times in the first minute of the standard flow. While visible they stack top-center and **overlap the right-hand Labels panel**, then auto-dismiss after a few seconds. Root cause: `AchievementsService.refresh()` re-emitted *every* `pending_announcement` on *every* call, and `refresh()` fires after votes, finds, and navigation. The server keeps a milestone in `pending_announcements` until the user opens the panel (which ACKs it), so each refresh re-popped a toast for an already-shown unlock; the toast `dedupKey` only suppresses duplicates while a toast is still on-screen, so anything past the 5 s auto-dismiss re-fired. Fix: `AchievementsService` now tracks emitted milestones in a session-scoped `Set` (`categoryId:tierIdx`) and pushes each to the `unlock$` stream at most once, so the toast fires once per real unlock while the notification dot stays server-driven (cleared when the panel is opened).
 
 ### Training / labeling
@@ -108,7 +108,7 @@ Arriving from a Find specifically to grab hits, the export defaults to All (838 
 **[P3 · `header-data-lag`] Header "Data:" label lags the loaded/active dataset.**
 After loading Caltech-101 (S) it stayed "Data: Select a dataset" until I entered a view, even though the New-Detector modal correctly knew the active media type was Image. The dashboard's row-checkbox selection and the header's "active dataset" are two separate notions of "selected", which can read as out-of-sync.
 
-**[P3 · `no-access-log`] No server-side request/activity logging in local mode.** **Fixed.**
+**~~[P3 · `no-access-log`] No server-side request/activity logging in local mode.~~** **Fixed.**
 The dev server log contained only the 6 boot lines — no access logs, no progress lines — for an entire session that downloaded, embedded ~1250 images, ran Find, and exported. Root cause: `setup_logging()` pinned the `werkzeug` logger to `ERROR` unconditionally, so the access log was unreachable even with `VTSEARCH_LOG_LEVEL` turned up. `werkzeug` now follows the configured level (silenced at WARNING+, on at INFO/DEBUG), and a `-v`/`-vv` flag on `python app.py` raises the level for the session (`-v` → INFO + access log, `-vv` → DEBUG). gunicorn mirrors it: `VTSEARCH_LOG_LEVEL=info`/`debug` enables its access log too.
 
 ---

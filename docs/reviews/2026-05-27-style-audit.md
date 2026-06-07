@@ -68,13 +68,13 @@ All assets are under `docs/reviews/assets/2026-05-27-style-audit/`.
 | V4  | New-detector / Settings  | Low      | Modal-close (x) intentionally hidden, diverges from style-guide template |
 | V5  | New-detector modal       | Low      | `Esc` does not dismiss the dialog from any inner focus                    |
 | V6  | Import-dataset picker    | Low      | Top-level tabs serve as picker - no canonical "Back" chevron pattern      |
-| V7  | Import-dataset / Demo    | Low      | "Needs Download" badge text reads very dim in dark mode                   |
+| ~~V7~~  | ~~Import-dataset / Demo~~    | Low      | ~~"Needs Download" badge text reads very dim in dark mode~~ — **FIXED**                   |
 | V8  | Settings (all tabs)      | Low      | Footer "Close" is styled primary even though there is no Save action     |
 | V9  | Dashboard (empty)        | Low      | `.empty-state` panel reserves a large fixed height in empty card         |
-| V10 | Dashboard / table header | Low      | Disabled "Combine selected" / "Delete selected" icon buttons very faint  |
-| V11 | Header (always)          | Low      | Disabled "Dashboard" button text low contrast on accent-blue header bg   |
+| ~~V10~~ | ~~Dashboard / table header~~ | Low      | ~~Disabled "Combine selected" / "Delete selected" icon buttons very faint~~ — **FIXED**  |
+| ~~V11~~ | ~~Header (always)~~          | Low      | ~~Disabled "Dashboard" button text low contrast on accent-blue header bg~~ — **FIXED**   |
 | V12 | Settings Appearance      | Low      | List/Grid + Click/Hover toggles are custom button styles, not `.btn`    |
-| V13 | Help modal (dark)        | Low      | Scrollbar in modal body unstyled - default browser thumb on dark bg     |
+| ~~V13~~ | ~~Help modal (dark)~~        | Low      | ~~Scrollbar in modal body unstyled - default browser thumb on dark bg~~ — **FIXED**     |
 | V14 | New-detector modal       | Low      | `.new-detector-form { width: 480px; }` is a hardcoded raw px value      |
 | V15 | Import-dataset picker    | Low      | Picker-tab `<i>` icons appear muted/grey in light mode (only Demo flask reads colour) |
 
@@ -82,37 +82,16 @@ No findings were promoted to High. The audit did not surface a
 broken-layout / unreadable-text bug in either theme; all issues are
 style-guide compliance or minor-contrast.
 
-### Systemic finding (added during fix-up)
+### ~~Systemic finding (added during fix-up)~~ — SHIPPED
 
-The four contrast Lows above (V7, V10, V11, V13) all traced back to one
-underlying habit: components reach for `opacity` to "tone something
-down" without picking a shared value, and without checking whether
-opacity is the right tool against the surface they're sitting on. A
-grep across `frontend/src` turned up **seven different opacity values**
-used to express the `:disabled` / `.disabled` state across button-like
-elements: `0.35`, `0.4`, `0.45`, `0.5`, `0.55`, `0.6`, `0.75`. The
-dashboard icon buttons sat at `0.35` (V10), the header "you are here"
-button at `0.4` against the accent-blue header (V11), the importer
-sub-tabs at `0.45`, and the global `.btn` baseline at `0.5`.
-
-Resolved by introducing a single `--opacity-disabled: 0.5` token (see
-`_variables.scss`; documented at §1.9 of `docs/style-guide.md`) and
-collapsing the standard `:disabled { opacity: ... }` sites onto it
-(`_components.scss`, `_picker-shared.scss`, `dashboard.component.scss`,
-`dataset-card.component.scss`, `app.component.scss`,
-`view-controls.component.scss`, `right-panel.component.scss`,
-`export-modal`, `media-crop-modal`, `audio-crop-overlay`,
-`label-importer-modal`). The few non-standard sites that mean
-"something different" (`folder-browser` at `0.55` is the wait-cursor
-state, `login` at `0.6`, achievement-tier opacities) are deliberately
-left alone - they convey distinct semantics and shouldn't be conflated
-with disabled.
-
-The V11 fix also makes the broader point: **opacity is the wrong tool
-for "disabled" when the surface is saturated**. White-on-accent-blue
-dimmed via opacity cannot hold contrast, so the header's Dashboard
-button now uses a `color: var(--header-text-dim)` shift instead. The
-style guide now calls this out explicitly.
+~~The four contrast Lows above (V7, V10, V11, V13) traced to one habit: reaching
+for `opacity` to "tone something down" without a shared value or checking the
+surface. A grep found seven `:disabled` opacity values (`0.35`–`0.75`).~~
+Resolved by a single `--opacity-disabled: 0.5` token (`_variables.scss`,
+documented at §1.9 of `docs/style-guide.md`) with the standard sites collapsed
+onto it; saturated surfaces (the header Dashboard button) switched to a
+`color: var(--header-text-dim)` shift instead, since opacity can't hold contrast
+on accent-blue. The style guide now calls this out.
 
 ---
 
@@ -144,7 +123,7 @@ Suspected source: `frontend/src/app/components/dashboard/dashboard.component.scs
 (the section wrappers in `dashboard.component.html:46` and `:210` carry
 the `.empty-state` element).
 
-### V10 - Disabled icon buttons (Combine, Delete) very faint
+### ~~V10 - Disabled icon buttons (Combine, Delete) very faint~~ — FIXED
 
 In light mode, the disabled "Combine selected datasets" (chevron-right)
 and "Delete selected" (trash) icons sit just above the panel border at
@@ -164,7 +143,7 @@ use `var(--opacity-disabled)` (0.5). Combined with the systemic token
 roll-out, every standard "this button is disabled" affordance now sits
 at the same opacity.
 
-### V11 - "Dashboard" disabled button vs. accent header bg
+### ~~V11 - "Dashboard" disabled button vs. accent header bg~~ — FIXED
 
 The persistent header bar uses the accent-purple background in both
 themes. The "Dashboard" button is rendered in-place (you're on it,
@@ -223,7 +202,7 @@ Suspected source: `frontend/src/app/components/dashboard/dataset-importer-modal/
 Severity: Low (UX-debatable; calling out for design alignment, not
 fixing as-is).
 
-### V7 - "Needs Download" badge very dim in dark mode
+### ~~V7 - "Needs Download" badge very dim in dark mode~~ — FIXED
 
 The `.badge-download` pill on the Demo > Downloaded Media table reads
 as ~light-grey text on near-same-shade pill background in dark mode
@@ -414,7 +393,7 @@ from the markdown copied in at build time.
 
 V2 already covers the bespoke tab implementation.
 
-### V13 - Scrollbar in modal body unstyled in dark mode
+### ~~V13 - Scrollbar in modal body unstyled in dark mode~~ — FIXED
 
 In both Help tabs the body is taller than the modal so a vertical
 scrollbar appears on the right side of the modal-content. In dark
