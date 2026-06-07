@@ -286,8 +286,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
         // A new projection (media-type switch / rebuild) re-lays-out every item,
         // so the old selection no longer maps to what's on screen — drop it. A
         // bin-shape toggle keeps the same projection id and selection, since the
-        // ids are shape-independent.
-        this.selection.clear();
+        // ids are shape-independent. A Re-project of the items already on screen
+        // arms the survive mark instead: the ids are unchanged (only positions
+        // move), so the id-based selection stays coherent and is kept.
+        if (!this.selection.consumeSurviveProjectionChange()) {
+          this.selection.clear();
+        }
+        this.fitToData();
+      } else if (this.viewport.consumeFitOnNextMeta()) {
+        // Same projection id, but the view asked for a re-frame (e.g. a
+        // Remove-from-Good cull shrank the bounds): fit to what remains.
         this.fitToData();
       } else {
         this.updateActiveLevel();

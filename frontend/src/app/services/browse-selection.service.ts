@@ -94,6 +94,30 @@ export class BrowseSelectionService {
     if (changed) this.bump();
   }
 
+  /**
+   * Arm a one-shot exemption from the canvas's clear-on-new-projection rule.
+   *
+   * Selection is id-based, so it survives any relayout of the *same* items —
+   * a Re-project re-fits UMAP over what's already on screen and only moves
+   * points around. The view marks the selection before kicking off such a
+   * build; the canvas consumes the mark when the new projection arrives and
+   * keeps the selection instead of dropping it. Genuine new projections
+   * (media-type switch, rebuild over different items) never set the mark, so
+   * they still clear.
+   */
+  markSurviveProjectionChange(): void {
+    this.surviveProjectionChange = true;
+  }
+
+  /** Consume the one-shot survive mark, returning whether it was set. */
+  consumeSurviveProjectionChange(): boolean {
+    const survive = this.surviveProjectionChange;
+    this.surviveProjectionChange = false;
+    return survive;
+  }
+
+  private surviveProjectionChange = false;
+
   /** Drop the whole selection. */
   clear(): void {
     if (this.selected.size === 0) return;

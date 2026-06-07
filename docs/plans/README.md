@@ -18,6 +18,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 - [vtsbrowse-toponymy.md](vtsbrowse-toponymy.md): named-region "street signs" (design only)
 - [vtsbrowse-audit-fixes.md](vtsbrowse-audit-fixes.md): queued audit fixes (#1 shipped; #2–#3 open)
 - [vtsbrowser-hex-circle-radius.md](vtsbrowser-hex-circle-radius.md): singleton-circle radius investigation (needs visual verification)
+- [vtsbrowser-qa-followups.md](vtsbrowser-qa-followups.md): QA-drive follow-ups (deferred: startup wedge, tab crash; skipped: toolbar overlay)
 
 ## Scalability
 
