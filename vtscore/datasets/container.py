@@ -178,8 +178,9 @@ def remove_projections(path: str | Path) -> None:
     for entry in present:
         _rewrite_without(p, entry)
     if present:
-        logger.info("Removed %d projection entr%s from container: %s",
-                    len(present), "y" if len(present) == 1 else "ies", p)
+        logger.info(
+            "Removed %d projection entr%s from container: %s", len(present), "y" if len(present) == 1 else "ies", p
+        )
 
 
 def read_projection(path: str | Path, bin_shape: str = "hex") -> tuple[Any, Any] | None:
