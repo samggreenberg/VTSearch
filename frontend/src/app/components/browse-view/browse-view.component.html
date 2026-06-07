@@ -46,6 +46,7 @@
             [displayScale]="hexDisplayScale"
             [colormap]="colormap"
             [thumbnailBorder]="thumbnailBorder"
+            [marqueeMode]="marqueeMode"
             (hexHover)="onHexHover($event)"
             (densityMaxChanged)="onDensityMaxChanged($event)"
           />
@@ -54,6 +55,18 @@
             [mediaType]="mediaType"
           />
           <div class="browse-controls">
+            <div class="browse-select" role="group" aria-label="Region select">
+              <button
+                type="button"
+                class="browse-size-btn"
+                [class.browse-size-btn--active]="marqueeMode"
+                [attr.aria-pressed]="marqueeMode"
+                (click)="toggleMarqueeMode()"
+                title="Region select: drag to select a region (Shift+drag also works)"
+                aria-label="Region select: drag to select a region">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2.5" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="0.5"/></svg>
+              </button>
+            </div>
             <div class="browse-zoom">
               <button
                 type="button"

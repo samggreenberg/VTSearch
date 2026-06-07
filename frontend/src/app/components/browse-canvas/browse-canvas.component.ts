@@ -80,6 +80,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * in {@link thumbnailMode} (image/video); singletons never get the band.
    */
   @Input() thumbnailBorder = 0;
+  /**
+   * GUI parallel to the Shift modifier: when on, a plain left-drag rubber-bands
+   * a selection marquee instead of panning, so the region-select gesture is
+   * discoverable without knowing the Shift+drag hotkey. Shift+drag keeps working
+   * regardless. Toggled by the region-select button in the browse toolbar.
+   */
+  @Input() marqueeMode = false;
   @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
   /**
    * The densest visible cell's item count, emitted whenever it changes. Density
@@ -773,9 +780,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.panStartY = event.clientY;
     this.dragMoved = false;
 
-    if (event.shiftKey) {
-      // Shift+drag: rubber-band a region to add to the selection. Suppress any
-      // hover preview while marqueeing so it doesn't flicker over the rectangle.
+    if (event.shiftKey || this.marqueeMode) {
+      // Shift+drag (or the region-select toggle): rubber-band a region to add to
+      // the selection. Suppress any hover preview while marqueeing so it doesn't
+      // flicker over the rectangle.
       event.preventDefault();
       const [mx, my] = this.canvasXY(event);
       this.isMarquee = true;
