@@ -37,46 +37,23 @@ A latent fourth issue: the CLI scoring path never called `embed_missing`, so
 folder chunks (which arrive with `embedding=None`) would raise `ValueError` at
 scoring time. Only pre-embedded sources (pickles) worked.
 
-## What shipped (Phase 1)
+## ~~What shipped (Phase 1)~~
 
-### 1. Lazy file enumeration (wall #1)
+All struck through:
 
-`vtscore/security/path_validation.py` gains generator twins
-`iter_rglob_follow_symlinks` / `iter_glob_top_level`; the existing list
-functions now wrap them. `load_dataset_from_folder_chunked` streams files via
-`_iter_media_files` (no full list) whenever no precomputed-override maps are
-supplied (the common CLI case). With override maps present it keeps the
-materialise-and-validate path (those maps are themselves bounded). The media
-type is still validated eagerly, and an empty folder still raises
-`ValueError("No <type> files found in folder")`.
-
-### 2. Per-chunk embed (latent bug)
-
-`_score_medias_with_detectors` now calls `embed_missing` (idempotent — a no-op
-for already-embedded pickle chunks) and drops any item whose embedding is still
-`None` before scoring. Folder → autodetect now actually embeds and scores.
-
-### 3. Streaming export (walls #2 + #3)
-
-A new opt-in `--stream-results` path (`_run_streaming_pipeline` in `cli.py`)
-trains detectors on the first chunk, then streams each chunk's above-threshold
-hits straight to the exporter with **no global accumulation and no global
-sort**. Negative (below-threshold) hits are dropped by default; `--keep-negatives`
-re-includes them. Exporters opt in via `supports_streaming` +
-`export_cli_streaming(header, records, field_values)`:
-
-- `server_json_file` → newline-delimited JSON (NDJSON): one metadata header line
-  then one hit per line, written to a temp file and atomically renamed.
-- `server_csv_file` → appends rows as they stream (fixed column superset).
-- `gui` → prints each hit as it arrives plus a final count.
-
-`email_smtp` / `webhook` inherently need the whole payload, so they do not
-support streaming; requesting `--stream-results` with them is a clear error.
-`--dry-run` reports a `Streaming: yes (...)` line (with whether negatives are
-dropped) so a streaming run can be sanity-checked before it starts.
-
-**Tradeoff (accepted):** streamed output is ordered by chunk, **not** globally
-sorted by score. Callers who need a global ranking sort the NDJSON afterwards.
+- ~~**1. Lazy file enumeration (wall #1).**~~ Generator twins
+  `iter_rglob_follow_symlinks` / `iter_glob_top_level` in `path_validation.py`;
+  `load_dataset_from_folder_chunked` streams via `_iter_media_files` (no full
+  list) in the common CLI case; media type still validated eagerly.
+- ~~**2. Per-chunk embed (latent bug).**~~ `_score_medias_with_detectors` now
+  calls idempotent `embed_missing` and drops still-`None` items before scoring,
+  so folder → autodetect embeds and scores.
+- ~~**3. Streaming export (walls #2 + #3).**~~ Opt-in `--stream-results`
+  (`_run_streaming_pipeline`) streams each chunk's above-threshold hits with no
+  global accumulation/sort (`--keep-negatives` to re-include); exporters opt in
+  via `supports_streaming` + `export_cli_streaming` (`server_json_file` NDJSON,
+  `server_csv_file` append, `gui` print); `email_smtp`/`webhook` reject
+  streaming. **Accepted tradeoff:** output is chunk-ordered, not globally sorted.
 
 ## Open follow-ups
 

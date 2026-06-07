@@ -512,31 +512,16 @@ flag.
 
 ---
 
-### 3.3  Virtual grid mode (S16) — **SHIPPED**
+### ~~3.3  Virtual grid mode (S16)~~ — **SHIPPED**
 
-**File:** `frontend/src/app/components/left-panel/media-list/`
-
-**Problem:** Grid mode rendered every item into the DOM, and list mode only
-virtualized above 500 items.  Reproduced live: switching Caltech-101 (S)
-(412 items) to grid froze the main thread for **~1.8 s** (all 412
-`vt-media-item` components mounted at once); entering the view in list mode
-froze it for **~1.1 s**.  During the freeze the whole page — including the
-dataset-load **Cancel** button — is unresponsive, which is what reads to
-users as "the app totally froze while loading."
-
-**Shipped fix:** Chunk `cachedOrderedItems` into fixed-width rows and run
-them through a `CdkVirtualScrollViewport` (the CDK scroller is 1-D, so each
-virtual item is one row of `gridColumns` cards).  Columns are derived from
-the measured viewport width + goal width; the row stride (`itemSize`) is
-measured from a real rendered card via a `ResizeObserver` (handles
-icon-size changes for free).  The threshold marker gets its own full-width
-row.  Grid-aware `scrollToIndex` / selected-scroll / metadata prefetch.
-The list threshold was lowered from 500 → **150** so entering a view or
-switching to list never renders hundreds of rows synchronously; grid
-virtualizes above 80.
-
-After: list↔grid toggles peak at ~169 ms (was ~1129 ms), the grid switch at
-~18 ms (was ~1814 ms), with ~20–34 components in the DOM instead of 412.
+`media-list/` now chunks `cachedOrderedItems` into fixed-width rows through a
+`CdkVirtualScrollViewport` (one virtual item = one row of `gridColumns` cards;
+columns derived from measured viewport width, row stride measured from a real
+card via `ResizeObserver`; threshold marker gets its own full-width row;
+grid-aware `scrollToIndex`/selected-scroll/prefetch). The list-virtualization
+threshold dropped 500 → **150**; grid virtualizes above 80. Result: list↔grid
+toggles ~169 ms (was ~1129 ms), grid switch ~18 ms (was ~1814 ms), ~20–34
+components in the DOM instead of 412.
 
 ---
 

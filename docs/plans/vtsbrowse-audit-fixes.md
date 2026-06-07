@@ -1,9 +1,7 @@
 # VTSBrowse audit — queued fixes
 
-Status: **planned, not yet applied** (paused behind an unrelated in-flight
-`build_pyramid` auto-depth change in the working tree). Apply on a feature
-branch off `dev`; the files below are disjoint from the auto-depth WIP, so they
-commit cleanly on their own.
+Status: **partially applied — #1 shipped, #2 and #3 open.** Apply the rest on a
+feature branch off `dev`.
 
 This came out of a live-driving + targeted-code audit of VTSBrowse (the hex-tile
 UMAP browse view). The feature is well-built; these are the genuinely
@@ -12,35 +10,12 @@ bottom) — don't re-raise them.
 
 ## Findings & fixes, in priority order
 
-### 1. `clear_medias()` leaks the projection + tile pyramid  (HIGH value)
+### ~~1. `clear_medias()` leaks the projection + tile pyramid (HIGH value)~~ — SHIPPED
 
-- **Where:** `vtscore/state/__init__.py` — `clear_medias()` (around lines
-  132–138).
-- **What:** The function's docstring says it drops caches "so RAM is released
-  immediately," and it clears `medias`, `_emb_matrix`, `_emb_matrix_ids`,
-  `diversity_tree`, and `dataset_display_name` — but it leaves `ctx._projection`
-  (2-D coords) and `ctx._pyramid` (the **entire hex-tile pyramid — the largest
-  Browse artifact**) resident.
-- **Two consequences, both verified in code:**
-  - *Memory:* on the RAM-tight box (~3.7 GB), unloading a dataset never frees
-    its tiles.
-  - *Correctness (latent):* the build route short-circuits on
-    `if ctx._pyramid is not None:` at `vtsearch/routes/projection.py:86` and
-    returns `{"status": "ready"}` **before** the signature check at line ~108.
-    So if the same `dataset_id` context is reloaded with changed contents and
-    the projection isn't rebuilt, the **stale pyramid is served** (hexes for the
-    old data). Reload path: `clear_dataset` → `clear_all` → `clear_medias`
-    (`vtscore/datasets/load_pipeline.py:152`); `_pyramid` is only re-set on load
-    when `build_projection` is requested (`load_pipeline.py:1107–1108`).
-- **Fix:** add to `clear_medias()`, inside the `_state_lock` block:
-  ```python
-  ctx._projection = None
-  ctx._pyramid = None
-  ```
-- **Test:** add a regression test asserting `clear_medias()` nulls both — put it
-  in a **state** test file (e.g. `tests_lib/` for the state core), **NOT** in
-  `tests_lib/projection/test_pyramid.py` (that file has unrelated WIP). Build a
-  context with a non-null `_pyramid`, call `clear_medias`, assert both `None`.
+`clear_medias()` in `vtscore/state/__init__.py` now nulls `_projection` and
+empties `_pyramids` inside the `_state_lock` block, so unloading a dataset frees
+its tiles and the build route can no longer serve a stale pyramid after a
+content-changing reload.
 
 ### 2. Hover preview/highlight goes stale on zoom  (MEDIUM)
 

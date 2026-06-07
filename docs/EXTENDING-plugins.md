@@ -692,8 +692,9 @@ behavioural change.
 > from `list_records()`; even when you've overridden
 > `fetch_source_media` or `fetch_all_source_media`.
 
-See [`docs/plans/multi-media-import.md`](plans/multi-media-import.md) for
-the full design history.
+See [`EXTENDING-media.md` § Adding a Media Converter](EXTENDING-media.md#adding-a-media-converter)
+for how converters compose with importers. (The original `multi-media-import`
+design plan was removed once the feature shipped; its history is in git.)
 
 ---
 
