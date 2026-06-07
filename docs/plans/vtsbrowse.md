@@ -817,6 +817,20 @@ and available to any future consumer of `vtscore`.
 ## Open follow-ups
 
 **Shipped:**
+- **Live elapsed-time during the UMAP fit (no more dead airtime).** The build
+  status bar used to sit frozen at `0/N` for the entire fit because
+  `fit_projection` emitted no progress between the start and end of the single
+  blocking `reducer.fit_transform()` call. It now runs the fit on a worker
+  thread and ticks an elapsed-seconds heartbeat (`vtscore/projection/umap_projection.py`,
+  `_umap_layout`) on a `_HEARTBEAT_SECONDS` (1 s) cadence — matching the browse
+  view's 1 s `/api/projection/meta` poll. The heartbeat reports `total=0`, which
+  switches the frontend `vt-progress-bar` to its animated *indeterminate* state
+  and shows `UMAP fit (N points) — Ns elapsed`. *Why not a true `done/total`
+  %:* UMAP's epoch loop runs inside numba with no per-epoch Python callback, so
+  a real fraction would require parsing UMAP's verbose/tqdm stdout — fragile
+  across versions. Elapsed-seconds + an animated bar was the robust floor (and
+  the user's explicitly-accepted fallback). If a real % is ever wanted, the
+  hook point is UMAP's `tqdm_kwds`/`verbose` epoch output.
 - **Item selection on the canvas (tracking only).** Supersedes the v1
   "no selection" scope (*§Locked decisions* / *§Interaction model*). Selection
   is held at the *media-id* granularity in `BrowseSelectionService`
