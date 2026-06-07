@@ -53,6 +53,26 @@ export class ProjectionApiService {
     return this.http.post<ProjectionMeta>('/api/projection/subset/remove', { shape, ids });
   }
 
+  /**
+   * Re-fit UMAP over the whole dataset and replace the frozen layout with a
+   * fresh arrangement (new ``projection_id``). Unlike {@link build}, ``force``
+   * overrides the cached/persisted layout. Runs in the background; poll
+   * `getMeta(shape)`.
+   */
+  reproject(shape: BinShape): Observable<ProjectionBuildResponse> {
+    return this.http.post<ProjectionBuildResponse>('/api/projection/build', { shape, force: true });
+  }
+
+  /**
+   * Re-fit UMAP over just `ids` (the items currently in a subset browse) and
+   * replace its layout with a fresh arrangement. Used to re-spread the
+   * survivors after a cull, or to reshuffle. Runs in the background; poll
+   * `getMeta(shape, true)`.
+   */
+  reprojectSubset(shape: BinShape, ids: number[]): Observable<ProjectionBuildResponse> {
+    return this.http.post<ProjectionBuildResponse>('/api/projection/build', { shape, ids, force: true });
+  }
+
   getTile(
     shape: BinShape,
     level: number,

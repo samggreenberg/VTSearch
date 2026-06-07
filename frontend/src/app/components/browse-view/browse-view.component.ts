@@ -583,6 +583,43 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Re-fit UMAP over the items currently on screen and replace the layout with
+   * a fresh 2-D arrangement. Unlike the bin-shape toggle (which re-bins the
+   * frozen layout) or the Remove-from-Good cull (which re-bins minus points),
+   * this forces a new UMAP fit: useful after culling items from a subset (so
+   * the survivors re-spread) or just to reshuffle into a new arrangement. In
+   * full-dataset mode it re-projects every item and overwrites the persisted
+   * canonical layout; in subset mode it re-projects the current ``subsetIds``.
+   * The fit runs in the background, so the view shows build progress meanwhile.
+   */
+  onReproject(): void {
+    if (this.subset && this.subsetIds.length === 0) return;
+    this.selection.clear();
+    this.status = 'building';
+    this.buildProgress = 0;
+    this.buildTotal = 0;
+    this.buildMessage = '';
+    const request$ = this.subset
+      ? this.projectionApi.reprojectSubset(this.binShape, this.subsetIds)
+      : this.projectionApi.reproject(this.binShape);
+    request$.pipe(takeUntil(this.destroy$)).subscribe({
+      next: (resp) => {
+        if (resp.status === 'ready') {
+          // Defensive: a forced build always re-fits, but re-read meta anyway.
+          this.loadProjection();
+          return;
+        }
+        this.pollBuildStatus();
+      },
+      error: (err) => {
+        this.status = 'error';
+        this.errorMessage =
+          err?.error?.message || err?.error?.error || 'Failed to start re-projection';
+      },
+    });
+  }
+
+  /**
    * Cull the hand-selected items from a Find-positives browse: confirm, mark
    * them Bad in the detector's labels (so they leave the Find view's Good
    * list), then drop them from this browse by re-fitting the subset over the

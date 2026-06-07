@@ -159,6 +159,30 @@ def append_projection(
     logger.info("Appended %s projection to container: %s", pyramid.bin_shape, p)
 
 
+def remove_projections(path: str | Path) -> None:
+    """Remove every stored projection entry (all bin shapes) from a container.
+
+    Used when a forced re-projection discards the frozen full-dataset layout:
+    the persisted hex/square entries must go too, or a later load — or the
+    not-yet-rebuilt other bin shape — would resurrect the stale coordinates
+    (which are shared across bin shapes).  A no-op if no entries are present.
+    """
+    p = Path(path)
+    entry_names = {_projection_entry_name(s) for s in ("hex", "square")}
+    try:
+        with zipfile.ZipFile(str(p), "r") as zf:
+            present = entry_names & set(zf.namelist())
+    except Exception:
+        logger.warning("Failed to read container %s while clearing projections", p, exc_info=True)
+        return
+    for entry in present:
+        _rewrite_without(p, entry)
+    if present:
+        logger.info(
+            "Removed %d projection entr%s from container: %s", len(present), "y" if len(present) == 1 else "ies", p
+        )
+
+
 def read_projection(path: str | Path, bin_shape: str = "hex") -> tuple[Any, Any] | None:
     """Read the projection + pyramid for *bin_shape* from a container, or ``None``."""
     entry_name = _projection_entry_name(bin_shape)

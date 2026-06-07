@@ -11992,7 +11992,7 @@
     },
     "/api/projection/build": {
       "post": {
-        "description": "Body: ``{\"shape\": \"hex\" | \"square\"}`` (defaults to hex).\n\nReturns immediately.  If the pyramid for this shape is already cached or\npersisted, returns ``\"ready\"``.  If the shared UMAP layout already exists\n(e.g. the other shape was built first), the new shape is re-binned inline\nand returned ready \u2014 no UMAP re-fit.  Only the first build of a dataset,\nwhere no layout exists yet, runs UMAP in the background and returns a\n``job_id`` for polling via ``GET /api/projection/meta``.",
+        "description": "Body: ``{\"shape\": \"hex\" | \"square\", \"ids\": [...]?, \"force\": bool?}``\n(``shape`` defaults to hex).\n\nReturns immediately.  If the pyramid for this shape is already cached or\npersisted, returns ``\"ready\"``.  If the shared UMAP layout already exists\n(e.g. the other shape was built first), the new shape is re-binned inline\nand returned ready \u2014 no UMAP re-fit.  Only the first build of a dataset,\nwhere no layout exists yet, runs UMAP in the background and returns a\n``job_id`` for polling via ``GET /api/projection/meta``.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
         "operationId": "build_projection",
         "responses": {
           "200": {
