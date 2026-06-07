@@ -21,5 +21,6 @@ can't drift.
 - [RCDatasetImporter.md](RCDatasetImporter.md): RCDatasetImporter / Holder / PullWrest extension
 - [scalability.md](scalability.md): Scalability brainstorm: 100 k / 1 M / 10 M datasets
 - [scalability-plan.md](scalability-plan.md): Scalability implementation plan (phases 1–4)
+- [user-docs-screenshots.md](user-docs-screenshots.md): Auto-refreshable screenshots for user-facing docs (manifest + Playwright capture harness)
 - [vtsbrowse.md](vtsbrowse.md): VTSBrowse — UMAP hexbin dataset browser
 - [vtsbrowse-empirical-tuning.md](vtsbrowse-empirical-tuning.md): VTSBrowse projection empirical tuning
