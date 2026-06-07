@@ -29,6 +29,7 @@ from vtscore.projection.pyramid import (
     Tile,
     build_pyramid,
     max_useful_levels,
+    tile_member_ids,
 )
 from vtscore.projection.squarebin import square_center, squarebin_assign
 from vtscore.projection.umap_projection import Projection, fit_projection
@@ -42,6 +43,7 @@ __all__ = [
     "LevelMeta",
     "build_pyramid",
     "max_useful_levels",
+    "tile_member_ids",
     "BIN_SHAPES",
     "DEFAULT_BIN_SHAPE",
     "hexbin_assign",

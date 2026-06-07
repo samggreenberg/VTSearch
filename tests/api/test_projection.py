@@ -265,9 +265,35 @@ class TestProjectionTiles:
                 assert "cy" in cell
                 assert "count" in cell
                 assert "rep_id" in cell
+                # Each cell carries the full member id list (for selection), and
+                # it agrees with the cell's count and includes its representative.
+                assert "member_ids" in cell
+                assert len(cell["member_ids"]) == cell["count"]
+                assert cell["rep_id"] in cell["member_ids"]
             break
 
         assert found_cells, "Expected at least one tile with cells"
+
+    def test_tile_member_ids_cover_every_item(self, client):
+        """Across a level, the served cells' member ids partition the dataset."""
+        ctx = get_active_context()
+        rng = np.random.default_rng(11)
+        ids = list(ctx.medias.keys())[:6]
+        coords = rng.standard_normal((len(ids), 2)).astype(np.float32)
+        proj = Projection("tile-members", ids, coords, "pca")
+        pyr = build_pyramid(proj, n_levels=2)
+        ctx._projection = proj
+        ctx._pyramids = {"hex": pyr}
+
+        recovered: list[int] = []
+        for level, tx, ty in pyr.tiles:
+            if level != 0:
+                continue
+            resp = client.get(f"/api/projection/tiles/hex/{level}/{tx}/{ty}")
+            assert resp.status_code == 200
+            for cell in resp.get_json()["cells"]:
+                recovered.extend(cell["member_ids"])
+        assert sorted(recovered) == sorted(ids)
 
     def test_served_tile_is_cacheable(self, client):
         ctx = get_active_context()

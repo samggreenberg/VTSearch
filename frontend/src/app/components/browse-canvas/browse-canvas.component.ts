@@ -15,6 +15,7 @@ import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
+import { BrowseSelectionService } from '../../services/browse-selection.service';
 import {
   densityColor,
   resolveColormap,
@@ -117,6 +118,21 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private panStartY = 0;
   private panStartCenterX = 0;
   private panStartCenterY = 0;
+  // Whether the current drag has moved past the click threshold. A mousedown +
+  // mouseup with no real movement is treated as a click (toggle the bin under
+  // the cursor) rather than a pan, so plain click selects without fighting pan.
+  private dragMoved = false;
+  private static readonly CLICK_MOVE_THRESHOLD = 4;
+
+  // Shift+drag draws a marquee rectangle (canvas-relative screen coords) that
+  // adds every bin whose centre falls inside it to the selection — the fast path
+  // for grabbing a region, since plain drag is reserved for panning.
+  private isMarquee = false;
+  private marquee: { x0: number; y0: number; x1: number; y1: number } | null = null;
+
+  // Accent colour resolved from the live theme once per frame, used for the
+  // selection rings and the marquee rectangle.
+  private selAccent = '#4f9dff';
 
   private hoveredCell: HexCellPayload | null = null;
   private hoverDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -150,12 +166,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private boundCanvasMouseLeave = this.onCanvasMouseLeave.bind(this);
 
   private recenterSub: Subscription | null = null;
+  private selectionSub: Subscription | null = null;
 
   constructor(
     private ngZone: NgZone,
     private tileCache: TileCacheService,
     private activeContext: ActiveContextService,
     private viewport: BrowseViewportService,
+    private selection: BrowseSelectionService,
   ) {}
 
   /** True when cells should be painted with the central item's thumbnail. */
@@ -189,6 +207,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.requestRedraw();
     });
 
+    // Repaint when the selection changes so the per-cell rings and the dimming
+    // of unselected cells track the live set.
+    this.selectionSub = this.selection.changed$.subscribe(() => this.requestRedraw());
+
     this.resizeObserver = new ResizeObserver(() => {
       this.ngZone.runOutsideAngular(() => this.resize());
     });
@@ -220,6 +242,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
         this.lastProjectionId = this.meta.projection_id;
         this.thumbCache.clear();
         this.thumbFailed.clear();
+        // A new projection (media-type switch / rebuild) re-lays-out every item,
+        // so the old selection no longer maps to what's on screen — drop it. A
+        // bin-shape toggle keeps the same projection id and selection, since the
+        // ids are shape-independent.
+        this.selection.clear();
         this.fitToData();
       } else {
         this.updateActiveLevel();
@@ -248,6 +275,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   ngOnDestroy(): void {
     this.tileLoadSub?.unsubscribe();
     this.recenterSub?.unsubscribe();
+    this.selectionSub?.unsubscribe();
     this.viewport.setViewport(null);
     this.resizeObserver?.disconnect();
     this.themeObserver?.disconnect();
@@ -449,18 +477,58 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
     // Resolve the colormap against the live theme once per frame, not per cell.
     const cmap = resolveColormap(this.colormap, this.effectiveTheme());
+    // Accent for selection rings + marquee, also resolved once per frame.
+    this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
+    const selectionActive = this.selection.size > 0;
 
     for (const cell of allCells) {
       const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
       if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
       if (sy < -screenRadius * 2 || sy > this.height + screenRadius * 2) continue;
-      this.drawHex(ctx, sx, sy, screenRadius, cell, cmap);
+      this.drawHex(ctx, sx, sy, screenRadius, cell, cmap, selectionActive);
     }
+
+    if (this.marquee) this.drawMarquee(ctx);
 
     // Publish the region now on screen so the minimap can draw its viewport box.
     this.viewport.setViewport(this.getVisibleBounds());
 
     this.prefetchNeighbors(visibleTiles);
+  }
+
+  /** Selection state of a cell: 0 = none, 1 = partial, 2 = full. Memoized on
+   *  the cell against the selection version so a steady-state pan doesn't
+   *  re-scan every bin's members each frame. */
+  private selStateFor(cell: HexCellPayload): 0 | 1 | 2 {
+    const memo = cell as HexCellPayload & { _selVer?: number; _selState?: 0 | 1 | 2 };
+    if (memo._selVer === this.selection.version && memo._selState !== undefined) {
+      return memo._selState;
+    }
+    const members = this.cellMembers(cell);
+    const sel = this.selection.selectedCountIn(members);
+    const state: 0 | 1 | 2 = sel === 0 ? 0 : sel === members.length ? 2 : 1;
+    memo._selVer = this.selection.version;
+    memo._selState = state;
+    return state;
+  }
+
+  /** Translucent fill + dashed accent border for the in-progress marquee. */
+  private drawMarquee(ctx: CanvasRenderingContext2D): void {
+    const m = this.marquee!;
+    const x = Math.min(m.x0, m.x1);
+    const y = Math.min(m.y0, m.y1);
+    const w = Math.abs(m.x1 - m.x0);
+    const h = Math.abs(m.y1 - m.y0);
+    ctx.save();
+    ctx.fillStyle = this.selAccent;
+    ctx.globalAlpha = 0.12;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = this.selAccent;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.restore();
   }
 
   private drawHex(
@@ -470,6 +538,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     radius: number,
     cell: HexCellPayload,
     cmap: ResolvedColormap,
+    selectionActive: boolean,
   ): void {
     // A cell with one item is drawn as a disc (slightly smaller than the cell);
     // multi-item cells keep their full shape so they tile the space.
@@ -496,6 +565,17 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.fill();
     }
 
+    // When a selection exists, dim every bin with no selected member so the
+    // selected ones pop. Clipped so the wash stays inside the cell footprint.
+    const selState = selectionActive ? this.selStateFor(cell) : 0;
+    if (selectionActive && selState === 0) {
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.fill();
+      ctx.restore();
+    }
+
     const isHovered =
       this.hoveredCell && this.hoveredCell.q === cell.q && this.hoveredCell.r === cell.r;
     if (isHovered) {
@@ -509,6 +589,17 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.clip();
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.restore();
+    } else if (selState > 0) {
+      // Selected bin: an inset accent ring (solid when every member is
+      // selected, dashed when only some are — the "partial" state). Clipped so
+      // the band sits just inside the cell rather than bleeding onto neighbours.
+      ctx.save();
+      ctx.clip();
+      ctx.strokeStyle = this.selAccent;
+      ctx.lineWidth = 5;
+      if (selState === 1) ctx.setLineDash([6, 4]);
       ctx.stroke();
       ctx.restore();
     } else if (thumb && !single && this.thumbnailBorder > 0) {
@@ -642,9 +733,23 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
-    this.isPanning = true;
     this.panStartX = event.clientX;
     this.panStartY = event.clientY;
+    this.dragMoved = false;
+
+    if (event.shiftKey) {
+      // Shift+drag: rubber-band a region to add to the selection. Suppress any
+      // hover preview while marqueeing so it doesn't flicker over the rectangle.
+      event.preventDefault();
+      const [mx, my] = this.canvasXY(event);
+      this.isMarquee = true;
+      this.marquee = { x0: mx, y0: my, x1: mx, y1: my };
+      document.addEventListener('mousemove', this.boundMouseMove);
+      document.addEventListener('mouseup', this.boundMouseUp);
+      return;
+    }
+
+    this.isPanning = true;
     this.panStartCenterX = this.transform.centerX;
     this.panStartCenterY = this.transform.centerY;
     document.addEventListener('mousemove', this.boundMouseMove);
@@ -652,19 +757,96 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private onMouseMove(event: MouseEvent): void {
+    if (this.isMarquee && this.marquee) {
+      const [mx, my] = this.canvasXY(event);
+      this.marquee.x1 = mx;
+      this.marquee.y1 = my;
+      this.dragMoved = true;
+      this.requestRedraw();
+      return;
+    }
     if (!this.isPanning) return;
     const dx = event.clientX - this.panStartX;
     const dy = event.clientY - this.panStartY;
+    if (
+      Math.abs(dx) > BrowseCanvasComponent.CLICK_MOVE_THRESHOLD ||
+      Math.abs(dy) > BrowseCanvasComponent.CLICK_MOVE_THRESHOLD
+    ) {
+      this.dragMoved = true;
+    }
     const z = this.effZoom;
     this.transform.centerX = this.panStartCenterX - dx / z;
     this.transform.centerY = this.panStartCenterY - dy / z;
     this.requestRedraw();
   }
 
-  private onMouseUp(): void {
-    this.isPanning = false;
+  private onMouseUp(event: MouseEvent): void {
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
+
+    if (this.isMarquee) {
+      this.isMarquee = false;
+      this.commitMarquee();
+      this.marquee = null;
+      this.requestRedraw();
+      return;
+    }
+
+    const wasPanning = this.isPanning;
+    this.isPanning = false;
+    // A press that never crossed the move threshold is a click: toggle the bin
+    // under the cursor (no modifier — Shift is reserved for the marquee).
+    if (wasPanning && !this.dragMoved && !event.shiftKey) {
+      const [mx, my] = this.canvasXY(event);
+      this.toggleCellAt(mx, my);
+    }
+  }
+
+  /** Canvas-relative ``[x, y]`` for a mouse event. */
+  private canvasXY(event: MouseEvent): [number, number] {
+    const rect = this.canvasRef.nativeElement.getBoundingClientRect();
+    return [event.clientX - rect.left, event.clientY - rect.top];
+  }
+
+  /** Member media ids of a cell, falling back to its representative. */
+  private cellMembers(cell: HexCellPayload): number[] {
+    return cell.member_ids && cell.member_ids.length > 0 ? cell.member_ids : [cell.rep_id];
+  }
+
+  /** Toggle the selection of the bin under canvas point ``(mx, my)``. */
+  private toggleCellAt(mx: number, my: number): void {
+    const cell = this.hitTest(mx, my);
+    if (!cell) return;
+    const members = this.cellMembers(cell);
+    // Mutate inside the zone so the selection panel's count updates.
+    this.ngZone.run(() => this.selection.toggleBin(members));
+    this.requestRedraw();
+  }
+
+  /** Add every bin whose centre falls inside the marquee rectangle. */
+  private commitMarquee(): void {
+    if (!this.marquee || !this.meta) return;
+    const [px0, py0] = this.screenToProj(this.marquee.x0, this.marquee.y0);
+    const [px1, py1] = this.screenToProj(this.marquee.x1, this.marquee.y1);
+    const minX = Math.min(px0, px1);
+    const maxX = Math.max(px0, px1);
+    const minY = Math.min(py0, py1);
+    const maxY = Math.max(py0, py1);
+
+    const level = this.activeLevel;
+    const ids: number[] = [];
+    for (const { tx, ty } of this.getVisibleTiles()) {
+      const tile = this.tileCache.getCached(level, tx, ty);
+      if (!tile) continue;
+      for (const cell of tile.cells) {
+        if (cell.cx >= minX && cell.cx <= maxX && cell.cy >= minY && cell.cy <= maxY) {
+          for (const id of this.cellMembers(cell)) ids.push(id);
+        }
+      }
+    }
+    if (ids.length > 0) {
+      this.ngZone.run(() => this.selection.addAll(ids));
+    }
   }
 
   /**
@@ -712,7 +894,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private onCanvasMouseMove(event: MouseEvent): void {
-    if (this.isPanning) return;
+    if (this.isPanning || this.isMarquee) return;
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;

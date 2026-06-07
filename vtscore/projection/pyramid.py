@@ -320,6 +320,44 @@ def build_pyramid(
     )
 
 
+def tile_member_ids(
+    pyr: Pyramid,
+    projection: Projection,
+    level: int,
+    tx: int,
+    ty: int,
+) -> dict[tuple[int, int], list[int]]:
+    """Media ids per cell for one tile, re-derived from the frozen layout.
+
+    A :class:`HexCell` stores only its ``count`` (density) and a single
+    ``rep_id`` — the per-cell member lists are computed during the build and
+    discarded, since persisting them would bloat the container with an index
+    that the frozen 2-D coordinates already imply.  The browse canvas needs the
+    full membership to render per-cell selection state (none / partial / full)
+    and to toggle a whole bin's contents, so we recompute it on demand here by
+    re-binning *projection*'s coordinates at *level*'s radius and grouping the
+    points that land in the requested ``(tx, ty)`` tile.
+
+    Returned keyed by ``(q, r)`` so the tile endpoint can hand each cell its
+    members.  Tiles are immutable for the dataset's life (the projection is
+    frozen at ingest), so this is computed once per tile and then HTTP-cached.
+    """
+    coords = np.ascontiguousarray(projection.coords, dtype=np.float64)
+    if coords.shape[0] == 0:
+        return {}
+    ids = np.asarray(projection.ids, dtype=np.int64)
+    geom = _geometry_for(pyr.bin_shape)
+    radius = pyr.level_radius(level)
+    q, r = geom.assign(coords, radius)
+    tx_all, ty_all = geom.tile_index(q, r, pyr.tile_span)
+    mask = (tx_all == tx) & (ty_all == ty)
+
+    members: dict[tuple[int, int], list[int]] = {}
+    for qq, rr, mid in zip(q[mask].tolist(), r[mask].tolist(), ids[mask].tolist()):
+        members.setdefault((int(qq), int(rr)), []).append(int(mid))
+    return members
+
+
 def max_useful_levels(point_count: int) -> int:
     """A generous ``n_levels`` ceiling for *point_count* clips.
 

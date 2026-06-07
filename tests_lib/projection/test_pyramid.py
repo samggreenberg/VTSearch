@@ -5,7 +5,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vtscore.projection.pyramid import BIN_SHAPES, Pyramid, build_pyramid, max_useful_levels
+from vtscore.projection.pyramid import (
+    BIN_SHAPES,
+    Pyramid,
+    build_pyramid,
+    max_useful_levels,
+    tile_member_ids,
+)
 from vtscore.projection.umap_projection import Projection
 
 
@@ -83,6 +89,50 @@ def test_tile_indexing_matches_get_tile():
         assert pyr.get_tile(level, tx, ty) is tile
         assert tile.level == level and tile.tx == tx and tile.ty == ty
     assert pyr.get_tile(999, 0, 0) is None
+
+
+@pytest.mark.parametrize("bin_shape", BIN_SHAPES)
+def test_tile_member_ids_partition_each_tile(bin_shape):
+    """Every tile's members reproduce each cell's count and union to its ids."""
+    coords = _cluster_cloud()
+    ids = list(range(1000, 1000 + coords.shape[0]))
+    proj = _projection(coords, ids=ids)
+    pyr = build_pyramid(proj, bin_shape=bin_shape, n_levels=4)
+
+    all_recovered: set[int] = set()
+    for (level, tx, ty), tile in pyr.tiles.items():
+        members = tile_member_ids(pyr, proj, level, tx, ty)
+        # Re-deriving membership must agree with the cell aggregates: one entry
+        # per cell, member count equals the stored count, and the representative
+        # is among the members.
+        assert set(members) == {(c.q, c.r) for c in tile.cells}
+        for cell in tile.cells:
+            cell_members = members[(cell.q, cell.r)]
+            assert len(cell_members) == cell.count
+            assert cell.rep_id in cell_members
+            all_recovered.update(cell_members)
+
+    # Across one level, every point is recovered exactly once.
+    level0_members: list[int] = []
+    for (level, tx, ty) in pyr.tiles:
+        if level != 0:
+            continue
+        for member_list in tile_member_ids(pyr, proj, level, tx, ty).values():
+            level0_members.extend(member_list)
+    assert sorted(level0_members) == sorted(ids)
+    assert all_recovered == set(ids)
+
+
+def test_tile_member_ids_empty_for_missing_tile():
+    proj = _projection(_cluster_cloud())
+    pyr = build_pyramid(proj, n_levels=3)
+    assert tile_member_ids(pyr, proj, 0, 999, 999) == {}
+
+
+def test_tile_member_ids_empty_projection():
+    proj = _projection(np.empty((0, 2), dtype=np.float32), ids=[])
+    pyr = build_pyramid(proj, n_levels=2)
+    assert tile_member_ids(pyr, proj, 0, 0, 0) == {}
 
 
 def test_empty_projection_yields_no_tiles_but_keeps_levels():
