@@ -138,7 +138,7 @@ def test_tile_member_ids_caches_per_level():
 
     # Level 1 is now cached, holding *every* level-1 tile (not just the one asked for).
     assert level in pyr._member_index
-    assert set(pyr._member_index[level]) == {(t, u) for (l, t, u) in pyr.tiles if l == level}
+    assert set(pyr._member_index[level]) == {(t, u) for (lvl, t, u) in pyr.tiles if lvl == level}
 
     # A second fetch returns the same cached object — no recompute.
     assert tile_member_ids(pyr, proj, level, tx, ty) is pyr._member_index[level][(tx, ty)]
