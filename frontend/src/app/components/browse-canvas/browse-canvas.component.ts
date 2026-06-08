@@ -51,7 +51,7 @@ export interface BrowseContextMenuEvent {
 /** How much larger the hovered cell is drawn relative to its neighbours so it
  *  lifts off the grid. The border is reserved for selection state, so hover is
  *  signalled by this size bump + a soft drop shadow instead of a ring. */
-const HOVER_RADIUS_SCALE = 1.18;
+const HOVER_RADIUS_SCALE = 1.38;
 
 @Component({
   selector: 'vt-browse-canvas',
@@ -813,6 +813,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     cell: HexCellPayload,
     cmap: ResolvedColormap,
     selectionActive: boolean,
+    fitMode: 'cover' | 'contain' = 'cover',
   ): void {
     // A cell with one item is drawn as a disc (slightly smaller than the cell);
     // multi-item cells keep their full shape so they tile the space.
@@ -821,12 +822,18 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
     // Image / video: paint the central item's thumbnail clipped to the cell.
     // Until it loads, fall back to the density shading below so the cell is
-    // never blank.
+    // never blank. Grid cells cover-fit (fill the bin, cropping the edges);
+    // the hovered cell contain-fits so a thumbnail clipped by its bin shows in
+    // full, scaled down to sit inside the enlarged view.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
     if (thumb) {
       ctx.save();
       ctx.clip();
-      this.drawImageCover(ctx, thumb, cx, cy, radius);
+      if (fitMode === 'contain') {
+        this.drawImageContain(ctx, thumb, cx, cy, radius);
+      } else {
+        this.drawImageCover(ctx, thumb, cx, cy, radius);
+      }
       ctx.restore();
     } else if (single) {
       // Singletons get the colormap's dedicated one-item colour, decoupled
@@ -901,7 +908,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.fill();
     ctx.restore();
 
-    this.drawHex(ctx, cx, cy, bumped, cell, cmap, selectionActive);
+    this.drawHex(ctx, cx, cy, bumped, cell, cmap, selectionActive, 'contain');
   }
 
   /** Cover-fit an image over the hex's 2*radius square (the path must be clipped). */
@@ -914,6 +921,25 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   ): void {
     const size = radius * 2;
     const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight);
+    const dw = img.naturalWidth * scale;
+    const dh = img.naturalHeight * scale;
+    ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+  }
+
+  /** Contain-fit an image inside the cell's bounding box so the whole frame is
+   *  visible (letterboxed against the cell's base fill). Used for the hovered
+   *  cell, where a thumbnail clipped in the grid should show in full. The fit
+   *  box follows the shape (hex is wider than tall, square is even) so wide
+   *  thumbnails aren't re-cropped by the cell silhouette. */
+  private drawImageContain(
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    cx: number,
+    cy: number,
+    radius: number,
+  ): void {
+    const { hw, hh } = this.geom.contentHalfExtent(radius);
+    const scale = Math.min((hw * 2) / img.naturalWidth, (hh * 2) / img.naturalHeight);
     const dw = img.naturalWidth * scale;
     const dh = img.naturalHeight * scale;
     ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);

@@ -37,6 +37,13 @@ export interface BinGeometry {
    * inside a cell of the given `radius` — the hover hit-test predicate.
    */
   contains(ox: number, oy: number, radius: number): boolean;
+  /**
+   * Half-width / half-height of the cell's bounding box at the given screen
+   * `radius`. Used to contain-fit a thumbnail inside a cell: a hex is wider
+   * than tall (`√3·radius` × `2·radius`) while a square is `√3·radius` on a
+   * side, so the fit box differs by shape.
+   */
+  contentHalfExtent(radius: number): { hw: number; hh: number };
 }
 
 // Pointy-top hexagon: column spacing `radius·√3`, row spacing `radius·1.5`.
@@ -47,6 +54,7 @@ const HEX_GEOMETRY: BinGeometry = {
   dy: (radius) => radius * 1.5,
   traceCell: (ctx, cx, cy, radius, single) => traceHexCellPath(ctx, cx, cy, radius, single),
   contains: (ox, oy, radius) => ox * ox + oy * oy < radius * radius,
+  contentHalfExtent: (radius) => ({ hw: (radius * SQRT3) / 2, hh: radius }),
 };
 
 // Corner radius of a square-mode singleton, as a fraction of its half-side. A
@@ -75,6 +83,10 @@ const SQUARE_GEOMETRY: BinGeometry = {
   contains: (ox, oy, radius) => {
     const half = (radius * SQRT3) / 2;
     return Math.abs(ox) < half && Math.abs(oy) < half;
+  },
+  contentHalfExtent: (radius) => {
+    const half = (radius * SQRT3) / 2;
+    return { hw: half, hh: half };
   },
 };
 
