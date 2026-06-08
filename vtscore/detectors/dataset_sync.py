@@ -103,6 +103,9 @@ def ensure_votes_match_active_dataset() -> None:
             det_ctx.last_learned_scores.clear()
             det_ctx.find_initial_labels.clear()
             det_ctx.training_medias.clear()
+            # The detector now has no votes for the active dataset, so they
+            # can't be find/scoring output; let the next vote sync normally.
+            det_ctx.find_mode = False
             det_ctx.votes_dataset_id = ds_ctx.dataset_id
             det_ctx.cached_labelset = None
             det_ctx.cached_labelset_mtime = 0.0
@@ -132,6 +135,9 @@ def ensure_votes_match_active_dataset() -> None:
         det_ctx.last_learned_scores.clear()
         det_ctx.find_initial_labels.clear()
         det_ctx.training_medias.clear()
+        # Votes are about to be re-derived from the on-disk labelset (the
+        # canonical training labels), so any prior find/scoring state is stale.
+        det_ctx.find_mode = False
         restore_labels_from_detector(data)
         det_ctx.votes_dataset_id = ds_ctx.dataset_id
         det_ctx.cached_labelset = LabelSet.from_dict(data.get("labelset") or {})

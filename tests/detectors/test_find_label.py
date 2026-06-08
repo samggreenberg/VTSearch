@@ -8,6 +8,7 @@ labelset stored on disk.
 from __future__ import annotations
 
 import app as app_module
+import pytest
 from helpers import setup_trainable_model_in_registry
 from vtsearch.state import snapshot_medias
 
@@ -81,6 +82,63 @@ class TestFindLabel:
         # the unknown field into a 422 from flask-smorest.
         assert resp.status_code == 422, resp.get_json()
         assert "dataset_id" in resp.get_json()["errors"]["json"]
+
+
+class TestFindModeIsPerDetector:
+    """Find mode is per-detector state, not a process-wide global.
+
+    Running ``/api/find-label`` on detector A used to flip a process-global
+    ``_find_mode`` flag that was only ever cleared by explicitly *unloading* a
+    detector.  Loading detector B to train it (or creating a new detector)
+    left the flag stuck True, so ``sync_labels_to_loaded_detector`` silently
+    dropped every vote on B: the right-pane Good/Bad panels stayed empty and
+    Learned sort stayed greyed out even though the stripe still showed the
+    in-memory votes.  Find mode now lives on each ``DetectorContext``, so a
+    find pass on A never blocks vote syncing on B.
+    """
+
+    def test_find_label_on_one_detector_does_not_block_sync_on_another(self, client):
+        from tests import load_detector_and_wait
+        from vtscore.detectors.store import _detector_path, _read_detector
+        from vtsearch.state import medias
+
+        if len(medias) < 5:
+            pytest.skip("Need at least 5 medias")
+        ids = list(medias.keys())
+        snap = snapshot_medias()
+
+        mid_a = setup_trainable_model_in_registry(
+            "find-leak-A",
+            good_ids=[ids[0], ids[1]],
+            bad_ids=[ids[2], ids[3]],
+            snap=snap,
+        )
+        mid_b = setup_trainable_model_in_registry(
+            "find-leak-B",
+            good_ids=[ids[0]],
+            bad_ids=[ids[1]],
+            snap=snap,
+        )
+
+        # Use detector A to score the whole dataset: A enters find mode so its
+        # scoring labels are NOT synced back over its training labelset.
+        load_detector_and_wait(client, mid_a)
+        resp = client.post("/api/find-label", json={"detector_id": mid_a})
+        assert resp.status_code == 200, resp.get_json()
+
+        # Switch to detector B and cast a genuine training vote.
+        load_detector_and_wait(client, mid_b)
+        target_id = ids[4]
+        resp = client.post(f"/api/medias/{target_id}/vote", json={"target": "good"})
+        assert resp.status_code == 200, resp.get_json()
+
+        # B's on-disk labelset must have recorded the vote.  Before the fix,
+        # A's find mode leaked through the global flag and the sync was skipped,
+        # leaving B's labelset (and the Good/Bad panels) empty.
+        data = _read_detector(_detector_path("find-leak-B"))
+        assert data is not None
+        good_md5s = {el["md5"] for el in data["labelset"]["labels"] if el["label"] == "good"}
+        assert medias[target_id]["md5"] in good_md5s
 
 
 class TestAutoDetect:

@@ -339,6 +339,14 @@ class DetectorContext:
         "vote_click_times",
         "vote_region_boxes",
         "click_counter",
+        # True when this detector's in-memory votes are find/scoring output
+        # (set by /api/find-label) rather than genuine training labels.  While
+        # set, ``sync_labels_to_loaded_detector`` refuses to persist the votes
+        # so a scoring pass can't overwrite the detector's saved labelset.
+        # Per-detector (not a process global) so a find pass on one detector
+        # never blocks vote syncing on another.  Cleared whenever the votes are
+        # re-derived from the on-disk labelset (detector load / dataset switch).
+        "find_mode",
         # Training artifacts
         "last_learned_scores",
         "textsort_suggestions",
@@ -406,6 +414,8 @@ class DetectorContext:
         # yes-votes and for every no-vote.  Patch-embedder v2.
         self.vote_region_boxes: dict[int, tuple[float, float, float, float]] = {}
         self.click_counter: int = 0
+        # See the slot comment: True while these votes are find/scoring output.
+        self.find_mode: bool = False
         # Training artifacts
         self.last_learned_scores: dict[int, float] = {}
         self.textsort_suggestions: list[str] = []
