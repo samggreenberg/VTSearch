@@ -25,6 +25,9 @@ dependencies = [
     "requests",
     "tqdm",
     "scikit-learn",
+    # Imported directly by vtscore.embedding.loader for the startup
+    # threadpool-controller warm-up (also a scikit-learn dependency).
+    "threadpoolctl",
     "umap-learn",
     "transformers",
     "pandas",

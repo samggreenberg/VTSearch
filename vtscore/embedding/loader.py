@@ -129,12 +129,49 @@ def default_concurrent_embeddings() -> int:
     return max(1, min(_MAX_CPU_EMBED_DEFAULT, by_cpu, by_ram))
 
 
+def _warm_threadpool_controller() -> None:
+    """Build sklearn's cached ``ThreadpoolController`` while single-threaded.
+
+    The first sklearn fit (e.g. KMeans in diversity-tree building) constructs
+    a ``threadpoolctl.ThreadpoolController``, which scans every loaded shared
+    library via ``dl_iterate_phdr``.  That C call holds glibc's loader lock
+    while invoking a *Python* callback per library - and running Python means
+    acquiring the GIL.  If another thread holds the GIL and is itself inside
+    native code that needs the loader lock (libgcc's ``_Unwind_Find_FDE``
+    during stack unwinding does ``dl_iterate_phdr`` too, and numpy-heavy
+    embedding work hits it), the two threads deadlock: loader lock <-> GIL.
+    Observed in production as a frozen server when a detector load and a
+    dataset load ran concurrently.
+
+    sklearn caches the controller in a module global
+    (``sklearn.utils.parallel._get_threadpool_controller``), so building it
+    once here - at startup, before any load threads exist - means the
+    dangerous scan never runs under concurrency.  Best-effort: sklearn may be
+    absent (minimal installs) and the helper is private, so fall back through
+    public threadpoolctl (which at least pre-loads the library handles) and
+    swallow failures rather than block startup.
+    """
+    try:
+        from sklearn.utils.parallel import _get_threadpool_controller  # noqa: PLC0415
+
+        _get_threadpool_controller()
+    except Exception:
+        try:
+            import threadpoolctl  # noqa: PLC0415
+
+            threadpoolctl.ThreadpoolController()
+        except Exception:
+            pass
+
+
 def initialize_models() -> None:
     """Prepare the runtime environment for embedding models.
 
-    Creates the model cache directory and configures PyTorch thread count
-    **if torch is already imported**.  When torch has not been imported yet
-    (e.g. during fast test startup) the thread-count configuration is
+    Creates the model cache directory, configures PyTorch thread count
+    **if torch is already imported**, and warms sklearn's threadpool
+    controller while still single-threaded (see
+    :func:`_warm_threadpool_controller`).  When torch has not been imported
+    yet (e.g. during fast test startup) the thread-count configuration is
     deferred until ``ensure_torch_configured`` is called by the first code
     path that actually imports torch.
 
@@ -142,6 +179,7 @@ def initialize_models() -> None:
     """
     MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     ensure_torch_configured()
+    _warm_threadpool_controller()
     try:
         from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
 
