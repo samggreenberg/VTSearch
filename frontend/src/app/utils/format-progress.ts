@@ -66,6 +66,9 @@ export function formatEta(seconds: number | null | undefined): string {
   // Sub-minute: round to a nice multiple of seconds (minimum 5s granularity).
   if (seconds < 60) {
     const s = snapEta(seconds, 5);
+    // A few seconds left snaps down to 0; claiming "~0 sec" reads as "done"
+    // even though work remains. Show "< 5 sec left" instead.
+    if (s <= 0) return '< 5 sec left';
     if (s < 60) return etaUnit(s, 'sec');
   }
   // Minutes: round to the nice fraction of a minute (minimum half-minute).
