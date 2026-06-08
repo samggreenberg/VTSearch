@@ -43,12 +43,8 @@ class TestPromoteToDataset:
         roundtrip: dict = {}
         load_dataset_from_pickle(entry["pkl_path"], roundtrip)
         assert len(roundtrip) == len(ids)
-        original_origins = {
-            (snap[cid].get("origin_name") or snap[cid].get("filename")) for cid in ids
-        }
-        promoted_origins = {
-            (m.get("origin_name") or m.get("filename")) for m in roundtrip.values()
-        }
+        original_origins = {(snap[cid].get("origin_name") or snap[cid].get("filename")) for cid in ids}
+        promoted_origins = {(m.get("origin_name") or m.get("filename")) for m in roundtrip.values()}
         assert promoted_origins == original_origins
 
     def test_renumbers_ids_from_one(self, client):
@@ -63,6 +59,7 @@ class TestPromoteToDataset:
         )
         assert resp.status_code == 200
         entry = reg.get_dataset(resp.get_json()["dataset_id"])
+        assert entry is not None
         roundtrip: dict = {}
         load_dataset_from_pickle(entry["pkl_path"], roundtrip)
         assert sorted(roundtrip.keys()) == list(range(1, len(ids) + 1))
@@ -98,6 +95,7 @@ class TestPromoteToDataset:
             )
             assert resp.status_code == 200, resp.get_json()
             new_entry = reg.get_dataset(resp.get_json()["dataset_id"])
+            assert new_entry is not None
             # Death date inherited; created date is fresh (not the source's).
             assert new_entry["expires_at"] == 99_999.0
             assert new_entry["created_at"] != src["created_at"]
