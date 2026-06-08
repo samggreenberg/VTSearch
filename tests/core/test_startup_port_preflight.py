@@ -44,6 +44,30 @@ def test_port_is_free_reflects_binding():
     assert app_module._port_is_free(port) is True
 
 
+def test_port_is_free_ignores_orphaned_time_wait():
+    """Sockets a dead server leaves in TIME_WAIT must not read as "in use".
+
+    A ``kill -9``'d server's accepted connections linger in TIME_WAIT (local
+    port == the listen port, owned by no process) for ~60s. werkzeug binds
+    with ``SO_REUSEADDR`` and would start fine, so the probe - which matches
+    that bind - must report the port free rather than block the restart.
+    Closing the server side of the connection first parks its socket in
+    TIME_WAIT, surviving all three ``close()`` calls below.
+    """
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.connect(("127.0.0.1", port))
+    conn, _ = server.accept()
+    conn.close()  # server closes first -> this socket heads to TIME_WAIT
+    client.close()
+    server.close()
+    assert app_module._port_is_free(port) is True
+
+
 def test_find_listener_pids_identifies_self():
     sock, port = _listening_socket()
     try:
