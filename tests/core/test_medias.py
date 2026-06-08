@@ -447,6 +447,49 @@ class TestMediaImage:
                 media["thumbnail_bytes"] = saved_thumb
 
 
+class TestMediaThumbnail:
+    """Tests for GET /api/medias/<id>/thumbnail (downscaled grid/list tiles)."""
+
+    def test_returns_image_for_audio_media(self, client):
+        # The default test dataset is audio; /image yields a waveform PNG, which
+        # the thumbnail route downscales (and re-encodes, here keeping PNG).
+        resp = client.get("/api/medias/1/thumbnail")
+        assert resp.status_code == 200
+        assert resp.content_type in ("image/jpeg", "image/png")
+
+    def test_thumbnail_is_bounded(self, client):
+        from PIL import Image  # noqa: PLC0415
+
+        from vtscore.media.image.thumbnail import DEFAULT_MAX_DIM  # noqa: PLC0415
+
+        resp = client.get("/api/medias/1/thumbnail")
+        assert resp.status_code == 200
+        with Image.open(io.BytesIO(resp.data)) as img:
+            assert max(img.size) <= DEFAULT_MAX_DIM
+
+    def test_returns_404_for_invalid_id(self, client):
+        resp = client.get("/api/medias/9999/thumbnail")
+        assert resp.status_code == 404
+
+    def test_sets_cache_headers_and_etag(self, client):
+        resp = client.get("/api/medias/1/thumbnail")
+        assert resp.status_code == 200
+        assert "max-age" in resp.headers.get("Cache-Control", "")
+        assert resp.headers.get("ETag")
+
+    def test_conditional_request_returns_304(self, client):
+        first = client.get("/api/medias/1/thumbnail")
+        etag = first.headers["ETag"]
+        second = client.get("/api/medias/1/thumbnail", headers={"If-None-Match": etag})
+        assert second.status_code == 304
+        assert second.data == b""
+
+    def test_consistent_responses(self, client):
+        resp1 = client.get("/api/medias/1/thumbnail")
+        resp2 = client.get("/api/medias/1/thumbnail")
+        assert resp1.data == resp2.data
+
+
 class TestMediaAudio:
     def test_returns_wav_for_valid_id(self, client):
         resp = client.get("/api/medias/1/audio")

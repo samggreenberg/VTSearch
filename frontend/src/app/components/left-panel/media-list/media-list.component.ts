@@ -45,6 +45,16 @@ const LIST_ITEM_HEIGHT = 28;
 const GRID_GAP_PX = 4;
 /** Fallback grid-row stride before the first real card is measured (px). */
 const GRID_ROW_HEIGHT_FALLBACK = 100;
+/**
+ * Smallest plausible measured grid-row stride (px).  A card mid-relayout
+ * (its ``<img>`` still loading after a zoom) can momentarily report a
+ * near-zero ``getBoundingClientRect().height``.  Accepting that as the CDK
+ * ``itemSize`` would make the viewport think each row is a few pixels tall and
+ * mount nearly every item at once — defeating virtualization and decoding
+ * hundreds of images simultaneously.  Heights below this floor are treated as
+ * "not yet laid out" and ignored until a real card measures.
+ */
+const MIN_GRID_ROW_HEIGHT = 24;
 /** Extra items to prefetch beyond the visible viewport edges. */
 const PREFETCH_BUFFER = 50;
 
@@ -381,7 +391,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     const card = vp?.querySelector('vt-media-item .media-item') as HTMLElement | null;
     if (card) {
       const measured = Math.round(card.getBoundingClientRect().height + GRID_GAP_PX);
-      if (measured > 0) {
+      // Only trust a measurement once the card has actually laid out: a
+      // transient near-zero height (image still loading after a zoom) would
+      // otherwise be locked in as a tiny ``itemSize`` and collapse
+      // virtualization.  Leave ``gridHeightMeasured`` false so the next
+      // change-detection / resize pass re-measures against a real card.
+      if (measured >= MIN_GRID_ROW_HEIGHT) {
         this.gridHeightMeasured = true;
         if (Math.abs(measured - this.gridRowHeight) > 1) {
           this.gridRowHeight = measured;

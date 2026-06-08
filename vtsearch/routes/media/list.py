@@ -407,16 +407,15 @@ def media_video(media_id: int):
     return _send_video_bytes(media_bytes, mimetype, f"media_{media_id}{ext}")
 
 
-@medias_bp.route("/api/medias/<int:media_id>/image")
-@medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
-@medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
-def media_image(media_id: int):  # noqa: C901
-    """Stream the image bytes for a single image media item.
+def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
+    """Resolve the displayable image for a media item.
 
-    Determines the MIME type from the media's filename extension, defaulting
-    to ``image/jpeg`` for unrecognised extensions. For non-image media types
-    that declare an ``image_response`` hook (audio waveforms, video frames),
-    the route delegates to that hook.
+    Returns ``(image_bytes, mimetype, download_name)`` for the bytes the
+    ``/image`` route would serve, ``abort``-ing with the matching error when
+    no image is available.  For non-image types it delegates to the media
+    type's ``image_response`` hook (audio waveforms, video frames); for image
+    types it streams the source bytes with a mimetype derived from the
+    filename extension.  Shared by the full-image and thumbnail routes.
     """
     c = get_media(media_id)
     if not c:
@@ -436,11 +435,7 @@ def media_image(media_id: int):  # noqa: C901
         if image_response_fn is not None:
             resp = image_response_fn(c)
             if resp is not None:
-                return send_file(
-                    io.BytesIO(resp.data),
-                    mimetype=resp.mimetype,
-                    download_name=resp.download_name,
-                )
+                return resp.data, resp.mimetype, resp.download_name
         abort(400, message="no image available")
 
     media_bytes = _resolve_bytes(c)
@@ -460,11 +455,59 @@ def media_image(media_id: int):  # noqa: C901
     else:
         mimetype = "image/jpeg"
 
-    return send_file(
-        io.BytesIO(media_bytes),
-        mimetype=mimetype,
-        download_name=f"media_{media_id}{Path(filename).suffix if filename and Path(filename).suffix else '.jpg'}",
-    )
+    suffix = Path(filename).suffix if filename and Path(filename).suffix else ".jpg"
+    return media_bytes, mimetype, f"media_{media_id}{suffix}"
+
+
+@medias_bp.route("/api/medias/<int:media_id>/image")
+@medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
+@medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
+def media_image(media_id: int):
+    """Stream the image bytes for a single image media item.
+
+    Determines the MIME type from the media's filename extension, defaulting
+    to ``image/jpeg`` for unrecognised extensions. For non-image media types
+    that declare an ``image_response`` hook (audio waveforms, video frames),
+    the route delegates to that hook.
+    """
+    data, mimetype, download_name = _resolve_display_image(media_id)
+    return send_file(io.BytesIO(data), mimetype=mimetype, download_name=download_name)
+
+
+@medias_bp.route("/api/medias/<int:media_id>/thumbnail")
+@medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
+@medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
+def media_thumbnail(media_id: int):
+    """Stream a downscaled thumbnail of a media item's image.
+
+    Grid and list tiles use this instead of ``/image`` so a gallery of many
+    high-resolution items doesn't force the browser to decode every full-size
+    bitmap at once.  The thumbnail is bounded to a fixed longest-side length
+    (see :data:`vtscore.media.image.thumbnail.DEFAULT_MAX_DIM`) and is the
+    same regardless of zoom level, so an ``ETag`` lets the browser reuse it
+    across scrolls and zoom changes.  Undecodable sources (e.g. SVG) fall
+    back to the original bytes.
+    """
+    from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+    data, src_mimetype, _ = _resolve_display_image(media_id)
+
+    # ETag fingerprints the source bytes so the browser can revalidate cheaply
+    # without us regenerating the thumbnail on every conditional request.
+    etag = hashlib.md5(data).hexdigest()
+    if etag in request.if_none_match:
+        resp = make_response("", 304)
+        resp.set_etag(etag)
+        resp.headers["Cache-Control"] = "private, max-age=86400"
+        return resp
+
+    result = make_image_thumbnail(data)
+    thumb, mimetype = result if result is not None else (data, src_mimetype)
+
+    resp = make_response(send_file(io.BytesIO(thumb), mimetype=mimetype, download_name=f"thumb_{media_id}"))
+    resp.set_etag(etag)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
 
 
 @medias_bp.route("/api/medias/<int:media_id>/paragraph")
