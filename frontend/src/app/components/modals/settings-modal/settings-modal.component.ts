@@ -17,7 +17,11 @@ import { EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
 import { VtDialogService } from '../../../services/dialog.service';
-import { DEFAULT_THUMBNAIL_BORDER, MAX_THUMBNAIL_BORDER } from '../../browse-canvas/hex-render.util';
+import {
+  DEFAULT_THUMBNAIL_BORDER,
+  MAX_THUMBNAIL_BORDER,
+  usesThumbnails,
+} from '../../browse-canvas/hex-render.util';
 
 @Component({
   selector: 'vt-settings-modal',
@@ -317,6 +321,15 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   onBrowseColormapChange(typeId: string, value: string): void {
     this.setBrowsePref('browse_colormap', typeId, value);
+  }
+
+  /**
+   * True when *typeId* paints cells with thumbnails (image/video). These types
+   * are pinned to grayscale, so the colormap picker is hidden for them and the
+   * UI shows a fixed read-only value instead.
+   */
+  browseTabUsesThumbnails(typeId: string): boolean {
+    return usesThumbnails(typeId);
   }
 
   getBrowseIconSize(typeId: string): string {

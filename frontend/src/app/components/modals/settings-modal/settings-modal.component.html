@@ -274,13 +274,20 @@
               </div>
               <div class="form-group">
                 <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap</label>
-                <select class="form-select" [ngModel]="getBrowseColormap(activeBrowseTab)" (ngModelChange)="onBrowseColormapChange(activeBrowseTab, $event)" aria-label="Browser colormap">
-                  <option value="auto">Auto (match theme)</option>
-                  <option value="heat">Heat (red → yellow)</option>
-                  <option value="ocean">Ocean (blue)</option>
-                  <option value="gray">Grayscale</option>
-                </select>
-                <p class="form-hint">Darker bins mean more items in light mode; brighter bins mean more in dark mode.</p>
+                @if (browseTabUsesThumbnails(activeBrowseTab)) {
+                  <select class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">
+                    <option value="gray" selected>Grayscale</option>
+                  </select>
+                  <p class="form-hint">Thumbnail datasets (image, video) always use grayscale, so the density shading never tints the thumbnails.</p>
+                } @else {
+                  <select class="form-select" [ngModel]="getBrowseColormap(activeBrowseTab)" (ngModelChange)="onBrowseColormapChange(activeBrowseTab, $event)" aria-label="Browser colormap">
+                    <option value="auto">Auto (match theme)</option>
+                    <option value="heat">Heat (red → yellow)</option>
+                    <option value="ocean">Ocean (blue)</option>
+                    <option value="gray">Grayscale</option>
+                  </select>
+                  <p class="form-hint">Darker bins mean more items in light mode; brighter bins mean more in dark mode.</p>
+                }
               </div>
               <div class="form-group">
                 <label class="form-label" title="On-screen size of the projection cells">Cell size</label>

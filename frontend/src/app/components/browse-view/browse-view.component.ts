@@ -30,6 +30,7 @@ import {
   BROWSE_COLORMAP_IDS,
   DEFAULT_THUMBNAIL_BORDER,
   MAX_THUMBNAIL_BORDER,
+  usesThumbnails,
   type BrowseColormapId,
 } from '../browse-canvas/hex-render.util';
 import type { BinShape, ProjectionMeta } from '../../models/projection.models';
@@ -315,11 +316,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (!s) return;
     const mt = this.mediaType;
 
-    const cmap = mt ? this.perMediaValue(s.browse_colormap, mt) : '';
-    this.colormap =
-      cmap && (BROWSE_COLORMAP_IDS as readonly string[]).includes(cmap)
-        ? (cmap as BrowseColormapId)
-        : 'auto';
+    // Thumbnail media (image/video) are pinned to grayscale so the colourful
+    // density presets never tint real thumbnails; the saved per-type value is
+    // ignored for them (the Settings UI hides the picker to match).
+    if (usesThumbnails(mt)) {
+      this.colormap = 'gray';
+    } else {
+      const cmap = mt ? this.perMediaValue(s.browse_colormap, mt) : '';
+      this.colormap =
+        cmap && (BROWSE_COLORMAP_IDS as readonly string[]).includes(cmap)
+          ? (cmap as BrowseColormapId)
+          : 'auto';
+    }
 
     const sizeLabel = mt ? this.perMediaValue(s.browse_icon_size, mt) : '';
     const sizeIdx = (BrowseViewComponent.ICON_SIZES as readonly string[]).indexOf(sizeLabel);
