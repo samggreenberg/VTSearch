@@ -1,45 +1,80 @@
-# Locking down `main`
+# Controlling who can change `main` (and `dev`)
 
-Goal: **only @samggreenberg can approve and land changes to `main`.** No other
-collaborator can push directly to `main` or self-merge a PR into it.
+Goal: **only @samggreenberg should land changes on `main`.** `dev` is the shared
+integration branch and stays open to collaborators via PRs.
 
-As of this writing the repo had **no protection on `main`** and 7 collaborators
-with `write` access (`xofm31`, `sbwilli3`, `matsunagateitoku`,
-`trevoradriaanse`, `qr1338`, `GCHQDev42081`, `drew-synergist-computing`), all of
-whom could change `main`. The steps below close that gap.
+## Reality check: this repo is private on the Free plan
 
-This pairs with the repo-root [`.github/CODEOWNERS`](../.github/CODEOWNERS)
-(`* @samggreenberg`), which makes Sam the sole code owner.
+Two GitHub limitations apply here, and they shape everything below:
 
-## Option A — Branch ruleset (recommended, modern UI)
+1. **No branch protection or rulesets.** On the Free plan, protected branches and
+   repository rulesets are only available on **public** repositories. A private
+   repo on Free **cannot** enforce "require a PR," "require my review," or
+   "restrict who pushes to `main`." Those settings are simply unavailable.
+2. **No granular collaborator roles.** On a **personal-account** repo (this one),
+   every collaborator you add has **write/push** access. The Read / Triage /
+   Write / Maintain roles only exist inside **organizations**. So you can't make
+   any of the 7 collaborators (`xofm31`, `sbwilli3`, `matsunagateitoku`,
+   `trevoradriaanse`, `qr1338`, `GCHQDev42081`, `drew-synergist-computing`)
+   read-only either.
 
-GitHub UI: **Settings → Rules → Rulesets → New branch ruleset**
+Net effect: **right now, nothing GitHub-side can hard-*prevent* a collaborator
+from pushing to `main`.** Enforcement requires changing the plan or visibility
+(see the last section). Until then, the controls below are *soft* — they signal,
+notify, and rely on team convention, but do not block.
 
-1. **Name**: `protect-main`
-2. **Enforcement status**: `Active`
-3. **Bypass list**: empty (or add only `samggreenberg` if you want an admin escape hatch).
-4. **Target branches**: add target → `Include by pattern` → `main`.
-5. Enable these rules:
-   - ☑ **Restrict creations / deletions** (no deleting `main`).
-   - ☑ **Restrict updates** (blocks direct pushes; changes must go through a PR).
-   - ☑ **Require a pull request before merging**
-     - Required approvals: **1**
-     - ☑ **Require review from Code Owners** ← this is what makes *you* the
-       required approver, via `.github/CODEOWNERS`.
-     - ☑ **Dismiss stale approvals when new commits are pushed**
-   - ☑ **Block force pushes**
+## Soft controls in effect today
 
-Because CODEOWNERS lists only `@samggreenberg`, the "Code Owners" requirement
-can only be satisfied by your review. Other write collaborators can open PRs and
-even click "approve," but their approval does not satisfy the Code Owner rule,
-so the PR stays unmergeable until you approve.
+### 1. CODEOWNERS auto-requests your review
 
-## Option B — Classic branch protection (`gh` CLI)
+`.github/CODEOWNERS` is `* @samggreenberg`. Even without branch protection,
+GitHub uses it to **automatically request your review** on every PR. This does
+not *block* a merge on the Free/private plan, but it makes your sign-off the
+visible, expected step on anything heading toward `main`.
 
-If you prefer classic protection over a ruleset, run this from a machine
-authenticated as `samggreenberg` (`gh auth status` to confirm):
+### 2. Team convention (the actual gate, for now)
+
+The enforced rules don't exist, so the working agreement is the gate. The
+project already encodes it in `CLAUDE.md`:
+
+- All work branches off `dev`; all PRs target `dev`, **never** `main`.
+- `main` is updated **only by @samggreenberg**, by promoting `dev` → `main`.
+- Collaborators do not push directly to `main`.
+
+Keep `main` as the stable/release branch and do all day-to-day merging on `dev`.
+Because everyone works off `dev`, no one has a routine reason to touch `main`.
+
+### 3. Notifications so you'd *see* an unwanted push
+
+Since you can't block pushes, make sure you'd notice one:
+
+- **Watch** the repo (top-right **Watch → All Activity**, or **Custom → Pushes**)
+  so direct pushes to `main` generate a notification.
+- Optionally subscribe to the `main` branch's commit feed (Atom):
+  `https://github.com/samggreenberg/vtsearch/commits/main.atom`.
+
+This turns "someone changed `main`" from invisible into an alert you can act on
+(revert + a conversation), which is the best available recourse without
+enforcement.
+
+## When you want real enforcement
+
+The soft controls above can't *prevent* a push. To actually restrict `main` so
+only you can land changes, pick one of these — then the enforced steps further
+below become available:
+
+| Path | Cost | Result |
+|------|------|--------|
+| **GitHub Pro** | ~$4/mo | Keep repo private; classic branch protection works on private repos. Cheapest real fix. |
+| **Make repo public** | Free | Branch protection + rulesets become available for free. (Code becomes public.) |
+| **Move into an Organization** | Free org / paid Team | Granular member roles (read-only members, contribute via fork+PR). Private-branch *protection* still needs the org **Team** plan. |
+
+### Enforced setup (once on Pro, or public)
+
+Classic branch protection via `gh` (run as `samggreenberg`):
 
 ```bash
+# Lock main: PR + your Code Owner review required, only you may push.
 gh api -X PUT repos/samggreenberg/vtsearch/branches/main/protection \
   --input - <<'JSON'
 {
@@ -50,55 +85,19 @@ gh api -X PUT repos/samggreenberg/vtsearch/branches/main/protection \
     "require_code_owner_reviews": true,
     "dismiss_stale_reviews": true
   },
-  "restrictions": {
-    "users": ["samggreenberg"],
-    "teams": [],
-    "apps": []
-  },
+  "restrictions": { "users": ["samggreenberg"], "teams": [], "apps": [] },
   "allow_force_pushes": false,
-  "allow_deletions": false,
-  "required_linear_history": false
+  "allow_deletions": false
 }
 JSON
 ```
 
-Key fields:
-- `"restrictions".users = ["samggreenberg"]` — only you may push to `main`.
-- `"require_code_owner_reviews": true` — with CODEOWNERS, only your review counts.
-- `"enforce_admins": false` — you keep an admin override; set `true` to bind
-  yourself to the same rules.
+With `.github/CODEOWNERS` = `* @samggreenberg`, `require_code_owner_reviews`
+means only *your* review satisfies the gate; `restrictions.users` limits pushes
+to you. Set `enforce_admins: true` to bind yourself to the same rules.
 
-### Verify
-
-```bash
-gh api repos/samggreenberg/vtsearch/branches/main/protection
-# or, for a ruleset:
-gh api repos/samggreenberg/vtsearch/rulesets
-```
-
-## Protecting `dev` (lighter than `main`)
-
-`dev` is the integration branch where day-to-day work merges before it's
-promoted to `main`. It should **not** carry the same owner-only gate as `main`,
-or you become the required reviewer for every change (including every Claude
-PR). The goal here is just a guardrail: **no direct or force pushes — everything
-goes through a PR — but no mandatory approver**, so routine work keeps flowing.
-
-GitHub UI: **Settings → Rules → Rulesets → New branch ruleset**
-
-1. **Name**: `protect-dev`
-2. **Enforcement status**: `Active`
-3. **Bypass list**: empty (add `samggreenberg` only if you want an escape hatch).
-4. **Target branches**: `Include by pattern` → `dev`.
-5. Enable:
-   - ☑ **Restrict deletions** (no deleting `dev`).
-   - ☑ **Require a pull request before merging**
-     - Required approvals: **0** (a PR is required, but no review is mandated).
-     - ☐ Do **not** enable "Require review from Code Owners" — that would pull
-       you into every `dev` PR via `.github/CODEOWNERS`.
-   - ☑ **Block force pushes**
-
-Equivalent classic protection via `gh` (run as `samggreenberg`):
+For `dev`, keep it lighter — a PR guardrail with no mandatory approver so routine
+work (and Claude PRs) keeps flowing:
 
 ```bash
 gh api -X PUT repos/samggreenberg/vtsearch/branches/dev/protection \
@@ -117,20 +116,6 @@ gh api -X PUT repos/samggreenberg/vtsearch/branches/dev/protection \
 JSON
 ```
 
-`"required_approving_review_count": 0` with a non-null
-`required_pull_request_reviews` block means "a PR is required, but it can merge
-without a formal approval." `"restrictions": null` keeps push access as-is (any
-write collaborator can open/merge PRs); `allow_force_pushes: false` is the
-guardrail.
-
-If you later want reviews on `dev` too, bump the count to `1` (any collaborator
-can satisfy it) — but leave `require_code_owner_reviews` off unless you
-specifically want to be the gate.
-
-## Note on collaborator write access
-
-Branch protection governs `main` specifically; the 7 collaborators keep `write`
-on the rest of the repo (needed for `dev` and feature branches). If you also
-want to reduce their general access, change their role in
-**Settings → Collaborators and teams** — but that's separate from protecting
-`main`, which the steps above fully cover.
+Verify with `gh api repos/samggreenberg/vtsearch/branches/main/protection`.
+The equivalent UI lives under **Settings → Rules → Rulesets** (or the classic
+**Settings → Branches** editor) once your plan/visibility allows it.
