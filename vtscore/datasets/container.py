@@ -61,8 +61,15 @@ def write_container(
         pickle.dump(data, buf, protocol=5)
         medias_pickle_bytes = buf.getvalue()
 
+    # Store the payload uncompressed (ZIP_STORED).  The pickle is dominated
+    # by float32 embeddings and already-compressed media_bytes (JPEG/PNG/
+    # audio), both of which DEFLATE cannot shrink — on an image dataset it
+    # burned ~9s scanning every byte to save zero space, the bulk of the
+    # post-diversity "Saving to registry…" stall.  Reads are unaffected:
+    # zipfile decompresses any method, so legacy DEFLATE containers still
+    # load.
     if isinstance(dest, io.BytesIO):
-        with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_STORED) as zf:
             zf.writestr("medias.pkl", medias_pickle_bytes)
             zf.writestr("meta.json", json.dumps(meta, indent=2))
         return
@@ -72,7 +79,7 @@ def write_container(
     fd, tmp = tempfile.mkstemp(dir=p.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "wb") as raw:
-            with zipfile.ZipFile(raw, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            with zipfile.ZipFile(raw, "w", compression=zipfile.ZIP_STORED) as zf:
                 zf.writestr("medias.pkl", medias_pickle_bytes)
                 zf.writestr("meta.json", json.dumps(meta, indent=2))
         os.replace(tmp, str(p))

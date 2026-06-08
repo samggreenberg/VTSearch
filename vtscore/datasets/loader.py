@@ -166,6 +166,7 @@ def export_dataset_to_file(
     created_at: float | None = None,
     expires_at: float | None = None,
     extra_pickle_keys: dict[str, Any] | None = None,
+    on_stage: Callable[[str], None] | None = None,
 ) -> bytes:
     """Serialise the current media dataset to a ZIP container byte string.
 
@@ -184,6 +185,9 @@ def export_dataset_to_file(
         expires_at: Unix timestamp when the dataset expires (``None`` = never).
         extra_pickle_keys: Additional top-level keys for the pickle dict
             (e.g. ``audio_dir``, ``video_dir``).
+        on_stage: Optional callback fired with a human-readable message
+            before each internal stage (build dict / pickle / package), so
+            a caller can keep a progress bar moving during serialisation.
 
     Returns:
         Raw bytes of the ZIP container.
@@ -192,6 +196,8 @@ def export_dataset_to_file(
 
     from vtscore.datasets.container import write_container
 
+    if on_stage:
+        on_stage("Serializing dataset…")
     data: dict[str, Any] = {
         "medias": {
             cid: {
@@ -233,6 +239,8 @@ def export_dataset_to_file(
         "expires_at": expires_at,
     }
 
+    if on_stage:
+        on_stage("Packaging dataset…")
     out_buf = io.BytesIO()
     write_container(
         out_buf,
