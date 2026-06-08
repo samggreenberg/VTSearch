@@ -18,6 +18,42 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _sniff_image_mimetype(data: bytes) -> str:
+    """Best-effort image mimetype from magic bytes (PNG vs JPEG).
+
+    Precomputed thumbnails are always either PNG (alpha / waveform / video
+    frame) or JPEG (opaque image), so a two-way sniff is enough; anything
+    unrecognised defaults to JPEG.
+    """
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    return "image/jpeg"
+
+
+def cached_thumbnail_response(thumb_bytes: bytes, download_name: str):
+    """Serve already-final thumbnail bytes with an ``ETag`` and cache headers.
+
+    Unlike :func:`image_thumbnail_response`, this does **no** decode/resize:
+    the bytes are a thumbnail that was precomputed at ingest (the media dict's
+    ``thumbnail_bytes``), so the request path just streams them.  The ``ETag``
+    fingerprints the thumbnail bytes so the browser reuses one tile per item
+    across scrolls and zoom levels, short-circuiting to a 304.
+    """
+    etag = hashlib.md5(thumb_bytes).hexdigest()
+    if etag in request.if_none_match:
+        resp = make_response("", 304)
+        resp.set_etag(etag)
+        resp.headers["Cache-Control"] = "private, max-age=86400"
+        return resp
+
+    resp = make_response(
+        send_file(io.BytesIO(thumb_bytes), mimetype=_sniff_image_mimetype(thumb_bytes), download_name=download_name)
+    )
+    resp.set_etag(etag)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
+
+
 def image_thumbnail_response(image_bytes: bytes, fallback_mimetype: str, download_name: str):
     """Build a cached, downscaled-image thumbnail response from ``image_bytes``.
 

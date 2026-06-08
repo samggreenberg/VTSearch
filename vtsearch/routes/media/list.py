@@ -38,6 +38,7 @@ from vtsearch.schemas.media import (
     MediaVoteResponseSchema,
 )
 from vtsearch.routes._shared import (
+    cached_thumbnail_response,
     image_thumbnail_response,
     require_dataset_header,
     require_detector_header,
@@ -489,9 +490,20 @@ def media_thumbnail(media_id: int):
     bitmap at once.  The thumbnail is bounded to a fixed longest-side length
     (see :data:`vtscore.media.image.thumbnail.DEFAULT_MAX_DIM`) and is the
     same regardless of zoom level, so an ``ETag`` lets the browser reuse it
-    across scrolls and zoom changes.  Undecodable sources (e.g. SVG) fall
-    back to the original bytes.
+    across scrolls and zoom changes.
+
+    When the media carries a precomputed ``thumbnail_bytes`` (generated at
+    ingest for image/audio/video), the bytes are streamed directly with no
+    request-time decode/resize -- the path that keeps a fresh browse-canvas
+    zoom responsive.  Media without one (old pickles, thin loads, undecodable
+    SVGs) fall back to generating the thumbnail from the display image.
     """
+    c = get_media(media_id)
+    if not c:
+        abort(404, message="not found")
+    thumb = c.get("thumbnail_bytes")
+    if thumb:
+        return cached_thumbnail_response(thumb, f"thumb_{media_id}")
     data, src_mimetype, _ = _resolve_display_image(media_id)
     return image_thumbnail_response(data, src_mimetype, f"thumb_{media_id}")
 
@@ -784,7 +796,8 @@ def add_media_to_pile():  # noqa: C901
     if embedding is None:
         abort(400, message="Failed to embed the uploaded file.")
 
-    # Generate thumbnail for non-image media
+    # Precompute the grid/list thumbnail so the request path never decodes the
+    # full-resolution upload on a cold tile fetch (matches the ingest path).
     thumb = None
     if dataset_media_type == "audio":
         from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
@@ -794,6 +807,11 @@ def add_media_to_pile():  # noqa: C901
         from vtscore.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
 
         thumb = generate_video_thumbnail(file_bytes)
+    elif dataset_media_type == "image":
+        from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+        result = make_image_thumbnail(file_bytes)
+        thumb = result[0] if result is not None else None
 
     new_media: dict[str, Any] = {
         "media_type": dataset_media_type,
