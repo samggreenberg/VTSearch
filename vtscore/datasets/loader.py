@@ -198,32 +198,43 @@ def export_dataset_to_file(
 
     if on_stage:
         on_stage("Serializing dataset…")
-    data: dict[str, Any] = {
-        "medias": {
-            cid: {
-                "id": media["id"],
-                "media_type": media.get("media_type", "audio"),
-                "duration": media["duration"],
-                "file_size": media["file_size"],
-                "md5": media["md5"],
-                "embedder": media.get("embedder", ""),
-                "embedding": _embedding_for_pickle(media["embedding"]),
-                "filename": media.get("filename", f"media_{cid}.wav"),
-                "category": media.get("category", "unknown"),
-                "origin": media.get("origin"),
-                "origin_name": media.get("origin_name", media.get("filename", "")),
-                "media_bytes": media.get("media_bytes"),
-                "media_string": media.get("media_string"),
-                "media_path": media.get("media_path"),
-                "word_count": media.get("word_count"),
-                "character_count": media.get("character_count"),
-                "width": media.get("width"),
-                "height": media.get("height"),
-                "custom_metadata": media.get("custom_metadata"),
-            }
-            for cid, media in medias.items()
+
+    # Per-type extra fields (e.g. the image/audio/video ``thumbnail_bytes``)
+    # are declared by each media type's ``pickle_extra_fields`` and copied back
+    # on load; the export side must write them too or they silently drop out of
+    # the round-trip.  Build the type→fields map once and merge each media's
+    # extra fields into its serialized entry below.
+    from vtscore.media import all_types  # noqa: PLC0415
+
+    extra_fields_by_type: dict[str, list[str]] = {mt.type_id: mt.pickle_extra_fields for mt in all_types()}
+
+    def _serialize_media(cid: int, media: dict[str, Any]) -> dict[str, Any]:
+        entry = {
+            "id": media["id"],
+            "media_type": media.get("media_type", "audio"),
+            "duration": media["duration"],
+            "file_size": media["file_size"],
+            "md5": media["md5"],
+            "embedder": media.get("embedder", ""),
+            "embedding": _embedding_for_pickle(media["embedding"]),
+            "filename": media.get("filename", f"media_{cid}.wav"),
+            "category": media.get("category", "unknown"),
+            "origin": media.get("origin"),
+            "origin_name": media.get("origin_name", media.get("filename", "")),
+            "media_bytes": media.get("media_bytes"),
+            "media_string": media.get("media_string"),
+            "media_path": media.get("media_path"),
+            "word_count": media.get("word_count"),
+            "character_count": media.get("character_count"),
+            "width": media.get("width"),
+            "height": media.get("height"),
+            "custom_metadata": media.get("custom_metadata"),
         }
-    }
+        for field in extra_fields_by_type.get(media.get("media_type", ""), ()):
+            entry[field] = media.get(field)
+        return entry
+
+    data: dict[str, Any] = {"medias": {cid: _serialize_media(cid, media) for cid, media in medias.items()}}
 
     pkl_buf = io.BytesIO()
     pickle.dump(data, pkl_buf, protocol=_PICKLE_PROTOCOL)

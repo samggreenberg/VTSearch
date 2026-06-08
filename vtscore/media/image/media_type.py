@@ -65,7 +65,7 @@ class ImageMediaType(MediaType):
 
     @property
     def pickle_extra_fields(self) -> list[str]:
-        return ["width", "height"]
+        return ["width", "height", "thumbnail_bytes"]
 
     # ------------------------------------------------------------------
     # Display metadata
@@ -136,6 +136,8 @@ class ImageMediaType(MediaType):
 
         from PIL import Image  # noqa: PLC0415
 
+        from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
         if media_bytes is None:
             with open(file_path, "rb") as f:
                 media_bytes = f.read()
@@ -144,11 +146,18 @@ class ImageMediaType(MediaType):
                 width, height = img.width, img.height
         except Exception:
             width, height = None, None
+        # Precompute the grid/list thumbnail at ingest so the request path
+        # streams it without re-decoding the full-resolution original on every
+        # cold fetch (e.g. each fresh browse-canvas zoom).  Undecodable sources
+        # (SVG, corrupt files) yield None and fall back to request-time
+        # generation in the thumbnail route.
+        thumb = make_image_thumbnail(media_bytes)
         return {
             "media_bytes": media_bytes,
             "duration": 0,
             "width": width,
             "height": height,
+            "thumbnail_bytes": thumb[0] if thumb is not None else None,
         }
 
     # ------------------------------------------------------------------
