@@ -673,7 +673,15 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private updateActiveLevel(): void {
     if (!this.meta || this.meta.levels.length === 0) return;
-    this.activeLevel = this.levelForEffZoom(this.effZoom);
+    // Floor the level at the coarsest one reachable in "normal space" (the
+    // level the fit zoom lands on). Zooming out past the whole-projection fit
+    // only happens in the rubber-band overshoot zone, and that overshoot is
+    // always sprung back by the settle — so re-binning to a coarser level out
+    // there would shift the bins, then shift them straight back when the view
+    // snaps home. That double re-lay-out reads as a glitch. Holding the level
+    // at the floor keeps the bins put while the elastic edge does its bounce.
+    const floorLevel = this.levelForEffZoom(this.computeFitZoom());
+    this.activeLevel = Math.max(floorLevel, this.levelForEffZoom(this.effZoom));
   }
 
   private projToScreen(px: number, py: number): [number, number] {
