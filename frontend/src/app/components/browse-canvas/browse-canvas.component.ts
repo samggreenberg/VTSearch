@@ -125,6 +125,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private dpr = 1;
 
   private transform: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  // The transform the pixels currently on the canvas were painted at. After a
+  // normal draw() this mirrors `transform`; during a zoom transition it tracks
+  // the interpolated frame so a re-triggered transition can chain from what's
+  // actually on screen. Seeds the "from" end of the zoom-in/out animation.
+  private displayedTransform: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  // Set once the first real frame has been painted. The zoom transition needs a
+  // prior frame to snapshot, so it stays disabled until this is true.
+  private hasDrawn = false;
   private activeLevel = 0;
   private maxCount = 1;
   // Last maxCount pushed out via densityMaxChanged, so the legend is only
@@ -190,6 +198,27 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private tileLoadSub: Subscription | null = null;
   private rafId = 0;
   private needsRedraw = false;
+
+  // --- Zoom transition (picture-in-picture) ---------------------------------
+  // When a zoom crosses a pyramid-level boundary the bins re-lay-out, which used
+  // to snap with no sense of "you zoomed *this* canvas". Instead we freeze the
+  // current frame to an offscreen snapshot and, for ~ZOOM_ANIM_MS, blit it
+  // scaled+translated so it grows (zoom-in) or shrinks (zoom-out) from where it
+  // was to where the same region now sits — then paint the real, rebinned frame.
+  // Because projection→screen is affine, the snapshot only needs a uniform
+  // scale + offset per frame (see {@link zoomBlitRect}), no per-bin work.
+  private static readonly ZOOM_ANIM_MS = 220;
+  private animActive = false;
+  // Offscreen copy of the canvas backing store taken when a transition starts;
+  // reused across transitions to avoid reallocating.
+  private animSnapshot: HTMLCanvasElement | null = null;
+  private animFrom: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  private animTo: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  private animStartTs = 0;
+  private animRafId = 0;
+  // Background colour captured at transition start, so each frame doesn't pay a
+  // getComputedStyle just to clear behind the shrinking/growing snapshot.
+  private animBg = '';
   private resizeObserver: ResizeObserver | null = null;
   // Repaints when the document theme flips (explicit switch or an OS
   // dark/light change while on "system"), so the colormap and background
@@ -282,6 +311,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['meta'] && this.meta) {
+      // Fresh meta re-bins (new projection, bin-shape toggle, cull). Any zoom
+      // transition was easing the *old* data, so abandon it; the redraw below
+      // paints the new state.
+      this.cancelZoomAnim();
       this.tileCache.setProjectionId(this.meta.projection_id);
       // A bin-shape toggle delivers fresh meta for the *same* projection id
       // (hex and square share one UMAP layout). In that case keep the current
@@ -334,6 +367,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.resizeObserver?.disconnect();
     this.themeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
+    if (this.animRafId) cancelAnimationFrame(this.animRafId);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.clickTimer) clearTimeout(this.clickTimer);
     const el = this.canvasRef.nativeElement;
@@ -350,6 +384,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private resize(): void {
+    // A resize changes the backing store and framing; a snapshot blit sized to
+    // the old canvas would be wrong, so drop any in-flight transition.
+    this.cancelZoomAnim();
     const el = this.canvasRef.nativeElement.parentElement!;
     const rect = el.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
@@ -482,12 +519,152 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private requestRedraw(): void {
+    // A zoom transition owns the canvas while it runs; tile loads, hover and
+    // selection repaints that arrive mid-transition are folded into the real
+    // frame the transition paints when it lands (see {@link endZoomAnim}).
+    if (this.animActive) return;
     if (this.needsRedraw) return;
     this.needsRedraw = true;
     this.rafId = requestAnimationFrame(() => {
       this.needsRedraw = false;
       this.draw();
     });
+  }
+
+  /** Honour the OS "reduce motion" setting: skip the zoom transition entirely. */
+  private prefersReducedMotion(): boolean {
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  }
+
+  /**
+   * Commit a zoom change after `transform` and `activeLevel` have been updated.
+   * Plays the picture-in-picture transition only when the pyramid level actually
+   * flipped (the moment bins re-lay-out) — within a level the bins just rescale,
+   * which already reads as a smooth zoom, so a plain redraw is enough. A zoom
+   * that lands mid-transition without crossing a level retargets the in-flight
+   * animation so it eases on to the latest view instead of snapping.
+   *
+   * @param prevLevel the active level *before* this zoom, for the cross check.
+   */
+  private commitZoomChange(prevLevel: number): void {
+    const crossedLevel = this.activeLevel !== prevLevel;
+    if (crossedLevel && this.hasDrawn && this.width > 0 && !this.prefersReducedMotion()) {
+      this.startZoomAnim();
+    } else if (this.animActive) {
+      // Same level but the view moved while a transition runs: ease on to the
+      // new target rather than stopping short at the old one.
+      this.animTo = { ...this.transform };
+    } else {
+      this.requestRedraw();
+    }
+  }
+
+  /**
+   * Freeze the current frame and begin easing it toward the new transform. The
+   * snapshot is the pixels on screen right now — the pre-zoom frame, or the
+   * current blit frame when chaining off an in-flight transition (`animFrom`
+   * tracks the live interpolated transform, so the hand-off is seamless).
+   */
+  private startZoomAnim(): void {
+    const canvasEl = this.canvasRef.nativeElement;
+    let snap = this.animSnapshot;
+    if (!snap) snap = document.createElement('canvas');
+    if (snap.width !== canvasEl.width || snap.height !== canvasEl.height) {
+      snap.width = canvasEl.width;
+      snap.height = canvasEl.height;
+    }
+    const sctx = snap.getContext('2d')!;
+    sctx.clearRect(0, 0, snap.width, snap.height);
+    sctx.drawImage(canvasEl, 0, 0);
+    this.animSnapshot = snap;
+
+    this.animFrom = { ...this.displayedTransform };
+    this.animTo = { ...this.transform };
+    this.animStartTs = performance.now();
+    this.animBg = this.themeColor('--bg-body');
+
+    // The animation owns the canvas now; drop any pending plain redraw.
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+    this.needsRedraw = false;
+    if (this.animRafId) cancelAnimationFrame(this.animRafId);
+    this.animActive = true;
+    this.ngZone.runOutsideAngular(() => {
+      this.animRafId = requestAnimationFrame(this.stepZoomAnim);
+    });
+  }
+
+  /**
+   * Where to blit the frozen snapshot so the proj region it covers lands where
+   * transform `to` (interpolated by eased fraction `e` from `animFrom`) would
+   * put it. proj→screen is affine and the zoom is uniform, so the snapshot maps
+   * by a single scale + offset: a point at snapshot-pixel `s` goes to
+   * `scale*s + offset`. At e=0 this is the identity (overlays the live frame);
+   * at e=1 it matches the destination transform exactly, so the real rebinned
+   * frame can take over without a jump. Returns CSS-px destination rect.
+   */
+  private zoomBlitRect(e: number): { x: number; y: number; w: number; h: number } {
+    const from = this.animFrom;
+    const z0 = from.zoom;
+    // Geometric zoom interpolation (perceptually even), linear centre pan.
+    const zu = z0 * Math.pow(this.animTo.zoom / z0, e);
+    const cux = from.centerX + (this.animTo.centerX - from.centerX) * e;
+    const cuy = from.centerY + (this.animTo.centerY - from.centerY) * e;
+    const scale = zu / z0;
+    const x = (this.width / 2) * (1 - scale) + (from.centerX - cux) * zu;
+    const y = (this.height / 2) * (1 - scale) + (from.centerY - cuy) * zu;
+    return { x, y, w: scale * this.width, h: scale * this.height };
+  }
+
+  /** One frame of the zoom transition: clear, blit the scaled snapshot, repeat
+   *  until the duration elapses, then paint the real rebinned frame. */
+  private readonly stepZoomAnim = (now: number): void => {
+    const ctx = this.ctx;
+    const snap = this.animSnapshot;
+    if (!this.animActive || !snap || !ctx) return;
+
+    const t = Math.min(1, Math.max(0, (now - this.animStartTs) / BrowseCanvasComponent.ZOOM_ANIM_MS));
+    const e = 1 - Math.pow(1 - t, 3); // easeOutCubic: quick out, settle into the rebin
+    const rect = this.zoomBlitRect(e);
+
+    ctx.clearRect(0, 0, this.width, this.height);
+    ctx.fillStyle = this.animBg;
+    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(snap, 0, 0, snap.width, snap.height, rect.x, rect.y, rect.w, rect.h);
+
+    // Track what the canvas shows so a re-trigger chains from this exact frame.
+    this.displayedTransform = {
+      centerX: this.animFrom.centerX + (this.animTo.centerX - this.animFrom.centerX) * e,
+      centerY: this.animFrom.centerY + (this.animTo.centerY - this.animFrom.centerY) * e,
+      zoom: this.animFrom.zoom * Math.pow(this.animTo.zoom / this.animFrom.zoom, e),
+    };
+
+    if (t < 1) {
+      this.animRafId = requestAnimationFrame(this.stepZoomAnim);
+    } else {
+      this.endZoomAnim();
+    }
+  };
+
+  /** Land the transition: paint the real, rebinned frame at the destination. */
+  private endZoomAnim(): void {
+    this.animActive = false;
+    if (this.animRafId) {
+      cancelAnimationFrame(this.animRafId);
+      this.animRafId = 0;
+    }
+    this.draw();
+  }
+
+  /** Abandon any in-flight transition without painting (the caller repaints).
+   *  Used when the projection/bin-shape/size changes out from under it. */
+  private cancelZoomAnim(): void {
+    if (!this.animActive) return;
+    this.animActive = false;
+    if (this.animRafId) {
+      cancelAnimationFrame(this.animRafId);
+      this.animRafId = 0;
+    }
   }
 
   private draw(): void {
@@ -573,6 +750,15 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.viewport.setViewport(this.getVisibleBounds());
 
     this.prefetchNeighbors(visibleTiles);
+
+    // Record what's now on screen so a zoom transition can grow/shrink this
+    // exact frame the next time a zoom crosses a level boundary.
+    this.displayedTransform = {
+      centerX: this.transform.centerX,
+      centerY: this.transform.centerY,
+      zoom: this.transform.zoom,
+    };
+    this.hasDrawn = true;
   }
 
   /** Selection state of a cell: 0 = none, 1 = partial, 2 = full. Memoized on
@@ -822,6 +1008,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
+    // A new drag/marquee takes over from any zoom transition: settle it to the
+    // real frame now so the pan/marquee starts from a correct, crisp view.
+    if (this.animActive) this.endZoomAnim();
     // A fresh press settles any single-click toggle still waiting out the
     // double-click window (so quick clicks on different bins each register). The
     // second press of a double-click (detail >= 2) is exempt: flushing there
@@ -1023,12 +1212,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * fits in the viewport (the same framing used on first load), then redraw.
    */
   zoomToFit(): void {
+    const prevLevel = this.activeLevel;
     this.fitToData();
-    this.requestRedraw();
+    this.commitZoomChange(prevLevel);
     this.refreshHoverAfterZoom();
   }
 
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
+    const prevLevel = this.activeLevel;
     const [projX, projY] = this.screenToProj(anchorX, anchorY);
     const newZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
     // Keep the point under the cursor fixed while zooming.
@@ -1038,8 +1229,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
     // Zoom holds the thumbnail size (targetRadius) and re-selects the level, so
     // a smaller region is re-binned more finely while bins stay ~the same size.
+    // When that re-selection crosses a level, the picture-in-picture transition
+    // grows/shrinks the current frame into place before the rebin lands.
     this.updateActiveLevel();
-    this.requestRedraw();
+    this.commitZoomChange(prevLevel);
     this.refreshHoverAfterZoom();
   }
 
