@@ -18,6 +18,7 @@ import { DetectorContextBarComponent } from './detector-context-bar/detector-con
 import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
+import { IconComponent } from '../icon/icon.component';
 
 export interface TrainModeContext {
   model: { name: string; registry_id?: string };
@@ -35,6 +36,7 @@ export interface TrainModeContext {
     ExportModalComponent,
     LabelImporterModalComponent,
     ViewControlsComponent,
+    IconComponent,
   ],
   templateUrl: './right-panel.component.html',
   styleUrl: './right-panel.component.scss',
@@ -56,6 +58,10 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Input() disabled = false;
   @Output() mediaSelected = new EventEmitter<number>();
   @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  /** Find mode: browse the positive results as their own UMAP projection. */
+  @Output() browse = new EventEmitter<void>();
+  /** Find mode: promote the goods into their own dataset. */
+  @Output() toDataset = new EventEmitter<void>();
 
   goodIds: number[] = [];
   badIds: number[] = [];
@@ -158,6 +164,14 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   onExport(): void {
     this.showExport = true;
+  }
+
+  onBrowse(): void {
+    this.browse.emit();
+  }
+
+  onToDataset(): void {
+    this.toDataset.emit();
   }
 
   onDetectorRenamed(newName: string): void {

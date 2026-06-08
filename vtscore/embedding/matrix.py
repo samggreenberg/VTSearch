@@ -79,6 +79,32 @@ def get_embedding_matrix(ctx: "DatasetContext") -> tuple[list[int], np.ndarray]:
         return list(sorted_ids), matrix
 
 
+def get_embedding_submatrix(ctx: "DatasetContext", ids: list[int]) -> tuple[list[int], np.ndarray]:
+    """Return ``(sorted_ids, (N, D) float32 matrix)`` for a *subset* of *ctx*'s medias.
+
+    Unlike :func:`get_embedding_matrix`, this builds a fresh matrix over only
+    the requested *ids* (intersected with the dataset's current medias) and
+    never populates the context-wide cache - subset projections (e.g. the
+    positives of a Find run) are ephemeral.  The returned id list is sorted and
+    de-duplicated; ids absent from the dataset are dropped silently.
+
+    Returns ``([], np.empty((0, 0), dtype=np.float32))`` when nothing matches.
+    Raises ``ValueError`` if any requested media has ``embedding=None``.
+    """
+    with _state_lock:
+        medias = ctx.medias
+        sorted_ids = sorted({cid for cid in ids if cid in medias})
+        if not sorted_ids:
+            return [], np.empty((0, 0), dtype=np.float32)
+
+        first_emb = np.asarray(_require_embedding(sorted_ids[0], medias[sorted_ids[0]]), dtype=np.float32)
+        dim = int(first_emb.shape[-1])
+        matrix = np.empty((len(sorted_ids), dim), dtype=np.float32)
+        for i, cid in enumerate(sorted_ids):
+            matrix[i] = _require_embedding(cid, medias[cid])
+        return sorted_ids, matrix
+
+
 def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
     """Drop the cached matrix on *ctx*; next access rebuilds it."""
     with _state_lock:

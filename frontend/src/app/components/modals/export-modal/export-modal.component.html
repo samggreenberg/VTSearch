@@ -81,19 +81,6 @@
     }
   </div>
 
-  <!-- Delimiter -->
-  <div class="export-section">
-    <h3 title="Character used to separate columns in the exported text (comma, tab, or pipe)">Delimiter</h3>
-    <div class="delimiter-row">
-      @for (opt of delimiterOptions; track opt.value) {
-        <label class="delimiter-option">
-          <input type="radio" name="delimiter" [value]="opt.value" [(ngModel)]="delimiter" />
-          {{ opt.label }}
-        </label>
-      }
-    </div>
-  </div>
-
   <!-- Export Tabs -->
   <div class="export-section">
     <div class="export-tabs">
@@ -139,18 +126,13 @@
     <div class="tab-content">
       @if (activeTab === 'clipboard') {
         <div class="tab-pane">
-          <button
-            class="btn btn--primary"
-            (click)="copyToClipboard()"
+          <vt-clipboard-copy
+            mode="table"
+            [rows]="clipboardRows"
+            [columns]="clipboardColumns"
             [disabled]="!hasLabels || enabledColumns.length === 0"
-            title="Copy exported data to clipboard"
-          >
-            @if (copySuccess) {
-              <vt-icon type="check"></vt-icon> Copied!
-            } @else {
-              Copy
-            }
-          </button>
+            copyLabel="Copy"
+          ></vt-clipboard-copy>
         </div>
       } @else if (activeTabExporter) {
         <div class="tab-pane">

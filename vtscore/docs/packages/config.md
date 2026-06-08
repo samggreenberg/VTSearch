@@ -173,27 +173,20 @@ at all. When `DEVICE` is anything other than `"auto"`, the env var's
 value is returned unchanged - this is how you pin to `"cuda:1"` or
 `"mps"` for a specific run.
 
-## Server-path roots
+## Server-path access
 
-```python
-SERVER_ROOTS: tuple[Path, ...]
-```
+There is no configurable server-root allow-list. Server-side filesystem
+access (importers, exporters, the file browser) is governed entirely by
+the active login provider:
 
-Allowed roots for server-side filesystem importers, exporters, and the
-file browser. Parsed from `VTSEARCH_SERVER_ROOTS` (PATH-separated:
-`:` on Unix, `;` on Windows). When unset, defaults to a single-element
-tuple `(Path.cwd().resolve(),)`, which reproduces the historical
-"anything under the launch directory" behaviour.
+- **Single-user / no-auth mode** (`DefaultLoginProvider`): unrestricted.
+  The lone trusted user may read from and write to any server-readable
+  path, and the file browser is rooted at the filesystem root (`/`).
+- **Multi-user mode** (any non-default provider): each user is confined
+  to their own `<get_user_data_dir(user)>/...` subtree.
 
-```bash
-# Restrict to two specific roots:
-export VTSEARCH_SERVER_ROOTS=/srv/data:/srv/imports
-```
-
-The first entry is what `/api/browse` shows when no `path` parameter
-is provided. Multi-user mode is unaffected - each user is still
-confined to their own `<get_user_data_dir(user)>/...` subtree
-regardless of this setting.
+See `vtscore.security.path_validation.get_file_access_base_dir` and
+`validate_server_filepath`.
 
 ## Embedder model identifiers
 
@@ -239,7 +232,6 @@ Every env var consulted by `vtscore.config`, in one place:
 | `VTSEARCH_MODELS_DIR`       | Override `MODELS_CACHE_DIR`. Independent of `VTSEARCH_DATA_DIR`.                                |
 | `VTSEARCH_TORCH_THREADS`    | Set `TORCH_THREADS` (and therefore OMP / MKL caps). Floor of 1.                                 |
 | `VTSEARCH_DEVICE`           | Set `DEVICE`. `"auto"` is the default; pin to `"cuda"`, `"cuda:0"`, `"cpu"`, or `"mps"`.        |
-| `VTSEARCH_SERVER_ROOTS`     | PATH-separated list of allowed roots for server-path importers/exporters.                       |
 | `VTSEARCH_MAX_UPLOAD_MB`    | Set `MAX_UPLOAD_MB`. `0` = unlimited.                                                           |
 | `VTSEARCH_TRAIN_EPOCHS`     | Set `TRAIN_EPOCHS` (MLP training upper bound).                                                  |
 | `VTSEARCH_TRAIN_PATIENCE`   | Set `TRAIN_PATIENCE` (early-stop patience). `0` disables.                                       |

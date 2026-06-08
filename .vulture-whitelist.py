@@ -134,9 +134,11 @@ get_audio_playing  # noqa: F821
 get_swipe_animation  # noqa: F821
 get_hide_autopilot  # noqa: F821
 get_autopilot_resort_interval  # noqa: F821
-get_browse_minimap_visible  # noqa: F821
-get_browse_minimap_width  # noqa: F821
-get_browse_minimap_height  # noqa: F821
+get_browse_panel_width  # noqa: F821
+get_browse_bin_shape  # noqa: F821
+get_browse_colormap  # noqa: F821
+get_browse_icon_size  # noqa: F821
+get_browse_thumbnail_border  # noqa: F821
 set_dataset_max_age_days  # noqa: F821
 
 # ---------------------------------------------------------------------------
@@ -183,6 +185,14 @@ _processor  # noqa: F821
 # attribute-lookup protocol; vulture sees the def but no caller.
 # ---------------------------------------------------------------------------
 __getattr__  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# Flask's ``@after_this_request`` registers the decorated function as a
+# response callback on the current request; the name is never referenced
+# again. Vulture's ``--ignore-decorators`` matches ``@*.after_request``
+# (the blueprint/app form) but not the bare ``@after_this_request`` call.
+# ---------------------------------------------------------------------------
+_cache_tile  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # Mock attributes that mimic the shape of third-party return values:

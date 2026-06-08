@@ -54,6 +54,7 @@ from vtscore.detectors.store import (
     _write_detector,
 )
 from vtscore.detectors.workflow import apply_and_retrain as _apply_and_retrain
+from vtsearch.routes._shared import image_thumbnail_response
 from vtsearch.schemas.detectors import (
     DetectorLabelsDetailResponseSchema,
     DetectorLabelVoteRequestSchema,
@@ -408,29 +409,28 @@ def preview_detector_label(name: str, element_id: str):
 def _in_memory_thumbnail_response(media: dict, media_type: str):
     """Build a small thumbnail send_file from an in-memory media dict.
 
-    Images: serves the cached ``media_bytes``. Audio/video/document: defers
-    to the media-type's ``image_response`` (cached waveform / midframe PNG).
-    Returns ``None`` if no thumbnail can be produced from memory.
+    Images: serve the resolved media bytes via the media type's
+    ``media_response``, which lazily reads from ``media_path`` / ``media_url``
+    when ``media_bytes`` is not held in memory (thin-loaded datasets, e.g. a
+    local folder import). This mirrors the center viewer's
+    ``/api/medias/<id>/image`` byte resolution so a thumbnail never 404s for an
+    item the center can display. Audio/video/document: defer to the media
+    type's ``image_response`` (cached waveform / midframe PNG). Returns
+    ``None`` if no thumbnail can be produced.
     """
-    if media_type == "image":
-        media_bytes = media.get("media_bytes")
-        if not media_bytes:
-            return None
-        filename = media.get("filename", "") or ""
-        suffix = Path(filename).suffix.lower()
-        mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or "image/jpeg"
-        return send_file(
-            io.BytesIO(media_bytes),
-            mimetype=mimetype,
-            download_name=f"media_{media.get('id', 0)}{suffix or '.jpg'}",
-        )
-
     from vtscore.media import get as get_media_type  # noqa: PLC0415
 
     try:
         mt = get_media_type(media_type)
     except KeyError:
         return None
+
+    if media_type == "image":
+        resp = mt.media_response(media)
+        if not isinstance(resp.data, (bytes, bytearray)) or not resp.data:
+            return None
+        return image_thumbnail_response(bytes(resp.data), resp.mimetype, resp.download_name)
+
     image_response_fn = getattr(mt, "image_response", None)
     if image_response_fn is None:
         return None
@@ -450,13 +450,11 @@ def _origin_thumbnail_response(file_path: Path, media_type: str, elem):
         suffix = file_path.suffix.lower()
         mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or "image/jpeg"
         try:
-            return send_file(
-                io.BytesIO(file_path.read_bytes()),
-                mimetype=mimetype,
-                download_name=elem.origin_name or elem.filename or f"label{suffix}",
-            )
+            image_bytes = file_path.read_bytes()
         except OSError:
             abort(404, message="Element media file unreadable")
+        download_name = elem.origin_name or elem.filename or f"label{suffix}"
+        return image_thumbnail_response(image_bytes, mimetype, download_name)
 
     if media_type == "audio":
         from vtscore.media.audio.media_type import generate_waveform_thumbnail_from_file  # noqa: PLC0415

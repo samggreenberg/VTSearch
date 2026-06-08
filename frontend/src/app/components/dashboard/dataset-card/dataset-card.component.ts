@@ -5,6 +5,7 @@ import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import {
   ProgressHeader,
+  ProgressKind,
   formatProgressHeader,
   isProgressIndeterminate,
 } from '../../../utils/format-progress';
@@ -25,6 +26,9 @@ export class DatasetCardComponent implements OnChanges {
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
   @Input() loadingTask?: LoadingTask;
+  /** Which progress vocabulary to render the inline row with. ``projection``
+   *  is used while the Browse button pre-builds the dataset's projection. */
+  @Input() taskKind: ProgressKind = 'dataset';
 
   @HostBinding('class.loading-error')
   get hasLoadingError(): boolean {
@@ -48,12 +52,6 @@ export class DatasetCardComponent implements OnChanges {
 
   get isOwner(): boolean {
     return this.dataset?.created_by === this.currentUser;
-  }
-
-  // Browsing (VTSBrowse) currently only supports audio datasets; the button is
-  // shown disabled for every other media type.
-  get canBrowse(): boolean {
-    return this.dataset?.media_type === 'audio';
   }
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
@@ -139,7 +137,6 @@ export class DatasetCardComponent implements OnChanges {
 
   onBrowse(event: MouseEvent): void {
     event.stopPropagation();
-    if (!this.canBrowse) return;
     this.browse.emit();
   }
 
@@ -165,7 +162,7 @@ export class DatasetCardComponent implements OnChanges {
   get taskProgressInfo(): ProgressHeader {
     const task = this.loadingTask;
     if (!task) return { header: '', subtitle: '', detail: '', eta: '' };
-    return formatProgressHeader(task, 'dataset', task.embedder);
+    return formatProgressHeader(task, this.taskKind, task.embedder);
   }
 
   get taskIsIndeterminate(): boolean {

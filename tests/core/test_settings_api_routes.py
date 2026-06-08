@@ -62,6 +62,38 @@ class TestSettingsAPI:
         # SettingsUpdate schema catches the type mismatch → 422.
         assert res.status_code == 422
 
+    def test_update_inclusion_no_detector_browse_mode(self, client):
+        """A bulk settings save without an identified detector must not 400.
+
+        Reproduces the VTSBrowser theme-switch bug: the browser has a dataset
+        loaded but no detector, so Angular's ``activeContextInterceptor``
+        sends ``X-Dataset-Id`` but omits ``X-Detector-Id``. The settings-modal
+        ``save()`` echoes the whole settings blob back on every change
+        (including ``inclusion``, which routes to the active detector
+        context). With no detector identified, the route resolves the frozen
+        request-missing detector sentinel; applying ``inclusion`` used to
+        raise ``RequestMissingContextError`` → 400. The inclusion cache write
+        is now skipped when no detector is present (the value still persists
+        to the per-user settings store).
+        """
+        from vtscore.state.core import set_thread_detector_context
+
+        # Drop the thread-local detector context the conftest installs so the
+        # resolver falls through to the request-missing sentinel, matching a
+        # production Flask request thread with no detector.
+        set_thread_detector_context(None)
+        res = client.put(
+            "/api/settings",
+            json={"theme": "dark", "inclusion": 3},
+            headers={"X-Detector-Id": ""},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["inclusion"] == 3
+
+        # The value still persisted to the per-user settings store.
+        res2 = client.get("/api/settings")
+        assert res2.get_json()["inclusion"] == 3
+
     def test_update_volume_invalid(self, client):
         res = client.put(
             "/api/settings",
@@ -569,3 +601,92 @@ class TestServerSettingsReadOnly:
             assert res.get_json()["hidden_plugins"] == {}
         finally:
             settings_mod.set_cli_hidden_plugins(None)
+
+
+class TestBrowserSettings:
+    """Per-media-type VTSBrowse prefs: bin shape, colormap, and cell size."""
+
+    def test_update_browse_bin_shape_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_bin_shape": {"audio": "square", "image": "hex"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_bin_shape"]["audio"] == "square"
+        assert data["browse_bin_shape"]["image"] == "hex"
+
+        # Persisted, and a second key write merges rather than clobbers.
+        res2 = client.put("/api/settings", json={"browse_bin_shape": {"audio": "square", "video": "square"}})
+        assert res2.get_json()["browse_bin_shape"]["video"] == "square"
+        assert client.get("/api/settings").get_json()["browse_bin_shape"]["audio"] == "square"
+
+    def test_update_browse_bin_shape_invalid(self, client):
+        res = client.put("/api/settings", json={"browse_bin_shape": {"audio": "triangle"}})
+        assert res.status_code == 400
+
+    def test_update_browse_colormap_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_colormap": {"audio": "ocean", "image": "heat"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_colormap"]["audio"] == "ocean"
+        assert data["browse_colormap"]["image"] == "heat"
+        assert client.get("/api/settings").get_json()["browse_colormap"]["audio"] == "ocean"
+
+    def test_update_browse_colormap_invalid(self, client):
+        res = client.put("/api/settings", json={"browse_colormap": {"audio": "rainbow"}})
+        assert res.status_code == 400
+
+    def test_update_browse_icon_size_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_icon_size": {"audio": "XL", "image": "XS"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_icon_size"]["audio"] == "XL"
+        assert data["browse_icon_size"]["image"] == "XS"
+
+    def test_update_browse_icon_size_is_uppercased(self, client):
+        # Mirrors grid_icon_size: lowercase input is normalised to the enum.
+        res = client.put("/api/settings", json={"browse_icon_size": {"audio": "l"}})
+        assert res.status_code == 200
+        assert res.get_json()["browse_icon_size"]["audio"] == "L"
+
+    def test_update_browse_icon_size_invalid(self, client):
+        res = client.put("/api/settings", json={"browse_icon_size": {"audio": "huge"}})
+        assert res.status_code == 400
+
+    def test_update_browse_thumbnail_border_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_thumbnail_border": {"image": 3, "video": 0}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_thumbnail_border"]["image"] == 3
+        assert data["browse_thumbnail_border"]["video"] == 0
+        # The written value persists across a fresh read (the frontend sends the
+        # full merged map; the backend stores it verbatim).
+        assert client.get("/api/settings").get_json()["browse_thumbnail_border"]["image"] == 3
+
+    def test_update_browse_thumbnail_border_clamped(self, client):
+        # Out-of-range values are clamped into 0..8 rather than rejected.
+        res = client.put("/api/settings", json={"browse_thumbnail_border": {"image": 100, "video": -5}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_thumbnail_border"]["image"] == 8
+        assert data["browse_thumbnail_border"]["video"] == 0
+
+    def test_get_settings_includes_browser_prefs(self, client):
+        data = client.get("/api/settings").get_json()
+        # Present as (possibly empty) dicts so the frontend can index by type.
+        for key in (
+            "browse_bin_shape",
+            "browse_colormap",
+            "browse_icon_size",
+            "browse_thumbnail_border",
+        ):
+            assert key in data
+            assert isinstance(data[key], dict)
+
+    def test_defaults_have_empty_browser_prefs(self, client):
+        data = client.get("/api/settings/defaults").get_json()
+        for key in (
+            "browse_bin_shape",
+            "browse_colormap",
+            "browse_icon_size",
+            "browse_thumbnail_border",
+        ):
+            assert data.get(key, {}) == {}

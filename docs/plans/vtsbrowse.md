@@ -1,24 +1,15 @@
 # Design: VTSBrowse — a UMAP hexbin Dataset Browser in VTSearch
 
-> **Status:** Prerequisite shipped (app-wide L2 normalization at ingest),
-> **Flask-free projection backend** shipped (`vtscore/projection/`: UMAP fit +
-> hex-tile pyramid), **Browse routes** shipped
-> (`vtsearch/routes/projection.py`: build, meta, tiles endpoints), **the
-> Angular browse canvas** shipped (Canvas 2D renderer, pan/zoom, hover
-> preview, tile caching, `/browse/:datasetId` route), **projection
-> persistence** shipped (inside the dataset container), **ZIP container
-> format** shipped (single `.pkl` file containing `medias.pkl` + `meta.json`
-> + optional `projection.npz`; all legacy raw-pickle and sidecar support
-> removed), **dataset age-off** shipped (server setting
-> `dataset_max_age_days`, `expires_at` timestamp on datasets, auto-removal
-> on load/list), **and opt-in projection-at-creation** shipped (a "Build
-> 2-D Browse projection now" checkbox in every dataset importer that runs
-> the UMAP + pyramid build inline as a load stage instead of lazily on
-> first Browse visit; defaults off).
-> This doc scopes VTSBrowse as a **module within
-> VTSearch** — new routes, services, and Angular components that add a Browse
-> mode alongside the existing Find and Train modes. See *§What shipped* and
-> *§Open follow-ups* at the bottom for where things stand.
+> **Status: shipped and live.** The Browse mode (UMAP projection → server-side
+> hex/square pyramid → Canvas 2D renderer, persisted in the dataset container)
+> is built and in use. The completed work is collapsed to a struck-through list
+> in *§What shipped*; the design body below remains the living spec for the
+> feature and its open follow-ups. **Remaining work** lives in
+> *§Open follow-ups → Active* (thin-pickle save mode, empirical tuning, WebGL).
+>
+> This doc scopes VTSBrowse as a **module within VTSearch** — new routes,
+> services, and Angular components that add a Browse mode alongside the existing
+> Find and Train modes.
 >
 > **Direction change (this revision):** the original sketch was a
 > *hover-to-hear grid* that reused VTSearch's left-panel media-list. The
@@ -388,6 +379,50 @@ hard part — invalidating live caches when a projection changes underneath
 them — simply does not arise, because projections don't change underneath
 anyone.
 
+### Bin shape (hex/square)
+
+Not everyone likes hexagons.  The pyramid can tile the projection as either
+**hexagons** (the default d3-hexbin lattice) or **squares**, and the browse
+canvas exposes a toggle to switch between them.  The design keeps this cheap by
+factoring binning out of the rest of the pipeline:
+
+- **The UMAP layout is shape-independent and computed once.**  Hex and square
+  are two *binnings* of the same frozen `(N, 2)` coordinates, so switching only
+  re-bins (an O(N·levels) NumPy pass), never re-fits UMAP.  Both binnings carry
+  the **same `projection_id`**.
+- **`build_pyramid(projection, *, bin_shape=...)`** dispatches the three
+  lattice-specific operations — point→cell `assign`, cell `center`, and
+  `tile_index` — through a small `_BinGeometry` record selected by `bin_shape`
+  (`"hex"` | `"square"`).  The square lattice uses a cell side of `radius·√3`
+  (the hex column spacing) so a square and a hexagon at the same pyramid level
+  share the renderer's level-of-detail picker and have a comparable on-screen
+  footprint.  Every other knob (`base_radius`, `tile_span`, auto-depth) is
+  shared.
+- **The pyramid records its `bin_shape`** (in the dataclass, in `meta()`, and in
+  the persisted JSON), so a loaded projection always knows which lattice it was
+  binned with.  Containers written before the toggle have no `bin_shape` and are
+  hex by construction, so they default to hex.
+- **Persistence is per-shape.**  Each binning is stored in its own ZIP entry —
+  `projection.npz` for hex (unchanged legacy name) and `projection_{shape}.npz`
+  for the rest — sharing the coordinates (a small duplication next to the tile
+  JSON).  Hex and square coexist in one container; appending one leaves the
+  other intact.
+- **The context caches both.**  `DatasetContext._pyramids` maps `bin_shape →
+  Pyramid`, so toggling back and forth within a session is instant after the
+  first build of each shape.  Hex is built at ingest (the projection-at-creation
+  stage); square is derived lazily on first toggle, then cached and persisted.
+- **The HTTP surface is shape-keyed.**  `POST /api/projection/build` takes
+  `{"shape": ...}`, `GET /api/projection/meta?shape=...` reports that shape's
+  status/metadata (including `bin_shape`), and tiles move to
+  `GET /api/projection/tiles/<shape>/<level>/<tx>/<ty>`.  The client tile cache
+  keys on shape too, so both binnings stay cached side by side under the one
+  shared `projection_id`.
+- **Every other control is shape-agnostic.**  Pan, zoom, on-screen cell size,
+  the minimap, and hover all run off the shared `radius`/`tile_span` metadata
+  and a shared `BinGeometry`, so they work identically in either mode.  Toggling
+  preserves the current pan/zoom: because the projection id is unchanged, the
+  canvas re-bins in place instead of re-framing to data.
+
 ### Stage 3 — Canvas renderer (client-side, **Canvas 2D**)
 
 - **Transform model.** Maintain a projection-space <-> screen-space affine
@@ -443,6 +478,7 @@ anyone.
 | Sibling highlight | **On hover** | Hovering an item highlights the other items from the same source file wherever they fall on the canvas. Requires a per-point source-file group id; see *§Interaction model*. |
 | UMAP seeding | **Unseeded (fast)** | No `random_state`; numba parallelism stays on. Safe only because the projection is frozen at ingest, so the fit never re-runs for a given dataset. |
 | Projection lifetime | **Frozen at ingest, persisted** | UMAP + pyramid computed once and stored with the dataset artifact (carve-out from "No Persisted Vectors/MLPs"; covers 2D coords + pyramid only). Never recomputed; legacy datasets compute-once on first open. Dissolves tile-cache invalidation. |
+| Bin shape | **Hex (default) or square, user-toggleable** | The projection can be tiled as hexagons or squares. The UMAP layout is shape-independent and shared; switching only re-bins the frozen coords (no re-fit). Each binning is its own `Pyramid` (carrying `bin_shape`), cached per-shape on the context and persisted in its own container entry (`projection.npz` for hex, `projection_{shape}.npz` for square). See *§Bin shape (hex/square)*. |
 
 ### Notes on frontend integration
 
@@ -523,199 +559,67 @@ and available to any future consumer of `vtscore`.
 
 ## What shipped
 
-- **Prerequisite: app-wide L2 normalization at ingest.** Every embedding is
-  now unit-norm at the point it enters `medias`, and every text-query vector
-  is unit-norm at the embedder, so all similarity is a plain dot product.
-  - New leaf helper `vtscore/embedding/normalize.py:l2_normalize` (numpy-only;
-    zero / non-finite norms pass through untouched; idempotent).
-  - Applied at the `MediaEmbedder` base: `embed_media` and `embed_media_bulk`
-    normalize fresh outputs; `embed_text` became a thin wrapper over a new
-    `_embed_text_impl` hook (every embedder subclass renamed `embed_text ->
-    _embed_text_impl`) so the normalization lives in one place.
-  - Applied at the stored-vector write paths so pickle/legacy loads and
-    re-ingest-from-origin also hold the invariant:
-    `loader_pickle._build_pickle_full_media` / `_build_pickle_thin_media` and
-    `ingest._build_media_data`.
-  - `vtscore/training/region_similarity.py` dropped per-comparison
-    normalization (both the per-media `score_against_query` path and the
-    vectorized `cosine_sort_with_boxes` fast path); the zero-query guard
-    stays. Contract change: callers must pass a unit-norm `query_vec` (all
-    in-tree sources already do).
-  - `svm.py` standardize-caveat docstring refreshed.
-  - **Behavior changes (per design):** the diversity tree's k-means now
-    clusters on unit vectors (angular, not magnitude+direction), so diversity
-    ordering shifts; the MLP trains on unit-scale inputs, which can shift
-    threshold calibration. **Breaks backwards compatibility** of
-    stored-embedding magnitude — legacy pickles re-normalize on load.
-  - Tests: `tests_lib/detectors/test_embedding_normalization.py`,
-    `tests_lib/datasets/test_pickle_normalization.py`.
+All struck through; the design body above documents the contract. Details live
+in git history and the cited source files.
 
-- **Projection backend (Stages 1 + 2), Flask-free.** The browse-canvas compute
-  core landed under `vtscore/projection/` (library tier — covered by
-  `./run-tests.sh vtscore-clean`), with no app/HTTP wiring yet.
-  - `umap_projection.py` — `fit_projection(matrix, ids, ...) -> Projection`
-    (Stage 1). Plain Euclidean UMAP on the ingest-normalized matrix; **unseeded
-    by default** (`random_state=None`) per the locked decision, with an optional
-    seed for reproducible/test fits. `n_neighbors` is clamped to `N-1`; below
-    `min_n_for_umap` it falls back to a deterministic **PCA-2** layout, and the
-    degenerate `N <= 2` / scalar-embedding cases fall back to a trivial layout.
-    Each fit mints a `projection_id`. An optional `on_progress` callback matches
-    the ingest `(status, message, current, total)` convention.
-  - `hexbin.py` — the **d3-hexbin** assignment rule reimplemented vectorized in
-    NumPy (no d3 dependency): `hexbin_assign(points, radius) -> (q, r)` integer
-    cell keys (`q = round(2*pi)` to keep d3's half-integer column index
-    integral) and `hex_center(q, r, radius)` to invert.
-  - `pyramid.py` — `build_pyramid(projection, ...) -> Pyramid` (Stage 2). By
-    default (**auto-depth**, `n_levels=None`) it descends — each level halving the
-    hex radius — until every occupied hex holds a single clip, so the deepest
-    level resolves one-clip-per-hex (enabling hover-to-hear of individual
-    sounds); it stops early when a halving no longer separates any co-located
-    clips, capped by `max_useful_levels()` as a runaway guard. Pass an int
-    `n_levels` for fixed depth. Each level aggregates per hex: axial key, center,
-    **count** (density), and a **representative media id** (member nearest the
-    cell centroid, ties broken to the smaller id). Hexes are grouped into
-    `(level, tx, ty)` **tiles**; `Tile.to_payload()` / `Pyramid.meta()` emit
-    JSON-friendly dicts for the tile/meta endpoints. Tunable knobs
-    (`base_cols`/`base_radius`, `tile_span`) are parameters, not baked constants,
-    per *§Open problems*.
-  - **New dependency:** `umap-learn` (added to `[project.dependencies]` with the
-    `umap-learn -> umap` deptry module-name mapping). Imported lazily so the
-    package import never triggers numba's JIT until a fit runs.
-  - Tests: `tests_lib/projection/` (new `projection` group/marker) —
-    `test_hexbin.py`, `test_umap_projection.py`, `test_pyramid.py`.
-  - **Not yet built (next phases):** persistence of the projection + pyramid
-    with the dataset artifact (the carve-out).
-
-- **Browse routes (HTTP layer).** The three projection endpoints landed under
-  `vtsearch/routes/projection.py` with a `projection_bp` Blueprint:
-  - `POST /api/projection/build` — kicks off a background UMAP + pyramid build
-    via the `projection_jobs` :class:`JobManager` singleton. Returns immediately
-    with a `job_id`; if a projection is already cached on the `DatasetContext`,
-    returns `"ready"` without rebuilding. Signature-keyed caching means
-    unchanged datasets short-circuit.
-  - `GET /api/projection/meta` — returns projection/pyramid metadata (bounds,
-    zoom levels, hex sizing, point count, `projection_id`, dataset `media_type`,
-    projection `method`) when ready; build progress (job_id, current, total,
-    message) when building; `"idle"` when no build has been requested.
-  - `GET /api/projection/tiles/<level>/<tx>/<ty>` — serves a tile's hex cells
-    as JSON (delegates to `Pyramid.get_tile` + `Tile.to_payload`). Empty tiles
-    return `{"cells": []}`. Route uses `signed=True` on `tx`/`ty` converters
-    since tile indices can be negative.
-  - Schemas live in `vtsearch/schemas/projection.py`.
-  - `DatasetContext` gained `_projection` and `_pyramid` cache slots (in-memory
-    only; reset per test by `conftest.reset_state`).
-  - `projection_jobs` added to `JOB_MANAGERS` so it participates in
-    `/api/jobs/active` introspection and `reset_all_async_jobs_for_tests()`.
-  - Tests: `tests/api/test_projection.py` (7 tests covering meta, build, tiles).
-
-- **Browse canvas frontend (Stage 3).** Angular components for the Canvas 2D
-  hex-tile renderer, coded against the `Tile.to_payload()` / `Pyramid.meta()`
-  contracts from the projection backend.
-  - `BrowseCanvasComponent` — Canvas 2D renderer with:
-    - Affine projection-space ↔ screen-space transform (pan = translate,
-      zoom = scale about cursor).
-    - Automatic level-of-detail: picks the pyramid zoom level whose hex
-      screen radius is ~28px.
-    - Viewport culling: only draws hexes inside the visible area.
-    - Density colormap: viridis (14-stop LUT), log-scaled count.
-    - Hover hit-test: finds the nearest hex within one radius of the cursor.
-    - Tile prefetch: neighbors + adjacent zoom levels.
-    - ResizeObserver for responsive canvas sizing; devicePixelRatio-aware.
-  - `BrowseHoverPreviewComponent` — media-type-dependent hover previews:
-    audio playback (looped, hard-cut on move), image/video thumbnails,
-    text snippets (fetched via `/api/medias/<id>/paragraph`).
-  - `BrowseViewComponent` — routed view with status states (loading,
-    building, ready, empty, error), projection build trigger, dataset
-    info overlay.
-  - `ProjectionApiService` — API calls for
-    `/api/projection/{build,meta,tiles}` endpoints.
-  - `TileCacheService` — LRU tile cache (512 entries) with in-flight
-    request dedup, shareReplay, and neighbor/level prefetching.
-  - `browseContextGuard` — dataset-only route guard; Browse requires no
-    detector.
-  - Route: `/browse/:datasetId` (lazy-loaded `BrowseViewComponent`).
-  - App shell integration: `isOnLabelView` recognizes `/browse`;
-    incompatible-pair explainer skipped (no detector on browse).
-  - `ContextSwitchService` updated to navigate within `/browse` when the
-    dataset pulldown changes on the browse route.
-  - **Not yet wired:** sibling highlighting (needs source-file group ids
-    in the tile payload or a server-side lookup endpoint).
-
-- **Projection persistence (in-container).** The `(N, 2)` projection
-  coordinates and the full hex-tile pyramid are persisted inside the
-  dataset ZIP container as `projection.npz`, using NumPy's compressed
-  `.npz` format (coords and ids as native arrays; all pyramid metadata,
-  levels, tiles, and cells as a JSON blob).
-  - `vtscore/projection/persistence.py` — serialization helpers
-    `_pyramid_to_meta` and `_rebuild_from_npz_arrays`, shared by the
-    container module.
-  - `vtscore/datasets/container.py` — `append_projection(path, proj, pyr)`
-    and `read_projection(path)`.  `allow_pickle=False` on load for safety.
-  - `vtsearch/routes/projection.py` — the build route calls
-    `_try_load_persisted()` before computing: if a container has a
-    projection and its media-id set matches, it is restored instantly.
-    After a fresh UMAP + pyramid build, `_persist_projection()` appends
-    the result.  Both are best-effort (registry lookup or I/O failures
-    log a warning and fall back to recompute/skip).
-  - Tests: `tests_lib/projection/test_persistence.py` (round-trip, empty
-    projection, negative tile indices, overwrite) and
-    `tests/api/test_projection.py::TestProjectionPersistence` (route
-    loads from container, skips stale projection, persists after build).
-
-- **ZIP container format.** Dataset files are ZIP containers (the `.pkl`
-  extension is unchanged). The container holds `medias.pkl` (the pickled
-  media dict) + `meta.json` (embedder, clipper, media_type, name,
-  timestamps, `expires_at`) + optional `projection.npz` (appended after
-  browse build). **No legacy support:** raw pickle files and sidecar
-  files (`.embedder`, `.clipper`, `.projection`) are not supported.
-  - `vtscore/datasets/container.py` — `write_container`, `read_container`,
-    `append_projection`, `read_projection`, `read_meta`.
-  - `export_dataset_to_file()` produces ZIP containers with metadata.
-  - `_read_pickle_dataset()` reads only ZIP containers.
-  - `read_pkl_embedder/clipper` read from container `meta.json`.
-  - Demo dataset cache (`loader_demo.py`) writes ZIP containers.
-  - Find endpoint (`_load_find_dataset_medias`, `_load_pkl_for_check`)
-    reads via `read_container`.
-  - Stage-file endpoint extracts `medias.pkl` from the ZIP for peeking.
-  - Tests: `tests_lib/datasets/test_container.py`.
-
-- **Opt-in projection-at-creation.** A "Build 2-D Browse projection now"
-  checkbox in the Advanced block of every dataset importer lets the user
-  spend the UMAP + hex-tile compute up front (so Browse opens instantly)
-  instead of paying for it lazily on first Browse visit. Defaults **off**:
-  building the projection is a cost the user explicitly opts into.
-  - Frontend: the checkbox lives in the shared `vt-import-advanced`
-    component, so it appears uniformly across the generic-form,
-    server-folder, local-folder/files, and demo import flows. Its value
-    rides each flow's existing submit path (`runImporter` params,
-    `import-local-{folder,files}` multipart, `load-file` multipart,
-    `load-demo` body) as a `build_projection` `"true"`/`"false"` string.
-  - Backend: `build_projection` is a framework-level pass-through key
-    (like `clipper` / `embedder` / `dataset_name`), threaded through
-    `_run_importer_in_background` → `_run_origin_load_in_background` to a
-    new inline `_build_projection_stage`. The stage runs **after** the
-    dataset is registered, fits UMAP on the cached embedding matrix,
-    builds the hex-tile pyramid, caches both on the `DatasetContext`, and
-    persists them into the container via `_persist_projection_to_container`
-    (resolving the pkl path through the dataset registry). It is
-    **best-effort by contract**: the dataset is already saved and usable
-    before it runs, so a failure — or a cancel during the fit — leaves the
-    dataset intact and just defers the projection to the lazy Browse-time
-    build. Empty / embedding-less datasets are a silent no-op.
-  - Tests: `tests/datasets/test_load_projection_stage.py`.
-
-- **Dataset age-off.** Server setting `dataset_max_age_days` (default: None
-  = never expire) stamps new datasets with an `expires_at` timestamp in
-  both the container `meta.json` and the dataset registry entry.
-  - Setting added to `ServerSettings` model, API schemas, `CoreConfig`.
-  - `_auto_register_dataset` (load pipeline) computes `expires_at =
-    now + max_age_days * 86400` and passes it to both the container and
-    the registry.
-  - Enforcement: loading an expired dataset returns HTTP 410 and
-    auto-unregisters it; listing datasets filters and auto-unregisters
-    expired entries.
+- ~~**Prerequisite: app-wide L2 normalization at ingest.**~~ Every embedding is
+  unit-norm where it enters `medias`; all similarity is plain dot product.
+  (`vtscore/embedding/normalize.py`, `MediaEmbedder` base, pickle/ingest write
+  paths, `region_similarity.py`.) Breaks stored-magnitude back-compat; legacy
+  pickles re-normalize on load.
+- ~~**Projection backend (Stages 1 + 2), Flask-free** — `vtscore/projection/`~~
+  (`umap_projection.py` unseeded Euclidean UMAP + PCA-2 fallback; `hexbin.py`
+  d3-hexbin reimplemented in NumPy; `pyramid.py` auto-depth tile pyramid). New
+  `umap-learn` dependency.
+- ~~**Browse routes (HTTP layer)** — `vtsearch/routes/projection.py`~~
+  (`POST /build`, `GET /meta`, `GET /tiles/<level>/<tx>/<ty>`), backed by the
+  `projection_jobs` JobManager and `DatasetContext` cache slots.
+- ~~**Browse canvas frontend (Stage 3)**~~ — `BrowseCanvasComponent` (Canvas 2D,
+  pan/zoom, LOD, viewport culling, hover hit-test), `BrowseHoverPreviewComponent`,
+  `BrowseViewComponent`, `ProjectionApiService`, `TileCacheService` (LRU),
+  `browseContextGuard`, `/browse/:datasetId` route.
+- ~~**Projection persistence (in-container)**~~ — coords + pyramid stored as
+  `projection.npz` in the dataset ZIP (`vtscore/projection/persistence.py`,
+  `container.append_projection`/`read_projection`); build route restores instead
+  of recomputing when the media-id set matches.
+- ~~**ZIP container format**~~ — `.pkl` files are ZIPs (`medias.pkl` + `meta.json`
+  + optional `projection.npz`); no legacy raw-pickle/sidecar support
+  (`vtscore/datasets/container.py`).
+- ~~**Opt-in projection-at-creation**~~ — "Build 2-D Browse projection now"
+  checkbox in `vt-import-advanced`; best-effort `_build_projection_stage` after
+  registration.
+- ~~**Dataset age-off**~~ — `dataset_max_age_days` server setting → `expires_at`
+  on container + registry; expired loads return 410 and auto-unregister.
+- ~~**Hex/square bin-shape toggle**~~ — `vtscore/projection/squarebin.py`,
+  `build_pyramid(..., bin_shape=)`, per-shape container entries,
+  `DatasetContext._pyramids`, shape-keyed routes/tile-cache, `browse_bin_shape`
+  setting.
+- ~~**Per-theme density colormap + Browser settings tab**~~ — Heat/Ocean/Grayscale
+  colormaps resolved against the live theme; per-media-type `browse_colormap` /
+  `browse_icon_size` / `browse_bin_shape` settings surfaced in a new Browser tab.
 
 ## Open follow-ups
+
+**Shipped (struck through):**
+- ~~**Live elapsed-time during the UMAP fit**~~ — fit runs on a worker thread and
+  ticks a 1 s elapsed-seconds heartbeat (`total=0` → indeterminate progress bar),
+  since UMAP's numba epoch loop exposes no per-epoch callback.
+- ~~**Item selection on the canvas (tracking only)**~~ — media-id-granular
+  `BrowseSelectionService`; click toggles a bin, Shift+drag marquees; per-cell
+  none/partial/full rendering; `member_ids` re-derived on demand
+  (`tile_member_ids`, never persisted). *Still open:* act on the selection
+  (export / seed detector / subset projection); minimap selection overlay.
+- ~~**Double-click + right-click on the canvas**~~ — double-click zooms about the
+  cursor (click toggle deferred by `DBLCLICK_MS`); right-click opens the shared
+  `vt-media-context-menu`. *Still open:* the context menu is the home for the
+  deferred selection *actions* once they land.
+- ~~**Load + project on the dashboard before entering Browse**~~ — `BrowsePrepService`
+  loads + builds the `hex` projection with inline row progress before navigating;
+  guard/`loadProjection()` stay as the deep-link fallback.
+- ~~**Browse a Find run's positives as their own UMAP**~~ — Find-panel `Browse`
+  button UMAPs only the positive ids into an ephemeral, never-persisted `_subset_*`
+  projection (`?subset=1`). *Known limitation:* in-memory id handoff, so a hard
+  reload of the subset URL loses it.
 
 **Active:**
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable

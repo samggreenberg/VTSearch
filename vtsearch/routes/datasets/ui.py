@@ -16,6 +16,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS
+from vtscore.datasets.demo_counts import exact_demo_count
 from vtscore.datasets.loader import read_pkl_clipper, read_pkl_embedder
 from vtscore.datasets.load_pipeline import _origin_to_str
 from vtsearch.routes._shared import format_mtime
@@ -90,8 +91,15 @@ def _downgrade_for_mismatch(
     return status, pkl_embedder, pkl_clipper
 
 
-def _calculate_demo_num_files(dataset_info: dict) -> int:
-    """Compute the file count for a demo dataset from its slice configuration."""
+def _estimate_demo_num_files(dataset_info: dict) -> int:
+    """Estimate the file count for a demo dataset from its slice configuration.
+
+    Used as a fallback for demo datasets whose exact count has not been
+    measured into ``DEMO_MEDIA_COUNTS``.  Multiplies a single per-category
+    average by the slice fraction, so it is only exact when every category has
+    the same number of items; uneven sources (e.g. Caltech-101) need a recorded
+    exact count instead.
+    """
     num_categories = len(dataset_info["categories"])
     items_per_category = dataset_info.get("items_per_category") or 0
     slice_frac_start = dataset_info.get("slice_frac_start")
@@ -114,6 +122,19 @@ def _calculate_demo_num_files(dataset_info: dict) -> int:
         else:
             per_cat = 40
     return num_categories * per_cat
+
+
+def _demo_num_files(dataset_id: str, dataset_info: dict) -> int:
+    """Resolve the advertised ``# Media`` count for a demo dataset.
+
+    Prefers the exact, pre-measured count in ``DEMO_MEDIA_COUNTS`` so the
+    figure shown before download is accurate; falls back to the per-category
+    estimate for datasets that have not been measured yet.
+    """
+    exact = exact_demo_count(dataset_id)
+    if exact is not None:
+        return exact
+    return _estimate_demo_num_files(dataset_info)
 
 
 def _calculate_demo_download_size_mb(status: str, pkl_file: Path, dataset_info: dict) -> float:
@@ -171,7 +192,7 @@ def demo_dataset_list(query: dict):
                 "label": dataset_info.get("label", name),
                 "status": status,
                 "ready": status == "ready",
-                "num_files": _calculate_demo_num_files(dataset_info),
+                "num_files": _demo_num_files(name, dataset_info),
                 "download_size_mb": round(_calculate_demo_download_size_mb(status, pkl_file, dataset_info), 1),
                 "description": dataset_info.get("description", ""),
                 "media_type": media_type,
@@ -233,10 +254,11 @@ def _resolve_browse_root(source: str) -> Path | None:
 
     * ``demo:<name>``: the ``required_folder`` of the named demo dataset.
     * ``folder``: the configured ``saved_datasets_dir``.
-    * ``server_fs``: the whole server filesystem (single-user mode) or the
-      current user's data directory (multi-user mode). Matches the actual
-      runtime scope of the ``server_folder``/``server_files`` importers,
-      which accept any absolute path readable by the server process.
+    * ``server_fs``: the configured server root (single-user mode) or the
+      current user's data directory (multi-user mode). Matches the scope
+      the ``server_folder``/``server_files`` importers enforce at import
+      time, so the picker can never browse to a folder the importer would
+      later reject.
 
     Returns ``None`` if the source is unrecognised or the directory does not
     exist.
@@ -263,33 +285,24 @@ def _resolve_browse_root(source: str) -> Path | None:
 
         base = get_file_access_base_dir()
         if base is None:
+            # Single-user / no-auth mode: root the picker at the filesystem
+            # root so the user can browse to any folder, matching the
+            # unrestricted server_folder import validation.
             return Path("/")
         return base.resolve()
 
     return None
 
 
-def _default_browse_path(source: str, root: Path) -> str:
-    """Pick a sensible initial relative path for *source* under *root*.
+def _default_browse_path() -> str:
+    """Initial relative sub-path the browse picker opens at.
 
-    For ``server_fs`` in single-user mode (root == ``/``) we start the
-    picker at the server user's home directory if it exists, saving the
-    user three or four clicks to drill down from ``/``. Falls back to the
-    root itself otherwise.
+    Always the root itself (``""``). Every browse source resolves to a
+    meaningful directory (a demo folder, the saved-datasets dir, the user's
+    data dir in multi-user mode, or the filesystem root in single-user mode),
+    so there is nothing to skip past.
     """
-    if source != "server_fs":
-        return ""
-    try:
-        home = Path.home().resolve()
-    except (RuntimeError, OSError):
-        return ""
-    try:
-        rel = home.relative_to(root)
-    except ValueError:
-        return ""
-    if not home.is_dir():
-        return ""
-    return str(rel) if str(rel) != "." else ""
+    return ""
 
 
 @datasets_ui_bp.route("/api/browse-media-files")
@@ -356,7 +369,7 @@ def browse_media_files(query: dict):
         "directories": directories,
         "files": files,
         "root_path": str(root),
-        "default_path": _default_browse_path(source, root),
+        "default_path": _default_browse_path(),
     }
 
 

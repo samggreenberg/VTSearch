@@ -1,0 +1,234 @@
+// The selection panel fills the top region of the browse side panel: a header
+// with the count + Clear, a sort/view toolbar, then a scrolling Grid/List of
+// the selected items. Mirrors the Find right panel's labeled-item lists.
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bsp {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.bsp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg) var(--space-sm);
+  flex-shrink: 0;
+}
+
+.bsp-title {
+  margin: 0;
+  font-size: var(--font-sm);
+  letter-spacing: 0.05em;
+  font-weight: var(--weight-regular);
+  color: var(--text-primary);
+}
+
+.bsp-clear {
+  font-size: var(--font-xs);
+  line-height: 1;
+  padding: var(--space-2xs) var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-base), border-color var(--transition-base);
+
+  &:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+
+  &:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
+}
+
+.bsp-actions {
+  padding: 0 var(--space-lg) var(--space-sm);
+  flex-shrink: 0;
+}
+
+.bsp-remove-good {
+  width: 100%;
+}
+
+.bsp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-lg) var(--space-md);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.bsp-sort-label {
+  font-size: var(--font-2xs);
+  color: var(--text-dim);
+}
+
+.bsp-sort-select {
+  padding: var(--space-2xs) var(--space-sm);
+  font-size: var(--font-xs);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.bsp-view-controls {
+  margin-left: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.bsp-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: var(--space-md) var(--space-lg);
+
+  &.grid-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
+    gap: var(--space-xs);
+    align-content: start;
+    justify-content: end;
+  }
+}
+
+.bsp-empty {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+
+  .grid-layout & {
+    grid-column: 1 / -1;
+  }
+}
+
+.bsp-entry {
+  padding: var(--space-xs) 0;
+  font-size: var(--font-sm);
+  cursor: pointer;
+  color: var(--text-vote);
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+
+  &:hover {
+    color: var(--text-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+}
+
+.bsp-entry-grid {
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-xs);
+  gap: var(--space-2xs);
+  border-radius: var(--radius-sm);
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.bsp-thumb-wrap {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+
+  .bsp-entry-grid & {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+.bsp-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  display: block;
+
+  .bsp-entry-grid & {
+    object-fit: contain;
+  }
+}
+
+.bsp-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: var(--font-xl);
+  overflow: hidden;
+  flex-shrink: 0;
+
+  .bsp-entry-grid & {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    font-size: var(--font-3xl);
+  }
+}
+
+.bsp-name {
+  display: block;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bsp-name-grid {
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  text-align: center;
+  line-height: 1.2;
+  flex-shrink: 0;
+}

@@ -64,7 +64,27 @@
       [focusMode]="focusMode"
       (mediaSelected)="onMediaSelected($event)"
       (mediaVote)="onMediaVote($event)"
-    />
+    >
+      @if (mode === 'find') {
+        <div list-actions class="goods-actions">
+          <button class="goods-action-btn" [disabled]="disabled || goodIds.length === 0" (click)="onBrowse()" aria-label="Browse" title="Browse the positive results as their own 2-D UMAP projection (builds on click)">
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+          <button class="goods-action-btn" [disabled]="disabled || goodIds.length === 0" (click)="onToDataset()" aria-label="To Dataset" title="Promote the goods into their own dataset">
+            <vt-icon type="cubes" [size]="14"></vt-icon>
+          </button>
+          <button class="goods-action-btn" [disabled]="disabled" (click)="onExport()" aria-label="Export" title="Export labeled items to clipboard, file, email, or webhook">
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 14 20 9 15 4"></polyline>
+              <path d="M4 20v-7a4 4 0 0 1 4-4h12"></path>
+            </svg>
+          </button>
+        </div>
+      }
+    </vt-label-list>
 
     <div class="label-divider"></div>
 
@@ -83,9 +103,11 @@
     />
   }
 
-  <div class="export-row">
-    <button class="panel-btn export-btn" [disabled]="disabled" (click)="onExport()" title="Export labeled items to clipboard, file, email, or webhook">Export</button>
-  </div>
+  @if (mode !== 'find') {
+    <div class="export-row">
+      <button class="panel-btn export-btn" [disabled]="disabled" (click)="onExport()" title="Export labeled items to clipboard, file, email, or webhook">Export</button>
+    </div>
+  }
 </aside>
 
 @if (showLabelImport) {

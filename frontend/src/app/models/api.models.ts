@@ -135,7 +135,7 @@ export interface ConverterInfo {
 }
 
 /** One row of a multi-media import specification.  See
- *  ``docs/plans/multi-media-import.md``. */
+ *  ``docs/EXTENDING-media.md``. */
 export interface SourceSpec {
   source_type: string;
   /** ``null`` means "include directly" (source_type must equal output). */

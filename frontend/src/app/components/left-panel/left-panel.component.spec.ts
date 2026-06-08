@@ -1,7 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
+import { SimpleChange } from '@angular/core';
 import { LeftPanelComponent } from './left-panel.component';
+import type { Media } from '../../models/api.models';
 
 describe('LeftPanelComponent', () => {
   let component: LeftPanelComponent;
@@ -119,5 +124,50 @@ describe('LeftPanelComponent', () => {
     spyOn(component.mediaSelect, 'emit');
     component.mediaSelect.emit(42);
     expect(component.mediaSelect.emit).toHaveBeenCalledWith(42);
+  });
+
+  describe('grid header (mediaTypeName)', () => {
+    const stub = (media_type: string): Media => ({ id: 1, media_type }) as Media;
+
+    function setMedias(medias: Media[]): void {
+      component.medias = medias;
+      component.ngOnChanges({
+        medias: new SimpleChange(undefined, medias, false),
+      });
+    }
+
+    it('derives the type label from the first grid item', () => {
+      setMedias([stub('audio')]);
+      expect(component.mediaTypeName).toBe('Audio');
+    });
+
+    it('resets to "Media" when the grid empties (no stale type label)', () => {
+      setMedias([stub('audio')]);
+      expect(component.mediaTypeName).toBe('Audio');
+      // Switching to an empty grid must clear the previous type, not keep it.
+      setMedias([]);
+      expect(component.mediaTypeName).toBe('Media');
+    });
+
+    it('re-derives when the grid switches media type', () => {
+      setMedias([stub('audio')]);
+      expect(component.mediaTypeName).toBe('Audio');
+      setMedias([stub('image')]);
+      expect(component.mediaTypeName).toBe('Image');
+    });
+
+    it('upgrades from the fallback to the display name when type metadata loads after the grid', () => {
+      const httpMock = TestBed.inject(HttpTestingController);
+      // The grid populates before the getMediaTypes() request (fired in
+      // ngOnInit) resolves, so the header first shows the capitalized fallback.
+      setMedias([stub('audio')]);
+      expect(component.mediaTypeName).toBe('Audio');
+
+      // Metadata arrives late with a custom display name: the header must
+      // upgrade instead of staying stuck on the fallback.
+      const req = httpMock.expectOne((r) => r.url.includes('/api/media-types'));
+      req.flush({ media_types: [{ type_id: 'audio', name: 'Sound Clips' }] });
+      expect(component.mediaTypeName).toBe('Sound Clips');
+    });
   });
 });

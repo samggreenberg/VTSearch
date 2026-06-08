@@ -11,6 +11,26 @@
   line-height: 0;
 }
 
+// Docked in the side panel's meta-row: fill the cell instead of floating, and
+// let the ResizeObserver size the canvas to match. No drop shadow — the panel
+// already frames it.
+:host(.dock) {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  box-shadow: none;
+  border-radius: var(--radius-sm);
+
+  // Out of flow so the explicit pixel size the ResizeObserver writes onto the
+  // canvas can never feed back into the host's (and the side panel's) layout —
+  // the panel cell drives the canvas size, never the reverse.
+  canvas {
+    position: absolute;
+    inset: 0;
+  }
+}
+
 canvas {
   display: block;
   cursor: crosshair;

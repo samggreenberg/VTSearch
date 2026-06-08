@@ -1,9 +1,9 @@
 # Patch-based Image Embedder - Design
 
-**Status:** V1 shipped; six image embedders (DINOv2/v3/EUPE × single/patch) with
-HAC region tree, region voting via Shift-drag, and asymmetric training loss. V2
-(region voting on focus pane) shipped. V3 (broader region-aware UX improvements)
-is in design phase; see Open follow-ups.
+**Status:** V1 shipped, V2 shipped, **V3 in design (not started).** The design
+body below is the living spec for the shipped V1/V2 behaviour; the *V1 - DONE*
+and *V2 - DONE* closeouts are collapsed to struck-through lists. **Remaining
+work** is *V3 - design* (one text + one patch embedder per dataset).
 
 ## Status of related work
 
@@ -397,208 +397,50 @@ Run these **before** we ship v1, on the `caltech101_s` demo dataset (a sensible 
 
 These all run in a single throwaway script (or notebook), check results visually, then we delete the script.
 
-## V1 - DONE
+## ~~V1 - DONE~~
 
-V1 is **shipped**.  Backend landed in PR #1248; the remaining UI surface
-and validation items below were closed out in follow-up sessions.  Each
-was independent so they could be picked up in any order.
+V1 is **shipped** (backend in PR #1248; UI/validation in follow-ups). The design
+body above is the spec; closeout items, all struck through:
 
-1. **Gallery-card `best_region.box` outline overlay - DONE.**
-   - Backend returns `best_region` (4-tuple `[x0, y0, x1, y1]` in
-     normalised image coordinates) on every result dict when the
-     loaded dataset is patch-region-aware - both from `_cosine_sort`
-     in `vtsearch/routes/sorting.py` and from `train_and_score` in
-     `vtsearch/models/training.py`.  See "Similarity (search & sort)"
-     and "Detector MLP" sections above.
-   - Frontend wiring: `SortResult.best_region` /
-     `LearnedSortResult.best_region` (api models) →
-     `SortedItem.bestRegion` (sort-state service) → each
-     `setSortResults` call site (`label-view`, `find-view`) →
-     `MediaListComponent.cachedOrderedItems[i].bestRegion` →
-     `MediaItemComponent.bestRegion` input.  The component renders a
-     faint yellow outline div positioned by percent inside a
-     `.thumbnail-wrap` container, in both grid and list view.  Boxes
-     that cover ~the entire image (the legacy single-vector fallback
-     of `(0, 0, 1, 1)`) are suppressed.  Purely informational; no
-     vote semantics attached.
+- ~~**Gallery-card `best_region.box` outline overlay.**~~ Backend returns
+  `best_region` on result dicts for patch-region datasets (`_cosine_sort`,
+  `train_and_score`); frontend renders a faint outline in grid + list, suppressing
+  the `(0,0,1,1)` full-image fallback.
+- ~~**`Dockerfile.image-embedders` + `scripts/cache_gated_models.sh` off the broken
+  PE-Core AutoModel path.**~~ Both now pre-cache EUPE via `torch.hub.load(...)` into
+  `TORCH_HOME`; `SKIP_DINOV3=1` knob; build wrapped in try/except for no-network.
+- ~~**caltech101_s pre-implementation experiments.**~~ Confirmed the `K=12`, `α=0.5`
+  defaults stand (`_attach_patch_regions` unchanged) and the diversity tree clusters
+  sensibly on CLS-pooled DINOv2. *(Sweep write-up `docs/experiments/hac-tree-sweep/`
+  was removed in the docs cleanup; it lives in git history. Re-run harness:
+  `scripts/run_hac_tree_sweep.py`.)*
+- ~~**FP16 ↔ FP32 rank-stability check.**~~ `TestFp16Fp32RankStability` —
+  worst-case score delta ~1e-3 (< 1e-2 ceiling), zero non-tie rank flips; fp16-on-disk
+  is faithful at v1 scale.
 
-2. **`Dockerfile.image-embedders` + `scripts/cache_gated_models.sh`
-   off the broken PE-Core AutoModel path - DONE.**
-   - Both files used to call `AutoModel.from_pretrained(EUPE_MODEL_ID,
-     ..., trust_remote_code=True)`, which no longer matched the
-     embedder's actual load path (`torch.hub.load` against
-     `facebookresearch/EUPE` with a HF weights URL).  Switched both
-     to a torch-hub-based pre-cache: `TORCH_HOME` points at the
-     shared `model_cache/` dir (Dockerfile sets it equal to
-     `VTSEARCH_MODELS_DIR`; the host script sets it to the cache
-     directory it was passed) and we call
-     `torch.hub.load("facebookresearch/EUPE", "eupe_vitb16",
-     source="github", pretrained=True, weights=EUPE_MODEL_ID,
-     trust_repo=True)` once at build / host-cache time so the
-     EUPE repo clone + weights file are baked in.  No HF token
-     needed for EUPE (the EUPE-ViT-B HF repo is ungated); the
-     cache script grew a `SKIP_DINOV3=1` knob so users who only
-     need EUPE can run it without an HF login.  The Dockerfile's
-     EUPE bake step is also wrapped in a try/except so the build
-     succeeds even when no host cache is present and the build
-     environment has no network.
+**Open questions:** none — the v1 fp16/fp32 question was answered above.
 
-3. **caltech101_s pre-implementation experiments - DONE.**
-   - The design pinned `K = 12` and `α = 0.5` as v1 defaults; the
-     intent was to confirm both on caltech-101 before shipping the
-     production embedders.  Sweep results live under
-     [`docs/experiments/hac-tree-sweep/`](../experiments/hac-tree-sweep/README.md)
-     with per-image overlay PNGs and aggregate metrics.
-   - **`K ∈ {8, 12, 16}` and `α ∈ {0.3, 0.5, 0.7}` sweep on 30
-     caltech-101 images (DINOv2 backbone).**  Conclusion: K=12 is the
-     smallest K where multi-subject images (faces, animals on grass)
-     cleanly separate subject parts from background in the leaf set,
-     while keeping HAC merges balanced.  α controls how chain-like
-     the merges get - α=0.3 produces tighter spatially-coherent
-     internals (mean area-growth ≈ 1.0), α=0.7 lets internals form
-     L-shapes over background patches.  The α=0.5 design pin sits in
-     between; geometric metrics differ by single-digit percent across
-     the sweep, so the production defaults stand and
-     `_attach_patch_regions` in `vtscore/datasets/loader_folder.py`
-     was not changed.
-   - **Diversity-tree sanity check** on CLS-pooled DINOv2 vectors for
-     the same 30 images: multiple semantically-coherent clusters
-     (mammals on grass; side-profile fauna; tall complex silhouettes;
-     single-object-on-simple-background), no random-looking clusters
-     → the diversity tree continues to behave reasonably once the
-     patch-aware embedder takes over from SigLIP.
-   - Sweep ran via `scripts/run_hac_tree_sweep.py` (kept in-tree so
-     the same sweep can be re-run on a different dataset without
-     having to reconstruct the harness).  Code under
-     `vtscore/media/patch_embed.py` is parameterised on `K` and
-     `α` per the same goal.
+## ~~V2 - DONE~~
 
-4. **FP16 ↔ FP32 rank-stability check - DONE.**
-   - Added `TestFp16Fp32RankStability` to
-     `tests/test_patch_embedder.py`.  Builds a 50-media batch of 24
-     fp32 region vectors per image at the production 768-dim shape,
-     mirrors it as fp16, scores both against 20 random unit queries,
-     and asserts: (a) the per-media max-cosine score differs by
-     < 1e-2 across the full batch; (b) no pair of media whose fp32
-     scores differ by more than the 5e-3 quantization noise band
-     flips relative order under fp16 storage; (c) the #1 result is
-     preserved across every query.
-   - Empirically the worst-case score delta lands ~1e-3 on this
-     batch (well inside the 1e-2 ceiling), and zero non-tie rank
-     flips occurred across all sampled pairs × queries.  fp16-on-
-     disk is faithful for retrieval at the v1 scale; no design
-     changes required.
+V2 is **shipped**. Region voting on the focus pane via Shift-drag is live (yes-votes
+carry an optional `region_box`, no-votes never do; the `←`/`→` binary fast path is
+byte-for-byte identical to v1). Semantics live under "Vote attribution → v2".
+Closeout, struck through:
 
-## Open questions
+- ~~**Backend region plumbing** (PRs #1271–#1273).~~ `LabeledElement.region_box`;
+  `box_to_vote_vector` on-the-fly pooling from `patch_grid`; `POST /vote` accepts
+  `region_box` (400 on no-vote-with-box); training re-pools per pass; round-trips
+  through all four `from_clips_and_votes` call sites + label import.
+- ~~**Frontend region-draw UX** (PRs #1273–#1274).~~ `.region-stage` overlay on
+  `ImageViewerComponent` (Shift = box-draw, 8 handles, zoom/rotate-stable coords);
+  `castVote` sole entry point with the no-timeout sticky "discard & vote no" state;
+  `vote(id, label, regionBox?)` keeps the binary path unchanged.
+- ~~**Test coverage.**~~ Backend `TestRegionBox*`/`TestRegionAwareTraining`/
+  `TestLabel*RegionBox`; frontend specs for coord transform, armed-state, and the
+  vote-API contract.
 
-*(None outstanding.  The v1 open question - fp16/fp32 rank stability -
-was answered under "V1 - DONE"; v2 shipped without leaving any open
-design questions behind.)*
-
-## V2 - DONE
-
-V2 is **shipped**.  Region voting on the focus pane via Shift-drag is
-live: yes-votes carry an optional rectangular `region_box`; no-votes
-never carry one; and the binary-only `←`/`→` fast path is byte-for-byte
-identical to v1.  Semantics live under "Vote attribution → v2: region
-voting" above; closeout summary below.
-
-1. **Backend region plumbing - DONE (PRs #1271, #1272, #1273).**
-   - `vtscore/datasets/labelset.py::LabeledElement` gained an
-     optional `region_box: tuple[float, float, float, float] | None`
-     that round-trips through the dict-serialisation path used by
-     label export/import.
-   - `vtscore/media/patch_embed.py::box_to_vote_vector(patch_grid,
-     box)` does the on-the-fly pooling: select grid cells whose
-     centers fall inside the normalised box, uniform-mean their
-     vectors, L2-normalise.  Uniform mean is the only rule that keeps
-     `box → vote_vector` consistent across disjoint cell sets - see
-     "v2 → Backend semantics §1" above for the HAC-associativity
-     argument.
-   - `POST /api/medias/<id>/vote` accepts an optional `region_box`
-     (4-float list in `[0, 1]`).  Yes-votes persist it on
-     `DetectorContext.vote_region_boxes` and from there into label
-     export, detector sync, and labelset-source sync.  No-votes that
-     include a box return HTTP 400 instead of silently dropping it
-     (surfaces client bugs immediately).  Toggling a good vote off
-     or switching good → bad evicts the box.
-   - `vtsearch/models/training.py::_training_vec_for_vote` and
-     `vtsearch/models/labelset_training.py::populate_label_embeddings`
-     pool the training vector on-the-fly from `media["patch_grid"]`
-     via `box_to_vote_vector` when `region_box` is set, falling back
-     to `media["embedding"]` for legacy datasets and single-vector
-     embedders.  Cross-dataset elements whose file isn't in the
-     active snap rebuild a patch grid via `patch_forward` on the
-     resolved file and pool the box from it (bug H2 fix); only when
-     the embedder has no patch path do they fall back to a full-file
-     embedding (with a logged warning).  Region-voted labelset
-     elements re-pool every training pass so `region_box` edits
-     propagate without explicit cache invalidation; the image-level
-     cache fast path is unchanged.
-   - `LabelSet.from_clips_and_votes` accepts an optional
-     `vote_region_boxes` map.  All four call sites
-     (`/api/labels/export`, `POST /api/detectors/<name>/labels`,
-     `sync_labels_to_loaded_detector`, `sync_to_labelset_source`)
-     thread it through, and `POST /api/labels/import` rebuilds the
-     map on good-vote imports - so a region annotation round-trips
-     from the vote API all the way to disk + any configured labelset
-     source.
-
-2. **Frontend region-draw UX - DONE (PRs #1273, #1274).**
-   - `ImageViewerComponent` carries a `.region-stage` overlay that
-     listens for `Shift` keydown/keyup on `window` while the focus
-     pane is mounted, swaps pan-on-drag for box-draw under Shift,
-     flips the cursor to crosshair, and renders the box + 8 resize
-     handles + draggable body as positioned divs.  The stage shares
-     the image's `transform`, so click-drag-release coordinates are
-     anchored in image-local space and stay stable across zoom and
-     rotate.  A zero-area Shift-click restores the prior box rather
-     than discarding it - drawing a box is real work.
-   - `CenterPanelComponent.castVote` is the sole vote entry point.
-     `→` with box → yes-vote + `region_box`; `→` without box → plain
-     yes-vote (unchanged from v1).  `←` without box → plain no-vote
-     (unchanged from v1).  `←` with box → arms a visible sticky
-     "discard & vote no" state with **no timeout** (a red pulse on
-     the box plus an inline hint banner *"Press ← again to vote no
-     and discard the box, or Esc to keep the box."*); second `←`
-     confirms.  Esc, mouse-interaction with the box, a fresh
-     Shift-drag-redraw, or media-item navigation all clear the armed
-     state and keep the box.  The on-screen vote buttons use the
-     same `castVote` path.
-   - `MediasApiService.vote(id, label, regionBox?)` only appends
-     `region_box` to the request body when a non-empty 4-tuple is
-     passed, so the binary-only fast path is byte-for-byte unchanged
-     from v1.
-   - The gallery card's `best_region` outline shipped in v1 already
-     and is unchanged in v2 - it stays read-only; the active
-     draw/edit layer lives only on the focus pane.
-
-3. **Test coverage - DONE.**
-   - Backend tests under `tests/test_patch_embedder.py`:
-     `TestRegionBoxOnLabeledElement`, `TestBoxToVoteVector`,
-     `TestVoteEndpointRegionBox`, `TestRegionAwareTraining`,
-     `TestLabelExportRegionBox`, `TestLabelImportRegionBox`.
-   - Frontend specs in
-     `frontend/src/app/components/center-panel/image-viewer/image-viewer.component.spec.ts`:
-     pure-function `screenToImageNormalized` under non-trivial
-     `pan / zoom / rotate`, region-box coord stability across zoom
-     and rotate, and zero-area Shift-click box preservation.
-   - Frontend specs in `center-panel.component.spec.ts`: the sticky
-     armed state (first `←` arms without firing a request; second
-     `←` posts the no-vote; Esc / mouse-on-box /
-     `regionBoxChange(null)` / media-item navigation cancel armed),
-     and the vote-API contract (`region_box` present on
-     yes-with-box, absent on yes-without-box, absent on every
-     no-vote including after a two-press bad-vote confirm).
-
-**Deferred (out of scope for v2):**
-
-- Touch support - no `Shift` modifier on mobile.  Toolbar toggle
-  button is the natural future home, but v2's audience is desktop
-  power users.
-- Multiple regions per vote - v2 ships single rectangle only.
-- Region votes on non-image media types - `supports_patch_regions`
-  is image-specific; no obvious 2D analogue elsewhere.
+**Deferred (out of scope for v2):** touch support (no Shift modifier); multiple
+regions per vote; region votes on non-image media types.
 
 ## V3 - design
 

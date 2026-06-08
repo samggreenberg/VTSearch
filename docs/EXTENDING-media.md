@@ -259,6 +259,7 @@ embedder per media type should override the `is_default` property to return
 |------|----------|-----------|---------|
 | `audio/embedder_clap.py` | `AudioClapEmbedder` | audio | ✅ |
 | `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | audio | |
+| `audio/embedder_paraspeechclap.py` | `AudioParaSpeechClapEmbedder` | audio | |
 | `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image | ✅ |
 | `text/embedder_e5.py` | `TextE5Embedder` | text | ✅ |
 | `text/embedder_bge.py` | `TextBGEEmbedder` | text | |
@@ -475,6 +476,7 @@ loaded via `spec_from_file_location` so discovery still works.
 |----------|------|------------|-------|------------|
 | `AudioClapEmbedder` | `clap` | `audio` | LAION CLAP (laion/clap-htsat-unfused) | 512 |
 | `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
+| `AudioParaSpeechClapEmbedder` | `paraspeechclap` | `audio` | ParaSpeechCLAP speech-style (WavLM-Large + Granite, ajd12342/paraspeechclap-combined) | 768 |
 | `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
 | `ImageDinov2SingleEmbedder` / `ImageDinov2PatchEmbedder` | `dinov2_single` / `dinov2_patch` | `image` | DINOv2 ViT-B/14 (facebook/dinov2-base), ungated | 768 |
 | `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | `dinov3_single` / `dinov3_patch` | `image` | DINOv3 ViT-B/16 (facebook/dinov3-vitb16-pretrain-lvd1689m), HF-gated | 768 |

@@ -81,9 +81,11 @@ resolution rather than relying on a closed-form estimate.
 
 | Knob | Current value | Location |
 |------|---------------|----------|
-| Target on-screen hex radius (level picker) | `28` px | `updateActiveLevel`, `:163` |
+| Target on-screen hex radius (level picker) | `28` px default (`DEFAULT_TARGET_RADIUS`), scaled by the thumbnail-size buttons (XS–XL → ×0.5–×2.5) into `targetRadius` | `levelForEffZoom` / `setThumbnailRadius` |
 | Density scale | log (`log(count)/log(maxCount)`) | `drawHex`, `:284` |
-| Colormap | viridis, 14-stop LUT | `VIRIDIS`, `:27` |
+| Colormap | darkred→yellow, 8-stop LUT (black left free for "None"/empty space) | `HEATMAP`, `hex-render.util.ts` |
+| Singleton cell shape | inscribed disc (`HEX_INRADIUS_RATIO`), hex otherwise | `traceCellPath`, `hex-render.util.ts` |
+| Minimap overview level | level whose hexes ≈ `5` px (finer-grained than level 0) | `overviewLevel`, `browse-minimap.component.ts` |
 | Hover debounce | `30` ms | `onCanvasMouseMove`, `:445` |
 | Hex hit radius | `1 × radius` | `hitTest`, `:490` |
 
@@ -193,7 +195,9 @@ can't:
   `targetScreenRadius=28` level-picker land on the right level? Sweep it (e.g.
   22 / 28 / 36) if levels feel off.
 - **Density colormap:** is **log** the right compression, or does **sqrt** read
-  better for the actual count distributions seen in Phase A? Viridis vs magma.
+  better for the actual count distributions seen in Phase A? The ramp is now
+  darkred→yellow (black left free to mean empty/"None"); revisit the stop count
+  and endpoints if the sweep says so.
 - **Hover feel:** debounce window (does sweeping machine-gun previews at 30 ms?
   try 50–80 ms), audio loop hard-cut vs a short fade, text-snippet length,
   popup placement.

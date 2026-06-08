@@ -17,6 +17,11 @@ import { EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
 import { VtDialogService } from '../../../services/dialog.service';
+import {
+  DEFAULT_THUMBNAIL_BORDER,
+  MAX_THUMBNAIL_BORDER,
+  usesThumbnails,
+} from '../../browse-canvas/hex-render.util';
 
 @Component({
   selector: 'vt-settings-modal',
@@ -36,6 +41,10 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   embeddersByType: Record<string, EmbedderInfo[]> = {};
   activeSettingsTab = 'appearance';
   activeViewTab = '';
+  /** Active media-type tab within the Browser settings tab. */
+  activeBrowseTab = '';
+  /** Upper bound for the pile-thumbnail border number input (template-bound). */
+  readonly maxThumbnailBorder = MAX_THUMBNAIL_BORDER;
   loading = true;
   error = '';
   showImporterModal = false;
@@ -94,6 +103,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
           } else {
             this.activeViewTab = this.mediaTypes[0].type_id;
           }
+          this.activeBrowseTab = this.mediaTypes[0].type_id;
         }
         this.loading = false;
       },
@@ -271,6 +281,85 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     const dict = this.settings[side];
     if (!dict) return 'click';
     return dict[typeId] ?? 'click';
+  }
+
+  // --- Browser tab: per-media-type projection-browser preferences ---
+
+  /** Read a per-media-type browser setting for *typeId*, or *fallback*. */
+  private getBrowsePref(
+    key: 'browse_bin_shape' | 'browse_colormap' | 'browse_icon_size',
+    typeId: string,
+    fallback: string,
+  ): string {
+    const dict = this.settings[key] as Record<string, string> | undefined;
+    return (dict && dict[typeId]) || fallback;
+  }
+
+  /** Write a per-media-type browser setting and persist. */
+  private setBrowsePref(
+    key: 'browse_bin_shape' | 'browse_colormap' | 'browse_icon_size',
+    typeId: string,
+    value: string,
+  ): void {
+    const dict = { ...((this.settings[key] as Record<string, string> | undefined) || {}) };
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)[key] = dict;
+    this.save();
+  }
+
+  getBrowseBinShape(typeId: string): string {
+    return this.getBrowsePref('browse_bin_shape', typeId, 'hex');
+  }
+
+  onBrowseBinShapeChange(typeId: string, value: string): void {
+    this.setBrowsePref('browse_bin_shape', typeId, value);
+  }
+
+  getBrowseColormap(typeId: string): string {
+    return this.getBrowsePref('browse_colormap', typeId, 'auto');
+  }
+
+  onBrowseColormapChange(typeId: string, value: string): void {
+    this.setBrowsePref('browse_colormap', typeId, value);
+  }
+
+  /**
+   * True when *typeId* paints cells with thumbnails (image/video). These types
+   * are pinned to grayscale, so the colormap picker is hidden for them and the
+   * UI shows a fixed read-only value instead.
+   */
+  browseTabUsesThumbnails(typeId: string): boolean {
+    return usesThumbnails(typeId);
+  }
+
+  getBrowseIconSize(typeId: string): string {
+    return this.getBrowsePref('browse_icon_size', typeId, 'M');
+  }
+
+  onBrowseIconSizeChange(typeId: string, value: string): void {
+    this.setBrowsePref('browse_icon_size', typeId, value);
+  }
+
+  /** Pile-thumbnail border width (CSS px) for *typeId*, defaulting to the
+   *  feature default when the user hasn't set one for this media type. */
+  getBrowseThumbnailBorder(typeId: string): number {
+    const dict = this.settings.browse_thumbnail_border as Record<string, number> | undefined;
+    const value = dict?.[typeId];
+    return value == null ? DEFAULT_THUMBNAIL_BORDER : value;
+  }
+
+  /** Write the per-media-type pile-thumbnail border width, clamped to the
+   *  shared 0..MAX range, and persist. */
+  onBrowseThumbnailBorderChange(typeId: string, value: number | string): void {
+    let n = typeof value === 'string' ? parseInt(value, 10) : value;
+    if (!Number.isFinite(n)) n = 0;
+    n = Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, Math.round(n)));
+    const dict = {
+      ...((this.settings.browse_thumbnail_border as Record<string, number> | undefined) || {}),
+    };
+    dict[typeId] = n;
+    (this.settings as Record<string, unknown>)['browse_thumbnail_border'] = dict;
+    this.save();
   }
 
   onNumberChange(key: string, value: number): void {

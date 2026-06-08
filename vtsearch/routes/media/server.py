@@ -18,7 +18,7 @@ from flask_smorest import Blueprint, abort
 from werkzeug.exceptions import HTTPException
 
 from vtscore.config import DATA_DIR
-from vtsearch.routes._shared import format_exception_detail
+from vtsearch.routes._shared import format_exception_detail, image_thumbnail_response
 from vtsearch.schemas.media import (
     ExampleSortByIdRequestSchema,
     ExampleSortOriginRequestSchema,
@@ -162,11 +162,7 @@ def server_media_file_thumbnail(filename: str):
 
     if media_type == "image":
         mimetype = _IMAGE_MIMETYPES.get(suffix, "image/jpeg")
-        return send_file(
-            io.BytesIO(file_path.read_bytes()),
-            mimetype=mimetype,
-            download_name=file_path.name,
-        )
+        return image_thumbnail_response(file_path.read_bytes(), mimetype, file_path.name)
 
     if media_type == "audio":
         from vtscore.media.audio.media_type import generate_waveform_thumbnail_from_file

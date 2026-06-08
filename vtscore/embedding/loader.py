@@ -67,26 +67,111 @@ def default_concurrent_downloads() -> int:
     return max(1, min(4, os.cpu_count() or 1))
 
 
+# A single CPU embed job holds an embedder model plus an N x D fp32 working
+# set; budgeting ~4 GiB of total RAM per concurrent job keeps memory-starved
+# boxes at one worker while letting roomy workstations run a few in parallel.
+_RAM_BYTES_PER_CPU_EMBED = 4 * 1024 * 1024 * 1024
+
+# Upper bound on the CPU embed default regardless of how big the box is; a
+# hand override in ``data/settings.json`` can still go higher (clamped to 16).
+_MAX_CPU_EMBED_DEFAULT = 4
+
+
+def _total_memory_bytes() -> int:
+    """Best-effort total physical RAM in bytes, or ``0`` if it can't be read.
+
+    Uses ``MemTotal`` (Linux ``/proc/meminfo``) with an ``SC_PHYS_PAGES``
+    sysconf fallback. Total (not *available*) RAM is the right signal for a
+    startup default: it's stable, whereas free memory swings with whatever
+    else happens to be running when the setting is first resolved.
+    """
+    try:
+        with open("/proc/meminfo", encoding="ascii") as fh:
+            for line in fh:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        pass
+    try:
+        pages = os.sysconf("SC_PHYS_PAGES")
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        if pages > 0 and page_size > 0:
+            return pages * page_size
+    except (OSError, ValueError):
+        pass
+    return 0
+
+
 def default_concurrent_embeddings() -> int:
     """Default for ``max_concurrent_dataset_embeddings`` derived from hardware.
 
-    The embed phase is CPU/GPU- and RAM-bound. On CPU-only boxes one worker
-    keeps the box hot without thrashing; with GPUs we allow one task per
-    visible CUDA device (capped at 2) so two datasets can embed in parallel
-    on a multi-GPU rig without overcommitting a single device's VRAM.
+    The embed phase is CPU/GPU- and RAM-bound, so the default scales with the
+    scarcer of the two resources:
+
+    * **GPU boxes** allow one task per visible CUDA device (capped at 2) so two
+      datasets can embed in parallel on a multi-GPU rig without overcommitting a
+      single device's VRAM.
+    * **CPU-only boxes** allow roughly one job per 4 cores and one job per
+      ``_RAM_BYTES_PER_CPU_EMBED`` of total RAM, whichever is smaller, capped at
+      :data:`_MAX_CPU_EMBED_DEFAULT`. Constrained machines (few cores or little
+      RAM) still resolve to 1 - preserving the old fully-serial behaviour where
+      a second concurrent embed would thrash or OOM - while workstations get
+      genuine parallel embedding with no config change. When total RAM can't be
+      read we fall back to 1 rather than guess generously.
     """
     gpus = _detect_cuda_devices()
-    if gpus <= 0:
-        return 1
-    return max(1, min(2, gpus))
+    if gpus > 0:
+        return max(1, min(2, gpus))
+
+    by_cpu = (os.cpu_count() or 1) // 4
+    total_ram = _total_memory_bytes()
+    by_ram = total_ram // _RAM_BYTES_PER_CPU_EMBED if total_ram else 1
+    return max(1, min(_MAX_CPU_EMBED_DEFAULT, by_cpu, by_ram))
+
+
+def _warm_threadpool_controller() -> None:
+    """Build sklearn's cached ``ThreadpoolController`` while single-threaded.
+
+    The first sklearn fit (e.g. KMeans in diversity-tree building) constructs
+    a ``threadpoolctl.ThreadpoolController``, which scans every loaded shared
+    library via ``dl_iterate_phdr``.  That C call holds glibc's loader lock
+    while invoking a *Python* callback per library - and running Python means
+    acquiring the GIL.  If another thread holds the GIL and is itself inside
+    native code that needs the loader lock (libgcc's ``_Unwind_Find_FDE``
+    during stack unwinding does ``dl_iterate_phdr`` too, and numpy-heavy
+    embedding work hits it), the two threads deadlock: loader lock <-> GIL.
+    Observed in production as a frozen server when a detector load and a
+    dataset load ran concurrently.
+
+    sklearn caches the controller in a module global
+    (``sklearn.utils.parallel._get_threadpool_controller``), so building it
+    once here - at startup, before any load threads exist - means the
+    dangerous scan never runs under concurrency.  Best-effort: sklearn may be
+    absent (minimal installs) and the helper is private, so fall back through
+    public threadpoolctl (which at least pre-loads the library handles) and
+    swallow failures rather than block startup.
+    """
+    try:
+        from sklearn.utils.parallel import _get_threadpool_controller  # noqa: PLC0415
+
+        _get_threadpool_controller()
+    except Exception:
+        try:
+            import threadpoolctl  # noqa: PLC0415
+
+            threadpoolctl.ThreadpoolController()
+        except Exception:
+            pass
 
 
 def initialize_models() -> None:
     """Prepare the runtime environment for embedding models.
 
-    Creates the model cache directory and configures PyTorch thread count
-    **if torch is already imported**.  When torch has not been imported yet
-    (e.g. during fast test startup) the thread-count configuration is
+    Creates the model cache directory, configures PyTorch thread count
+    **if torch is already imported**, and warms sklearn's threadpool
+    controller while still single-threaded (see
+    :func:`_warm_threadpool_controller`).  When torch has not been imported
+    yet (e.g. during fast test startup) the thread-count configuration is
     deferred until ``ensure_torch_configured`` is called by the first code
     path that actually imports torch.
 
@@ -94,6 +179,7 @@ def initialize_models() -> None:
     """
     MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     ensure_torch_configured()
+    _warm_threadpool_controller()
     try:
         from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
 

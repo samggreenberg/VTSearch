@@ -227,14 +227,23 @@ This is a niche escape hatch, not the primary interface.
 | Should we have per-detector settings for converter/clipper? | No; clipper lives in the detector itself (travels with the file). Converter is automatic from the registry. |
 | Per-detector settings for EACH detector‽ | No. Clipper is per-detector via `input_spec`. Converter is per-source-type via registry. No settings explosion. |
 
-## What shipped (Phase 1)
+## ~~What shipped (Phase 1)~~
 
-- Detector JSON gained the optional `input_spec` field (`clipper` + `clipper_params`). Detectors without it behave exactly as before.
-- `save_detector_labels` captures the active dataset's clipper into `input_spec` automatically (and clears any stale value when re-saving from an unclipped dataset).
-- `LabelSet` gained an optional top-level `detector_meta` block (`media_type`, `input_spec`, `threshold`) so a round-trip through a `LabelsetSource` doesn't strip the training context. Legacy labelsets without the block still load.
-- `LabelsetSource` gained `load_full()` returning a full `LabelSet`. `server_json_file` overrides it; the default impl wraps the legacy `load()` so other sources keep working.
-- `sync_to_labelset_source` emits `detector_meta` (threshold only when an MLP is loaded). `sync_from_labelset_source` writes `input_spec` (and missing `media_type`) back onto the receiver; threshold is *not* persisted because the receiver retrains.
-- CLI `_load_and_train_detectors` skips detectors whose `input_spec.clipper` doesn't match the loaded dataset's clipper, with a clear progress message pointing the user at how to reload. Detectors without `input_spec` are unaffected.
+All struck through:
+
+- ~~Detector JSON gained the optional `input_spec` field (`clipper` +
+  `clipper_params`); detectors without it behave as before.~~
+- ~~`save_detector_labels` captures the active dataset's clipper into `input_spec`
+  (clearing stale values on re-save from an unclipped dataset).~~
+- ~~`LabelSet` gained an optional `detector_meta` block (`media_type`, `input_spec`,
+  `threshold`) so a `LabelsetSource` round-trip keeps the training context; legacy
+  labelsets still load.~~
+- ~~`LabelsetSource.load_full()` (overridden by `server_json_file`, default wraps
+  legacy `load()`).~~
+- ~~`sync_to/from_labelset_source` emit/write `input_spec` + `media_type`
+  (threshold not persisted — receiver retrains).~~
+- ~~CLI `_load_and_train_detectors` skips detectors whose `input_spec.clipper`
+  mismatches the loaded dataset's clipper, with a reload hint.~~
 
 ## Open follow-ups
 

@@ -12,6 +12,7 @@ from vtscore.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
     extract_tensor as _extract_tensor,
+    hf_token,
     intercept_tqdm_progress,
     intercept_weight_loading_progress,
     load_pretrained_local_first,
@@ -77,13 +78,18 @@ class VideoXClipEmbedder(MediaEmbedder):
             intercept_weight_loading_progress(self._on_progress, "Loading X-CLIP model weights…"),
         ):
             self._model = load_pretrained_local_first(
-                XCLIPModel.from_pretrained, XCLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
+                XCLIPModel.from_pretrained,
+                XCLIP_MODEL_ID,
+                low_cpu_mem_usage=True,
+                cache_dir=cache_dir,
+                token=hf_token(),
+                on_progress=self._on_progress,
             )
         self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading X-CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(
-                XCLIPProcessor.from_pretrained, XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False, token=False
+                XCLIPProcessor.from_pretrained, XCLIP_MODEL_ID, cache_dir=cache_dir, use_fast=False, token=hf_token()
             )
 
     # ------------------------------------------------------------------

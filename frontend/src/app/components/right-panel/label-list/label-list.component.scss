@@ -18,10 +18,22 @@
 // but are styled as compact uppercase chips, not as full section
 // headings. See the load-sort-modal comment about promoting a shared
 // `.subhead` class; same pattern, same eventual fix.
+// Header row: the "Goods (#)" / "Bads (#)" chip on the left, with an
+// optional projected action cluster (Browse / To Dataset / Export in the
+// Find right panel) pushed to the right.
+.vote-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  flex-shrink: 0;
+}
+
 h3 {
   font-size: var(--font-sm);
   letter-spacing: 0.05em;
-  margin: 0 0 var(--space-md) 0;
+  margin: 0;
   flex-shrink: 0;
   display: flex;
   align-items: center;

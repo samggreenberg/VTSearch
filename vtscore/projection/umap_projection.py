@@ -24,14 +24,24 @@ never pulls in numba's JIT until an actual fit runs.
 
 from __future__ import annotations
 
+import threading
+import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 import numpy as np
 
 # Matches the ingest progress-callback shape (status, message, current, total).
 ProgressCallback = Callable[[str, str, int, int], None]
+
+# How often the UMAP fit emits a "still working" heartbeat.  UMAP's
+# ``fit_transform`` is one opaque blocking call (the epoch loop runs inside
+# numba with no per-epoch Python callback), so there's no real fraction to
+# report; instead we tick elapsed seconds on this cadence so the UI shows a
+# live counter and an animated bar instead of dead airtime.  The browse view
+# polls ``/api/projection/meta`` once a second, so a 1 s heartbeat lines up.
+_HEARTBEAT_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -59,6 +69,29 @@ class Projection:
         return (float(xmin), float(ymin), float(xmax), float(ymax))
 
 
+def remove_ids(projection: Projection, remove: Iterable[int]) -> Projection:
+    """Return *projection* with *remove* ids (and their points) dropped.
+
+    The remaining points keep their **exact** 2-D coordinates — this never
+    re-fits the layout.  The ``projection_id`` is deliberately preserved so the
+    layout keeps its identity (the browse canvas reads it to decide whether to
+    re-frame the viewport: a content edit must not move points on screen).  Tile
+    freshness is handled separately by a content-version cache token, since the
+    counts/membership do change.
+
+    Used to cull hand-selected false-positives from a Find-positives subset
+    browse without re-running UMAP.
+    """
+    remove_set = {int(i) for i in remove}
+    keep = [i for i, mid in enumerate(projection.ids) if int(mid) not in remove_set]
+    new_ids = [int(projection.ids[i]) for i in keep]
+    if projection.coords.shape[0]:
+        new_coords = np.ascontiguousarray(projection.coords[keep], dtype=np.float32)
+    else:
+        new_coords = projection.coords
+    return Projection(projection.projection_id, new_ids, new_coords, projection.method)
+
+
 def _trivial_layout(n: int) -> np.ndarray:
     """A deterministic layout for ``n`` points when there's nothing to project.
 
@@ -84,6 +117,54 @@ def _pca_layout(matrix: np.ndarray) -> np.ndarray:
         pad = np.zeros((n, 2 - coords.shape[1]), dtype=coords.dtype)
         coords = np.concatenate([coords, pad], axis=1)
     return np.ascontiguousarray(coords, dtype=np.float32)
+
+
+def _umap_layout(
+    mat: np.ndarray,
+    *,
+    n_neighbors: int,
+    min_dist: float,
+    random_state: int | None,
+    on_heartbeat: Callable[[int], None],
+) -> np.ndarray:
+    """Run UMAP on *mat*, ticking ``on_heartbeat(elapsed_seconds)`` while it runs.
+
+    UMAP's ``fit_transform`` is a single blocking call with no per-epoch hook,
+    so it runs on a worker thread and the caller's thread emits an
+    elapsed-seconds heartbeat on each ``_HEARTBEAT_SECONDS`` tick.  Anything the
+    worker raises is re-raised here.
+    """
+    import umap
+
+    reducer = umap.UMAP(
+        n_components=2,
+        n_neighbors=min(n_neighbors, mat.shape[0] - 1),
+        min_dist=min_dist,
+        metric="euclidean",
+        random_state=random_state,
+    )
+
+    fit_result: list[np.ndarray] = []
+    fit_error: list[Exception] = []
+
+    def _fit() -> None:
+        try:
+            fit_result.append(np.asarray(reducer.fit_transform(mat)))
+        except Exception as exc:  # surfaced via fit_error below
+            fit_error.append(exc)
+
+    worker = threading.Thread(target=_fit, name="umap-fit", daemon=True)
+    started = time.monotonic()
+    worker.start()
+    while True:
+        worker.join(timeout=_HEARTBEAT_SECONDS)
+        if not worker.is_alive():
+            break
+        on_heartbeat(int(time.monotonic() - started))
+
+    if fit_error:
+        raise fit_error[0]
+    return np.ascontiguousarray(fit_result[0], dtype=np.float32)
 
 
 def fit_projection(
@@ -134,16 +215,20 @@ def fit_projection(
         _progress("projecting", "PCA fallback done", n, n)
         return Projection(projection_id, list(ids), coords, "pca")
 
-    _progress("projecting", f"UMAP fit ({n} points)", 0, n)
-    import umap
+    # total=0 keeps the frontend bar in its animated *indeterminate* state for
+    # the whole fit (a non-zero total would freeze it at 0/N — the dead airtime
+    # this code exists to kill); the message carries the live elapsed-seconds.
+    _progress("projecting", f"UMAP fit ({n} points)", 0, 0)
 
-    reducer = umap.UMAP(
-        n_components=2,
-        n_neighbors=min(n_neighbors, n - 1),
+    def _heartbeat(elapsed: int) -> None:
+        _progress("projecting", f"UMAP fit ({n} points) — {elapsed}s elapsed", 0, 0)
+
+    coords = _umap_layout(
+        mat,
+        n_neighbors=n_neighbors,
         min_dist=min_dist,
-        metric="euclidean",
         random_state=random_state,
+        on_heartbeat=_heartbeat,
     )
-    coords = np.ascontiguousarray(reducer.fit_transform(mat), dtype=np.float32)
     _progress("projecting", "UMAP fit done", n, n)
     return Projection(projection_id, list(ids), coords, "umap")

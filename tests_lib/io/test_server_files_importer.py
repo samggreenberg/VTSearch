@@ -148,7 +148,7 @@ class TestImporterMetadata:
         imp = get_importer("server_files")
         assert imp is not None
         assert imp.name == "server_files"
-        assert imp.display_name == "Files"
+        assert imp.display_name == "Manifest"
         assert imp.picker_view == "form"
         assert imp.hidden_from_picker is False
 

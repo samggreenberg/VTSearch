@@ -1,0 +1,84 @@
+// Horizontal color key for the density shading. Docked along the bottom of the
+// browse side panel, beneath the overview minimap. Purely informational.
+.browse-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-sm);
+  pointer-events: none;
+}
+
+.browse-legend-title {
+  font-size: var(--font-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+// The single-item swatch and the density ramp sit side by side in one row.
+.browse-legend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+// The swatch and its tick labels stack so the labels sit under the gradient
+// they annotate. Grows to fill the row width to the right of the single dot.
+.browse-legend-body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+// The swatch itself: a wide, short stripe carrying the density ramp (dense at
+// the right).
+.browse-legend-bar {
+  height: 10px;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+// Ramp tick labels are absolutely placed at their fractional position along the
+// bar and centered on that mark, so each number sits beneath the color it
+// denotes.
+.browse-legend-ticks {
+  position: relative;
+  height: 1em;
+
+  .browse-legend-tick {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+  }
+}
+
+.browse-legend-tick {
+  font-size: var(--font-xs);
+  line-height: 1;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// The one-item swatch: a dot in the colormap's dedicated single colour, the
+// same shape a lone cell is drawn as on the canvas.
+.browse-legend-single {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  flex: none;
+}
+
+.browse-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  flex: none;
+}

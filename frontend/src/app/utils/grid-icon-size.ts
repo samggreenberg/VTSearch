@@ -24,7 +24,8 @@ const GRID_GAP = 4;
 export function snapPanelWidthToGridColumns(panelEl: HTMLElement, currentPanelWidth: number): number | null {
   const gridEl = (
     panelEl.querySelector('.media-list.grid-layout') ??
-    panelEl.querySelector('.vote-list.grid-layout')
+    panelEl.querySelector('.vote-list.grid-layout') ??
+    panelEl.querySelector('.bsp-list.grid-layout')
   ) as HTMLElement | null;
   if (!gridEl) return null;
 

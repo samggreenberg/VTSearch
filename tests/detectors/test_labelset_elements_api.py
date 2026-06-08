@@ -233,6 +233,87 @@ class TestLabelElementThumbnail:
         res = client.get(f"/api/detectors/cross-ds-model/labels/{target['id']}/thumbnail")
         assert res.status_code == 404
 
+    def test_serves_in_dataset_image_with_only_media_path(self, client, tmp_path):
+        """Regression: a thin-loaded image (``media_path`` set, ``media_bytes``
+        absent) - e.g. a local-folder import - must serve a thumbnail, just as
+        the center viewer's ``/api/medias/<id>/image`` does. The in-memory fast
+        path used to read ``media_bytes`` only and, finding none, fell through
+        to origin resolution that 404s, so the right pane showed no thumbnails
+        even though clicking an entry rendered the full image fine.
+        """
+        import hashlib
+
+        from helpers import make_png_bytes
+
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.store import _detector_path, _write_detector
+        from vtsearch.state import medias
+
+        png = make_png_bytes(color=(10, 20, 30))
+        img_file = tmp_path / "folder_img.png"
+        img_file.write_bytes(png)
+        md5 = hashlib.md5(png).hexdigest()  # noqa: S324 - identity key, not security
+
+        origin = {"importer": "folder", "params": {"path": str(tmp_path)}}
+        cid = 987654
+        media = {
+            "id": cid,
+            "media_type": "image",
+            "embedder": "siglip",
+            "md5": md5,
+            "filename": "folder_img.png",
+            # Thin load: only a path on disk, no bytes held in memory.
+            "media_path": str(img_file),
+            "origin": origin,
+            "origin_name": "folder_img.png",
+        }
+
+        name = "folder-img-model"
+        labelset = {
+            "labels": [
+                {
+                    "md5": md5,
+                    "label": "good",
+                    "origin": origin,
+                    "origin_name": "folder_img.png",
+                    "filename": "folder_img.png",
+                }
+            ]
+        }
+        _write_detector(
+            _detector_path(name),
+            {
+                "name": name,
+                "text_query": "",
+                "media_type": "image",
+                "examples": [],
+                "labelset": labelset,
+            },
+        )
+        element_id = stable_element_id(LabelSet.from_dict(labelset).elements[0])
+
+        saved = dict(medias)
+        medias[cid] = media
+        try:
+            res = client.get(f"/api/detectors/{name}/labels/{element_id}/thumbnail")
+            assert res.status_code == 200, res.get_json()
+            # The thumbnail route downscales/re-encodes the image (so a labelset
+            # of many high-res items doesn't decode every full-size bitmap at
+            # once), so assert a valid bounded image rather than byte-equality.
+            import io  # noqa: PLC0415
+
+            from PIL import Image  # noqa: PLC0415
+
+            from vtscore.media.image.thumbnail import DEFAULT_MAX_DIM  # noqa: PLC0415
+
+            assert res.mimetype in ("image/jpeg", "image/png")
+            with Image.open(io.BytesIO(res.data)) as thumb_img:
+                assert max(thumb_img.size) <= DEFAULT_MAX_DIM
+        finally:
+            medias.clear()
+            medias.update(saved)
+
 
 # ---------------------------------------------------------------------------
 # Cross-dataset: voting in dataset B preserves dataset A's labels on disk

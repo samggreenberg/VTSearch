@@ -137,12 +137,6 @@
   --bg-primary: var(--bg-panel);
   --accent-color: var(--accent);
   --color-accent: var(--accent);
-  // Per-detector accent. Components opt in by setting `--detector-hue: <0-359>`
-  // (typically via inline style bound to `detectorHue(detector.name)`); these
-  // vars resolve the hue against theme-specific saturation/lightness. The
-  // fallback hue keeps colors readable when `--detector-hue` is unset.
-  --detector-accent: hsl(var(--detector-hue, 230), 55%, 70%);
-  --detector-accent-bg: hsla(var(--detector-hue, 230), 60%, 60%, 0.22);
   --error: var(--color-bad);
   --error-text: var(--color-bad);
   --error-border: var(--border-secondary);
@@ -161,15 +155,24 @@
 }
 
 [data-theme="light"] {
-  --bg-body: #f0f2f5;
+  // Neutral ramp. The desk (--bg-body) is a clearly-grayed slate so that white
+  // surfaces (cards, modals, dropdowns) and the lighter side panels read as
+  // *raised* against it - mirroring the dark theme, where --bg-surface sits a
+  // visible step above the near-black --bg-body. A near-white desk (the old
+  // #f0f2f5) made white cards blend into the background. Elevation order, low
+  // to high: hover < body < subtle < panel < surface.
+  --bg-body: #e4e7ef;
   --bg-surface: #ffffff;
-  --bg-panel: #f5f6fa;
-  --bg-hover: #e4e6f0;
-  --bg-subtle: #eaecf2;
-  --bg-secondary-btn: #e0e2ea;
-  --border: #d0d3dc;
-  --border-secondary: #c0c3cc;
-  --border-subtle: #c8cad6;
+  --bg-panel: #f1f3f8;
+  --bg-hover: #dbe0ec;
+  --bg-subtle: #edeff4;
+  --bg-secondary-btn: #dde1ec;
+  // Border ramp, faintest to strongest: subtle < border < secondary. (Unlike
+  // dark, where "fainter" means darker/closer-to-bg, here fainter means
+  // lighter/closer-to-the-white-surface the line sits on.)
+  --border: #c9cdd9;
+  --border-secondary: #b4b9c7;
+  --border-subtle: #dadde6;
   --text-primary: #1a1a2e;
   --text-secondary: #555;
   --text-muted: #666;
@@ -203,7 +206,7 @@
   --status-green-dot: #43a047;
   --status-green-label: #2e7d32;
   --status-green-sub: #66bb6a;
-  --scrollbar-thumb: #c0c3cc;
+  --scrollbar-thumb: #bcc1ce;
   --scrollbar-thumb-hover: #5a68d8;
   --badge-embedding: #c99000;
   --btn-icon-hover-bg: rgba(0, 0, 0, 0.07);
@@ -215,8 +218,6 @@
   --bg-primary: var(--bg-panel);
   --accent-color: var(--accent);
   --color-accent: var(--accent);
-  --detector-accent: hsl(var(--detector-hue, 230), 50%, 42%);
-  --detector-accent-bg: hsla(var(--detector-hue, 230), 55%, 50%, 0.18);
   --error: var(--color-bad);
   --error-text: var(--color-bad);
   --error-border: #e57373;
@@ -289,10 +290,6 @@
   --bg-primary: var(--bg-panel);
   --accent-color: var(--accent);
   --color-accent: var(--accent);
-  // Highviz: skip per-detector hues so the yellow accessibility accent is
-  // not diluted. All detector surfaces fall back to the global accent.
-  --detector-accent: var(--accent);
-  --detector-accent-bg: var(--accent-highlight-bg);
   --error: var(--color-bad);
   --error-text: var(--color-bad);
   --error-border: #ff4444;

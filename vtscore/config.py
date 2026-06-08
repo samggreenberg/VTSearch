@@ -62,31 +62,12 @@ def resolve_device() -> str:
         return "cpu"
 
 
-def _parse_server_roots(value: str | None) -> tuple[Path, ...]:
-    """Parse ``VTSEARCH_SERVER_ROOTS`` into a tuple of resolved Paths.
-
-    Splits on :data:`os.pathsep` (``:`` on Unix, ``;`` on Windows).  Empty
-    segments are ignored.  When the env var is unset or empty the tuple
-    contains a single entry (``Path.cwd()`` at import time) which
-    reproduces the historical "anything under CWD" behaviour exactly.
-    """
-    if not value:
-        return (Path.cwd().resolve(),)
-    roots: list[Path] = []
-    for segment in value.split(os.pathsep):
-        segment = segment.strip()
-        if segment:
-            roots.append(Path(segment).resolve())
-    return tuple(roots) if roots else (Path.cwd().resolve(),)
-
-
-# Allowed roots for the server file browser and server-path importers/exporters.
-# In single-user mode these define the directories the user is permitted to
-# read from and write to via the API.  The first entry is the default browse
-# root (what ``/api/browse`` shows when no ``path`` parameter is provided).
-# Multi-user mode is unaffected; each user is still confined to their own
-# ``data/<username>/`` subtree regardless of this setting.
-SERVER_ROOTS: tuple[Path, ...] = _parse_server_roots(os.environ.get("VTSEARCH_SERVER_ROOTS"))
+# Server-side file access is governed by the active login provider, not a
+# configurable allow-list.  In single-user / no-auth mode the lone trusted user
+# may read from and write to any server-readable path (server-path importers,
+# exporters, and the file browser are unrestricted).  In multi-user mode each
+# user is confined to their own ``data/<username>/`` subtree.  See
+# :func:`vtscore.security.path_validation.get_file_access_base_dir`.
 
 # Maximum size (in megabytes) accepted for a single HTTP request body.  Wired
 # into Flask's ``MAX_CONTENT_LENGTH`` config in ``app.py``.  ``0`` (the
@@ -148,6 +129,20 @@ AST_MODEL_ID = "MIT/ast-finetuned-audioset-10-10-0.4593"
 AST_SAMPLE_RATE = 16000  # AST expects 16 kHz mono
 WHISPER_MODEL_ID = "openai/whisper-base"
 WHISPER_SAMPLE_RATE = 16000  # Whisper expects 16 kHz mono
+# ParaSpeechCLAP: dual-encoder speech↔text "style" CLAP (MIT-licensed).
+# Unlike the AST / Whisper speech embedders, it has a paired text tower, so
+# text queries like "a deep, raspy voice" or "a whispered, anxious style" land
+# in the same space as the speech embeddings.  Reconstructed from the upstream
+# checkpoint via ``_paraspeechclap_model.py`` (WavLM speech + Granite text +
+# projection heads); the ``combined`` variant covers both speaker-level
+# (pitch/texture/clarity) and utterance-level (emotion/speaking-style) attributes.
+PARASPEECHCLAP_SPEECH_MODEL_ID = "microsoft/wavlm-large"
+PARASPEECHCLAP_TEXT_MODEL_ID = "ibm-granite/granite-embedding-278m-multilingual"
+PARASPEECHCLAP_CHECKPOINT_REPO = "ajd12342/paraspeechclap-combined"
+PARASPEECHCLAP_CHECKPOINT_FILE = "paraspeechclap-combined.pth.tar"
+PARASPEECHCLAP_EMBED_DIM = 768
+PARASPEECHCLAP_SAMPLE_RATE = 16000  # WavLM expects 16 kHz mono
+PARASPEECHCLAP_MAX_SAMPLES = 16000 * 30  # cap clips at 30 s to bound CPU memory/latency
 BGE_MODEL_ID = "BAAI/bge-base-en-v1.5"
 LANGUAGEBIND_VIDEO_MODEL_ID = "LanguageBind/LanguageBind_Video_V1.5_FT"
 VIDEOMAE_MODEL_ID = "OpenGVLab/VideoMAEv2-Base"

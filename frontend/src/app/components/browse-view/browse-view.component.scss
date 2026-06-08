@@ -37,6 +37,33 @@
   color: var(--text-muted);
 }
 
+// Top-left overlay cluster, anchored to ``.browse-main`` like the other
+// overlays. Stacks the Back affordance (to Find in subset mode, to the
+// dashboard in full-dataset mode) above the Re-project button so the two
+// never overlap regardless of mode.
+.browse-tools-left {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+// Re-fit UMAP over the displayed items into a fresh layout. The icon sits
+// inline with the label; mirrors the secondary-button look of ``.browse-back``.
+.browse-reproject {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+
+  vt-icon {
+    line-height: 0;
+  }
+}
+
 .browse-info {
   position: absolute;
   bottom: var(--space-md);
@@ -59,32 +86,96 @@
   color: var(--text-primary);
 }
 
-// Shown in place of the minimap once it's hidden, so the overview can be
-// brought back. Sits in the same lower-right corner the minimap occupies.
-.browse-minimap-show {
-  position: absolute;
-  bottom: var(--space-md);
-  right: var(--space-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 28px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color var(--transition-base), border-color var(--transition-base);
+// Ready-state layout: the canvas region, a draggable divider, and the docked
+// side panel. The panel width is driven by the ``--browse-panel-width`` custom
+// property the divider drag updates (persisted as ``browse_panel_width``).
+.browse-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8px var(--browse-panel-width, 300px);
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 
-  &:hover {
-    color: var(--text-primary);
-    border-color: var(--text-primary);
+// Holds the canvas plus its on-canvas overlays (controls, info, hover
+// preview); the positioning context those overlays anchor to.
+.browse-main {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+// 8px hit target with a 4px visible line centered inside; same pattern as the
+// Find view's panel dividers.
+.browse-divider {
+  width: 8px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 2px;
+    width: 4px;
+    background: var(--border);
+    transition: background var(--transition-base);
   }
 
-  vt-icon {
-    line-height: 0;
+  &:hover::after {
+    background: var(--accent);
   }
+}
+
+// The docked side panel: selection list on top, then the overview minimap with
+// the density legend pinned beneath it (roughly a 2:1 split).
+.browse-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+}
+
+.browse-side-selection {
+  flex: 2 1 0;
+  min-height: 0;
+  display: block;
+  overflow: hidden;
+}
+
+// ``flex-basis: 0`` (not ``auto``) is load-bearing: the docked minimap sets an
+// explicit pixel height on its canvas from a ResizeObserver, so a content-sized
+// basis would feed that height back into this row and ratchet it until it
+// swallows the whole panel, crushing the selection list above to nothing.
+//
+// Stacks the overview minimap above the legend so the legend sits flush at the
+// bottom of the panel with no dead space beneath it; the minimap takes the rest
+// of the meta height (a short, wide rectangle).
+.browse-side-meta {
+  flex: 1 1 0;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.browse-side-minimap {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+// The density legend, pinned to the very bottom of the panel under the minimap.
+.browse-side-legend {
+  flex: none;
+  display: block;
 }
 
 // Top-right control cluster: the zoom +/- pill sits beside the hex-size pill.
@@ -99,8 +190,10 @@
 // Zoom (true span) control and on-screen hex size control. Both mirror the
 // grouped pill look of the Find view's grid-size buttons (.vc-btn); the hex
 // pill reuses the image icon at 11px / 18px, the zoom pill uses +/- glyphs.
+.browse-select,
 .browse-zoom,
-.browse-size {
+.browse-size,
+.browse-shape {
   display: inline-flex;
 }
 
@@ -131,7 +224,7 @@
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   }
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled):not(.browse-size-btn--active) {
     color: var(--text-primary);
     border-color: var(--text-primary);
     z-index: 1;
@@ -145,11 +238,34 @@
   vt-icon {
     line-height: 0;
   }
+
+  // The region-select toggle carries an inline dashed-rectangle SVG rather than
+  // a vt-icon child; keep it from adding a baseline gap inside the flex button.
+  svg {
+    display: block;
+  }
 }
 
-// +/- zoom glyphs need explicit sizing since they carry no icon child.
-.browse-size-btn--text {
-  font-size: var(--font-lg);
-  font-weight: var(--weight-medium);
+// Hex/square glyph buttons carry a unicode shape rather than an icon child.
+.browse-size-btn--glyph {
+  font-size: var(--font-md);
   line-height: 1;
+}
+
+// The filled-square glyph (U+25A0) is drawn smaller than the filled-hexagon
+// glyph (U+2B22) at the same font size, so bump it up until the two read as
+// roughly equal-area lattice swatches.
+.browse-size-btn--square-glyph {
+  font-size: calc(var(--font-md) * 1.3);
+}
+
+// The selected bin shape reads as pressed: filled accent surface that stays
+// lit even when not hovered, so the active lattice is obvious at a glance.
+// Mirrors the Find view's ``.vc-btn--active`` treatment.
+.browse-size-btn--active {
+  background: var(--accent-color);
+  color: var(--toggle-active-text);
+  border-color: var(--accent-color);
+  box-shadow: inset 0 1px 3px var(--shadow-dropdown);
+  z-index: 1;
 }

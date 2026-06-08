@@ -81,10 +81,7 @@
           <div class="file-list">
             @for (model of registryModels; track model.id) {
               <button class="file-item" (click)="loadRegistryModel(model)" [title]="'Load detector: ' + model.name">
-                <span class="file-item-name">
-                  <vt-detector-swatch [name]="model.name"></vt-detector-swatch>
-                  {{ model.name }}
-                </span>
+                {{ model.name }}
                 @if (model.num_training) {
                   <span class="item-meta">{{ model.num_training | number }} labels</span>
                 }

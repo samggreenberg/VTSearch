@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, of, Subject } from 'rxjs';
 import { tap, shareReplay, catchError } from 'rxjs/operators';
 import { ProjectionApiService } from './projection-api.service';
-import type { TilePayload } from '../models/projection.models';
+import type { BinShape, TilePayload } from '../models/projection.models';
 
 interface CacheEntry {
   tile: TilePayload;
@@ -15,8 +15,28 @@ export class TileCacheService {
 
   private cache = new Map<string, CacheEntry>();
   private inflight = new Map<string, Observable<TilePayload>>();
-  private readonly MAX_ENTRIES = 512;
+  // Deeper datasets carve more pyramid levels, so a small flat LRU thrashes:
+  // panning back over seen ground misses and the hex grid blanks. Hold more.
+  private readonly MAX_ENTRIES = 2048;
+  // Levels 0..PINNED_LEVELS-1 are the coarse top of the pyramid: a handful of
+  // tiles that cover the whole projection and are the cheapest thing to keep
+  // warm. Exempt them from eviction so a zoom/pan back to the overview is never
+  // a cache miss (and so they're available as a fallback layer later).
+  private readonly PINNED_LEVELS = 3;
   private projectionId = '';
+  // Membership version of the current (subset) projection. Bumped server-side
+  // when items are removed from a subset browse in place; the layout identity
+  // (projectionId) is kept stable so the canvas doesn't re-frame, so this is
+  // what distinguishes "same layout, different contents" for the tile cache.
+  private contentVersion = 0;
+  // The bin shape (hex/square) tiles are currently fetched for. It is part of
+  // the cache key, so switching shapes keeps both binnings cached side by side
+  // (they share one projection id, so the id alone can't tell them apart).
+  private binShape: BinShape = 'hex';
+  // Whether tiles are fetched from the ephemeral subset projection (the
+  // positives of a Find run) rather than the full-dataset projection. The two
+  // have distinct projection ids, so the cache invalidates on switch.
+  private subset = false;
 
   readonly tileLoaded$ = new Subject<TilePayload>();
 
@@ -25,7 +45,26 @@ export class TileCacheService {
       this.cache.clear();
       this.inflight.clear();
       this.projectionId = id;
+      this.contentVersion = 0;
     }
+  }
+
+  setBinShape(shape: BinShape): void {
+    this.binShape = shape;
+  }
+
+  /**
+   * Update the membership version. Entries are keyed by it, so a change makes
+   * the prior version's tiles unreachable (refetched on demand) without
+   * clearing the whole cache — and rides along on the tile URL so the HTTP
+   * cache refreshes too.
+   */
+  setContentVersion(version: number): void {
+    this.contentVersion = version;
+  }
+
+  setSubset(subset: boolean): void {
+    this.subset = subset;
   }
 
   getTile(level: number, tx: number, ty: number): Observable<TilePayload> | null {
@@ -42,7 +81,7 @@ export class TileCacheService {
 
     if (!this.projectionId) return null;
 
-    const req$ = this.projectionApi.getTile(level, tx, ty).pipe(
+    const req$ = this.projectionApi.getTile(this.binShape, level, tx, ty, this.subset, this.cacheToken()).pipe(
       tap((tile) => {
         this.inflight.delete(key);
         this.put(key, tile);
@@ -78,10 +117,16 @@ export class TileCacheService {
     this.cache.clear();
     this.inflight.clear();
     this.projectionId = '';
+    this.contentVersion = 0;
   }
 
   private key(level: number, tx: number, ty: number): string {
-    return `${level}:${tx}:${ty}`;
+    return `${this.binShape}:${this.contentVersion}:${level}:${tx}:${ty}`;
+  }
+
+  /** Cache-bust token for the tile URL: ``<projection_id>:<content_version>``. */
+  private cacheToken(): string {
+    return `${this.projectionId}:${this.contentVersion}`;
   }
 
   private put(key: string, tile: TilePayload): void {
@@ -93,10 +138,14 @@ export class TileCacheService {
 
   private evict(): void {
     const target = Math.floor(this.MAX_ENTRIES * 0.75);
-    const entries = [...this.cache.entries()].sort((a, b) => a[1].lastAccess - b[1].lastAccess);
-    const toRemove = entries.length - target;
-    for (let i = 0; i < toRemove; i++) {
-      this.cache.delete(entries[i][0]);
+    // Only coarse-but-not-pinned tiles are eviction candidates; pinned coarse
+    // levels stay resident. They're few, so they can't crowd out the budget.
+    const candidates = [...this.cache.entries()]
+      .filter(([, e]) => e.tile.level >= this.PINNED_LEVELS)
+      .sort((a, b) => a[1].lastAccess - b[1].lastAccess);
+    const toRemove = this.cache.size - target;
+    for (let i = 0; i < toRemove && i < candidates.length; i++) {
+      this.cache.delete(candidates[i][0]);
     }
   }
 }

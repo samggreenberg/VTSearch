@@ -47,14 +47,22 @@ class TestValidateServerFilepath:
         result = validate_server_filepath("data/output/file.csv", base_dir=tmp_path)
         assert result == (tmp_path / "data" / "output" / "file.csv").resolve()
 
-    def test_defaults_to_cwd(self):
+    def test_relative_defaults_to_cwd(self):
+        """With base_dir=None, a relative path resolves against the CWD."""
         cwd = Path.cwd()
         result = validate_server_filepath("some_file.json")
         assert result == (cwd / "some_file.json").resolve()
 
-    def test_rejects_absolute_outside_cwd(self):
-        with pytest.raises(ValueError, match="must be within"):
-            validate_server_filepath("/etc/passwd")
+    def test_unrestricted_accepts_absolute_anywhere(self):
+        """With base_dir=None (single-user / no-auth) any absolute path is allowed."""
+        result = validate_server_filepath("/etc/passwd")
+        assert result == Path("/etc/passwd")
+
+    def test_unrestricted_accepts_outside_cwd(self, tmp_path):
+        """base_dir=None permits paths far outside the process CWD."""
+        target = tmp_path / "anywhere" / "clip.wav"
+        result = validate_server_filepath(str(target))
+        assert result == target.resolve()
 
     def test_rejects_symlink_escape(self, tmp_path):
         """A symlink that points outside base_dir should be rejected."""
@@ -67,6 +75,61 @@ class TestValidateServerFilepath:
             validate_server_filepath("escape_link/passwd", base_dir=tmp_path)
 
 
+class TestFolderFieldValidation:
+    """The server_folder importer's ``folder`` field is path-validated through
+    the same primitive as the server_files ``server_path`` field (unified
+    policy). In single-user / no-auth mode that validation is unrestricted."""
+
+    def test_folder_field_outside_cwd_accepted_single_user(self, tmp_path):
+        """In single-user mode the importer accepts a folder anywhere on disk."""
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.plugins.normalize import normalize_field_values
+
+        # Single-user (default provider) -> base_dir is None -> unrestricted.
+        from vtsearch.auth import DefaultLoginProvider, get_login_provider, set_login_provider
+
+        outside = tmp_path / "anywhere" / "media"
+        outside.mkdir(parents=True)
+        original = get_login_provider()
+        try:
+            set_login_provider(DefaultLoginProvider())
+            imp = ServerFolderDatasetImporter()
+            out = normalize_field_values(imp, {"path": str(outside), "media_type": "image"})
+            assert out["path"] == str(outside)
+        finally:
+            set_login_provider(original)
+
+    def test_folder_field_outside_user_dir_rejected_multi_user(self, tmp_path):
+        """In multi-user mode the importer still confines to the user data dir."""
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.plugins.normalize import normalize_field_values
+        from vtsearch.auth import LoginProvider, get_login_provider, set_login_provider
+
+        user_dir = tmp_path / "alice"
+        user_dir.mkdir()
+
+        class MultiUserProvider(LoginProvider):
+            name = "multi"
+
+            def get_user(self, request):
+                return "alice"
+
+            def is_authenticated(self, request):
+                return True
+
+            def get_user_data_dir(self, username, base_data_dir):
+                return user_dir
+
+        original = get_login_provider()
+        try:
+            set_login_provider(MultiUserProvider())
+            imp = ServerFolderDatasetImporter()
+            with pytest.raises(ValueError, match="must be within"):
+                normalize_field_values(imp, {"path": "/tmp/outside_the_user_dir", "media_type": "image"})
+        finally:
+            set_login_provider(original)
+
+
 # ---------------------------------------------------------------------------
 # get_file_access_base_dir
 # ---------------------------------------------------------------------------
@@ -76,7 +139,7 @@ class TestGetFileAccessBaseDir:
     """Test that get_file_access_base_dir returns the correct base for each provider."""
 
     def test_default_provider_returns_none(self):
-        """DefaultLoginProvider → None (unrestricted, falls back to CWD)."""
+        """DefaultLoginProvider → None (unrestricted file access)."""
         from vtsearch.auth import DefaultLoginProvider, get_login_provider, set_login_provider
 
         original = get_login_provider()
@@ -291,24 +354,22 @@ class TestMultiUserFileRestriction:
 
             set_login_provider(original)
 
-    def test_default_provider_allows_any_path(self, client):
-        """DefaultLoginProvider allows any path within CWD (single-user mode)."""
+    def test_default_provider_allows_any_path(self, client, tmp_path):
+        """DefaultLoginProvider (single-user) allows any path, even outside CWD."""
         from vtsearch.auth import DefaultLoginProvider, get_login_provider, set_login_provider
 
         original = get_login_provider()
         try:
             set_login_provider(DefaultLoginProvider())
-            # Paths within CWD should be accepted (even if the file doesn't exist,
-            # the path validation itself should pass)
-            cwd = Path.cwd()
-            resp = client.post(
-                "/api/dataset/load-folder",
-                json={"path": str(cwd / "some_folder"), "media_type": "audio"},
-            )
-            # Should not get a "must be within" error; may get "Invalid folder path"
-            # since the folder doesn't exist, but not a path-validation error.
+            # A path well outside the process CWD must not be rejected on
+            # path-validation grounds (it may 400 for "Invalid folder path"
+            # since the folder doesn't exist, but never "must be within").
             # ``load-folder`` is on flask-smorest, so the human-readable text
             # lives under ``message``.
+            resp = client.post(
+                "/api/dataset/load-folder",
+                json={"path": str(tmp_path / "elsewhere" / "some_folder"), "media_type": "audio"},
+            )
             if resp.status_code == 400:
                 assert "must be within" not in resp.get_json().get("message", "")
         finally:

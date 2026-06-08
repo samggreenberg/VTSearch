@@ -16,10 +16,11 @@ from typing import Iterator
 def get_file_access_base_dir() -> Path | None:
     """Return the base directory for file-access validation.
 
-    In single-user mode (:class:`~vtsearch.auth.DefaultLoginProvider`) this
-    returns ``None``, which causes :func:`validate_server_filepath` to fall
-    back to :data:`vtscore.config.SERVER_ROOTS[0]` (``Path.cwd()`` by
-    default).
+    In single-user / no-auth mode (:class:`~vtsearch.auth.DefaultLoginProvider`)
+    this returns ``None``, which tells :func:`validate_server_filepath` to apply
+    **no** confinement: the lone trusted user may read from and write to any
+    server-readable path.  There is no per-user boundary to protect, so the app
+    does not impose one.
 
     In multi-user mode (any non-default provider) this returns the current
     user's data directory so that each user is confined to their own
@@ -29,22 +30,24 @@ def get_file_access_base_dir() -> Path | None:
 
     provider = get_login_provider()
     if isinstance(provider, DefaultLoginProvider):
-        return None  # single-user: unrestricted (CWD)
+        return None  # single-user / no-auth: unrestricted file access
     return get_user_data_dir()
 
 
 def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:
-    """Validate that *filepath_str* resolves within *base_dir*.
+    """Resolve *filepath_str*, optionally asserting it stays within *base_dir*.
 
     Parameters
     ----------
     filepath_str:
         User-supplied file path (absolute or relative).
     base_dir:
-        The directory the resolved path must reside in.
-        Defaults to :data:`vtscore.config.SERVER_ROOTS[0]` (which itself
-        falls back to ``Path.cwd()`` when ``VTSEARCH_SERVER_ROOTS`` is
-        unset).
+        The single directory the resolved path must reside in.  When ``None``
+        (the single-user / no-auth case; see :func:`get_file_access_base_dir`)
+        the path is **unrestricted**: it is resolved (relative paths against the
+        process CWD) and returned without any containment check.  When a path is
+        given (the per-user data dir in multi-user mode) it is the only allowed
+        root and an escape raises.
 
     Returns
     -------
@@ -54,29 +57,27 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
     Raises
     ------
     ValueError
-        If the resolved path is outside *base_dir*.
+        If *base_dir* is given and the resolved path escapes it.
     """
-    if base_dir is None:
-        from vtscore.config import SERVER_ROOTS  # noqa: PLC0415
-
-        base_dir = SERVER_ROOTS[0]
-
     path = Path(filepath_str)
 
-    # Resolve relative paths against base_dir, absolute paths as-is
+    if base_dir is None:
+        # Single-user / no-auth mode: every server-readable path is allowed.
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        return path.resolve()
+
+    # Multi-user: confine to base_dir.  Resolve relative paths against it.
     if not path.is_absolute():
         path = base_dir / path
 
     resolved = path.resolve()
-    base_resolved = base_dir.resolve()
-
     try:
-        resolved.relative_to(base_resolved)
+        resolved.relative_to(base_dir.resolve())
     except ValueError:
         raise ValueError(
-            f"Path must be within '{base_resolved}'. The given path resolves outside the allowed directory."
-        )
-
+            f"The given path resolves outside the allowed directory. Paths must be within '{base_dir.resolve()}'."
+        ) from None
     return resolved
 
 

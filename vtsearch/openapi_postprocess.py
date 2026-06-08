@@ -76,6 +76,59 @@ def _operation_ids_for_view(name: str, op_keys: list[tuple[str, str]]) -> dict[t
     return assigned
 
 
+# flask-smorest names the 422 validation-error response component (and writes
+# its ``description``) from ``http.HTTPStatus(422)``. Python 3.13 renamed that
+# member from ``UNPROCESSABLE_ENTITY`` / "Unprocessable Entity" to the RFC 9110
+# spelling ``UNPROCESSABLE_CONTENT`` / "Unprocessable Content", so the generated
+# spec — component key, every ``$ref`` to it, and the description — depends on
+# the interpreter running the dump. Pin it to the modern name so the snapshot is
+# byte-identical across Python versions and ``./run-tests.sh`` doesn't report
+# environment-only drift.
+_CANONICAL_422_NAME = "UNPROCESSABLE_CONTENT"
+_CANONICAL_422_DESCRIPTION = "Unprocessable Content"
+_LEGACY_422_NAME = "UNPROCESSABLE_ENTITY"
+
+_RESPONSE_REF_PREFIX = "#/components/responses/"
+
+
+def _rewrite_response_refs(node: Any, old_ref: str, new_ref: str) -> None:
+    """Recursively rewrite every ``$ref`` equal to ``old_ref`` to ``new_ref``."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "$ref" and value == old_ref:
+                node[key] = new_ref
+            else:
+                _rewrite_response_refs(value, old_ref, new_ref)
+    elif isinstance(node, list):
+        for item in node:
+            _rewrite_response_refs(item, old_ref, new_ref)
+
+
+def normalize_unprocessable_response(spec: dict[str, Any]) -> None:
+    """Pin the 422 response component to a Python-version-independent name.
+
+    Renames the legacy ``UNPROCESSABLE_ENTITY`` component (emitted by
+    flask-smorest on Python < 3.13) to the canonical ``UNPROCESSABLE_CONTENT``,
+    rewrites every ``$ref`` that pointed at it, and forces the canonical
+    description. A no-op when the spec already uses the canonical name.
+    """
+    responses = spec.get("components", {}).get("responses")
+    if not isinstance(responses, dict):
+        return
+
+    if _LEGACY_422_NAME in responses and _CANONICAL_422_NAME not in responses:
+        responses[_CANONICAL_422_NAME] = responses.pop(_LEGACY_422_NAME)
+        _rewrite_response_refs(
+            spec,
+            _RESPONSE_REF_PREFIX + _LEGACY_422_NAME,
+            _RESPONSE_REF_PREFIX + _CANONICAL_422_NAME,
+        )
+
+    canonical = responses.get(_CANONICAL_422_NAME)
+    if isinstance(canonical, dict) and "description" in canonical:
+        canonical["description"] = _CANONICAL_422_DESCRIPTION
+
+
 def assign_operation_ids(app: Flask, spec: dict[str, Any]) -> None:
     """Mutate ``spec`` to assign an ``operationId`` to every operation.
 

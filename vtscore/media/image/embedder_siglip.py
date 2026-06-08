@@ -12,6 +12,7 @@ from vtscore.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
     extract_tensor as _extract_tensor,
+    hf_token,
     intercept_tqdm_progress,
     intercept_weight_loading_progress,
     load_pretrained_local_first,
@@ -79,7 +80,12 @@ class ImageSiglipEmbedder(MediaEmbedder):
             intercept_weight_loading_progress(self._on_progress, "Loading SigLIP model weights…"),
         ):
             self._model = load_pretrained_local_first(
-                SiglipModel.from_pretrained, SIGLIP_MODEL_ID, low_cpu_mem_usage=True, cache_dir=cache_dir, token=False
+                SiglipModel.from_pretrained,
+                SIGLIP_MODEL_ID,
+                low_cpu_mem_usage=True,
+                cache_dir=cache_dir,
+                token=hf_token(),
+                on_progress=self._on_progress,
             )
         self._model = self._model.to("cpu")
         self._on_progress("loading", "Loading SigLIP processor…", 0, 0)
@@ -87,10 +93,10 @@ class ImageSiglipEmbedder(MediaEmbedder):
             from transformers import SiglipImageProcessor, SiglipTokenizer  # noqa: PLC0415
 
             image_processor = load_pretrained_local_first(
-                SiglipImageProcessor.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False
+                SiglipImageProcessor.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=hf_token()
             )
             tokenizer = load_pretrained_local_first(
-                SiglipTokenizer.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=False
+                SiglipTokenizer.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=hf_token()
             )
             self._processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 

@@ -360,8 +360,7 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
 
                 def _embed_progress(name: str, done: int, total: int) -> None:
                     tracker.check_cancelled()
-                    msg = f"{base_msg} ({done}/{total})" if total else base_msg
-                    tracker.update("loading", msg, done, total, step=1, total_steps=1)
+                    tracker.update("loading", base_msg, done, total, step=1, total_steps=1)
 
                 # ``populate_label_embeddings`` clears the cache when it detects
                 # the embedder change, so this rebuilds against the new embedder
@@ -428,16 +427,17 @@ def load_detector_route(body: dict):  # noqa: C901
         sync_labels_to_loaded_detector()
 
     if detector_id is None:
-        from vtscore.detectors.registry import remove_loaded_detector_id, set_find_mode
+        from vtscore.detectors.registry import remove_loaded_detector_id
 
         det_ctx = get_active_detector_context()
         prev_id = det_ctx.detector_id if det_ctx.detector_id else None
         if prev_id:
             from vtsearch.state import unregister_detector_context
 
+            # Find mode lived on this detector's context (per-detector), so
+            # tearing the context down clears it; no separate global to reset.
             unregister_detector_context(prev_id)
             remove_loaded_detector_id(prev_id)
-        set_find_mode(False)
         return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
     if is_detector_loaded(detector_id):
@@ -551,7 +551,7 @@ def load_detector_route(body: dict):  # noqa: C901
                                 tracker.check_cancelled()
                                 tracker.update(
                                     "loading",
-                                    f"Embedding labels… ({done}/{total})",
+                                    "Embedding labels…",
                                     done,
                                     total,
                                     step=3,

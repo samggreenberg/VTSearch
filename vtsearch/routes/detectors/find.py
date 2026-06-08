@@ -429,7 +429,6 @@ def _partition_find_results(media_results: dict[int, dict]) -> tuple[list[dict],
 def _score_dataset(
     ds: dict,
     detector_configs: list[dict],
-    datasets_total: int,
     scored_units: int,
     total_scoring_units: int,
 ) -> tuple[list[dict], list[dict], int, int, str]:
@@ -459,10 +458,7 @@ def _score_dataset(
     media_results = _seed_media_results(all_ids, temp_medias, ds["name"])
 
     for dc in detector_configs:
-        score_label = f'Scoring with "{dc["name"]}" on "{ds["name"]}"'
-        if datasets_total > 1 or len(detector_configs) > 1:
-            score_label += f" ({scored_units}/{new_total} items)"
-        score_label += "…"
+        score_label = f'Scoring with "{dc["name"]}" on "{ds["name"]}"…'
         update_find_progress(
             "running",
             score_label,
@@ -544,10 +540,7 @@ def multi_find(body: dict):
     scored_units = 0
 
     for di, ds in enumerate(datasets):
-        ds_label = f'Loading dataset "{ds["name"]}"'
-        if len(datasets) > 1:
-            ds_label += f" ({di + 1}/{len(datasets)})"
-        ds_label += "…"
+        ds_label = f'Loading dataset "{ds["name"]}"…'
         update_find_progress(
             "running",
             ds_label,
@@ -560,7 +553,6 @@ def multi_find(body: dict):
         positives, negatives, scored_units, added_units, ds_media_type = _score_dataset(
             ds,
             detector_configs,
-            len(datasets),
             scored_units,
             total_scoring_units,
         )

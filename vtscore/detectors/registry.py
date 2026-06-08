@@ -34,10 +34,6 @@ _entries: list[dict[str, Any]] | None = None
 # Set of detector IDs currently loaded in memory (each has a DetectorContext).
 _loaded_ids: set[str] = set()
 
-# When ``True`` the detector most recently used for scoring is in "find mode"
-# - its labels should NOT be synced back to the detector's saved labelset.
-_find_mode: bool = False
-
 
 # ---------------------------------------------------------------------------
 # Persistence
@@ -241,22 +237,36 @@ def get_loaded_detector_ids() -> set[str]:
 
 
 def is_find_mode() -> bool:
-    """Return ``True`` if the active detector is in find/scoring mode."""
-    with _lock:
-        return _find_mode
+    """Return ``True`` if the active detector's votes are find/scoring output.
+
+    Find mode is per-detector state (``DetectorContext.find_mode``), not a
+    process global: a scoring pass on one detector must never block vote
+    syncing on another, and switching to a different detector must not inherit
+    the previous detector's find state.
+    """
+    from vtscore.state.core import _state_lock, get_active_detector_context
+
+    with _state_lock:
+        return get_active_detector_context().find_mode
 
 
 def set_find_mode(enabled: bool = True) -> None:
-    """Set or clear find mode for the active detector."""
-    global _find_mode
-    with _lock:
-        _find_mode = enabled
+    """Set or clear find mode on the active detector context.
+
+    No-op when no real detector is active (the empty / request-missing
+    sentinel contexts have no labelset to protect).
+    """
+    from vtscore.state.core import _state_lock, get_active_detector_context
+
+    with _state_lock:
+        det_ctx = get_active_detector_context()
+        if det_ctx.detector_id:
+            det_ctx.find_mode = enabled
 
 
 def reset_for_tests() -> None:
     """Reset the in-memory cache (for test isolation)."""
-    global _entries, _find_mode
+    global _entries
     with _lock:
         _entries = None
         _loaded_ids.clear()
-        _find_mode = False

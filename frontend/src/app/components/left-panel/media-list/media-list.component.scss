@@ -27,6 +27,26 @@
   overflow-x: hidden;
 }
 
+// Virtualized grid: each CDK item is a single row of cards (laid out with the
+// same column template as the plain grid), so only on-screen rows are mounted.
+.grid-virtual {
+  padding-inline: var(--space-xs);
+}
+
+.grid-virtual-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));
+  gap: var(--space-xs);
+  align-content: start;
+  justify-content: start;
+  box-sizing: border-box;
+
+  // The threshold marker occupies a whole row on its own.
+  .media-threshold-line {
+    grid-column: 1 / -1;
+  }
+}
+
 .media-threshold-line {
   display: flex;
   align-items: center;

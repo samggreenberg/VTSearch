@@ -142,7 +142,8 @@
                 [columnOrder]="visibleDatasetColumns"
                 [selected]="isDatasetSelected(dataset.id)"
                 [dimmed]="isLoading && !isDatasetSelected(dataset.id)"
-                [loadingTask]="loadingTasksSvc.getInlineTask(dataset.id)"
+                [loadingTask]="browsePrep.displayTask(dataset.id) ?? loadingTasksSvc.getInlineTask(dataset.id)"
+                [taskKind]="browsePrep.taskKind(dataset.id)"
                 [statsOpen]="modals.stats.open && modals.stats.datasetId === dataset.id"
                 [deleteConfirmOpen]="deletingDatasetId === dataset.id"
                 (rowClick)="!isLoading && toggleDatasetSelection(dataset.id, $event)"
@@ -153,8 +154,8 @@
                 (load)="loadDataset(dataset)"
                 (browse)="browseDataset(dataset)"
                 (security)="editDatasetSecurity(dataset)"
-                (cancelTask)="loadingTasksSvc.cancelLoadingTask($event)"
-                (dismissTask)="loadingTasksSvc.dismissLoadingTask($event)"
+                (cancelTask)="onCancelDatasetTask($event)"
+                (dismissTask)="onDismissDatasetTask($event)"
               />
             }
           </tbody>

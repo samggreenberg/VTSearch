@@ -25,8 +25,14 @@ dependencies = [
     "requests",
     "tqdm",
     "scikit-learn",
+    # Imported directly by vtscore.embedding.loader for the startup
+    # threadpool-controller warm-up (also a scikit-learn dependency).
+    "threadpoolctl",
     "umap-learn",
     "transformers",
+    # Imported directly by vtscore.media.embedder for the Hub metadata
+    # preflight (also a transformers dependency).
+    "huggingface_hub",
     "pandas",
     "pyyaml",
     "matplotlib",
@@ -164,9 +170,12 @@ DEP001 = [
 # import them directly for embedder weight-loading progress and EUPE
 # preprocessing transforms. Declaring them as first-party doesn't add
 # anything: the install path already pins them through the parent.
+# ``huggingface_hub`` ships with ``transformers`` and is imported directly by
+# the ParaSpeechCLAP embedder (``hf_hub_download`` for its checkpoint file).
 DEP003 = [
     "safetensors",
     "torchvision",
+    "huggingface_hub",
 ]
 # DEP002: declared but not imported. Tools we run via their CLIs
 # (pytest, ruff, …), runtime helpers loaded by name (gunicorn), or
@@ -226,11 +235,12 @@ exclude_lines = [
 
 [tool.codespell]
 # Skip generated, binary, frontend node_modules (including nested
-# node_modules npm installs), and serialized formats.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json"
+# node_modules npm installs), serialized formats, and any in-repo
+# virtualenv (third-party site-packages must never be spell-checked).
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method),
 # and stylistic spellings the project uses consistently (re-use,
 # pre-select, unparseable, invokable).
-ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,ser"
+ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,ser,lod"

@@ -1,9 +1,11 @@
 # Scalability Implementation Plan
 
-**Status:** Open; none of the phases below shipped yet.  Separately, the
-CLI-specific streaming work (lazy folder enumeration, per-chunk embed, and
-streaming export — partial fixes for S20/S15/S13 on the `--autodetect` target
-side) **has** shipped; see
+**Status:** Mostly open.  **§3.3 (S16) virtual grid mode has shipped** — the
+gallery now virtualizes both grid and list and no longer freezes the UI at a
+few hundred items (added §3.4/S17 as the deferred backend cancel/progress
+follow-up surfaced by that work).  Separately, the CLI-specific streaming work
+(lazy folder enumeration, per-chunk embed, and streaming export — partial
+fixes for S20/S15/S13 on the `--autodetect` target side) **has** shipped; see
 [`cli-stream-massive-images.md`](cli-stream-massive-images.md).
 
 **Parent:** [`scalability.md`](scalability.md); the brainstorm that defines
@@ -510,40 +512,49 @@ flag.
 
 ---
 
-### 3.3  Virtual grid mode (S16)
+### ~~3.3  Virtual grid mode (S16)~~ — **SHIPPED**
 
-**File:** `frontend/src/app/components/left-panel/media-list/`
+`media-list/` now chunks `cachedOrderedItems` into fixed-width rows through a
+`CdkVirtualScrollViewport` (one virtual item = one row of `gridColumns` cards;
+columns derived from measured viewport width, row stride measured from a real
+card via `ResizeObserver`; threshold marker gets its own full-width row;
+grid-aware `scrollToIndex`/selected-scroll/prefetch). The list-virtualization
+threshold dropped 500 → **150**; grid virtualizes above 80. Result: list↔grid
+toggles ~169 ms (was ~1129 ms), grid switch ~18 ms (was ~1814 ms), ~20–34
+components in the DOM instead of 412.
 
-**Problem:** Grid mode renders every item into the DOM.  At > 500 items
-Chrome layout stalls; at > 5 000 items the tab may crash.
+---
 
-**Fix:** Use `CdkVirtualScrollViewport` in grid mode with a fixed-height
-row that holds `floor(viewport_width / item_width)` grid cells.
+### 3.4  Load Cancel responsiveness during pickle read (S17) — open follow-up
 
-The CDK virtual scroller works with 1D lists, not 2D grids.  The standard
-approach is to group items into row arrays and give the viewport a list
-of rows:
+**Files:** `vtscore/datasets/container.py` (`read_container`),
+`vtscore/datasets/loader_pickle.py`, `vtscore/datasets/load_pipeline.py`
 
-```typescript
-// Computed when cachedOrderedItems changes
-get virtualRows(): MediaItem[][] {
-  const cols = Math.floor(this.viewportWidth / this.gridIconSize);
-  const rows: MediaItem[][] = [];
-  for (let i = 0; i < this.cachedOrderedItems.length; i += cols) {
-    rows.push(this.cachedOrderedItems.slice(i, i + cols));
-  }
-  return rows;
-}
-```
+**Problem (found while investigating the S16 freeze, deferred for now):** the
+dataset load runs in a daemon thread and streams progress over SSE, so for
+the demo datasets the dashboard load stays responsive with a working Cancel.
+But on a large `.pkl` two things still read as "frozen, Cancel does nothing":
 
-The template renders each row as a flex container with `cols` items.
-`itemSize` is set to `this.gridIconSize + gap`.
+1. **`read_container` is one un-cancellable, no-progress step.** It does a
+   full ZIP `zf.read("medias.pkl")` (DEFLATE decompress of the whole blob) +
+   `safe_pickle_load` of the entire dict.  While it runs the bar sits at
+   "Reading…" and — because the dev server is a single process holding the
+   GIL through that pure-Python work — the Cancel/SSE endpoints can't be
+   serviced.  So the progress bar appears stuck and Cancel is inert until it
+   finishes.
+2. **Cancel is unchecked for the whole import phase.** `_run_importer(...)`
+   runs the entire pickle-conversion loop with no `tracker.check_cancelled()`
+   inside; the first cancel check is only *after* it returns
+   (`load_pipeline.py`, right after `_run_importer`).  So even once the read
+   finishes, a click during conversion doesn't abort until the loop ends.
 
-Existing breakpoints (`VIRTUAL_SCROLL_THRESHOLD = 500`) apply to both list
-and grid mode.
-
-**Risk:** medium; requires layout changes to the grid template and dynamic
-`itemSize` computation when icon-size settings change.
+**Fix direction:** add `check_cancelled()` inside the
+`load_dataset_from_pickle` conversion loop (it already reports progress every
+`_progress_interval` items — check cancel there too), and give the
+read/decompress phase coarse progress + a cancellation point (e.g. stream the
+ZIP member, or at minimum surface an indeterminate "Reading…" state the user
+understands is uninterruptible).  Overlaps with **S15 (streaming pickle
+load)** below.
 
 ---
 

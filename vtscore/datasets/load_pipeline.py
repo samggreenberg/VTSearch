@@ -591,6 +591,7 @@ def _auto_register_dataset(
     created_by: str = "",
     display_name: str | None = None,
     ingest_started_at: float | None = None,
+    on_stage: Callable[[str], None] | None = None,
 ) -> dict | None:
     """Save *media_dict* as a pkl and register in the dataset registry.
 
@@ -601,6 +602,8 @@ def _auto_register_dataset(
     """
     if not media_dict:
         return None
+
+    _stage = on_stage or (lambda _msg: None)
 
     first = next(iter(media_dict.values()))
     media_type = first.get("media_type", "audio")
@@ -657,13 +660,16 @@ def _auto_register_dataset(
             name=name,
             created_at=now,
             expires_at=expires_at,
+            on_stage=on_stage,
         )
+        _stage("Writing to disk…")
         Path(pkl_path).write_bytes(data_bytes)
         del data_bytes
     except Exception:
         traceback.print_exc()
         return None
 
+    _stage("Registering dataset…")
     try:
         entry = _reg_register(
             name=name,
@@ -1100,12 +1106,14 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
         _progress(current, total, message or "Building 2-D projection…")
 
     proj = fit_projection(matrix, list(sorted_ids), on_progress=_on_fit_progress)
-    _progress(0, 1, "Building hex-tile pyramid…")
+    _progress(0, 1, "Building tile pyramid…")
+    # Build the default (hex) binning at ingest; the square binning is derived
+    # lazily on first toggle in the browse view, then cached/persisted there.
     pyr = build_pyramid(proj)
     _progress(1, 1, "Projection ready")
 
     ctx._projection = proj
-    ctx._pyramid = pyr
+    ctx._pyramids[pyr.bin_shape] = pyr
 
     _persist_projection_to_container(dataset_id, proj, pyr)
 
@@ -1133,7 +1141,13 @@ def _register_and_migrate(
     in-memory migration steps raise, the entry is rolled back before the
     exception propagates so we never leave an orphan on disk.
     """
-    tracker.update("loading", "Saving to registry…", step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
+
+    def _on_stage(message: str) -> None:
+        # Keep the dashboard row alive through the otherwise-silent
+        # serialize → write → register window (the old "frozen bar" gap).
+        tracker.update("loading", message, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
+
+    _on_stage("Saving to registry…")
     entry = _auto_register_dataset(
         ctx.medias,
         name=name,
@@ -1144,6 +1158,7 @@ def _register_and_migrate(
         created_by=created_by,
         display_name=name,
         ingest_started_at=ingest_started_at,
+        on_stage=_on_stage,
     )
     if entry is None:
         return task_id, None

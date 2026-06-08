@@ -1,0 +1,10 @@
+# Code owners for VTSearch.
+#
+# Purpose: when combined with a branch ruleset on `main` that requires
+# "Review from Code Owners", this file makes @samggreenberg the only
+# valid approver for changes to `main`. See docs/branch-protection.md
+# for the ruleset settings that enforce it.
+#
+# The last matching pattern wins, so this catch-all assigns every file
+# in the repo to @samggreenberg.
+* @samggreenberg

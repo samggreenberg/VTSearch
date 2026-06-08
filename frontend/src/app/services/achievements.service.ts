@@ -17,6 +17,8 @@ const EMPTY_STATE: AchievementState = {
   achievements: [],
   pending_announcements: [],
   docs: [],
+  media_types: [],
+  hours: [],
 };
 
 /**

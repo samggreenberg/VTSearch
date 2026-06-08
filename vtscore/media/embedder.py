@@ -168,6 +168,20 @@ _HF_RETRY_COUNT = 3
 _HF_RETRY_BACKOFF_BASE = 2  # seconds; delays will be 2, 4, 8, …
 
 
+def hf_token() -> str | bool:
+    """Token for HuggingFace Hub requests: ``HF_TOKEN`` env var when set, else ``False``.
+
+    All bundled models are public, so no token is *required*; ``False``
+    explicitly tells the HF libraries not to look for (or warn about) a
+    missing one.  Setting ``HF_TOKEN`` opts into authenticated requests,
+    which matters behind shared egress IPs (e.g. clusters where many users
+    NAT through one address): the Hub rate-limits anonymous requests per IP
+    and can silently delay the first metadata call by minutes, while
+    authenticated requests are limited per account.
+    """
+    return os.environ.get("HF_TOKEN") or False
+
+
 def _is_transient_hf_error(exc: Exception) -> bool:
     """Return True if *exc* looks like a retryable HuggingFace Hub HTTP error."""
     cls_names = {type(exc).__name__} | {c.__name__ for c in type(exc).__mro__}
@@ -183,7 +197,12 @@ def _is_transient_hf_error(exc: Exception) -> bool:
     return False
 
 
-def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+def load_pretrained_local_first(
+    load_fn: Callable[..., Any],
+    *args: Any,
+    on_progress: Optional[ProgressCallback] = None,
+    **kwargs: Any,
+) -> Any:
     """Call *load_fn* preferring cached model files, falling back to download.
 
     HuggingFace ``from_pretrained`` (and ``SentenceTransformer()``) contact the
@@ -196,10 +215,23 @@ def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwarg
     model can be downloaded normally.  Transient HTTP errors from the
     HuggingFace Hub (5xx, timeouts) are retried up to ``_HF_RETRY_COUNT``
     times with exponential backoff.
+
+    When *on_progress* is given, the network fallback is preceded by a
+    metadata preflight (one tiny ``config.json`` fetch) under a
+    :func:`timed_progress` ticker labelled "Contacting HuggingFace Hub…".
+    The Hub's first metadata request is where pre-download stalls land (DNS
+    trouble, Hub latency, anonymous per-IP rate-limit waits — observed at
+    minutes on shared egress IPs), and previously they masqueraded as model
+    loading.  The preflight absorbs that wait under an honest, ticking label
+    while the subsequent real download keeps its clean tqdm progress.
+    *on_progress* is consumed here and never forwarded to *load_fn*.
     """
     try:
         return load_fn(*args, local_files_only=True, **kwargs)
     except (OSError, TypeError, ValueError):
+        if on_progress is not None:
+            with timed_progress(on_progress, "loading", "Contacting HuggingFace Hub…"):
+                _hub_metadata_preflight(args, kwargs)
         last_exc: Exception | None = None
         for attempt in range(_HF_RETRY_COUNT):
             try:
@@ -218,6 +250,33 @@ def load_pretrained_local_first(load_fn: Callable[..., Any], *args: Any, **kwarg
                 )
                 time.sleep(delay)
         raise last_exc  # type: ignore[misc]
+
+
+def _hub_metadata_preflight(args: tuple, kwargs: dict) -> None:
+    """Best-effort fetch of the repo's ``config.json`` to absorb Hub waits.
+
+    Downloads (and thereby caches) the smallest standard file of the model
+    repo so that any per-IP anonymous rate-limit sleep or slow first
+    connection happens here, inside the caller's "Contacting HuggingFace
+    Hub…" ticker, rather than silently inside ``from_pretrained``.  All
+    failures are swallowed: the real ``load_fn`` call that follows performs
+    its own requests and produces the user-facing error if the Hub is
+    genuinely unreachable.
+    """
+    repo_id = args[0] if args and isinstance(args[0], str) else None
+    if repo_id is None:
+        return
+    try:
+        from huggingface_hub import hf_hub_download  # noqa: PLC0415
+
+        hf_hub_download(
+            repo_id,
+            "config.json",
+            cache_dir=kwargs.get("cache_dir") or kwargs.get("cache_folder"),
+            token=kwargs.get("token"),
+        )
+    except Exception:
+        pass
 
 
 @contextlib.contextmanager
@@ -655,7 +714,7 @@ class MediaEmbedder(ABC):
         total = len(medias)
         results: list[Optional[np.ndarray]] = []
         for i, m in enumerate(medias):
-            self._on_progress("embedding", f"Embedding {i + 1}/{total}...", i + 1, total)
+            self._on_progress("embedding", "Embedding...", i + 1, total)
             results.append(self.embed_media(m))
         return results
 
@@ -758,7 +817,7 @@ class MediaEmbedder(ABC):
         total = len(medias)
         results: list[Optional["PatchEmbedOutput"]] = []  # noqa: F821
         for i, m in enumerate(medias):
-            self._on_progress("embedding", f"Patch-embedding {i + 1}/{total}...", i + 1, total)
+            self._on_progress("embedding", "Patch-embedding...", i + 1, total)
             results.append(self.patch_forward(m))
         return results
 

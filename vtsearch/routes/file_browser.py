@@ -40,16 +40,14 @@ file_browser_bp = Blueprint(
 def _get_browse_root() -> Path:
     """Return the root directory users are allowed to browse.
 
-    In single-user mode this is the first entry of
-    :data:`vtscore.config.SERVER_ROOTS` (which defaults to
-    ``Path.cwd()`` when the env var is unset).  In multi-user mode it is
-    the current user's data directory.
+    In single-user / no-auth mode this is the filesystem root (``/``) so the
+    lone trusted user can navigate to any folder on the server, matching the
+    unrestricted server-path import validation.  In multi-user mode it is the
+    current user's data directory, confining the browser to that subtree.
     """
     base = _paths.get_file_access_base_dir()
     if base is None:
-        from vtscore.config import SERVER_ROOTS  # noqa: PLC0415
-
-        return SERVER_ROOTS[0]
+        return Path("/")
     return base
 
 

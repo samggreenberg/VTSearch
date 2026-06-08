@@ -31,6 +31,13 @@ class _PerMediaTypeNumberDict(fields.Dict):
         super().__init__(keys=fields.String(), values=fields.Float(), **kwargs)
 
 
+class _PerMediaTypeIntDict(fields.Dict):
+    """``{media_type_id: int}`` dict (used for pixel-width settings)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(keys=fields.String(), values=fields.Integer(), **kwargs)
+
+
 class AppSettingsSchema(Schema):
     """Full settings dict returned by ``GET /api/settings`` and ``/defaults``.
 
@@ -59,12 +66,18 @@ class AppSettingsSchema(Schema):
     autopilot_goal_diversity = fields.Integer()
     disable_achievements = fields.Boolean()
 
-    # VTSBrowse overview-minimap show/hide + size. Persisted but not shown
-    # as Settings-modal widgets; the minimap's own close button and resize
-    # handle drive these.
-    browse_minimap_visible = fields.Boolean()
-    browse_minimap_width = fields.Integer()
-    browse_minimap_height = fields.Integer()
+    # VTSBrowse side-panel width (CSS px). Persisted but not shown as a
+    # Settings-modal widget; the panel's draggable divider drives it.
+    browse_panel_width = fields.Integer()
+
+    # VTSBrowse per-media-type display prefs (bin shape, density colormap,
+    # on-screen cell size). ``{media_type_id: value}`` dicts driven by the
+    # browse-canvas toolbar and the Settings → Browser tab.
+    browse_bin_shape = _PerMediaTypeStringDict()
+    browse_colormap = _PerMediaTypeStringDict()
+    browse_icon_size = _PerMediaTypeStringDict()
+    # Pile-thumbnail border width in CSS px, per media type (0 disables).
+    browse_thumbnail_border = _PerMediaTypeIntDict()
 
     # Per-user, per-media-type
     view_mode_left = _PerMediaTypeStringDict()
@@ -171,9 +184,15 @@ class SettingsUpdateSchema(Schema):
     autopilot_goal_diversity = fields.Integer()
     disable_achievements = fields.Boolean()
 
-    browse_minimap_visible = fields.Boolean()
-    browse_minimap_width = fields.Integer()
-    browse_minimap_height = fields.Integer()
+    browse_panel_width = fields.Integer()
+
+    # Per-media-type dicts; the setters in ``settings.py`` validate each
+    # value against its enum (BinShape / BrowseColormap / BrowseIconSize),
+    # so these are declared ``Raw`` here like the other per-media settings.
+    browse_bin_shape = fields.Raw()
+    browse_colormap = fields.Raw()
+    browse_icon_size = fields.Raw()
+    browse_thumbnail_border = fields.Raw()
 
     autorun_detectors = fields.List(fields.String())
 

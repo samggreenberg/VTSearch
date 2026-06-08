@@ -35,49 +35,49 @@ TIER_NAMES: tuple[str, ...] = ("Bronze", "Silver", "Gold", "Platinum")
 ACHIEVEMENTS: list[dict[str, Any]] = [
     {
         "id": "datasets_loaded",
-        "name": "Datasets Loaded",
+        "name": "Data: Set",
         "description": "Load datasets you imported. Demos and synthetic don't count.",
         "icon": "cubes",
         "tiers": [1, 10, 100, 1000],
     },
     {
         "id": "votes_cast",
-        "name": "Votes Cast",
+        "name": "Get Out the Vote",
         "description": "Every Good or Bad you cast on a media item.",
         "icon": "checkbox-checked",
         "tiers": [100, 1000, 10000, 100000],
     },
     {
         "id": "detectors_trained",
-        "name": "Detectors Trained",
+        "name": "Detector Collector",
         "description": "Each detector you trained, counted on its first vote.",
         "icon": "graduation",
         "tiers": [2, 20, 200, 2000],
     },
     {
         "id": "detectors_imported",
-        "name": "Detectors Imported",
+        "name": "Detector Getter",
         "description": "Detectors built up from imported labels.",
         "icon": "robot",
         "tiers": [1, 10, 100, 1000],
     },
     {
         "id": "find_media",
-        "name": "Find Media",
+        "name": "Finders Keepers",
         "description": "Media items scored by Find (GUI and CLI combined).",
         "icon": "search",
         "tiers": [200, 2000, 20000, 200000],
     },
     {
         "id": "days_active",
-        "name": "Days Active",
+        "name": "Your Days are Numbered",
         "description": "Distinct UTC calendar days on which you cast at least one vote.",
         "icon": "lightning",
         "tiers": [2, 20, 200, 2000],
     },
     {
         "id": "media_types_touched",
-        "name": "Media Types Touched",
+        "name": "Multi Media",
         "description": "Distinct media types you've voted on (audio, image, text, video, document).",
         "icon": "palette",
         "tiers": [2, 3, 4, 5],
@@ -120,6 +120,21 @@ EXCLUDED_DATASET_IMPORTERS: frozenset[str] = frozenset({"demo", "synthetic"})
 #: Marathoner streak alive.  Anything strictly greater than this resets the
 #: streak counter to 1 on the next vote.
 STREAK_GAP_SECONDS: float = 10 * 60
+
+#: Canonical media types tracked by the "Multi Media" achievement, in display
+#: order, paired with their human-readable labels.  The achievement's tiers
+#: (max 5) assume exactly these five types; :func:`get_full_state` reports a
+#: per-type ticked flag so the UI can show which ones the user has voted on.
+MEDIA_TYPES: list[dict[str, str]] = [
+    {"id": "audio", "name": "Audio"},
+    {"id": "image", "name": "Image"},
+    {"id": "text", "name": "Text"},
+    {"id": "video", "name": "Video"},
+    {"id": "document", "name": "Document"},
+]
+
+#: Hours of the day (UTC) tracked by the "Around the Clock" achievement.
+HOURS_OF_DAY: tuple[int, ...] = tuple(range(24))
 
 #: Readme Reader docs.  Each entry pairs a doc with the code phrase printed at
 #: the bottom of it.  The phrase is matched server-side: the user pastes their
@@ -465,7 +480,14 @@ def get_full_state() -> dict[str, Any]:
                 },
                 ...
             ],
+            "docs": [{"id", "name", "path", "read"}, ...],
+            "media_types": [{"id", "name", "seen"}, ...],
+            "hours": [{"hour": <0..23>, "seen": <bool>}, ...],
         }
+
+    The ``media_types`` and ``hours`` arrays back the "Multi Media" and
+    "Around the Clock" expandable panels: each entry's ``seen`` flag says
+    whether the user has cast a vote in that media type / hour-of-day bucket.
     """
     if _is_disabled():
         zeroed: list[dict[str, Any]] = []
@@ -487,6 +509,8 @@ def get_full_state() -> dict[str, Any]:
             "achievements": zeroed,
             "pending_announcements": [],
             "docs": [{"id": d["id"], "name": d["name"], "path": d["path"], "read": False} for d in DOCS],
+            "media_types": [{"id": m["id"], "name": m["name"], "seen": False} for m in MEDIA_TYPES],
+            "hours": [{"hour": h, "seen": False} for h in HOURS_OF_DAY],
         }
     username = get_current_user()
     _ensure_user_loaded(username)
@@ -531,11 +555,17 @@ def get_full_state() -> dict[str, Any]:
                 )
         read_ids = set(state.get("docs_read_ids", []))
         docs = [{"id": d["id"], "name": d["name"], "path": d["path"], "read": d["id"] in read_ids} for d in DOCS]
+        seen_types = set(state.get("media_types_seen", []))
+        media_types = [{"id": m["id"], "name": m["name"], "seen": m["id"] in seen_types} for m in MEDIA_TYPES]
+        seen_hours = set(state.get("hours_seen", []))
+        hours = [{"hour": h, "seen": h in seen_hours} for h in HOURS_OF_DAY]
         return {
             "tier_names": list(TIER_NAMES),
             "achievements": achievements,
             "pending_announcements": pending,
             "docs": docs,
+            "media_types": media_types,
+            "hours": hours,
         }
 
 

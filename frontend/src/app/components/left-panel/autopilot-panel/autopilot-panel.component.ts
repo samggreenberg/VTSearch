@@ -23,6 +23,7 @@ export interface StepDisplay {
   stepNumber: number;
   state: 'done' | 'active' | 'future';
   detail: string;
+  detailTitle: string;
   statusIcons: StatusIcon[];
   helpText: string;
   intent: string;
@@ -86,6 +87,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         stepNumber: i + 1,
         state: stateStr,
         detail: stateStr === 'active' ? this.phaseDetail(phase) : '',
+        detailTitle: stateStr === 'active' ? this.phaseDetailTitle(phase) : '',
         statusIcons: stateStr === 'active' ? this.phaseStatusIcons(phase) : [],
         helpText: this.phaseHelpText(phase),
         intent: this.phaseIntent(phase, i + 1),
@@ -161,22 +163,40 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   }
 
   private phaseStatusIcons(phase: AutopilotPhase): StatusIcon[] {
-    if (phase !== 'hard' && phase !== 'new') return [];
     const st = this.state;
-    const smartState = st.smartStatus === 'green' ? 'green' : 'pending';
-    const stableState = st.stableStatus === 'green' ? 'green' : 'pending';
-    return [
-      {
-        color: st.smartStatus === 'green' ? 'green' : 'yellow',
-        ariaLabel: `Smart: ${smartState}`,
-        title: `Smart: ${smartState}. Tracks detector accuracy over labeling steps. Green when error cost has leveled off (detector has converged). Yellow when still improving.`,
-      },
-      {
-        color: st.stableStatus === 'green' ? 'green' : 'yellow',
-        ariaLabel: `Stable: ${stableState}`,
-        title: `Stable: ${stableState}. Tracks prediction stability. Green when predictions stop changing between labeling steps (detector is confident). Yellow when predictions are still shifting.`,
-      },
-    ];
+    // The boundary phase is gated by the smart + stable indicators, so it
+    // shows both dots. The diversity phase runs *after* smart + stable are
+    // already green (that is the condition for leaving the boundary phase),
+    // so showing those two dots here would just be two stale greens. The
+    // indicator that actually gates the diversity phase is span coverage, so
+    // the diversity row shows a single span dot instead.
+    if (phase === 'hard') {
+      const smartState = st.smartStatus === 'green' ? 'green' : 'pending';
+      const stableState = st.stableStatus === 'green' ? 'green' : 'pending';
+      return [
+        {
+          color: st.smartStatus === 'green' ? 'green' : 'yellow',
+          ariaLabel: `Smart: ${smartState}`,
+          title: `Smart: ${smartState}. Tracks detector accuracy over labeling steps. Green when error cost has leveled off (detector has converged). Yellow when still improving.`,
+        },
+        {
+          color: st.stableStatus === 'green' ? 'green' : 'yellow',
+          ariaLabel: `Stable: ${stableState}`,
+          title: `Stable: ${stableState}. Tracks prediction stability. Green when predictions stop changing between labeling steps (detector is confident). Yellow when predictions are still shifting.`,
+        },
+      ];
+    }
+    if (phase === 'new') {
+      const spanState = st.spanStatus === 'green' ? 'green' : 'pending';
+      return [
+        {
+          color: st.spanStatus === 'green' ? 'green' : 'yellow',
+          ariaLabel: `Diversity: ${spanState}`,
+          title: `Diversity: ${spanState}. Tracks how much of the dataset your labels span. Green when your labels cover a diverse spread of items. Yellow when coverage is still concentrated.`,
+        },
+      ];
+    }
+    return [];
   }
 
   private phaseHelpText(phase: AutopilotPhase): string {
@@ -221,6 +241,10 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
       case 'bad':
         return `${this.badVotes.size}/${st.badToStart} bad labels`;
       case 'hard': {
+        // No count target here — the phase ends when the smart and stable
+        // indicators (the dots rendered right after this text) both go green.
+        // That explanation lives in the tooltip (phaseDetailTitle); the visible
+        // text stays a bare count so it never overflows the panel.
         const total = this.goodVotes.size + this.badVotes.size;
         return `${total} labels`;
       }
@@ -228,6 +252,22 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         return `Diversity: ${Math.round(st.fracDiversity)}`;
       case 'done':
         return 'All indicators green';
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Tooltip for the active step's detail text. Used to carry explanatory
+   * copy that would overflow the panel if rendered inline — currently just
+   * the "boundary" phase's end condition, which is otherwise invisible.
+   */
+  private phaseDetailTitle(phase: AutopilotPhase): string {
+    switch (phase) {
+      case 'hard':
+        return 'Ends when both indicators turn green.';
+      case 'new':
+        return 'Ends when the diversity indicator turns green.';
       default:
         return '';
     }

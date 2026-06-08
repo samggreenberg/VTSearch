@@ -53,7 +53,7 @@
         @if (taskProgressInfo.eta) {
           <span class="progress-eta">{{ taskProgressInfo.eta }}</span>
         }
-        <button class="btn btn--cancel btn--sm" (click)="onCancelTask($event)" title="Cancel this dataset load">Cancel</button>
+        <button class="btn btn--cancel btn--sm" (click)="onCancelTask($event)" [title]="taskKind === 'projection' ? 'Cancel building the projection' : 'Cancel this dataset load'">Cancel</button>
       </div>
     </div>
   </td>
@@ -129,7 +129,7 @@
   }
   <td class="actions-col">
     <div class="actions-cell">
-    <button class="browse-btn" [class.disabled]="!canBrowse" [disabled]="!canBrowse" (click)="onBrowse($event)" [attr.aria-label]="canBrowse ? 'Browse dataset' : 'Browsing is only available for audio datasets'" [title]="canBrowse ? 'Browse dataset' : 'Browsing is only available for audio datasets'">
+    <button class="browse-btn" (click)="onBrowse($event)" aria-label="Browse dataset" title="Browse dataset">
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path>
         <circle cx="12" cy="12" r="3"></circle>

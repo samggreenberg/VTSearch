@@ -29,78 +29,177 @@
       </div>
     }
     @case ('ready') {
-      <vt-browse-canvas
-        [meta]="meta"
-        [mediaType]="mediaType"
-        [displayScale]="hexDisplayScale"
-        (hexHover)="onHexHover($event)"
-      />
-      <vt-browse-hover-preview
-        [hover]="hoverEvent"
-        [mediaType]="mediaType"
-      />
-      <div class="browse-controls">
-        <div class="browse-zoom">
-          <button
-            type="button"
-            class="browse-size-btn browse-size-btn--text"
-            (click)="zoomOut()"
-            title="Zoom out"
-            aria-label="Zoom out">
-            &minus;
-          </button>
-          <button
-            type="button"
-            class="browse-size-btn browse-size-btn--text"
-            (click)="zoomIn()"
-            title="Zoom in"
-            aria-label="Zoom in">
-            +
-          </button>
+      <div class="browse-content" #content [style.--browse-panel-width]="panelWidth + 'px'">
+        <div class="browse-main">
+          <div class="browse-tools-left">
+            @if (subset) {
+              <button
+                type="button"
+                class="btn btn--secondary btn--sm browse-back"
+                (click)="back()"
+                title="Return to the Find view (keeps any items you removed from Good)">
+                &larr; Back to Find
+              </button>
+            } @else {
+              <button
+                type="button"
+                class="btn btn--secondary btn--sm browse-back"
+                (click)="back()"
+                title="Return to the dashboard">
+                &larr; Back to Dashboard
+              </button>
+            }
+            <button
+              type="button"
+              class="btn btn--secondary btn--sm browse-reproject"
+              (click)="onReproject()"
+              [title]="subset
+                ? 'Re-project the displayed items into a fresh 2-D layout'
+                : 'Re-project all items into a fresh 2-D layout'">
+              <vt-icon type="shuffle" [size]="14"></vt-icon>
+              Re-project
+            </button>
+          </div>
+          <vt-browse-canvas
+            [meta]="meta"
+            [mediaType]="mediaType"
+            [colormap]="colormap"
+            [thumbnailBorder]="thumbnailBorder"
+            [marqueeMode]="marqueeMode"
+            (hexHover)="onHexHover($event)"
+            (densityMaxChanged)="onDensityMaxChanged($event)"
+            (contextMenu)="onCanvasContextMenu($event)"
+          />
+          <vt-browse-hover-preview
+            [hover]="hoverEvent"
+            [mediaType]="mediaType"
+          />
+          @if (contextMenuOpen) {
+            <vt-browse-bin-popup
+              [x]="contextMenuX"
+              [y]="contextMenuY"
+              [bounds]="contextBounds"
+              [memberIds]="contextMembers"
+              [mediaType]="mediaType"
+              (dismissed)="dismissContextMenu()"
+            />
+          }
+          <div class="browse-controls">
+            <div class="browse-select" role="group" aria-label="Region select">
+              <button
+                type="button"
+                class="browse-size-btn"
+                [class.browse-size-btn--active]="marqueeMode"
+                [attr.aria-pressed]="marqueeMode"
+                (click)="toggleMarqueeMode()"
+                title="Region select: drag to select a region (Shift+drag also works)"
+                aria-label="Region select: drag to select a region">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2.5" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="0.5"/></svg>
+              </button>
+            </div>
+            <div class="browse-zoom">
+              <button
+                type="button"
+                class="browse-size-btn"
+                (click)="zoomIn()"
+                title="Zoom In"
+                aria-label="Zoom in">
+                <vt-icon type="zoom-in" [size]="16"></vt-icon>
+              </button>
+              <button
+                type="button"
+                class="browse-size-btn"
+                (click)="zoomToFit()"
+                title="Zoom to fit"
+                aria-label="Zoom to fit">
+                <vt-icon type="zoom-fit" [size]="16"></vt-icon>
+              </button>
+              <button
+                type="button"
+                class="browse-size-btn"
+                (click)="zoomOut()"
+                title="Zoom out"
+                aria-label="Zoom out">
+                <vt-icon type="zoom-out" [size]="16"></vt-icon>
+              </button>
+            </div>
+            <div class="browse-size">
+              <button
+                type="button"
+                class="browse-size-btn"
+                [disabled]="atMinHexSize"
+                (click)="bumpHexSize(-1)"
+                title="Smaller thumbnails"
+                aria-label="Smaller thumbnails">
+                <vt-icon type="image" [size]="11"></vt-icon>
+              </button>
+              <button
+                type="button"
+                class="browse-size-btn"
+                [disabled]="atMaxHexSize"
+                (click)="bumpHexSize(1)"
+                title="Bigger thumbnails"
+                aria-label="Bigger thumbnails">
+                <vt-icon type="image" [size]="18"></vt-icon>
+              </button>
+            </div>
+            <div class="browse-shape" role="group" aria-label="Bin shape">
+              <button
+                type="button"
+                class="browse-size-btn browse-size-btn--glyph"
+                [class.browse-size-btn--active]="binShape === 'hex'"
+                [attr.aria-pressed]="binShape === 'hex'"
+                (click)="setBinShape('hex')"
+                title="Hexagon bins"
+                aria-label="Hexagon bins">
+                &#x2B22;
+              </button>
+              <button
+                type="button"
+                class="browse-size-btn browse-size-btn--glyph browse-size-btn--square-glyph"
+                [class.browse-size-btn--active]="binShape === 'square'"
+                [attr.aria-pressed]="binShape === 'square'"
+                (click)="setBinShape('square')"
+                title="Square bins"
+                aria-label="Square bins">
+                &#x25A0;
+              </button>
+            </div>
+          </div>
+          <div class="browse-info">
+            <span class="browse-info-label">{{ datasetName }}</span>
+            <span class="browse-info-count">{{ meta?.point_count | number }} {{ countNoun }}</span>
+          </div>
         </div>
-        <div class="browse-size">
-          <button
-            type="button"
-            class="browse-size-btn"
-            [disabled]="atMinHexSize"
-            (click)="bumpHexSize(-1)"
-            title="Smaller hexes"
-            aria-label="Smaller hexes">
-            <vt-icon type="image" [size]="11"></vt-icon>
-          </button>
-          <button
-            type="button"
-            class="browse-size-btn"
-            [disabled]="atMaxHexSize"
-            (click)="bumpHexSize(1)"
-            title="Bigger hexes"
-            aria-label="Bigger hexes">
-            <vt-icon type="image" [size]="18"></vt-icon>
-          </button>
-        </div>
+
+        <div
+          class="browse-divider"
+          (mousedown)="onDividerMouseDown($event)"
+        ></div>
+
+        <aside class="browse-side" aria-label="Selection">
+          <vt-browse-selection-panel
+            class="browse-side-selection"
+            [mediaType]="mediaType"
+            [canRemoveGood]="subset"
+            (removeGood)="onRemoveGood()"
+          />
+          <div class="browse-side-meta">
+            <div class="browse-side-minimap">
+              <vt-browse-minimap
+                [meta]="meta"
+                [colormap]="colormap"
+                [dock]="true"
+              />
+            </div>
+            <vt-browse-legend
+              class="browse-side-legend"
+              [maxCount]="densityMax"
+              [colormap]="colormap"
+            />
+          </div>
+        </aside>
       </div>
-      <div class="browse-info">
-        <span class="browse-info-label">{{ datasetName }}</span>
-        <span class="browse-info-count">{{ meta?.point_count | number }} items</span>
-      </div>
-      @if (minimapVisible) {
-        <vt-browse-minimap
-          [meta]="meta"
-          [width]="minimapWidth"
-          [height]="minimapHeight"
-          (closed)="setMinimapVisible(false)"
-          (resized)="onMinimapResized($event)"
-        />
-      } @else {
-        <button
-          type="button"
-          class="browse-minimap-show"
-          (click)="setMinimapVisible(true)"
-          title="Show overview"
-          aria-label="Show overview">
-          <vt-icon type="grid" [size]="16"></vt-icon>
-        </button>
-      }
     }
   }
 </div>

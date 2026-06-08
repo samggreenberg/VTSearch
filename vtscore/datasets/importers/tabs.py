@@ -19,8 +19,7 @@ from typing import Any
 #: ``frontend/src/app/components/icon/icon.component.ts``).
 _PICKER_TABS: list[dict[str, Any]] = [
     {"id": "services", "label": "Services", "icon": "lightning", "order": 10},
-    {"id": "server", "label": "Server", "icon": "server", "order": 20},
-    {"id": "local", "label": "Local", "icon": "house", "order": 30},
+    {"id": "server", "label": "Files", "icon": "folder", "order": 20},
     {"id": "demo", "label": "Demo", "icon": "flask", "order": 40},
 ]
 

@@ -163,37 +163,20 @@ If the chain entry is missing or malformed, the resolver falls through
 to the legacy single-clipper code path; labels imported from
 pre-chain datasets keep working.
 
-## Phase 1: Backend chain runner + origin encoding + resolver replay (shipped)
+## ~~Phase 1: Backend chain runner + origin encoding + resolver replay (shipped)~~
 
-### Files
+Shipped — struck through. The design above (step list, validation, origin
+encoding, resolver replay) is the spec for what landed:
 
-- **New** `vtscore/datasets/clipper_chain.py`:
-  - `ChainStep` typed dict.
-  - `validate_chain(steps, source_media_type) → final_media_type`.
-  - `apply_chain_to_clips(clips_dict, steps, on_progress=...)`:
-    iterates each step over the entire `clips_dict` and rebuilds it in
-    place. Stamps `params["clipper_chain"]` (full trail) and the legacy
-    single-clipper keys for the last clipper step.
-  - `replay_chain_on_file(file_path, steps, target_media_type) →
-    media_dict`: used by the resolver replay path; walks the chain in
-    memory and returns the final clip dict.
-- **Modified** `vtscore/datasets/load_pipeline.py`:
-  - `_apply_clipper` accepts optional `chain_steps` and dispatches to
-    the chain runner when provided.
-  - `_run_origin_load_in_background` / `_run_importer_in_background`
-    accept and forward `chain_steps`. The importer field `clipper_chain`
-    (JSON string) is parsed and passed through.
-- **Modified** `vtscore/detectors/resolver.py`:
-  - `_apply_clip_and_embed` checks for `params["clipper_chain"]` first;
-    on hit, calls `replay_chain_on_file` and embeds the result.
-- **New** tests under `tests/detectors/test_clipper_chain.py`:
-  - Same-type chain (`text_paragraph → text_sentence`) end-to-end:
-    clips appear, origins stamped, resolver replay reproduces the same
-    embedding.
-  - Single-step chain produces output identical to the legacy
-    single-clipper code path (regression guard).
-  - Validation rejects unknown step names and mismatched types with
-    clear errors.
+- ~~**New** `vtscore/datasets/clipper_chain.py`~~ — `ChainStep`,
+  `validate_chain`, `apply_chain_to_clips` (stamps `params["clipper_chain"]` +
+  legacy last-clipper keys), `replay_chain_on_file`.
+- ~~**Modified** `load_pipeline.py`~~ — `_apply_clipper` + the background loaders
+  accept/forward `chain_steps` (importer `clipper_chain` JSON parsed through).
+- ~~**Modified** `resolver.py`~~ — `_apply_clip_and_embed` replays the chain when
+  `params["clipper_chain"]` is present.
+- ~~**Tests** `tests/detectors/test_clipper_chain.py`~~ — same-type chain
+  end-to-end, single-step regression guard, validation errors.
 
 ### Limitations of Phase 1
 

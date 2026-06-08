@@ -9,6 +9,7 @@ import type { DatasetAllImportersListResponse } from '../generated/api-client/mo
 import type { DatasetAvailableFilesResponse } from '../generated/api-client/models/dataset-available-files-response';
 import type { DatasetClearResponse } from '../generated/api-client/models/dataset-clear-response';
 import type { DatasetCombineRequest } from '../generated/api-client/models/dataset-combine-request';
+import type { DatasetPromoteResponse } from '../generated/api-client/models/dataset-promote-response';
 import type { DatasetImportersListResponse } from '../generated/api-client/models/dataset-importers-list-response';
 import type { DatasetLoadDemoRequest } from '../generated/api-client/models/dataset-load-demo-request';
 import type { DatasetLoadSourceRequest } from '../generated/api-client/models/dataset-load-source-request';
@@ -25,6 +26,7 @@ import { availableDatasetFiles } from '../generated/api-client/fn/datasets-stagi
 import { clearDatasetRoute } from '../generated/api-client/fn/datasets-load/clear-dataset-route';
 import { clearStaging } from '../generated/api-client/fn/datasets-staging/clear-staging';
 import { combineDatasetsRoute } from '../generated/api-client/fn/datasets-staging/combine-datasets-route';
+import { promoteToDataset } from '../generated/api-client/fn/datasets-staging/promote-to-dataset';
 import { datasetAllImporters } from '../generated/api-client/fn/datasets-listings/dataset-all-importers';
 import { datasetImporters } from '../generated/api-client/fn/datasets-listings/dataset-importers';
 import { detectMediaType } from '../generated/api-client/fn/datasets-ui/detect-media-type';
@@ -165,6 +167,14 @@ export class DatasetsCrudApiService {
 
   clearDataset(): Observable<DatasetClearResponse> {
     return clearDatasetRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  /** Promote a set of media items (the Find Goods pile) into their own
+   *  saved dataset. Resolves with the new dataset's id / name / count. */
+  promote(name: string, mediaIds: number[]): Observable<DatasetPromoteResponse> {
+    return promoteToDataset(this.http, this.config.rootUrl, {
+      body: { name, media_ids: mediaIds },
+    }).pipe(map((r) => r.body));
   }
 
   /** Binary stream; stays on plain ``HttpClient`` so ``responseType: 'blob'``

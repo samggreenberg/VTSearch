@@ -1,0 +1,134 @@
+// A small floating list of a bin's media items, opened by right-clicking a bin
+// on the VTSBrowse canvas. Rows mirror the selection panel's list entries.
+.bin-popup {
+  position: fixed;
+  z-index: var(--z-burger-menu);
+  width: 280px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.bin-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.bin-popup-title {
+  font-size: var(--font-xs);
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bin-popup-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--font-lg);
+  line-height: 1;
+  padding: var(--space-2xs) var(--space-xs);
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.bin-popup-list {
+  // Concrete height is bound per render (rows, capped) so the virtual viewport
+  // scrolls; the cap is applied inline via [style.height.px].
+  overflow-x: hidden;
+}
+
+.bin-popup-entry {
+  height: 36px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0 var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-vote);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  &.selected {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--text-primary);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+}
+
+.bin-popup-thumb-wrap {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.bin-popup-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--bg-body);
+  display: block;
+}
+
+.bin-popup-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-body);
+  color: var(--text-muted);
+  font-size: var(--font-lg);
+  flex-shrink: 0;
+}
+
+.bin-popup-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -182,16 +182,23 @@ class TestServerMediaFileThumbnail:
             wf.writeframes(struct.pack(f"<{num_samples}h", *samples))
         return path
 
-    def test_image_returns_file_bytes(self, client):
+    def test_image_returns_thumbnail(self, client):
+        import io
+
         from PIL import Image
 
+        from vtscore.media.image.thumbnail import DEFAULT_MAX_DIM
+
         path = self._media_dir / "example.png"
-        Image.new("RGB", (16, 16), color=(123, 45, 67)).save(path)
+        # Larger than the thumbnail cap so we can confirm it gets downscaled.
+        Image.new("RGB", (1000, 800), color=(123, 45, 67)).save(path)
 
         resp = client.get("/api/server-media-files/example.png/thumbnail")
         assert resp.status_code == 200
-        assert resp.mimetype == "image/png"
-        assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
+        # Opaque images are re-encoded as JPEG and bounded to the thumbnail cap.
+        assert resp.mimetype in ("image/jpeg", "image/png")
+        with Image.open(io.BytesIO(resp.data)) as img:
+            assert max(img.size) <= DEFAULT_MAX_DIM
 
     def test_audio_returns_waveform_png(self, client):
         self._make_wav("example.wav")

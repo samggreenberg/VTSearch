@@ -38,6 +38,18 @@
             },
             "type": "array"
           },
+          "hours": {
+            "items": {
+              "$ref": "#/components/schemas/_HourEntry"
+            },
+            "type": "array"
+          },
+          "media_types": {
+            "items": {
+              "$ref": "#/components/schemas/_MediaTypeEntry"
+            },
+            "type": "array"
+          },
           "pending_announcements": {
             "items": {
               "$ref": "#/components/schemas/_PendingAnnouncement"
@@ -54,6 +66,8 @@
         "required": [
           "achievements",
           "docs",
+          "hours",
+          "media_types",
           "pending_announcements",
           "tier_names"
         ],
@@ -157,14 +171,32 @@
             "readOnly": true,
             "type": "array"
           },
-          "browse_minimap_height": {
+          "browse_bin_shape": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "browse_colormap": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "browse_icon_size": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "browse_panel_width": {
             "type": "integer"
           },
-          "browse_minimap_visible": {
-            "type": "boolean"
-          },
-          "browse_minimap_width": {
-            "type": "integer"
+          "browse_thumbnail_border": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object"
           },
           "calibrate_count": {
             "type": "integer"
@@ -1100,6 +1132,53 @@
           "message",
           "ok",
           "task_id"
+        ],
+        "type": "object"
+      },
+      "DatasetPromoteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "media_ids": {
+            "description": "IDs of the media items (in the active dataset) to promote.",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "name": {
+            "description": "Display name for the new dataset.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_ids",
+          "name"
+        ],
+        "type": "object"
+      },
+      "DatasetPromoteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "num_items": {
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "name",
+          "num_items",
+          "ok"
         ],
         "type": "object"
       },
@@ -2681,6 +2760,15 @@
           "cy": {
             "type": "number"
           },
+          "member_ids": {
+            "default": null,
+            "description": "All media ids aggregated in this cell (for selection).",
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          },
           "q": {
             "type": "integer"
           },
@@ -3363,6 +3451,56 @@
         ],
         "type": "object"
       },
+      "MediaVoteBulkRequest": {
+        "properties": {
+          "ids": {
+            "description": "Media ids to apply the target vote to.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "target": {
+            "description": "Absolute target state applied to every id: ``good``, ``bad``, or ``none``. Idempotent.",
+            "enum": [
+              "good",
+              "bad",
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "ids",
+          "target"
+        ],
+        "type": "object"
+      },
+      "MediaVoteBulkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "description": "How many ids actually changed state (idempotent re-applies and missing ids excluded).",
+            "type": "integer"
+          },
+          "missing": {
+            "description": "Requested ids that were not present in the loaded dataset.",
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed",
+          "missing",
+          "ok"
+        ],
+        "type": "object"
+      },
       "MediaVoteRequest": {
         "properties": {
           "region_box": {
@@ -3558,6 +3696,12 @@
             "nullable": true,
             "type": "number"
           },
+          "bin_shape": {
+            "default": null,
+            "description": "hex | square",
+            "nullable": true,
+            "type": "string"
+          },
           "bounds": {
             "default": null,
             "items": {
@@ -3565,6 +3709,11 @@
             },
             "nullable": true,
             "type": "array"
+          },
+          "content_version": {
+            "default": 0,
+            "description": "Monotonic version of the projection's membership. Stays at 0 for full-dataset projections; bumped when items are removed from a subset browse in place. Combined with ``projection_id`` to bust the immutable tile cache without re-framing the canvas.",
+            "type": "integer"
           },
           "current": {
             "default": null,
@@ -4019,15 +4168,13 @@
             },
             "type": "array"
           },
-          "browse_minimap_height": {
+          "browse_bin_shape": {},
+          "browse_colormap": {},
+          "browse_icon_size": {},
+          "browse_panel_width": {
             "type": "integer"
           },
-          "browse_minimap_visible": {
-            "type": "boolean"
-          },
-          "browse_minimap_width": {
-            "type": "integer"
-          },
+          "browse_thumbnail_border": {},
           "calibrate_count": {
             "type": "integer"
           },
@@ -4144,6 +4291,32 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "SubsetRemoveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Media ids to drop from the current subset browse.",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "shape": {
+            "default": "hex",
+            "description": "Bin shape whose updated meta to return (hex | square).",
+            "enum": [
+              "hex",
+              "square"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "ids"
         ],
         "type": "object"
       },
@@ -4854,6 +5027,24 @@
         ],
         "type": "object"
       },
+      "_HourEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "hour": {
+            "description": "Hour of day, UTC (0-23).",
+            "type": "integer"
+          },
+          "seen": {
+            "description": "Whether the user has voted in this hour bucket.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hour",
+          "seen"
+        ],
+        "type": "object"
+      },
       "_LabelSet": {
         "additionalProperties": true,
         "properties": {
@@ -4866,6 +5057,27 @@
         },
         "required": [
           "labels"
+        ],
+        "type": "object"
+      },
+      "_MediaTypeEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "seen": {
+            "description": "Whether the user has voted on this media type.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "seen"
         ],
         "type": "object"
       },
@@ -5090,6 +5302,9 @@
               "caltech101_m",
               "caltech101_l",
               "caltech101_a",
+              "caltech256_s",
+              "caltech256_m",
+              "caltech256_l",
               "caltech256_a",
               "oxford_flowers_102_a",
               "food101_s",
@@ -5656,6 +5871,9 @@
               "caltech101_m",
               "caltech101_l",
               "caltech101_a",
+              "caltech256_s",
+              "caltech256_m",
+              "caltech256_l",
               "caltech256_a",
               "oxford_flowers_102_a",
               "food101_s",
@@ -7865,6 +8083,50 @@
         "summary": "Reload a dataset from a stored source origin dict.",
         "tags": [
           "datasets_load"
+        ]
+      }
+    },
+    "/api/dataset/promote": {
+      "post": {
+        "description": "Used by the Find interface's \"To Dataset\" button to turn the Goods\npile into its own dataset. The promoted items keep their original\norigins and in-memory embeddings (so preprocessing is preserved for\nfree; the new pickle is a self-contained snapshot). The new dataset\ngets a fresh ``created_at`` but inherits the source dataset's\n``expires_at`` (death date).",
+        "operationId": "promote_to_dataset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetPromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetPromoteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No dataset loaded or none of the items resolved."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "Failed to write or register the new dataset."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Promote a set of media items into a brand-new saved dataset.",
+        "tags": [
+          "datasets_staging"
         ]
       }
     },
@@ -11470,6 +11732,47 @@
         ]
       }
     },
+    "/api/medias/vote-bulk": {
+      "post": {
+        "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics, then the detector\nlabelset is persisted **once** rather than per id.  Bulk votes are\nimage-level (no region boxes).  Powers the Browser's \"Remove from Good\"\ncull, which marks a hand-selected set of false-positives ``bad`` and\ndrops them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
+        "operationId": "vote_media_bulk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaVoteBulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaVoteBulkResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No ids supplied."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Apply one absolute vote target to many medias in a single request.",
+        "tags": [
+          "medias"
+        ]
+      }
+    },
     "/api/medias/{media_id}/audio": {
       "get": {
         "description": "Returns an ``audio/wav`` file response on success (HTTP 200), or a 404\nJSON envelope if the media does not exist or its bytes are unavailable.",
@@ -11645,6 +11948,38 @@
         }
       ]
     },
+    "/api/medias/{media_id}/thumbnail": {
+      "get": {
+        "description": "Grid and list tiles use this instead of ``/image`` so a gallery of many\nhigh-resolution items doesn't force the browser to decode every full-size\nbitmap at once.  The thumbnail is bounded to a fixed longest-side length\n(see :data:`vtscore.media.image.thumbnail.DEFAULT_MAX_DIM`) and is the\nsame regardless of zoom level, so an ``ETag`` lets the browser reuse it\nacross scrolls and zoom changes.\n\nWhen the media carries a precomputed ``thumbnail_bytes`` (generated at\ningest for image/audio/video), the bytes are streamed directly with no\nrequest-time decode/resize -- the path that keeps a fresh browse-canvas\nzoom responsive.  Media without one (old pickles, thin loads, undecodable\nSVGs) fall back to generating the thumbnail from the display image.",
+        "operationId": "media_thumbnail",
+        "responses": {
+          "400": {
+            "description": "Media is not an image and has no image_response delegate."
+          },
+          "404": {
+            "description": "Media not found, or media bytes unavailable."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Stream a downscaled thumbnail of a media item's image.",
+        "tags": [
+          "medias"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "media_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ]
+    },
     "/api/medias/{media_id}/video": {
       "get": {
         "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``video/mp4`` for unrecognised extensions.",
@@ -11786,7 +12121,7 @@
     },
     "/api/projection/build": {
       "post": {
-        "description": "Returns immediately with a ``job_id`` for polling via\n``GET /api/projection/meta``.  If a projection is already cached on\nthe context, returns it without rebuilding.",
+        "description": "Body: ``{\"shape\": \"hex\" | \"square\", \"ids\": [...]?, \"force\": bool?}``\n(``shape`` defaults to hex).\n\nReturns immediately.  If the pyramid for this shape is already cached or\npersisted, returns ``\"ready\"``.  If the shared UMAP layout already exists\n(e.g. the other shape was built first), the new shape is re-binned inline\nand returned ready \u2014 no UMAP re-fit.  Only the first build of a dataset,\nwhere no layout exists yet, runs UMAP in the background and returns a\n``job_id`` for polling via ``GET /api/projection/meta``.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
         "operationId": "build_projection",
         "responses": {
           "200": {
@@ -11806,7 +12141,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Kick off a background UMAP + pyramid build for the active dataset.",
+        "summary": "Kick off (or short-circuit) a build of the requested bin shape.",
         "tags": [
           "projection"
         ]
@@ -11814,7 +12149,7 @@
     },
     "/api/projection/meta": {
       "get": {
-        "description": "When the projection is ready, includes bounds, zoom levels, hex sizing,\npoint count, and the dataset's media type (so the client knows which\nhover-preview behavior to use).",
+        "description": "Query: ``?shape=hex|square`` (defaults to hex).\n\nWhen the requested shape's pyramid is ready, includes bounds, zoom levels,\ncell sizing, point count, the dataset's media type, and the ``bin_shape``\nthe canvas should render.",
         "operationId": "projection_meta",
         "responses": {
           "200": {
@@ -11831,13 +12166,54 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return projection/pyramid metadata and build status.",
+        "summary": "Return projection/pyramid metadata and build status for a bin shape.",
         "tags": [
           "projection"
         ]
       }
     },
-    "/api/projection/tiles/{level}/{tx}/{ty}": {
+    "/api/projection/subset/remove": {
+      "post": {
+        "description": "Re-bins the frozen subset layout onto its existing grid minus the removed\npoints: the remaining points keep their exact 2-D positions and bins, only\ncounts/representatives change.  The ``projection_id`` (layout identity) is\npreserved and a bumped ``content_version`` busts the otherwise-immutable\ntile cache.  The served ``bounds`` shrink to the survivors' extent so the\nclient re-frames to what's left (zoom-to-fit, minimap) instead of keeping\ndead space where the culled points were \u2014 safe because bin assignment is\norigin-independent; bounds only drive client framing.  Returns the updated\nsubset meta for *shape*.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
+        "operationId": "remove_from_subset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubsetRemoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionMeta"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "description": "No subset projection is currently built."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Drop ids from the current subset browse **without re-fitting UMAP**.",
+        "tags": [
+          "projection"
+        ]
+      }
+    },
+    "/api/projection/tiles/{shape}/{level}/{tx}/{ty}": {
       "get": {
         "description": "Because the projection is frozen at ingest, tiles are immutable for the\nlife of the dataset and can be cached aggressively by the client.",
         "operationId": "get_tile",
@@ -11859,12 +12235,21 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return the hex cells for one tile at ``(level, tx, ty)``.",
+        "summary": "Return the cells for one tile of the *shape* pyramid at ``(level, tx, ty)``.",
         "tags": [
           "projection"
         ]
       },
       "parameters": [
+        {
+          "in": "path",
+          "name": "shape",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
         {
           "in": "path",
           "name": "level",
@@ -13011,7 +13396,7 @@
       "name": "embed"
     },
     {
-      "description": "VTSBrowse projection: UMAP layout + hex-tile pyramid.",
+      "description": "VTSBrowse projection: UMAP layout + hex/square tile pyramid.",
       "name": "projection"
     }
   ]

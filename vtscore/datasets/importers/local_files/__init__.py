@@ -34,6 +34,7 @@ class LocalFilesDatasetImporter(DatasetImporter):
 
     name = "local_files"
     display_name = "Files"
+    hidden_from_picker = True
     description = (
         "Upload a single file from this computer (your browser machine) that lists the media "
         "to import: a UTF-8 text file with one server-side path per line, or a .npz archive "

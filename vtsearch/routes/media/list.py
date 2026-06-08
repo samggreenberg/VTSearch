@@ -32,10 +32,17 @@ from vtsearch.schemas.media import (
     MediaBatchResponseSchema,
     MediaIdsListResponseSchema,
     MediaParagraphResponseSchema,
+    MediaVoteBulkRequestSchema,
+    MediaVoteBulkResponseSchema,
     MediaVoteRequestSchema,
     MediaVoteResponseSchema,
 )
-from vtsearch.routes._shared import require_dataset_header, require_detector_header
+from vtsearch.routes._shared import (
+    cached_thumbnail_response,
+    image_thumbnail_response,
+    require_dataset_header,
+    require_detector_header,
+)
 from vtsearch.state import (
     _state_lock,
     apply_label,
@@ -405,16 +412,15 @@ def media_video(media_id: int):
     return _send_video_bytes(media_bytes, mimetype, f"media_{media_id}{ext}")
 
 
-@medias_bp.route("/api/medias/<int:media_id>/image")
-@medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
-@medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
-def media_image(media_id: int):  # noqa: C901
-    """Stream the image bytes for a single image media item.
+def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:  # noqa: C901
+    """Resolve the displayable image for a media item.
 
-    Determines the MIME type from the media's filename extension, defaulting
-    to ``image/jpeg`` for unrecognised extensions. For non-image media types
-    that declare an ``image_response`` hook (audio waveforms, video frames),
-    the route delegates to that hook.
+    Returns ``(image_bytes, mimetype, download_name)`` for the bytes the
+    ``/image`` route would serve, ``abort``-ing with the matching error when
+    no image is available.  For non-image types it delegates to the media
+    type's ``image_response`` hook (audio waveforms, video frames); for image
+    types it streams the source bytes with a mimetype derived from the
+    filename extension.  Shared by the full-image and thumbnail routes.
     """
     c = get_media(media_id)
     if not c:
@@ -434,11 +440,7 @@ def media_image(media_id: int):  # noqa: C901
         if image_response_fn is not None:
             resp = image_response_fn(c)
             if resp is not None:
-                return send_file(
-                    io.BytesIO(resp.data),
-                    mimetype=resp.mimetype,
-                    download_name=resp.download_name,
-                )
+                return resp.data, resp.mimetype, resp.download_name
         abort(400, message="no image available")
 
     media_bytes = _resolve_bytes(c)
@@ -458,11 +460,52 @@ def media_image(media_id: int):  # noqa: C901
     else:
         mimetype = "image/jpeg"
 
-    return send_file(
-        io.BytesIO(media_bytes),
-        mimetype=mimetype,
-        download_name=f"media_{media_id}{Path(filename).suffix if filename and Path(filename).suffix else '.jpg'}",
-    )
+    suffix = Path(filename).suffix if filename and Path(filename).suffix else ".jpg"
+    return media_bytes, mimetype, f"media_{media_id}{suffix}"
+
+
+@medias_bp.route("/api/medias/<int:media_id>/image")
+@medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
+@medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
+def media_image(media_id: int):
+    """Stream the image bytes for a single image media item.
+
+    Determines the MIME type from the media's filename extension, defaulting
+    to ``image/jpeg`` for unrecognised extensions. For non-image media types
+    that declare an ``image_response`` hook (audio waveforms, video frames),
+    the route delegates to that hook.
+    """
+    data, mimetype, download_name = _resolve_display_image(media_id)
+    return send_file(io.BytesIO(data), mimetype=mimetype, download_name=download_name)
+
+
+@medias_bp.route("/api/medias/<int:media_id>/thumbnail")
+@medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
+@medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
+def media_thumbnail(media_id: int):
+    """Stream a downscaled thumbnail of a media item's image.
+
+    Grid and list tiles use this instead of ``/image`` so a gallery of many
+    high-resolution items doesn't force the browser to decode every full-size
+    bitmap at once.  The thumbnail is bounded to a fixed longest-side length
+    (see :data:`vtscore.media.image.thumbnail.DEFAULT_MAX_DIM`) and is the
+    same regardless of zoom level, so an ``ETag`` lets the browser reuse it
+    across scrolls and zoom changes.
+
+    When the media carries a precomputed ``thumbnail_bytes`` (generated at
+    ingest for image/audio/video), the bytes are streamed directly with no
+    request-time decode/resize -- the path that keeps a fresh browse-canvas
+    zoom responsive.  Media without one (old pickles, thin loads, undecodable
+    SVGs) fall back to generating the thumbnail from the display image.
+    """
+    c = get_media(media_id)
+    if not c:
+        abort(404, message="not found")
+    thumb = c.get("thumbnail_bytes")
+    if thumb:
+        return cached_thumbnail_response(thumb, f"thumb_{media_id}")
+    data, src_mimetype, _ = _resolve_display_image(media_id)
+    return image_thumbnail_response(data, src_mimetype, f"thumb_{media_id}")
 
 
 @medias_bp.route("/api/medias/<int:media_id>/paragraph")
@@ -595,6 +638,66 @@ def vote_media(body: dict, media_id: int):
     return {"ok": True, "state": new_state, "click_time": click_time}
 
 
+@medias_bp.route("/api/medias/vote-bulk", methods=["POST"])
+@medias_bp.arguments(MediaVoteBulkRequestSchema)
+@medias_bp.response(200, MediaVoteBulkResponseSchema)
+@medias_bp.alt_response(400, description="No ids supplied.")
+@require_dataset_header
+@require_detector_header
+def vote_media_bulk(body: dict):
+    """Apply one absolute vote target to many medias in a single request.
+
+    Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to
+    ``target`` with the same idempotent semantics, then the detector
+    labelset is persisted **once** rather than per id.  Bulk votes are
+    image-level (no region boxes).  Powers the Browser's "Remove from Good"
+    cull, which marks a hand-selected set of false-positives ``bad`` and
+    drops them from the browse.
+
+    Ids that aren't in the loaded dataset are skipped and reported back in
+    ``missing``; ``changed`` counts only the ids whose state actually moved
+    (idempotent re-applies don't count).
+    """
+    target = body["target"]
+    ids = body["ids"]
+    if not ids:
+        abort(400, message="No ids supplied")
+
+    changed = 0
+    missing: list[int] = []
+    for media_id in ids:
+        if get_media(media_id) is None:
+            missing.append(media_id)
+            continue
+        old, new, _click_time = set_vote(media_id, target)
+        if old != new:
+            changed += 1
+
+    # Persist the resulting labelset once for the whole batch.  Mirrors the
+    # single-vote route's H30 handling: a write failure surfaces as a 500
+    # rather than leaving the in-memory votes silently un-persisted.
+    from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+
+    try:
+        sync_labels_to_loaded_detector()
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).exception("vote_media_bulk: detector label sync failed")
+        abort(500, message=f"Failed to persist votes to detector store: {exc}")
+
+    from vtscore.labels.sync import sync_to_labelset_source
+
+    try:
+        sync_to_labelset_source()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("vote_media_bulk: labelset source scheduling failed")
+
+    return {"ok": True, "changed": changed, "missing": missing}
+
+
 @medias_bp.route("/api/medias/add-to-pile", methods=["POST"])
 @medias_bp.response(200, MediaAddToPileResponseSchema)
 @medias_bp.alt_response(
@@ -693,7 +796,8 @@ def add_media_to_pile():  # noqa: C901
     if embedding is None:
         abort(400, message="Failed to embed the uploaded file.")
 
-    # Generate thumbnail for non-image media
+    # Precompute the grid/list thumbnail so the request path never decodes the
+    # full-resolution upload on a cold tile fetch (matches the ingest path).
     thumb = None
     if dataset_media_type == "audio":
         from vtscore.media.audio.media_type import generate_waveform_thumbnail  # noqa: PLC0415
@@ -703,6 +807,11 @@ def add_media_to_pile():  # noqa: C901
         from vtscore.media.video.media_type import generate_video_thumbnail  # noqa: PLC0415
 
         thumb = generate_video_thumbnail(file_bytes)
+    elif dataset_media_type == "image":
+        from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+        result = make_image_thumbnail(file_bytes)
+        thumb = result[0] if result is not None else None
 
     new_media: dict[str, Any] = {
         "media_type": dataset_media_type,

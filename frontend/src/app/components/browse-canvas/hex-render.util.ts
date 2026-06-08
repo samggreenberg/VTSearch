@@ -8,33 +8,160 @@ const DEG30 = Math.PI / 6;
 /** Pointy-top hexagon vertex angles (matches the projection's hex layout). */
 export const HEX_ANGLES = Array.from({ length: 6 }, (_, i) => (Math.PI / 3) * i - DEG30);
 
-const VIRIDIS: [number, number, number][] = [
-  [68, 1, 84],
-  [72, 35, 116],
-  [64, 67, 135],
-  [52, 94, 141],
-  [41, 120, 142],
-  [33, 145, 140],
-  [42, 168, 131],
-  [68, 190, 112],
-  [94, 201, 98],
-  [128, 213, 79],
-  [166, 222, 52],
-  [199, 227, 33],
-  [229, 228, 32],
-  [253, 231, 37],
+type RGB = [number, number, number];
+
+/** The effective theme the canvas is rendered under (no ``'system'``). */
+export type CanvasTheme = 'dark' | 'light' | 'highviz';
+
+/**
+ * A density colormap, resolved for a concrete theme. ``single`` is the colour
+ * for a one-item cell (drawn as a distinct dot); ``ramp`` is the low→high
+ * density gradient for multi-item cells. The "nothing here" colour is never
+ * part of the map — empty space is painted with the canvas background so it
+ * reads as absence — so every ``single``/``ramp`` colour means "at least one".
+ */
+export interface ResolvedColormap {
+  single: RGB;
+  ramp: RGB[];
+}
+
+/** The colormap presets the user can pick per media type in Settings → Browser. */
+export type BrowseColormapId = 'auto' | 'heat' | 'ocean' | 'gray';
+
+/** All selectable colormap ids, in pulldown order (``auto`` first). */
+export const BROWSE_COLORMAP_IDS: readonly BrowseColormapId[] = ['auto', 'heat', 'ocean', 'gray'];
+
+/**
+ * Media types whose browse cells are painted with the central item's thumbnail
+ * (``image``, ``video``) rather than flat density shading. These are pinned to
+ * the grayscale colormap: the colourful presets are fun for the abstract
+ * density shading of non-thumbnail types, but under real thumbnails a neutral
+ * ground reads best and a coloured tint would fight the image content. Callers
+ * both force ``'gray'`` for these types and hide the colormap picker for them.
+ */
+export function usesThumbnails(mediaType: string): boolean {
+  return mediaType === 'image' || mediaType === 'video';
+}
+
+/**
+ * Default width (CSS px) of the colormap-coloured border drawn around
+ * multi-item ("pile") thumbnails, applied per media type when the user hasn't
+ * set ``browse_thumbnail_border`` for that type. ``0`` would disable it.
+ */
+export const DEFAULT_THUMBNAIL_BORDER = 2;
+
+/** Max selectable pile-thumbnail border width (CSS px); mirrors the backend clamp. */
+export const MAX_THUMBNAIL_BORDER = 8;
+
+// "Heat": dark-red → yellow. The low end is a deep red rather than black so
+// that black stays free to mean "nothing here" — empty space reads as absence
+// while any occupied cell is at least dark red. Brightness rises with density,
+// which reads naturally on a dark background. This is the dark-mode default.
+const HEAT_RAMP: RGB[] = [
+  [90, 0, 0],
+  [140, 12, 0],
+  [185, 28, 0],
+  [220, 60, 0],
+  [240, 105, 0],
+  [250, 150, 5],
+  [255, 195, 25],
+  [255, 235, 70],
 ];
 
-/** Map a normalized density ``t`` in [0, 1] to a viridis ``rgb(...)`` string. */
-export function viridisColor(t: number): string {
-  const n = VIRIDIS.length - 1;
+// "Ocean": medium-blue → dark-navy, with a neutral mid grey for singletons.
+// Darkness rises with density, which reads naturally on a light background
+// (more ink = more items) and keeps the hues disjoint from Heat's red/yellow —
+// so "this bin is blue" unambiguously means light mode + lots, and "yellow"
+// means dark mode + lots. This is the light-mode default. The low end starts
+// at a clearly-saturated blue (not the near-white ColorBrewer "Blues" tail)
+// so even sparse cells separate from the ``#f0f2f5`` light-mode background;
+// the earlier pale start made one-item discs and low-density bins vanish.
+const OCEAN_RAMP: RGB[] = [
+  [158, 202, 225],
+  [107, 174, 214],
+  [66, 146, 198],
+  [33, 113, 181],
+  [8, 81, 156],
+  [8, 48, 107],
+];
+// A mid neutral grey — distinct from the blue ramp so a lone dot reads as
+// "exactly one", and dark enough to stay legible on the light-mode background.
+const OCEAN_SINGLE: RGB = [150, 158, 172];
+
+// "Grayscale": a neutral luminance ramp that always moves *away* from the
+// background so density stays legible — darker as it grows on a light canvas,
+// lighter as it grows on a dark one — so the direction is theme-dependent.
+const GRAY_LIGHT: ResolvedColormap = {
+  single: [176, 176, 176],
+  ramp: [
+    [150, 150, 150],
+    [122, 122, 122],
+    [92, 92, 92],
+    [60, 60, 60],
+    [28, 28, 28],
+  ],
+};
+const GRAY_DARK: ResolvedColormap = {
+  single: [96, 96, 96],
+  ramp: [
+    [110, 110, 110],
+    [150, 150, 150],
+    [185, 185, 185],
+    [214, 214, 214],
+    [240, 240, 240],
+  ],
+};
+
+const HEAT: ResolvedColormap = { single: HEAT_RAMP[0], ramp: HEAT_RAMP };
+const OCEAN: ResolvedColormap = { single: OCEAN_SINGLE, ramp: OCEAN_RAMP };
+
+/**
+ * Resolve a colormap id to concrete colours for *theme*. ``auto`` picks the
+ * per-theme default — Ocean (blue, darkens with density) in light mode, Heat
+ * (red→yellow, brightens with density) in dark/high-viz — so the field always
+ * has good contrast against the background without the user choosing a map.
+ */
+export function resolveColormap(id: BrowseColormapId, theme: CanvasTheme): ResolvedColormap {
+  switch (id) {
+    case 'heat':
+      return HEAT;
+    case 'ocean':
+      return OCEAN;
+    case 'gray':
+      return theme === 'light' ? GRAY_LIGHT : GRAY_DARK;
+    case 'auto':
+    default:
+      return theme === 'light' ? OCEAN : HEAT;
+  }
+}
+
+/** Format an ``[r, g, b]`` triple as a CSS ``rgb(...)`` string. */
+export function rgbString(c: RGB): string {
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+/**
+ * Build a CSS gradient stop list (``rgb(...) p%, …``) from a colormap ramp,
+ * low → high. Lets the on-screen legend build its swatch from the same colours
+ * the canvas fills cells with, so the two can't drift.
+ */
+export function gradientStops(ramp: readonly (readonly [number, number, number])[]): string {
+  const n = Math.max(ramp.length - 1, 1);
+  return ramp
+    .map(([r, g, b], i) => `rgb(${r},${g},${b}) ${Math.round((i / n) * 100)}%`)
+    .join(', ');
+}
+
+/** Map a normalized density ``t`` in [0, 1] to an ``rgb(...)`` string on *ramp*. */
+export function densityColor(t: number, ramp: RGB[]): string {
+  const n = ramp.length - 1;
   const idx = t * n;
   const lo = Math.floor(idx);
   const hi = Math.min(lo + 1, n);
   const frac = idx - lo;
-  const r = Math.round(VIRIDIS[lo][0] + (VIRIDIS[hi][0] - VIRIDIS[lo][0]) * frac);
-  const g = Math.round(VIRIDIS[lo][1] + (VIRIDIS[hi][1] - VIRIDIS[lo][1]) * frac);
-  const b = Math.round(VIRIDIS[lo][2] + (VIRIDIS[hi][2] - VIRIDIS[lo][2]) * frac);
+  const r = Math.round(ramp[lo][0] + (ramp[hi][0] - ramp[lo][0]) * frac);
+  const g = Math.round(ramp[lo][1] + (ramp[hi][1] - ramp[lo][1]) * frac);
+  const b = Math.round(ramp[lo][2] + (ramp[hi][2] - ramp[lo][2]) * frac);
   return `rgb(${r},${g},${b})`;
 }
 
@@ -53,4 +180,34 @@ export function traceHexPath(
     else ctx.lineTo(x, y);
   }
   ctx.closePath();
+}
+
+/**
+ * A hex's inscribed-circle radius as a fraction of its circumradius
+ * (``radius``). A disc of this radius is the largest circle that fits inside
+ * the hex, so a singleton drawn as a disc reads slightly smaller than the hex
+ * it replaces.
+ */
+export const HEX_INRADIUS_RATIO = SQRT3 / 2;
+
+/**
+ * Trace one cell's outline as the current path. A cell holding a single media
+ * item (``single``) is drawn as the hex's inscribed disc — barely smaller than
+ * the hex, and visibly so since a disc has less area than the hex around it —
+ * so singletons read as distinct dots. Every other cell keeps the full hex.
+ */
+export function traceCellPath(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  single: boolean,
+): void {
+  if (single) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * HEX_INRADIUS_RATIO, 0, Math.PI * 2);
+    ctx.closePath();
+  } else {
+    traceHexPath(ctx, cx, cy, radius);
+  }
 }

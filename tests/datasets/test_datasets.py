@@ -38,6 +38,37 @@ class TestDatasetEndpoints:
         # Should return available demo datasets
         assert "demos" in data or isinstance(data, dict)
 
+    def test_demo_list_advertises_exact_measured_count(self, client):
+        """demo-list serves the written-down exact count, not the estimate.
+
+        Caltech-101's uneven category sizes made the per-category-average
+        estimate ~37-40% low (S advertised 300, loader produced 412). The
+        route must now report the measured value from DEMO_MEDIA_COUNTS.
+        """
+        from vtscore.datasets.demo_counts import DEMO_MEDIA_COUNTS
+
+        resp = client.get("/api/dataset/demo-list")
+        assert resp.status_code == 200
+        by_name = {d["name"]: d for d in resp.get_json()["datasets"]}
+
+        for did, expected in DEMO_MEDIA_COUNTS.items():
+            if did in by_name:  # media type may be unregistered in a given build
+                assert by_name[did]["num_files"] == expected, did
+
+    def test_demo_list_falls_back_to_estimate_for_unmeasured(self, client):
+        """Datasets absent from DEMO_MEDIA_COUNTS still get the slice estimate."""
+        from vtscore.datasets.config import DEMO_DATASETS
+        from vtscore.datasets.demo_counts import DEMO_MEDIA_COUNTS
+        from vtsearch.routes.datasets.ui import _estimate_demo_num_files
+
+        resp = client.get("/api/dataset/demo-list")
+        by_name = {d["name"]: d for d in resp.get_json()["datasets"]}
+
+        unmeasured = [n for n in by_name if n not in DEMO_MEDIA_COUNTS]
+        assert unmeasured, "expected at least one demo without a measured count"
+        for did in unmeasured:
+            assert by_name[did]["num_files"] == _estimate_demo_num_files(DEMO_DATASETS[did]), did
+
     def test_demo_categories_returns_categories(self, client):
         """GET /api/dataset/demo-categories/<name> returns categories for a valid demo."""
         from vtscore.datasets import DEMO_DATASETS
@@ -128,33 +159,30 @@ class TestDatasetEndpoints:
             file_names2 = [f["name"] for f in data2["files"]]
             assert "sound.wav" in file_names2
 
-    def test_browse_media_files_server_fs_lists_filesystem(self, client, tmp_path):
-        """``source=server_fs`` should let the picker walk the whole filesystem.
+    def test_browse_media_files_server_fs_unrestricted_single_user(self, client, tmp_path):
+        """``source=server_fs`` is unrestricted in single-user / no-auth mode.
 
-        The single-user mode root is ``/`` so any directory readable by the
-        server process should be listable via its absolute path stripped of
-        the leading slash.
+        The picker is rooted at the filesystem root (``/``) so the user can
+        browse to any absolute folder on the server, matching the now
+        unrestricted ``server_folder`` import validation.
         """
         sub = tmp_path / "subdir"
         sub.mkdir()
         (sub / "track.wav").write_bytes(b"RIFF" + b"\x00" * 64)
 
-        # tmp_path is absolute (e.g. /tmp/pytest-of-user/.../test_x0).
-        # Strip the leading "/" to get the relative path under "/".
-        rel = str(tmp_path).lstrip("/")
-        resp = client.get(f"/api/browse-media-files?source=server_fs&path={rel}")
+        # Browsing with no sub-path reports the filesystem root.
+        resp = client.get("/api/browse-media-files?source=server_fs&path=")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["root_path"] == "/"
-        dir_names = [d["name"] for d in data["directories"]]
-        file_names = [f["name"] for f in data["files"]]
-        assert "subdir" in dir_names
-        # No media files at this level.
-        assert "track.wav" not in file_names
-
-        # default_path is reported on every server_fs response. It points
-        # at the server user's home dir when it exists.
+        # default_path is reported on every server_fs response.
         assert "default_path" in data
+
+        # An arbitrary absolute path (well outside the CWD) is browsable.
+        resp = client.get(f"/api/browse-media-files?source=server_fs&path={tmp_path}")
+        assert resp.status_code == 200
+        dir_names = [d["name"] for d in resp.get_json()["directories"]]
+        assert "subdir" in dir_names
 
     def test_select_browsed_file_copies_to_example_media(self, client, tmp_path):
         """POST /api/browse-media-files/select copies the file to example_media."""
@@ -259,6 +287,22 @@ class TestDatasetEndpoints:
         """GET /api/dataset/detect-media-type returns 404 for an unknown source."""
         resp = client.get("/api/dataset/detect-media-type?source=demo:nonexistent_xyz&path=")
         assert resp.status_code == 404
+
+    def test_detect_media_type_server_fs_unrestricted_single_user(self, client, tmp_path):
+        """``server_fs`` detection runs against any absolute path in single-user mode.
+
+        With no per-user boundary to enforce, detection scans whatever absolute
+        folder the user supplies, matching the unrestricted importer.
+        """
+        root = tmp_path / "media"
+        root.mkdir()
+        (root / "a.wav").write_bytes(b"RIFF")
+        (root / "b.wav").write_bytes(b"RIFF")
+
+        # An absolute path well outside the CWD is detected, not rejected.
+        resp = client.get(f"/api/dataset/detect-media-type?source=server_fs&path={root}")
+        assert resp.status_code == 200
+        assert resp.get_json()["dominant"] == "audio"
 
     def test_detect_media_type_directory_cap(self, tmp_path):
         """The helper stops walking after ``max_dirs`` directories, even when

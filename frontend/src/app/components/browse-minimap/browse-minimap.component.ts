@@ -2,6 +2,7 @@ import {
   Component,
   ElementRef,
   EventEmitter,
+  HostBinding,
   Input,
   NgZone,
   OnChanges,
@@ -14,7 +15,14 @@ import {
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
-import { SQRT3, traceHexPath, viridisColor } from '../browse-canvas/hex-render.util';
+import {
+  densityColor,
+  resolveColormap,
+  rgbString,
+  type BrowseColormapId,
+  type CanvasTheme,
+} from '../browse-canvas/hex-render.util';
+import { binGeometry } from '../browse-canvas/bin-geometry';
 import { IconComponent } from '../icon/icon.component';
 import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
 
@@ -26,13 +34,15 @@ export const MINIMAP_MAX_HEIGHT = 450;
 
 /**
  * Lower-right overview for the browse canvas: a density heatmap of the whole
- * projection at its coarsest level, with a rectangle marking the region the
- * main canvas is currently showing. Clicking/dragging the minimap recenters
- * the main view; a corner handle resizes it and a close button hides it.
+ * projection, with a rectangle marking the region the main canvas is currently
+ * showing. Clicking/dragging the minimap recenters the main view; a corner
+ * handle resizes it and a close button hides it.
  *
- * The heatmap reads the coarsest (level 0) hex tiles — the fewest, largest
- * bins — straight from the shared :class:`TileCacheService`, so it reuses
- * whatever the main canvas has already fetched and never holds its own copy.
+ * The heatmap picks the pyramid level whose hexes land near a small target
+ * on-screen size, so the whole projection is shown as a fine-grained field of
+ * many hexes (not the handful of level-0 bins). Tiles for that level are read
+ * straight from the shared :class:`TileCacheService`, so it reuses whatever the
+ * main canvas has already fetched and never holds its own copy.
  */
 @Component({
   selector: 'vt-browse-minimap',
@@ -46,10 +56,22 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   @Input() meta: ProjectionMeta | null = null;
   @Input() width = 200;
   @Input() height = 150;
-  /** Hide request from the close button. */
+  /** Density colormap preset; mirrors the main canvas so the overview matches. */
+  @Input() colormap: BrowseColormapId = 'auto';
+  /**
+   * Docked mode: the minimap fills its container (the browse side panel's
+   * meta-row) and sizes its canvas to fit via a {@link ResizeObserver},
+   * rather than floating over the canvas at an explicit size. In this mode
+   * the close button and corner resize handle are hidden — the panel owns
+   * the geometry — but click/drag-to-navigate stays live.
+   */
+  @Input() @HostBinding('class.dock') dock = false;
+  /** Hide request from the close button (floating mode only). */
   @Output() closed = new EventEmitter<void>();
-  /** Final size after a resize drag, for persistence. */
+  /** Final size after a resize drag, for persistence (floating mode only). */
   @Output() resized = new EventEmitter<{ width: number; height: number }>();
+
+  private resizeObserver: ResizeObserver | null = null;
 
   private ctx!: CanvasRenderingContext2D;
   private dpr = 1;
@@ -59,6 +81,8 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   private viewportSub: Subscription | null = null;
   private rafId = 0;
   private needsRedraw = false;
+  // Repaints when the document theme flips, matching the main canvas.
+  private themeObserver: MutationObserver | null = null;
 
   private resizing = false;
   private resizeStartX = 0;
@@ -77,13 +101,15 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     private ngZone: NgZone,
     private tileCache: TileCacheService,
     private viewport: BrowseViewportService,
+    private host: ElementRef<HTMLElement>,
   ) {}
 
   ngOnInit(): void {
     this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
+    if (this.dock) this.startDockSizing();
     this.resizeCanvas();
 
-    // Coarse tiles arrive asynchronously; repaint as the cache fills. The
+    // Overview tiles arrive asynchronously; repaint as the cache fills. The
     // viewport box updates on every pan/zoom the main canvas publishes.
     this.tileLoadSub = this.tileCache.tileLoaded$.subscribe(() => this.requestRedraw());
     this.viewportSub = this.viewport.viewport$.subscribe((b) => {
@@ -91,7 +117,13 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       this.requestRedraw();
     });
 
-    this.requestCoarseTiles();
+    this.themeObserver = new MutationObserver(() => this.requestRedraw());
+    this.themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+
+    this.requestOverviewTiles();
     this.requestRedraw();
   }
 
@@ -102,7 +134,10 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       this.requestRedraw();
     }
     if (changes['meta'] && !changes['meta'].firstChange) {
-      this.requestCoarseTiles();
+      this.requestOverviewTiles();
+      this.requestRedraw();
+    }
+    if (changes['colormap'] && !changes['colormap'].firstChange) {
       this.requestRedraw();
     }
   }
@@ -110,9 +145,36 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   ngOnDestroy(): void {
     this.tileLoadSub?.unsubscribe();
     this.viewportSub?.unsubscribe();
+    this.themeObserver?.disconnect();
+    this.resizeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.detachResizeListeners();
     this.detachNavListeners();
+  }
+
+  /**
+   * Docked mode: track the host element's box and resize the canvas to fill
+   * it, so the overview grows/shrinks with the side panel's divider drag. The
+   * observer fires outside Angular, so the resize never triggers change
+   * detection — only a canvas repaint.
+   */
+  private startDockSizing(): void {
+    const el = this.host.nativeElement;
+    this.ngZone.runOutsideAngular(() => {
+      this.resizeObserver = new ResizeObserver(() => {
+        const w = Math.max(MINIMAP_MIN_WIDTH, Math.round(el.clientWidth));
+        const h = Math.max(MINIMAP_MIN_HEIGHT, Math.round(el.clientHeight));
+        if (w === this.width && h === this.height) return;
+        this.width = w;
+        this.height = h;
+        this.resizeCanvas();
+        // A large size change can shift the overview pyramid level, so make
+        // sure the tiles for the new level are requested before repainting.
+        this.requestOverviewTiles();
+        this.requestRedraw();
+      });
+      this.resizeObserver.observe(el);
+    });
   }
 
   private resizeCanvas(): void {
@@ -125,21 +187,44 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
-  // --- Coarse-tile coverage -------------------------------------------------
+  // --- Overview-tile coverage -----------------------------------------------
 
-  /** Fetch every level-0 tile spanning the projection bounds (idempotent). */
-  private requestCoarseTiles(): void {
+  /**
+   * Target on-screen radius (minimap px) for the overview's hexes. Small enough
+   * that the whole projection reads as a fine field of many bins rather than
+   * the few large level-0 hexes, while still resolving structure at a glance.
+   */
+  private static readonly OVERVIEW_TARGET_HEX_PX = 5;
+
+  /**
+   * Pyramid level to render in the overview: the one whose hexes are nearest
+   * the small target on-screen size for the current minimap scale. Deeper than
+   * level 0 (so the map is finer-grained), clamped to the available levels.
+   */
+  private overviewLevel(f: { scale: number }): number {
+    if (!this.meta || this.meta.levels.length === 0) return 0;
+    const basePx = this.meta.base_radius * f.scale; // level-0 hex radius in px
+    const ideal = Math.log2(basePx / BrowseMinimapComponent.OVERVIEW_TARGET_HEX_PX);
+    return Math.max(0, Math.min(this.meta.levels.length - 1, Math.round(ideal)));
+  }
+
+  /** Fetch every tile of the overview level spanning the bounds (idempotent). */
+  private requestOverviewTiles(): void {
     if (!this.meta || this.meta.point_count === 0) return;
-    for (const { tx, ty } of this.coarseTiles()) {
-      this.tileCache.getTile(0, tx, ty)?.subscribe();
+    const f = this.fit();
+    if (!f) return;
+    const level = this.overviewLevel(f);
+    for (const { tx, ty } of this.overviewTiles(level)) {
+      this.tileCache.getTile(level, tx, ty)?.subscribe();
     }
   }
 
-  private coarseTiles(): { tx: number; ty: number }[] {
+  private overviewTiles(level: number): { tx: number; ty: number }[] {
     if (!this.meta) return [];
-    const radius = this.meta.base_radius; // level 0 = coarsest, largest hexes
-    const tileW = this.meta.tile_span * radius * SQRT3;
-    const tileH = this.meta.tile_span * radius * 1.5;
+    const radius = this.meta.base_radius / Math.pow(2, level);
+    const geom = binGeometry(this.meta.bin_shape);
+    const tileW = this.meta.tile_span * geom.dx(radius);
+    const tileH = this.meta.tile_span * geom.dy(radius);
     const [xmin, ymin, xmax, ymax] = this.meta.bounds;
     const txMin = Math.floor(xmin / tileW) - 1;
     const txMax = Math.ceil(xmax / tileW) + 1;
@@ -168,6 +253,14 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   /**
    * Projection→minimap scale (fits the whole extent inside an inset margin)
    * and the data centre, or ``null`` when there's nothing to map.
+   *
+   * ``bounds`` is the extent of the bin *centres*, but each edge bin is drawn
+   * out to its circumradius beyond its centre, so scaling on the centres alone
+   * clips the edge bins off the minimap. We add the overview-level bin radius
+   * (in projection units) as margin on every side. That radius depends on the
+   * scale we're solving for (the overview level is chosen from it), so iterate
+   * from the no-margin fit to a fixed point — the level is quantised, so this
+   * settles immediately.
    */
   private fit(): { scale: number; cx: number; cy: number; margin: number } | null {
     if (!this.meta || this.meta.point_count === 0) return null;
@@ -175,10 +268,14 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     const dataW = xmax - xmin || 1;
     const dataH = ymax - ymin || 1;
     const margin = 4;
-    const scale = Math.min(
-      (this.width - margin * 2) / dataW,
-      (this.height - margin * 2) / dataH,
-    );
+    const availW = this.width - margin * 2;
+    const availH = this.height - margin * 2;
+    let scale = Math.min(availW / dataW, availH / dataH);
+    for (let i = 0; i < 3; i++) {
+      const level = this.overviewLevel({ scale });
+      const r = this.meta.base_radius / Math.pow(2, level);
+      scale = Math.min(availW / (dataW + 2 * r), availH / (dataH + 2 * r));
+    }
     return { scale, cx: (xmin + xmax) / 2, cy: (ymin + ymax) / 2, margin };
   }
 
@@ -199,15 +296,23 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
 
     const f = this.fit();
     if (f) {
-      const cells = this.coarseCells();
+      const level = this.overviewLevel(f);
+      const cells = this.overviewCells(level);
       let maxCount = 1;
       for (const c of cells) if (c.count > maxCount) maxCount = c.count;
-      const hexR = this.meta!.base_radius * f.scale;
+      const geom = binGeometry(this.meta!.bin_shape);
+      const cellR = (this.meta!.base_radius / Math.pow(2, level)) * f.scale;
+      const cmap = resolveColormap(this.colormap, this.effectiveTheme());
       for (const cell of cells) {
         const [sx, sy] = this.projToMap(cell.cx, cell.cy, f);
-        traceHexPath(ctx, sx, sy, hexR);
-        const t = Math.log(cell.count) / Math.log(maxCount || 2);
-        ctx.fillStyle = viridisColor(Math.max(0, Math.min(1, t)));
+        const single = cell.count === 1;
+        geom.traceCell(ctx, sx, sy, cellR, single);
+        if (single) {
+          ctx.fillStyle = rgbString(cmap.single);
+        } else {
+          const t = Math.log(cell.count) / Math.log(maxCount || 2);
+          ctx.fillStyle = densityColor(Math.max(0, Math.min(1, t)), cmap.ramp);
+        }
         ctx.fill();
       }
       this.drawViewportRect(ctx, f);
@@ -219,11 +324,11 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     ctx.strokeRect(0.5, 0.5, this.width - 1, this.height - 1);
   }
 
-  /** Pull all cached level-0 cells covering the extent. */
-  private coarseCells(): HexCellPayload[] {
+  /** Pull all cached cells of the overview *level* covering the extent. */
+  private overviewCells(level: number): HexCellPayload[] {
     const out: HexCellPayload[] = [];
-    for (const { tx, ty } of this.coarseTiles()) {
-      const tile = this.tileCache.getCached(0, tx, ty);
+    for (const { tx, ty } of this.overviewTiles(level)) {
+      const tile = this.tileCache.getCached(level, tx, ty);
       if (tile) out.push(...tile.cells);
     }
     return out;
@@ -252,6 +357,12 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
 
   private themeColor(varName: string): string {
     return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  }
+
+  /** The effective theme in force, read from the document's ``data-theme``. */
+  private effectiveTheme(): CanvasTheme {
+    const t = document.documentElement.getAttribute('data-theme');
+    return t === 'light' || t === 'highviz' ? t : 'dark';
   }
 
   // --- Click / drag to recenter --------------------------------------------

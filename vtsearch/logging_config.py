@@ -287,7 +287,18 @@ def setup_logging(
     root.setLevel(level_value)
 
     # Quiet down chatty libraries; preserved from app.py's old basicConfig.
-    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+    #
+    # ``huggingface_hub`` stays pinned to ERROR regardless of level: its
+    # INFO/DEBUG output is download-progress chatter nobody asked for.
+    #
+    # ``werkzeug`` is different. Its INFO records *are* the dev-server access
+    # log (one ``"GET /api/... 200"`` line per request), so we only silence it
+    # at the default WARNING+ levels and let it through once the operator opts
+    # into INFO/DEBUG (``python app.py -v`` or ``VTSEARCH_LOG_LEVEL=info``).
+    # Pinning it to ERROR unconditionally was the ``no-access-log`` bug: there
+    # was no way to see request activity at all, even with the level turned up.
+    werkzeug_level = level_value if level_value <= logging.INFO else logging.ERROR
+    logging.getLogger("werkzeug").setLevel(werkzeug_level)
     logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
     logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
 

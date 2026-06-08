@@ -29,11 +29,18 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT
 
 __all__ = [
+    "BROWSE_THUMBNAIL_BORDER_PX",
+    "BinShape",
+    "BrowseColormap",
+    "BrowseIconSize",
     "FocusMode",
     "GridIconSize",
     "ServerSettings",
     "Theme",
     "UserSettings",
+    "VALID_BIN_SHAPES",
+    "VALID_BROWSE_COLORMAPS",
+    "VALID_BROWSE_ICON_SIZES",
     "VALID_FOCUS_MODES",
     "VALID_GRID_ICON_SIZES",
     "VALID_PANEL_PX",
@@ -47,12 +54,24 @@ Theme = Literal["dark", "light", "highviz", "system"]
 ViewMode = Literal["grid", "list"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
+BinShape = Literal["hex", "square"]
+# VTSBrowse density colormap preset. ``auto`` follows the active theme (Ocean
+# in light mode, Heat in dark/high-viz); the rest lock to a specific map.
+BrowseColormap = Literal["auto", "heat", "ocean", "gray"]
+# VTSBrowse on-screen cell size, shared label set with the grid icon size.
+BrowseIconSize = Literal["XS", "S", "M", "L", "XL"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_VIEW_MODES: tuple[str, ...] = ("grid", "list")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
+VALID_BIN_SHAPES: tuple[str, ...] = ("hex", "square")
+VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
+VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_PANEL_PX: tuple[int, int] = (150, 500)
+# Allowed range (CSS px) for the VTSBrowse pile-thumbnail border width. ``0``
+# disables the border; values are clamped into this range on read/write.
+BROWSE_THUMBNAIL_BORDER_PX: tuple[int, int] = (0, 8)
 
 
 def _clamp(lo: float, hi: float):
@@ -174,17 +193,40 @@ class UserSettings(BaseModel):
     autopilot_resort_interval: Annotated[int, _clamp_min(1)] = 10
     autopilot_goal_diversity: Annotated[int, _clamp_min(1)] = 40
 
-    # VTSBrowse overview minimap (the small heatmap + viewport box in the
-    # lower-right of the browse canvas). These persist the user's last
-    # show/hide choice and the size they dragged it to so the overview
-    # comes back the same way on the next visit. They are stored in the
-    # settings set but are deliberately NOT surfaced as Settings-modal
-    # widgets - the controls live on the minimap itself (a close button
-    # and a corner resize handle). Width/height are in CSS pixels, clamped
-    # to a sane on-screen range.
-    browse_minimap_visible: bool = True
-    browse_minimap_width: Annotated[int, _clamp(120, 600)] = 200
-    browse_minimap_height: Annotated[int, _clamp(90, 450)] = 150
+    # VTSBrowse side-panel width (CSS px). The browse view docks a
+    # selection panel (selected-item grid + the legend and overview
+    # minimap) to the right of the canvas, separated by a draggable
+    # divider; this persists the width the user dragged it to so the
+    # panel comes back the same way on the next visit. Not surfaced as a
+    # Settings-modal widget - the divider drives it. Clamped to a sane
+    # on-screen range.
+    browse_panel_width: Annotated[int, _clamp(260, 800)] = 360
+
+    # VTSBrowse per-media-type display preferences. Each is a
+    # ``{media_type_id: value}`` dict so a user can tune the projection
+    # browser independently for, say, audio vs. image datasets. Empty
+    # entries fall back to the per-type default on the frontend (hex,
+    # ``auto`` colormap, ``M`` size). Driven by the toolbar toggles on the
+    # browse canvas AND the Settings → Browser tab; both write the same
+    # maps keyed by the active dataset's media type.
+    #
+    # - ``browse_bin_shape``: tile the projection as hexagons (default) or
+    #   squares, per media type.
+    # - ``browse_colormap``: density colormap preset (``auto`` follows the
+    #   theme — Ocean in light mode, Heat in dark/high-viz).
+    # - ``browse_icon_size``: on-screen cell size (XS…XL), the named form of
+    #   the canvas's bigger/smaller buttons.
+    # - ``browse_thumbnail_border``: width in CSS px of the colormap-coloured
+    #   border drawn around multi-item ("pile") thumbnails. The band's colour is
+    #   the density colour for the pile's item count, so its hue/brightness reads
+    #   as the stack height under the tile. Only affects media types that paint
+    #   thumbnails (image, video); ``0`` disables it. Clamped to 0..8 px.
+    browse_bin_shape: dict[str, BinShape] = Field(default_factory=dict)
+    browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
+    browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
+    browse_thumbnail_border: dict[str, Annotated[int, _clamp(*BROWSE_THUMBNAIL_BORDER_PX)]] = Field(
+        default_factory=dict
+    )
 
     view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
     view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)

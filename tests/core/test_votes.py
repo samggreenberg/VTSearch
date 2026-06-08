@@ -112,6 +112,52 @@ class TestVoteClip:
         assert 2 not in app_module.good_votes
 
 
+class TestVoteBulk:
+    """POST /api/medias/vote-bulk: apply one target to many ids at once.
+
+    Powers the Browser's "Remove from Good" cull (mark a hand-selected set of
+    false-positives Bad in a single request).
+    """
+
+    def test_bulk_mark_bad_moves_from_good(self, client):
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "good"})
+        resp = client.post("/api/medias/vote-bulk", json={"ids": [1, 2], "target": "bad"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["changed"] == 2
+        assert data["missing"] == []
+        assert 1 in app_module.bad_votes
+        assert 2 in app_module.bad_votes
+        assert 1 not in app_module.good_votes
+        assert 2 not in app_module.good_votes
+
+    def test_bulk_idempotent_not_counted(self, client):
+        client.post("/api/medias/1/vote", json={"target": "bad"})
+        # 1 is already bad → no change; 2 transitions none→bad → one change.
+        resp = client.post("/api/medias/vote-bulk", json={"ids": [1, 2], "target": "bad"})
+        assert resp.get_json()["changed"] == 1
+        assert 1 in app_module.bad_votes
+        assert 2 in app_module.bad_votes
+
+    def test_bulk_reports_missing_ids(self, client):
+        resp = client.post("/api/medias/vote-bulk", json={"ids": [1, 9999], "target": "bad"})
+        data = resp.get_json()
+        assert data["missing"] == [9999]
+        assert data["changed"] == 1
+        assert 1 in app_module.bad_votes
+
+    def test_bulk_empty_ids_rejected(self, client):
+        resp = client.post("/api/medias/vote-bulk", json={"ids": [], "target": "bad"})
+        assert resp.status_code == 400
+
+    def test_bulk_invalid_target_rejected(self, client):
+        resp = client.post("/api/medias/vote-bulk", json={"ids": [1], "target": "meh"})
+        assert resp.status_code == 422
+        assert "target" in resp.get_json()["errors"]["json"]
+
+
 class TestGetVotes:
     def test_empty_votes(self, client):
         resp = client.get("/api/votes")

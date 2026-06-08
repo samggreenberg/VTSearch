@@ -278,9 +278,24 @@ class DatasetContext:
         # we don't rebuild a 10k-row matrix per call.
         "_emb_matrix_ids",
         "_emb_matrix",
-        # VTSBrowse: cached projection + pyramid (frozen at ingest).
+        # VTSBrowse: cached projection (frozen at ingest) + per-bin-shape
+        # pyramids derived from it. The projection (UMAP coords) is shared
+        # across bin shapes; ``_pyramids`` maps "hex"/"square" -> Pyramid so the
+        # browse hex/square toggle can keep both binnings cached at once.
         "_projection",
-        "_pyramid",
+        "_pyramids",
+        # VTSBrowse subset projection: an ephemeral UMAP fit over just a subset
+        # of this dataset's media ids (e.g. the positives of a Find run),
+        # computed on demand and never persisted.  Held alongside the full
+        # projection so a user can browse the whole dataset and a subset
+        # independently.  ``_subset_ids`` is the sorted id list the cached
+        # subset layout was fit against (cache key); ``_subset_job_id`` tracks
+        # the in-flight background UMAP build for status polling.
+        "_subset_projection",
+        "_subset_pyramids",
+        "_subset_ids",
+        "_subset_job_id",
+        "_subset_content_version",
     )
 
     def __init__(self, dataset_id: str = "") -> None:
@@ -291,7 +306,17 @@ class DatasetContext:
         self._emb_matrix_ids: list[int] | None = None
         self._emb_matrix: Any = None  # np.ndarray | None
         self._projection: Any = None  # Projection | None
-        self._pyramid: Any = None  # Pyramid | None
+        self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
+        self._subset_projection: Any = None  # Projection | None (ephemeral subset UMAP)
+        self._subset_pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid (subset)
+        self._subset_ids: list[int] | None = None  # sorted ids the subset layout is fit on
+        self._subset_job_id: str | None = None  # in-flight subset build job id
+        # Bumped on each in-place edit of the subset layout (e.g. removing
+        # false-positives from a Find browse).  The layout/``projection_id`` is
+        # kept stable so the canvas preserves the viewport; this counter changes
+        # only the tile cache key/URL so stale tiles aren't served (the tile URL
+        # is otherwise cached ``immutable``).  Reset to 0 on a fresh subset fit.
+        self._subset_content_version: int = 0
 
 
 class DetectorContext:
@@ -314,6 +339,14 @@ class DetectorContext:
         "vote_click_times",
         "vote_region_boxes",
         "click_counter",
+        # True when this detector's in-memory votes are find/scoring output
+        # (set by /api/find-label) rather than genuine training labels.  While
+        # set, ``sync_labels_to_loaded_detector`` refuses to persist the votes
+        # so a scoring pass can't overwrite the detector's saved labelset.
+        # Per-detector (not a process global) so a find pass on one detector
+        # never blocks vote syncing on another.  Cleared whenever the votes are
+        # re-derived from the on-disk labelset (detector load / dataset switch).
+        "find_mode",
         # Training artifacts
         "last_learned_scores",
         "textsort_suggestions",
@@ -381,6 +414,8 @@ class DetectorContext:
         # yes-votes and for every no-vote.  Patch-embedder v2.
         self.vote_region_boxes: dict[int, tuple[float, float, float, float]] = {}
         self.click_counter: int = 0
+        # See the slot comment: True while these votes are find/scoring output.
+        self.find_mode: bool = False
         # Training artifacts
         self.last_learned_scores: dict[int, float] = {}
         self.textsort_suggestions: list[str] = []
@@ -838,7 +873,19 @@ def _get_inclusion() -> int | None:
 
 
 def _set_inclusion(value: int | None) -> None:
-    get_active_detector_context().inclusion = value
+    ctx = get_active_detector_context()
+    # ``inclusion`` is cached per-detector for fast reads, but its canonical
+    # persisted home is the per-user settings store (written by the caller's
+    # ``_persist_setting`` hook). When a Flask request identifies no detector
+    # (e.g. the VTSBrowser, which has a dataset but no loaded detector), the
+    # active context is the frozen request-missing sentinel; there is no
+    # detector to cache the value on, so skip the cache write rather than
+    # raising ``RequestMissingContextError``. The user-settings persist still
+    # runs, so an inclusion value echoed back by a bulk settings save is a
+    # harmless no-op instead of a 400.
+    if is_request_missing_detector_context(ctx):
+        return
+    ctx.inclusion = value
 
 
 # ---------------------------------------------------------------------------

@@ -26,14 +26,28 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   // ngOnChanges cycles rebuilding videoSrc (and yanking playback) for the
   // same id.
   private lastMediaId: number | null = null;
+  // Whether (loadedmetadata) has fired for the current videoSrc. Clip bounds
+  // (clip_start/clip_end) often arrive via batch hydration *after* the video
+  // has already loaded, on a later ngOnChanges with the same media id; in that
+  // case (loadedmetadata) does not fire again, so we (re)apply the bounds here.
+  private metadataLoaded = false;
 
   constructor(private activeContext: ActiveContextService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {
-      this.lastMediaId = this.media.id;
-      this.videoError = false;
-      this.videoSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/video`);
+    if (changes['media'] && this.media) {
+      if (this.media.id !== this.lastMediaId) {
+        this.lastMediaId = this.media.id;
+        this.videoError = false;
+        this.metadataLoaded = false;
+        this.stopClipEnforcement();
+        this.videoSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/video`);
+      } else if (this.metadataLoaded) {
+        // Same media id, but metadata (e.g. clip_start/clip_end) may have just
+        // arrived via batch hydration. The video already loaded, so
+        // (loadedmetadata) won't fire again; apply the clip window now.
+        this.applyClipBounds();
+      }
     }
     if (changes['volume'] && this.videoRef?.nativeElement) {
       this.videoRef.nativeElement.volume = this.volume;
@@ -88,17 +102,33 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   onLoadedMetadata(): void {
     const video = this.videoRef?.nativeElement;
     if (!video) return;
+    this.metadataLoaded = true;
     video.volume = this.volume;
+    this.applyClipBounds();
+    this.syncPlaybackState();
+  }
 
-    // For clipped videos, seek to clip_start and enforce clip boundaries.
+  // Seek into the clip window and (re)start boundary enforcement when the media
+  // carries clip extents; otherwise tear enforcement down. Safe to call both on
+  // (loadedmetadata) and on later metadata-enrichment ngOnChanges cycles.
+  private applyClipBounds(): void {
+    const video = this.videoRef?.nativeElement;
+    if (!video) return;
+
     if (this.media?.clip_start != null) {
-      video.currentTime = this.media.clip_start;
+      const clipStart = this.media.clip_start;
+      const clipEnd = this.media.clip_end;
+      // Snap into the window only when currently outside it. This handles the
+      // initial seek and the case where the full video already started playing
+      // before clip extents arrived, without yanking a video already looping
+      // correctly within its window.
+      if (video.currentTime < clipStart || (clipEnd != null && video.currentTime >= clipEnd)) {
+        video.currentTime = clipStart;
+      }
       this.startClipEnforcement();
     } else {
       this.stopClipEnforcement();
     }
-
-    this.syncPlaybackState();
   }
 
   private startClipEnforcement(): void {

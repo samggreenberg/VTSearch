@@ -197,6 +197,58 @@ class MediaVoteResponseSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
+# /api/medias/vote-bulk
+# ---------------------------------------------------------------------------
+
+
+class MediaVoteBulkRequestSchema(Schema):
+    """Body for ``POST /api/medias/vote-bulk``.
+
+    Applies one **absolute target** vote to every id in ``ids`` in a single
+    request, persisting the detector labelset once at the end.  Per-id
+    semantics match ``/api/medias/<id>/vote`` (idempotent, achievement-gated);
+    bulk votes are always image-level, so there is no ``region_box``.  Powers
+    the Browser's "Remove from Good" cull, which marks a hand-selected batch
+    of false-positives ``bad`` in one shot.
+
+    Unknown fields are silently dropped, matching :class:`MediaVoteRequestSchema`.
+    """
+
+    ids = fields.List(
+        fields.Integer(),
+        required=True,
+        metadata={"description": "Media ids to apply the target vote to."},
+    )
+    target = fields.String(
+        required=True,
+        validate=validate.OneOf(["good", "bad", "none"]),
+        metadata={
+            "description": "Absolute target state applied to every id: ``good``, ``bad``, or ``none``. Idempotent.",
+        },
+    )
+
+    class Meta:
+        unknown = "exclude"
+
+
+class MediaVoteBulkResponseSchema(Schema):
+    """Response for ``POST /api/medias/vote-bulk`` (success path)."""
+
+    ok = fields.Boolean(required=True)
+    changed = fields.Integer(
+        required=True,
+        metadata={
+            "description": "How many ids actually changed state (idempotent re-applies and missing ids excluded).",
+        },
+    )
+    missing = fields.List(
+        fields.Integer(),
+        required=True,
+        metadata={"description": "Requested ids that were not present in the loaded dataset."},
+    )
+
+
+# ---------------------------------------------------------------------------
 # /api/medias/<id>/paragraph and /api/medias/<id>/text
 # ---------------------------------------------------------------------------
 

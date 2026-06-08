@@ -14,7 +14,6 @@ module-level `CONVERTER` sentinel.
 
 **App-side counterpart:** [`docs/EXTENDING-media.md § Adding a Media
 Converter`](../../../docs/EXTENDING-media.md#adding-a-media-converter)
-and the [multi-media import plan](../../../docs/plans/multi-media-import.md)
 for how converters compose with importers. This guide focuses on the
 library API and third-party packaging.
 

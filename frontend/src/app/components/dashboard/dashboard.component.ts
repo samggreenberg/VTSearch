@@ -18,6 +18,7 @@ import { TopBarStateService } from '../../services/top-bar-state.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { DashboardModalsService } from '../../services/dashboard-modals.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
+import { BrowsePrepService } from '../../services/browse-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { DatasetRegistryEntry, DemoDataset, DetectorRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
 import { ProgressEventsService } from '../../services/progress-events.service';
@@ -169,6 +170,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private newThingFlows: NewThingFlowsService,
     public modals: DashboardModalsService,
     public loadingTasksSvc: DashboardLoadingTasksService,
+    public browsePrep: BrowsePrepService,
     private progressEvents: ProgressEventsService,
     private settingsState: SettingsStateService,
     columnsService: DashboardColumnsService,
@@ -788,11 +790,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Launch the VTSBrowse view for a dataset. The browseContextGuard loads the
-   *  dataset context if needed. Browsing currently only supports audio datasets;
-   *  the dataset card disables the button for other media types. */
+  /** Launch the VTSBrowse view for a dataset. Loads the dataset (if needed)
+   *  AND builds its projection first — with progress shown inline on the
+   *  dataset's row — so missing loads or projections surface here on the
+   *  dashboard, not after we've navigated into the browse window. Only once
+   *  both are ready does `BrowsePrepService` navigate to `/browse/:id`.
+   *  Browsing works for any media type — the UMAP projection and hex-tile
+   *  pyramid are embedding-based and media-agnostic. */
   browseDataset(dataset: DatasetRegistryEntry): void {
-    this.router.navigate(['/browse', dataset.id]);
+    this.browsePrep.prepareAndBrowse(dataset.id);
+  }
+
+  /** Cancel a dataset load row. Routes the browse-prep projection row to
+   *  `BrowsePrepService`; everything else is a real SSE load task. */
+  onCancelDatasetTask(taskId: string): void {
+    if (this.browsePrep.ownsTask(taskId)) {
+      this.browsePrep.cancel();
+    } else {
+      this.loadingTasksSvc.cancelLoadingTask(taskId);
+    }
+  }
+
+  /** Dismiss an errored dataset row (see `onCancelDatasetTask`). */
+  onDismissDatasetTask(taskId: string): void {
+    if (this.browsePrep.ownsTask(taskId)) {
+      this.browsePrep.dismiss();
+    } else {
+      this.loadingTasksSvc.dismissLoadingTask(taskId);
+    }
   }
 
   loadDetector(model: DetectorRegistryEntry): void {
@@ -989,6 +1014,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return (
       this.trainLoading ||
       this.findLoading ||
+      this.browsePrep.preparing ||
       this.contextSwitch.switching ||
       this.datasetState.loading
     );
@@ -1035,9 +1061,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get findHint(): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
-    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and a detector';
-    if (nDatasets === 0) return 'Select a dataset';
-    if (nModels === 0) return 'Select a detector';
+    // "row above": selection means checking a table row — a dataset can be
+    // loaded (named in the top bar) while its row is unchecked, so a bare
+    // "select a dataset" reads as already satisfied.
+    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and a detector row above';
+    if (nDatasets === 0) return 'Select a dataset row in the table above';
+    if (nModels === 0) return 'Select a detector row in the table above';
     if (!this.findMediaTypesMatch()) return 'Media type mismatch';
     if (this.hasUntrainedModel()) return 'Selected detector has no training labels';
     return 'Score selected datasets with selected detectors';
@@ -1046,7 +1075,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get labelHint(): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
-    if (nDatasets === 0) return 'Select a dataset';
+    if (nDatasets === 0) return 'Select a dataset row in the table above';
     if (nDatasets > 1) return 'Select exactly 1 dataset';
     if (nModels === 0) return 'Create a new detector and start training';
     if (nModels > 1) return 'Select exactly 1 detector';
