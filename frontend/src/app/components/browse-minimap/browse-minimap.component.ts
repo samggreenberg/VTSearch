@@ -253,6 +253,14 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   /**
    * Projection→minimap scale (fits the whole extent inside an inset margin)
    * and the data centre, or ``null`` when there's nothing to map.
+   *
+   * ``bounds`` is the extent of the bin *centres*, but each edge bin is drawn
+   * out to its circumradius beyond its centre, so scaling on the centres alone
+   * clips the edge bins off the minimap. We add the overview-level bin radius
+   * (in projection units) as margin on every side. That radius depends on the
+   * scale we're solving for (the overview level is chosen from it), so iterate
+   * from the no-margin fit to a fixed point — the level is quantised, so this
+   * settles immediately.
    */
   private fit(): { scale: number; cx: number; cy: number; margin: number } | null {
     if (!this.meta || this.meta.point_count === 0) return null;
@@ -260,10 +268,14 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     const dataW = xmax - xmin || 1;
     const dataH = ymax - ymin || 1;
     const margin = 4;
-    const scale = Math.min(
-      (this.width - margin * 2) / dataW,
-      (this.height - margin * 2) / dataH,
-    );
+    const availW = this.width - margin * 2;
+    const availH = this.height - margin * 2;
+    let scale = Math.min(availW / dataW, availH / dataH);
+    for (let i = 0; i < 3; i++) {
+      const level = this.overviewLevel({ scale });
+      const r = this.meta.base_radius / Math.pow(2, level);
+      scale = Math.min(availW / (dataW + 2 * r), availH / (dataH + 2 * r));
+    }
     return { scale, cx: (xmin + xmax) / 2, cy: (ymin + ymax) / 2, margin };
   }
 

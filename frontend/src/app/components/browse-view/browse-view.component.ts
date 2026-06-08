@@ -88,9 +88,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * instead re-bins a smaller region more finely. The persisted per-media value
    * is the size *label* (see {@link ICON_SIZES}), not the multiplier.
    */
-  private readonly HEX_SCALES = [0.5, 0.75, 1, 1.6, 2.5];
+  private readonly HEX_SCALES = [0.5, 0.75, 1, 1.6, 2.5, 4, 6.25];
   /** Named icon sizes, index-aligned with {@link HEX_SCALES}. */
-  static readonly ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL'] as const;
+  static readonly ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'] as const;
   hexScaleIndex = 2;
 
   /**
@@ -144,7 +144,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * overview minimap), mirrored from the ``browse_panel_width`` setting and
    * driven by the draggable divider between the canvas and the panel.
    */
-  panelWidth = 360;
+  panelWidth = 300;
   /** Clamp + divider geometry, mirroring the Find view's panel dividers. */
   private static readonly PANEL_MIN = 260;
   private static readonly PANEL_MAX = 800;

@@ -1,14 +1,13 @@
-// Vertical color key for the density shading. Docked in the browse side
-// panel's bottom meta-row beside the overview minimap. Purely informational.
+// Horizontal color key for the density shading. Docked along the bottom of the
+// browse side panel, beneath the overview minimap. Purely informational.
 .browse-legend {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-2xs);
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
   pointer-events: none;
 }
 
@@ -19,33 +18,43 @@
   white-space: nowrap;
 }
 
-// The swatch and its tick labels share one height so the labels line up with
-// the gradient they annotate.
-.browse-legend-body {
+// The single-item swatch and the density ramp sit side by side in one row.
+.browse-legend-row {
   display: flex;
-  align-items: stretch;
-  gap: var(--space-xs);
-  height: 140px;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
-// The swatch itself: a tall, narrow stripe carrying the density ramp (dense at
-// the top).
+// The swatch and its tick labels stack so the labels sit under the gradient
+// they annotate. Grows to fill the row width to the right of the single dot.
+.browse-legend-body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+// The swatch itself: a wide, short stripe carrying the density ramp (dense at
+// the right).
 .browse-legend-bar {
-  width: 10px;
+  height: 10px;
+  width: 100%;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
 
-// Ramp tick labels are absolutely placed at their fractional height up the bar
-// and centered on that mark, so each number sits beside the color it denotes.
+// Ramp tick labels are absolutely placed at their fractional position along the
+// bar and centered on that mark, so each number sits beneath the color it
+// denotes.
 .browse-legend-ticks {
   position: relative;
-  min-width: 2.5ch;
+  height: 1em;
 
   .browse-legend-tick {
     position: absolute;
-    left: 0;
-    transform: translateY(50%);
+    top: 0;
+    transform: translateX(-50%);
   }
 }
 
@@ -62,7 +71,8 @@
 .browse-legend-single {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  gap: var(--space-2xs);
+  flex: none;
 }
 
 .browse-legend-dot {
