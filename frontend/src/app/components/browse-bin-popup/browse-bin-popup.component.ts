@@ -25,7 +25,7 @@ const ITEM_HEIGHT = 36;
 const MAX_VISIBLE_ROWS = 10;
 /** Extra rows of metadata prefetched beyond the visible window. */
 const PREFETCH_BUFFER = 50;
-/** Gap (px) kept between the popup and the viewport edge when clamping. */
+/** Gap (px) kept between the popup and the canvas edge when clamping. */
 const EDGE_MARGIN = 8;
 
 /**
@@ -59,6 +59,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   /** Viewport anchor (clientX/clientY) the popup opens at, then clamps inward. */
   @Input() x = 0;
   @Input() y = 0;
+  /** The canvas's bounding rect (viewport coords); the popup is clamped inside
+   *  it so it stays on the canvas. Null falls back to the full viewport. */
+  @Input() bounds: DOMRect | null = null;
 
   /** Emitted when the popup should close (outside click, Escape, or the X). */
   @Output() dismissed = new EventEmitter<void>();
@@ -99,7 +102,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       this.viewport?.scrollToIndex(0);
       this.prefetchVisible();
     }
-    if (changes['x'] || changes['y'] || changes['memberIds']) {
+    if (changes['x'] || changes['y'] || changes['bounds'] || changes['memberIds']) {
       this.left = this.x;
       this.top = this.y;
       // Measure + clamp after the new content lays out.
@@ -241,21 +244,28 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
 
   // --- Positioning ---------------------------------------------------------
 
-  /** Clamp the popup inside the viewport so it never spills off an edge. */
+  /** Clamp the popup inside the canvas (or the viewport, when no bounds are
+   *  given) so it never spills off an edge or onto the side panel. */
   private place(): void {
     const panel = this.panelRef?.nativeElement;
     if (!panel) return;
     const rect = panel.getBoundingClientRect();
+    const b = this.bounds;
+    const minLeft = b ? b.left + EDGE_MARGIN : EDGE_MARGIN;
+    const minTop = b ? b.top + EDGE_MARGIN : EDGE_MARGIN;
+    const maxRight = b ? b.right : window.innerWidth;
+    const maxBottom = b ? b.bottom : window.innerHeight;
     let l = this.x;
     let t = this.y;
-    if (l + rect.width + EDGE_MARGIN > window.innerWidth) {
-      l = Math.max(EDGE_MARGIN, window.innerWidth - rect.width - EDGE_MARGIN);
+    if (l + rect.width + EDGE_MARGIN > maxRight) {
+      l = maxRight - rect.width - EDGE_MARGIN;
     }
-    if (t + rect.height + EDGE_MARGIN > window.innerHeight) {
-      t = Math.max(EDGE_MARGIN, window.innerHeight - rect.height - EDGE_MARGIN);
+    if (t + rect.height + EDGE_MARGIN > maxBottom) {
+      t = maxBottom - rect.height - EDGE_MARGIN;
     }
-    this.left = l;
-    this.top = t;
+    // Never push the top-left off the opposite edge (popup larger than canvas).
+    this.left = Math.max(minLeft, l);
+    this.top = Math.max(minTop, t);
     this.cdr.markForCheck();
   }
 
