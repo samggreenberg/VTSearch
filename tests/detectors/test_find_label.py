@@ -136,6 +136,7 @@ class TestFindModeIsPerDetector:
         # A's find mode leaked through the global flag and the sync was skipped,
         # leaving B's labelset (and the Good/Bad panels) empty.
         data = _read_detector(_detector_path("find-leak-B"))
+        assert data is not None
         good_md5s = {el["md5"] for el in data["labelset"]["labels"] if el["label"] == "good"}
         assert medias[target_id]["md5"] in good_md5s
 
