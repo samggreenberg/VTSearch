@@ -496,6 +496,7 @@ class TestMediaThumbnail:
 
         sentinel = b"\x89PNG\r\n\x1a\n" + b"precomputed-thumbnail-payload"
         media = get_media(1)
+        assert media is not None
         original = media.get("thumbnail_bytes")
         media["thumbnail_bytes"] = sentinel
         try:
