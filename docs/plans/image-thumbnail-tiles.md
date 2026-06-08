@@ -1,8 +1,9 @@
 # Downscaled thumbnails for grid/list tiles
 
-**Status:** Shipped for the media-list grid/list tiles (the reported crash
-path). Open follow-up: the other small-thumbnail consumers still request the
-full-resolution `/image` route.
+**Status:** Shipped app-wide. The media-list grid/list (the reported crash
+path) plus every other image-thumbnail consumer (Find/Train right panels,
+browse views) now serve downscaled thumbnails, and all "thumbnail" routes
+finally downscale images.
 
 ## What shipped
 
@@ -34,18 +35,26 @@ from swap thrashing). Two compounding causes, both fixed:
    treated as "not yet laid out" and ignored until a real card measures, so
    `gridHeightMeasured` stays false and the next pass re-measures.
 
+## Whole-app rollout (shipped)
+
+A shared `vtsearch.routes._shared.image_thumbnail_response` helper (ETag +
+`Cache-Control` + downscale via `make_image_thumbnail`) now backs every
+small-image route, and the previously-full-res "thumbnail" routes finally
+produce real image thumbnails:
+
+- **Backend routes that now downscale images:** `/api/medias/<id>/thumbnail`,
+  `/api/detectors/<name>/labels/<id>/thumbnail` (in-memory + origin paths,
+  backing the right-panel `labelset-list`), and
+  `/api/server-media-files/<file>/thumbnail`.
+- **Frontend consumers switched from `/image` to `/thumbnail`:** right-panel
+  `label-list` (current votes), `browse-selection-panel`, `browse-bin-popup`,
+  `browse-canvas`.
+- **Intentionally left on full-res `/image`:** the center `image-viewer`
+  (detail view) and `label-view`'s crop overlay — the crop maps coordinates
+  onto the real pixels, so it needs the original resolution.
+
 ## Open follow-ups
 
-- **Wire the other thumbnail consumers to `/thumbnail`.** Several views still
-  load full-res `/image` for small thumbnails. Lower risk than the grid (they
-  render far fewer items), but they'd benefit from the same bounded decode:
-  - `right-panel/label-list/label-list.component.ts`
-  - `browse-selection-panel/browse-selection-panel.component.ts`
-  - `browse-bin-popup/browse-bin-popup.component.ts`
-  - `browse-canvas/browse-canvas.component.ts`
-  - `label-view/label-view.component.ts`
-
-  Each has spec tests asserting the `/image` URL that would need updating.
 - **Optional server-side thumbnail cache.** Currently each thumbnail is
   generated on demand (PIL decode + resize) and cached only in the browser via
   `ETag`/`Cache-Control`. If first-paint CPU on very large datasets becomes a
