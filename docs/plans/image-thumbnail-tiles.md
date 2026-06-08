@@ -1,9 +1,9 @@
 # Downscaled thumbnails for grid/list tiles
 
-**Status:** Shipped app-wide. The media-list grid/list (the reported crash
-path) plus every other image-thumbnail consumer (Find/Train right panels,
-browse views) now serve downscaled thumbnails, and all "thumbnail" routes
-finally downscale images.
+**Status:** Shipped app-wide, then extended to **precompute at ingest** (see
+"Precompute at ingest" below). Image thumbnails are now generated once when
+media is loaded and served verbatim, so a fresh browse-canvas zoom no longer
+waits on per-tile full-resolution decodes.
 
 ## What shipped
 
@@ -53,10 +53,57 @@ produce real image thumbnails:
   (detail view) and `label-view`'s crop overlay — the crop maps coordinates
   onto the real pixels, so it needs the original resolution.
 
+## Precompute at ingest (shipped)
+
+The whole-app rollout above downscaled images but still regenerated the
+thumbnail from the full-resolution original on every *cold* `/thumbnail`
+request (no server-side cache). On the browse canvas this was the dominant
+cost behind "zoom into a fresh region and wait for the bin tiles to appear":
+each newly visible bin fans out a request that does a full-res PIL decode +
+LANCZOS resize, throttled by the browser's ~6-connection-per-origin cap and
+the server's thread pool. The delivered 384 px tile is tiny to decode
+client-side, so the lag was almost entirely server-side generation + fan-out,
+not browser "reformatting".
+
+Audio and video already avoided this: they generate `thumbnail_bytes` at
+ingest and serve the stored bytes via `image_response`. Images were the gap.
+What shipped brings images to parity:
+
+- **Generate at ingest.** `ImageMediaType.load_media_data` now precomputes
+  `thumbnail_bytes` (via `make_image_thumbnail`), and the add-to-pile upload
+  route (`routes/media/list.py`) does the same for image uploads. Undecodable
+  sources (SVG, corrupt) yield `None` and fall back to request-time generation.
+- **Persist it.** `ImageMediaType.pickle_extra_fields` now lists
+  `thumbnail_bytes`, and `export_dataset_to_file` was fixed to write *every*
+  media type's `pickle_extra_fields` instead of a hardcoded key list. That
+  hardcoded list silently dropped `thumbnail_bytes` on export, so even
+  audio/video thumbnails were not surviving a pickle round-trip before this
+  change — they do now.
+- **Serve it directly.** `GET /api/medias/<id>/thumbnail` checks
+  `media["thumbnail_bytes"]` first and streams it with no decode/resize
+  (`_shared.cached_thumbnail_response`, mimetype sniffed from magic bytes).
+  Media without a stored thumbnail (old pickles, thin loads, demo images,
+  undecodable sources) fall back to the existing on-demand generation.
+
+**Backwards compatibility:** exported dataset pickles now embed image/audio/
+video thumbnails, so they grow by roughly one ~20-40 KB thumbnail per visual
+item (marginal next to the full media bytes already stored). Old pickles
+without `thumbnail_bytes` still load and simply regenerate thumbnails on
+demand. The image `/thumbnail` `ETag` now fingerprints the thumbnail bytes
+rather than the source bytes, so caches revalidate once after deploy.
+
 ## Open follow-ups
 
-- **Optional server-side thumbnail cache.** Currently each thumbnail is
-  generated on demand (PIL decode + resize) and cached only in the browser via
-  `ETag`/`Cache-Control`. If first-paint CPU on very large datasets becomes a
-  concern, add a process-scoped LRU keyed by media id + content hash. Not
-  needed for the reported workload.
+- **Document thumbnails.** The `document` media type has no `image_response`
+  and no `thumbnail_bytes`; document tiles get no real thumbnail. Out of scope
+  for the image/video responsiveness work; render a first-page image at ingest
+  if document tiles ever need a preview.
+- **Demo image datasets.** Demo image loaders (`vtscore/media/image/_demo_*`,
+  `loader_demo`) build media dicts without routing through
+  `load_media_data`, so demo images fall back to request-time thumbnail
+  generation. The main folder/server/upload import flows (what populates real
+  browse datasets) precompute. Add precompute to the demo path if demo-set
+  browse responsiveness matters.
+- **Thin loads stay lazy by design.** Thin-mode imports/pickles deliberately
+  skip reading bytes, so they carry no `thumbnail_bytes` and regenerate on
+  demand — generating thumbnails eagerly there would defeat thin mode.
