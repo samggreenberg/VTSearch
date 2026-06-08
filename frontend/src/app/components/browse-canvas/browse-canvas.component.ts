@@ -813,24 +813,29 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     cell: HexCellPayload,
     cmap: ResolvedColormap,
     selectionActive: boolean,
-    fitMode: 'cover' | 'contain' = 'cover',
+    trim: { hw: number; hh: number } | null = null,
   ): void {
     // A cell with one item is drawn as a disc (slightly smaller than the cell);
-    // multi-item cells keep their full shape so they tile the space.
+    // multi-item cells keep their full shape so they tile the space. The hovered
+    // cell instead passes `trim`: its outline is the cell clipped to the
+    // thumbnail's contain-fit rectangle, so the enlarged tile is just the
+    // thumbnail with the protruding corners lopped off rather than background
+    // bars painted over the neighbours.
     const single = cell.count === 1;
-    this.geom.traceCell(ctx, cx, cy, radius, single);
+    if (trim) this.geom.traceTrimmedCell(ctx, cx, cy, radius, trim.hw, trim.hh);
+    else this.geom.traceCell(ctx, cx, cy, radius, single);
 
     // Image / video: paint the central item's thumbnail clipped to the cell.
     // Until it loads, fall back to the density shading below so the cell is
-    // never blank. Grid cells cover-fit (fill the bin, cropping the edges);
-    // the hovered cell contain-fits so a thumbnail clipped by its bin shows in
-    // full, scaled down to sit inside the enlarged view.
+    // never blank. Grid cells cover-fit (fill the bin, cropping the edges); the
+    // hovered cell instead draws the thumbnail contain-fit into `trim`, which
+    // its trimmed outline matches, so the whole frame shows with no letterbox.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
     if (thumb) {
       ctx.save();
       ctx.clip();
-      if (fitMode === 'contain') {
-        this.drawImageContain(ctx, thumb, cx, cy, radius);
+      if (trim) {
+        ctx.drawImage(thumb, cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
       } else {
         this.drawImageCover(ctx, thumb, cx, cy, radius);
       }
@@ -896,6 +901,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     selectionActive: boolean,
   ): void {
     const bumped = radius * HOVER_RADIUS_SCALE;
+    // With a thumbnail, trim the tile to the thumbnail's contain-fit rectangle
+    // so the enlarged cell is just the (whole) thumbnail — no background bars
+    // reaching over the neighbours. Without one (flat density), keep the full
+    // bumped cell.
+    const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
+    const trim = thumb ? this.containRect(thumb, bumped) : null;
+
     // Cast a single clean drop shadow from an opaque base shape first, then
     // paint the real (shadow-free) cell on top so the fill/border don't each
     // stack their own shadow.
@@ -903,12 +915,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
     ctx.shadowBlur = Math.max(4, radius * 0.3);
     ctx.shadowOffsetY = Math.max(1, radius * 0.1);
-    this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
+    if (trim) this.geom.traceTrimmedCell(ctx, cx, cy, bumped, trim.hw, trim.hh);
+    else this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
     ctx.fillStyle = this.themeColor('--bg-body');
     ctx.fill();
     ctx.restore();
 
-    this.drawHex(ctx, cx, cy, bumped, cell, cmap, selectionActive, 'contain');
+    this.drawHex(ctx, cx, cy, bumped, cell, cmap, selectionActive, trim);
   }
 
   /** Cover-fit an image over the hex's 2*radius square (the path must be clipped). */
@@ -926,23 +939,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
   }
 
-  /** Contain-fit an image inside the cell's bounding box so the whole frame is
-   *  visible (letterboxed against the cell's base fill). Used for the hovered
-   *  cell, where a thumbnail clipped in the grid should show in full. The fit
-   *  box follows the shape (hex is wider than tall, square is even) so wide
-   *  thumbnails aren't re-cropped by the cell silhouette. */
-  private drawImageContain(
-    ctx: CanvasRenderingContext2D,
-    img: HTMLImageElement,
-    cx: number,
-    cy: number,
-    radius: number,
-  ): void {
+  /** Half-extents of an image contain-fit into the cell's bounding box at the
+   *  given `radius`. The fit box follows the shape (hex is wider than tall,
+   *  square is even) so wide thumbnails aren't re-cropped by the silhouette. */
+  private containRect(img: HTMLImageElement, radius: number): { hw: number; hh: number } {
     const { hw, hh } = this.geom.contentHalfExtent(radius);
     const scale = Math.min((hw * 2) / img.naturalWidth, (hh * 2) / img.naturalHeight);
-    const dw = img.naturalWidth * scale;
-    const dh = img.naturalHeight * scale;
-    ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+    return { hw: (img.naturalWidth * scale) / 2, hh: (img.naturalHeight * scale) / 2 };
   }
 
   /**
