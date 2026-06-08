@@ -18,6 +18,7 @@ from vtscore.config import AST_MODEL_ID, AST_SAMPLE_RATE
 from vtscore.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
+    hf_token,
     intercept_tqdm_progress,
     load_pretrained_local_first,
     timed_progress,
@@ -80,14 +81,15 @@ class AudioASTEmbedder(MediaEmbedder):
                 AST_MODEL_ID,
                 low_cpu_mem_usage=True,
                 cache_dir=cache_dir,
-                token=False,
+                token=hf_token(),
+                on_progress=self._on_progress,
             )
         self._model = self._model.to("cpu")
         self._model.eval()
         self._on_progress("loading", "Loading AST feature extractor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(
-                ASTFeatureExtractor.from_pretrained, AST_MODEL_ID, cache_dir=cache_dir, token=False
+                ASTFeatureExtractor.from_pretrained, AST_MODEL_ID, cache_dir=cache_dir, token=hf_token()
             )
 
         # Warmup: run a dummy forward pass so the first real embed_media

@@ -21,6 +21,7 @@ from vtscore.config import VIDEOMAE_MODEL_ID
 from vtscore.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
+    hf_token,
     intercept_tqdm_progress,
     intercept_weight_loading_progress,
     load_pretrained_local_first,
@@ -153,8 +154,9 @@ class VideoVideoMAEEmbedder(MediaEmbedder):
                 VIDEOMAE_MODEL_ID,
                 low_cpu_mem_usage=True,
                 cache_dir=cache_dir,
-                token=False,
+                token=hf_token(),
                 trust_remote_code=True,
+                on_progress=self._on_progress,
             )
         self._model = self._model.to("cpu")
         self._model.eval()

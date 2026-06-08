@@ -21,10 +21,14 @@ from vtsearch.logging_config import new_request_id, setup_logging  # noqa: E402
 
 setup_logging()
 
-# All HF models we use are public, so no token is needed.  Each from_pretrained()
-# call passes token=False to signal this explicitly.  The env var + warnings
-# filter below are belt-and-suspenders in case any transitive HF code still
-# warns about missing tokens.
+# All HF models we use are public, so no token is *required*.  Each
+# from_pretrained() call passes token=hf_token(): the HF_TOKEN env var when
+# set (authenticated requests sidestep the Hub's per-IP anonymous rate limits,
+# which matter behind shared egress IPs like cluster NATs), else False to
+# signal "anonymous on purpose" and suppress missing-token warnings.  The env
+# var below disables *implicit* token pickup so the explicit pass in
+# hf_token() stays the single path; the warnings filters are
+# belt-and-suspenders in case any transitive HF code still warns.
 os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
 warnings.filterwarnings("ignore", message=".*unauthenticated requests.*")

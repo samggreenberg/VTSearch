@@ -17,7 +17,13 @@ from unittest.mock import MagicMock, patch
 import torch
 import torch.nn as nn
 
-from vtscore.media.embedder import intercept_weight_loading_progress, load_pretrained_local_first, timed_progress
+from vtscore.media.embedder import (
+    _hub_metadata_preflight,
+    hf_token,
+    intercept_weight_loading_progress,
+    load_pretrained_local_first,
+    timed_progress,
+)
 from vtscore.embedding.loader import _make_console_progress, predict_embedders_to_preload, preload_predicted_embedders
 
 
@@ -709,6 +715,93 @@ class TestLoadPretrainedLocalFirst:
         result = load_pretrained_local_first(fake_load, "model-id")
         assert result is sentinel
         assert mock_sleep.call_count == 2
+
+    @patch("vtscore.media.embedder._hub_metadata_preflight")
+    def test_on_progress_consumed_and_preflight_runs(self, mock_preflight):
+        """on_progress triggers the Hub preflight + ticker and is never forwarded to load_fn."""
+        events = []
+        forwarded = {}
+
+        def fake_load(*args, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("not cached")
+            forwarded.update(kwargs)
+            return "ok"
+
+        result = load_pretrained_local_first(
+            fake_load, "model-id", cache_dir="/tmp", on_progress=lambda *a: events.append(a)
+        )
+        assert result == "ok"
+        assert "on_progress" not in forwarded
+        mock_preflight.assert_called_once_with(("model-id",), {"cache_dir": "/tmp"})
+        assert any("Contacting HuggingFace Hub" in e[1] for e in events)
+
+    @patch("vtscore.media.embedder._hub_metadata_preflight")
+    def test_no_preflight_when_cached(self, mock_preflight):
+        """A successful local_files_only load must not touch the network preflight."""
+        events = []
+
+        def fake_load(*args, **kwargs):
+            assert kwargs.get("local_files_only") is True
+            return "cached"
+
+        result = load_pretrained_local_first(fake_load, "model-id", on_progress=lambda *a: events.append(a))
+        assert result == "cached"
+        mock_preflight.assert_not_called()
+        assert events == []
+
+    @patch("vtscore.media.embedder._hub_metadata_preflight")
+    def test_no_preflight_without_on_progress(self, mock_preflight):
+        """Without on_progress there is no ticker, so the preflight is skipped."""
+
+        def fake_load(*args, **kwargs):
+            if kwargs.get("local_files_only"):
+                raise OSError("not cached")
+            return "ok"
+
+        assert load_pretrained_local_first(fake_load, "model-id") == "ok"
+        mock_preflight.assert_not_called()
+
+
+class TestHubMetadataPreflight:
+    """Tests for the best-effort config.json preflight."""
+
+    def test_fetches_config_json_with_cache_and_token(self):
+        with patch("huggingface_hub.hf_hub_download") as dl:
+            _hub_metadata_preflight(("org/repo",), {"cache_dir": "/tmp/c", "token": "tok"})
+        dl.assert_called_once_with("org/repo", "config.json", cache_dir="/tmp/c", token="tok")
+
+    def test_supports_cache_folder_alias(self):
+        """SentenceTransformer call sites pass cache_folder instead of cache_dir."""
+        with patch("huggingface_hub.hf_hub_download") as dl:
+            _hub_metadata_preflight(("org/repo",), {"cache_folder": "/tmp/c"})
+        dl.assert_called_once_with("org/repo", "config.json", cache_dir="/tmp/c", token=None)
+
+    def test_swallows_download_errors(self):
+        with patch("huggingface_hub.hf_hub_download", side_effect=RuntimeError("hub down")):
+            _hub_metadata_preflight(("org/repo",), {})  # must not raise
+
+    def test_skips_without_string_repo_id(self):
+        with patch("huggingface_hub.hf_hub_download") as dl:
+            _hub_metadata_preflight((), {})
+            _hub_metadata_preflight((object(),), {})
+        dl.assert_not_called()
+
+
+class TestHfToken:
+    """Tests for the HF_TOKEN env passthrough."""
+
+    def test_false_when_env_unset(self, monkeypatch):
+        monkeypatch.delenv("HF_TOKEN", raising=False)
+        assert hf_token() is False
+
+    def test_returns_env_token(self, monkeypatch):
+        monkeypatch.setenv("HF_TOKEN", "hf_secret")
+        assert hf_token() == "hf_secret"
+
+    def test_empty_env_is_false(self, monkeypatch):
+        monkeypatch.setenv("HF_TOKEN", "")
+        assert hf_token() is False
 
 
 class TestTimedProgress:

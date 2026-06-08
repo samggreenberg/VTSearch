@@ -30,6 +30,9 @@ dependencies = [
     "threadpoolctl",
     "umap-learn",
     "transformers",
+    # Imported directly by vtscore.media.embedder for the Hub metadata
+    # preflight (also a transformers dependency).
+    "huggingface_hub",
     "pandas",
     "pyyaml",
     "matplotlib",

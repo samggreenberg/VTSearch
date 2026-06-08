@@ -25,6 +25,7 @@ from vtscore.config import WHISPER_MODEL_ID, WHISPER_SAMPLE_RATE
 from vtscore.media.embedder import (
     MediaEmbedder,
     embedder_load_setup,
+    hf_token,
     intercept_tqdm_progress,
     load_pretrained_local_first,
     timed_progress,
@@ -87,7 +88,8 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
                 WHISPER_MODEL_ID,
                 low_cpu_mem_usage=True,
                 cache_dir=cache_dir,
-                token=False,
+                token=hf_token(),
+                on_progress=self._on_progress,
             )
         # Encoder only - drop the decoder so we don't keep ~half the
         # weights in RSS for no benefit (we never invoke it).
@@ -98,7 +100,7 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
         self._on_progress("loading", "Loading Whisper feature extractor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(
-                WhisperFeatureExtractor.from_pretrained, WHISPER_MODEL_ID, cache_dir=cache_dir, token=False
+                WhisperFeatureExtractor.from_pretrained, WHISPER_MODEL_ID, cache_dir=cache_dir, token=hf_token()
             )
 
         # Warmup: run a dummy forward pass.
