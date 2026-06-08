@@ -149,6 +149,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // `resize()`; this flag stops later window resizes from clobbering the user's
   // pan/zoom.
   private fittedAgainstRealSize = false;
+  // Whether the user has taken over the framing (panned, zoomed, or resized a
+  // thumbnail). Until then the view stays auto-fit: applying a saved cell size
+  // (which changes the bin radius and thus how far edge bins reach) re-fits so
+  // the projection opens fully in view, rather than leaving the initial fit —
+  // computed for the default radius — clipping the now-larger edge bins.
+  private framedByUser = false;
 
   private isPanning = false;
   private panStartX = 0;
@@ -322,6 +328,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       // re-frames to data and drops stale representative thumbnails.
       if (this.meta.projection_id !== this.lastProjectionId) {
         this.lastProjectionId = this.meta.projection_id;
+        // A brand-new projection opens auto-fit: clear the user-framed flag so a
+        // saved cell size applied right after load re-fits to keep it all in view.
+        this.framedByUser = false;
         this.thumbCache.clear();
         this.thumbFailed.clear();
         // A new projection (media-type switch / rebuild) re-lays-out every item,
@@ -1057,6 +1066,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       Math.abs(dy) > BrowseCanvasComponent.CLICK_MOVE_THRESHOLD
     ) {
       this.dragMoved = true;
+      this.framedByUser = true;
     }
     const z = this.effZoom;
     this.transform.centerX = this.panStartCenterX - dx / z;
@@ -1219,6 +1229,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
+    this.framedByUser = true;
     const prevLevel = this.activeLevel;
     const [projX, projY] = this.screenToProj(anchorX, anchorY);
     const newZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
@@ -1253,10 +1264,20 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   setThumbnailRadius(radius: number, reframe: boolean): void {
     if (radius <= 0 || radius === this.targetRadius) return;
     if (reframe && this.meta && this.fittedAgainstRealSize) {
+      this.framedByUser = true;
       this.transform.zoom *= radius / this.targetRadius;
     }
     this.targetRadius = radius;
-    this.updateActiveLevel();
+    // On initial load (the user hasn't framed yet) a saved cell size changes the
+    // bin radius, so re-fit to keep the whole projection in view rather than
+    // letting the now-larger edge bins spill past the default-radius framing.
+    // Once the user has panned/zoomed, only re-select the level so their view is
+    // preserved.
+    if (!reframe && !this.framedByUser && this.meta && this.fittedAgainstRealSize) {
+      this.fitToData();
+    } else {
+      this.updateActiveLevel();
+    }
     this.requestRedraw();
     if (reframe) this.refreshHoverAfterZoom();
   }

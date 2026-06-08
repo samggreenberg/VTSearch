@@ -15,7 +15,7 @@ interface LegendTick {
 }
 
 /**
- * Vertical color key for the browse canvas. The canvas shades each cell by its
+ * Horizontal color key for the browse canvas. The canvas shades each cell by its
  * item count: a one-item cell gets the colormap's dedicated ``single`` colour
  * (drawn as a dot), and multi-item cells use the density ``ramp``, renormalized
  * to the densest cell currently in view — so the ramp's top is {@link maxCount}
@@ -33,21 +33,23 @@ interface LegendTick {
   template: `
     <div class="browse-legend" role="img" [attr.aria-label]="ariaLabel">
       <span class="browse-legend-title">{{ title }}</span>
-      @if (ticks.length > 0) {
-        <div class="browse-legend-body">
-          <div class="browse-legend-bar" [style.background]="barGradient"></div>
-          <div class="browse-legend-ticks">
-            @for (tick of ticks; track tick.t) {
-              <span class="browse-legend-tick" [style.bottom.%]="tick.t * 100">{{
-                tick.label
-              }}</span>
-            }
-          </div>
+      <div class="browse-legend-row">
+        <div class="browse-legend-single">
+          <span class="browse-legend-dot" [style.background]="singleColor"></span>
+          <span class="browse-legend-tick">1</span>
         </div>
-      }
-      <div class="browse-legend-single">
-        <span class="browse-legend-dot" [style.background]="singleColor"></span>
-        <span class="browse-legend-tick">1</span>
+        @if (ticks.length > 0) {
+          <div class="browse-legend-body">
+            <div class="browse-legend-bar" [style.background]="barGradient"></div>
+            <div class="browse-legend-ticks">
+              @for (tick of ticks; track tick.t) {
+                <span class="browse-legend-tick" [style.left.%]="tick.t * 100">{{
+                  tick.label
+                }}</span>
+              }
+            </div>
+          </div>
+        }
       </div>
     </div>
   `,
@@ -90,9 +92,9 @@ export class BrowseLegendComponent implements OnInit, OnDestroy {
     return resolveColormap(this.colormap, this.theme);
   }
 
-  /** Vertical gradient with the dense (last ramp stop) end at the top. */
+  /** Horizontal gradient with the dense (last ramp stop) end at the right. */
   get barGradient(): string {
-    return `linear-gradient(to top, ${gradientStops(this.resolved.ramp)})`;
+    return `linear-gradient(to right, ${gradientStops(this.resolved.ramp)})`;
   }
 
   /** The one-item cell colour, shown as a dot. */
@@ -104,8 +106,9 @@ export class BrowseLegendComponent implements OnInit, OnDestroy {
    * Tick labels for the ramp (multi-item cells, count ≥ 2). The canvas maps a
    * count to a height via `t = ln(count) / ln(maxCount)`, so a height `t` reads
    * back as `count = maxCount^t` and each label sits exactly at the color that
-   * count is painted with. Sampled top→bottom, deduped, and dropping anything
-   * that rounds below 2 (those are singletons, shown by the dot instead).
+   * count is painted with (placed left→right along the bar). Sampled high→low,
+   * deduped, and dropping anything that rounds below 2 (those are singletons,
+   * shown by the dot instead).
    */
   get ticks(): LegendTick[] {
     const max = Math.max(Math.round(this.maxCount), 1);

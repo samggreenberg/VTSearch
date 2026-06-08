@@ -101,7 +101,7 @@
                 type="button"
                 class="browse-size-btn"
                 (click)="zoomIn()"
-                title="Zoom in — view a smaller region, re-binned finer (thumbnails stay the same size)"
+                title="Zoom In"
                 aria-label="Zoom in">
                 <vt-icon type="zoom-in" [size]="16"></vt-icon>
               </button>
@@ -117,7 +117,7 @@
                 type="button"
                 class="browse-size-btn"
                 (click)="zoomOut()"
-                title="Zoom out — view a larger region, re-binned coarser (thumbnails stay the same size)"
+                title="Zoom out"
                 aria-label="Zoom out">
                 <vt-icon type="zoom-out" [size]="16"></vt-icon>
               </button>
@@ -128,7 +128,7 @@
                 class="browse-size-btn"
                 [disabled]="atMinHexSize"
                 (click)="bumpHexSize(-1)"
-                title="Smaller thumbnails — same bins, fewer pixels each (shows more of the canvas)"
+                title="Smaller thumbnails"
                 aria-label="Smaller thumbnails">
                 <vt-icon type="image" [size]="11"></vt-icon>
               </button>
@@ -137,7 +137,7 @@
                 class="browse-size-btn"
                 [disabled]="atMaxHexSize"
                 (click)="bumpHexSize(1)"
-                title="Bigger thumbnails — same bins, more pixels each (shows less of the canvas)"
+                title="Bigger thumbnails"
                 aria-label="Bigger thumbnails">
                 <vt-icon type="image" [size]="18"></vt-icon>
               </button>
@@ -155,7 +155,7 @@
               </button>
               <button
                 type="button"
-                class="browse-size-btn browse-size-btn--glyph"
+                class="browse-size-btn browse-size-btn--glyph browse-size-btn--square-glyph"
                 [class.browse-size-btn--active]="binShape === 'square'"
                 [attr.aria-pressed]="binShape === 'square'"
                 (click)="setBinShape('square')"
@@ -184,7 +184,6 @@
             (removeGood)="onRemoveGood()"
           />
           <div class="browse-side-meta">
-            <vt-browse-legend [maxCount]="densityMax" [colormap]="colormap" />
             <div class="browse-side-minimap">
               <vt-browse-minimap
                 [meta]="meta"
@@ -192,6 +191,11 @@
                 [dock]="true"
               />
             </div>
+            <vt-browse-legend
+              class="browse-side-legend"
+              [maxCount]="densityMax"
+              [colormap]="colormap"
+            />
           </div>
         </aside>
       </div>
