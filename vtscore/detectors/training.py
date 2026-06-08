@@ -51,6 +51,11 @@ def train_and_threshold(
     3. Optional safe-threshold blending when ``get_safe_thresholds()`` is
        enabled and *snap* is provided.
 
+    ``inclusion`` is read from ``get_inclusion()``, which resolves to the
+    *active detector context's* inclusion (seeded from the user's settings
+    default the first time it's read for a detector). Both Train and Find
+    therefore train at the same per-detector inclusion within a session.
+
     Args:
         X_list: Embedding vectors (list of numpy arrays).
         y_list: Binary labels (1.0 = good, 0.0 = bad).

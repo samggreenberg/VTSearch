@@ -61,6 +61,11 @@ def _resolve_or_train_detector(  # noqa: C901
     on demand from the detector's labelset, embedding label media via its
     origin importer.  Returns ``(None, _, diag)`` when training is not
     possible.
+
+    Inclusion changes don't need special handling here: ``set_inclusion``
+    invalidates every loaded context's cached MLP, so after a slider move the
+    ``det_ctx.model`` short-circuit below is skipped and the cold branch
+    retrains at the new (per-detector) inclusion.
     """
     from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
     from vtscore.state.core import get_detector_context

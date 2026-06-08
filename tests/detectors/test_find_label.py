@@ -31,6 +31,34 @@ class TestFindLabel:
         total = data["good_count"] + data["bad_count"]
         assert total == app_module.NUM_MEDIAS
 
+    def test_find_label_honors_active_detector_inclusion(self, client):
+        """find-label trains at the active detector context's inclusion.
+
+        Inclusion lives on the DetectorContext (seeded from the user-settings
+        default).  A strongly-inclusive setting cannot label *fewer* items Good
+        than a strongly-exclusive one for the same detector + dataset, since
+        inclusion drives both the MLP class weights and the threshold.  Setting
+        it via the API also invalidates the cached MLP, so the next find-label
+        retrains at the new value rather than reusing a stale model.
+        """
+        from tests import load_detector_and_wait
+
+        detector_id = setup_trainable_model_in_registry(
+            "incl-context",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        load_detector_and_wait(client, detector_id)
+
+        client.post("/api/inclusion", json={"inclusion": 10})
+        inclusive = client.post("/api/find-label", json={"detector_id": detector_id}).get_json()
+
+        client.post("/api/inclusion", json={"inclusion": -10})
+        exclusive = client.post("/api/find-label", json={"detector_id": detector_id}).get_json()
+
+        assert inclusive["good_count"] >= exclusive["good_count"]
+
     def test_find_label_missing_model_id(self, client):
         resp = client.post("/api/find-label", json={})
         # Schema validation: missing required `detector_id` → 422 with the

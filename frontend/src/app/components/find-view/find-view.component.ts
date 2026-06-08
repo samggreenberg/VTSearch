@@ -18,6 +18,7 @@ import { DatasetStateService } from '../../services/dataset-state.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
+import { SortingApiService } from '../../services/sorting-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
@@ -76,6 +77,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     public mediaState: MediaStateService,
     public voteState: VoteStateService,
     public sortState: SortStateService,
+    private sortingApi: SortingApiService,
     private settingsState: SettingsStateService,
     private progressEvents: ProgressEventsService,
     private browseSubset: BrowseSubsetService,
@@ -115,6 +117,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // loadVotes() above refreshes them; re-running find here would re-score
     // with the unchanged model and re-promote those items to Good, undoing
     // the cull. Keep the cull instead (the user's decision).
+    // Seed the inclusion slider from the active detector's context value
+    // (GET /api/inclusion resolves per-detector, falling back to the
+    // user-settings default the first time it's read). This keeps Find's
+    // slider in step with whatever the detector was last trained at.
+    this.seedInclusion();
+
     if (!this.browseSubset.consumeReturningToFind()) {
       this.runFindLabel();
     }
@@ -145,7 +153,16 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
+    this.seedInclusion();
     this.runFindLabel();
+  }
+
+  /** Pull the active detector's per-detector inclusion into the slider. */
+  private seedInclusion(): void {
+    this.sortingApi
+      .getInclusion()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({ next: (resp) => this.sortState.setInclusion(resp.inclusion) });
   }
 
   ngAfterViewInit(): void {
@@ -385,6 +402,24 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaSelect(id: number): void {
     this.mediaState.selectMedia(id);
+  }
+
+  /**
+   * Inclusion change in Find: persist to the active detector's context (the
+   * same per-detector value Train edits, via POST /api/inclusion), then
+   * re-score. set_inclusion invalidates the cached MLP, so runFindLabel
+   * retrains at the new inclusion — both the live and cold paths converge on
+   * a model trained at the value shown in the slider. The settings store only
+   * holds the default that seeds a fresh detector; this does not change the
+   * inclusion of any other detector's context.
+   */
+  onInclusionChange(value: number): void {
+    if (this.sortState.sortBusy) return;
+    this.sortState.setInclusion(value);
+    this.sortingApi
+      .setInclusion(value)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({ next: () => this.runFindLabel() });
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
