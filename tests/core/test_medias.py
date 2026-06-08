@@ -489,6 +489,26 @@ class TestMediaThumbnail:
         resp2 = client.get("/api/medias/1/thumbnail")
         assert resp1.data == resp2.data
 
+    def test_serves_precomputed_thumbnail_directly(self, client):
+        # A media carrying ``thumbnail_bytes`` (precomputed at ingest) is
+        # streamed verbatim, with no request-time decode/resize.
+        from vtsearch.state import get_media  # noqa: PLC0415
+
+        sentinel = b"\x89PNG\r\n\x1a\n" + b"precomputed-thumbnail-payload"
+        media = get_media(1)
+        original = media.get("thumbnail_bytes")
+        media["thumbnail_bytes"] = sentinel
+        try:
+            resp = client.get("/api/medias/1/thumbnail")
+            assert resp.status_code == 200
+            assert resp.content_type == "image/png"
+            assert resp.data == sentinel
+        finally:
+            if original is None:
+                media.pop("thumbnail_bytes", None)
+            else:
+                media["thumbnail_bytes"] = original
+
 
 class TestMediaAudio:
     def test_returns_wav_for_valid_id(self, client):
