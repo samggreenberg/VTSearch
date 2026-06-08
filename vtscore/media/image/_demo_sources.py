@@ -49,6 +49,8 @@ def build_demo_datasets() -> list[DemoDataset]:
     cats256 = DEMO_CATEGORIES_CALTECH256
     ct101_desc = "Centered object photos"
     ct101_folder = DATA_DIR / "caltech-101" / "101_ObjectCategories"
+    ct256_desc = "Cluttered object photos"
+    ct256_folder = DATA_DIR / "caltech-256" / "256_ObjectCategories"
     food_desc = "Crowd-sourced food photos"
     food_folder = DATA_DIR / "food-101" / "images"
     euro_desc = "Satellite imagery by land use"
@@ -107,12 +109,48 @@ def build_demo_datasets() -> list[DemoDataset]:
             download_size_mb=CALTECH101_DOWNLOAD_SIZE_MB,
         ),
         DemoDataset(
-            id="caltech256_a",
-            label="Caltech-256 (A)",
-            description="Cluttered object photos",
+            id="caltech256_s",
+            label="Caltech-256 (S)",
+            description=ct256_desc,
             categories=cats256,
             source="caltech256",
-            required_folder=DATA_DIR / "caltech-256" / "256_ObjectCategories",
+            required_folder=ct256_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 7,
+            items_per_category=119,
+            download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="caltech256_m",
+            label="Caltech-256 (M)",
+            description=ct256_desc,
+            categories=cats256,
+            source="caltech256",
+            required_folder=ct256_folder,
+            slice_frac_start=1 / 7,
+            slice_frac_end=3 / 7,
+            items_per_category=119,
+            download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="caltech256_l",
+            label="Caltech-256 (L)",
+            description=ct256_desc,
+            categories=cats256,
+            source="caltech256",
+            required_folder=ct256_folder,
+            slice_frac_start=3 / 7,
+            slice_frac_end=None,
+            items_per_category=119,
+            download_size_mb=CALTECH256_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="caltech256_a",
+            label="Caltech-256 (A)",
+            description=ct256_desc,
+            categories=cats256,
+            source="caltech256",
+            required_folder=ct256_folder,
             slice_frac_start=0.0,
             slice_frac_end=None,
             items_per_category=119,
