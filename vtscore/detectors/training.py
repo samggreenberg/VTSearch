@@ -40,7 +40,6 @@ def train_and_threshold(
     X_list: list,
     y_list: list[float],
     snap: dict | None = None,
-    inclusion: int | None = None,
 ) -> tuple[Any, float]:
     """Train an MLP and compute a calibrated threshold.
 
@@ -52,15 +51,15 @@ def train_and_threshold(
     3. Optional safe-threshold blending when ``get_safe_thresholds()`` is
        enabled and *snap* is provided.
 
+    ``inclusion`` is read from ``get_inclusion()``, which resolves to the
+    *active detector context's* inclusion (seeded from the user's settings
+    default the first time it's read for a detector). Both Train and Find
+    therefore train at the same per-detector inclusion within a session.
+
     Args:
         X_list: Embedding vectors (list of numpy arrays).
         y_list: Binary labels (1.0 = good, 0.0 = bad).
         snap: Optional media snapshot for safe-threshold scoring.
-        inclusion: Optional precision/recall override in ``[-10, 10]``. When
-            ``None`` (the default) the user's global ``get_inclusion()``
-            setting is used. When provided (e.g. a Find-local override) it
-            drives both the MLP class weights and the threshold cost function
-            without touching the persisted global setting.
 
     Returns:
         ``(model, threshold)``
@@ -84,8 +83,6 @@ def train_and_threshold(
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
-    incl = get_inclusion() if inclusion is None else inclusion
-
     safe = bool(get_safe_thresholds() and snap)
     # Below the safe-threshold ramp floor the cross-cal output is blended
     # away (pure GMM), so don't pay for the fold trainings.
@@ -96,12 +93,12 @@ def train_and_threshold(
             X_list,
             y_list,
             input_dim,
-            incl,
+            get_inclusion(),
             calibrate_count=get_calibrate_count(),
             calibration_fraction=get_calibration_fraction(),
         )
 
-    model = train_model(X, y, input_dim, incl)
+    model = train_model(X, y, input_dim, get_inclusion())
 
     if safe:
         from vtscore.embedding.matrix import get_embedding_matrix_for_snap

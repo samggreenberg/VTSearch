@@ -31,58 +31,32 @@ class TestFindLabel:
         total = data["good_count"] + data["bad_count"]
         assert total == app_module.NUM_MEDIAS
 
-    def test_find_label_accepts_inclusion_override(self, client):
-        """A valid Find-local ``inclusion`` in the body is accepted (200)."""
-        detector_id = setup_trainable_model_in_registry(
-            "incl-accept",
-            good_ids=[1, 2, 3],
-            bad_ids=[18, 19, 20],
-            snap=snapshot_medias(),
-        )
-        resp = client.post(
-            "/api/find-label",
-            json={"detector_id": detector_id, "inclusion": 5},
-        )
-        assert resp.status_code == 200, resp.get_json()
-        data = resp.get_json()
-        assert data["good_count"] + data["bad_count"] == app_module.NUM_MEDIAS
+    def test_find_label_honors_active_detector_inclusion(self, client):
+        """find-label trains at the active detector context's inclusion.
 
-    def test_find_label_rejects_out_of_range_inclusion(self, client):
-        """``inclusion`` outside [-10, 10] fails schema validation (422)."""
-        detector_id = setup_trainable_model_in_registry(
-            "incl-range",
-            good_ids=[1, 2, 3],
-            bad_ids=[18, 19, 20],
-            snap=snapshot_medias(),
-        )
-        resp = client.post(
-            "/api/find-label",
-            json={"detector_id": detector_id, "inclusion": 99},
-        )
-        assert resp.status_code == 422, resp.get_json()
-        assert "inclusion" in resp.get_json()["errors"]["json"]
-
-    def test_find_label_inclusion_override_shifts_threshold(self, client):
-        """Higher inclusion (recall) labels at least as many items Good.
-
-        The override drives both the MLP class weights and the threshold cost
-        function, so a strongly-inclusive run cannot end up with *fewer* Goods
-        than a strongly-exclusive one on the same detector + dataset.
+        Inclusion lives on the DetectorContext (seeded from the user-settings
+        default).  A strongly-inclusive setting cannot label *fewer* items Good
+        than a strongly-exclusive one for the same detector + dataset, since
+        inclusion drives both the MLP class weights and the threshold.  Setting
+        it via the API also invalidates the cached MLP, so the next find-label
+        retrains at the new value rather than reusing a stale model.
         """
+        from tests import load_detector_and_wait
+
         detector_id = setup_trainable_model_in_registry(
-            "incl-shift",
+            "incl-context",
             good_ids=[1, 2, 3],
             bad_ids=[18, 19, 20],
             snap=snapshot_medias(),
         )
-        inclusive = client.post(
-            "/api/find-label",
-            json={"detector_id": detector_id, "inclusion": 10},
-        ).get_json()
-        exclusive = client.post(
-            "/api/find-label",
-            json={"detector_id": detector_id, "inclusion": -10},
-        ).get_json()
+        load_detector_and_wait(client, detector_id)
+
+        client.post("/api/inclusion", json={"inclusion": 10})
+        inclusive = client.post("/api/find-label", json={"detector_id": detector_id}).get_json()
+
+        client.post("/api/inclusion", json={"inclusion": -10})
+        exclusive = client.post("/api/find-label", json={"detector_id": detector_id}).get_json()
+
         assert inclusive["good_count"] >= exclusive["good_count"]
 
     def test_find_label_missing_model_id(self, client):

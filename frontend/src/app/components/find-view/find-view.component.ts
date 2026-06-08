@@ -18,6 +18,7 @@ import { DatasetStateService } from '../../services/dataset-state.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
+import { SortingApiService } from '../../services/sorting-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
@@ -76,6 +77,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     public mediaState: MediaStateService,
     public voteState: VoteStateService,
     public sortState: SortStateService,
+    private sortingApi: SortingApiService,
     private settingsState: SettingsStateService,
     private progressEvents: ProgressEventsService,
     private browseSubset: BrowseSubsetService,
@@ -115,6 +117,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // loadVotes() above refreshes them; re-running find here would re-score
     // with the unchanged model and re-promote those items to Good, undoing
     // the cull. Keep the cull instead (the user's decision).
+    // Seed the inclusion slider from the active detector's context value
+    // (GET /api/inclusion resolves per-detector, falling back to the
+    // user-settings default the first time it's read). This keeps Find's
+    // slider in step with whatever the detector was last trained at.
+    this.seedInclusion();
+
     if (!this.browseSubset.consumeReturningToFind()) {
       this.runFindLabel();
     }
@@ -145,7 +153,16 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
+    this.seedInclusion();
     this.runFindLabel();
+  }
+
+  /** Pull the active detector's per-detector inclusion into the slider. */
+  private seedInclusion(): void {
+    this.sortingApi
+      .getInclusion()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({ next: (resp) => this.sortState.setInclusion(resp.inclusion) });
   }
 
   ngAfterViewInit(): void {
@@ -186,17 +203,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  /**
-   * Score every loaded media with the active detector and apply labels.
-   *
-   * When *inclusion* is provided (a Find-local slider change) it is threaded
-   * to the backend, which retrains the detector at that precision/recall
-   * preference — shaping both the MLP and the threshold — without touching
-   * the user's persisted global inclusion. The initial call on load omits it
-   * so the backend keeps its default behavior (reuse a cached MLP when one is
-   * available, else train at the global setting).
-   */
-  private runFindLabel(inclusion?: number): void {
+  private runFindLabel(): void {
     const modelId = this.activeContext.modelId;
     if (!modelId) return;
 
@@ -209,9 +216,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const modelName =
       this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
-    const request =
-      inclusion != null ? { detector_id: modelId, inclusion } : { detector_id: modelId };
-    this.detectorsFindApi.findLabel(request)
+    this.detectorsFindApi.findLabel({ detector_id: modelId })
       .pipe(
         takeUntil(this.destroy$),
         finalize(() => {
@@ -348,12 +353,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((settings) => {
         if (!settings) return;
-        // Seed the slider at the user's global inclusion so it opens where
-        // Train left off. Changes from here are Find-local and never written
-        // back (see onInclusionChange).
-        if (settings.inclusion != null) {
-          this.sortState.setInclusion(settings.inclusion);
-        }
         const dict = settings.view_mode_left;
         if (dict && typeof dict === 'object') {
           this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
@@ -406,16 +405,21 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Find-local inclusion change: update the slider state and re-score at the
-   * new precision/recall preference. Unlike Train, this deliberately does NOT
-   * persist to the global setting (settingsApi.setInclusion) — the override is
-   * scoped to this Find session and threaded through the find-label request,
-   * which retrains the detector at this inclusion.
+   * Inclusion change in Find: persist to the active detector's context (the
+   * same per-detector value Train edits, via POST /api/inclusion), then
+   * re-score. set_inclusion invalidates the cached MLP, so runFindLabel
+   * retrains at the new inclusion — both the live and cold paths converge on
+   * a model trained at the value shown in the slider. The settings store only
+   * holds the default that seeds a fresh detector; this does not change the
+   * inclusion of any other detector's context.
    */
   onInclusionChange(value: number): void {
     if (this.sortState.sortBusy) return;
     this.sortState.setInclusion(value);
-    this.runFindLabel(value);
+    this.sortingApi
+      .setInclusion(value)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({ next: () => this.runFindLabel() });
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {

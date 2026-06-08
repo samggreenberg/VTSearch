@@ -54,7 +54,6 @@ def _resolve_or_train_detector(  # noqa: C901
     *,
     progress_step: int = 2,
     progress_total_steps: int = 4,
-    inclusion: int | None = None,
 ) -> tuple[Any | None, float, dict | None]:
     """Return (mlp, threshold, diagnostic) for *detector_id*.
 
@@ -63,19 +62,13 @@ def _resolve_or_train_detector(  # noqa: C901
     origin importer.  Returns ``(None, _, diag)`` when training is not
     possible.
 
-    When *inclusion* is provided (a Find-local precision/recall override),
-    the cached MLP is intentionally bypassed in favor of a fresh retrain at
-    that inclusion, so the new preference shapes both the model weights and
-    the threshold.  The cached model/threshold were fit at the old inclusion
-    and would silently ignore the override.  The override is only honored
-    when an on-disk labelset is available to retrain from; with no labelset
-    we fall back to the cached MLP (the override cannot be applied).
+    Inclusion changes don't need special handling here: ``set_inclusion``
+    invalidates every loaded context's cached MLP, so after a slider move the
+    ``det_ctx.model`` short-circuit below is skipped and the cold branch
+    retrains at the new (per-detector) inclusion.
     """
     from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
     from vtscore.state.core import get_detector_context
-
-    has_labelset = bool(det_data and det_data.get("labelset", {}).get("labels"))
-    force_retrain = inclusion is not None and has_labelset
 
     det_ctx = get_detector_context(detector_id)
     if det_ctx is not None:
@@ -85,7 +78,7 @@ def _resolve_or_train_detector(  # noqa: C901
         # branch trains fresh against *snap*'s embedder.
         snap_embedder = next(iter(snap.values()), {}).get("embedder", "") or "" if snap else ""
         invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
-    if not force_retrain and det_ctx is not None and det_ctx.model is not None:
+    if det_ctx is not None and det_ctx.model is not None:
         return det_ctx.model, det_ctx.threshold, None
 
     if det_data is None:
@@ -176,7 +169,7 @@ def _resolve_or_train_detector(  # noqa: C901
             step=progress_step,
             total_steps=progress_total_steps,
         )
-        trained_mlp, threshold = train_and_threshold(X_list, y_list, snap=snap, inclusion=inclusion)
+        trained_mlp, threshold = train_and_threshold(X_list, y_list, snap=snap)
         return trained_mlp, threshold, None
 
     diagnostic: dict = {
@@ -234,10 +227,6 @@ def find_label(body: dict):  # noqa: C901
     _FIND_LABEL_STEPS = 4
 
     detector_id = body["detector_id"]
-    # Find-local inclusion override (never persisted): when present, forces a
-    # retrain at this precision/recall preference instead of reusing the
-    # cached MLP or the global setting.
-    inclusion = body.get("inclusion")
 
     # Clear a leftover cancel flag from a previously-cancelled run so
     # the new operation doesn't trip on it immediately.
@@ -273,7 +262,6 @@ def find_label(body: dict):  # noqa: C901
         snap,
         progress_step=2,
         progress_total_steps=_FIND_LABEL_STEPS,
-        inclusion=inclusion,
     )
     if mlp is None:
         update_find_progress("idle", "")
