@@ -23,6 +23,7 @@ import {
   type BrowseColormapId,
   type CanvasTheme,
   type ResolvedColormap,
+  usesThumbnails,
 } from './hex-render.util';
 import { binGeometry, BinGeometry } from './bin-geometry';
 import type {
@@ -256,7 +257,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   /** True when cells should be painted with the central item's thumbnail. */
   private get thumbnailMode(): boolean {
-    return this.mediaType === 'image' || this.mediaType === 'video';
+    return usesThumbnails(this.mediaType);
   }
 
   /** Geometry (hex or square) for the active projection's bin shape. */

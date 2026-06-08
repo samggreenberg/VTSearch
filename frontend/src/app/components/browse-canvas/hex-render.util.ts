@@ -32,6 +32,18 @@ export type BrowseColormapId = 'auto' | 'heat' | 'ocean' | 'gray';
 export const BROWSE_COLORMAP_IDS: readonly BrowseColormapId[] = ['auto', 'heat', 'ocean', 'gray'];
 
 /**
+ * Media types whose browse cells are painted with the central item's thumbnail
+ * (``image``, ``video``) rather than flat density shading. These are pinned to
+ * the grayscale colormap: the colourful presets are fun for the abstract
+ * density shading of non-thumbnail types, but under real thumbnails a neutral
+ * ground reads best and a coloured tint would fight the image content. Callers
+ * both force ``'gray'`` for these types and hide the colormap picker for them.
+ */
+export function usesThumbnails(mediaType: string): boolean {
+  return mediaType === 'image' || mediaType === 'video';
+}
+
+/**
  * Default width (CSS px) of the colormap-coloured border drawn around
  * multi-item ("pile") thumbnails, applied per media type when the user hasn't
  * set ``browse_thumbnail_border`` for that type. ``0`` would disable it.
