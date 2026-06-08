@@ -229,6 +229,31 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // Background colour captured at transition start, so each frame doesn't pay a
   // getComputedStyle just to clear behind the shrinking/growing snapshot.
   private animBg = '';
+
+  // --- Boundary settle (rubber-band snap-back) ------------------------------
+  // After a pan/zoom leaves the view past its hard bounds (rubber-band
+  // overshoot), this eases the *real* transform back to the clamp. Distinct from
+  // the picture-in-picture zoom transition above: it walks the live transform
+  // and repaints each frame, rather than blitting a frozen snapshot.
+  /** Initial give of the rubber band: a pull just past the edge moves the view
+   *  by this fraction of the pull (tapering off from there). */
+  private static readonly RUBBER_GIVE = 0.5;
+  /** Cap on pan overshoot, as a fraction of the viewport extent on that axis. */
+  private static readonly RUBBER_PAN_MAX = 0.18;
+  /** Cap on zoom-out overshoot past the fit, in natural-log units
+   *  (≈26% extra zoom-out at exp(-0.3)). */
+  private static readonly RUBBER_ZOOM_MAX = 0.3;
+  /** Snap-back duration. */
+  private static readonly SETTLE_MS = 320;
+  private settleActive = false;
+  private settleRafId = 0;
+  private settleFrom: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  private settleTo: ViewTransform = { centerX: 0, centerY: 0, zoom: 1 };
+  private settleStartTs = 0;
+  // Wheel zoom arrives as a burst of discrete events with no "gesture end", so
+  // the snap-back is debounced: it fires only once the wheel has gone quiet.
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
+
   private resizeObserver: ResizeObserver | null = null;
   // Repaints when the document theme flips (explicit switch or an OS
   // dark/light change while on "system"), so the colormap and background
@@ -287,6 +312,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // The minimap publishes recenter requests when the user clicks/drags it;
     // jump the viewport centre there (keeping zoom) and redraw.
     this.recenterSub = this.viewport.recenter$.subscribe(({ x, y }) => {
+      // A minimap jump is a programmatic move, not an elastic gesture: cancel any
+      // snap-back and hard-clamp straight to the bounds (no rubber-band here).
+      this.cancelSettle();
       this.transform.centerX = x;
       this.transform.centerY = y;
       // A minimap click/drag can target a content edge; keep the viewport inside
@@ -326,8 +354,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (changes['meta'] && this.meta) {
       // Fresh meta re-bins (new projection, bin-shape toggle, cull). Any zoom
       // transition was easing the *old* data, so abandon it; the redraw below
-      // paints the new state.
+      // paints the new state. A boundary settle would spring toward the old
+      // bounds, so stop it too.
       this.cancelZoomAnim();
+      this.cancelSettle();
       this.tileCache.setProjectionId(this.meta.projection_id);
       // A bin-shape toggle delivers fresh meta for the *same* projection id
       // (hex and square share one UMAP layout). In that case keep the current
@@ -384,6 +414,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.themeObserver?.disconnect();
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.animRafId) cancelAnimationFrame(this.animRafId);
+    if (this.settleRafId) cancelAnimationFrame(this.settleRafId);
+    if (this.settleTimer) clearTimeout(this.settleTimer);
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.clickTimer) clearTimeout(this.clickTimer);
     const el = this.canvasRef.nativeElement;
@@ -401,8 +433,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   private resize(): void {
     // A resize changes the backing store and framing; a snapshot blit sized to
-    // the old canvas would be wrong, so drop any in-flight transition.
+    // the old canvas would be wrong, so drop any in-flight transition. A settle
+    // would spring toward stale bounds, so stop it too — the refit/clamp below
+    // re-establishes the correct framing.
     this.cancelZoomAnim();
+    this.cancelSettle();
     const el = this.canvasRef.nativeElement.parentElement!;
     const rect = el.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
@@ -502,13 +537,43 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private clampView(): void {
     if (!this.meta || this.meta.point_count === 0) return;
     if (this.width <= 0 || this.height <= 0) return;
+    const c = this.clampedTransform(this.transform);
+    this.transform.zoom = c.zoom;
+    this.transform.centerX = c.centerX;
+    this.transform.centerY = c.centerY;
+  }
+
+  /**
+   * The hard-clamped form of `t` (zoom floored at the whole-projection fit, pan
+   * reined inside the content rectangle — see {@link clampView}). Pure: returns
+   * a fresh transform without touching {@link transform}, so the boundary-settle
+   * animation can compute its destination while the live view is still
+   * mid-overshoot. Caller is responsible for the meta/size guards.
+   */
+  private clampedTransform(t: ViewTransform): ViewTransform {
     const minZoom = this.computeFitZoom();
-    if (this.transform.zoom < minZoom) this.transform.zoom = minZoom;
+    const zoom = Math.max(t.zoom, minZoom);
+    const lim = this.panLimits(zoom);
+    return {
+      zoom,
+      centerX: lim ? this.clampAxis(t.centerX, lim.loX, lim.hiX, lim.viewX) : t.centerX,
+      centerY: lim ? this.clampAxis(t.centerY, lim.loY, lim.hiY, lim.viewY) : t.centerY,
+    };
+  }
+
+  /**
+   * Pan-centre limits at zoom `z`: the content rectangle (the bin-centre
+   * `bounds` grown by the edge bins' circumradius `r`, since those bins draw out
+   * that far past their centres) and the viewport extent each axis must keep
+   * inside it. Returns null when there's no data to frame.
+   */
+  private panLimits(
+    z: number,
+  ): { loX: number; hiX: number; loY: number; hiY: number; viewX: number; viewY: number } | null {
+    if (!this.meta || this.meta.point_count === 0) return null;
     const [xmin, ymin, xmax, ymax] = this.meta.bounds;
-    const r = this.meta.base_radius / Math.pow(2, this.levelForEffZoom(this.transform.zoom));
-    const z = this.transform.zoom;
-    this.transform.centerX = this.clampAxis(this.transform.centerX, xmin - r, xmax + r, this.width / z);
-    this.transform.centerY = this.clampAxis(this.transform.centerY, ymin - r, ymax + r, this.height / z);
+    const r = this.meta.base_radius / Math.pow(2, this.levelForEffZoom(z));
+    return { loX: xmin - r, hiX: xmax + r, loY: ymin - r, hiY: ymax + r, viewX: this.width / z, viewY: this.height / z };
   }
 
   /**
@@ -522,6 +587,74 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (viewExtent >= hi - lo) return (lo + hi) / 2;
     const half = viewExtent / 2;
     return Math.min(Math.max(center, lo + half), hi - half);
+  }
+
+  // --- Rubber-band boundaries -----------------------------------------------
+  // Hitting the hard clamp used to stop the view dead, which reads as the tool
+  // freezing. Instead, a gesture that pushes past the edge keeps moving the view
+  // — with diminishing travel, so the boundary feels elastic — and on release
+  // the view eases back to the clamp. That turns "unresponsive" into a legible
+  // "you've reached the edge" cue. Only the live pan/zoom gestures go soft;
+  // programmatic moves (minimap recenter, resize refit) still hard-clamp.
+
+  /**
+   * Signed diminishing overshoot. Near zero it tracks the input at
+   * {@link RUBBER_GIVE} (so the first bit past the edge still moves), and as the
+   * input grows it asymptotes to ±`maxOver`, so the view drifts a bounded amount
+   * past a limit and never runs away no matter how hard the gesture pushes. This
+   * is the standard asymptotic rubber-band curve `f(x) = maxOver·x / (maxOver/c + x)`.
+   */
+  private rubber(x: number, maxOver: number): number {
+    if (maxOver <= 0) return 0;
+    const c = BrowseCanvasComponent.RUBBER_GIVE;
+    const s = Math.sign(x);
+    const a = Math.abs(x);
+    return (s * (maxOver * a)) / (maxOver / c + a);
+  }
+
+  /**
+   * Soft analogue of the pan half of {@link clampView}: rather than pin the
+   * centre at the content edge, let it drift past with rubber-band resistance,
+   * so a drag into the wall still moves a little. Mutates {@link transform}.
+   */
+  private softClampPan(z: number): void {
+    const lim = this.panLimits(z);
+    if (!lim) return;
+    this.transform.centerX = this.rubberAxis(this.transform.centerX, lim.loX, lim.hiX, lim.viewX);
+    this.transform.centerY = this.rubberAxis(this.transform.centerY, lim.loY, lim.hiY, lim.viewY);
+  }
+
+  /**
+   * {@link clampAxis} with elastic edges: inside the allowed range it's the
+   * identity; past either edge (or away from the pinned centre when the content
+   * is narrower than the viewport) it returns a rubber-banded overshoot.
+   */
+  private rubberAxis(center: number, lo: number, hi: number, viewExtent: number): number {
+    const maxOver = BrowseCanvasComponent.RUBBER_PAN_MAX * viewExtent;
+    if (viewExtent >= hi - lo) {
+      const mid = (lo + hi) / 2;
+      return mid + this.rubber(center - mid, maxOver);
+    }
+    const half = viewExtent / 2;
+    const clampLo = lo + half;
+    const clampHi = hi - half;
+    if (center < clampLo) return clampLo + this.rubber(center - clampLo, maxOver);
+    if (center > clampHi) return clampHi + this.rubber(center - clampHi, maxOver);
+    return center;
+  }
+
+  /**
+   * Soft analogue of the zoom floor in {@link clampView}: a zoom below the
+   * whole-projection fit is allowed but resisted in log space (perceptually even
+   * with the rest of zooming), so wheeling out at the edge keeps responding —
+   * the projection shrinks a touch more — before the settle springs it back.
+   */
+  private softFloorZoom(rawZoom: number): number {
+    const minZoom = this.computeFitZoom();
+    if (rawZoom >= minZoom) return rawZoom;
+    const over = Math.log(minZoom / rawZoom); // > 0: how far past the floor, in log units
+    const damped = this.rubber(over, BrowseCanvasComponent.RUBBER_ZOOM_MAX);
+    return minZoom * Math.exp(-damped);
   }
 
   /** Pyramid level whose bins render closest to the current thumbnail size
@@ -593,10 +726,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private requestRedraw(): void {
-    // A zoom transition owns the canvas while it runs; tile loads, hover and
-    // selection repaints that arrive mid-transition are folded into the real
-    // frame the transition paints when it lands (see {@link endZoomAnim}).
-    if (this.animActive) return;
+    // A zoom transition or boundary snap-back owns the canvas while it runs;
+    // tile loads, hover and selection repaints that arrive mid-animation are
+    // folded into the real frame it paints each step / when it lands (see
+    // {@link endZoomAnim} and {@link stepSettle}).
+    if (this.animActive || this.settleActive) return;
     if (this.needsRedraw) return;
     this.needsRedraw = true;
     this.rafId = requestAnimationFrame(() => {
@@ -739,6 +873,97 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       cancelAnimationFrame(this.animRafId);
       this.animRafId = 0;
     }
+  }
+
+  /**
+   * If the view sits past its hard bounds (rubber-band overshoot), ease it back
+   * to the clamped position; otherwise do nothing. Cancels any pending debounced
+   * settle. Called when a pan ends and (debounced) once wheel zoom goes quiet.
+   */
+  private settleToBounds(): void {
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
+    }
+    if (!this.meta || this.meta.point_count === 0) return;
+    if (this.width <= 0 || this.height <= 0) return;
+    const dest = this.clampedTransform(this.transform);
+    const cur = this.transform;
+    const settled =
+      Math.abs(dest.centerX - cur.centerX) < 1e-3 &&
+      Math.abs(dest.centerY - cur.centerY) < 1e-3 &&
+      Math.abs(dest.zoom - cur.zoom) <= 1e-4 * cur.zoom;
+    if (settled) return;
+    // Honour reduced-motion: jump straight to the clamp instead of springing.
+    if (this.prefersReducedMotion()) {
+      this.transform = dest;
+      this.updateActiveLevel();
+      this.requestRedraw();
+      this.refreshHoverAfterZoom();
+      return;
+    }
+    this.settleFrom = { ...cur };
+    this.settleTo = dest;
+    this.settleStartTs = performance.now();
+    if (this.settleRafId) cancelAnimationFrame(this.settleRafId);
+    this.settleActive = true;
+    this.ngZone.runOutsideAngular(() => {
+      this.settleRafId = requestAnimationFrame(this.stepSettle);
+    });
+  }
+
+  /** One frame of the boundary snap-back: interpolate the live transform from
+   *  the overshoot toward the clamp (easeOutCubic, geometric on zoom) and
+   *  repaint, landing exactly on the clamped transform. */
+  private readonly stepSettle = (now: number): void => {
+    if (!this.settleActive) return;
+    const t = Math.min(1, (now - this.settleStartTs) / BrowseCanvasComponent.SETTLE_MS);
+    const e = 1 - Math.pow(1 - t, 3);
+    const from = this.settleFrom;
+    const to = this.settleTo;
+    this.transform.centerX = from.centerX + (to.centerX - from.centerX) * e;
+    this.transform.centerY = from.centerY + (to.centerY - from.centerY) * e;
+    this.transform.zoom = from.zoom * Math.pow(to.zoom / from.zoom, e);
+    this.updateActiveLevel();
+    this.draw();
+    if (t < 1) {
+      this.settleRafId = requestAnimationFrame(this.stepSettle);
+    } else {
+      this.settleActive = false;
+      this.settleRafId = 0;
+      this.transform.centerX = to.centerX;
+      this.transform.centerY = to.centerY;
+      this.transform.zoom = to.zoom;
+      this.updateActiveLevel();
+      this.draw();
+      this.refreshHoverAfterZoom();
+    }
+  };
+
+  /** Stop a snap-back in flight (without snapping to the clamp) and drop any
+   *  pending debounced settle — used when a new gesture takes over, so it
+   *  continues from wherever the view visually is. */
+  private cancelSettle(): void {
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = null;
+    }
+    if (!this.settleActive) return;
+    this.settleActive = false;
+    if (this.settleRafId) {
+      cancelAnimationFrame(this.settleRafId);
+      this.settleRafId = 0;
+    }
+  }
+
+  /** Debounced settle for wheel zoom, which has no discrete "end": fires once
+   *  the wheel has been quiet for a beat. */
+  private scheduleSettle(): void {
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = null;
+      this.settleToBounds();
+    }, 90);
   }
 
   private draw(): void {
@@ -1114,6 +1339,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // A new drag/marquee takes over from any zoom transition: settle it to the
     // real frame now so the pan/marquee starts from a correct, crisp view.
     if (this.animActive) this.endZoomAnim();
+    // A new gesture takes over from any boundary snap-back: stop it where it is
+    // (don't snap) so the pan/marquee continues from the current visual frame.
+    this.cancelSettle();
     // A fresh press settles any single-click toggle still waiting out the
     // double-click window (so quick clicks on different bins each register). The
     // second press of a double-click (detail >= 2) is exempt: flushing there
@@ -1165,8 +1393,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const z = this.effZoom;
     this.transform.centerX = this.panStartCenterX - dx / z;
     this.transform.centerY = this.panStartCenterY - dy / z;
-    // Stop the drag at the content edge so the user can't pan off into blank space.
-    this.clampView();
+    // Let the drag pull a little past the content edge with rubber-band
+    // resistance instead of stopping dead, so hitting the wall reads as an
+    // elastic edge; onMouseUp springs it back inside.
+    this.softClampPan(z);
     this.requestRedraw();
   }
 
@@ -1197,6 +1427,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
         this.scheduleToggle(mx, my);
       }
     }
+    // A drag that pulled past the content edge ends overshot; spring it back.
+    if (wasPanning && this.dragMoved) this.settleToBounds();
   }
 
   /**
@@ -1321,6 +1553,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * fits in the viewport (the same framing used on first load), then redraw.
    */
   zoomToFit(): void {
+    this.cancelSettle();
     const prevLevel = this.activeLevel;
     this.fitToData();
     this.commitZoomChange(prevLevel);
@@ -1329,17 +1562,23 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
     this.framedByUser = true;
+    // A zoom takes over from any in-flight snap-back; continue from where the
+    // view visually is and reschedule the settle below.
+    this.cancelSettle();
     const prevLevel = this.activeLevel;
     const [projX, projY] = this.screenToProj(anchorX, anchorY);
-    const newZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
+    const rawZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
+    // Below the whole-projection fit the zoom-out is resisted, not blocked, so
+    // the wheel keeps responding at the edge; the overshoot is sprung back by
+    // the debounced settle once the wheel goes quiet.
+    const newZoom = this.softFloorZoom(rawZoom);
     // Keep the point under the cursor fixed while zooming.
     this.transform.centerX = projX - (anchorX - this.width / 2) / newZoom;
     this.transform.centerY = projY - (anchorY - this.height / 2) / newZoom;
     this.transform.zoom = newZoom;
-    // Hold the view inside the useful bounds: floor the zoom at the whole-
-    // projection fit and rein the pan back from any blank margin a zoom-out off
-    // the anchor would expose.
-    this.clampView();
+    // Let the pan drift past the content edge with the same rubber-band give a
+    // zoom-out off the anchor would otherwise slam into.
+    this.softClampPan(newZoom);
 
     // Zoom holds the thumbnail size (targetRadius) and re-selects the level, so
     // a smaller region is re-binned more finely while bins stay ~the same size.
@@ -1348,6 +1587,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.updateActiveLevel();
     this.commitZoomChange(prevLevel);
     this.refreshHoverAfterZoom();
+    this.scheduleSettle();
   }
 
   /**
@@ -1366,6 +1606,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   setThumbnailRadius(radius: number, reframe: boolean): void {
     if (radius <= 0 || radius === this.targetRadius) return;
+    this.cancelSettle();
     if (reframe && this.meta && this.fittedAgainstRealSize) {
       this.framedByUser = true;
       this.transform.zoom *= radius / this.targetRadius;
