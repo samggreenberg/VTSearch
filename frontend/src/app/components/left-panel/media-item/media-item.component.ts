@@ -44,7 +44,11 @@ export class MediaItemComponent implements OnChanges {
   get thumbnailUrl(): string | null {
     if (this.thumbnailFailed) return null;
     if (this.media.media_type === 'image' || this.media.media_type === 'video' || this.media.media_type === 'document' || this.media.media_type === 'audio') {
-      return this.activeContext.mediaUrl(`/api/medias/${this.media.id}/image`);
+      // Use the downscaled thumbnail endpoint, not the full-resolution
+      // ``/image`` route: a grid of hundreds of high-res items would otherwise
+      // force the browser to decode every full-size bitmap at once and exhaust
+      // memory. The same thumbnail is reused at every zoom level.
+      return this.activeContext.mediaUrl(`/api/medias/${this.media.id}/thumbnail`);
     }
     return null;
   }

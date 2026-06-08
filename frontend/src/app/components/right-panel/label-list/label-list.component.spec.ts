@@ -157,9 +157,9 @@ describe('LabelListComponent', () => {
     });
 
     it('should generate correct thumbnail URLs', () => {
-      expect(component.thumbnailUrl(1)).toBe('/api/medias/1/image');
-      expect(component.thumbnailUrl(2)).toBe('/api/medias/2/image');
-      expect(component.thumbnailUrl(3)).toBe('/api/medias/3/image');
+      expect(component.thumbnailUrl(1)).toBe('/api/medias/1/thumbnail');
+      expect(component.thumbnailUrl(2)).toBe('/api/medias/2/thumbnail');
+      expect(component.thumbnailUrl(3)).toBe('/api/medias/3/thumbnail');
     });
 
     it('should be in grid mode when viewMode is grid', () => {

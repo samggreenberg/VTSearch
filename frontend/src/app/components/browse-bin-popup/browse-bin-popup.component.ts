@@ -219,7 +219,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   }
 
   thumbnailUrl(id: number): string {
-    return this.activeContext.mediaUrl(`/api/medias/${id}/image`);
+    return this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
   }
 
   onThumbnailError(url: string): void {

@@ -11851,6 +11851,38 @@
         }
       ]
     },
+    "/api/medias/{media_id}/thumbnail": {
+      "get": {
+        "description": "Grid and list tiles use this instead of ``/image`` so a gallery of many\nhigh-resolution items doesn't force the browser to decode every full-size\nbitmap at once.  The thumbnail is bounded to a fixed longest-side length\n(see :data:`vtscore.media.image.thumbnail.DEFAULT_MAX_DIM`) and is the\nsame regardless of zoom level, so an ``ETag`` lets the browser reuse it\nacross scrolls and zoom changes.  Undecodable sources (e.g. SVG) fall\nback to the original bytes.",
+        "operationId": "media_thumbnail",
+        "responses": {
+          "400": {
+            "description": "Media is not an image and has no image_response delegate."
+          },
+          "404": {
+            "description": "Media not found, or media bytes unavailable."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Stream a downscaled thumbnail of a media item's image.",
+        "tags": [
+          "medias"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "media_id",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ]
+    },
     "/api/medias/{media_id}/video": {
       "get": {
         "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``video/mp4`` for unrecognised extensions.",

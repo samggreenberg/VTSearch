@@ -197,7 +197,7 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   }
 
   thumbnailUrl(id: number): string {
-    return this.activeContext.mediaUrl(`/api/medias/${id}/image`);
+    return this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
   }
 
   onThumbnailError(url: string): void {
