@@ -286,6 +286,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.recenterSub = this.viewport.recenter$.subscribe(({ x, y }) => {
       this.transform.centerX = x;
       this.transform.centerY = y;
+      // A minimap click/drag can target a content edge; keep the viewport inside
+      // the useful bounds just as a direct pan does.
+      this.clampView();
       this.requestRedraw();
     });
 
@@ -421,6 +424,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // the user's pan/zoom.
     if (!this.fittedAgainstRealSize && this.meta && this.width > 0 && this.height > 0) {
       this.fitToData();
+    } else {
+      // The viewport changed size: a shrunk canvas raises the fit floor and a
+      // grown one extends past the content, so re-clamp the kept pan/zoom.
+      this.clampView();
+      this.updateActiveLevel();
     }
     this.requestRedraw();
   }
@@ -428,18 +436,36 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private fitToData(): void {
     if (!this.meta || this.meta.point_count === 0) return;
     const [xmin, ymin, xmax, ymax] = this.meta.bounds;
+    this.transform.zoom = this.computeFitZoom();
+    this.transform.centerX = (xmin + xmax) / 2;
+    this.transform.centerY = (ymin + ymax) / 2;
+    // Mark whether this fit used the real canvas size (vs the 800x600 fallback),
+    // so `resize()` knows whether a corrective refit is still owed.
+    this.fittedAgainstRealSize = this.width > 0 && this.height > 0;
+    this.updateActiveLevel();
+  }
+
+  /**
+   * The zoom at which the whole projection just fits the viewport — the framing
+   * {@link fitToData} (Zoom Fit) lands on, and the floor {@link clampView} holds
+   * the user to (zooming out past this only adds blank margins, so it is the
+   * "useful edge"). `bounds` is the extent of the bin *centres*, but each edge
+   * bin is drawn out to its circumradius beyond its centre, so framing on the
+   * centres alone clips the edge bins; add the bin circumradius (in projection
+   * units) as margin, plus a little breathing room. The active level — and thus
+   * the radius — depends on the zoom we're solving for, so iterate a few times
+   * from the no-margin fit to a fixed point (the level is quantised and clamps
+   * at 0, so this settles immediately).
+   */
+  private computeFitZoom(): number {
+    if (!this.meta) return this.transform.zoom;
+    const [xmin, ymin, xmax, ymax] = this.meta.bounds;
     const dataW = xmax - xmin || 1;
     const dataH = ymax - ymin || 1;
     // Small breathing room beyond the bins themselves.
     const padding = 0.05;
     const w = this.width || 800;
     const h = this.height || 600;
-    // `bounds` is the extent of the bin *centres*, but each edge bin is drawn out
-    // to its circumradius beyond its centre, so framing on the centres alone clips
-    // the edge bins. Add the bin circumradius (in projection units) as margin. The
-    // active level — and therefore the radius — depends on the zoom we're solving
-    // for, so iterate a few times from the no-margin fit to a fixed point (the
-    // level is quantised and clamps at 0, so this settles immediately).
     let zoom = Math.min(
       w / (dataW * (1 + padding * 2)),
       h / (dataH * (1 + padding * 2)),
@@ -451,13 +477,48 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       const padH = dataH + 2 * (r + dataH * padding);
       zoom = Math.min(w / padW, h / padH);
     }
-    this.transform.zoom = zoom;
-    this.transform.centerX = (xmin + xmax) / 2;
-    this.transform.centerY = (ymin + ymax) / 2;
-    // Mark whether this fit used the real canvas size (vs the 800x600 fallback),
-    // so `resize()` knows whether a corrective refit is still owed.
-    this.fittedAgainstRealSize = this.width > 0 && this.height > 0;
-    this.updateActiveLevel();
+    return zoom;
+  }
+
+  /**
+   * Keep the view within the useful bounds: never zoomed out past the
+   * whole-projection fit, never panned so the viewport runs off the content into
+   * blank space. Mutates {@link transform} in place; callers re-select the level
+   * and redraw. Safe to call repeatedly (idempotent once inside the bounds).
+   *
+   * Zoom is floored at {@link computeFitZoom} so the user can't shrink the
+   * projection into a sea of background. Each pan axis is then clamped so the
+   * viewport stays inside the content rectangle — the bin *centres* extent
+   * (`bounds`) grown by the edge bins' circumradius `r`, since those bins draw
+   * out that far past their centres. When the viewport is larger than the
+   * content on an axis (e.g. after zooming out from an off-centre view) it is
+   * centred on that axis rather than allowed to show blank margin — so a
+   * zoom-out from the top third reveals the *content* re-centred to fill the
+   * frame, even though that nudges the view off the original spot.
+   */
+  private clampView(): void {
+    if (!this.meta || this.meta.point_count === 0) return;
+    if (this.width <= 0 || this.height <= 0) return;
+    const minZoom = this.computeFitZoom();
+    if (this.transform.zoom < minZoom) this.transform.zoom = minZoom;
+    const [xmin, ymin, xmax, ymax] = this.meta.bounds;
+    const r = this.meta.base_radius / Math.pow(2, this.levelForEffZoom(this.transform.zoom));
+    const z = this.transform.zoom;
+    this.transform.centerX = this.clampAxis(this.transform.centerX, xmin - r, xmax + r, this.width / z);
+    this.transform.centerY = this.clampAxis(this.transform.centerY, ymin - r, ymax + r, this.height / z);
+  }
+
+  /**
+   * Clamp a viewport centre on one axis to keep its `viewExtent`-wide span
+   * inside the content range `[lo, hi]`. When the span is wider than the content
+   * it can't be contained, so centre it (`(lo + hi) / 2`) — that yields equal
+   * margins instead of letting the view drift to one edge with all the blank on
+   * the other side.
+   */
+  private clampAxis(center: number, lo: number, hi: number, viewExtent: number): number {
+    if (viewExtent >= hi - lo) return (lo + hi) / 2;
+    const half = viewExtent / 2;
+    return Math.min(Math.max(center, lo + half), hi - half);
   }
 
   /** Pyramid level whose bins render closest to the current thumbnail size
@@ -1101,6 +1162,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const z = this.effZoom;
     this.transform.centerX = this.panStartCenterX - dx / z;
     this.transform.centerY = this.panStartCenterY - dy / z;
+    // Stop the drag at the content edge so the user can't pan off into blank space.
+    this.clampView();
     this.requestRedraw();
   }
 
@@ -1267,6 +1330,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.transform.centerX = projX - (anchorX - this.width / 2) / newZoom;
     this.transform.centerY = projY - (anchorY - this.height / 2) / newZoom;
     this.transform.zoom = newZoom;
+    // Hold the view inside the useful bounds: floor the zoom at the whole-
+    // projection fit and rein the pan back from any blank margin a zoom-out off
+    // the anchor would expose.
+    this.clampView();
 
     // Zoom holds the thumbnail size (targetRadius) and re-selects the level, so
     // a smaller region is re-binned more finely while bins stay ~the same size.
@@ -1306,6 +1373,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (!reframe && !this.framedByUser && this.meta && this.fittedAgainstRealSize) {
       this.fitToData();
     } else {
+      // A reframe scales the zoom in lock-step with the size, which can push it
+      // below the whole-projection fit (shrinking thumbnails) — clamp it back.
+      this.clampView();
       this.updateActiveLevel();
     }
     this.requestRedraw();
