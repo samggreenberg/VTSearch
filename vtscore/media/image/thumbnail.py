@@ -42,7 +42,7 @@ def make_image_thumbnail(media_bytes: bytes, max_dim: int = DEFAULT_MAX_DIM) -> 
         with Image.open(io.BytesIO(media_bytes)) as src:
             img = ImageOps.exif_transpose(src) or src
             has_alpha = img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
-            img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+            img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
             out = io.BytesIO()
             if has_alpha:
                 img.convert("RGBA").save(out, format="PNG", optimize=True)
