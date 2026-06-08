@@ -81,7 +81,7 @@ resolution rather than relying on a closed-form estimate.
 
 | Knob | Current value | Location |
 |------|---------------|----------|
-| Target on-screen hex radius (level picker) | `28` px | `updateActiveLevel`, `:163` |
+| Target on-screen hex radius (level picker) | `28` px default (`DEFAULT_TARGET_RADIUS`), scaled by the thumbnail-size buttons (XS–XL → ×0.5–×2.5) into `targetRadius` | `levelForEffZoom` / `setThumbnailRadius` |
 | Density scale | log (`log(count)/log(maxCount)`) | `drawHex`, `:284` |
 | Colormap | darkred→yellow, 8-stop LUT (black left free for "None"/empty space) | `HEATMAP`, `hex-render.util.ts` |
 | Singleton cell shape | inscribed disc (`HEX_INRADIUS_RATIO`), hex otherwise | `traceCellPath`, `hex-render.util.ts` |
