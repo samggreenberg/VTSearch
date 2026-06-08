@@ -769,7 +769,7 @@ class TestHubMetadataPreflight:
     def test_fetches_config_json_with_cache_and_token(self):
         with patch("huggingface_hub.hf_hub_download") as dl:
             _hub_metadata_preflight(("org/repo",), {"cache_dir": "/tmp/c", "token": "tok"})
-        dl.assert_called_once_with("org/repo", "config.json", cache_dir="/tmp/c", token="tok")
+        dl.assert_called_once_with("org/repo", "config.json", cache_dir="/tmp/c", token="tok")  # noqa: S106  # dummy token
 
     def test_supports_cache_folder_alias(self):
         """SentenceTransformer call sites pass cache_folder instead of cache_dir."""
