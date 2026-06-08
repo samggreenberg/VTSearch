@@ -69,12 +69,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   @Input() mediaType = '';
   /**
-   * User-controlled on-screen size multiplier for hexes. ``1`` is the default
-   * fit. This scales rendering (positions + hex radius) only; it deliberately
-   * does NOT feed level selection, so growing/shrinking the display never
-   * changes the binning, i.e. which vectors land in a given hex.
+   * Target on-screen bin radius in CSS px: the size each bin/thumbnail aims to
+   * render at. Level selection picks the pyramid level whose bins land closest
+   * to this, so it is the "thumbnail size" knob — bigger value ⇒ bigger, coarser
+   * bins. It is set, not bound: {@link setThumbnailRadius} updates it (and, for
+   * the +/- buttons, scales the view in lock-step so the *same* bins simply use
+   * more pixels rather than re-binning). Default 28 = the "M" thumbnail size.
    */
-  @Input() displayScale = 1;
+  private targetRadius = BrowseCanvasComponent.DEFAULT_TARGET_RADIUS;
   /**
    * Density colormap preset for the flat (non-thumbnail) shading. ``auto``
    * follows the theme (Ocean in light mode, Heat in dark); the others lock to
@@ -160,6 +162,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // 1.15/tick so the gesture lands a decisive jump, matching the map idiom.
   private static readonly DOUBLE_CLICK_ZOOM = 2.0;
 
+  // On-screen bin radius (CSS px) the "M" thumbnail size targets, and the
+  // default before any saved size is applied. See {@link targetRadius}.
+  static readonly DEFAULT_TARGET_RADIUS = 28;
+
   // Shift+drag draws a marquee rectangle (canvas-relative screen coords) that
   // adds every bin whose centre falls inside it to the selection — the fast path
   // for grabbing a region, since plain drag is reserved for panning.
@@ -224,10 +230,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     return binGeometry(this.meta?.bin_shape);
   }
 
-  /** On-screen scale: base zoom × display-size multiplier. Used for all
-   * projection↔screen conversions, rendered hex radius, and level selection. */
+  /** On-screen scale (projection units → CSS px). Used for all projection↔screen
+   * conversions and the rendered bin radius. Thumbnail size no longer folds in
+   * here: it lives in {@link targetRadius} (level selection) and, for the +/-
+   * buttons, in a matching {@link transform}.zoom change, so "Zoom" and
+   * "thumbnail size" are now distinct operations rather than the same multiply. */
   private get effZoom(): number {
-    return this.transform.zoom * this.displayScale;
+    return this.transform.zoom;
   }
 
   ngOnInit(): void {
@@ -300,14 +309,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       } else {
         this.updateActiveLevel();
       }
-      this.requestRedraw();
-    }
-    // Display-size changes rescale rendering and require a level re-selection:
-    // effZoom = transform.zoom * displayScale, so a larger displayScale raises
-    // the effective zoom and should switch to a finer pyramid level to keep
-    // hexes near the 28px target, not blow them up.
-    if (changes['displayScale'] && !changes['displayScale'].firstChange) {
-      this.updateActiveLevel();
       this.requestRedraw();
     }
     // Entering region-select mode: drop any hover preview/highlight that was
@@ -393,17 +394,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // active level — and therefore the radius — depends on the zoom we're solving
     // for, so iterate a few times from the no-margin fit to a fixed point (the
     // level is quantised and clamps at 0, so this settles immediately).
-    let zoom =
-      Math.min(w / (dataW * (1 + padding * 2)), h / (dataH * (1 + padding * 2))) /
-      this.displayScale;
+    let zoom = Math.min(
+      w / (dataW * (1 + padding * 2)),
+      h / (dataH * (1 + padding * 2)),
+    );
     for (let i = 0; i < 3; i++) {
-      const level = this.levelForEffZoom(zoom * this.displayScale);
+      const level = this.levelForEffZoom(zoom);
       const r = this.meta.base_radius / Math.pow(2, level);
       const padW = dataW + 2 * (r + dataW * padding);
       const padH = dataH + 2 * (r + dataH * padding);
-      // Fit so the *effective* zoom fills the viewport: divide out displayScale so
-      // a non-default display size still frames the whole projection on load.
-      zoom = Math.min(w / padW, h / padH) / this.displayScale;
+      zoom = Math.min(w / padW, h / padH);
     }
     this.transform.zoom = zoom;
     this.transform.centerX = (xmin + xmax) / 2;
@@ -414,13 +414,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.updateActiveLevel();
   }
 
-  /** Pyramid level whose bins render closest to the target on-screen radius at
-   * the given effective zoom. Shared by live level selection and fit framing. */
+  /** Pyramid level whose bins render closest to the current thumbnail size
+   * ({@link targetRadius}) at the given on-screen zoom. Shared by live level
+   * selection and fit framing. */
   private levelForEffZoom(effZoom: number): number {
     if (!this.meta || this.meta.levels.length === 0) return 0;
-    const targetScreenRadius = 28;
     const idealLevel = Math.log2(
-      (this.meta.base_radius * effZoom) / targetScreenRadius,
+      (this.meta.base_radius * effZoom) / this.targetRadius,
     );
     return Math.max(
       0,
@@ -1029,17 +1029,41 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   zoomBy(factor: number, anchorX = this.width / 2, anchorY = this.height / 2): void {
     const [projX, projY] = this.screenToProj(anchorX, anchorY);
     const newZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
-    // Anchor the point under the cursor using the new *effective* zoom so the
-    // display-size multiplier keeps that pixel fixed while zooming.
-    const newEffZoom = newZoom * this.displayScale;
-
-    this.transform.centerX = projX - (anchorX - this.width / 2) / newEffZoom;
-    this.transform.centerY = projY - (anchorY - this.height / 2) / newEffZoom;
+    // Keep the point under the cursor fixed while zooming.
+    this.transform.centerX = projX - (anchorX - this.width / 2) / newZoom;
+    this.transform.centerY = projY - (anchorY - this.height / 2) / newZoom;
     this.transform.zoom = newZoom;
 
+    // Zoom holds the thumbnail size (targetRadius) and re-selects the level, so
+    // a smaller region is re-binned more finely while bins stay ~the same size.
     this.updateActiveLevel();
     this.requestRedraw();
     this.refreshHoverAfterZoom();
+  }
+
+  /**
+   * Set the thumbnail size — the on-screen radius each bin aims to render at.
+   *
+   * `reframe` picks between the two callers:
+   *  - `true` (the +/- thumbnail buttons): scale the view by the same factor as
+   *    the size change so the level is held (level selection divides
+   *    `base_radius * zoom` by `targetRadius`, and scaling both by the same
+   *    factor leaves the quotient — hence the chosen level — unchanged). The
+   *    *same bins* therefore just use more/fewer pixels and the visible region
+   *    shrinks/grows. This is "make the thumbnails bigger", never a re-bin.
+   *  - `false` (initial load / settings sync): only record the size and
+   *    re-select the level at the current framing, so a saved size sets the
+   *    overview granularity without yanking the viewport.
+   */
+  setThumbnailRadius(radius: number, reframe: boolean): void {
+    if (radius <= 0 || radius === this.targetRadius) return;
+    if (reframe && this.meta && this.fittedAgainstRealSize) {
+      this.transform.zoom *= radius / this.targetRadius;
+    }
+    this.targetRadius = radius;
+    this.updateActiveLevel();
+    this.requestRedraw();
+    if (reframe) this.refreshHoverAfterZoom();
   }
 
   private onWheel(event: WheelEvent): void {

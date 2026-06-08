@@ -63,7 +63,6 @@
           <vt-browse-canvas
             [meta]="meta"
             [mediaType]="mediaType"
-            [displayScale]="hexDisplayScale"
             [colormap]="colormap"
             [thumbnailBorder]="thumbnailBorder"
             [marqueeMode]="marqueeMode"
@@ -102,7 +101,7 @@
                 type="button"
                 class="browse-size-btn"
                 (click)="zoomIn()"
-                title="Zoom in"
+                title="Zoom in — view a smaller region, re-binned finer (thumbnails stay the same size)"
                 aria-label="Zoom in">
                 <vt-icon type="zoom-in" [size]="16"></vt-icon>
               </button>
@@ -118,7 +117,7 @@
                 type="button"
                 class="browse-size-btn"
                 (click)="zoomOut()"
-                title="Zoom out"
+                title="Zoom out — view a larger region, re-binned coarser (thumbnails stay the same size)"
                 aria-label="Zoom out">
                 <vt-icon type="zoom-out" [size]="16"></vt-icon>
               </button>
@@ -129,8 +128,8 @@
                 class="browse-size-btn"
                 [disabled]="atMinHexSize"
                 (click)="bumpHexSize(-1)"
-                title="Smaller cells"
-                aria-label="Smaller cells">
+                title="Smaller thumbnails — same bins, fewer pixels each (shows more of the canvas)"
+                aria-label="Smaller thumbnails">
                 <vt-icon type="image" [size]="11"></vt-icon>
               </button>
               <button
@@ -138,8 +137,8 @@
                 class="browse-size-btn"
                 [disabled]="atMaxHexSize"
                 (click)="bumpHexSize(1)"
-                title="Bigger cells"
-                aria-label="Bigger cells">
+                title="Bigger thumbnails — same bins, more pixels each (shows less of the canvas)"
+                aria-label="Bigger thumbnails">
                 <vt-icon type="image" [size]="18"></vt-icon>
               </button>
             </div>

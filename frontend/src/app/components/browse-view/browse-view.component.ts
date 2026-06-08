@@ -79,12 +79,14 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   datasetName = '';
 
   /**
-   * Discrete on-screen size multipliers for the hexes, one per named icon
-   * size (XS…XL). ``M`` (index 2, scale 1) is the default fit; the
-   * bigger/smaller buttons step through these and the Settings → Browser tab
-   * picks one by name. This only rescales the rendering — it never changes
-   * which vectors land in a hex. The persisted per-media value is the size
-   * *label* (see {@link ICON_SIZES}), not the multiplier.
+   * Discrete thumbnail-size multipliers, one per named icon size (XS…XL),
+   * applied to the canvas's default target bin radius. ``M`` (index 2, scale 1)
+   * is the default. The bigger/smaller buttons step through these and the
+   * Settings → Browser tab picks one by name. Growing the size makes the *same
+   * bins* use more pixels (the view zooms in lock-step, so the binning — which
+   * vectors land in a hex — is unchanged); it is not the "Zoom" control, which
+   * instead re-bins a smaller region more finely. The persisted per-media value
+   * is the size *label* (see {@link ICON_SIZES}), not the multiplier.
    */
   private readonly HEX_SCALES = [0.5, 0.75, 1, 1.6, 2.5];
   /** Named icon sizes, index-aligned with {@link HEX_SCALES}. */
@@ -268,10 +270,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.densityMax = max;
   }
 
-  get hexDisplayScale(): number {
-    return this.HEX_SCALES[this.hexScaleIndex];
-  }
-
   /** Noun for the item-count chip — "positives" for a Find-subset browse. */
   get countNoun(): string {
     return this.subset ? 'positives' : 'items';
@@ -285,8 +283,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     return this.hexScaleIndex === this.HEX_SCALES.length - 1;
   }
 
-  /** Grow (+1) or shrink (-1) the on-screen hex size, clamped to the range,
-   *  and persist the new size as the per-media ``browse_icon_size``. */
+  /** Target bin radius (CSS px) for the current named thumbnail size. */
+  private get thumbnailRadius(): number {
+    return BrowseCanvasComponent.DEFAULT_TARGET_RADIUS * this.HEX_SCALES[this.hexScaleIndex];
+  }
+
+  /** Grow (+1) or shrink (-1) the on-screen thumbnail size, clamped to the
+   *  range, and persist the new size as the per-media ``browse_icon_size``.
+   *  Reframes the canvas so the same bins render bigger/smaller (the region
+   *  shrinks/grows) without changing the binning. */
   bumpHexSize(delta: 1 | -1): void {
     const next = Math.max(
       0,
@@ -294,6 +299,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     );
     if (next === this.hexScaleIndex) return;
     this.hexScaleIndex = next;
+    this.canvas?.setThumbnailRadius(this.thumbnailRadius, true);
     this.persistBrowsePref('browse_icon_size', BrowseViewComponent.ICON_SIZES[next]);
   }
 
@@ -318,6 +324,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const sizeLabel = mt ? this.perMediaValue(s.browse_icon_size, mt) : '';
     const sizeIdx = (BrowseViewComponent.ICON_SIZES as readonly string[]).indexOf(sizeLabel);
     this.hexScaleIndex = sizeIdx >= 0 ? sizeIdx : 2;
+    // Seed the saved size as the overview granularity (no reframe): a settings
+    // change re-bins at the current framing rather than zooming the viewport,
+    // and on first load the initial fit picks the matching level.
+    this.canvas?.setThumbnailRadius(this.thumbnailRadius, false);
 
     const shape: BinShape = this.perMediaValue(s.browse_bin_shape, mt) === 'square' ? 'square' : 'hex';
     if (shape !== this.binShape) this.switchBinShape(shape, false);
