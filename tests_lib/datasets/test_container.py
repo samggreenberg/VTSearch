@@ -66,6 +66,38 @@ class TestContainerFormat:
         assert meta["clipper"] == "test_clipper"
         assert meta["name"] == "Test Dataset"
 
+    def test_payload_stored_uncompressed(self, tmp_path):
+        """medias.pkl must be stored (ZIP_STORED), not DEFLATE-compressed.
+
+        The payload is float32 embeddings + already-compressed media_bytes,
+        both incompressible: DEFLATE burned seconds scanning every byte for
+        zero gain, the bulk of the post-diversity "Saving to registry…"
+        stall.  Pin STORED so the latency fix can't silently regress.
+        """
+        path = tmp_path / "dataset.pkl"
+        write_container(path, _medias_pkl_bytes(), _meta())
+        with zipfile.ZipFile(str(path), "r") as zf:
+            for info in zf.infolist():
+                assert info.compress_type == zipfile.ZIP_STORED, (
+                    f"{info.filename} is compressed ({info.compress_type}); expected ZIP_STORED"
+                )
+
+    def test_reads_legacy_deflate_container(self, tmp_path):
+        """Pre-existing DEFLATE-compressed containers must still load.
+
+        Switching writes to STORED must not orphan datasets written by an
+        older build; zipfile decompresses any method on read.
+        """
+        path = tmp_path / "legacy.pkl"
+        with zipfile.ZipFile(str(path), "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("medias.pkl", _medias_pkl_bytes())
+            import json
+
+            zf.writestr("meta.json", json.dumps(_meta()))
+        data, meta = read_container(path)
+        assert len(data["medias"]) == 5
+        assert meta["embedder"] == "test_embedder"
+
     def test_read_meta_only(self, tmp_path):
         path = tmp_path / "dataset.pkl"
         write_container(path, _medias_pkl_bytes(), _meta())
