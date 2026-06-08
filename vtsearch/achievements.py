@@ -35,7 +35,7 @@ TIER_NAMES: tuple[str, ...] = ("Bronze", "Silver", "Gold", "Platinum")
 ACHIEVEMENTS: list[dict[str, Any]] = [
     {
         "id": "datasets_loaded",
-        "name": "Datasets Loaded",
+        "name": "Data: Set",
         "description": "Load datasets you imported. Demos and synthetic don't count.",
         "icon": "cubes",
         "tiers": [1, 10, 100, 1000],
