@@ -602,12 +602,17 @@ if os.environ.get("VTSEARCH_SERVER_INIT") == "1":
 def _port_is_free(port: int) -> bool:
     """Return True if nothing is bound to ``0.0.0.0:port``.
 
-    Probes by attempting a plain bind (no ``SO_REUSEADDR``), so an existing
-    LISTEN socket surfaces as ``EADDRINUSE``.
+    Probes with ``SO_REUSEADDR``, matching how werkzeug actually binds.  On
+    Linux an active LISTEN socket still surfaces as ``EADDRINUSE`` (only
+    ``SO_REUSEPORT`` would mask it), but orphaned ``TIME_WAIT`` remnants - the
+    parent-less sockets a ``kill -9``'d server leaves behind for ~60s - do
+    not.  Without the flag those remnants made the preflight refuse a restart
+    that werkzeug's own bind would have happily performed.
     """
     import socket
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(("0.0.0.0", port))
         except OSError:
