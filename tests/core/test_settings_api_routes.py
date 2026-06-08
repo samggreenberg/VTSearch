@@ -23,6 +23,29 @@ class TestSettingsAPI:
         assert "volume" in data
         assert "autorun_detectors" in data
 
+    def test_get_settings_tolerates_stale_scalar_dict_field(self, client, isolated_settings):
+        """A stale scalar where a per-media-type dict is expected must not 500.
+
+        Older settings files (or hand-edits) can carry e.g.
+        ``browse_bin_shape: "hex"`` from before the field became a
+        ``{media_type: shape}`` dict. Marshmallow's ``Dict`` field calls
+        ``.items()`` while dumping, so the bare string used to crash the
+        whole endpoint with ``AttributeError: 'str' object has no attribute
+        'items'`` → 500. The read path now coerces it to ``{}`` (equivalent
+        to "never set") instead.
+        """
+        import json as _json
+
+        from vtsearch import settings as settings_mod
+
+        isolated_settings._user.parent.mkdir(parents=True, exist_ok=True)
+        isolated_settings._user.write_text(_json.dumps({"browse_bin_shape": "hex"}) + "\n")
+        settings_mod.reset()  # force the in-memory cache to re-read the corrupt file
+
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        assert res.get_json()["browse_bin_shape"] == {}
+
     def test_update_volume(self, client):
         res = client.put(
             "/api/settings",

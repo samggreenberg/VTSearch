@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from flask_smorest import Blueprint, abort
+from marshmallow import fields
 
 from vtsearch import settings
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
@@ -194,6 +195,33 @@ def _apply_dir(key: str, value: str, setter) -> None:
     setter(value.strip())
 
 
+#: Schema fields declared as dicts (``browse_*``, the per-media-type
+#: embedder maps, ``import_defaults_by_media_type`` …). A persisted or
+#: hand-edited settings file from an older build can carry a stale scalar
+#: where one of these is now expected (e.g. a pre-per-media-type
+#: ``browse_bin_shape: "hex"``). Marshmallow's ``Dict`` field calls
+#: ``.items()`` while dumping, so a bare string there would 500 the entire
+#: settings endpoint. Derived from the schema so it stays in sync as
+#: fields are added.
+_DICT_FIELD_NAMES = frozenset(
+    name for name, field in AppSettingsSchema().fields.items() if isinstance(field, fields.Dict)
+)
+
+
+def _coerce_dict_fields(data: dict) -> dict:
+    """Replace any non-dict value in a schema dict field with ``{}``.
+
+    Mirrors how the per-side getters (``view_mode`` etc.) already coerce a
+    junk persisted value back to its default on read: a stale scalar left
+    over from an older settings file resolves to "never set" rather than
+    crashing the serializer. Mutates and returns *data*.
+    """
+    for name in _DICT_FIELD_NAMES:
+        if name in data and not isinstance(data[name], dict):
+            data[name] = {}
+    return data
+
+
 def _with_effective(data: dict) -> dict:
     """Overlay the resolver-computed (read-only) views onto *data*.
 
@@ -205,7 +233,11 @@ def _with_effective(data: dict) -> dict:
     * ``hidden_plugins`` - the persisted server setting unioned with any
       ``--hide-plugin`` CLI flags, normalised to sorted lists so the
       "Server" settings tab can render what's actually in force.
+
+    Stale dict fields are coerced to ``{}`` first so a corrupt persisted
+    value can't 500 the endpoint (see :func:`_coerce_dict_fields`).
     """
+    _coerce_dict_fields(data)
     data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
     data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
     data["hidden_plugins"] = {
