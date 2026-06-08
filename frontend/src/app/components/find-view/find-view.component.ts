@@ -10,6 +10,9 @@ import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
+import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
+import { ToastService } from '../../services/toast.service';
+import { VtDialogService } from '../../services/dialog.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { MediaStateService } from '../../services/media-state.service';
@@ -64,6 +67,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private mediasApi: MediasApiService,
     private detectorsFindApi: DetectorsFindApiService,
     private datasetsRegistryApi: DatasetsRegistryApiService,
+    private datasetsCrudApi: DatasetsCrudApiService,
+    private toast: ToastService,
+    private dialog: VtDialogService,
     private ngZone: NgZone,
     private activeContext: ActiveContextService,
     private datasetState: DatasetStateService,
@@ -422,6 +428,38 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       label: `${detectorName} — positives`,
     });
     this.router.navigate(['/browse', datasetId], { queryParams: { subset: 1 } });
+  }
+
+  /**
+   * Promote the current Goods pile into its own saved dataset. The
+   * promoted items keep their origins and embeddings; the new dataset
+   * gets a fresh created date but inherits this dataset's death date.
+   * We prompt for a name (prefilled "<dataset> <detector> Results"),
+   * then create + register it and confirm with a toast (staying in Find).
+   */
+  onToDataset(): void {
+    const ids = Array.from(this.voteState.goodVotes);
+    if (ids.length === 0) return;
+    const modelId = this.activeContext.modelId;
+    const detectorName =
+      this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
+    const base = [this.datasetName, detectorName, 'Results'].filter((s) => !!s).join(' ');
+
+    this.dialog.prompt('Name the new dataset', base).then((name) => {
+      const trimmed = (name ?? '').trim();
+      if (!trimmed) return;
+      this.datasetsCrudApi
+        .promote(trimmed, ids)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (res) => {
+            this.toast.success({
+              message: `Created dataset "${res.name}"`,
+              detail: `${res.num_items} item${res.num_items === 1 ? '' : 's'} promoted. Find it in the Datasets dashboard.`,
+            });
+          },
+        });
+    });
   }
 
   /** Cancel the find-label scoring run; the HTTP request will surface
