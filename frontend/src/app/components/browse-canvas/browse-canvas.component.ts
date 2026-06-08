@@ -531,10 +531,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * draw out that far past their centres. Clamping the centre (not the whole
    * span) is deliberate: it lets any point in the content be parked at screen
    * centre, at the cost of blank margin past the edge (see {@link clampAxis}).
-   * When the viewport is larger than the content on an axis (e.g. after zooming
-   * out from an off-centre view) it is centred on that axis rather than allowed
-   * to drift — so a zoom-out from the top third reveals the *content* re-centred
-   * to fill the frame, even though that nudges the view off the original spot.
+   * The `[lo, hi]` clamp holds at every zoom — even when the viewport is larger
+   * than the content — so you can always pull an edge bin to the centre of the
+   * current zoom. (Use Zoom Fit to re-frame the whole projection; the passive
+   * clamp no longer force-recentres on zoom-out.)
    */
   private clampView(): void {
     if (!this.meta || this.meta.point_count === 0) return;
@@ -558,8 +558,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const lim = this.panLimits(zoom);
     return {
       zoom,
-      centerX: lim ? this.clampAxis(t.centerX, lim.loX, lim.hiX, lim.viewX) : t.centerX,
-      centerY: lim ? this.clampAxis(t.centerY, lim.loY, lim.hiY, lim.viewY) : t.centerY,
+      centerX: lim ? this.clampAxis(t.centerX, lim.loX, lim.hiX) : t.centerX,
+      centerY: lim ? this.clampAxis(t.centerY, lim.loY, lim.hiY) : t.centerY,
     };
   }
 
@@ -567,8 +567,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * Pan-centre limits at zoom `z`: the content rectangle the viewport *centre*
    * is held within (the bin-centre `bounds` grown by the edge bins' circumradius
    * `r`, since those bins draw out that far past their centres) plus the viewport
-   * extent on each axis (used to detect when the content is fully in frame and to
-   * scale the rubber-band give). Returns null when there's no data to frame.
+   * extent on each axis (used to scale the rubber-band give). Returns null when
+   * there's no data to frame.
    */
   private panLimits(
     z: number,
@@ -584,17 +584,21 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * point in the content can be brought to screen centre (drag the top-left bin
    * out from under the Back button and park it dead-centre if you like). The cost
    * is blank margin past the content edge: at centre = `lo` the viewport spills
-   * half its extent (`viewExtent / 2`) past the edge into background. That spill
-   * is half the viewport, so it's larger when zoomed out and smaller when zoomed
-   * in — the wall sits further from the data the further out you are, which is the
-   * price of being able to centre an edge point at any zoom. When the viewport is
-   * wider than the whole content (`viewExtent >= hi - lo`, i.e. at/near the
-   * whole-projection fit) panning can't reveal anything new, so centre it
-   * (`(lo + hi) / 2`) for equal margins instead of stranding the content to one
-   * side.
+   * half its extent past the edge into background. That spill is half the
+   * viewport, so it's larger when zoomed out and smaller when zoomed in — the
+   * wall sits further from the data the further out you are, which is the price of
+   * being able to centre an edge point at any zoom.
+   *
+   * The clamp is `[lo, hi]` at *every* zoom, including when the viewport is wider
+   * than the whole content (at/near the whole-projection fit): we deliberately do
+   * NOT pin the centre to `(lo + hi) / 2` there. Pinning froze panning the moment
+   * an axis's viewport grew past its content span — which killed all panning when
+   * zoomed out, and (because the test is per-axis) let you centre an edge bin
+   * vertically but not horizontally whenever the content's aspect ratio differed
+   * from the viewport's. Keeping the full `[lo, hi]` range on both axes lets you
+   * pull any bin to the centre of the current zoom, all the way out.
    */
-  private clampAxis(center: number, lo: number, hi: number, viewExtent: number): number {
-    if (viewExtent >= hi - lo) return (lo + hi) / 2;
+  private clampAxis(center: number, lo: number, hi: number): number {
     return Math.min(Math.max(center, lo), hi);
   }
 
@@ -634,16 +638,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   /**
-   * {@link clampAxis} with elastic edges: inside the allowed range it's the
-   * identity; past either edge (or away from the pinned centre when the content
-   * is narrower than the viewport) it returns a rubber-banded overshoot.
+   * {@link clampAxis} with elastic edges: inside `[lo, hi]` it's the identity;
+   * past either edge it returns a rubber-banded overshoot. Like {@link clampAxis}
+   * it uses the full `[lo, hi]` range at every zoom (no centre-pinning when the
+   * viewport is wider than the content), so a drag can pull any bin to the centre
+   * even at the furthest zoom.
    */
   private rubberAxis(center: number, lo: number, hi: number, viewExtent: number): number {
     const maxOver = BrowseCanvasComponent.RUBBER_PAN_MAX * viewExtent;
-    if (viewExtent >= hi - lo) {
-      const mid = (lo + hi) / 2;
-      return mid + this.rubber(center - mid, maxOver);
-    }
     if (center < lo) return lo + this.rubber(center - lo, maxOver);
     if (center > hi) return hi + this.rubber(center - hi, maxOver);
     return center;
