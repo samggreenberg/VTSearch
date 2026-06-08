@@ -407,7 +407,7 @@ def media_video(media_id: int):
     return _send_video_bytes(media_bytes, mimetype, f"media_{media_id}{ext}")
 
 
-def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
+def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:  # noqa: C901
     """Resolve the displayable image for a media item.
 
     Returns ``(image_bytes, mimetype, download_name)`` for the bytes the
