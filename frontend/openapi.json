@@ -2623,6 +2623,14 @@
           "detector_id": {
             "minLength": 1,
             "type": "string"
+          },
+          "inclusion": {
+            "default": null,
+            "description": "Find-local precision/recall override in [-10, 10]. When provided, the detector is retrained at this inclusion (affecting both the MLP class weights and the decision threshold) instead of reusing the cached MLP or the user's global inclusion setting. Omit to keep the default behavior (live MLP when cached, else train at the global setting). This value is never persisted to the user's settings.",
+            "maximum": 10,
+            "minimum": -10,
+            "nullable": true,
+            "type": "integer"
           }
         },
         "required": [

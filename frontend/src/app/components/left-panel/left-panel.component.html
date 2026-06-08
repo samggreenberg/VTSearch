@@ -3,8 +3,13 @@
     <div class="dataset-name" [title]="datasetName">{{ datasetName }}</div>
   }
   @if (panelMode === 'find') {
-    <!-- Find mode: simplified view (media list header, media items, and stripe only) -->
+    <!-- Find mode: simplified view (inclusion control, media list header, media items, and stripe). -->
     <div class="tab-panel-manual" role="region" aria-label="Find results">
+      <vt-inclusion-slider
+        [value]="inclusion"
+        (valueChange)="inclusionChange.emit($event)"
+      />
+
       <div class="images-header">
         <h3 class="images-header-title">
           {{ mediaTypeName }}s ({{ medias.length | number }})

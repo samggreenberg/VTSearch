@@ -432,6 +432,23 @@ class FindLabelRequestSchema(Schema):
     """
 
     detector_id = fields.String(required=True, validate=validate.Length(min=1))
+    inclusion = fields.Integer(
+        required=False,
+        load_default=None,
+        allow_none=True,
+        validate=validate.Range(min=-10, max=10),
+        metadata={
+            "description": (
+                "Find-local precision/recall override in [-10, 10]. When "
+                "provided, the detector is retrained at this inclusion "
+                "(affecting both the MLP class weights and the decision "
+                "threshold) instead of reusing the cached MLP or the user's "
+                "global inclusion setting. Omit to keep the default behavior "
+                "(live MLP when cached, else train at the global setting). "
+                "This value is never persisted to the user's settings."
+            )
+        },
+    )
 
 
 class FindLabelResponseSchema(Schema):

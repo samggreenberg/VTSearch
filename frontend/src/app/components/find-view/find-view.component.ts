@@ -186,7 +186,17 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private runFindLabel(): void {
+  /**
+   * Score every loaded media with the active detector and apply labels.
+   *
+   * When *inclusion* is provided (a Find-local slider change) it is threaded
+   * to the backend, which retrains the detector at that precision/recall
+   * preference — shaping both the MLP and the threshold — without touching
+   * the user's persisted global inclusion. The initial call on load omits it
+   * so the backend keeps its default behavior (reuse a cached MLP when one is
+   * available, else train at the global setting).
+   */
+  private runFindLabel(inclusion?: number): void {
     const modelId = this.activeContext.modelId;
     if (!modelId) return;
 
@@ -199,7 +209,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const modelName =
       this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
-    this.detectorsFindApi.findLabel({ detector_id: modelId })
+    const request =
+      inclusion != null ? { detector_id: modelId, inclusion } : { detector_id: modelId };
+    this.detectorsFindApi.findLabel(request)
       .pipe(
         takeUntil(this.destroy$),
         finalize(() => {
@@ -336,6 +348,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((settings) => {
         if (!settings) return;
+        // Seed the slider at the user's global inclusion so it opens where
+        // Train left off. Changes from here are Find-local and never written
+        // back (see onInclusionChange).
+        if (settings.inclusion != null) {
+          this.sortState.setInclusion(settings.inclusion);
+        }
         const dict = settings.view_mode_left;
         if (dict && typeof dict === 'object') {
           this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
@@ -385,6 +403,19 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onMediaSelect(id: number): void {
     this.mediaState.selectMedia(id);
+  }
+
+  /**
+   * Find-local inclusion change: update the slider state and re-score at the
+   * new precision/recall preference. Unlike Train, this deliberately does NOT
+   * persist to the global setting (settingsApi.setInclusion) — the override is
+   * scoped to this Find session and threaded through the find-label request,
+   * which retrains the detector at this inclusion.
+   */
+  onInclusionChange(value: number): void {
+    if (this.sortState.sortBusy) return;
+    this.sortState.setInclusion(value);
+    this.runFindLabel(value);
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
