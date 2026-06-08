@@ -23,6 +23,7 @@ export interface StepDisplay {
   stepNumber: number;
   state: 'done' | 'active' | 'future';
   detail: string;
+  detailTitle: string;
   statusIcons: StatusIcon[];
   helpText: string;
   intent: string;
@@ -86,6 +87,7 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         stepNumber: i + 1,
         state: stateStr,
         detail: stateStr === 'active' ? this.phaseDetail(phase) : '',
+        detailTitle: stateStr === 'active' ? this.phaseDetailTitle(phase) : '',
         statusIcons: stateStr === 'active' ? this.phaseStatusIcons(phase) : [],
         helpText: this.phaseHelpText(phase),
         intent: this.phaseIntent(phase, i + 1),
@@ -222,15 +224,30 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
         return `${this.badVotes.size}/${st.badToStart} bad labels`;
       case 'hard': {
         // No count target here — the phase ends when the smart and stable
-        // indicators (the dots rendered right after this text) both go green,
-        // so say that instead of an open-ended bare count.
+        // indicators (the dots rendered right after this text) both go green.
+        // That explanation lives in the tooltip (phaseDetailTitle); the visible
+        // text stays a bare count so it never overflows the panel.
         const total = this.goodVotes.size + this.badVotes.size;
-        return `${total} labels · ends when both turn green`;
+        return `${total} labels`;
       }
       case 'new':
         return `Diversity: ${Math.round(st.fracDiversity)}`;
       case 'done':
         return 'All indicators green';
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Tooltip for the active step's detail text. Used to carry explanatory
+   * copy that would overflow the panel if rendered inline — currently just
+   * the "boundary" phase's end condition, which is otherwise invisible.
+   */
+  private phaseDetailTitle(phase: AutopilotPhase): string {
+    switch (phase) {
+      case 'hard':
+        return 'Ends when both indicators turn green.';
       default:
         return '';
     }
