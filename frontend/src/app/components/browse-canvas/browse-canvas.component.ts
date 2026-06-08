@@ -68,6 +68,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * flat density (darkred→yellow) shading.
    */
   @Input() mediaType = '';
+  /** On-screen bin radius (CSS px) the "M" thumbnail size targets, and the
+   * default before any saved size is applied. See {@link targetRadius}. */
+  static readonly DEFAULT_TARGET_RADIUS = 28;
   /**
    * Target on-screen bin radius in CSS px: the size each bin/thumbnail aims to
    * render at. Level selection picks the pyramid level whose bins land closest
@@ -161,10 +164,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   // How hard a double-click zooms in about the cursor. Larger than the wheel's
   // 1.15/tick so the gesture lands a decisive jump, matching the map idiom.
   private static readonly DOUBLE_CLICK_ZOOM = 2.0;
-
-  // On-screen bin radius (CSS px) the "M" thumbnail size targets, and the
-  // default before any saved size is applied. See {@link targetRadius}.
-  static readonly DEFAULT_TARGET_RADIUS = 28;
 
   // Shift+drag draws a marquee rectangle (canvas-relative screen coords) that
   // adds every bin whose centre falls inside it to the selection — the fast path
