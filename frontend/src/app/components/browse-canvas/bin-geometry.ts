@@ -6,7 +6,13 @@
 // captures exactly those differences behind one `BinGeometry` interface so the
 // canvas and minimap stay shape-agnostic.
 
-import { SQRT3, traceCellPath as traceHexCellPath, densityColor, resolveColormap } from './hex-render.util';
+import {
+  SQRT3,
+  HEX_ANGLES,
+  traceCellPath as traceHexCellPath,
+  densityColor,
+  resolveColormap,
+} from './hex-render.util';
 import type { BinShape } from '../../models/projection.models';
 
 export { SQRT3, densityColor, resolveColormap };
@@ -37,6 +43,78 @@ export interface BinGeometry {
    * inside a cell of the given `radius` — the hover hit-test predicate.
    */
   contains(ox: number, oy: number, radius: number): boolean;
+  /**
+   * Half-width / half-height of the cell's bounding box at the given screen
+   * `radius`. Used to contain-fit a thumbnail inside a cell: a hex is wider
+   * than tall (`√3·radius` × `2·radius`) while a square is `√3·radius` on a
+   * side, so the fit box differs by shape.
+   */
+  contentHalfExtent(radius: number): { hw: number; hh: number };
+  /**
+   * Trace the pile cell outline clipped to the centered axis-aligned rectangle
+   * of half-extents `(hw, hh)` as the current path. This is the cell shape with
+   * the corners that stick out past the rectangle lopped off — used to draw a
+   * hovered thumbnail tile trimmed to the thumbnail's contain-fit rectangle, so
+   * the enlarged tile doesn't paint background over its neighbours. The outer
+   * `radius` (and so the shape away from the cut) is unchanged.
+   */
+  traceTrimmedCell(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    radius: number,
+    hw: number,
+    hh: number,
+  ): void;
+}
+
+// Sutherland–Hodgman clip of a convex polygon (local coords, centered on the
+// origin) against one axis-aligned half-plane, returning the clipped polygon.
+type Pt = { x: number; y: number };
+function clipHalfPlane(poly: Pt[], axis: 'x' | 'y', value: number, keepGreater: boolean): Pt[] {
+  if (poly.length === 0) return poly;
+  const inside = (p: Pt) => (keepGreater ? p[axis] >= value : p[axis] <= value);
+  const crossing = (a: Pt, b: Pt): Pt => {
+    const t = (value - a[axis]) / (b[axis] - a[axis]);
+    return axis === 'x'
+      ? { x: value, y: a.y + (b.y - a.y) * t }
+      : { x: a.x + (b.x - a.x) * t, y: value };
+  };
+  const out: Pt[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const cur = poly[i];
+    const prev = poly[(i + poly.length - 1) % poly.length];
+    const curIn = inside(cur);
+    if (curIn) {
+      if (!inside(prev)) out.push(crossing(prev, cur));
+      out.push(cur);
+    } else if (inside(prev)) {
+      out.push(crossing(prev, cur));
+    }
+  }
+  return out;
+}
+
+// Trace `verts` (local, origin-centered) clipped to the `±hw × ±hh` rectangle as
+// the current path at screen center `(cx, cy)`.
+function traceClippedPolygon(
+  ctx: CanvasRenderingContext2D,
+  verts: Pt[],
+  cx: number,
+  cy: number,
+  hw: number,
+  hh: number,
+): void {
+  let poly = clipHalfPlane(verts, 'x', -hw, true);
+  poly = clipHalfPlane(poly, 'x', hw, false);
+  poly = clipHalfPlane(poly, 'y', -hh, true);
+  poly = clipHalfPlane(poly, 'y', hh, false);
+  ctx.beginPath();
+  poly.forEach((p, i) => {
+    if (i === 0) ctx.moveTo(cx + p.x, cy + p.y);
+    else ctx.lineTo(cx + p.x, cy + p.y);
+  });
+  ctx.closePath();
 }
 
 // Pointy-top hexagon: column spacing `radius·√3`, row spacing `radius·1.5`.
@@ -47,6 +125,14 @@ const HEX_GEOMETRY: BinGeometry = {
   dy: (radius) => radius * 1.5,
   traceCell: (ctx, cx, cy, radius, single) => traceHexCellPath(ctx, cx, cy, radius, single),
   contains: (ox, oy, radius) => ox * ox + oy * oy < radius * radius,
+  contentHalfExtent: (radius) => ({ hw: (radius * SQRT3) / 2, hh: radius }),
+  traceTrimmedCell: (ctx, cx, cy, radius, hw, hh) => {
+    const verts = HEX_ANGLES.map((a) => ({
+      x: radius * Math.cos(a),
+      y: radius * Math.sin(a),
+    }));
+    traceClippedPolygon(ctx, verts, cx, cy, hw, hh);
+  },
 };
 
 // Corner radius of a square-mode singleton, as a fraction of its half-side. A
@@ -75,6 +161,20 @@ const SQUARE_GEOMETRY: BinGeometry = {
   contains: (ox, oy, radius) => {
     const half = (radius * SQRT3) / 2;
     return Math.abs(ox) < half && Math.abs(oy) < half;
+  },
+  contentHalfExtent: (radius) => {
+    const half = (radius * SQRT3) / 2;
+    return { hw: half, hh: half };
+  },
+  traceTrimmedCell: (ctx, cx, cy, radius, hw, hh) => {
+    const half = (radius * SQRT3) / 2;
+    const verts: Pt[] = [
+      { x: -half, y: -half },
+      { x: half, y: -half },
+      { x: half, y: half },
+      { x: -half, y: half },
+    ];
+    traceClippedPolygon(ctx, verts, cx, cy, hw, hh);
   },
 };
 
