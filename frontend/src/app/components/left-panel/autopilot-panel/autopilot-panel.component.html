@@ -49,7 +49,7 @@
                 {{ step.label }}
               </span>
               @if (step.detail || step.statusIcons.length) {
-                <span class="ap-step-detail">
+                <span class="ap-step-detail" [title]="step.detailTitle">
                   {{ step.detail }}
                   @for (icon of step.statusIcons; track icon.ariaLabel) {
                     <span
