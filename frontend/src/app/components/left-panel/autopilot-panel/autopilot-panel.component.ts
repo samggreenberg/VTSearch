@@ -163,22 +163,40 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   }
 
   private phaseStatusIcons(phase: AutopilotPhase): StatusIcon[] {
-    if (phase !== 'hard' && phase !== 'new') return [];
     const st = this.state;
-    const smartState = st.smartStatus === 'green' ? 'green' : 'pending';
-    const stableState = st.stableStatus === 'green' ? 'green' : 'pending';
-    return [
-      {
-        color: st.smartStatus === 'green' ? 'green' : 'yellow',
-        ariaLabel: `Smart: ${smartState}`,
-        title: `Smart: ${smartState}. Tracks detector accuracy over labeling steps. Green when error cost has leveled off (detector has converged). Yellow when still improving.`,
-      },
-      {
-        color: st.stableStatus === 'green' ? 'green' : 'yellow',
-        ariaLabel: `Stable: ${stableState}`,
-        title: `Stable: ${stableState}. Tracks prediction stability. Green when predictions stop changing between labeling steps (detector is confident). Yellow when predictions are still shifting.`,
-      },
-    ];
+    // The boundary phase is gated by the smart + stable indicators, so it
+    // shows both dots. The diversity phase runs *after* smart + stable are
+    // already green (that is the condition for leaving the boundary phase),
+    // so showing those two dots here would just be two stale greens. The
+    // indicator that actually gates the diversity phase is span coverage, so
+    // the diversity row shows a single span dot instead.
+    if (phase === 'hard') {
+      const smartState = st.smartStatus === 'green' ? 'green' : 'pending';
+      const stableState = st.stableStatus === 'green' ? 'green' : 'pending';
+      return [
+        {
+          color: st.smartStatus === 'green' ? 'green' : 'yellow',
+          ariaLabel: `Smart: ${smartState}`,
+          title: `Smart: ${smartState}. Tracks detector accuracy over labeling steps. Green when error cost has leveled off (detector has converged). Yellow when still improving.`,
+        },
+        {
+          color: st.stableStatus === 'green' ? 'green' : 'yellow',
+          ariaLabel: `Stable: ${stableState}`,
+          title: `Stable: ${stableState}. Tracks prediction stability. Green when predictions stop changing between labeling steps (detector is confident). Yellow when predictions are still shifting.`,
+        },
+      ];
+    }
+    if (phase === 'new') {
+      const spanState = st.spanStatus === 'green' ? 'green' : 'pending';
+      return [
+        {
+          color: st.spanStatus === 'green' ? 'green' : 'yellow',
+          ariaLabel: `Diversity: ${spanState}`,
+          title: `Diversity: ${spanState}. Tracks how much of the dataset your labels span. Green when your labels cover a diverse spread of items. Yellow when coverage is still concentrated.`,
+        },
+      ];
+    }
+    return [];
   }
 
   private phaseHelpText(phase: AutopilotPhase): string {
@@ -248,6 +266,8 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
     switch (phase) {
       case 'hard':
         return 'Ends when both indicators turn green.';
+      case 'new':
+        return 'Ends when the diversity indicator turns green.';
       default:
         return '';
     }
