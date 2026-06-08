@@ -8,6 +8,7 @@ labelset stored on disk.
 from __future__ import annotations
 
 import app as app_module
+import pytest
 from helpers import setup_trainable_model_in_registry
 from vtsearch.state import snapshot_medias
 
