@@ -156,7 +156,10 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
   thumbnailUrl(id: number): string {
     const media = this.lookup(id);
     if (!media) return '';
-    return this.activeContext.mediaUrl(`/api/medias/${id}/image`);
+    // Downscaled tile, not the full-resolution ``/image``: the labeled set can
+    // hold hundreds of items, and decoding every full-size bitmap at once
+    // exhausts browser memory.
+    return this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
   }
 
   onThumbnailError(url: string): void {

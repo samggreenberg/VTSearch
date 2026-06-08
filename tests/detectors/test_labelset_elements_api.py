@@ -298,8 +298,18 @@ class TestLabelElementThumbnail:
         try:
             res = client.get(f"/api/detectors/{name}/labels/{element_id}/thumbnail")
             assert res.status_code == 200, res.get_json()
-            assert res.mimetype == "image/png"
-            assert res.data == png
+            # The thumbnail route downscales/re-encodes the image (so a labelset
+            # of many high-res items doesn't decode every full-size bitmap at
+            # once), so assert a valid bounded image rather than byte-equality.
+            import io  # noqa: PLC0415
+
+            from PIL import Image  # noqa: PLC0415
+
+            from vtscore.media.image.thumbnail import DEFAULT_MAX_DIM  # noqa: PLC0415
+
+            assert res.mimetype in ("image/jpeg", "image/png")
+            with Image.open(io.BytesIO(res.data)) as thumb_img:
+                assert max(thumb_img.size) <= DEFAULT_MAX_DIM
         finally:
             medias.clear()
             medias.update(saved)

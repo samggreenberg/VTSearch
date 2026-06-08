@@ -746,8 +746,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.thumbCache.delete(representativeId);
       this.thumbFailed.add(representativeId);
     };
-    // The /image route serves the frame for video via its image_response hook.
-    img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/image`);
+    // Downscaled tile, not full-res /image: a browse projection can hold
+    // thousands of points, so painting full-size bitmaps onto the hexes would
+    // exhaust memory. The /thumbnail route serves the frame for video via the
+    // same image_response hook, then downscales it.
+    img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/thumbnail`);
     this.thumbCache.set(representativeId, img);
     return null;
   }

@@ -37,7 +37,11 @@ from vtsearch.schemas.media import (
     MediaVoteRequestSchema,
     MediaVoteResponseSchema,
 )
-from vtsearch.routes._shared import require_dataset_header, require_detector_header
+from vtsearch.routes._shared import (
+    image_thumbnail_response,
+    require_dataset_header,
+    require_detector_header,
+)
 from vtsearch.state import (
     _state_lock,
     apply_label,
@@ -488,26 +492,8 @@ def media_thumbnail(media_id: int):
     across scrolls and zoom changes.  Undecodable sources (e.g. SVG) fall
     back to the original bytes.
     """
-    from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
-
     data, src_mimetype, _ = _resolve_display_image(media_id)
-
-    # ETag fingerprints the source bytes so the browser can revalidate cheaply
-    # without us regenerating the thumbnail on every conditional request.
-    etag = hashlib.md5(data).hexdigest()
-    if etag in request.if_none_match:
-        resp = make_response("", 304)
-        resp.set_etag(etag)
-        resp.headers["Cache-Control"] = "private, max-age=86400"
-        return resp
-
-    result = make_image_thumbnail(data)
-    thumb, mimetype = result if result is not None else (data, src_mimetype)
-
-    resp = make_response(send_file(io.BytesIO(thumb), mimetype=mimetype, download_name=f"thumb_{media_id}"))
-    resp.set_etag(etag)
-    resp.headers["Cache-Control"] = "private, max-age=86400"
-    return resp
+    return image_thumbnail_response(data, src_mimetype, f"thumb_{media_id}")
 
 
 @medias_bp.route("/api/medias/<int:media_id>/paragraph")

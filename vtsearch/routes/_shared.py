@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import logging
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable
 
-from flask import g, jsonify, request
+from flask import g, jsonify, make_response, request, send_file
 from flask_smorest import abort
 from marshmallow import ValidationError
 
@@ -14,6 +16,36 @@ if TYPE_CHECKING:
     from vtscore.plugins import PluginBase
 
 logger = logging.getLogger(__name__)
+
+
+def image_thumbnail_response(image_bytes: bytes, fallback_mimetype: str, download_name: str):
+    """Build a cached, downscaled-image thumbnail response from ``image_bytes``.
+
+    Shared by every route that serves a small image tile (the media grid/list,
+    saved detector labels, server-media examples).  The bytes are run through
+    :func:`vtscore.media.image.thumbnail.make_image_thumbnail` so a gallery of
+    many high-resolution items never forces the browser to decode every
+    full-size bitmap at once; undecodable sources fall back to the original
+    bytes.  An ``ETag`` fingerprints the *source* bytes so the browser reuses
+    one thumbnail per item across scrolls and zoom levels, and conditional
+    requests short-circuit to a 304 without regenerating the thumbnail.
+    """
+    from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
+
+    etag = hashlib.md5(image_bytes).hexdigest()
+    if etag in request.if_none_match:
+        resp = make_response("", 304)
+        resp.set_etag(etag)
+        resp.headers["Cache-Control"] = "private, max-age=86400"
+        return resp
+
+    result = make_image_thumbnail(image_bytes)
+    thumb, mimetype = result if result is not None else (image_bytes, fallback_mimetype)
+
+    resp = make_response(send_file(io.BytesIO(thumb), mimetype=mimetype, download_name=download_name))
+    resp.set_etag(etag)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
 
 
 def _has_context_id(header_name: str, query_param: str) -> bool:
