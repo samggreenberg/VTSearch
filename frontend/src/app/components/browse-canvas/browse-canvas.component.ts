@@ -47,6 +47,9 @@ export interface BrowseContextMenuEvent {
   clientY: number;
   /** Member media ids of the bin under the cursor; empty over blank space. */
   members: number[];
+  /** The canvas's bounding rect (viewport coords); the popup clamps inside it
+   *  so it never spills onto the side panel or past the canvas edges. */
+  bounds: DOMRect;
 }
 
 /** How much larger the hovered cell is drawn relative to its neighbours so it
@@ -1240,7 +1243,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    *  popup, carrying the cursor anchor and the bin (if any) under it. */
   private onContextMenu(event: MouseEvent): void {
     event.preventDefault();
-    const [mx, my] = this.canvasXY(event);
+    const rect = this.canvasRef.nativeElement.getBoundingClientRect();
+    const mx = event.clientX - rect.left;
+    const my = event.clientY - rect.top;
     // Close any hover preview so it doesn't sit under the popup.
     this.clearHover();
     const cell = this.hitTest(mx, my);
@@ -1250,6 +1255,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
         clientX: event.clientX,
         clientY: event.clientY,
         members,
+        bounds: rect,
       }),
     );
   }

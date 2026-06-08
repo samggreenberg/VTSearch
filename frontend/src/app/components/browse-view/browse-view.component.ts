@@ -170,6 +170,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   contextMenuX = 0;
   contextMenuY = 0;
   contextMembers: number[] = [];
+  /** Canvas bounds the popup clamps inside, so it stays on the canvas rather
+   *  than spilling onto the side panel or past the canvas edges. */
+  contextBounds: DOMRect | null = null;
 
   private destroy$ = new Subject<void>();
   private polling = false;
@@ -502,6 +505,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.contextMembers = event.members;
     this.contextMenuX = event.clientX;
     this.contextMenuY = event.clientY;
+    this.contextBounds = event.bounds;
     this.contextMenuOpen = true;
   }
 
