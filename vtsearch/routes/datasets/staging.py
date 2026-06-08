@@ -17,6 +17,8 @@ in the plan doc.
 """
 
 import io
+import time
+from collections import Counter
 from pathlib import Path
 from uuid import uuid4
 
@@ -25,12 +27,18 @@ from flask_smorest import Blueprint, abort
 
 import vtscore.security.path_validation as _paths
 from vtscore.config import EMBEDDINGS_DIR
-from vtscore.datasets import DEMO_DATASETS, get_importer, list_importers
+from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtscore.datasets.load_pipeline import (
     STAGING_DIR,
     _run_importer_in_background,
     _stage_importer_in_background,
 )
+from vtscore.datasets.registry import (
+    get_dataset as _reg_get,
+    get_saved_datasets_dir,
+    register_dataset as _reg_register,
+)
+from vtsearch.auth import get_current_user
 from vtsearch.routes._shared import get_plugin_or_404, register_plugin_typed_routes, validate_plugin_args
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
 from vtsearch.schemas.datasets import (
@@ -38,12 +46,15 @@ from vtsearch.schemas.datasets import (
     DatasetAvailableFilesResponseSchema,
     DatasetCombineRequestSchema,
     DatasetLoadStartedResponseSchema,
+    DatasetPromoteRequestSchema,
+    DatasetPromoteResponseSchema,
     DatasetStageDemoRequestSchema,
     DatasetStageFileResponseSchema,
     DatasetStagingStartedResponseSchema,
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
 )
+from vtsearch.state import get_active_context, snapshot_medias
 from vtscore.security.pickle import peek_pickle_dataset_summary
 
 datasets_staging_bp = Blueprint(
@@ -95,6 +106,115 @@ def combine_datasets_route(body: dict):
 
     task_id = _run_importer_in_background(importer, {"datasets": dataset_paths, "name": name})
     return {"ok": True, "message": "Combining datasets...", "task_id": str(task_id) if task_id else ""}
+
+
+@datasets_staging_bp.route("/api/dataset/promote", methods=["POST"])
+@datasets_staging_bp.arguments(DatasetPromoteRequestSchema)
+@datasets_staging_bp.response(200, DatasetPromoteResponseSchema)
+@datasets_staging_bp.alt_response(400, description="No dataset loaded or none of the items resolved.")
+@datasets_staging_bp.alt_response(500, description="Failed to write or register the new dataset.")
+def promote_to_dataset(body: dict):
+    """Promote a set of media items into a brand-new saved dataset.
+
+    Used by the Find interface's "To Dataset" button to turn the Goods
+    pile into its own dataset. The promoted items keep their original
+    origins and in-memory embeddings (so preprocessing is preserved for
+    free; the new pickle is a self-contained snapshot). The new dataset
+    gets a fresh ``created_at`` but inherits the source dataset's
+    ``expires_at`` (death date).
+    """
+    name = body["name"].strip()
+    media_ids = body["media_ids"]
+
+    snap = snapshot_medias()
+    if not snap:
+        abort(400, message="No dataset loaded")
+
+    # Build the subset, renumbering IDs from 1 and preserving each item's
+    # origin/embedding (a shallow copy is enough; we serialise immediately
+    # and never mutate the embedding array).
+    subset: dict[int, dict] = {}
+    new_id = 1
+    for mid in media_ids:
+        media = snap.get(mid)
+        if media is None:
+            continue
+        clone = dict(media)
+        clone["id"] = new_id
+        subset[new_id] = clone
+        new_id += 1
+
+    if not subset:
+        abort(400, message="None of the selected items are in the current dataset")
+
+    # Inherit embedder / clipper / media_type / death-date from the source
+    # dataset's registry entry when available; otherwise derive from the
+    # promoted items themselves.
+    ctx = get_active_context()
+    src_id = ctx.dataset_id or None
+    src_entry = _reg_get(src_id) if src_id else None
+
+    first = next(iter(subset.values()))
+    media_type = (src_entry or {}).get("media_type") or first.get("media_type", "audio")
+    embedder = (src_entry or {}).get("embedder") or first.get("embedder", "")
+    clipper = (src_entry or {}).get("clipper", "") if src_entry else ""
+    expires_at = (src_entry or {}).get("expires_at") if src_entry else None
+
+    ext_counter: Counter[str] = Counter()
+    for m in subset.values():
+        fn = m.get("filename", "")
+        if fn and "." in fn:
+            ext_counter[fn.rsplit(".", 1)[-1].lower()] += 1
+        else:
+            ext_counter["(no extension)"] += 1
+
+    now = time.time()
+    ds_dir = get_saved_datasets_dir()
+    ds_dir.mkdir(parents=True, exist_ok=True)
+    pkl_path = str(ds_dir / f"ds_{uuid4().hex}.pkl")
+
+    try:
+        data_bytes = export_dataset_to_file(
+            subset,
+            embedder=embedder,
+            clipper=clipper,
+            media_type=media_type,
+            name=name,
+            created_at=now,
+            expires_at=expires_at,
+        )
+        Path(pkl_path).write_bytes(data_bytes)
+        del data_bytes
+    except Exception as exc:  # noqa: BLE001 (surface the failure to the caller)
+        Path(pkl_path).unlink(missing_ok=True)
+        abort(500, message=f"Failed to write dataset: {exc}")
+
+    source = {
+        "importer": "promote",
+        "params": {
+            "source_dataset_id": src_id or "",
+            "source_name": (src_entry or {}).get("name", "") if src_entry else "",
+        },
+    }
+    try:
+        entry = _reg_register(
+            name=name,
+            media_type=media_type,
+            num_items=len(subset),
+            pkl_path=pkl_path,
+            origin="promote",
+            source=source,
+            clipper=clipper,
+            embedder=embedder,
+            created_by=get_current_user(),
+            file_type_counts=dict(ext_counter.most_common()),
+            expires_at=expires_at,
+        )
+    except Exception as exc:  # noqa: BLE001
+        Path(pkl_path).unlink(missing_ok=True)
+        abort(500, message=f"Failed to register dataset: {exc}")
+
+    return {"ok": True, "dataset_id": entry["id"], "name": name, "num_items": len(subset)}
 
 
 @datasets_staging_bp.route("/api/dataset/stage-file", methods=["POST"])

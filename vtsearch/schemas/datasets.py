@@ -423,6 +423,37 @@ class DatasetCombineRequestSchema(Schema):
     name = fields.String(load_default="")
 
 
+class DatasetPromoteRequestSchema(Schema):
+    """Body for ``POST /api/dataset/promote``.
+
+    Promotes a set of media items from the active dataset into a brand-new
+    saved dataset (e.g. the Find "Goods" pile). The items keep their
+    original origins and embeddings; the new dataset gets a fresh
+    ``created_at`` but inherits the source dataset's ``expires_at``.
+    """
+
+    name = fields.String(
+        required=True,
+        validate=validate.Length(min=1),
+        metadata={"description": "Display name for the new dataset."},
+    )
+    media_ids = fields.List(
+        fields.Integer(),
+        required=True,
+        validate=validate.Length(min=1),
+        metadata={"description": "IDs of the media items (in the active dataset) to promote."},
+    )
+
+
+class DatasetPromoteResponseSchema(Schema):
+    """Response for ``POST /api/dataset/promote``."""
+
+    ok = fields.Boolean(required=True)
+    dataset_id = fields.String(required=True)
+    name = fields.String(required=True)
+    num_items = fields.Integer(required=True)
+
+
 class DatasetStageFileResponseSchema(Schema):
     """Response for ``POST /api/dataset/stage-file`` (multipart upload).
 

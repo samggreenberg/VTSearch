@@ -80,6 +80,40 @@
   }
 }
 
+// Icon-only action cluster projected into the good label-list header in
+// Find mode (Browse / To Dataset / Export). Mirrors the dashboard card
+// action buttons: compact, borderless, tooltip-labelled.
+.goods-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.goods-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xs);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 0;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  &:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
+}
+
 .import-btn {
   flex: 1;
   text-align: center;

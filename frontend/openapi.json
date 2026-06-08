@@ -1135,6 +1135,53 @@
         ],
         "type": "object"
       },
+      "DatasetPromoteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "media_ids": {
+            "description": "IDs of the media items (in the active dataset) to promote.",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "name": {
+            "description": "Display name for the new dataset.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_ids",
+          "name"
+        ],
+        "type": "object"
+      },
+      "DatasetPromoteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "num_items": {
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "name",
+          "num_items",
+          "ok"
+        ],
+        "type": "object"
+      },
       "DatasetRegistryLoadResponse": {
         "additionalProperties": false,
         "properties": {
@@ -8030,6 +8077,50 @@
         "summary": "Reload a dataset from a stored source origin dict.",
         "tags": [
           "datasets_load"
+        ]
+      }
+    },
+    "/api/dataset/promote": {
+      "post": {
+        "description": "Used by the Find interface's \"To Dataset\" button to turn the Goods\npile into its own dataset. The promoted items keep their original\norigins and in-memory embeddings (so preprocessing is preserved for\nfree; the new pickle is a self-contained snapshot). The new dataset\ngets a fresh ``created_at`` but inherits the source dataset's\n``expires_at`` (death date).",
+        "operationId": "promote_to_dataset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetPromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetPromoteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No dataset loaded or none of the items resolved."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "Failed to write or register the new dataset."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Promote a set of media items into a brand-new saved dataset.",
+        "tags": [
+          "datasets_staging"
         ]
       }
     },
