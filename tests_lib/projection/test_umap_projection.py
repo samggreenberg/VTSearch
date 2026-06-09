@@ -83,6 +83,40 @@ def test_n_neighbors_clamped_below_n():
     assert proj.coords.shape == (n, 2)
 
 
+def _clustered_matrix(per: int = 40, d: int = 12, seed: int = 0) -> np.ndarray:
+    """Three well-separated high-dim Gaussian clusters so UMAP yields distinct
+    islands and compaction has oceans to close."""
+    rng = np.random.default_rng(seed)
+    centres = rng.standard_normal((3, d)).astype(np.float32) * 12.0
+    return np.concatenate(
+        [c + rng.standard_normal((per, d)).astype(np.float32) for c in centres]
+    )
+
+
+def test_compaction_on_by_default_moves_clusters_together():
+    mat = _clustered_matrix(seed=5)
+    ids = list(range(mat.shape[0]))
+    packed = fit_projection(mat, ids, n_neighbors=10, random_state=3, compact=True)
+    loose = fit_projection(mat, ids, n_neighbors=10, random_state=3, compact=False)
+    assert packed.method == "umap" and loose.method == "umap"
+    assert packed.coords.shape == loose.coords.shape
+    # Default compaction must actually change the layout (close the oceans):
+    # the packed bbox is no larger than the raw UMAP bbox.
+    def _area(c):
+        span = c.max(axis=0) - c.min(axis=0)
+        return float(span[0] * span[1])
+
+    assert not np.allclose(packed.coords, loose.coords)
+    assert _area(packed.coords) <= _area(loose.coords) + 1e-3
+
+
+def test_compaction_preserves_finiteness_and_dtype():
+    mat = _clustered_matrix(seed=6)
+    proj = fit_projection(mat, list(range(mat.shape[0])), n_neighbors=10, random_state=2)
+    assert proj.coords.dtype == np.float32
+    assert np.isfinite(proj.coords).all()
+
+
 def test_progress_callback_invoked():
     seen: list[tuple[str, str, int, int]] = []
     fit_projection(

@@ -46,7 +46,9 @@ def _cluster(coords: np.ndarray, min_cluster_size: int) -> np.ndarray:
     from sklearn.cluster import HDBSCAN
 
     size = max(2, min(min_cluster_size, coords.shape[0]))
-    return np.asarray(HDBSCAN(min_cluster_size=size).fit_predict(coords))
+    # copy=True so HDBSCAN never overwrites *coords* in place — the centroid and
+    # radius computation downstream reads the same array.
+    return np.asarray(HDBSCAN(min_cluster_size=size, copy=True).fit_predict(coords))
 
 
 def _build_units(coords: np.ndarray, labels: np.ndarray) -> tuple[list[np.ndarray], np.ndarray, np.ndarray]:
