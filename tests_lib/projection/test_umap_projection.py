@@ -88,9 +88,7 @@ def _clustered_matrix(per: int = 40, d: int = 12, seed: int = 0) -> np.ndarray:
     islands and compaction has oceans to close."""
     rng = np.random.default_rng(seed)
     centres = rng.standard_normal((3, d)).astype(np.float32) * 12.0
-    return np.concatenate(
-        [c + rng.standard_normal((per, d)).astype(np.float32) for c in centres]
-    )
+    return np.concatenate([c + rng.standard_normal((per, d)).astype(np.float32) for c in centres])
 
 
 def test_compaction_on_by_default_moves_clusters_together():
@@ -100,6 +98,7 @@ def test_compaction_on_by_default_moves_clusters_together():
     loose = fit_projection(mat, ids, n_neighbors=10, random_state=3, compact=False)
     assert packed.method == "umap" and loose.method == "umap"
     assert packed.coords.shape == loose.coords.shape
+
     # Default compaction must actually change the layout (close the oceans):
     # the packed bbox is no larger than the raw UMAP bbox.
     def _area(c):
