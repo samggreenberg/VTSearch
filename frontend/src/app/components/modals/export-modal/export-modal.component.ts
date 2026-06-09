@@ -125,6 +125,11 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     if (this.initialFilter === 'unverified' || this.initialFilter === 'verified') {
       this.serverFilter = this.initialFilter;
       this.labelFilter = 'both';
+    } else if (this.initialFilter === 'unverified_good') {
+      // The left work-queue export: the unverified partition (server-side),
+      // sliced to the above-threshold good category (client-side).
+      this.serverFilter = 'unverified';
+      this.labelFilter = 'good';
     } else {
       this.serverFilter = 'both';
       this.labelFilter = this.initialFilter;
@@ -435,9 +440,12 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return 'upload';
   }
 
-  /** Modal heading, noting the server-side partition when present. */
+  /** Modal heading, noting the server-side partition (and category slice) when present. */
   get modalTitle(): string {
-    if (this.serverFilter === 'unverified') return 'Export Unverified';
+    if (this.serverFilter === 'unverified') {
+      // The left work-queue export opens on the above-threshold good slice.
+      return this.labelFilter === 'good' ? 'Export Unverified Good' : 'Export Unverified';
+    }
     if (this.serverFilter === 'verified') return 'Export Verified';
     return 'Export';
   }

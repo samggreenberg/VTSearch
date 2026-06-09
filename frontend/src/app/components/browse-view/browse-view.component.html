@@ -181,8 +181,9 @@
           <vt-browse-selection-panel
             class="browse-side-selection"
             [mediaType]="mediaType"
-            [canRemoveGood]="subset"
-            (removeGood)="onRemoveGood()"
+            [canVerify]="subset"
+            (verifyGood)="onVerify('good')"
+            (verifyBad)="onVerify('bad')"
           />
           <div class="browse-side-meta">
             <div class="browse-side-minimap">

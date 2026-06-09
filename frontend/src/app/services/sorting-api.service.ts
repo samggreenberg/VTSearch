@@ -53,8 +53,30 @@ import { exampleSortServer } from '../generated/api-client/fn/media-server/examp
 import { serverMediaFileFromMediaId } from '../generated/api-client/fn/media-server/server-media-file-from-media-id';
 import { listServerMediaFiles } from '../generated/api-client/fn/media-server/list-server-media-files';
 
-/** Server-side label partition for ``/api/labels/export``. */
-export type LabelFilter = 'good' | 'bad' | 'both' | 'corrections' | 'unverified' | 'verified';
+/**
+ * Label partition used to open the export modal. The first six map directly to
+ * the ``/api/labels/export`` ``label_filter`` query (server-side partitions or
+ * client-side category slices). ``unverified_good`` is a UI-only combination —
+ * the export modal fetches the server ``unverified`` partition and slices it to
+ * the ``good`` category (the above-threshold work queue); it is never sent to
+ * the backend as a ``label_filter`` value.
+ */
+export type LabelFilter =
+  | 'good'
+  | 'bad'
+  | 'both'
+  | 'corrections'
+  | 'unverified'
+  | 'verified'
+  | 'unverified_good';
+
+/**
+ * The subset of {@link LabelFilter} the backend ``/api/labels/export``
+ * ``label_filter`` query accepts. Excludes the UI-only ``unverified_good``,
+ * which the export modal resolves to a server ``unverified`` fetch plus a
+ * client-side ``good`` slice before any request is made.
+ */
+export type ServerLabelFilter = Exclude<LabelFilter, 'unverified_good'>;
 
 @Injectable({ providedIn: 'root' })
 export class SortingApiService {
@@ -116,7 +138,7 @@ export class SortingApiService {
 
   exportLabels(
     goodsOnly?: boolean,
-    options?: { enrich?: boolean; labelFilter?: LabelFilter },
+    options?: { enrich?: boolean; labelFilter?: ServerLabelFilter },
   ): Observable<LabelsExportResponse> {
     return exportLabels(this.http, this.config.rootUrl, {
       goods_only: goodsOnly || undefined,

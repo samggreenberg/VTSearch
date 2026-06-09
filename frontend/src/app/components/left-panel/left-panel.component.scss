@@ -125,28 +125,51 @@
   margin-left: var(--space-xs);
 }
 
-// Find mode: compact icon button for "export the unverified work queue",
-// pushed to the right edge of the header next to the view controls.
-.unverified-export-btn {
+// Find mode: the Inclusion cutoff and the unverified-positives work-queue
+// actions share one row, with the action cluster pushed to the right edge.
+.find-inclusion-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-xs);
+  flex-shrink: 0;
+}
+
+// Icon-only action cluster (Browse / To Dataset / Export) sitting next to the
+// Inclusion control. Mirrors the right panel's ``.goods-actions``: compact,
+// borderless, tooltip-labelled.
+.find-queue-actions {
   margin-left: auto;
+}
+
+.goods-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.goods-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-2xs, 4px);
-  background: transparent;
-  border: 1px solid var(--border-subtle);
+  padding: var(--space-xs);
+  border: none;
   border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
+  line-height: 0;
+  transition: color var(--transition-base), background var(--transition-base);
 
   &:hover:not(:disabled) {
+    background: var(--bg-hover);
     color: var(--text-primary);
-    border-color: var(--border-strong, var(--border-subtle));
   }
 
   &:disabled {
-    opacity: 0.5;
-    cursor: default;
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
   }
 }
 

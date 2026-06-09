@@ -599,57 +599,49 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Cull the hand-selected items from a Find-positives browse: confirm, mark
-   * them Bad in the detector's labels (so they leave the Find view's Good
-   * list), then drop them from this browse by re-fitting the subset over the
-   * reduced id set. Subset mode only — wired up via the selection panel's
-   * ``canRemoveGood`` affordance, which is itself gated on ``subset``.
+   * Verify the hand-selected items in a Find-positives browse: mark them
+   * good/bad in the detector's labels *and* verify them (Find-mode bulk votes
+   * land in ``verified_ids``), so they leave the unverified set, then drop them
+   * from this browse by re-binning the layout over the reduced id set. Both
+   * "Verified Good" (*target* ``good``) and "Verified Bad" (*target* ``bad``)
+   * route here. Subset mode only — wired via the selection panel's ``canVerify``
+   * affordance, itself gated on ``subset``.
    */
-  onRemoveGood(): void {
+  onVerify(target: 'good' | 'bad'): void {
     const ids = this.selection.ids();
     if (ids.length === 0) return;
-    const n = ids.length;
-    this.dialog
-      .confirmDestructive(
-        `Remove ${n} item${n === 1 ? '' : 's'} from Good?`,
-        "(They'll be marked Bad in the Find results and removed from this browse. The underlying media is unaffected.)",
-        'Remove',
-      )
-      .then((ok) => {
-        if (!ok) return;
-        // 1) Mark them Bad in the detector's labels (one bulk request).
-        this.mediasApi
-          .voteBulk(ids, 'bad')
-          .pipe(takeUntil(this.destroy$))
-          .subscribe({
-            next: () => this.dropFromBrowse(ids),
-            error: () =>
-              this.toast.error({ message: 'Failed to remove the selected items from Good.' }),
-          });
+    this.mediasApi
+      .voteBulk(ids, target)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => this.dropFromBrowse(ids, target),
+        error: () =>
+          this.toast.error({ message: 'Failed to verify the selected items.' }),
       });
   }
 
   /**
-   * Drop *removedIds* from the browse after they've been marked Bad. The
-   * remaining items keep their exact 2-D positions and bins — the server
-   * re-bins the frozen layout in place (no UMAP re-fit), returning the same
-   * ``projection_id`` with a bumped ``content_version`` so only the tile cache
-   * refreshes. The canvas then zooms to fit the survivors (via the one-shot
-   * fit request below), since the old framing leaves dead space wherever the
-   * culled items used to be.
+   * Drop *removedIds* from the browse after they've been verified as *target*
+   * (good/bad). The remaining items keep their exact 2-D positions and bins —
+   * the server re-bins the frozen layout in place (no UMAP re-fit), returning
+   * the same ``projection_id`` with a bumped ``content_version`` so only the
+   * tile cache refreshes. The canvas then zooms to fit the survivors (via the
+   * one-shot fit request below), since the old framing leaves dead space
+   * wherever the verified items used to be.
    */
-  private dropFromBrowse(removedIds: number[]): void {
+  private dropFromBrowse(removedIds: number[], target: 'good' | 'bad'): void {
     const removed = new Set(removedIds);
     const remaining = this.subsetIds.filter((id) => !removed.has(id));
     this.selection.clear();
+    const label = target === 'good' ? 'Verified Good' : 'Verified Bad';
     this.toast.success({
-      message: `Removed ${removedIds.length} item${removedIds.length === 1 ? '' : 's'} from Good.`,
+      message: `Marked ${removedIds.length} item${removedIds.length === 1 ? '' : 's'} ${label}.`,
     });
     this.subsetIds = remaining;
     if (remaining.length === 0) {
-      // Nothing left to project; the cull emptied the browse.
+      // Nothing left to project; verifying emptied the browse.
       this.status = 'error';
-      this.errorMessage = 'All positives were removed. Go back to Find to start over.';
+      this.errorMessage = 'All items were verified. Go back to Find to see your results.';
       return;
     }
     this.projectionApi
@@ -664,7 +656,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         },
         error: () =>
           this.toast.error({
-            message: 'Items were removed from Good, but the browse view could not refresh.',
+            message: 'Items were verified, but the browse view could not refresh.',
           }),
       });
   }
@@ -684,8 +676,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /**
    * Return to the Find view this browse was launched from, preserving the
-   * cull: the flag tells the Find view to skip its automatic re-scoring (which
-   * would re-promote the removed items) and just show the updated labels.
+   * verifications: the flag tells the Find view to skip its automatic
+   * re-scoring (which would re-promote the items it re-scores) and just show
+   * the updated labels, with the verified items now in the right-panel pile.
    */
   private backToFind(): void {
     const datasetId = this.activeContext.datasetId;

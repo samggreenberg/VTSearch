@@ -1,6 +1,6 @@
 # Find Verification Workflow
 
-**Status:** **Phase 1 (backend spine) + Phase 2 (frontend) shipped; Phase 3 (verified-only colouring) shipped** — full `./run-tests.sh` green. Phase 2/3 were built without a browser in the container, so the UI passed `npm run build:prod` (no TS errors, no budget warnings) but was **not visually eyeballed**; a manual pass on a real screen is still owed. See **What shipped / Open follow-ups** at the bottom.
+**Status:** **Phase 1 (backend spine) + Phase 2 (frontend) + Phase 3 (verified-only colouring) + Phase 4 (left work-queue actions) shipped** — full `./run-tests.sh` green. The UI was built without a browser in the container, so it passes `npm run build:prod` (no TS errors, no budget warnings) but was **not visually eyeballed**; a manual pass on a real screen is still owed. See **What shipped / Open follow-ups** at the bottom.
 
 ## The reframe (read this first)
 
@@ -157,6 +157,14 @@ All under `./run-tests.sh` (full suite + `npm run build:prod` green). This close
 
 - **Items colour green/red only once verified.** The detector's threshold split is now a *presumption*, not a vote the UI paints. The left work queue is fed the ranking **minus verified items** (`find-view.unverifiedSortOrder`, recomputed only when the ranking or verified set changes), and the media-list + stripe receive **empty vote sets**, so nothing on the left is coloured. Verified items move to the right pile; the off-left move keeps the media-list and stripe on the same (filtered) index space, so stripe-click navigation stays aligned. The find header counts the unverified work-queue size.
 - **Big Good/Bad buttons verify instead of un-toggling.** `VoteStateService` gained a find-mode flag: `currentState()` reads an *unverified* item as `'none'` (its good/bad is the flood-filled presumption, not a human decision), and `effectiveGood`/`effectiveBad` expose that gated state to the centre buttons. So the buttons read neutral on an unverified item, and a click sets an absolute good/bad (verifying it) rather than toggling the detector's presumption off. The Find view sets the flag on enter and clears it on leave so Label/Train are untouched.
+
+## What shipped (Phase 4 — left work-queue actions)
+
+All under `./run-tests.sh` (full suite + `npm run build:prod` green).
+
+- **Left-panel work-queue actions.** Browse / To Dataset / Export now sit next to the Inclusion control in the Find left panel (`left-panel.component.html`, find mode), each scoped to the **unverified positives** — the above-cutoff slice of the work-queue ranking (which Phase 3 already feeds in verified-filtered), via `find-view.onBrowseUnverified` / `onToDatasetUnverified` and the `unverified_good` export filter. The button gating counts the above-threshold items of the (verified-filtered) `sortOrder`. These complement (do **not** replace) the right-panel trio, which still acts on the *full* good set (verified + unverified). The buttons disable when there are no unverified positives.
+- **`unverified_good` export filter.** A UI-only `LabelFilter` the export modal resolves to the server `unverified` partition sliced to the `good` category; never sent to the backend as a `label_filter` (typed out via `ServerLabelFilter`).
+- **Browse-canvas verify, replacing the cull.** The browse selection panel's single "Remove from Good" button became **"Verified Good" / "Verified Bad"** (`browse-selection-panel`, gated on `canVerify`). Both mark the selection good/bad and verify it (Find-mode `vote-bulk` already lands in `verified_ids`), then drop it from the canvas — so verifying a selection while browsing the unverified positives removes it (it's no longer unverified). The return-to-Find skip-rescore guard is unchanged.
 
 ## Open follow-ups
 

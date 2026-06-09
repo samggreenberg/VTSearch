@@ -13,15 +13,23 @@
     </button>
   </div>
 
-  @if (canRemoveGood) {
+  @if (canVerify) {
     <div class="bsp-actions">
       <button
         type="button"
-        class="btn btn--danger btn--sm bsp-remove-good"
+        class="btn btn--primary btn--sm bsp-verify-good"
         [disabled]="count === 0"
-        (click)="onRemoveGood()"
-        title="Mark the selected items Bad in the Find results and remove them from this browse">
-        Remove from Good ({{ count | number }})
+        (click)="onVerifyGood()"
+        title="Mark the selected items Verified Good and remove them from this browse (they're no longer unverified)">
+        Verified Good ({{ count | number }})
+      </button>
+      <button
+        type="button"
+        class="btn btn--danger btn--sm bsp-verify-bad"
+        [disabled]="count === 0"
+        (click)="onVerifyBad()"
+        title="Mark the selected items Verified Bad and remove them from this browse (they're no longer unverified)">
+        Verified Bad ({{ count | number }})
       </button>
     </div>
   }

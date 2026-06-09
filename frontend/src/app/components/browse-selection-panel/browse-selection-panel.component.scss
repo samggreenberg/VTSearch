@@ -56,12 +56,15 @@
 }
 
 .bsp-actions {
+  display: flex;
+  gap: var(--space-sm);
   padding: 0 var(--space-lg) var(--space-sm);
   flex-shrink: 0;
 }
 
-.bsp-remove-good {
-  width: 100%;
+.bsp-verify-good,
+.bsp-verify-bad {
+  flex: 1;
 }
 
 .bsp-toolbar {
