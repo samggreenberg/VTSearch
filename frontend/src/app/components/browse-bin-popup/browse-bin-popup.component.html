@@ -9,6 +9,11 @@
     <span class="bin-popup-title" [title]="'Items in this bin (' + ids.length + ')'">
       {{ ids.length | number }} item{{ ids.length === 1 ? '' : 's' }}
     </span>
+    <vt-view-controls
+      side="popup"
+      [currentMediaType]="mediaType"
+      [showFocus]="false"
+      class="bin-popup-view-controls" />
     <button
       type="button"
       class="bin-popup-close"
@@ -20,35 +25,47 @@
   </div>
 
   <cdk-virtual-scroll-viewport
-    [itemSize]="itemHeight"
-    [style.height.px]="listHeight"
-    class="bin-popup-list"
+    [itemSize]="rowSize"
+    [style.height.px]="bodyHeight"
+    [style.width.px]="isGrid ? 280 : null"
+    class="bin-popup-body"
+    [class.grid]="isGrid"
     (mouseleave)="onListLeave()">
     <div
-      *cdkVirtualFor="let id of ids; trackBy: trackById"
-      class="bin-popup-entry"
-      [class.selected]="isSelected(id)"
-      role="button"
-      tabindex="0"
-      [attr.aria-pressed]="isSelected(id)"
-      [attr.aria-label]="name(id) + (isSelected(id) ? ' (selected; click to deselect)' : ' (click to select)')"
-      [title]="name(id)"
-      (click)="onEntryClick(id)"
-      (keydown)="onEntryKeydown($event, id)"
-      (mouseenter)="onEntryEnter(id)">
-      @if (hasThumbnailUrl(id)) {
-        <span class="bin-popup-thumb-wrap">
-          <img
-            class="bin-popup-thumb"
-            [src]="thumbnailUrl(id)"
-            [alt]="name(id)"
-            loading="lazy"
-            (error)="onThumbnailError(thumbnailUrl(id))" />
-        </span>
-      } @else {
-        <span class="bin-popup-placeholder">{{ placeholderIcon(id) }}</span>
+      *cdkVirtualFor="let row of rows; trackBy: trackByRow"
+      class="bin-popup-row"
+      [class.grid]="isGrid"
+      [style.height.px]="rowSize"
+      [style.--popup-cols]="columns"
+      [style.--popup-cell.px]="gridGoalWidth">
+      @for (id of row; track trackById($index, id)) {
+        <div
+          class="bin-popup-entry"
+          [class.grid]="isGrid"
+          [class.selected]="isSelected(id)"
+          role="button"
+          tabindex="0"
+          [attr.aria-pressed]="isSelected(id)"
+          [attr.aria-label]="name(id) + (isSelected(id) ? ' (selected; click to deselect)' : ' (click to select)')"
+          [title]="name(id)"
+          (click)="onEntryClick(id)"
+          (keydown)="onEntryKeydown($event, id)"
+          (mouseenter)="onEntryEnter(id)">
+          @if (hasThumbnailUrl(id)) {
+            <span class="bin-popup-thumb-wrap">
+              <img
+                class="bin-popup-thumb"
+                [src]="thumbnailUrl(id)"
+                [alt]="name(id)"
+                loading="lazy"
+                (error)="onThumbnailError(thumbnailUrl(id))" />
+            </span>
+          } @else {
+            <span class="bin-popup-placeholder">{{ placeholderIcon(id) }}</span>
+          }
+          <span class="bin-popup-name">{{ name(id) }}</span>
+        </div>
       }
-      <span class="bin-popup-name">{{ name(id) }}</span>
     </div>
   </cdk-virtual-scroll-viewport>
 

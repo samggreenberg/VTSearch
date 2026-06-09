@@ -1,5 +1,7 @@
-// A small floating list of a bin's media items, opened by right-clicking a bin
-// on the VTSBrowse canvas. Rows mirror the selection panel's list entries.
+// A small floating panel of a bin's media items, opened by right-clicking a bin
+// on the VTSBrowse canvas. A mini knock-off of the Find right panel: its header
+// carries the shared List/Grid + size controls and the body renders the bin's
+// members as a virtualized list or thumbnail grid.
 .bin-popup {
   position: fixed;
   z-index: var(--z-burger-menu);
@@ -31,6 +33,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.bin-popup-view-controls {
+  margin-left: auto;
 }
 
 .bin-popup-close {
@@ -48,22 +55,40 @@
   }
 }
 
-.bin-popup-list {
+.bin-popup-body {
   // Concrete height is bound per render (rows, capped) so the virtual viewport
   // scrolls; the cap is applied inline via [style.height.px].
   overflow-x: hidden;
 }
 
-.bin-popup-entry {
-  height: 36px;
+// --- Rows ------------------------------------------------------------------
+// One virtual item == one row. In list mode a row holds a single full-width
+// entry; in grid mode it is a CSS grid of fixed-size thumbnail cells.
+.bin-popup-row {
   box-sizing: border-box;
+
+  &.grid {
+    display: grid;
+    grid-template-columns: repeat(var(--popup-cols, 1), 1fr);
+    align-content: start;
+    justify-items: center;
+    column-gap: var(--space-2xs);
+    padding: 0 var(--space-sm);
+  }
+}
+
+.bin-popup-entry {
+  box-sizing: border-box;
+  cursor: pointer;
+  color: var(--text-vote);
+
+  // --- List mode: a horizontal row (thumbnail + name) --------------------
+  height: 36px;
   display: flex;
   align-items: center;
   gap: var(--space-md);
   padding: 0 var(--space-md);
   font-size: var(--font-sm);
-  color: var(--text-vote);
-  cursor: pointer;
 
   &:hover {
     background: var(--bg-hover);
@@ -80,8 +105,26 @@
     outline: 2px solid var(--accent);
     outline-offset: -2px;
   }
+
+  // --- Grid mode: a vertical cell (thumbnail above its name) -------------
+  &.grid {
+    height: auto;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+    width: var(--popup-cell, 80px);
+
+    &.selected {
+      // The list's inset accent bar reads oddly under a square thumbnail; use
+      // a ring instead so the whole cell shows as selected.
+      box-shadow: 0 0 0 2px var(--accent);
+    }
+  }
 }
 
+// List-mode thumbnail/placeholder: fixed 28px square.
 .bin-popup-thumb-wrap {
   display: block;
   width: 28px;
@@ -116,9 +159,29 @@
   flex: 1;
   min-width: 0;
   font-weight: var(--weight-medium);
+  font-size: var(--font-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+// Grid mode resizes the thumbnail to the chosen cell size and stacks the name
+// underneath it, truncated to the cell width.
+.bin-popup-entry.grid {
+  .bin-popup-thumb-wrap,
+  .bin-popup-placeholder {
+    width: var(--popup-cell, 80px);
+    height: var(--popup-cell, 80px);
+  }
+
+  .bin-popup-name {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: var(--popup-cell, 80px);
+    text-align: center;
+    font-size: var(--font-xs);
+    font-weight: var(--weight-normal);
+  }
 }
 
 .sr-only {
