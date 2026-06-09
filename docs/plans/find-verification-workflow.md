@@ -83,26 +83,29 @@ Unverified Bad  = { i ∉ verified_ids : find_scores[i] <  cutoff }
 
 ## Detector evaluation: the Stats button
 
-The real reason to verify a test haystack is **"is this detector worth subscribing to on my data?"** The verified set doubles as an evaluation sample, surfaced via a **Stats** button on the right panel (same affordance as the Datasets Dashboard card → `vt-dataset-stats-modal`).
+The real reason to verify a test haystack is **"is this detector worth subscribing to on my data?"** Stats surfaces that via a **Stats** button on the right panel (same affordance as the Datasets Dashboard card → `vt-dataset-stats-modal`).
 
-**No new tracked state.** The detector's natural call per item is `find_initial_labels` (its good/bad at the *default calibrated cutoff*, fixed at score time — so the eval baseline is stable no matter where the user later drags the slider). The human's call is the current vote. Crossing them over `verified_ids` gives a 2×2:
+**Stats counts ALL items, not just the verified ones.** Exactly like Export / Browse / To-Dataset, it treats unverified items as if verified — adopting the detector's current-cutoff call as their truth. This *risks false confidence* in the detector (an unverified item trivially "agrees" with the detector at the current cutoff), but that's the accepted price of not verifying every item, and the user still wants the totals: skip verifying the obvious top and middle-to-bottom, and those counts still show up. So **truth = the full `good_votes` / `bad_votes` adopted set** (human votes flood-filled with the detector's call on everything untouched); `verified_count` is reported separately as how much was actually human-checked.
+
+**No new tracked state.** The detector's original call per item is `find_initial_labels` (its good/bad at the default calibrated cutoff). Crossing the adopted label against it gives a 2×2:
 
 | | Detector said **Good** | Detector said **Bad** |
 |---|---|---|
-| **Human → Good** (Verified Good) | Confirmed positive *(agree)* | Rescued false negative *(correction)* |
-| **Human → Bad** (Verified Bad) | Culled false positive *(correction)* | Confirmed negative *(agree)* |
+| **Adopted → Good** | Confirmed positive *(agree)* | Rescued false negative *(correction)* |
+| **Adopted → Bad** | Culled false positive *(correction)* | Confirmed negative *(agree)* |
+
+Unverified items adopted the detector's own call, so they fall in the confirmed cells (the false-confidence inflation); corrections come from human overrides.
 
 Reported figures:
 
-- **Verified count** — evaluation sample size.
-- **Agreements vs. corrections** and the **agreement rate** — `confirmed_good + confirmed_bad` vs. `culled_fp + rescued_fn`.
-- **Precision on reviewed positives** — `confirmed_good / (confirmed_good + culled_fp)`: of the detector's above-cutoff hits the human checked, how many held up. The single most decision-relevant number.
-- **Misses surfaced** — `rescued_fn`: items the human pulled up from below the line.
-- **FP/FN-vs-Inclusion sweep — the headline chart.** For every inclusion `i ∈ [−10, 10]`, compute the calibrated threshold `t_i` (cheap: re-run the min-cost average over the **cached fold orderings** at `i` — 21 O(n) sweeps, no MLP work), then over the **verified sample** count `FP_i` = verified-Bad items scoring `≥ t_i` (detector would wrongly include) and `FN_i` = verified-Good items scoring `< t_i` (detector would wrongly drop). Plot both curves against inclusion, with the current inclusion marked. This is the precision/recall tradeoff *on the user's own data*: as inclusion rises the threshold drops, FP climbs, FN falls — the user reads off the inclusion that best balances the two and judges whether the detector is good enough to subscribe to. **Computed only over verified items** (the only ones with ground truth); the more the user verifies, the tighter the estimate. Subsumes the earlier per-item "at what cutoff would this return?" idea — that's just one item's crossing point on this chart.
-- **Run context** — the default cutoff and the current cutoff/inclusion.
+- **Totals** — `total_good` / `total_bad` (adopted, all items) and `verified_count` (how many the human actually checked).
+- **Agreements vs. corrections** and the **agreement rate** — `confirmed_good + confirmed_bad` vs. `culled_fp + rescued_fn`, over all items.
+- **Precision** — `confirmed_good / (confirmed_good + culled_fp)`: of everything the detector originally called good, how much the adopted set keeps (inflated by unverified items — the false-confidence number).
+- **FP/FN-vs-Inclusion sweep — the headline chart.** For every inclusion `i ∈ [−10, 10]`, compute the calibrated threshold `t_i` (cheap: re-run the min-cost average over the **cached fold orderings** at `i` — 21 O(n) sweeps, no MLP work), then over **all adopted items** count `FP_i` = adopted-Bad items scoring `≥ t_i` (detector at `i` would wrongly include) and `FN_i` = adopted-Good items scoring `< t_i` (detector at `i` would wrongly drop). Plot both curves against inclusion, current inclusion marked. This is the precision/recall tradeoff *on the user's own data*: as inclusion rises the threshold drops, FP climbs, FN falls — the user reads off the inclusion that best balances the two. At the current inclusion the unverified items contribute nothing (they sit on their own side of the line by construction), so the floor is the verified corrections; moving away from current makes unverified items flip and the curves climb. Subsumes the per-item "at what cutoff would this return?" idea — that's one item's crossing point on this chart.
+- **Run context** — the current cutoff/inclusion.
 
 ### Backend
-- **`GET /api/find/stats`**: returns (a) the 2×2 confusion counts at the current inclusion (`verified_ids` × `good_votes`/`bad_votes` × `find_initial_labels`), (b) the derived rates, and (c) the **21-point sweep** `[{inclusion, threshold, false_pos, false_neg}]` for `inclusion ∈ [−10, 10]` over the verified items — thresholds from the cached fold orderings, counts from the verified items' frozen scores. Pure read; cheap; no new state.
+- **`GET /api/find/stats`**: returns (a) adopted totals + `verified_count`, (b) the 2×2 confusion of the adopted label (`good_votes`/`bad_votes`, all items) × `find_initial_labels` and the derived rates, and (c) the **21-point sweep** `[{inclusion, threshold, false_pos, false_neg}]` for `inclusion ∈ [−10, 10]` over all adopted items — thresholds from the cached fold orderings, counts from the frozen `find_scores`. Pure read; cheap; no new state.
 
 ### Frontend
 - **`vt-find-stats-modal`** (mirrors `vt-dataset-stats-modal`): standalone modal on the shared `ModalComponent`, fetches `GET /api/find/stats` on open, renders the 2×2 + rates + the **FP/FN-vs-inclusion line chart** (current inclusion marked). The chart is a small hand-rolled inline SVG in the existing dependency-free viz style (cf. the dashboard card's pie) — no new charting dependency.
@@ -135,7 +138,7 @@ All under `./run-tests.sh` (full suite green). Note one doc-vs-code correction d
 - **Fold-ordering cache.** `calculate_cross_calibration_threshold` split into `compute_fold_orderings` (inclusion-independent) + `threshold_from_fold_orderings` (per-inclusion min-cost). `calibration_cache` re-keyed to drop inclusion and store the K fold orderings, so an Inclusion change reuses the orderings and only re-runs the cheap min-cost search.
 - **No-retrain Inclusion.** `set_inclusion` now calls `recompute_detector_thresholds_for_inclusion` (re-derive threshold from the fold cache, leave the model in place) instead of `invalidate_loaded_detector_models`.
 - **Verification state.** `DetectorContext.verified_ids` + `find_scores` (in-memory; cleared on pair change). Mark-verified on single-item find-mode votes (`set_vote`/`toggle_vote`), un-verify on un-vote.
-- **APIs.** `verified` array on `GET /api/votes`; `unverified`/`verified` `label_filter` on `/api/labels/export` (atomic via `VoteSnapshot.verified_ids`); new read-only `GET /api/find/stats` (2×2 confusion + the −10…10 FP/FN sweep). `find-label` freezes `find_scores`.
+- **APIs.** `verified` array on `GET /api/votes`; `unverified`/`verified` `label_filter` on `/api/labels/export` (atomic via `VoteSnapshot.verified_ids`); new read-only `GET /api/find/stats` (adopted-label 2×2 confusion + the −10…10 FP/FN sweep, both over **all** items — unverified flood-filled like Export/Browse, with `verified_count` as context). `find-label` freezes `find_scores`.
 
 ## Open follow-ups
 

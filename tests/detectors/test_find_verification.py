@@ -97,32 +97,37 @@ class TestUnverifiedExport:
 
 
 class TestFindStats:
-    """``GET /api/find/stats`` 2x2 confusion + FP/FN inclusion sweep."""
+    """``GET /api/find/stats`` over the ADOPTED label set (all items, with
+    unverified flood-filled), plus the FP/FN inclusion sweep."""
 
     def _setup(self):
         ctx = get_active_detector_context()
         ctx.find_mode = True
         ctx.threshold = 0.5
         set_find_scores({1: 0.9, 2: 0.8, 3: 0.2, 4: 0.1})
-        # Detector's call at the default cutoff.
+        # Detector's call at the default cutoff (find-label labelled all four).
         set_find_initial_labels({1: "good", 2: "good", 3: "bad", 4: "bad"})
-        # Human: confirm 1 good; cull 2 (false positive) to bad; rescue 4 to good.
+        # Human: confirm 1 good; cull 2 (false positive) to bad; rescue 4 to
+        # good; leave 3 untouched (unverified bad).  Final adopted label set:
         app_module.good_votes.update({1: None, 4: None})
-        app_module.bad_votes.update({2: None})
+        app_module.bad_votes.update({2: None, 3: None})
         ctx.verified_ids.clear()
         ctx.verified_ids.update({1: None, 2: None, 4: None})
 
-    def test_confusion_counts(self, client):
+    def test_confusion_counts_over_all_items(self, client):
         self._setup()
         data = client.get("/api/find/stats").get_json()
-        assert data["verified_count"] == 3
-        assert data["confirmed_good"] == 1  # id1
-        assert data["confirmed_bad"] == 0
-        assert data["culled_false_pos"] == 1  # id2
-        assert data["rescued_false_neg"] == 1  # id4
-        assert data["agreements"] == 1
+        assert data["total_good"] == 2  # ids 1, 4
+        assert data["total_bad"] == 2  # ids 2, 3
+        assert data["verified_count"] == 3  # human checked 1, 2, 4
+        assert data["confirmed_good"] == 1  # id1 (det good, adopted good)
+        assert data["confirmed_bad"] == 1  # id3 (det bad, adopted bad - unverified)
+        assert data["culled_false_pos"] == 1  # id2 (det good, adopted bad)
+        assert data["rescued_false_neg"] == 1  # id4 (det bad, adopted good)
+        assert data["agreements"] == 2
         assert data["corrections"] == 2
-        assert data["precision_on_reviewed"] == 0.5  # 1 / (1 + 1)
+        assert data["agreement_rate"] == 0.5
+        assert data["precision"] == 0.5  # confirmed_good 1 / (1 + culled_fp 1)
 
     def test_sweep_shape_and_values(self, client):
         self._setup()
@@ -130,18 +135,21 @@ class TestFindStats:
         sweep = data["sweep"]
         assert len(sweep) == 21
         assert [p["inclusion"] for p in sweep] == list(range(-10, 11))
-        # With no cached fold orderings, every point uses threshold 0.5:
-        # verified-bad id2 (0.8) is a false positive; verified-good id4 (0.1)
-        # is a false negative; id1 (0.9) is correctly above the line.
+        # No cached fold orderings -> every point uses threshold 0.5.
+        # Adopted-bad above the line: id2 (0.8) -> 1 FP. Adopted-good below it:
+        # id4 (0.1) -> 1 FN. (id1=0.9 good above, id3=0.2 bad below: correct.)
         for p in sweep:
             assert p["false_pos"] == 1
             assert p["false_neg"] == 1
 
-    def test_empty_when_nothing_verified(self, client):
+    def test_empty_when_no_votes(self, client):
         ctx = get_active_detector_context()
         ctx.verified_ids.clear()
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
         data = client.get("/api/find/stats").get_json()
-        assert data["verified_count"] == 0
+        assert data["total_good"] == 0
+        assert data["total_bad"] == 0
         assert data["agreement_rate"] == 0.0
-        assert data["precision_on_reviewed"] == 0.0
+        assert data["precision"] == 0.0
         assert len(data["sweep"]) == 21

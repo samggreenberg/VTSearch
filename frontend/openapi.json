@@ -2759,7 +2759,7 @@
           "inclusion": {
             "type": "integer"
           },
-          "precision_on_reviewed": {
+          "precision": {
             "type": "number"
           },
           "rescued_false_neg": {
@@ -2774,6 +2774,12 @@
           "threshold": {
             "type": "number"
           },
+          "total_bad": {
+            "type": "integer"
+          },
+          "total_good": {
+            "type": "integer"
+          },
           "verified_count": {
             "type": "integer"
           }
@@ -2786,10 +2792,12 @@
           "corrections",
           "culled_false_pos",
           "inclusion",
-          "precision_on_reviewed",
+          "precision",
           "rescued_false_neg",
           "sweep",
           "threshold",
+          "total_bad",
+          "total_good",
           "verified_count"
         ],
         "type": "object"
@@ -10901,7 +10909,7 @@
     },
     "/api/find/stats": {
       "get": {
-        "description": "Crosses each verified item's human vote against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (from the cached fold\norderings) to report false-positive / false-negative counts at every\ncutoff.  Pure read; no new state.  See docs/plans/find-verification-workflow.md.",
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (from the cached fold\norderings) for false-positive / false-negative counts at every cutoff.\nPure read; no new state.  See docs/plans/find-verification-workflow.md.",
         "operationId": "find_stats",
         "responses": {
           "200": {
@@ -10918,7 +10926,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Detector-evaluation stats over the Find-mode *verified* sample.",
+        "summary": "Detector-evaluation stats over the **adopted** Find label set.",
         "tags": [
           "detector_scoring"
         ]

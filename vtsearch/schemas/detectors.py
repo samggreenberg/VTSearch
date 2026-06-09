@@ -661,11 +661,15 @@ class FindStatsSweepPointSchema(Schema):
 
 class FindStatsResponseSchema(Schema):
     """Response for ``GET /api/find/stats`` (detector evaluation over the
-    verified sample). See docs/plans/find-verification-workflow.md."""
+    adopted Find label set). See docs/plans/find-verification-workflow.md."""
 
-    # 2x2 confusion of human vote vs. detector's call (find_initial_labels)
-    # over the verified items.
+    # Adopted totals over ALL items (unverified flood-filled at the current
+    # cutoff, like Export/Browse/ToDataset); verified_count is how many of
+    # those the human actually checked.
+    total_good = fields.Integer(required=True)
+    total_bad = fields.Integer(required=True)
     verified_count = fields.Integer(required=True)
+    # 2x2 confusion of adopted label vs. the detector's call (find_initial_labels).
     confirmed_good = fields.Integer(required=True)
     confirmed_bad = fields.Integer(required=True)
     culled_false_pos = fields.Integer(required=True)
@@ -674,11 +678,11 @@ class FindStatsResponseSchema(Schema):
     agreements = fields.Integer(required=True)
     corrections = fields.Integer(required=True)
     agreement_rate = fields.Float(required=True)
-    precision_on_reviewed = fields.Float(required=True)
+    precision = fields.Float(required=True)
     # Run context.
     inclusion = fields.Integer(required=True)
     threshold = fields.Float(required=True)
-    # FP/FN at every inclusion from -10..10 over the verified sample.
+    # FP/FN at every inclusion from -10..10 over all adopted items.
     sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
 
 
