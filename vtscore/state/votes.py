@@ -164,7 +164,10 @@ def rethreshold_unverified_find_items() -> None:
     """
     with _state_lock:
         ctx = get_active_detector_context()
-        if not ctx.find_mode or not ctx.find_scores:
+        # The request-missing sentinel (no detector identified) exposes none of
+        # these fields; guard with getattr so an Inclusion/settings write with
+        # no detector context is a clean no-op rather than an AttributeError.
+        if not getattr(ctx, "find_mode", False) or not getattr(ctx, "find_scores", None):
             return
         threshold = ctx.threshold
         good_votes = ctx.good_votes

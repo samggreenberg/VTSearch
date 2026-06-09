@@ -692,13 +692,17 @@ def set_inclusion_route(body: dict):
 
 
 def _active_detector_threshold() -> float | None:
-    """The active detector context's current cutoff, or ``None`` if unset."""
+    """The active detector context's current cutoff, or ``None`` if unset.
+
+    Returns ``None`` for the empty / request-missing sentinels (no detector
+    identified), which don't carry a meaningful threshold.
+    """
     from vtscore.state.core import _empty_detector_context, get_active_detector_context
 
     det_ctx = get_active_detector_context()
     if det_ctx is _empty_detector_context:
         return None
-    return det_ctx.threshold
+    return getattr(det_ctx, "threshold", None)
 
 
 @sorting_bp.route("/api/safe-thresholds", methods=["GET"])

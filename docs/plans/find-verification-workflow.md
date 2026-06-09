@@ -1,6 +1,6 @@
 # Find Verification Workflow
 
-**Status:** **Phase 1 (backend spine) shipped** — full `./run-tests.sh` green. Phase 2 (frontend) deferred to a session where the UI can be eyeballed (no browser in the build container). See **What shipped / Open follow-ups** at the bottom.
+**Status:** **Phase 1 (backend spine) + Phase 2 (frontend) shipped** — full `./run-tests.sh` green (4696 passed). Phase 2 was built without a browser in the container, so the UI passed `npm run build:prod` (no TS errors, no budget warnings) but was **not visually eyeballed**; a manual pass on a real screen is still owed. See **What shipped / Open follow-ups** at the bottom.
 
 ## The reframe (read this first)
 
@@ -140,9 +140,21 @@ All under `./run-tests.sh` (full suite green). Note one doc-vs-code correction d
 - **Verification state.** `DetectorContext.verified_ids` + `find_scores` (in-memory; cleared on pair change). Mark-verified on single-item find-mode votes (`set_vote`/`toggle_vote`), un-verify on un-vote.
 - **APIs.** `verified` array on `GET /api/votes`; `unverified`/`verified` `label_filter` on `/api/labels/export` (atomic via `VoteSnapshot.verified_ids`); new read-only `GET /api/find/stats` (adopted-label 2×2 confusion + the −10…10 FP/FN sweep, both over **all** items — unverified flood-filled like Export/Browse, with `verified_count` as context). `find-label` freezes `find_scores`.
 
+## What shipped (Phase 2 — frontend)
+
+All under `./run-tests.sh` (full suite + `npm run build:prod` green).
+
+- **No-retrain Inclusion slide.** `find-view.onInclusionChange` now calls `POST /api/inclusion` (no `runFindLabel`) and reconciles the server-returned cutoff + the re-split unverified votes on the cheap response — no scoring spinner. The backend `set_inclusion` now also re-thresholds the unverified Find items over the frozen `find_scores` (`rethreshold_unverified_find_items`), so export/Stats reflect the slider; `GET|POST /api/inclusion` returns the resolved `threshold`.
+- **Verified-id tracking.** `VoteStateService` exposes `verifiedIds$` (from the `/api/votes` `verified` array) with optimistic add/remove on a manual Find vote (merged over the server set so a racing poll doesn't flicker the left/right split).
+- **Right panel = the verified pile.** Find mode shows only `good/bad ∩ verified`, each bucket headed "Verified Good/Bad (V)" with a folded "[N] Unverified …" count; Browse / To Dataset / Export / Stats act on the **full** good set, a bad-bucket Export acts on the full bad set.
+- **Marginal-positive auto-advance.** After any vote (button or hover) the centre jumps to the lowest unverified item still above the cutoff; the seed reuses the same rule. Empty queue → a one-shot "All positives reviewed" toast (the done state).
+- **Unverified Export** button in the left work-queue header (`label_filter=unverified`), routed through a shared `vt-export-modal` that now takes an `initialFilter` and fetches the `unverified`/`verified` server partitions.
+- **`vt-find-stats-modal`** — the adopted-totals + verified count, the 2×2 confusion, agreement-rate / precision, and the FP/FN-vs-inclusion sweep drawn as a dependency-free inline SVG line chart (current inclusion marked).
+
 ## Open follow-ups
 
-- **Phase 2 — frontend (the whole UI).** Find slider → `POST /api/inclusion` (no retrain) with optimistic client-side re-threshold; 2 verified buckets + count-folding headers on the right; left work queue + Unverified Export button; marginal-positive auto-advance; big-button/hover verify wired through; `vt-find-stats-modal` rendering the 2×2 + FP/FN sweep as an inline SVG line chart.
+- **Left work queue does not hide verified items (deviation).** The plan called for the left panel to drop verified items (move them off-left). As built, the left keeps showing the **full scored ranking** (verified items stay, colored) while the right becomes verified-only. This was a deliberate trade: the stripe-overview maps click position → index into the full `sortOrder`, and filtering the media-list would desync stripe-click navigation (and add a per-CD filter cost). Auto-advance already drives the "walk the queue" workflow, so the left staying full is low-harm. If the off-left move is wanted, filter the media-list **and** the stripe together (keep their index spaces aligned) and recompute the header count from the unverified set.
+- **UI not visually verified.** Built headless; the right-panel folding headers, the SVG chart, and the Unverified Export button placement should be eyeballed on a real screen.
 - **Safe-threshold blend on Inclusion slide.** `recompute_detector_thresholds_for_inclusion` re-derives the *raw* cross-cal threshold from the fold orderings; it does not re-apply `calculate_safe_threshold` blending (which needs the haystack score distribution). When `safe_thresholds` is on, an Inclusion slide's threshold will differ slightly from a full retrain's. `find_scores` is available to blend if this matters; deferred (safe_thresholds is opt-in).
 - **Done-state polish.** The empty queue (no unverified item above the cutoff) is now well-defined; decide how rich the "all positives reviewed" rest state should be (plain message vs. a summary nudge toward Stats/Export).
 - **Under-threshold (false-negative) review surface.** Currently reachable only item-by-item via the left panel + big buttons. If demand appears, add a dedicated below-the-line work queue (the symmetric "find what the detector missed" flow).
