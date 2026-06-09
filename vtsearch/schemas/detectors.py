@@ -650,6 +650,42 @@ class DetectorLabelVoteResponseSchema(Schema):
     action = fields.String(required=True)
 
 
+class FindStatsSweepPointSchema(Schema):
+    """One point on the Stats FP/FN-vs-inclusion sweep."""
+
+    inclusion = fields.Integer(required=True)
+    threshold = fields.Float(required=True)
+    false_pos = fields.Integer(required=True)
+    false_neg = fields.Integer(required=True)
+
+
+class FindStatsResponseSchema(Schema):
+    """Response for ``GET /api/find/stats`` (detector evaluation over the
+    adopted Find label set). See docs/plans/find-verification-workflow.md."""
+
+    # Adopted totals over ALL items (unverified flood-filled at the current
+    # cutoff, like Export/Browse/ToDataset); verified_count is how many of
+    # those the human actually checked.
+    total_good = fields.Integer(required=True)
+    total_bad = fields.Integer(required=True)
+    verified_count = fields.Integer(required=True)
+    # 2x2 confusion of adopted label vs. the detector's call (find_initial_labels).
+    confirmed_good = fields.Integer(required=True)
+    confirmed_bad = fields.Integer(required=True)
+    culled_false_pos = fields.Integer(required=True)
+    rescued_false_neg = fields.Integer(required=True)
+    # Derived rates.
+    agreements = fields.Integer(required=True)
+    corrections = fields.Integer(required=True)
+    agreement_rate = fields.Float(required=True)
+    precision = fields.Float(required=True)
+    # Run context.
+    inclusion = fields.Integer(required=True)
+    threshold = fields.Float(required=True)
+    # FP/FN at every inclusion from -10..10 over all adopted items.
+    sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
+
+
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
@@ -690,5 +726,7 @@ __all__ = [
     "FindLabelResponseSchema",
     "FindRequestSchema",
     "FindResponseSchema",
+    "FindStatsResponseSchema",
+    "FindStatsSweepPointSchema",
     "PendingLabelsetMoveSchema",
 ]

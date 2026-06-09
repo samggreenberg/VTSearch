@@ -136,6 +136,10 @@ class VotesResponseSchema(Schema):
 
     good = fields.List(fields.Integer(), required=True)
     bad = fields.List(fields.Integer(), required=True)
+    # Find-mode: ids the human has explicitly verified this session.  Lets the
+    # frontend split verified (right panel) from unverified (left work queue).
+    # Empty outside Find mode.  See docs/plans/find-verification-workflow.md.
+    verified = fields.List(fields.Integer(), required=True)
     click_times = fields.Dict(keys=fields.String(), values=fields.Float(), required=True)
     learned_scores = fields.Dict(keys=fields.String(), values=fields.Float(), required=True)
     labelset_good_count = fields.Integer(required=True)

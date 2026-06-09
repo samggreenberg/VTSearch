@@ -43,6 +43,7 @@ def _select_vote_pools(
     goods_only: bool,
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
+    verified_ids: dict[int, None] | None = None,
 ) -> tuple[dict, dict]:
     """Pick the (goods, bads) dicts to feed into ``LabelSet.from_clips_and_votes``.
 
@@ -50,15 +51,31 @@ def _select_vote_pools(
     filtering step happens after annotation, since "correction" depends on
     the find-initial labels, not on good vs bad.
 
+    ``unverified`` / ``verified`` partition the pools by ``verified_ids`` (the
+    Find-mode set of human-touched items): ``unverified`` is the left-panel
+    work queue (the detector's calls the human hasn't acted on), ``verified``
+    is the right-panel confirmed set.  See docs/plans/find-verification-workflow.md.
+
     Takes the vote dicts as parameters (rather than reading the module-level
     proxies) so the caller can pass an atomic snapshot from
     :func:`validated_vote_snapshot`, guaranteed to be keyed in the same
     dataset's cid space as the medias being composed with.
     """
+    verified = verified_ids or {}
     if label_filter == "good":
         return good_votes, {}
     if label_filter == "bad":
         return {}, bad_votes
+    if label_filter == "unverified":
+        return (
+            {cid: None for cid in good_votes if cid not in verified},
+            {cid: None for cid in bad_votes if cid not in verified},
+        )
+    if label_filter == "verified":
+        return (
+            {cid: None for cid in good_votes if cid in verified},
+            {cid: None for cid in bad_votes if cid in verified},
+        )
     if label_filter == "corrections":
         return good_votes, bad_votes
     if label_filter:
@@ -160,7 +177,9 @@ def export_labels(query: dict):
     # the same dataset's cid space; even if a concurrent request rehydrates
     # the detector against a different dataset before this route finishes.
     snap = validated_vote_snapshot()
-    goods, bads = _select_vote_pools(label_filter, query["goods_only"], snap.good_votes, snap.bad_votes)
+    goods, bads = _select_vote_pools(
+        label_filter, query["goods_only"], snap.good_votes, snap.bad_votes, snap.verified_ids
+    )
 
     all_medias = snap.medias
     labelset = LabelSet.from_clips_and_votes(

@@ -298,7 +298,7 @@ def _train_step(
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-    model = train_model(X, y, X.shape[1], inclusion_value)
+    model = train_model(X, y, X.shape[1])
 
     with torch.no_grad():
         X_dev = X.to(next(model.parameters()).device)

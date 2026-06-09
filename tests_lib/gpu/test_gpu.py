@@ -128,13 +128,18 @@ class TestTrainModelGPU:
         finally:
             config.TRAIN_EPOCHS = saved
 
-    def test_inclusion_positive_biases_toward_good(self, device):
+    def test_inclusion_lowers_threshold_not_model(self, device):
+        """Inclusion is a pure threshold knob: it leaves the trained model
+        (and its scores) untouched, but a higher inclusion yields a lower
+        (more inclusive) decision threshold via ``find_optimal_threshold``.
+        See docs/plans/find-verification-workflow.md."""
         import vtscore.config as config
 
         saved = config.TRAIN_EPOCHS
         config.TRAIN_EPOCHS = 100
         try:
             from vtscore.training.mlp import train_model
+            from vtscore.training.thresholds import find_optimal_threshold
 
             dim = 32
             rng = np.random.RandomState(1)
@@ -143,15 +148,21 @@ class TestTrainModelGPU:
             X = torch.tensor(np.vstack([good_embs, bad_embs]), device=device)
             y = torch.cat([torch.ones(10, 1), torch.zeros(10, 1)]).to(device)
 
-            model_neutral = train_model(X, y, dim, inclusion_value=0).to(device)
-            model_inclusive = train_model(X, y, dim, inclusion_value=5).to(device)
-
+            # The model is inclusion-independent and deterministic (seed=42),
+            # so two trainings yield identical scores.
+            model_a = train_model(X, y, dim).to(device)
+            model_b = train_model(X, y, dim).to(device)
             with torch.no_grad():
-                scores_neutral = torch.sigmoid(model_neutral(X)).squeeze(1).cpu().numpy()
-                scores_inclusive = torch.sigmoid(model_inclusive(X)).squeeze(1).cpu().numpy()
+                scores_a = torch.sigmoid(model_a(X)).squeeze(1).cpu().numpy()
+                scores_b = torch.sigmoid(model_b(X)).squeeze(1).cpu().numpy()
+            np.testing.assert_allclose(scores_a, scores_b, rtol=1e-5, atol=1e-5)
 
-            # With high inclusion, the overall mean score should be higher
-            assert scores_inclusive.mean() >= scores_neutral.mean() - 0.1
+            labels = y.squeeze(1).cpu().tolist()
+            scores = scores_a.tolist()
+            t_neutral = find_optimal_threshold(scores, labels, 0)
+            t_inclusive = find_optimal_threshold(scores, labels, 5)
+            # Higher inclusion => prefer recall => lower (more inclusive) threshold.
+            assert t_inclusive <= t_neutral
         finally:
             config.TRAIN_EPOCHS = saved
 

@@ -215,7 +215,7 @@ def simulate_voting_iterations(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
         )
-        model = train_model(X, y, input_dim, inclusion)
+        model = train_model(X, y, input_dim)
 
         # Apply safe threshold blending if enabled
         if safe_thresholds:

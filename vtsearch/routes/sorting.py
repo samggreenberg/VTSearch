@@ -576,6 +576,7 @@ def get_votes():
     return {
         "good": sorted(good_votes),
         "bad": sorted(bad_votes),
+        "verified": sorted(det_ctx.verified_ids),
         "click_times": {str(k): v for k, v in click_times.items()},
         "learned_scores": {str(k): round(finite_or(v), 4) for k, v in learned_scores.items()},
         "labelset_good_count": labelset_good_count,

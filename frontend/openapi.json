@@ -2741,6 +2741,97 @@
         ],
         "type": "object"
       },
+      "FindStatsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement_rate": {
+            "type": "number"
+          },
+          "agreements": {
+            "type": "integer"
+          },
+          "confirmed_bad": {
+            "type": "integer"
+          },
+          "confirmed_good": {
+            "type": "integer"
+          },
+          "corrections": {
+            "type": "integer"
+          },
+          "culled_false_pos": {
+            "type": "integer"
+          },
+          "inclusion": {
+            "type": "integer"
+          },
+          "precision": {
+            "type": "number"
+          },
+          "rescued_false_neg": {
+            "type": "integer"
+          },
+          "sweep": {
+            "items": {
+              "$ref": "#/components/schemas/FindStatsSweepPoint"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "total_bad": {
+            "type": "integer"
+          },
+          "total_good": {
+            "type": "integer"
+          },
+          "verified_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agreement_rate",
+          "agreements",
+          "confirmed_bad",
+          "confirmed_good",
+          "corrections",
+          "culled_false_pos",
+          "inclusion",
+          "precision",
+          "rescued_false_neg",
+          "sweep",
+          "threshold",
+          "total_bad",
+          "total_good",
+          "verified_count"
+        ],
+        "type": "object"
+      },
+      "FindStatsSweepPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "false_neg": {
+            "type": "integer"
+          },
+          "false_pos": {
+            "type": "integer"
+          },
+          "inclusion": {
+            "type": "integer"
+          },
+          "threshold": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "false_neg",
+          "false_pos",
+          "inclusion",
+          "threshold"
+        ],
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -4520,6 +4611,12 @@
               "type": "number"
             },
             "type": "object"
+          },
+          "verified": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -4528,7 +4625,8 @@
           "good",
           "labelset_bad_count",
           "labelset_good_count",
-          "learned_scores"
+          "learned_scores",
+          "verified"
         ],
         "type": "object"
       },
@@ -10816,6 +10914,31 @@
         ]
       }
     },
+    "/api/find/stats": {
+      "get": {
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (from the cached fold\norderings) for false-positive / false-negative counts at every cutoff.\nPure read; no new state.  See docs/plans/find-verification-workflow.md.",
+        "operationId": "find_stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindStatsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Detector-evaluation stats over the **adopted** Find label set.",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
+    },
     "/api/inclusion": {
       "get": {
         "operationId": "get_inclusion_route",
@@ -11288,7 +11411,7 @@
             }
           },
           {
-            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), or ``corrections`` (entries where the user changed the detector's original label). Overrides ``goods_only``.",
+            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), ``corrections`` (entries where the user changed the detector's original label), ``unverified`` (Find work-queue items the human hasn't acted on), or ``verified`` (items the human has confirmed). Overrides ``goods_only``.",
             "in": "query",
             "name": "label_filter",
             "required": false,
@@ -11299,7 +11422,9 @@
                 "good",
                 "bad",
                 "both",
-                "corrections"
+                "corrections",
+                "unverified",
+                "verified"
               ],
               "type": "string"
             }

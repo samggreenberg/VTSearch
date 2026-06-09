@@ -351,6 +351,14 @@ class DetectorContext:
         "last_learned_scores",
         "textsort_suggestions",
         "find_initial_labels",
+        # Find-session verification state (see docs/plans/find-verification-workflow.md):
+        # ``verified_ids`` are the ids the human has explicitly verified this Find
+        # session (a dict used as an ordered set, like ``good_votes``);
+        # ``find_scores`` is the frozen per-item detector score from the single
+        # scoring pass, so an Inclusion (cutoff) change re-thresholds without
+        # re-scoring.  Both are in-memory only and never persisted.
+        "verified_ids",
+        "find_scores",
         "inclusion",
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
@@ -388,15 +396,16 @@ class DetectorContext:
         "cached_labelset_media_type",  # str
         # Sync source
         "labelset_source",  # dict | None: {"source_name": "...", "field_values": {...}}
-        # Calibration threshold cache.  Holds ``(key, threshold)`` where *key*
-        # is a deterministic fingerprint of the inputs to
-        # :func:`calculate_cross_calibration_threshold` (training vectors,
-        # labels, inclusion, calibrate_count, calibration_fraction,
-        # hidden_dim).  Reusing the cached threshold is safe iff *key*
-        # matches; calibration is a deterministic function of these inputs
-        # (seeded RNG), so a hit is a pure memoization, not a stale carry-
-        # over from a previously trained model.
-        "calibration_cache",  # tuple[Any, float] | None
+        # Calibration fold-orderings cache.  Holds ``(key, (orderings,
+        # fallback))`` where *key* is a deterministic fingerprint of the
+        # **inclusion-independent** calibration inputs (training vectors,
+        # labels, calibrate_count, calibration_fraction, hidden_dim) and
+        # *orderings* are the per-fold held-out ``(scores, labels)``.  Because
+        # inclusion is deliberately absent from *key*, an Inclusion change hits
+        # the cache and only re-runs the cheap min-cost search (no fold refit);
+        # a label/embedder change rotates *key* and falls through to a fresh
+        # calibration.  See docs/plans/find-verification-workflow.md.
+        "calibration_cache",  # tuple[Any, tuple[list, float | None]] | None
     )
 
     def __init__(self, detector_id: str = "", *, name: str = "", media_type: str = "", embedder: str = "") -> None:
@@ -420,6 +429,9 @@ class DetectorContext:
         self.last_learned_scores: dict[int, float] = {}
         self.textsort_suggestions: list[str] = []
         self.find_initial_labels: dict[int, str] = {}
+        # Find-session verification state (see docs/plans/find-verification-workflow.md).
+        self.verified_ids: dict[int, None] = {}
+        self.find_scores: dict[int, float] = {}
         self.inclusion: int | None = None
         # Cached in-memory data (never exported)
         self.training_medias: dict[int, dict[str, Any]] = {}
@@ -440,7 +452,7 @@ class DetectorContext:
         self.cached_labelset_media_type: str = ""
         # Sync source
         self.labelset_source: dict[str, Any] | None = None
-        self.calibration_cache: tuple[Any, float] | None = None
+        self.calibration_cache: tuple[Any, tuple[list, float | None]] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -643,6 +655,8 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "last_learned_scores", _FrozenDict("detector"))
         object.__setattr__(self, "textsort_suggestions", _FrozenList("detector"))
         object.__setattr__(self, "find_initial_labels", _FrozenDict("detector"))
+        object.__setattr__(self, "verified_ids", _FrozenDict("detector"))
+        object.__setattr__(self, "find_scores", _FrozenDict("detector"))
         object.__setattr__(self, "inclusion", None)
         object.__setattr__(self, "training_medias", _FrozenDict("detector"))
         object.__setattr__(self, "label_embeddings", _FrozenDict("detector"))
@@ -830,6 +844,30 @@ def invalidate_loaded_detector_models() -> None:
         for ctx in _detector_contexts.values():
             ctx.model = None
             ctx.threshold = 0.5
+
+
+def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
+    """Re-derive each loaded detector's threshold at *inclusion_value* from its
+    cached fold orderings, leaving the (inclusion-independent) MLP in place.
+
+    Inclusion is a pure cutoff knob now: a change must not drop the model or
+    re-score the haystack - only move the threshold over already-computed
+    scores.  Detectors with no cached fold orderings yet are left untouched;
+    the next training pass computes the threshold under the new inclusion.
+    See docs/plans/find-verification-workflow.md.
+    """
+    from vtscore.training.thresholds import threshold_from_fold_orderings
+
+    with _state_lock:
+        for ctx in _detector_contexts.values():
+            cache = ctx.calibration_cache
+            if cache is None:
+                continue
+            orderings, fallback = cache[1]
+            if fallback is not None:
+                ctx.threshold = fallback
+            elif orderings:
+                ctx.threshold = threshold_from_fold_orderings(orderings, inclusion_value)
 
 
 # ---------------------------------------------------------------------------
