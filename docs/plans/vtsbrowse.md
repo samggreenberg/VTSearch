@@ -636,6 +636,19 @@ in git history and the cited source files.
   button UMAPs only the positive ids into an ephemeral, never-persisted `_subset_*`
   projection (`?subset=1`). *Known limitation:* in-memory id handoff, so a hard
   reload of the subset URL loses it.
+- ~~**Bin-popup member ordering**~~ — a bin's `member_ids` are served in a
+  locality-preserving 1-D order (a Hilbert space-filling-curve traversal of the
+  frozen 2-D layout, `_hilbert_order` in `pyramid.py`) rather than by media id,
+  so a dense bin lists similar items together (cats with cats, dogs with dogs)
+  and hiding items keeps the survivors' relative order. Derived from the 2-D
+  coords with no second UMAP fit, and recomputed wherever the `_member_index`
+  cache is (re)built, so it rebuilds/caches/trashes exactly like the coords. The
+  earlier idea — a *separate* 1-D UMAP fit, persisted alongside the 2-D coords —
+  was dropped because it would roughly double the projection build time for a
+  marginal gain over the curve, which already linearizes the layout UMAP
+  produced. *Open follow-up:* if a future ordering wants true 1-D-UMAP semantics
+  (not just a space-filling linearization of the 2-D layout), it would need that
+  second fit and a persisted `order` field on `Projection`.
 
 **Active:**
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable

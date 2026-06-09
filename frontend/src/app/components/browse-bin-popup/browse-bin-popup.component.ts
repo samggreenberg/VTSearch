@@ -74,7 +74,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   left = 0;
   top = 0;
 
-  /** The bin's member ids, in bin order (the list's data source). */
+  /** The bin's member ids, in bin order — a locality-preserving 1-D (Hilbert)
+   *  traversal of the layout, so spatially/semantically similar items sit
+   *  together in the list (the server orders them; see ``tile_member_ids``). */
   ids: number[] = [];
 
   readonly itemHeight = ITEM_HEIGHT;
