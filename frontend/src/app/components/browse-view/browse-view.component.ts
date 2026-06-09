@@ -72,7 +72,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * view, pushed up from the canvas. The legend labels the yellow end with it.
    */
   densityMax = 1;
-  status: 'loading' | 'building' | 'ready' | 'error' = 'loading';
+  status: 'loading' | 'building' | 'ready' | 'error' | 'done' = 'loading';
   errorMessage = '';
   buildProgress = 0;
   buildTotal = 0;
@@ -639,9 +639,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     });
     this.subsetIds = remaining;
     if (remaining.length === 0) {
-      // Nothing left to project; verifying emptied the browse.
-      this.status = 'error';
-      this.errorMessage = 'All items were verified. Go back to Find to see your results.';
+      // Nothing left to project; verifying emptied the browse. This is a
+      // success, not an error — render the ``done`` state (green, with a
+      // Back to Find button) rather than the red error state.
+      this.status = 'done';
       return;
     }
     this.projectionApi
