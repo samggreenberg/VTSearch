@@ -351,6 +351,52 @@ def rebin_like(projection: Projection, template: Pyramid) -> Pyramid:
     return replace(pyr, bounds=template.bounds)
 
 
+def _hilbert_order(coords: np.ndarray, bits: int = 16) -> np.ndarray:
+    """Indices that walk *coords* along a 2-D Hilbert space-filling curve.
+
+    Returns a permutation ``perm`` such that ``coords[perm]`` traverses the frozen
+    layout in a locality-preserving 1-D order: points adjacent in ``perm`` are
+    adjacent in the plane, so a contiguous slice of the order is a contiguous
+    region of the projection.  This is the cheap "derive a 1-D ordering from the
+    2-D coords" (one quantize + bit-twiddle + stable argsort, no second UMAP fit)
+    that orders bin-popup contents — because UMAP already places semantically
+    similar items near each other, the curve keeps them grouped in the list
+    (cats with cats, dogs with dogs) instead of scattering by media id, and the
+    order of any subset is just the order with the hidden points dropped.
+
+    The integer Hilbert distance is computed by the standard quadrant-rotation
+    walk (Wikipedia's ``xy2d``/``rot``), vectorized over all points.  Ties
+    (co-located points map to the same curve cell) break by ascending row index
+    via a stable sort — ascending id, since ids are sorted — so the order is
+    deterministic.
+    """
+    n = coords.shape[0]
+    if n == 0:
+        return np.empty(0, dtype=np.int64)
+    side = 1 << bits  # curve resolution: side x side cells
+    mins = coords.min(axis=0)
+    span = np.maximum(coords.max(axis=0) - mins, 1e-12)  # guard all-coincident axes
+    grid = np.clip(((coords - mins) / span * (side - 1)).astype(np.int64), 0, side - 1)
+    x = grid[:, 0].copy()
+    y = grid[:, 1].copy()
+    d = np.zeros(n, dtype=np.int64)
+    s = side >> 1
+    while s > 0:
+        rx = ((x & s) > 0).astype(np.int64)
+        ry = ((y & s) > 0).astype(np.int64)
+        d += s * s * ((3 * rx) ^ ry)
+        # rot(): in the ry == 0 quadrant, flip both axes when rx == 1, then swap.
+        flip = (ry == 0) & (rx == 1)
+        x[flip] = (side - 1) - x[flip]
+        y[flip] = (side - 1) - y[flip]
+        swap = ry == 0
+        x_swap = x[swap]
+        x[swap] = y[swap]
+        y[swap] = x_swap
+        s >>= 1
+    return np.argsort(d, kind="stable")
+
+
 def _level_membership(
     pyr: Pyramid,
     projection: Projection,
@@ -371,6 +417,11 @@ def _level_membership(
     then a dict lookup — turning a per-tile O(N) scan into one O(N) pass per
     level.  The cache is process-scoped and never persisted; the frozen layout
     re-derives it on the next load.
+
+    Within each cell, members come out in :func:`_hilbert_order` (a 1-D Hilbert
+    traversal of the frozen layout) rather than by id, so a dense bin's contents
+    group by region — the popup shows similar items together and a subset keeps
+    that order when items are hidden.
     """
     cached = pyr._member_index.get(level)
     if cached is not None:
@@ -388,7 +439,13 @@ def _level_membership(
     q, r = geom.assign(coords, radius)
     tx_all, ty_all = geom.tile_index(q, r, pyr.tile_span)
 
-    for txx, tyy, qq, rr, mid in zip(tx_all.tolist(), ty_all.tolist(), q.tolist(), r.tolist(), ids.tolist()):
+    # Visit points along the Hilbert curve so each cell's member list lands in a
+    # locality-preserving 1-D order (shared across this level's tiles; the whole
+    # index is memoized, so the curve is computed at most once per level).
+    perm = _hilbert_order(coords)
+    for txx, tyy, qq, rr, mid in zip(
+        tx_all[perm].tolist(), ty_all[perm].tolist(), q[perm].tolist(), r[perm].tolist(), ids[perm].tolist()
+    ):
         tile_cells = index.setdefault((int(txx), int(tyy)), {})
         tile_cells.setdefault((int(qq), int(rr)), []).append(int(mid))
 
@@ -408,9 +465,11 @@ def tile_member_ids(
     The browse canvas needs each cell's full membership to render per-cell
     selection state (none / partial / full) and to toggle a whole bin's
     contents.  Returned keyed by ``(q, r)`` so the tile endpoint can hand each
-    cell its members.  Backed by the per-level cache in :func:`_level_membership`
-    (computed once per level, shared across that level's tiles); the result is
-    also immutable for the dataset's life, so the tile endpoint HTTP-caches it.
+    cell its members, each list ordered by a 1-D Hilbert traversal of the layout
+    (see :func:`_level_membership`) so the popup groups similar items.  Backed by
+    the per-level cache in :func:`_level_membership` (computed once per level,
+    shared across that level's tiles); the result is also immutable for the
+    dataset's life, so the tile endpoint HTTP-caches it.
     """
     return _level_membership(pyr, projection, level).get((tx, ty), {})
 
