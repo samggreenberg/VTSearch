@@ -2933,6 +2933,10 @@
         "properties": {
           "inclusion": {
             "type": "integer"
+          },
+          "threshold": {
+            "nullable": true,
+            "type": "number"
           }
         },
         "required": [
@@ -10957,12 +10961,13 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Get the current Inclusion setting.",
+        "summary": "Get the current Inclusion setting and the cutoff it resolves to.",
         "tags": [
           "sorting"
         ]
       },
       "post": {
+        "description": "Inclusion is a pure cutoff knob: this re-derives the active detector's\nthreshold from its cached fold orderings (no MLP retrain) and, in Find\nmode, re-splits the unverified items over the frozen scores.  The new\ncutoff is returned so the Find slider can move the green/red line.",
         "operationId": "set_inclusion_route",
         "requestBody": {
           "content": {

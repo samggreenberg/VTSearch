@@ -145,6 +145,46 @@ def get_find_scores() -> dict[int, float]:
         return dict(get_active_detector_context().find_scores)
 
 
+def rethreshold_unverified_find_items() -> None:
+    """Re-split *unverified* Find items good/bad at the current cutoff.
+
+    Inclusion is a pure cutoff knob: sliding it moves
+    :attr:`DetectorContext.threshold` over the frozen ``find_scores`` with no
+    re-scoring.  Every scored item the human has not verified is re-assigned
+    good/bad purely by whether its frozen score clears the (already updated)
+    threshold; verified items keep their human vote wherever their score
+    lands, and ``find_initial_labels`` (the eval baseline at the default
+    cutoff) is left untouched.  Existing click-times are preserved so the
+    right-scroll ordering doesn't churn on a slide.
+
+    No-op outside Find mode or before a scoring pass has frozen ``find_scores``
+    (e.g. Train-mode inclusion changes).  Must run *after*
+    :func:`recompute_detector_thresholds_for_inclusion` has updated the
+    threshold.  See docs/plans/find-verification-workflow.md.
+    """
+    with _state_lock:
+        ctx = get_active_detector_context()
+        if not ctx.find_mode or not ctx.find_scores:
+            return
+        threshold = ctx.threshold
+        good_votes = ctx.good_votes
+        bad_votes = ctx.bad_votes
+        verified = ctx.verified_ids
+        for media_id, score in ctx.find_scores.items():
+            if media_id in verified:
+                continue
+            if score >= threshold:
+                if media_id in good_votes:
+                    continue
+                bad_votes.pop(media_id, None)
+                good_votes[media_id] = None
+            else:
+                if media_id in bad_votes:
+                    continue
+                good_votes.pop(media_id, None)
+                bad_votes[media_id] = None
+
+
 # ---------------------------------------------------------------------------
 # Compound operations (atomic vote toggle / label apply)
 # ---------------------------------------------------------------------------
