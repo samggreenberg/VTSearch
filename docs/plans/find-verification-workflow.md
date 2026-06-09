@@ -52,11 +52,18 @@ Unverified Bad  = bad_votes  − verified_ids
 
 `verified_ids` is required because confirming an item *without changing its vote* (the common case — detector said good, human agrees) produces no observable change in `good_votes`; only an explicit "I looked at this" set can capture it. It is process-scoped state on `DetectorContext`, which the "No Persisted Vectors or MLPs" rule explicitly blesses (in-memory caches on the context are fine; never written to disk/settings/JSON).
 
-**Reset semantics:** a fresh find-label run (initial load, or after an Inclusion change) re-scores and re-labels everything, so it clears `verified_ids` — the new scores define a new work queue. (Decision flagged below; v1 clears.)
+**Re-score semantics (preserve verified work):** the right panel is a *stable accumulation* — the items the human has resolved. The left panel is the churning work queue. Therefore a re-score (initial load, or after an Inclusion change) re-labels **only the unverified items**; it never touches a verified item's vote, and `verified_ids` survives. Concretely:
+
+- Re-scoring computes fresh scores for every item (the model retrained at the new Inclusion), but only **applies** the new threshold labels to items *not* in `verified_ids`.
+- A previously Unverified Good item can flip to Unverified Bad (and vice-versa) as the threshold moves — that's expected; it's still unverified.
+- A Verified Good / Verified Bad item keeps its human vote no matter where its new score lands.
+
+`verified_ids` is only cleared when the dataset/detector **pair changes** (a genuinely fresh context — `reloadForNewPair` in `find-view.component.ts:146`). Nothing the user does in the left panel (re-score, Inclusion, browse) clears it.
 
 ## Backend changes
 
-1. **`DetectorContext`** (`vtscore/state/core.py:322`): add `verified_ids: set[int] = field(default_factory=set)`. Clear it wherever the model/threshold cache is invalidated for a re-score, and in the find-label run itself.
+1. **`DetectorContext`** (`vtscore/state/core.py:322`): add `verified_ids: set[int] = field(default_factory=set)`. **Do not** clear it on re-score or model-cache invalidation — only on a dataset/detector pair change.
+1b. **Re-score preserves verified votes.** Change the find-label run (`scoring.py:341-353`) so it stops doing `apply_labels_bulk_with_click_time(..., replace_all=True)` over *all* items. Instead it applies the fresh threshold labels **only to items not in `verified_ids`**, leaving verified items' votes and their `find_initial_labels` entries intact. Scores are still computed for every item (for ordering), but verified items are excluded from re-labeling.
 2. **Mark-verified on manual votes in find mode.** When `find_mode` is True and a vote arrives through the manual path (the big buttons, hover-vote, right-panel vote — *not* the bulk `apply_labels_bulk_with_click_time` that find-label uses), add the id to `verified_ids`. Cleanest hook: in `vtscore/state/votes.py` `set_vote`/`toggle_vote`/`apply_label_with_click_time` (the click-time-bearing, single-item paths), guarded by `is_find_mode()`. The bulk find-label path stays unverified by construction.
 3. **Expose `verified_ids`** in the `GET /api/votes` payload (a `verified` id array) so the frontend can derive the four buckets without a second request. (`vtsearch/routes/labels/vote.py`.)
 4. **Unverified Export.** Extend the label export `label_filter` (`/api/labels/export`, `vote.py:147`) with two new values: `unverified` (emit `good_votes ∪ bad_votes − verified_ids`) and, for symmetry, `verified`. The work-queue dump the user re-imports as a dataset uses `unverified`. Existing `good`/`bad`/`corrections`/`all` are unchanged.
@@ -79,17 +86,16 @@ Unverified Bad  = bad_votes  − verified_ids
 - **User clicks Bad on centered item** (a false positive) → vote bad + verified → Verified Bad → auto-advance.
 - **Export / Browse / To Dataset (good panel)** → operates on Verified Good ∪ Unverified Good (flood-fill); unreviewed positives ride along on the detector's call.
 - **Unverified Export** → dumps only the untouched work queue for re-import as a dataset.
-- **Inclusion change** → retrain + re-score → fresh four-state split, `verified_ids` cleared.
+- **Inclusion change** → retrain + re-score → only the **unverified** items get re-labeled at the new threshold; every Verified Good / Verified Bad item (the right-panel accumulation) keeps its human vote. `verified_ids` is preserved.
 
 ## Decisions captured
 
 - **Inclusion retrains (not threshold-only) for v1.** Matches current wiring; revisit only if slow.
 - **Positives-only review**, with the big buttons available on any centered item for one-off ActuallyGood/ActuallyBad marks + auto-advance.
 - **Ephemeral throughout**; Unverified Export is the persistence escape hatch.
-- **`verified_ids` cleared on re-score.** Re-running Find (or changing Inclusion) is a fresh labeling pass, so prior verifications are discarded along with the prior scores.
+- **Re-score preserves verified work (CRITICAL).** Verified votes are a stable right-panel accumulation; re-scoring (incl. every Inclusion change) only re-labels unverified items and never disturbs them. `verified_ids` is cleared only on a dataset/detector pair change. Anything the user does in the left panel leaves the right panel untouched.
 
 ## Open follow-ups
 
 - **Pure-threshold Inclusion.** If retrain-per-change is too slow, repurpose the Inclusion knob into a score-threshold slider over frozen scores (run once, slide the green/red line with no retrain/re-embed). Forks the backend (Inclusion stops invalidating the MLP) and the UX ("frozen detector"). Deferred pending real-world latency.
-- **Preserve verifications across a re-score?** v1 clears `verified_ids` on every find run. If users find re-scoring (e.g. after a small Inclusion nudge) throws away too much manual work, consider carrying forward verifications whose item still lands on the same side of the threshold.
 - **Under-threshold (false-negative) review surface.** Currently only reachable item-by-item via the left panel + big buttons. If demand appears, add a dedicated under-threshold work queue (the symmetric "find what the detector missed" flow).
