@@ -190,7 +190,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     private router: Router,
     private browseSubset: BrowseSubsetService,
     private selection: BrowseSelectionService,
-    private browseViewport: BrowseViewportService,
     private mediasApi: MediasApiService,
     private dialog: VtDialogService,
     private toast: ToastService,
@@ -625,9 +624,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * (good/bad). The remaining items keep their exact 2-D positions and bins —
    * the server re-bins the frozen layout in place (no UMAP re-fit), returning
    * the same ``projection_id`` with a bumped ``content_version`` so only the
-   * tile cache refreshes. The canvas then zooms to fit the survivors (via the
-   * one-shot fit request below), since the old framing leaves dead space
-   * wherever the verified items used to be.
+   * tile cache refreshes. The viewport is left exactly where the user had it:
+   * verifying may leave dead space where the culled items used to be, but a
+   * surprise zoom-to-fit jump is more disruptive than that dead space. The
+   * user can hit Zoom Fit themselves if they want to re-frame.
    */
   private dropFromBrowse(removedIds: number[], target: 'good' | 'bad'): void {
     const removed = new Set(removedIds);
@@ -649,9 +649,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (meta) => {
-          // The survivors' bounds shrank; re-frame to them rather than leaving
-          // dead space where the culled cluster was.
-          this.browseViewport.requestFitOnNextMeta();
+          // Leave the viewport where the user had it; don't yank the camera to
+          // re-fit the survivors. They can hit Zoom Fit if they want that.
           this.applyMeta(meta);
         },
         error: () =>
