@@ -49,9 +49,7 @@ def _cluster(coords: np.ndarray, min_cluster_size: int) -> np.ndarray:
     return np.asarray(HDBSCAN(min_cluster_size=size).fit_predict(coords))
 
 
-def _build_units(
-    coords: np.ndarray, labels: np.ndarray
-) -> tuple[list[np.ndarray], np.ndarray, np.ndarray]:
+def _build_units(coords: np.ndarray, labels: np.ndarray) -> tuple[list[np.ndarray], np.ndarray, np.ndarray]:
     """Group points into rigid units (one per cluster, noise folded into nearest).
 
     Returns ``(point_index_lists, centres, radii)`` where ``centres[u]`` and
@@ -163,9 +161,7 @@ def compact_layout(
     point_lists, centres, radii = _build_units(coords, labels)
     target = coords.mean(axis=0).astype(np.float64)
     margin = margin_frac * float(np.median(radii))
-    settled = _relax(
-        centres, radii, target=target, margin=margin, attract=attract, iters=iters
-    )
+    settled = _relax(centres, radii, target=target, margin=margin, attract=attract, iters=iters)
 
     out = coords.copy()
     shifts = (settled - centres).astype(np.float32)

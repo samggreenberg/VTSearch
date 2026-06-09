@@ -76,11 +76,7 @@ def test_clusters_do_not_overlap_after_packing():
     coords, labels = _islands(spread=0.4, seed=5)
     out = compact_layout(coords, min_cluster_size=10)
     cents = np.stack([out[labels == k].mean(axis=0) for k in np.unique(labels)])
-    dmin = min(
-        float(np.linalg.norm(cents[i] - cents[j]))
-        for i in range(len(cents))
-        for j in range(i + 1, len(cents))
-    )
+    dmin = min(float(np.linalg.norm(cents[i] - cents[j])) for i in range(len(cents)) for j in range(i + 1, len(cents)))
     # Each blob's own extent is ~spread; centroids must stay well separated.
     assert dmin > 1.0
 
