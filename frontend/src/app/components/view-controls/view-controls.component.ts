@@ -18,7 +18,7 @@ type IconSize = (typeof ICON_SIZES)[number];
   styleUrl: './view-controls.component.scss',
 })
 export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
-  @Input() side: 'left' | 'right' = 'left';
+  @Input() side: 'left' | 'right' | 'popup' = 'left';
   @Input() currentMediaType = '';
   /**
    * Whether to show the click/hover focus toggle. The VTSBrowse selection
@@ -67,6 +67,8 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private defaultViewMode(): 'grid' | 'list' {
+    // Left panel reads as a list by default; the right panel and the
+    // VTSBrowse bin popup default to a thumbnail grid.
     return this.side === 'left' ? 'list' : 'grid';
   }
 

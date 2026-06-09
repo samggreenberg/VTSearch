@@ -326,6 +326,28 @@
                   aria-label="Browser thumbnail border width" />
                 <p class="form-hint">Only affects datasets that show thumbnails (image, video). Draws a colored band around each stacked tile; its color shows how many items are piled there. Set to 0 to hide it.</p>
               </div>
+              <div class="form-group">
+                <label class="form-label" title="How a right-clicked bin's items are shown in the popup">Bin popup</label>
+                <div class="toggle-group">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getPopupViewMode(activeBrowseTab) === 'grid'" (click)="onPopupViewModeChange(activeBrowseTab, 'grid')" title="Show a right-clicked bin's items as a thumbnail grid">
+                    Grid
+                  </button>
+                  <button class="toggle-btn" [class.toggle-btn--active]="getPopupViewMode(activeBrowseTab) === 'list'" (click)="onPopupViewModeChange(activeBrowseTab, 'list')" title="Show a right-clicked bin's items as a list">
+                    List
+                  </button>
+                </div>
+                <p class="form-hint">How the right-click bin popup shows a bin&rsquo;s items. Changing it on a popup while browsing remembers the choice here for this media type.</p>
+              </div>
+              <div class="form-group">
+                <label class="form-label" title="Thumbnail size in the bin popup's grid">Popup thumbnail size</label>
+                <select class="form-select" [ngModel]="getPopupGridIconSize(activeBrowseTab)" (ngModelChange)="onPopupGridIconSizeChange(activeBrowseTab, $event)" [disabled]="getPopupViewMode(activeBrowseTab) === 'list'" aria-label="Bin popup thumbnail size">
+                  <option value="XS">XS</option>
+                  <option value="S">S</option>
+                  <option value="M">M</option>
+                  <option value="L">L</option>
+                  <option value="XL">XL</option>
+                </select>
+              </div>
             </div>
           } @else {
             <p class="empty-state">No media types registered.</p>

@@ -255,6 +255,12 @@
             },
             "type": "object"
           },
+          "grid_icon_size_popup": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
           "grid_icon_size_right": {
             "additionalProperties": {
               "type": "string"
@@ -346,6 +352,12 @@
             "type": "string"
           },
           "view_mode_left": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "view_mode_popup": {
             "additionalProperties": {
               "type": "string"
             },
@@ -4299,6 +4311,7 @@
           "focus_mode_left": {},
           "focus_mode_right": {},
           "grid_icon_size_left": {},
+          "grid_icon_size_popup": {},
           "grid_icon_size_right": {},
           "hide_autopilot": {
             "type": "boolean"
@@ -4342,6 +4355,7 @@
             "type": "string"
           },
           "view_mode_left": {},
+          "view_mode_popup": {},
           "view_mode_right": {},
           "volume": {
             "type": "number"
