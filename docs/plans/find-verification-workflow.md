@@ -1,6 +1,6 @@
 # Find Verification Workflow
 
-**Status:** Phase 1 (backend spine) in progress — Inclusion refactor, frozen `find_scores`, `verified_ids` + mark-verified, Unverified Export, and `GET /api/find/stats` (incl. the −10…10 FP/FN sweep), all under `./run-tests.sh`. Phase 2 (frontend: 2 verified buckets + count-folding headers, left work queue, marginal-positive auto-advance, `vt-find-stats-modal`) is deferred to a session where the UI can be eyeballed (no browser in the build container).
+**Status:** **Phase 1 (backend spine) shipped** — full `./run-tests.sh` green. Phase 2 (frontend) deferred to a session where the UI can be eyeballed (no browser in the build container). See **What shipped / Open follow-ups** at the bottom.
 
 ## The reframe (read this first)
 
@@ -127,7 +127,19 @@ Reported figures:
 - **Ephemeral throughout**; Unverified Export is the persistence escape hatch.
 - **Stats eval baseline = the default calibrated cutoff**, fixed at score time, so corrections are measured against the detector's natural recommendation regardless of later slider position.
 
+## What shipped (Phase 1 — backend spine)
+
+All under `./run-tests.sh` (full suite green). Note one doc-vs-code correction discovered during build: `inclusion` only ever fed the **class-weight bias** in `train_model` (the hidden width was already `_auto_hidden_dim(n_train)` and regularization was fixed), so "fixed architecture" was already true — the refactor just removed the class-weight bias.
+
+- **Inclusion decoupled from the MLP.** `train_model` dropped its `inclusion_value` param + class-weight bias; all production/test callers updated. `inclusion` now lives only in `find_optimal_threshold` (the FP/FN cost warp). The model — and every item's score — is inclusion-independent.
+- **Fold-ordering cache.** `calculate_cross_calibration_threshold` split into `compute_fold_orderings` (inclusion-independent) + `threshold_from_fold_orderings` (per-inclusion min-cost). `calibration_cache` re-keyed to drop inclusion and store the K fold orderings, so an Inclusion change reuses the orderings and only re-runs the cheap min-cost search.
+- **No-retrain Inclusion.** `set_inclusion` now calls `recompute_detector_thresholds_for_inclusion` (re-derive threshold from the fold cache, leave the model in place) instead of `invalidate_loaded_detector_models`.
+- **Verification state.** `DetectorContext.verified_ids` + `find_scores` (in-memory; cleared on pair change). Mark-verified on single-item find-mode votes (`set_vote`/`toggle_vote`), un-verify on un-vote.
+- **APIs.** `verified` array on `GET /api/votes`; `unverified`/`verified` `label_filter` on `/api/labels/export` (atomic via `VoteSnapshot.verified_ids`); new read-only `GET /api/find/stats` (2×2 confusion + the −10…10 FP/FN sweep). `find-label` freezes `find_scores`.
+
 ## Open follow-ups
 
+- **Phase 2 — frontend (the whole UI).** Find slider → `POST /api/inclusion` (no retrain) with optimistic client-side re-threshold; 2 verified buckets + count-folding headers on the right; left work queue + Unverified Export button; marginal-positive auto-advance; big-button/hover verify wired through; `vt-find-stats-modal` rendering the 2×2 + FP/FN sweep as an inline SVG line chart.
+- **Safe-threshold blend on Inclusion slide.** `recompute_detector_thresholds_for_inclusion` re-derives the *raw* cross-cal threshold from the fold orderings; it does not re-apply `calculate_safe_threshold` blending (which needs the haystack score distribution). When `safe_thresholds` is on, an Inclusion slide's threshold will differ slightly from a full retrain's. `find_scores` is available to blend if this matters; deferred (safe_thresholds is opt-in).
 - **Done-state polish.** The empty queue (no unverified item above the cutoff) is now well-defined; decide how rich the "all positives reviewed" rest state should be (plain message vs. a summary nudge toward Stats/Export).
 - **Under-threshold (false-negative) review surface.** Currently reachable only item-by-item via the left panel + big buttons. If demand appears, add a dedicated below-the-line work queue (the symmetric "find what the detector missed" flow).
