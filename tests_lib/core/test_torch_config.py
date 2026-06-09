@@ -120,7 +120,7 @@ def test_train_model_places_model_on_selected_device(monkeypatch):
     X = torch.tensor(rng.standard_normal((20, 16)).astype(np.float32))
     y = torch.tensor([1.0] * 10 + [0.0] * 10, dtype=torch.float32).unsqueeze(1)
 
-    model = train_model(X, y, input_dim=16, inclusion_value=0, hidden_dim=8)
+    model = train_model(X, y, input_dim=16, hidden_dim=8)
     param_device = next(model.parameters()).device
     assert param_device.type == fake_device.type
 

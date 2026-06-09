@@ -111,7 +111,6 @@ def train_model(
     X_train: torch.Tensor,
     y_train: torch.Tensor,
     input_dim: int,
-    inclusion_value: int = 0,
     seed: int = 42,
     hidden_dim: int | None = None,
 ) -> nn.Sequential:
@@ -122,10 +121,11 @@ def train_model(
     provided via ``hidden_dim``.  Dropout is applied during training to
     reduce overfitting.
 
-    Trains using weighted binary cross-entropy loss with logits
-    (``BCEWithLogitsLoss``).  Class weights are adjusted based on
-    ``inclusion_value`` to bias the classifier toward including more
-    (positive) or fewer (positive) items.
+    Trains using class-balanced binary cross-entropy loss with logits
+    (``BCEWithLogitsLoss``).  Inclusion does **not** enter training: it is a
+    pure threshold/cutoff knob applied later in :func:`find_optimal_threshold`,
+    so the trained model (and therefore every item's score) is independent of
+    inclusion.  See docs/plans/find-verification-workflow.md.
 
     A local ``torch.Generator`` seeded with *seed* is used for model-weight
     initialisation, and ``torch.random.fork_rng`` isolates the global RNG
@@ -137,12 +137,6 @@ def train_model(
         y_train: Float tensor of shape ``(N, 1)`` containing binary labels
             (1.0 for good, 0.0 for bad).
         input_dim: Dimensionality of the input embeddings.
-        inclusion_value: Integer in ``[-10, 10]`` controlling class-weight bias.
-            - 0: balance classes equally (weight_true = num_false / num_true).
-            - Positive: increase weight for True samples by ``2 ** inclusion_value``,
-              causing the model to include more items.
-            - Negative: increase weight for False samples by ``2 ** (-inclusion_value)``,
-              causing the model to exclude more items.
         seed: Seed for the local RNG used for weight initialisation (default 42).
         hidden_dim: Number of neurons in the hidden layer.  When ``None``
             (default) the width is chosen automatically via
@@ -193,18 +187,11 @@ def train_model(
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 
     # Balanced class weights - the single-class case was rejected above.
+    # Inclusion is deliberately absent here (it's applied later as a pure
+    # threshold knob in find_optimal_threshold), so the model is inclusion-
+    # independent and its scores can be frozen across cutoff slides.
     weight_true = num_false / num_true
     weight_false = 1.0
-
-    # Adjust weights based on inclusion
-    if inclusion_value >= 0:
-        # Increase weight for True samples
-        weight_true *= 2.0**inclusion_value
-    else:
-        # Increase weight for False samples
-        weight_false *= 2.0 ** (-inclusion_value)
-
-    # Create sample weights
     weights = torch.where(y_train == 1, weight_true, weight_false).squeeze().to(device)
     loss_fn = nn.BCEWithLogitsLoss(reduction="none")
 

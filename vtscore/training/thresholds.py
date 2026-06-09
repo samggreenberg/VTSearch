@@ -256,8 +256,11 @@ def calculate_cross_calibration_threshold(
         y_list: List of binary labels (1.0 for good, 0.0 for bad),
             aligned with ``X_list``.
         input_dim: Dimensionality of the embeddings.
-        inclusion_value: Integer in ``[-10, 10]`` passed to :func:`train_model`
-            and :func:`find_optimal_threshold` to control the FPR/FNR trade-off.
+        inclusion_value: Integer in ``[-10, 10]`` passed to
+            :func:`find_optimal_threshold` to control the FPR/FNR trade-off.
+            It does **not** enter model training (the fold models are
+            inclusion-independent), so the same fold scores can be re-thresholded
+            at any inclusion - see docs/plans/find-verification-workflow.md.
         rng: Optional seeded RandomState for reproducible splits. Falls back
             to the global ``np.random`` state when ``None``.
         calibrate_count: Number of random Train/Calibrate splits (default 2).
@@ -333,7 +336,7 @@ def calculate_cross_calibration_threshold(
         y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
         X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32)
 
-        model = train_model(X_train, y_train, input_dim, inclusion_value, hidden_dim=hidden_dim)
+        model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim)
 
         with torch.no_grad():
             X_cal = X_cal.to(next(model.parameters()).device)

@@ -151,7 +151,7 @@ class TestLabelsetTrainAndScoreNaNSafety:
         # that always produces NaN logits.  This is what M13 simulates:
         # the trainer "successfully" produced an MLP, but its weights have
         # destabilised so every forward pass is NaN.
-        def fake_train_model(X, y, input_dim, inclusion, hidden_dim=None):  # noqa: ARG001
+        def fake_train_model(X, y, input_dim, hidden_dim=None):  # noqa: ARG001
             return _NaNProducingModel(input_dim).eval()
 
         # ``labelset_train_and_score`` does a local ``from vtscore.training.mlp
