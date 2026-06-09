@@ -1,8 +1,13 @@
 <div class="vote-section">
   <div class="vote-section-header">
-    <h3 [class]="label" [title]="label === 'good' ? 'Items you have marked as positive examples (' + ids.length + ')' : 'Items you have marked as negative examples (' + ids.length + ')'">
-      {{ label === 'good' ? 'Goods' : 'Bads' }} ({{ ids.length | number }})
-    </h3>
+    <div class="vote-section-heading">
+      <h3 [class]="label" [title]="label === 'good' ? 'Items you have marked as positive examples (' + ids.length + ')' : 'Items you have marked as negative examples (' + ids.length + ')'">
+        {{ headingLabel ?? (label === 'good' ? 'Goods' : 'Bads') }} ({{ ids.length | number }})
+      </h3>
+      @if (foldedNote) {
+        <span class="folded-note" [title]="'These items live on the left work queue; the bucket actions still include them.'">{{ foldedNote }}</span>
+      }
+    </div>
     <ng-content select="[list-actions]"></ng-content>
   </div>
   <div class="vote-list" [class.grid-layout]="isGrid" [style.--grid-goal-width]="gridGoalWidth + 'px'" #voteListContainer>

@@ -62,9 +62,14 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Output() browse = new EventEmitter<void>();
   /** Find mode: promote the goods into their own dataset. */
   @Output() toDataset = new EventEmitter<void>();
+  /** Find mode: export a label partition (good / bad). */
+  @Output() exportLabels = new EventEmitter<'good' | 'bad'>();
+  /** Find mode: open the detector-evaluation Stats modal. */
+  @Output() stats = new EventEmitter<void>();
 
   goodIds: number[] = [];
   badIds: number[] = [];
+  verifiedIds: Set<number> = new Set();
   clickTimes: Record<string, number> = {};
   learnedScores: Record<string, number> = {};
   goodElements: DetectorLabelView[] = [];
@@ -91,6 +96,32 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   /** True when the right pane should be sourced from the labelset (not /api/votes). */
   get useLabelset(): boolean {
     return this.mode === 'label' && !!this.trainableModelName;
+  }
+
+  /**
+   * Ids shown in the good bucket. In Find mode the right pane is the verified
+   * pile only (the unverified goods live on the left work queue), so it shows
+   * just ``good ∩ verified``. In Label mode it shows every good vote.
+   */
+  get goodDisplayIds(): number[] {
+    if (this.mode !== 'find') return this.goodIds;
+    return this.goodIds.filter((id) => this.verifiedIds.has(id));
+  }
+
+  /** Bad-bucket counterpart of {@link goodDisplayIds}. */
+  get badDisplayIds(): number[] {
+    if (this.mode !== 'find') return this.badIds;
+    return this.badIds.filter((id) => this.verifiedIds.has(id));
+  }
+
+  /** Find mode: count of unverified goods (the left work queue above the cutoff). */
+  get unverifiedGoodCount(): number {
+    return this.goodIds.length - this.goodDisplayIds.length;
+  }
+
+  /** Find mode: count of unverified bads (the left work queue below the cutoff). */
+  get unverifiedBadCount(): number {
+    return this.badIds.length - this.badDisplayIds.length;
   }
 
   ngOnInit(): void {
@@ -174,6 +205,18 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     this.toDataset.emit();
   }
 
+  onExportGood(): void {
+    this.exportLabels.emit('good');
+  }
+
+  onExportBad(): void {
+    this.exportLabels.emit('bad');
+  }
+
+  onStats(): void {
+    this.stats.emit();
+  }
+
   onDetectorRenamed(newName: string): void {
     if (!this.trainMode?.model?.registry_id) return;
     const registryId = this.trainMode.model.registry_id;
@@ -225,6 +268,11 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((votes) => {
         this.badIds = Array.from(votes);
+      });
+    this.voteState.verifiedIds$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((ids) => {
+        this.verifiedIds = ids;
       });
     this.voteState.clickTimes$
       .pipe(takeUntil(this.destroy$))

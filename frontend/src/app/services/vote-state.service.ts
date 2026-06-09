@@ -31,6 +31,7 @@ const UNDO_STACK_MAX = 20;
 export class VoteStateService implements OnDestroy {
   private readonly goodVotesSubject = new BehaviorSubject<Set<number>>(new Set());
   private readonly badVotesSubject = new BehaviorSubject<Set<number>>(new Set());
+  private readonly verifiedIdsSubject = new BehaviorSubject<Set<number>>(new Set());
   private readonly clickTimesSubject = new BehaviorSubject<Record<string, number>>({});
   private readonly learnedScoresSubject = new BehaviorSubject<Record<string, number>>({});
   private readonly labelsetGoodCountSubject = new BehaviorSubject<number>(0);
@@ -48,6 +49,14 @@ export class VoteStateService implements OnDestroy {
    */
   private pendingOptimistic = new Map<number, { state: VoteState; clickTime: number | null }>();
 
+  /**
+   * Optimistic verified state per media (Find mode): ``true`` = just verified,
+   * ``false`` = just un-verified.  Merged over the server's ``verified`` array
+   * in {@link applyVotes} and cleared once the server confirms, so a 2s poll
+   * that raced ahead of the vote POST doesn't flicker the left/right split.
+   */
+  private pendingVerified = new Map<number, boolean>();
+
   /** Past votes available to undo, most-recent last.  Capped at UNDO_STACK_MAX. */
   private past: UndoEntry[] = [];
   /** Votes that have been undone and can be redone via Cmd/Ctrl-Shift-Z. */
@@ -56,6 +65,8 @@ export class VoteStateService implements OnDestroy {
 
   readonly goodVotes$ = this.goodVotesSubject.asObservable();
   readonly badVotes$ = this.badVotesSubject.asObservable();
+  /** Find mode: ids the human has explicitly verified (acted on). */
+  readonly verifiedIds$ = this.verifiedIdsSubject.asObservable();
   readonly clickTimes$ = this.clickTimesSubject.asObservable();
   readonly learnedScores$ = this.learnedScoresSubject.asObservable();
   readonly labelsetGoodCount$ = this.labelsetGoodCountSubject.asObservable();
@@ -81,6 +92,24 @@ export class VoteStateService implements OnDestroy {
 
   get badVotes(): Set<number> {
     return this.badVotesSubject.value;
+  }
+
+  get verifiedIds(): Set<number> {
+    return this.verifiedIdsSubject.value;
+  }
+
+  /**
+   * Optimistically record that *id* is now verified (good/bad vote landed in
+   * Find mode) or no longer verified (un-voted).  The server marks the same
+   * transition on the vote POST; this just makes the left→right move feel
+   * instant.  Reconciled by {@link applyVotes} on the next ``/api/votes`` read.
+   */
+  setOptimisticVerified(id: number, verified: boolean): void {
+    this.pendingVerified.set(id, verified);
+    const next = new Set(this.verifiedIdsSubject.value);
+    if (verified) next.add(id);
+    else next.delete(id);
+    this.verifiedIdsSubject.next(next);
   }
 
   get clickTimes(): Record<string, number> {
@@ -288,11 +317,13 @@ export class VoteStateService implements OnDestroy {
   clear(): void {
     this.goodVotesSubject.next(new Set());
     this.badVotesSubject.next(new Set());
+    this.verifiedIdsSubject.next(new Set());
     this.clickTimesSubject.next({});
     this.learnedScoresSubject.next({});
     this.labelsetGoodCountSubject.next(0);
     this.labelsetBadCountSubject.next(0);
     this.pendingOptimistic.clear();
+    this.pendingVerified.clear();
     this.past = [];
     this.future = [];
   }
@@ -391,8 +422,23 @@ export class VoteStateService implements OnDestroy {
       }
     }
 
+    // Verified ids: start from the server set, then apply pending optimistic
+    // overrides (clearing each once the server already agrees) so an in-flight
+    // verify/un-verify isn't clobbered by a poll that raced the vote POST.
+    const verified = new Set(votes.verified ?? []);
+    for (const [id, want] of this.pendingVerified) {
+      if (verified.has(id) === want) {
+        this.pendingVerified.delete(id);
+      } else if (want) {
+        verified.add(id);
+      } else {
+        verified.delete(id);
+      }
+    }
+
     this.goodVotesSubject.next(good);
     this.badVotesSubject.next(bad);
+    this.verifiedIdsSubject.next(verified);
     this.clickTimesSubject.next(times);
     this.learnedScoresSubject.next(votes.learned_scores);
     this.labelsetGoodCountSubject.next(votes.labelset_good_count ?? good.size);

@@ -53,6 +53,9 @@ import { exampleSortServer } from '../generated/api-client/fn/media-server/examp
 import { serverMediaFileFromMediaId } from '../generated/api-client/fn/media-server/server-media-file-from-media-id';
 import { listServerMediaFiles } from '../generated/api-client/fn/media-server/list-server-media-files';
 
+/** Server-side label partition for ``/api/labels/export``. */
+export type LabelFilter = 'good' | 'bad' | 'both' | 'corrections' | 'unverified' | 'verified';
+
 @Injectable({ providedIn: 'root' })
 export class SortingApiService {
   private http = inject(HttpClient);
@@ -111,10 +114,14 @@ export class SortingApiService {
     }).pipe(map((r) => r.body));
   }
 
-  exportLabels(goodsOnly?: boolean, options?: { enrich?: boolean }): Observable<LabelsExportResponse> {
+  exportLabels(
+    goodsOnly?: boolean,
+    options?: { enrich?: boolean; labelFilter?: LabelFilter },
+  ): Observable<LabelsExportResponse> {
     return exportLabels(this.http, this.config.rootUrl, {
       goods_only: goodsOnly || undefined,
       enrich: options?.enrich || undefined,
+      label_filter: options?.labelFilter || undefined,
     }).pipe(map((r) => r.body));
   }
 
