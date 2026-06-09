@@ -11871,7 +11871,7 @@
     },
     "/api/medias/vote-bulk": {
       "post": {
-        "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics, then the detector\nlabelset is persisted **once** rather than per id.  Bulk votes are\nimage-level (no region boxes).  Powers the Browser's \"Remove from Good\"\ncull, which marks a hand-selected set of false-positives ``bad`` and\ndrops them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
+        "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics (including Find-mode\nverification \u2014 a good/bad target marks the item verified), then the\ndetector labelset is persisted **once** rather than per id.  Bulk votes\nare image-level (no region boxes).  Powers the Browser's \"Verified Good\" /\n\"Verified Bad\" actions, which mark a hand-selected set good/bad, verify\nthem, and drop them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
         "operationId": "vote_media_bulk",
         "requestBody": {
           "content": {
