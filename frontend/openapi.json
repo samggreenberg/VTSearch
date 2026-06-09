@@ -51,6 +51,14 @@
             "type": "array"
           },
           "pending_announcements": {
+            "description": "Milestones not yet seen in the panel; lights the notification dot.",
+            "items": {
+              "$ref": "#/components/schemas/_PendingAnnouncement"
+            },
+            "type": "array"
+          },
+          "pending_toasts": {
+            "description": "Milestones whose one-time unlock toast hasn't fired yet.",
             "items": {
               "$ref": "#/components/schemas/_PendingAnnouncement"
             },
@@ -69,6 +77,7 @@
           "hours",
           "media_types",
           "pending_announcements",
+          "pending_toasts",
           "tier_names"
         ],
         "type": "object"
@@ -6412,7 +6421,55 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Mark *category_id*'s tier as announced.",
+        "summary": "Mark *category_id*'s tier as announced (seen in the panel).",
+        "tags": [
+          "achievements"
+        ]
+      }
+    },
+    "/api/achievements/{category_id}/mark-toasted": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "category_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "mark_toasted",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcknowledgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcknowledgeResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Mark *category_id*'s tier's unlock toast as shown so it fires once.",
         "tags": [
           "achievements"
         ]

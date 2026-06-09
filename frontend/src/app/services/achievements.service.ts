@@ -10,12 +10,14 @@ import type { PendingAnnouncement } from '../generated/api-client/models/pending
 import { acknowledgeAchievement } from '../generated/api-client/fn/achievements/acknowledge-achievement';
 import { checkPhrase } from '../generated/api-client/fn/achievements/check-phrase';
 import { getAchievements } from '../generated/api-client/fn/achievements/get-achievements';
+import { markToasted } from '../generated/api-client/fn/achievements/mark-toasted';
 import { SettingsStateService } from './settings-state.service';
 
 const EMPTY_STATE: AchievementState = {
   tier_names: [],
   achievements: [],
   pending_announcements: [],
+  pending_toasts: [],
   docs: [],
   media_types: [],
   hours: [],
@@ -27,8 +29,11 @@ const EMPTY_STATE: AchievementState = {
  * consumer (a global host component) can render dialogs sequentially.
  *
  * Trigger `refresh()` after any action that might unlock a tier (vote,
- * find, dataset load complete, label import).  Acknowledged announcements
- * are persisted server-side so they don't replay on reload.
+ * find, dataset load complete, label import).  Two server-side watermarks
+ * keep the toast and the dot independent: unlock toasts fire once
+ * (`pending_toasts`, marked shown via {@link markToasted}) and never replay
+ * on reload, while the notification dot stays lit (`pending_announcements`)
+ * until the user opens the panel, which ACKs via {@link acknowledge}.
  */
 @Injectable({ providedIn: 'root' })
 export class AchievementsService {
@@ -46,11 +51,12 @@ export class AchievementsService {
 
   /**
    * Milestones already pushed to {@link unlock$} this session, keyed by
-   * `categoryId:tierIdx`. The server keeps returning a milestone in
-   * `pending_announcements` until the user opens the panel (which ACKs it),
-   * so without this guard every `refresh()` — fired after votes, finds, and
-   * navigation — would re-pop a toast for an already-shown unlock. The toast
-   * fires once per real unlock; the notification dot stays server-driven.
+   * `categoryId:tierIdx`. The toast watermark lives server-side
+   * (`pending_toasts` shrinks once {@link markToasted} lands), but that
+   * round-trips asynchronously, so this set guards against a second
+   * `refresh()` re-popping the same toast before the mark is persisted.
+   * The persistent guard is the server; this is just the in-flight race
+   * fix. The notification dot stays driven by `pending_announcements`.
    */
   private readonly emittedUnlocks = new Set<string>();
 
@@ -103,13 +109,29 @@ export class AchievementsService {
       .subscribe((next) => {
         this.inFlight = false;
         this.state$.next(next);
-        for (const p of next.pending_announcements) {
+        for (const p of next.pending_toasts) {
           const key = `${p.id}:${p.tier_idx}`;
           if (this.emittedUnlocks.has(key)) continue;
           this.emittedUnlocks.add(key);
           this.unlock$.next(p);
+          this.markToasted(p.id, p.tier_idx);
         }
       });
+  }
+
+  /**
+   * Persist that a tier's unlock toast has been shown, so it stays out of
+   * future `pending_toasts` lists and never replays on app restart. Fire and
+   * forget — the toasted watermark drives only the toast, not the dot or the
+   * panel display, so there's nothing to refresh on success.
+   */
+  private markToasted(categoryId: string, tierIdx: number): void {
+    markToasted(this.http, this.config.rootUrl, {
+      category_id: categoryId,
+      body: { tier_idx: tierIdx },
+    })
+      .pipe(catchError(() => of(null)))
+      .subscribe();
   }
 
   /**

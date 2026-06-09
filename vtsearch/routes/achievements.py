@@ -6,7 +6,11 @@ GET  /api/achievements
     Return current achievement state for the UI.
 
 POST /api/achievements/<category_id>/acknowledge
-    Mark a tier as announced.  Body: ``{"tier_idx": <int>}``.
+    Mark a tier as announced (seen in the panel; clears the dot).
+    Body: ``{"tier_idx": <int>}``.
+
+POST /api/achievements/<category_id>/mark-toasted
+    Mark a tier's one-time unlock toast as shown.  Body: ``{"tier_idx": <int>}``.
 
 POST /api/achievements/check-phrase
     Match a user-submitted phrase against the Readme Reader doc set.
@@ -61,8 +65,17 @@ def get_achievements():
 @achievements_bp.arguments(AcknowledgeRequestSchema)
 @achievements_bp.response(200, AcknowledgeResponseSchema)
 def acknowledge_achievement(body: dict, category_id: str):
-    """Mark *category_id*'s tier as announced."""
+    """Mark *category_id*'s tier as announced (seen in the panel)."""
     changed = achievements.acknowledge(category_id, body["tier_idx"])
+    return {"ok": True, "changed": changed}
+
+
+@achievements_bp.route("/api/achievements/<category_id>/mark-toasted", methods=["POST"])
+@achievements_bp.arguments(AcknowledgeRequestSchema)
+@achievements_bp.response(200, AcknowledgeResponseSchema)
+def mark_toasted(body: dict, category_id: str):
+    """Mark *category_id*'s tier's unlock toast as shown so it fires once."""
+    changed = achievements.mark_toasted(category_id, body["tier_idx"])
     return {"ok": True, "changed": changed}
 
 

@@ -58,7 +58,16 @@ class AchievementStateSchema(Schema):
 
     tier_names = fields.List(fields.String(), required=True)
     achievements = fields.List(fields.Nested(_AchievementEntrySchema), required=True)
-    pending_announcements = fields.List(fields.Nested(_PendingAnnouncementSchema), required=True)
+    pending_announcements = fields.List(
+        fields.Nested(_PendingAnnouncementSchema),
+        required=True,
+        metadata={"description": "Milestones not yet seen in the panel; lights the notification dot."},
+    )
+    pending_toasts = fields.List(
+        fields.Nested(_PendingAnnouncementSchema),
+        required=True,
+        metadata={"description": "Milestones whose one-time unlock toast hasn't fired yet."},
+    )
     docs = fields.List(fields.Nested(_DocEntrySchema), required=True)
     media_types = fields.List(fields.Nested(_MediaTypeEntrySchema), required=True)
     hours = fields.List(fields.Nested(_HourEntrySchema), required=True)
