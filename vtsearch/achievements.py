@@ -9,8 +9,23 @@ Categories and their tier thresholds are declared statically in
 :data:`ACHIEVEMENTS`.  Counters are incremented from hook points across the
 codebase (vote toggle, dataset load completion, label import, find).  The UI
 polls :func:`get_full_state` to render the Achievements tab and to discover
-newly-unlocked tiers (``pending_announcements``); the client ACKs each
-announcement via :func:`acknowledge` so the popup doesn't fire on refresh.
+newly-unlocked tiers.
+
+Two independent server-side watermarks track how far the user has been
+notified, so a one-time toast and a persistent notification dot don't have
+to share state:
+
+- ``toasted`` drives ``pending_toasts``: the milestones whose toast hasn't
+  fired yet.  The client pops a toast for each, then advances the watermark
+  via :func:`mark_toasted`, so the toast fires exactly once per real unlock
+  and never replays on the next app start.
+- ``announced`` drives ``pending_announcements``: the milestones the user
+  hasn't yet seen in the Achievements panel.  This is what lights the
+  notification dot.  It clears only when the user opens the panel, which ACKs
+  each announcement via :func:`acknowledge`.
+
+The dot therefore stays lit until the user actually looks at the panel, while
+the toast is a fire-once affair independent of whether they ever open it.
 """
 
 from __future__ import annotations
@@ -204,6 +219,7 @@ def _ensure_state(settings: dict[str, Any]) -> dict[str, Any]:
         settings["achievement_state"] = state
     counters = state.setdefault("counters", {})
     announced = state.setdefault("announced", {})
+    toasted = state.setdefault("toasted", {})
     state.setdefault("trained_detector_ids", [])
     state.setdefault("imported_detector_ids", [])
     state.setdefault("days_seen", [])
@@ -220,6 +236,8 @@ def _ensure_state(settings: dict[str, Any]) -> dict[str, Any]:
             counters[cid] = 0
         if cid not in announced or not isinstance(announced[cid], int):
             announced[cid] = -1
+        if cid not in toasted or not isinstance(toasted[cid], int):
+            toasted[cid] = -1
     return state
 
 
@@ -480,10 +498,17 @@ def get_full_state() -> dict[str, Any]:
                 },
                 ...
             ],
+            "pending_toasts": [ <same shape as pending_announcements>, ... ],
             "docs": [{"id", "name", "path", "read"}, ...],
             "media_types": [{"id", "name", "seen"}, ...],
             "hours": [{"hour": <0..23>, "seen": <bool>}, ...],
         }
+
+    ``pending_announcements`` lights the notification dot (it clears only when
+    the user opens the panel and ACKs via :func:`acknowledge`), while
+    ``pending_toasts`` drives the one-time unlock toast (the client pops each,
+    then advances the watermark via :func:`mark_toasted`).  The two are
+    independent so the toast fires once without forcing the dot to clear.
 
     The ``media_types`` and ``hours`` arrays back the "Multi Media" and
     "Around the Clock" expandable panels: each entry's ``seen`` flag says
@@ -508,6 +533,7 @@ def get_full_state() -> dict[str, Any]:
             "tier_names": list(TIER_NAMES),
             "achievements": zeroed,
             "pending_announcements": [],
+            "pending_toasts": [],
             "docs": [{"id": d["id"], "name": d["name"], "path": d["path"], "read": False} for d in DOCS],
             "media_types": [{"id": m["id"], "name": m["name"], "seen": False} for m in MEDIA_TYPES],
             "hours": [{"hour": h, "seen": False} for h in HOURS_OF_DAY],
@@ -524,11 +550,13 @@ def get_full_state() -> dict[str, Any]:
         state = _ensure_state(s)
         achievements: list[dict[str, Any]] = []
         pending: list[dict[str, Any]] = []
+        toasts: list[dict[str, Any]] = []
         for a in ACHIEVEMENTS:
             cid = a["id"]
             counter = int(state["counters"].get(cid, 0))
             tier_idx = _current_tier_idx(cid, counter)
             announced_idx = int(state["announced"].get(cid, -1))
+            toasted_idx = int(state["toasted"].get(cid, -1))
             next_threshold: int | None = a["tiers"][tier_idx + 1] if tier_idx + 1 < len(a["tiers"]) else None
             achievements.append(
                 {
@@ -542,17 +570,19 @@ def get_full_state() -> dict[str, Any]:
                     "next_threshold": next_threshold,
                 }
             )
-            for i in range(announced_idx + 1, tier_idx + 1):
-                pending.append(
-                    {
-                        "id": cid,
-                        "name": a["name"],
-                        "icon": a["icon"],
-                        "tier_idx": i,
-                        "tier_name": TIER_NAMES[i],
-                        "threshold": a["tiers"][i],
-                    }
-                )
+
+            def _milestone(i: int, _a: dict[str, Any] = a, _cid: str = cid) -> dict[str, Any]:
+                return {
+                    "id": _cid,
+                    "name": _a["name"],
+                    "icon": _a["icon"],
+                    "tier_idx": i,
+                    "tier_name": TIER_NAMES[i],
+                    "threshold": _a["tiers"][i],
+                }
+
+            pending.extend(_milestone(i) for i in range(announced_idx + 1, tier_idx + 1))
+            toasts.extend(_milestone(i) for i in range(toasted_idx + 1, tier_idx + 1))
         read_ids = set(state.get("docs_read_ids", []))
         docs = [{"id": d["id"], "name": d["name"], "path": d["path"], "read": d["id"] in read_ids} for d in DOCS]
         seen_types = set(state.get("media_types_seen", []))
@@ -563,6 +593,7 @@ def get_full_state() -> dict[str, Any]:
             "tier_names": list(TIER_NAMES),
             "achievements": achievements,
             "pending_announcements": pending,
+            "pending_toasts": toasts,
             "docs": docs,
             "media_types": media_types,
             "hours": hours,
@@ -570,7 +601,11 @@ def get_full_state() -> dict[str, Any]:
 
 
 def acknowledge(category_id: str, tier_idx: int) -> bool:
-    """Mark a tier as announced so it isn't popped again.
+    """Mark a tier as announced (seen in the panel) so the dot clears.
+
+    Opening the panel also implies the toast need never fire, so this advances
+    the ``toasted`` watermark alongside ``announced`` (a tier the user has
+    already read about in the panel shouldn't pop a toast later).
 
     Returns True if the announced index advanced, False otherwise.
     """
@@ -584,10 +619,43 @@ def acknowledge(category_id: str, tier_idx: int) -> bool:
     def _apply(cache: dict[str, Any]) -> None:
         nonlocal advanced
         state = _ensure_state(cache)
+        if tier_idx > int(state["toasted"].get(category_id, -1)):
+            state["toasted"][category_id] = tier_idx
         prev = int(state["announced"].get(category_id, -1))
         if tier_idx <= prev:
             return
         state["announced"][category_id] = tier_idx
+        advanced = True
+
+    mutate_user(_apply)
+    return advanced
+
+
+def mark_toasted(category_id: str, tier_idx: int) -> bool:
+    """Mark a tier's unlock toast as shown so it isn't popped again.
+
+    The client calls this right after rendering the toast.  Advancing the
+    ``toasted`` watermark keeps the milestone out of future ``pending_toasts``
+    lists, so the toast fires exactly once and never replays on app restart.
+    Unlike :func:`acknowledge` it leaves ``announced`` untouched, so the
+    notification dot stays lit until the user opens the panel.
+
+    Returns True if the toasted index advanced, False otherwise.
+    """
+    if category_id not in _ACH_BY_ID:
+        return False
+    if tier_idx < 0 or tier_idx >= len(TIER_NAMES):
+        return False
+
+    advanced = False
+
+    def _apply(cache: dict[str, Any]) -> None:
+        nonlocal advanced
+        state = _ensure_state(cache)
+        prev = int(state["toasted"].get(category_id, -1))
+        if tier_idx <= prev:
+            return
+        state["toasted"][category_id] = tier_idx
         advanced = True
 
     mutate_user(_apply)
