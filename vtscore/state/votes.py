@@ -126,6 +126,25 @@ def get_find_initial_labels() -> dict[int, str]:
         return get_active_detector_context().find_initial_labels.copy()
 
 
+def set_find_scores(scores: dict[int, float]) -> None:
+    """Store the frozen per-item detector scores from a find-label run.
+
+    These are the single-pass scores the cutoff (Inclusion) slides over
+    without re-scoring, and the basis for the Stats FP/FN sweep.  In-memory
+    only.  See docs/plans/find-verification-workflow.md.
+    """
+    with _state_lock:
+        ctx = get_active_detector_context()
+        ctx.find_scores.clear()
+        ctx.find_scores.update(scores)
+
+
+def get_find_scores() -> dict[int, float]:
+    """Return a copy of the frozen find-label scores."""
+    with _state_lock:
+        return dict(get_active_detector_context().find_scores)
+
+
 # ---------------------------------------------------------------------------
 # Compound operations (atomic vote toggle / label apply)
 # ---------------------------------------------------------------------------

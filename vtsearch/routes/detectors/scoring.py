@@ -24,6 +24,7 @@ from vtsearch.schemas.detectors import (
     AutoDetectResponseSchema,
     FindLabelRequestSchema,
     FindLabelResponseSchema,
+    FindStatsResponseSchema,
 )
 from vtscore.utils.scores import sigmoid_to_finite_scores
 from vtsearch.state import snapshot_medias
@@ -221,6 +222,7 @@ def find_label(body: dict):  # noqa: C901
     from vtsearch.state import (
         apply_labels_bulk_with_click_time,
         set_find_initial_labels,
+        set_find_scores,
     )
 
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
@@ -351,6 +353,9 @@ def find_label(body: dict):  # noqa: C901
     apply_labels_bulk_with_click_time(label_pairs, replace_all=True, record_achievement=False)
 
     set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
+    # Freeze the single-pass scores so the cutoff (Inclusion) re-thresholds
+    # without re-scoring, and the Stats FP/FN sweep can read them.
+    set_find_scores({entry["id"]: entry["score"] for entry in results})
 
     from vtscore.detectors.registry import set_find_mode
 
@@ -475,6 +480,85 @@ def _score_detector_for_auto_detect(
     except Exception:
         logger.exception("Auto-detect failed for detector %s", name)
         return None
+
+
+@detector_scoring_bp.route("/api/find/stats", methods=["GET"])
+@detector_scoring_bp.response(200, FindStatsResponseSchema)
+def find_stats():
+    """Detector-evaluation stats over the Find-mode *verified* sample.
+
+    Crosses each verified item's human vote against the detector's original
+    call (``find_initial_labels``) for a 2x2 confusion, and sweeps the
+    calibrated threshold across inclusion -10..10 (from the cached fold
+    orderings) to report false-positive / false-negative counts at every
+    cutoff.  Pure read; no new state.  See docs/plans/find-verification-workflow.md.
+    """
+    from vtscore.state.core import get_active_detector_context
+    from vtscore.training.thresholds import threshold_from_fold_orderings
+    from vtsearch.state import get_inclusion
+
+    det_ctx = get_active_detector_context()
+    good = det_ctx.good_votes
+    bad = det_ctx.bad_votes
+    initial = det_ctx.find_initial_labels
+    scores = det_ctx.find_scores
+
+    confirmed_good = confirmed_bad = culled_fp = rescued_fn = 0
+    for cid in det_ctx.verified_ids:
+        human = "good" if cid in good else ("bad" if cid in bad else None)
+        if human is None:
+            continue
+        detector_label = initial.get(cid)
+        if human == "good" and detector_label == "good":
+            confirmed_good += 1
+        elif human == "bad" and detector_label == "bad":
+            confirmed_bad += 1
+        elif human == "bad" and detector_label == "good":
+            culled_fp += 1
+        elif human == "good" and detector_label == "bad":
+            rescued_fn += 1
+
+    verified_count = confirmed_good + confirmed_bad + culled_fp + rescued_fn
+    agreements = confirmed_good + confirmed_bad
+    corrections = culled_fp + rescued_fn
+    agreement_rate = agreements / verified_count if verified_count else 0.0
+    pos_reviewed = confirmed_good + culled_fp
+    precision_on_reviewed = confirmed_good / pos_reviewed if pos_reviewed else 0.0
+
+    # Sweep FP/FN over the verified sample at every inclusion's threshold.
+    # Verified-bad above the line are false positives; verified-good below it
+    # are false negatives.  Thresholds come from the cached fold orderings
+    # (inclusion-independent), so this is cheap.
+    cache = det_ctx.calibration_cache
+    orderings = cache[1][0] if (cache is not None and cache[1][1] is None) else []
+    vg_scores = [scores[c] for c in det_ctx.verified_ids if c in good and c in scores]
+    vb_scores = [scores[c] for c in det_ctx.verified_ids if c in bad and c in scores]
+    sweep = []
+    for incl in range(-10, 11):
+        t_i = threshold_from_fold_orderings(orderings, incl) if orderings else det_ctx.threshold
+        sweep.append(
+            {
+                "inclusion": incl,
+                "threshold": round(t_i, 4),
+                "false_pos": sum(1 for s in vb_scores if s >= t_i),
+                "false_neg": sum(1 for s in vg_scores if s < t_i),
+            }
+        )
+
+    return {
+        "verified_count": verified_count,
+        "confirmed_good": confirmed_good,
+        "confirmed_bad": confirmed_bad,
+        "culled_false_pos": culled_fp,
+        "rescued_false_neg": rescued_fn,
+        "agreements": agreements,
+        "corrections": corrections,
+        "agreement_rate": round(agreement_rate, 4),
+        "precision_on_reviewed": round(precision_on_reviewed, 4),
+        "inclusion": get_inclusion(),
+        "threshold": round(det_ctx.threshold, 4),
+        "sweep": sweep,
+    }
 
 
 @detector_scoring_bp.route("/api/auto-detect", methods=["POST"])

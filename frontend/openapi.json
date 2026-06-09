@@ -2735,6 +2735,89 @@
         ],
         "type": "object"
       },
+      "FindStatsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement_rate": {
+            "type": "number"
+          },
+          "agreements": {
+            "type": "integer"
+          },
+          "confirmed_bad": {
+            "type": "integer"
+          },
+          "confirmed_good": {
+            "type": "integer"
+          },
+          "corrections": {
+            "type": "integer"
+          },
+          "culled_false_pos": {
+            "type": "integer"
+          },
+          "inclusion": {
+            "type": "integer"
+          },
+          "precision_on_reviewed": {
+            "type": "number"
+          },
+          "rescued_false_neg": {
+            "type": "integer"
+          },
+          "sweep": {
+            "items": {
+              "$ref": "#/components/schemas/FindStatsSweepPoint"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "verified_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agreement_rate",
+          "agreements",
+          "confirmed_bad",
+          "confirmed_good",
+          "corrections",
+          "culled_false_pos",
+          "inclusion",
+          "precision_on_reviewed",
+          "rescued_false_neg",
+          "sweep",
+          "threshold",
+          "verified_count"
+        ],
+        "type": "object"
+      },
+      "FindStatsSweepPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "false_neg": {
+            "type": "integer"
+          },
+          "false_pos": {
+            "type": "integer"
+          },
+          "inclusion": {
+            "type": "integer"
+          },
+          "threshold": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "false_neg",
+          "false_pos",
+          "inclusion",
+          "threshold"
+        ],
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -10813,6 +10896,31 @@
         "summary": "Pre-flight check: report how many detector labels can be resolved.",
         "tags": [
           "detector_find"
+        ]
+      }
+    },
+    "/api/find/stats": {
+      "get": {
+        "description": "Crosses each verified item's human vote against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (from the cached fold\norderings) to report false-positive / false-negative counts at every\ncutoff.  Pure read; no new state.  See docs/plans/find-verification-workflow.md.",
+        "operationId": "find_stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindStatsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Detector-evaluation stats over the Find-mode *verified* sample.",
+        "tags": [
+          "detector_scoring"
         ]
       }
     },

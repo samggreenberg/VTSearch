@@ -650,6 +650,38 @@ class DetectorLabelVoteResponseSchema(Schema):
     action = fields.String(required=True)
 
 
+class FindStatsSweepPointSchema(Schema):
+    """One point on the Stats FP/FN-vs-inclusion sweep."""
+
+    inclusion = fields.Integer(required=True)
+    threshold = fields.Float(required=True)
+    false_pos = fields.Integer(required=True)
+    false_neg = fields.Integer(required=True)
+
+
+class FindStatsResponseSchema(Schema):
+    """Response for ``GET /api/find/stats`` (detector evaluation over the
+    verified sample). See docs/plans/find-verification-workflow.md."""
+
+    # 2x2 confusion of human vote vs. detector's call (find_initial_labels)
+    # over the verified items.
+    verified_count = fields.Integer(required=True)
+    confirmed_good = fields.Integer(required=True)
+    confirmed_bad = fields.Integer(required=True)
+    culled_false_pos = fields.Integer(required=True)
+    rescued_false_neg = fields.Integer(required=True)
+    # Derived rates.
+    agreements = fields.Integer(required=True)
+    corrections = fields.Integer(required=True)
+    agreement_rate = fields.Float(required=True)
+    precision_on_reviewed = fields.Float(required=True)
+    # Run context.
+    inclusion = fields.Integer(required=True)
+    threshold = fields.Float(required=True)
+    # FP/FN at every inclusion from -10..10 over the verified sample.
+    sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
+
+
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
@@ -690,5 +722,7 @@ __all__ = [
     "FindLabelResponseSchema",
     "FindRequestSchema",
     "FindResponseSchema",
+    "FindStatsResponseSchema",
+    "FindStatsSweepPointSchema",
     "PendingLabelsetMoveSchema",
 ]
