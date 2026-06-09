@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subject, Subscription } from 'rxjs';
+import { combineLatest, Subject, Subscription } from 'rxjs';
 import { finalize, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
@@ -20,7 +20,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
-import { SortStateService } from '../../services/sort-state.service';
+import { SortStateService, SortedItem } from '../../services/sort-state.service';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
@@ -65,6 +65,23 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Verified ids (Find mode): the right-panel confirmed pile. */
   verifiedIds: Set<number> = new Set();
+  /**
+   * The left work queue: the scored ranking with verified items removed. The
+   * left panel is the *unverified* pile — once an item is verified it knows
+   * its colour and moves to the right, so it drops off the left (and out of
+   * the stripe).  Recomputed only when the ranking or the verified set
+   * changes (not every change-detection cycle) so the media-list / stripe
+   * don't rebuild needlessly.  Fed to both the media-list and the stripe so
+   * their index spaces stay aligned for stripe-click navigation.
+   */
+  unverifiedSortOrder: SortedItem[] | null = null;
+  /**
+   * Stable empty vote sets handed to the left panel in Find mode: the left
+   * shows only unverified items, which carry no colour, so the media-list and
+   * stripe must never paint green/red there.  A shared frozen reference keeps
+   * the inputs identity-stable across change detection.
+   */
+  readonly noVotes: Set<number> = new Set();
   /** Export modal visibility + the label filter it opens on. */
   showExport = false;
   exportFilter: LabelFilter = 'good';
@@ -106,11 +123,21 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit(): void {
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
+    // Find mode: an item's good/bad is the detector's presumption until a
+    // human verifies it, so the big buttons read neutral and a click verifies
+    // (rather than toggling the presumption off).  Cleared in ngOnDestroy.
+    this.voteState.setFindMode(true);
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
-    this.voteState.verifiedIds$
+    // The left work queue = the ranking minus verified items. Recompute it
+    // only when the ranking or the verified set changes.
+    combineLatest([this.sortState.sortOrder$, this.voteState.verifiedIds$])
       .pipe(takeUntil(this.destroy$))
-      .subscribe((ids) => (this.verifiedIds = ids));
+      .subscribe(([order, verified]) => {
+        this.verifiedIds = verified;
+        this.unverifiedSortOrder =
+          order && verified.size > 0 ? order.filter((item) => !verified.has(item.id)) : order;
+      });
     this.loadSettings();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
@@ -195,6 +222,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.stopProgressPolling();
     this.destroy$.next();
     this.destroy$.complete();
+    this.voteState.setFindMode(false);
     this.voteState.stopPolling();
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);

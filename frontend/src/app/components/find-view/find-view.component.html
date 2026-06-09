@@ -2,11 +2,11 @@
   <div class="panel-left">
     <vt-left-panel
       [medias]="mediaState.medias"
-      [sortOrder]="sortState.sortOrder"
+      [sortOrder]="unverifiedSortOrder"
       [threshold]="sortState.threshold"
       [selectedId]="mediaState.selectedId"
-      [goodVotes]="voteState.goodVotes"
-      [badVotes]="voteState.badVotes"
+      [goodVotes]="noVotes"
+      [badVotes]="noVotes"
       [sortMode]="sortState.sortMode"
       [selectMode]="sortState.selectMode"
       [inclusion]="sortState.inclusion"
