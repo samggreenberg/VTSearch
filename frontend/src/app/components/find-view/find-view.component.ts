@@ -161,11 +161,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       });
 
     // Run find-label to score and label all medias — unless we're returning
-    // from the Browser after a "Remove from Good" cull. In that case the
-    // backend vote lists already reflect the removed items (now Bad), and the
-    // loadVotes() above refreshes them; re-running find here would re-score
-    // with the unchanged model and re-promote those items to Good, undoing
-    // the cull. Keep the cull instead (the user's decision).
+    // from the Browser after verifying a selection there. In that case the
+    // backend vote lists already reflect the verified items (now Verified
+    // Good/Bad), and the loadVotes() above refreshes them; re-running find here
+    // would re-score with the unchanged model and could re-promote those items,
+    // undoing the verification. Keep the verifications instead.
     // Seed the inclusion slider from the active detector's context value
     // (GET /api/inclusion resolves per-detector, falling back to the
     // user-settings default the first time it's read). This keeps Find's
@@ -546,36 +546,75 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Browse the positive results of this Find run as their own UMAP projection.
-   * The positives are the current "good" list (the above-threshold items plus
-   * any manual corrections). We stash the ids for the browse view and navigate
-   * to `/browse/:datasetId?subset=1`, where they're UMAP'd on their own.
+   * Ids of the unverified positives: the above-threshold items (``goodVotes``)
+   * the human hasn't acted on yet (``goodVotes − verifiedIds``). The left
+   * work-queue actions (Browse / To Dataset / Export) all scope over exactly
+   * this set, as opposed to the right panel's full-good-set actions.
+   */
+  private unverifiedGoodIds(): number[] {
+    const verified = this.voteState.verifiedIds;
+    return Array.from(this.voteState.goodVotes).filter((id) => !verified.has(id));
+  }
+
+  /**
+   * Browse the full positive set of this Find run (verified + unverified good)
+   * as their own UMAP projection. Right-panel action; the left panel's Browse
+   * scopes to the unverified positives instead ({@link onBrowseUnverified}).
    */
   onBrowse(): void {
+    this.browseIds(Array.from(this.voteState.goodVotes), 'positives');
+  }
+
+  /**
+   * Browse only the unverified positives (above the cutoff, not yet acted on).
+   * Verifying a selection in the browse drops it from the canvas — it's no
+   * longer unverified. Left-panel work-queue action.
+   */
+  onBrowseUnverified(): void {
+    this.browseIds(this.unverifiedGoodIds(), 'unverified positives');
+  }
+
+  /**
+   * Stash *ids* for the browse view and navigate to
+   * `/browse/:datasetId?subset=1`, where they're UMAP'd on their own. *suffix*
+   * names the subset in the browse header (e.g. "<detector> — positives").
+   */
+  private browseIds(ids: number[], suffix: string): void {
     const datasetId = this.activeContext.datasetId;
-    if (!datasetId) return;
-    const ids = Array.from(this.voteState.goodVotes);
-    if (ids.length === 0) return;
+    if (!datasetId || ids.length === 0) return;
     const modelId = this.activeContext.modelId;
     const detectorName =
       this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
     this.browseSubset.set({
       datasetId,
       ids,
-      label: `${detectorName} — positives`,
+      label: `${detectorName} — ${suffix}`,
     });
     this.router.navigate(['/browse', datasetId], { queryParams: { subset: 1 } });
   }
 
   /**
-   * Promote the current Goods pile into its own saved dataset. The
-   * promoted items keep their origins and embeddings; the new dataset
-   * gets a fresh created date but inherits this dataset's death date.
-   * We prompt for a name (prefilled "<dataset> <detector> Results"),
-   * then create + register it and confirm with a toast (staying in Find).
+   * Promote the full Goods pile (verified + unverified) into its own saved
+   * dataset. Right-panel action; the left panel promotes the unverified
+   * positives instead ({@link onToDatasetUnverified}).
    */
   onToDataset(): void {
-    const ids = Array.from(this.voteState.goodVotes);
+    this.toDatasetFromIds(Array.from(this.voteState.goodVotes));
+  }
+
+  /** Promote only the unverified positives into their own dataset. */
+  onToDatasetUnverified(): void {
+    this.toDatasetFromIds(this.unverifiedGoodIds());
+  }
+
+  /**
+   * Promote *ids* into their own saved dataset. The promoted items keep their
+   * origins and embeddings; the new dataset gets a fresh created date but
+   * inherits this dataset's death date. We prompt for a name (prefilled
+   * "<dataset> <detector> Results"), then create + register it and confirm
+   * with a toast (staying in Find).
+   */
+  private toDatasetFromIds(ids: number[]): void {
     if (ids.length === 0) return;
     const modelId = this.activeContext.modelId;
     const detectorName =

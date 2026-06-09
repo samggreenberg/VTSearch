@@ -67,7 +67,7 @@ export class MediasApiService {
    *
    * Mirrors {@link vote} for a batch (idempotent, image-level — no region
    * boxes), persisting the detector labelset once server-side.  Used by the
-   * Browser's "Remove from Good" cull.  Stays on plain HttpClient (like
+   * Browser's "Verified Good" / "Verified Bad" actions.  Stays on plain HttpClient (like
    * {@link addToPile}) because the bulk route isn't modelled in the generated
    * client; the active-context interceptor still attaches the dataset /
    * detector headers the route requires.

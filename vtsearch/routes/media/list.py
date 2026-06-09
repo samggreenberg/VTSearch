@@ -648,11 +648,12 @@ def vote_media_bulk(body: dict):
     """Apply one absolute vote target to many medias in a single request.
 
     Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to
-    ``target`` with the same idempotent semantics, then the detector
-    labelset is persisted **once** rather than per id.  Bulk votes are
-    image-level (no region boxes).  Powers the Browser's "Remove from Good"
-    cull, which marks a hand-selected set of false-positives ``bad`` and
-    drops them from the browse.
+    ``target`` with the same idempotent semantics (including Find-mode
+    verification — a good/bad target marks the item verified), then the
+    detector labelset is persisted **once** rather than per id.  Bulk votes
+    are image-level (no region boxes).  Powers the Browser's "Verified Good" /
+    "Verified Bad" actions, which mark a hand-selected set good/bad, verify
+    them, and drop them from the browse.
 
     Ids that aren't in the loaded dataset are skipped and reported back in
     ``missing``; ``changed`` counts only the ids whose state actually moved

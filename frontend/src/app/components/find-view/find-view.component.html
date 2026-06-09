@@ -28,7 +28,9 @@
       (mediaSelect)="onMediaSelect($event)"
       (mediaVote)="onHoverVote($event)"
       (inclusionChange)="onInclusionChange($event)"
-      (unverifiedExport)="onExportRequest('unverified')"
+      (browse)="onBrowseUnverified()"
+      (toDataset)="onToDatasetUnverified()"
+      (unverifiedExport)="onExportRequest('unverified_good')"
       (sortCancel)="onSortCancel()"
     />
   </div>
