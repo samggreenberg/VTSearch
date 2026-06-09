@@ -440,9 +440,12 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     return 'upload';
   }
 
-  /** Modal heading, noting the server-side partition when present. */
+  /** Modal heading, noting the server-side partition (and category slice) when present. */
   get modalTitle(): string {
-    if (this.serverFilter === 'unverified') return 'Export Unverified';
+    if (this.serverFilter === 'unverified') {
+      // The left work-queue export opens on the above-threshold good slice.
+      return this.labelFilter === 'good' ? 'Export Unverified Good' : 'Export Unverified';
+    }
     if (this.serverFilter === 'verified') return 'Export Verified';
     return 'Export';
   }
