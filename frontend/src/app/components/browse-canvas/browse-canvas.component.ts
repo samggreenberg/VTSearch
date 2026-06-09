@@ -52,9 +52,11 @@ export interface BrowseContextMenuEvent {
   bounds: DOMRect;
 }
 
-/** How much larger the hovered cell is drawn relative to its neighbours so it
- *  lifts off the grid. The border is reserved for selection state, so hover is
- *  signalled by this size bump + a soft drop shadow instead of a ring. */
+/** How much larger a hovered *flat-density* cell (audio/text — no thumbnail) is
+ *  drawn relative to its neighbours so it lifts off the grid. The border is
+ *  reserved for selection state, so hover is signalled by this size bump + a
+ *  soft drop shadow instead of a ring. Thumbnail cells ignore this and size
+ *  their break-out rectangle by the neighbour-centre rule (`hoverThumbRect`). */
 const HOVER_RADIUS_SCALE = 1.38;
 
 @Component({
@@ -1123,19 +1125,24 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   ): void {
     // A cell with one item is drawn as a disc (slightly smaller than the cell);
     // multi-item cells keep their full shape so they tile the space. The hovered
-    // cell instead passes `trim`: its outline is the cell clipped to the
-    // thumbnail's contain-fit rectangle, so the enlarged tile is just the
-    // thumbnail with the protruding corners lopped off rather than background
-    // bars painted over the neighbours.
+    // cell instead passes `trim`: a plain rectangle of the thumbnail's native
+    // aspect ratio, so the enlarged tile breaks out of the bin silhouette and
+    // shows the whole frame (no hex/square clip, no background bars).
     const single = cell.count === 1;
-    if (trim) this.geom.traceTrimmedCell(ctx, cx, cy, radius, trim.hw, trim.hh);
-    else this.geom.traceCell(ctx, cx, cy, radius, single);
+    if (trim) {
+      ctx.beginPath();
+      ctx.rect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
+      ctx.closePath();
+    } else {
+      this.geom.traceCell(ctx, cx, cy, radius, single);
+    }
 
     // Image / video: paint the central item's thumbnail clipped to the cell.
     // Until it loads, fall back to the density shading below so the cell is
     // never blank. Grid cells cover-fit (fill the bin, cropping the edges); the
-    // hovered cell instead draws the thumbnail contain-fit into `trim`, which
-    // its trimmed outline matches, so the whole frame shows with no letterbox.
+    // hovered cell instead draws the whole thumbnail to fill `trim`, whose
+    // rectangle already carries the image's aspect ratio, so it shows undistorted
+    // and uncropped.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
     if (thumb) {
       ctx.save();
@@ -1206,13 +1213,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     cmap: ResolvedColormap,
     selectionActive: boolean,
   ): void {
-    const bumped = radius * HOVER_RADIUS_SCALE;
-    // With a thumbnail, trim the tile to the thumbnail's contain-fit rectangle
-    // so the enlarged cell is just the (whole) thumbnail — no background bars
-    // reaching over the neighbours. Without one (flat density), keep the full
-    // bumped cell.
+    // A hovered thumbnail breaks out of its bin: it's shown whole at its native
+    // aspect ratio as a plain rectangle (no silhouette), sized to grow until its
+    // edge just reaches the nearest neighbour cell's centre (`hoverThumbRect`).
+    // A non-thumbnail (flat density) cell has no such rectangle, so it keeps its
+    // silhouette and simply lifts off with a fixed size bump.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
-    const trim = thumb ? this.containRect(thumb, bumped) : null;
+    const trim = thumb ? this.hoverThumbRect(thumb, radius) : null;
+    const bumped = radius * HOVER_RADIUS_SCALE;
 
     // Cast a single clean drop shadow from an opaque base shape first, then
     // paint the real (shadow-free) cell on top so the fill/border don't each
@@ -1221,13 +1229,20 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
     ctx.shadowBlur = Math.max(4, radius * 0.3);
     ctx.shadowOffsetY = Math.max(1, radius * 0.1);
-    if (trim) this.geom.traceTrimmedCell(ctx, cx, cy, bumped, trim.hw, trim.hh);
-    else this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
+    if (trim) {
+      ctx.beginPath();
+      ctx.rect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
+      ctx.closePath();
+    } else {
+      this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
+    }
     ctx.fillStyle = this.themeColor('--bg-body');
     ctx.fill();
     ctx.restore();
 
-    this.drawHex(ctx, cx, cy, bumped, cell, cmap, selectionActive, trim);
+    // `radius` is unused for the shape when `trim` is set (the rectangle drives
+    // it), so the un-bumped radius is fine there; flat-density cells use the bump.
+    this.drawHex(ctx, cx, cy, trim ? radius : bumped, cell, cmap, selectionActive, trim);
   }
 
   /** Cover-fit an image over the hex's 2*radius square (the path must be clipped). */
@@ -1245,13 +1260,25 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
   }
 
-  /** Half-extents of an image contain-fit into the cell's bounding box at the
-   *  given `radius`. The fit box follows the shape (hex is wider than tall,
-   *  square is even) so wide thumbnails aren't re-cropped by the silhouette. */
-  private containRect(img: HTMLImageElement, radius: number): { hw: number; hh: number } {
-    const { hw, hh } = this.geom.contentHalfExtent(radius);
-    const scale = Math.min((hw * 2) / img.naturalWidth, (hh * 2) / img.naturalHeight);
-    return { hw: (img.naturalWidth * scale) / 2, hh: (img.naturalHeight * scale) / 2 };
+  /**
+   * Half-extents of a hovered thumbnail. On hover the thumbnail breaks out of
+   * its bin and is shown whole at its native aspect ratio, grown as large as
+   * possible under one rule: no neighbouring cell's centre may be covered. The
+   * rectangle (aspect = image width / height) is centred on the cell, so a
+   * neighbour at screen offset `(ox, oy)` stays uncovered while the half-height
+   * `H` satisfies `H ≤ max(|ox| / aspect, |oy|)`; the binding neighbour is the
+   * tightest of those (four for a square, six for a hex), and the rectangle's
+   * edge then just touches that centre. Wide images grow until they reach the
+   * side neighbours, tall ones until they reach the top/bottom — each axis
+   * limited by whichever neighbour it would otherwise overrun.
+   */
+  private hoverThumbRect(img: HTMLImageElement, radius: number): { hw: number; hh: number } {
+    const aspect = img.naturalWidth / img.naturalHeight;
+    let hh = Infinity;
+    for (const { dx, dy } of this.geom.neighborOffsets()) {
+      hh = Math.min(hh, Math.max((Math.abs(dx) * radius) / aspect, Math.abs(dy) * radius));
+    }
+    return { hw: aspect * hh, hh };
   }
 
   /**
