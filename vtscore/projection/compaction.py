@@ -43,12 +43,18 @@ _MAX_UNITS = 3000
 
 def _cluster(coords: np.ndarray, min_cluster_size: int) -> np.ndarray:
     """HDBSCAN labels for *coords* (``-1`` marks noise).  Deterministic."""
+    import warnings
+
     from sklearn.cluster import HDBSCAN
 
     size = max(2, min(min_cluster_size, coords.shape[0]))
-    # copy=True so HDBSCAN never overwrites *coords* in place — the centroid and
-    # radius computation downstream reads the same array.
-    return np.asarray(HDBSCAN(min_cluster_size=size, copy=True).fit_predict(coords))
+    # Feed HDBSCAN a throwaway copy: its ``copy`` default may overwrite the input
+    # in place, and the centroid/radius computation downstream reads *coords*.
+    # The FutureWarning is about that very default flipping in a later sklearn, so
+    # it's moot once we pass a copy.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        return np.asarray(HDBSCAN(min_cluster_size=size).fit_predict(coords.copy()))
 
 
 def _build_units(coords: np.ndarray, labels: np.ndarray) -> tuple[list[np.ndarray], np.ndarray, np.ndarray]:
