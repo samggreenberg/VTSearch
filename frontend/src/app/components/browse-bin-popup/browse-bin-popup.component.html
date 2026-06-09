@@ -27,7 +27,6 @@
   <cdk-virtual-scroll-viewport
     [itemSize]="rowSize"
     [style.height.px]="bodyHeight"
-    [style.width.px]="isGrid ? 280 : null"
     class="bin-popup-body"
     [class.grid]="isGrid"
     (mouseleave)="onListLeave()">
@@ -37,7 +36,7 @@
       [class.grid]="isGrid"
       [style.height.px]="rowSize"
       [style.--popup-cols]="columns"
-      [style.--popup-cell.px]="gridGoalWidth">
+      [style.--popup-cell]="gridGoalWidth + 'px'">
       @for (id of row; track trackById($index, id)) {
         <div
           class="bin-popup-entry"
