@@ -4513,6 +4513,12 @@
               "type": "number"
             },
             "type": "object"
+          },
+          "verified": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -4521,7 +4527,8 @@
           "good",
           "labelset_bad_count",
           "labelset_good_count",
-          "learned_scores"
+          "learned_scores",
+          "verified"
         ],
         "type": "object"
       },
@@ -11281,7 +11288,7 @@
             }
           },
           {
-            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), or ``corrections`` (entries where the user changed the detector's original label). Overrides ``goods_only``.",
+            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), ``corrections`` (entries where the user changed the detector's original label), ``unverified`` (Find work-queue items the human hasn't acted on), or ``verified`` (items the human has confirmed). Overrides ``goods_only``.",
             "in": "query",
             "name": "label_filter",
             "required": false,
@@ -11292,7 +11299,9 @@
                 "good",
                 "bad",
                 "both",
-                "corrections"
+                "corrections",
+                "unverified",
+                "verified"
               ],
               "type": "string"
             }

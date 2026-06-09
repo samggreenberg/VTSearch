@@ -272,6 +272,10 @@ class VoteSnapshot(NamedTuple):
     bad_votes: dict[int, None]
     vote_region_boxes: dict[int, tuple[float, float, float, float]]
     safe: bool
+    # Find-mode: ids the human has explicitly verified this session, captured
+    # under the same lock so verified/unverified export filters stay atomic
+    # with good_votes/bad_votes.  Empty outside Find mode.
+    verified_ids: dict[int, None]
 
 
 def validated_vote_snapshot() -> VoteSnapshot:
@@ -333,11 +337,12 @@ def validated_vote_snapshot() -> VoteSnapshot:
         # match the active dataset) is the race / stale-state scenario and
         # is the only one we refuse to compose for.
         if det_ctx.detector_id and det_ctx.votes_dataset_id and det_ctx.votes_dataset_id != ds_ctx.dataset_id:
-            return VoteSnapshot(snap, {}, {}, {}, safe=False)
+            return VoteSnapshot(snap, {}, {}, {}, safe=False, verified_ids={})
         return VoteSnapshot(
             snap,
             dict(det_ctx.good_votes),
             dict(det_ctx.bad_votes),
             dict(det_ctx.vote_region_boxes),
             safe=True,
+            verified_ids=dict(det_ctx.verified_ids),
         )
