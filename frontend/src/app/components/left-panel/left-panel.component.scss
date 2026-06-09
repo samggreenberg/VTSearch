@@ -122,7 +122,32 @@
 }
 
 .view-controls-slot {
+  margin-left: var(--space-xs);
+}
+
+// Find mode: compact icon button for "export the unverified work queue",
+// pushed to the right edge of the header next to the view controls.
+.unverified-export-btn {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2xs, 4px);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--border-strong, var(--border-subtle));
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 }
 
 .media-list-container {

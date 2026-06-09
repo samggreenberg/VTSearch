@@ -14,6 +14,18 @@
         <h3 class="images-header-title">
           {{ mediaTypeName }}s ({{ medias.length | number }})
         </h3>
+        <button
+          class="goods-action-btn unverified-export-btn"
+          [disabled]="disabled"
+          (click)="unverifiedExport.emit()"
+          aria-label="Export unverified"
+          title="Export the untouched work queue (unverified labels) — e.g. to re-import as a dataset"
+        >
+          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 14 20 9 15 4"></polyline>
+            <path d="M4 20v-7a4 4 0 0 1 4-4h12"></path>
+          </svg>
+        </button>
         <vt-view-controls
           side="left"
           [currentMediaType]="medias.length > 0 ? medias[0].media_type : ''"

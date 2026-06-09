@@ -30,6 +30,21 @@
   flex-shrink: 0;
 }
 
+// Find mode: heading word + count chip, with the "[N] Unverified …" folded
+// count stacked beneath it.
+.vote-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.folded-note {
+  font-size: var(--font-xs, var(--font-sm));
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
 h3 {
   font-size: var(--font-sm);
   letter-spacing: 0.05em;

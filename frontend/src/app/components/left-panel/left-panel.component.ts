@@ -97,6 +97,8 @@ export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Output() indicatorClick = new EventEmitter<string>();
   /** User clicked the Cancel button on the running sort progress bar. */
   @Output() sortCancel = new EventEmitter<void>();
+  /** Find mode: dump the untouched work queue (unverified labels) for re-import. */
+  @Output() unverifiedExport = new EventEmitter<void>();
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();
   @Output() autopilotRefocus = new EventEmitter<void>();

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import app as app_module
 from vtscore.state.core import get_active_detector_context
+from vtscore.state.votes import rethreshold_unverified_find_items
 from vtsearch.state import set_find_initial_labels, set_find_scores, set_vote
 
 
@@ -94,6 +95,65 @@ class TestUnverifiedExport:
             app_module.medias[3]["md5"]: "good",
             app_module.medias[4]["md5"]: "bad",
         }
+
+
+class TestRethresholdUnverified:
+    """Sliding the cutoff re-splits unverified items only; verified items hold."""
+
+    def _setup(self):
+        ctx = get_active_detector_context()
+        ctx.find_mode = True
+        ctx.threshold = 0.5
+        set_find_scores({1: 0.9, 2: 0.8, 3: 0.2, 4: 0.1})
+        # Initial split at 0.5: 1,2 good; 3,4 bad.  Human verified id1 (good).
+        app_module.good_votes.clear()
+        app_module.bad_votes.clear()
+        app_module.good_votes.update({1: None, 2: None})
+        app_module.bad_votes.update({3: None, 4: None})
+        ctx.verified_ids.clear()
+        ctx.verified_ids.update({1: None})
+        return ctx
+
+    def test_raise_cutoff_demotes_unverified(self):
+        ctx = self._setup()
+        ctx.threshold = 0.85  # now only id1 (0.9) clears it
+        rethreshold_unverified_find_items()
+        # id1 verified-good stays good even though... it still clears 0.85 anyway;
+        # id2 (0.8) is unverified and now below the line -> bad.
+        assert 1 in app_module.good_votes
+        assert 2 in app_module.bad_votes
+        assert 3 in app_module.bad_votes
+        assert 4 in app_module.bad_votes
+
+    def test_verified_item_holds_against_cutoff(self):
+        ctx = self._setup()
+        # Verify id2 as good, then raise the cutoff above its score.
+        ctx.verified_ids.update({2: None})
+        ctx.threshold = 0.85
+        rethreshold_unverified_find_items()
+        # id2 is verified-good; the cutoff must not demote it.
+        assert 2 in app_module.good_votes
+        assert 2 not in app_module.bad_votes
+
+    def test_lower_cutoff_promotes_unverified(self):
+        ctx = self._setup()
+        ctx.threshold = 0.05  # everything clears it
+        rethreshold_unverified_find_items()
+        for cid in (1, 2, 3, 4):
+            assert cid in app_module.good_votes
+
+    def test_noop_outside_find_mode(self):
+        ctx = self._setup()
+        ctx.find_mode = False
+        ctx.threshold = 0.85
+        rethreshold_unverified_find_items()
+        # No re-split: the initial 0.5 assignment stands.
+        assert 2 in app_module.good_votes
+
+    def test_inclusion_post_returns_threshold(self, client):
+        resp = client.post("/api/inclusion", json={"inclusion": 0})
+        assert resp.status_code == 200
+        assert "threshold" in resp.get_json()
 
 
 class TestFindStats:

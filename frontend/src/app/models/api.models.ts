@@ -34,6 +34,9 @@ export type Media = MediaIdsListResponse &
 export interface VotesResponse {
   good: number[];
   bad: number[];
+  /** Find mode: ids the human has explicitly verified (acted on). Empty
+   *  outside Find mode. Drives the left work-queue vs. right verified split. */
+  verified?: number[];
   click_times: Record<string, number>;
   learned_scores: Record<string, number>;
   labelset_good_count?: number;

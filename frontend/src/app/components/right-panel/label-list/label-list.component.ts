@@ -25,6 +25,17 @@ export interface LabelEntry {
 export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterViewChecked {
   @Input() label: 'good' | 'bad' = 'good';
   @Input() ids: number[] = [];
+  /**
+   * Overrides the bucket heading word ("Goods"/"Bads"). Find mode passes
+   * "Verified Good" / "Verified Bad" so the bucket reads as the confirmed pile.
+   */
+  @Input() headingLabel: string | null = null;
+  /**
+   * Find mode: a small "[N] Unverified Good/Bad" line folded under the heading,
+   * counting the items still on the left work queue that the bucket's actions
+   * (Browse / Export / To Dataset) act on alongside the shown verified items.
+   */
+  @Input() foldedNote: string | null = null;
   @Input() medias: Media[] = [];
   @Input() clickTimes: Record<string, number> = {};
   @Input() learnedScores: Record<string, number> = {};

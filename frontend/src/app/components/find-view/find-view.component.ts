@@ -7,6 +7,9 @@ import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
+import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
+import { FindStatsModalComponent } from '../modals/find-stats-modal/find-stats-modal.component';
+import type { LabelFilter } from '../../services/sorting-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
@@ -29,7 +32,15 @@ import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/gr
 @Component({
   selector: 'vt-find-view',
   standalone: true,
-  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent, ProgressBarComponent],
+  imports: [
+    CommonModule,
+    LeftPanelComponent,
+    CenterPanelComponent,
+    RightPanelComponent,
+    ProgressBarComponent,
+    ExportModalComponent,
+    FindStatsModalComponent,
+  ],
   templateUrl: './find-view.component.html',
   styleUrl: './find-view.component.scss',
 })
@@ -51,6 +62,14 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
+
+  /** Verified ids (Find mode): the right-panel confirmed pile. */
+  verifiedIds: Set<number> = new Set();
+  /** Export modal visibility + the label filter it opens on. */
+  showExport = false;
+  exportFilter: LabelFilter = 'good';
+  /** Detector-evaluation Stats modal visibility. */
+  showStats = false;
 
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
@@ -89,6 +108,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
+    this.voteState.verifiedIds$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((ids) => (this.verifiedIds = ids));
     this.loadSettings();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
@@ -233,20 +255,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');
           this.sortState.setSortProgress(0, 0);
-          // Select the item just above the threshold (last item with score >= threshold)
-          if (threshold != null && sorted.length > 0) {
-            let aboveId: number | null = null;
-            for (const item of sorted) {
-              if (item.score >= threshold) {
-                aboveId = item.id;
-              } else {
-                break;
-              }
-            }
-            if (aboveId != null) {
-              this.mediaState.selectMedia(aboveId);
-            }
-          }
+          // Seed the centre on the marginal positive (lowest item ≥ cutoff).
+          // With nothing verified yet this is the same rule auto-advance uses,
+          // so seed and advance unify.
+          this.queueEmptyNotified = false;
+          this.advanceToMarginalPositive();
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
         },
@@ -405,13 +418,14 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Inclusion change in Find: persist to the active detector's context (the
-   * same per-detector value Train edits, via POST /api/inclusion), then
-   * re-score. set_inclusion invalidates the cached MLP, so runFindLabel
-   * retrains at the new inclusion — both the live and cold paths converge on
-   * a model trained at the value shown in the slider. The settings store only
-   * holds the default that seeds a fresh detector; this does not change the
-   * inclusion of any other detector's context.
+   * Inclusion change in Find: a pure cutoff slide, **no retrain**. Inclusion
+   * is the FP/FN cost weight in the labelset min-cost threshold search; the
+   * model and every item's frozen score are inclusion-independent, so the
+   * slider only moves the green/red line over the cached scores. POST
+   * /api/inclusion re-derives the cutoff from the cached fold orderings and
+   * re-splits the *unverified* items server-side (verified items hold). We
+   * reconcile the new threshold (moves the line) and the re-split votes on the
+   * cheap response — there is no scoring spinner.
    */
   onInclusionChange(value: number): void {
     if (this.sortState.sortBusy) return;
@@ -419,7 +433,16 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortingApi
       .setInclusion(value)
       .pipe(takeUntil(this.destroy$))
-      .subscribe({ next: () => this.runFindLabel() });
+      .subscribe({
+        next: (resp) => {
+          if (resp.threshold != null && this.sortState.sortOrder) {
+            this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold);
+          }
+          // The server re-thresholded the unverified items over the frozen
+          // scores; pull the new good/bad split back for the left/right panes.
+          this.voteState.loadVotes();
+        },
+      });
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
@@ -437,10 +460,61 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
-    // In find mode: re-fetch labelset counters but skip a re-sort. The local
-    // vote state has already been reconciled from the POST response inside
-    // submitToggleVote, so a follow-up GET /api/votes only refreshes counts.
+    // A single-item manual vote (big button or hover) verifies the item: it
+    // moves out of the left work queue into the right verified pile. Mirror
+    // the server's mark-verified optimistically so the move feels instant —
+    // the resulting local polarity (good/bad vs. un-voted) decides verified.
+    const verified =
+      this.voteState.goodVotes.has(event.id) || this.voteState.badVotes.has(event.id);
+    this.voteState.setOptimisticVerified(event.id, verified);
+    // Re-fetch labelset counters + the authoritative verified set.
     this.voteState.loadVotes();
+    // Auto-advance to the marginal positive (the lowest unverified item still
+    // above the cutoff), so "just sit and vote" walks the boundary upward.
+    this.advanceToMarginalPositive();
+  }
+
+  /**
+   * Select the next item to review: the lowest-scored unverified item still
+   * above the cutoff (the Unverified Good nearest the line). This is a cheap
+   * active-learning order — always the most marginal positive next. The queue
+   * is empty exactly when no unverified item remains above the cutoff; that is
+   * the done state.  Mirrors the initial seed in {@link runFindLabel}.
+   */
+  private advanceToMarginalPositive(): void {
+    const order = this.sortState.sortOrder;
+    const threshold = this.sortState.threshold;
+    if (!order || threshold == null) return;
+    const verified = this.voteState.verifiedIds;
+    let target: number | null = null;
+    for (const item of order) {
+      if (item.score < threshold) break; // below the cutoff: nothing left above
+      if (!verified.has(item.id)) target = item.id;
+    }
+    if (target != null) {
+      this.queueEmptyNotified = false;
+      this.mediaState.selectMedia(target);
+    } else if (!this.queueEmptyNotified) {
+      this.queueEmptyNotified = true;
+      this.toast.success({
+        message: 'All positives reviewed',
+        detail: 'Every item above the cutoff has been verified. Check Stats or Export your results.',
+        dedupKey: 'find-queue-empty',
+      });
+    }
+  }
+
+  private queueEmptyNotified = false;
+
+  /** Open the detector-evaluation Stats modal. */
+  onStats(): void {
+    this.showStats = true;
+  }
+
+  /** Open the export modal pre-set to a label filter (good / bad / unverified). */
+  onExportRequest(filter: LabelFilter): void {
+    this.exportFilter = filter;
+    this.showExport = true;
   }
 
   /**

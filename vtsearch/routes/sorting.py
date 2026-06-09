@@ -671,18 +671,38 @@ def add_textsort_suggestion_route(body: dict):
 @sorting_bp.route("/api/inclusion", methods=["GET"])
 @sorting_bp.response(200, InclusionResponseSchema)
 def get_inclusion_route():
-    """Get the current Inclusion setting."""
-    return {"inclusion": get_inclusion()}
+    """Get the current Inclusion setting and the cutoff it resolves to."""
+    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
 
 
 @sorting_bp.route("/api/inclusion", methods=["POST"])
 @sorting_bp.arguments(InclusionRequestSchema)
 @sorting_bp.response(200, InclusionResponseSchema)
 def set_inclusion_route(body: dict):
-    """Set the Inclusion setting (clamped to ``[-10, 10]``)."""
+    """Set the Inclusion setting (clamped to ``[-10, 10]``).
+
+    Inclusion is a pure cutoff knob: this re-derives the active detector's
+    threshold from its cached fold orderings (no MLP retrain) and, in Find
+    mode, re-splits the unverified items over the frozen scores.  The new
+    cutoff is returned so the Find slider can move the green/red line.
+    """
     new_inclusion = int(max(-10, min(10, body["inclusion"])))
     set_inclusion(new_inclusion)
-    return {"inclusion": get_inclusion()}
+    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
+
+
+def _active_detector_threshold() -> float | None:
+    """The active detector context's current cutoff, or ``None`` if unset.
+
+    Returns ``None`` for the empty / request-missing sentinels (no detector
+    identified), which don't carry a meaningful threshold.
+    """
+    from vtscore.state.core import _empty_detector_context, get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    if det_ctx is _empty_detector_context:
+        return None
+    return getattr(det_ctx, "threshold", None)
 
 
 @sorting_bp.route("/api/safe-thresholds", methods=["GET"])

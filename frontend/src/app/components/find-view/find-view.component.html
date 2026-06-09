@@ -28,6 +28,7 @@
       (mediaSelect)="onMediaSelect($event)"
       (mediaVote)="onHoverVote($event)"
       (inclusionChange)="onInclusionChange($event)"
+      (unverifiedExport)="onExportRequest('unverified')"
       (sortCancel)="onSortCancel()"
     />
   </div>
@@ -72,6 +73,20 @@
       (mediaVoted)="onHoverVote($event)"
       (browse)="onBrowse()"
       (toDataset)="onToDataset()"
+      (exportLabels)="onExportRequest($event)"
+      (stats)="onStats()"
     />
   </div>
 </div>
+
+@if (showExport) {
+  <vt-export-modal
+    [initialFilter]="exportFilter"
+    (closed)="showExport = false"
+    (exported)="showExport = false"
+  />
+}
+
+@if (showStats) {
+  <vt-find-stats-modal (closed)="showStats = false" />
+}
