@@ -351,6 +351,14 @@ class DetectorContext:
         "last_learned_scores",
         "textsort_suggestions",
         "find_initial_labels",
+        # Find-session verification state (see docs/plans/find-verification-workflow.md):
+        # ``verified_ids`` are the ids the human has explicitly verified this Find
+        # session (a dict used as an ordered set, like ``good_votes``);
+        # ``find_scores`` is the frozen per-item detector score from the single
+        # scoring pass, so an Inclusion (cutoff) change re-thresholds without
+        # re-scoring.  Both are in-memory only and never persisted.
+        "verified_ids",
+        "find_scores",
         "inclusion",
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
@@ -420,6 +428,9 @@ class DetectorContext:
         self.last_learned_scores: dict[int, float] = {}
         self.textsort_suggestions: list[str] = []
         self.find_initial_labels: dict[int, str] = {}
+        # Find-session verification state (see docs/plans/find-verification-workflow.md).
+        self.verified_ids: dict[int, None] = {}
+        self.find_scores: dict[int, float] = {}
         self.inclusion: int | None = None
         # Cached in-memory data (never exported)
         self.training_medias: dict[int, dict[str, Any]] = {}
@@ -643,6 +654,8 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "last_learned_scores", _FrozenDict("detector"))
         object.__setattr__(self, "textsort_suggestions", _FrozenList("detector"))
         object.__setattr__(self, "find_initial_labels", _FrozenDict("detector"))
+        object.__setattr__(self, "verified_ids", _FrozenDict("detector"))
+        object.__setattr__(self, "find_scores", _FrozenDict("detector"))
         object.__setattr__(self, "inclusion", None)
         object.__setattr__(self, "training_medias", _FrozenDict("detector"))
         object.__setattr__(self, "label_embeddings", _FrozenDict("detector"))
