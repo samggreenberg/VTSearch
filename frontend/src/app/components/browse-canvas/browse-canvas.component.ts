@@ -382,10 +382,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
           this.selection.clear();
         }
         this.fitToData();
-      } else if (this.viewport.consumeFitOnNextMeta()) {
-        // Same projection id, but the view asked for a re-frame (e.g. a
-        // Remove-from-Good cull shrank the bounds): fit to what remains.
-        this.fitToData();
       } else {
         this.updateActiveLevel();
       }
