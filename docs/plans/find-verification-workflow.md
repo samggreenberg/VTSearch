@@ -1,6 +1,6 @@
 # Find Verification Workflow
 
-**Status:** Design — not yet implemented. Requirements locked with the user; awaiting go-ahead to build.
+**Status:** Phase 1 (backend spine) in progress — Inclusion refactor, frozen `find_scores`, `verified_ids` + mark-verified, Unverified Export, and `GET /api/find/stats` (incl. the −10…10 FP/FN sweep), all under `./run-tests.sh`. Phase 2 (frontend: 2 verified buckets + count-folding headers, left work queue, marginal-positive auto-advance, `vt-find-stats-modal`) is deferred to a session where the UI can be eyeballed (no browser in the build container).
 
 ## The reframe (read this first)
 
@@ -98,14 +98,14 @@ Reported figures:
 - **Agreements vs. corrections** and the **agreement rate** — `confirmed_good + confirmed_bad` vs. `culled_fp + rescued_fn`.
 - **Precision on reviewed positives** — `confirmed_good / (confirmed_good + culled_fp)`: of the detector's above-cutoff hits the human checked, how many held up. The single most decision-relevant number.
 - **Misses surfaced** — `rescued_fn`: items the human pulled up from below the line.
-- **"At what cutoff would it have returned?"** — now cheap because scores are frozen. For each rescued false-negative (a Verified Good sitting below the line), report the cutoff/score at which it would cross — i.e. how far the user would have to slide to make the detector surface it unaided. A per-item readout *and* an aggregate ("slide to score X to recover all your rescued positives"). This is the headline "how good is it really" signal and is a real column now, not a deferred proxy.
-- **Run context** — the default cutoff and the current cutoff.
+- **FP/FN-vs-Inclusion sweep — the headline chart.** For every inclusion `i ∈ [−10, 10]`, compute the calibrated threshold `t_i` (cheap: re-run the min-cost average over the **cached fold orderings** at `i` — 21 O(n) sweeps, no MLP work), then over the **verified sample** count `FP_i` = verified-Bad items scoring `≥ t_i` (detector would wrongly include) and `FN_i` = verified-Good items scoring `< t_i` (detector would wrongly drop). Plot both curves against inclusion, with the current inclusion marked. This is the precision/recall tradeoff *on the user's own data*: as inclusion rises the threshold drops, FP climbs, FN falls — the user reads off the inclusion that best balances the two and judges whether the detector is good enough to subscribe to. **Computed only over verified items** (the only ones with ground truth); the more the user verifies, the tighter the estimate. Subsumes the earlier per-item "at what cutoff would this return?" idea — that's just one item's crossing point on this chart.
+- **Run context** — the default cutoff and the current cutoff/inclusion.
 
 ### Backend
-- **`GET /api/find/stats`**: computes the four counts from `verified_ids` × (`good_votes`/`bad_votes`) × `find_initial_labels`, plus per-item recover-cutoffs from `find_scores`. Pure read; no new state.
+- **`GET /api/find/stats`**: returns (a) the 2×2 confusion counts at the current inclusion (`verified_ids` × `good_votes`/`bad_votes` × `find_initial_labels`), (b) the derived rates, and (c) the **21-point sweep** `[{inclusion, threshold, false_pos, false_neg}]` for `inclusion ∈ [−10, 10]` over the verified items — thresholds from the cached fold orderings, counts from the verified items' frozen scores. Pure read; cheap; no new state.
 
 ### Frontend
-- **`vt-find-stats-modal`** (mirrors `vt-dataset-stats-modal`): standalone modal on the shared `ModalComponent`, fetches `GET /api/find/stats` on open, renders the 2×2 + rates + recover-cutoff readout.
+- **`vt-find-stats-modal`** (mirrors `vt-dataset-stats-modal`): standalone modal on the shared `ModalComponent`, fetches `GET /api/find/stats` on open, renders the 2×2 + rates + the **FP/FN-vs-inclusion line chart** (current inclusion marked). The chart is a small hand-rolled inline SVG in the existing dependency-free viz style (cf. the dashboard card's pie) — no new charting dependency.
 - **Stats button** in the right panel (find mode), beside Browse / Export / To Dataset, emitting a `stats` event `find-view` handles — same wiring as the dashboard card's `stats` output.
 
 ## State-transition summary
