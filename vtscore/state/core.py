@@ -846,6 +846,30 @@ def invalidate_loaded_detector_models() -> None:
             ctx.threshold = 0.5
 
 
+def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
+    """Re-derive each loaded detector's threshold at *inclusion_value* from its
+    cached fold orderings, leaving the (inclusion-independent) MLP in place.
+
+    Inclusion is a pure cutoff knob now: a change must not drop the model or
+    re-score the haystack - only move the threshold over already-computed
+    scores.  Detectors with no cached fold orderings yet are left untouched;
+    the next training pass computes the threshold under the new inclusion.
+    See docs/plans/find-verification-workflow.md.
+    """
+    from vtscore.training.thresholds import threshold_from_fold_orderings
+
+    with _state_lock:
+        for ctx in _detector_contexts.values():
+            cache = ctx.calibration_cache
+            if cache is None:
+                continue
+            orderings, fallback = cache[1]
+            if fallback is not None:
+                ctx.threshold = fallback
+            elif orderings:
+                ctx.threshold = threshold_from_fold_orderings(orderings, inclusion_value)
+
+
 # ---------------------------------------------------------------------------
 # Scalar state accessors
 # ---------------------------------------------------------------------------

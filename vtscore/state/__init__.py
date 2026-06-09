@@ -218,7 +218,10 @@ def set_inclusion(value: int) -> None:
         from vtscore.detectors.labeling_progress import clear_progress_cache
 
         clear_progress_cache()
-        _core.invalidate_loaded_detector_models()
+        # Inclusion is a pure cutoff knob: re-threshold from the cached fold
+        # orderings instead of dropping the (inclusion-independent) MLP, so the
+        # scores stay frozen across a slide.  See docs/plans/find-verification-workflow.md.
+        _core.recompute_detector_thresholds_for_inclusion(value)
 
 
 def get_dataset_display_name() -> str | None:

@@ -262,13 +262,32 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         assert ctx.model is not None
         assert ctx.threshold == 0.73
 
-    def test_set_inclusion_invalidates_loaded_model(self):
+    def test_set_inclusion_preserves_model_no_fold_cache(self):
+        """Inclusion is a pure cutoff knob: it no longer drops the model.
+        Without cached fold orderings the threshold is left for the next
+        training pass.  See docs/plans/find-verification-workflow.md."""
         from vtsearch.state import get_inclusion, set_inclusion
 
         ctx = self._loaded_ctx()
+        model_before = ctx.model
         set_inclusion(get_inclusion() + 1)
-        assert ctx.model is None
-        assert ctx.threshold == 0.5
+        assert ctx.model is model_before
+        assert ctx.threshold == 0.73
+
+    def test_set_inclusion_rethresholds_from_fold_cache(self):
+        """With cached fold orderings, an inclusion change re-derives the
+        threshold (cheap min-cost over the cache) without touching the model."""
+        from vtsearch.state import get_inclusion, set_inclusion
+        from vtscore.training.thresholds import threshold_from_fold_orderings
+
+        ctx = self._loaded_ctx()
+        model_before = ctx.model
+        orderings = [([0.9, 0.8, 0.2, 0.1], [1.0, 1.0, 0.0, 0.0])]
+        ctx.calibration_cache = ("k", (orderings, None))
+        new_incl = get_inclusion() + 3
+        set_inclusion(new_incl)
+        assert ctx.model is model_before
+        assert ctx.threshold == threshold_from_fold_orderings(orderings, new_incl)
 
     def test_set_calibrate_count_invalidates_loaded_model(self):
         from vtsearch.state import get_calibrate_count, set_calibrate_count
