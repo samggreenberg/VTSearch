@@ -10,8 +10,9 @@
 6. [Region voting on images](#region-voting-on-images)
 7. [View options](#view-options)
 8. [Dashboard - managing datasets and detectors](#dashboard--managing-datasets-and-detectors)
-9. [Exporting your work](#exporting-your-work)
-10. [Importing pre-trained detectors](#importing-pre-trained-detectors)
+9. [Browse - exploring a dataset spatially](#browse--exploring-a-dataset-spatially)
+10. [Exporting your work](#exporting-your-work)
+11. [Importing pre-trained detectors](#importing-pre-trained-detectors)
 
 ---
 
@@ -395,8 +396,9 @@ and a pair of action buttons underneath.
   media type, item count, duplicate count, creation date, origin,
   clipper, and embedder. The **Loaded** column is a toggle:
   click the **×** to load into memory (a checkmark appears when
-  it's in). Per-row icon buttons: **Rename** (pencil), **Stats**
-  (pie chart), and **Delete** (trash).
+  it's in). Per-row icon buttons: **Browse** (eye - opens the spatial
+  map, see below), **Rename** (pencil), **Stats** (pie chart), and
+  **Delete** (trash).
 - **Detectors** - every saved detector. Each row shows media type,
   training count, whether it's an **autorun** (scored automatically
   during CLI autodetect), last-trained / created dates, and loaded
@@ -415,6 +417,65 @@ dataset with the detector and opens a ranked results modal.
 You can keep multiple datasets and multiple detectors loaded at once.
 Loading just pulls them into memory; the Train / Find buttons work
 on whichever rows you currently have selected.
+
+---
+
+## Browse - exploring a dataset spatially
+
+Click the **Browse** (eye) button on any dataset row in the Dashboard to
+open a bird's-eye map of the whole collection. VTSearch projects every
+item's embedding down to two dimensions (a UMAP projection) and renders
+the result as a pannable, zoomable density map. Browse is a way to *see
+the shape* of a dataset - where the clusters are, how big they are, what
+sits between them - without training anything. It never votes, trains, or
+scores; it's a pure explorer.
+
+The first time you browse a dataset, VTSearch builds the projection (a
+progress bar shows the work). The layout is cached on the dataset, so
+later visits open instantly.
+
+### Reading the map
+
+Each tile aggregates the items that landed in that part of the
+projection, and its **colour encodes how many** items are there - denser
+regions are brighter. The **legend** on the right decodes the colour
+scale; the **minimap** above it shows where your current view sits within
+the whole projection.
+
+Hovering a tile previews a representative item from that region:
+
+- **Audio** clips play on a loop while you hover (browsers need one
+  click anywhere on the page first to unlock audio playback).
+- **Images, text, video, and documents** show a thumbnail or snippet in
+  a popup anchored to your cursor.
+
+### Navigating
+
+The control cluster at the bottom-left of the canvas gives you:
+
+- **Zoom in / Zoom to fit / Zoom out** - or drag to pan and scroll to
+  zoom directly on the canvas.
+- **Thumbnail size** - smaller or bigger tiles.
+- **Bin shape** - hexagons or squares.
+- **Region select** - the dashed-rectangle toggle (or `Shift`+drag) lets
+  you drag a box to select every item inside it.
+
+Top-left, **Re-project** shuffles the items into a fresh 2-D layout
+(handy when a cluster lands somewhere awkward), and **Back to Dashboard**
+returns you to the inventory.
+
+### Selecting items
+
+Click a tile (or drag a region) to add its items to the **Selection**
+panel on the right. The panel lists what you've picked - sortable by
+recency, name, or ID, in list or grid view - and clicking any entry drops
+it from the selection. **Clear** empties the whole selection. This is how
+you carve a region of interest out of a large collection by eye.
+
+Browse can also open **scoped to a Find result**: after scoring a dataset
+you can project just the matched items and use **Remove from Good** to
+lasso and prune false positives before exporting. (See
+[Dashboard](#dashboard--managing-datasets-and-detectors) for Find.)
 
 ---
 

@@ -1,11 +1,21 @@
 # User-Docs Screenshots
 
-**Status:** Proposed. Drafted 2026-06-07. Capture harness not built yet
-(no browser in the drafting session). **In-app embed plumbing shipped**
-2026-06-07: the user guide's images now render in the in-app Help panel,
-theme-matched to the viewer (see "Doc-embedding convention" and "What
-shipped" below). One seed pair (`dashboard-loaded.{light,dark}.png`) is a
-placeholder until the harness runs in a browser-ready session.
+**Status:** Proposed. Drafted 2026-06-07; shot list audited 2026-06-09.
+Capture harness still not built (no browser in the drafting/audit
+sessions). **In-app embed plumbing shipped** 2026-06-07: the user guide's
+images now render in the in-app Help panel, theme-matched to the viewer
+(see "Doc-embedding convention" and "What shipped" below). One seed pair
+(`dashboard-loaded.{light,dark}.png`) is a placeholder until the harness
+runs in a browser-ready session.
+
+**2026-06-09 audit.** Re-checked every planned shot against the current
+UI and the user guide. Changes: dropped the vague `settings-modal` shot in
+favour of `settings-appearance` (the Settings → Appearance pane, which the
+guide actually describes); added `manual-controls` (Manual mode had no
+shot) and `browse-view` (the Browse mode was undocumented entirely — a
+new user-guide section was written for it this pass); sharpened several
+descriptions to match real control names. The ready-to-paste **Capture
+prompt** for a browser-ready session is now at the bottom of this doc.
 
 **Goal.** Add inline screenshots to the **user-facing** docs and build a
 system that can **regenerate every shot with one command** when the GUI
@@ -141,33 +151,45 @@ that *should* have been refreshed but weren't.
 ## Shot list (v1)
 
 All in **light + dark** (so ~2× the files). `*` = carries declarative
-annotations. README reuses guide shots rather than adding new ones.
+annotations. README reuses guide shots rather than adding new ones. The
+"Doc · section" column points at the live USER_GUIDE.md headings so the
+`embeddedIn` manifest field can be filled in verbatim.
 
 | id | Doc · section | What it shows | Annotated |
 |----|---------------|---------------|-----------|
-| `dashboard-loaded` | USER_GUIDE intro; README hero | Dashboard with a synthetic dataset + a trained detector | |
-| `dataset-panel` | Loading a dataset | Hamburger (☰) → dataset panel open | `*` (point at ☰) |
-| `importer-picker` | Loading a dataset; demos.md | The importer list incl. 🏭 Synthetic + demo entries | `*` |
-| `importer-form` | Loading a dataset | A filled importer form (synthetic: type + size) | |
-| `three-panel` | The three-panel layout | The full layout, three regions labeled | `*` (label each panel) |
-| `autopilot-vote` | Autopilot | One item shown with Good/Bad controls | `*` (circle Good/Bad) |
-| `autopilot-progress` | Autopilot | Mid-training / phase progress indicator | `*` |
-| `results-grid` | View options / results | Sorted results grid after training | |
-| `region-voting` | Region voting on images | An image with a drawn region + vote | `*` (the region) |
-| `view-options` | View options | The view-options menu open | |
-| `dashboard-manage` | Dashboard | Managing datasets + detectors (rename/select) | |
-| `export-picker` | Exporting your work | Exporter picker + a chosen exporter form | `*` |
-| `import-detector` | Importing pre-trained detectors | The import-detector picker | |
-| `settings-modal` | (theme/settings mention) | Settings modal — anchors the light/dark contrast | |
+| `dashboard-loaded` | USER_GUIDE intro; README hero | Dashboard populated with a synthetic dataset row + a trained-detector row (clean overview, no selection) | |
+| `dataset-panel` | Loading a dataset | The hamburger (☰) menu open, showing the demo-dataset list and the "import your own" options | `*` (point at ☰) |
+| `importer-picker` | Loading a dataset; demos.md | The importer list including 🏭 Synthetic Dataset + the demo entries | `*` |
+| `importer-form` | Loading a dataset | A filled Synthetic-Dataset importer form (media type + size) | |
+| `three-panel` | The three-panel layout | The full labeling layout with left / centre / right panels labeled | `*` (label each panel) |
+| `autopilot-vote` | Autopilot | An item in the centre viewer with the green **Good** / red **Bad** buttons, Autopilot phase 1 active | `*` (circle Good/Bad) |
+| `autopilot-progress` | Autopilot · "The collapsed bar" | The four phase indicators (phase 3 active) with the **smart** / **stable** status lights | `*` (the indicators) |
+| `manual-controls` | Manual mode | The three Manual-mode control rows — Sort mode, Selection strategy, Inclusion slider — above the media list | `*` (label the three rows) |
+| `region-voting` | Region voting on images | An image with a drawn region rectangle (8 resize handles), ready to submit a good vote | `*` (the region) |
+| `view-options` | View options | The View-settings modal open (list/grid, grid icon size, focus mode) | |
+| `results-grid` | View options | The left-panel media list in **grid** view after training (sorted thumbnails) | |
+| `settings-appearance` | View options · "Solo media type" / "Locking the embedder" | The Settings → **Appearance** pane: Solo media type, Solo media embedder, and the theme picker — also anchors the light/dark contrast | |
+| `dashboard-manage` | Dashboard | A dataset row **and** a detector row selected, with the **Train** / **Find** action bar below the tables | `*` (Train/Find) |
+| `browse-view` | Browse | The Browse map: a pannable hex-density UMAP of a synthetic image dataset, a hovered-tile preview popup, plus the legend + minimap on the right | `*` (preview + legend) |
+| `export-picker` | Exporting your work | The exporter picker with a chosen exporter's form below it | `*` |
+| `import-detector` | Importing pre-trained detectors | The import-detector picker (Load sort mode / Detectors dashboard) | |
 
-~14 logical shots × 2 themes ≈ **28 PNGs**. README embeds
+**16 logical shots × 2 themes = 32 PNGs.** README embeds
 `dashboard-loaded` (and optionally `results-grid`); demos.md embeds
 `importer-picker`.
 
-Region voting (`region-voting`) is the one shot most likely to resist
-clean scripting (canvas drag to draw a region). If it proves too fiddly
-to script deterministically, it's the single candidate to fall back to a
-hand-driven capture — noted here, not yet decided.
+**Determinism-risk shots (candidates for hand-capture fallback).** Two
+shots resist clean scripting:
+
+- `region-voting` — drawing the region is a canvas drag; if it can't be
+  driven deterministically, hand-capture this one.
+- `browse-view` — the UMAP layout must be seeded *and* the hover-preview
+  popup posed; the projection is also expensive to build. Seed the UMAP
+  (fixed `random_state`) and disable animations before relying on
+  pixel-diff for this shot; otherwise hand-capture it.
+
+Both are the only shots that touch a `<canvas>`; the rest are DOM and
+should diff cleanly.
 
 ## Doc-embedding convention (locked 2026-06-07)
 
@@ -210,7 +232,9 @@ descriptive alt text (= the manifest `caption`) for accessibility.
    entries in a browser-ready session.
 4. `refresh.sh` / `check.sh` / `wiring-check`; wire `wiring-check` into
    `run-tests.sh`.
-5. Fill out the full shot list.
+5. Fill out the full shot list. *(Locked: see "Shot list (v1)" — 16
+   shots, audited 2026-06-09. The USER_GUIDE.md anchors each shot embeds
+   into already exist.)*
 6. Embed in USER_GUIDE.md, then README.md + demos.md.
 
 ## What shipped
@@ -224,6 +248,15 @@ descriptive alt text (= the manifest `caption`) for accessibility.
   `<picture>` embed convention above. A seed pair
   (`dashboard-loaded.{light,dark}.png`, placeholder art) proves the
   pipeline end to end.
+- **Shot-list audit + Browse docs (2026-06-09).** Re-checked the shot
+  list against the live UI: repurposed `settings-modal` →
+  `settings-appearance`, added `manual-controls` and `browse-view`, and
+  sharpened descriptions to real control names. The Browse mode was
+  undocumented, so a new **"Browse - exploring a dataset spatially"**
+  section was added to `docs/user/USER_GUIDE.md` (plus a Browse-button
+  mention in the Dashboard section) to give `browse-view` a home. No
+  pixels were captured (no browser this session); the manifest + harness
+  are still owed — see the Capture prompt below.
 
 ## Open follow-ups
 
@@ -239,5 +272,61 @@ descriptive alt text (= the manifest `caption`) for accessibility.
   convention").
 - **`region-voting` scriptability** — confirm the canvas drag can be
   driven deterministically; fall back to hand-capture only if not.
+- **`browse-view` determinism** — seed the UMAP fit (fixed
+  `random_state`) so the layout is stable across runs, and pose the
+  hover-preview popup; otherwise hand-capture. The projection is also
+  expensive to build, so the recipe should reuse a cached fixture
+  projection rather than rebuilding per run.
 - **Pixel-diff tolerance** for `check.sh` (font hinting / AA can cause
   sub-pixel noise across machines; may need a small per-pixel threshold).
+
+## Capture prompt (paste this in a browser-ready session)
+
+The screenshots cannot be taken in the standard cloud container (no
+chromium — CLAUDE.md "No Chrome/Chromium available"). When you are in a
+session with a real browser, paste the prompt below. It builds the
+still-missing pieces (manifest + Playwright harness + driver scripts),
+captures the shot list above in both themes, wires the embeds, and runs
+the checks.
+
+> Build and run the user-docs screenshot harness described in
+> `docs/plans/user-docs-screenshots.md`. Specifically:
+>
+> 1. **Provision the browser.** Install Playwright + chromium in this
+>    session (do **not** add it to `run-tests.sh` or the default test
+>    container).
+> 2. **Create the manifest** `docs/user/screenshots.manifest.ts` using the
+>    `Shot` / `Annotation` schema in the plan, with one entry per row of
+>    the plan's "Shot list (v1)" table (all 16, `themes: ["light","dark"]`,
+>    `embeddedIn` set to the listed USER_GUIDE.md heading anchor,
+>    `caption` = the alt text, `annotations` for the rows marked `*`).
+> 3. **Build the harness** `scripts/screenshots/capture.ts` per the plan's
+>    "The harness" section: boot `python app.py --local` against a temp
+>    data dir, apply the determinism knobs (synthetic dataset with a fixed
+>    size + seed; viewport 1440×900 @2×; `* { transition:none !important;
+>    animation:none !important; }`; mask the app version and any
+>    wall-clock text; **seed the UMAP `random_state`** for `browse-view`),
+>    run each shot's recipe, apply the theme, inject declarative
+>    annotations as a pre-capture DOM overlay, then write
+>    `docs/user/assets/<id>.<theme>.png`.
+> 4. **Add the driver scripts** `scripts/screenshots/refresh.sh`,
+>    `check.sh`, and a `wiring-check` (assert every manifest `id` has both
+>    theme files on disk and every `![]`/`<picture>` embed in
+>    USER_GUIDE.md + README.md + demos.md has a matching manifest entry).
+>    Wire only `wiring-check` into `run-tests.sh` (it needs no browser).
+> 5. **Capture** every shot in light + dark by running `refresh.sh`. The
+>    fixtures: a synthetic **image** dataset (with a `_patch` embedder for
+>    `region-voting`) for the visual shots, plus a small trained detector
+>    for `dashboard-loaded` / `results-grid` / `dashboard-manage`. For
+>    `region-voting` and `browse-view`, if the canvas interaction won't
+>    drive deterministically, hand-capture those two and note it.
+> 6. **Wire the embeds.** Replace the placeholder `dashboard-loaded` pair,
+>    add the `<picture>` embeds (per the plan's "Doc-embedding
+>    convention") at each `embeddedIn` anchor in USER_GUIDE.md, add the
+>    `dashboard-loaded` hero to README.md, and add `importer-picker` to
+>    demos.md.
+> 7. Run `./run-tests.sh` (so `wiring-check` passes), then commit the PNGs
+>    + scripts + embeds together and open a PR targeting `dev`.
+>
+> Review the generated PNGs like any diff before committing; `git diff
+> --stat docs/user/assets/` is the list of shots the run produced.
