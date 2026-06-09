@@ -19,9 +19,11 @@ A user who just wants "run the detector and export the hits" never touches a ver
 
 This is the spine of the whole feature, so it comes first.
 
-**The detector scores every item exactly once**, at its trained configuration, producing a fixed score per item. Those scores are **frozen** for the life of the Find session. The left-panel slider is a **cutoff** over those frozen scores: sliding it moves the green/red line up or down the fixed ranking. It does **not** retrain the MLP, does **not** re-embed, and does **not** reorder items — it only changes *how deep into the ranking the positive cut goes*. (Higher = more inclusive = more greens; this is why the user calls it "Inclusion" — it controls how inclusive the positive set is. Whether the UI keeps that label or renames it "Cutoff" is a minor call noted in follow-ups.)
+**The detector scores every item exactly once**, at its trained configuration, producing a fixed score per item. Those scores are **frozen** for the life of the Find session. The **Inclusion** slider is a **cutoff** over those frozen scores: sliding it moves the green/red line up or down the fixed ranking. It does **not** retrain the MLP, does **not** re-embed, and does **not** reorder items — it only changes *how deep into the ranking the positive cut goes*. Higher Inclusion = more inclusive = more greens, which is exactly what the name has always meant; we keep calling it Inclusion.
 
-This is a deliberate change from today, where the Find slider *is* the training-Inclusion knob and every change retrains the MLP (`-10..10`, feeding hidden-layer width + regularization + calibration). **Train mode keeps that training-Inclusion knob unchanged** — it legitimately wants retrain-on-change while you teach a detector. Only Find's slider is decoupled into a pure cutoff. The two are different controls that happen to have shared a name.
+This is a deliberate change from today, where the Inclusion slider retrains the MLP on every change (`-10..10`, feeding hidden-layer width + regularization + calibration). **Inclusion is unified across both Train and Find as a no-retrain cutoff.** It leaves the MLP entirely: the architecture (hidden width) and regularization become fixed defaults, independent of Inclusion. Calibration computes a neutral default threshold, and Inclusion offsets the cutoff line from there. Training still happens in Train mode **when you vote** (that's the training loop) — but an Inclusion change never retrains, in either mode; it only moves the line over the current model's scores.
+
+> **Backwards-compat break (call out to user):** existing detectors' stored `inclusion` values change meaning (training-bias → cutoff position), and model capacity no longer varies with inclusion. Per repo policy we make the clean change and surface the break rather than shimming old behavior.
 
 Freezing the scores is what makes the rest cheap:
 
@@ -33,45 +35,46 @@ Freezing the scores is what makes the rest cheap:
 
 State on the active `DetectorContext` (all in-memory, ephemeral — blessed by the "No Persisted Vectors or MLPs" rule, which explicitly allows process-scoped caches on the context):
 
-- **`find_scores: dict[int, float]`** — the frozen per-item detector scores from the single scoring pass.
-- **`find_cutoff: float`** — the current cutoff line. Defaults to the calibrated threshold the detector produces (`train_and_threshold`); the slider moves it.
+- **`find_scores: dict[int, float]`** (new) — the frozen per-item detector scores from the single scoring pass.
+- **`inclusion`** (already exists) — now the cutoff knob: a no-retrain position that resolves to a score-threshold over `find_scores`. Default = the neutral calibrated threshold (`train_and_threshold`); the slider offsets from there. The resolved cutoff lives in the existing **`threshold`** field. ("Cutoff" below = `threshold` resolved from `inclusion`.)
 - **`good_votes` / `bad_votes`** — already exist. In find mode these hold the items' current good/bad assignment.
 - **`verified_ids: set[int]`** (new) — the items the human has explicitly acted on this session.
 
-**Resolved label of any item** = `good` if it's a verified-good vote; `bad` if verified-bad; otherwise `score ≥ find_cutoff`. The four buckets fall out:
+**Resolved label of any item** = `good` if it's a verified-good vote; `bad` if verified-bad; otherwise `score ≥ cutoff`. The four buckets fall out:
 
 ```
 Verified Good   = verified_ids ∩ good_votes
 Verified Bad    = verified_ids ∩ bad_votes
-Unverified Good = { i ∉ verified_ids : find_scores[i] ≥ find_cutoff }
-Unverified Bad  = { i ∉ verified_ids : find_scores[i] <  find_cutoff }
+Unverified Good = { i ∉ verified_ids : find_scores[i] ≥ cutoff }
+Unverified Bad  = { i ∉ verified_ids : find_scores[i] <  cutoff }
 ```
 
 `verified_ids` is required because confirming an item *without changing its side of the line* (the common case — detector says good, human agrees) leaves no trace in the scores; only an explicit "I looked at this" set captures it.
 
-**Cutoff-slide semantics (no re-score, preserve verified):** moving the slider sets `find_cutoff` and re-thresholds **only unverified items** against the frozen `find_scores`. Verified items keep their human vote wherever their score lands. An unverified item can flip Unverified Good ↔ Unverified Bad as the line moves; that's expected. No retrain, no re-embed.
+**Cutoff-slide semantics (no re-score, preserve verified):** moving the slider sets `cutoff` and re-thresholds **only unverified items** against the frozen `find_scores`. Verified items keep their human vote wherever their score lands. An unverified item can flip Unverified Good ↔ Unverified Bad as the line moves; that's expected. No retrain, no re-embed.
 
-`verified_ids`, `find_scores`, and `find_cutoff` are cleared/recomputed only when the dataset/detector **pair changes** (a genuinely fresh context — `reloadForNewPair` in `find-view.component.ts:146`), which is also the only time the detector re-scores.
+`verified_ids`, `find_scores`, and `cutoff` are cleared/recomputed only when the dataset/detector **pair changes** (a genuinely fresh context — `reloadForNewPair` in `find-view.component.ts:146`), which is also the only time the detector re-scores.
 
 ## Backend changes
 
-1. **`DetectorContext`** (`vtscore/state/core.py:322`): add `find_scores: dict[int, float]`, `find_cutoff: float`, and `verified_ids: set[int]` (all `field(default_factory=...)`). Cleared only on a pair change, not on a cutoff slide.
-2. **Score once, then stop re-scoring.** The find-label run (`vtsearch/routes/detectors/scoring.py`) trains/loads the model and scores all items as it does today, but now **caches the scores in `find_scores`**, sets `find_cutoff` to the calibrated default, applies labels by that default cutoff (the initial good/bad split), and records `find_initial_labels` (the detector's natural call at the default cutoff — the stable eval baseline; see Stats). It no longer reruns on a slider change.
-3. **New cutoff endpoint** `POST /api/find/cutoff` (decoupled from the training-Inclusion `POST /api/inclusion` at `sorting.py:760`, which Find stops calling): sets `find_cutoff`, re-thresholds **unverified** items against `find_scores`, reassigns their `good_votes`/`bad_votes`, and leaves verified items and `find_initial_labels` untouched. Cheap — no model work. The Find slider calls this instead of the retrain path.
-4. **Mark-verified on manual votes in find mode.** When `find_mode` is True and a vote arrives through the *single-item* manual path (the big buttons, hover-vote, right-panel vote), add the id to `verified_ids`. Cleanest hook: `vtscore/state/votes.py` `set_vote` / `toggle_vote` / `apply_label_with_click_time`, guarded by `is_find_mode()`. The bulk find-label/cutoff paths stay unverified by construction.
-5. **Expose `verified_ids`** in the `GET /api/votes` payload (a `verified` id array) so the frontend can derive the four buckets in one request (`vtsearch/routes/labels/vote.py`).
-6. **Unverified Export.** Extend the label-export `label_filter` (`/api/labels/export`, `vote.py:147`) with `unverified` (emit `good_votes ∪ bad_votes − verified_ids`) and, symmetrically, `verified`. The work-queue dump the user re-imports as a dataset uses `unverified`.
+1. **`DetectorContext`** (`vtscore/state/core.py:322`): add `find_scores: dict[int, float]` and `verified_ids: set[int]` (both `field(default_factory=...)`). The cutoff itself reuses the existing `threshold` field (resolved from `inclusion`); no new cutoff field. Both new fields reset only on a pair change, not on an Inclusion slide.
+2. **Inclusion leaves the MLP (training-path refactor).** In `vtscore/detectors/training.py`, `train_model` stops taking `inclusion` for hidden-layer width / regularization — the architecture becomes a fixed default. `POST /api/inclusion` (`sorting.py:760`) stops calling `invalidate_loaded_detector_models()` (`vtscore/state/__init__.py:189-200`): an Inclusion change no longer drops the cached MLP. Calibration (`calculate_cross_calibration_threshold`) computes a **neutral** default threshold; `inclusion` is applied as an **offset** that resolves to the actual cutoff (`threshold`) over the current model's scores. This is the unified Train+Find behavior; **it is the backwards-compat break** flagged above.
+3. **Score once, then stop re-scoring (Find).** The find-label run (`vtsearch/routes/detectors/scoring.py`) trains/loads the model and scores all items as today, but now **caches the scores in `find_scores`**, sets the cutoff to the neutral-calibrated default, applies labels by that default (the initial split), and records `find_initial_labels` (the detector's natural call at the default cutoff — the stable eval baseline; see Stats). It no longer reruns on a slider change.
+4. **Repurposed Inclusion endpoint (shared by Train and Find).** `POST /api/inclusion` no longer retrains; it sets `inclusion`, resolves the new cutoff over the current scores (the frozen `find_scores` in Find; the live model's scores in Train), and re-thresholds the **unverified** items (in Find, leaving verified items and `find_initial_labels` untouched). Cheap — no model work. The Find slider calls this same endpoint; there is no separate `/api/find/cutoff`.
+5. **Mark-verified on manual votes in find mode.** When `find_mode` is True and a vote arrives through the *single-item* manual path — the big Good/Bad buttons **and the hover-vote**, which the user has confirmed are equivalent (both pull the item out of the left queue into the right/verified pile) — add the id to `verified_ids`. Cleanest hook: `vtscore/state/votes.py` `set_vote` / `toggle_vote` / `apply_label_with_click_time`, guarded by `is_find_mode()`. The bulk find-label / Inclusion-slide paths stay unverified by construction.
+6. **Expose `verified_ids`** in the `GET /api/votes` payload (a `verified` id array) so the frontend can derive the four buckets in one request (`vtsearch/routes/labels/vote.py`).
+7. **Unverified Export.** Extend the label-export `label_filter` (`/api/labels/export`, `vote.py:147`) with `unverified` (emit `good_votes ∪ bad_votes − verified_ids`) and, symmetrically, `verified`. The work-queue dump the user re-imports as a dataset uses `unverified`.
 
 ## Frontend changes
 
-1. **Find slider becomes a cutoff control.** `find-view.component.ts onInclusionChange` (currently `setInclusion` → `runFindLabel`, which retrains) is replaced by a call to `POST /api/find/cutoff`. Because the frontend already has every item's score (`sortState.setSortResults(sorted, threshold)` holds `[{id, score}]`), the green/red display updates **optimistically client-side** the instant the slider moves; the cutoff POST reconciles server votes for export. No scoring spinner on a slide.
+1. **Find slider becomes a cutoff control.** `find-view.component.ts onInclusionChange` (currently `setInclusion` → `runFindLabel`, which retrains) now calls the repurposed `POST /api/inclusion` (no retrain). Because the frontend already has every item's score (`sortState.setSortResults(sorted, threshold)` holds `[{id, score}]`), the green/red display updates **optimistically client-side** the instant the slider moves; the POST reconciles server votes for export. No scoring spinner on a slide.
 2. **`VoteStateService`**: track a `verifiedIds` set from the new `/api/votes` `verified` field; expose `verifiedIds$`. On a manual vote in find mode, optimistically add the id.
 3. **Right panel** (`right-panel.component.ts`), find mode — the four-bucket view:
    - A **Verified Good** list with a header **"[N] Unverified Good"** (N = unverified-good count). Its **Browse / Export / To Dataset** buttons act on *everything below the button* = Verified Good ∪ Unverified Good = the full good set. (`onBrowse`/`onToDataset` already scope over `goodVotes` in `find-view.component.ts:452,475`, so the header/labeling is the new part.)
    - A symmetric **Verified Bad** list with a **"[M] Unverified Bad"** header.
    - Buckets derived from scores + cutoff + `verifiedIds$`.
 4. **Left panel** = the work queue: Unverified Good items in score order — what the user walks. Add an **Unverified Export** button (`label_filter=unverified`).
-5. **Center auto-advance** (explicit ask): today `find-view.component.ts:439 onMediaVoted` only reloads votes. In find mode, after a vote on the centered item, select the **next Unverified Good in score order** via `mediaState.selectMedia(nextId)`. The center-panel swipe already fires `mediaVoted` ~180ms after the vote (`center-panel.component.ts:260`), so the advance rides that callback. Empty queue → rest on the last item (or a "queue clear" state — minor, flagged below).
+5. **Center auto-advance → the marginal positive** (explicit ask): today `find-view.component.ts:439 onMediaVoted` only reloads votes. In find mode, after any vote (button or hover), select the **lowest-scored unverified item still above the cutoff** — i.e. the Unverified Good nearest the line — via `mediaState.selectMedia(nextId)`. This is a cheap active-learning order (always vote the most marginal/uncertain item next, so "just sit and vote" does the most good) without reimplementing Train's Good/Hard ordering. It's intentionally a little jarring — voting the top of the stack throws you to the boundary — but it makes "sit and vote" the optimal default. The initial seed already uses this exact rule (`find-view.component.ts:237` picks the lowest item ≥ threshold), so seed and advance unify. **The queue is empty exactly when no unverified item remains above the cutoff** — that *is* the done state (show a brief "all positives reviewed" rest state). The center-panel swipe fires `mediaVoted` ~180ms after the vote (`center-panel.component.ts:260`), so the advance rides that callback.
 6. **Big Good/Bad buttons must work in find mode.** Ensure the `voting-overlay` is rendered and not `disabled` outside the brief initial-scoring window; its `voted` → `castVote` → `submitToggleVoteAndRecord` path marks the item verified (item 4 above).
 
 ## Detector evaluation: the Stats button
@@ -103,24 +106,25 @@ Reported figures:
 
 ## State-transition summary
 
-- **Find run (pair load)** → score once → `find_scores` frozen, `find_cutoff` = calibrated default, `find_initial_labels` recorded, `verified_ids` empty; center seeded on the item just above the line (`find-view.component.ts:237`).
-- **Slide cutoff** → re-threshold unverified items only (instant, client-optimistic + cheap server cutoff POST); verified items unmoved; no retrain.
-- **Good on centered item** → vote good + verify → Verified Good → auto-advance to next Unverified Good.
-- **Bad on centered item** (false positive) → vote bad + verify → Verified Bad → auto-advance.
+- **Find run (pair load)** → score once → `find_scores` frozen, `cutoff` = calibrated default, `find_initial_labels` recorded, `verified_ids` empty; center seeded on the item just above the line (`find-view.component.ts:237`).
+- **Slide Inclusion** → re-threshold unverified items only (instant, client-optimistic + cheap `POST /api/inclusion`, no retrain); verified items unmoved.
+- **Good on centered item** (button or hover) → vote good + verify → Verified Good → auto-advance to the lowest unverified item still above the cutoff.
+- **Bad on centered item** (false positive; button or hover) → vote bad + verify → Verified Bad → auto-advance to the lowest unverified item still above the cutoff.
 - **Export / Browse / To Dataset (good panel)** → Verified Good ∪ Unverified Good (flood-fill); unreviewed positives ride along on the detector's call.
 - **Unverified Export** → dumps only the untouched work queue for re-import as a dataset.
 
 ## Decisions captured
 
-- **Find slider = pure cutoff over frozen scores (CRITICAL).** Score once at the detector's trained config; the slider only moves the line — no retrain, no re-embed, no reorder. Train mode keeps its separate training-Inclusion knob.
-- **Preserve-verified is automatic.** Verified items carry explicit votes the cutoff never overrides; sliding reclassifies only unverified items. The right panel is undisturbed by anything in the left panel. `verified_ids`/`find_scores`/`find_cutoff` reset only on a pair change.
+- **Inclusion = pure cutoff, unified across Train and Find, no retrain (CRITICAL).** Inclusion leaves the MLP entirely (fixed architecture + regularization); it only moves the line over the current model's scores. In Find the model is scored once and frozen; in Train the model still retrains *when you vote*, but never on an Inclusion change. **Backwards-compat break:** existing `inclusion` values change meaning and model capacity no longer varies with inclusion.
+- **Auto-advance = lowest unverified item above the cutoff** (the marginal positive), not next-in-stack. Doubles as the cheap active-learning order and self-defines the empty/done state.
+- **Hover-vote ≡ button-vote.** Both verify the item and move it left→right; both trigger auto-advance.
+- **Preserve-verified is automatic.** Verified items carry explicit votes the cutoff never overrides; sliding reclassifies only unverified items. The right panel is undisturbed by anything in the left panel. `verified_ids`/`find_scores`/`cutoff` reset only on a pair change.
 - **Positives-only review**, with the big buttons available on any centered item for one-off ActuallyGood/ActuallyBad marks + auto-advance.
 - **Ephemeral throughout**; Unverified Export is the persistence escape hatch.
 - **Stats eval baseline = the default calibrated cutoff**, fixed at score time, so corrections are measured against the detector's natural recommendation regardless of later slider position.
 
 ## Open follow-ups
 
-- **Slider parameterization & label.** Decide how cutoff maps to slider units (raw score, percentile/quantile of the score distribution, or keep a `-10..10` feel mapped monotonically to cutoff position) and whether the Find control keeps the word "Inclusion" or becomes "Cutoff." Cosmetic-ish; doesn't change the architecture.
-- **Hover-vote = verified?** Confirm a quick hover-vote should count as a deliberate verification the same as a center-panel click. Assumed yes for now.
-- **Empty work queue UX.** Rest on the last item vs. an explicit "queue clear" state. Minor.
+- **Inclusion parameterization.** Decide how the `inclusion` knob maps to a cutoff offset over scores (raw-score offset, percentile/quantile of the score distribution, or keep the `-10..10` feel mapped monotonically). The name stays **Inclusion** (confirmed). New constraint from the unification: the mapping must be **stable across Train's vote-triggered retrains** — `inclusion` is a position re-resolved over whatever the current scores are, so the same value should mean "the same relative cut" before and after a retrain. Doesn't change the architecture.
+- **Done-state polish.** The empty queue (no unverified item above the cutoff) is now well-defined; decide how rich the "all positives reviewed" rest state should be (plain message vs. a summary nudge toward Stats/Export).
 - **Under-threshold (false-negative) review surface.** Currently reachable only item-by-item via the left panel + big buttons. If demand appears, add a dedicated below-the-line work queue (the symmetric "find what the detector missed" flow).
