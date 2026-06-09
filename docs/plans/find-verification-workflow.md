@@ -54,7 +54,10 @@ Unverified Bad  = { i ∉ verified_ids : find_scores[i] <  cutoff }
 
 **Cutoff-slide semantics (no re-score, preserve verified):** moving the slider sets `cutoff` and re-thresholds **only unverified items** against the frozen `find_scores`. Verified items keep their human vote wherever their score lands. An unverified item can flip Unverified Good ↔ Unverified Bad as the line moves; that's expected. No retrain, no re-embed.
 
-`verified_ids`, `find_scores`, and `cutoff` are cleared/recomputed only when the dataset/detector **pair changes** (a genuinely fresh context — `reloadForNewPair` in `find-view.component.ts:146`), which is also the only time the detector re-scores.
+**Two scopes, deliberately separated:**
+
+- **Detector-scoped (survives a haystack switch):** the K fold orderings (`calibration_cache`) and the `inclusion`→`threshold` result derived from them. These depend only on the LabelSet + embedder + calibration settings, not the haystack, so pointing the same detector at a different dataset reuses them as-is. They recompute only when the LabelSet changes (Train votes), the embedder changes, or a calibration setting changes — the existing `calibration_cache` invalidation, minus inclusion.
+- **Find-session-scoped (tied to the current haystack):** `find_scores`, `good_votes`/`bad_votes`, and `verified_ids`. These reset when the haystack (dataset) or the detector changes — `reloadForNewPair` in `find-view.component.ts:146` — and the haystack is re-scored. `find_scores` is the *only* thing a haystack switch recomputes; the threshold rides along from detector scope.
 
 ## Backend changes
 
@@ -119,7 +122,7 @@ Reported figures:
 - **Inclusion = pure cutoff, unified across Train and Find, no retrain (CRITICAL).** Inclusion leaves the model entirely (fixed architecture + regularization); it stays the FP/FN cost weight in the labelset min-cost threshold search, which yields the cutoff with no MLP fit. In Find the haystack is scored once and frozen; in Train the model still retrains *when you vote*, but never on an Inclusion change. **Backwards-compat break:** existing `inclusion` values change meaning and model capacity no longer varies with inclusion.
 - **Auto-advance = lowest unverified item above the cutoff** (the marginal positive), not next-in-stack. Doubles as the cheap active-learning order and self-defines the empty/done state.
 - **Hover-vote ≡ button-vote.** Both verify the item and move it left→right; both trigger auto-advance.
-- **Preserve-verified is automatic.** Verified items carry explicit votes the cutoff never overrides; sliding reclassifies only unverified items. The right panel is undisturbed by anything in the left panel. `verified_ids`/`find_scores`/`cutoff` reset only on a pair change.
+- **Preserve-verified is automatic.** Verified items carry explicit votes the cutoff never overrides; sliding reclassifies only unverified items. The right panel is undisturbed by anything in the left panel. Find-session state (`verified_ids`/`find_scores`/votes) resets when the haystack or detector changes; the detector-scoped K fold orderings + threshold survive a same-embedder haystack switch (see Data model).
 - **Positives-only review**, with the big buttons available on any centered item for one-off ActuallyGood/ActuallyBad marks + auto-advance.
 - **Ephemeral throughout**; Unverified Export is the persistence escape hatch.
 - **Stats eval baseline = the default calibrated cutoff**, fixed at score time, so corrections are measured against the detector's natural recommendation regardless of later slider position.
