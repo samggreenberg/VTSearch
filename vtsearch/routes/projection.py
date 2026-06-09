@@ -91,6 +91,19 @@ def _media_type_for(ctx) -> str:
     return first.get("media_type", "audio")
 
 
+def _compact_for(ctx) -> bool:
+    """Whether to compact the layout for this dataset's media type (default on).
+
+    Reads the per-media-type ``browse_compact`` preference (Settings → Browser).
+    Because the compacted coordinates are Stage-1 output — computed once and
+    frozen/persisted — a toggle takes effect on the next fresh build or the
+    Browser's Re-project (``force``) action, not on an already-built layout.
+    """
+    from vtsearch import settings
+
+    return bool(settings.get_browse_compact().get(_media_type_for(ctx), True))
+
+
 def _pkl_path_for(dataset_id: str) -> str | None:
     """Return the pkl_path from the dataset registry, or ``None``."""
     from vtscore.datasets.registry import get_dataset
@@ -223,6 +236,7 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
     mat_copy = matrix.copy()
     ids_copy = list(sorted_ids)
     dataset_id = ctx.dataset_id
+    compact = _compact_for(ctx)
 
     def _run(job):
         with thread_dataset_context(ctx):
@@ -230,7 +244,7 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
             def _on_progress(status, message, current, total):
                 job.update_progress(current, total, message)
 
-            proj = fit_projection(mat_copy, ids_copy, on_progress=_on_progress)
+            proj = fit_projection(mat_copy, ids_copy, compact=compact, on_progress=_on_progress)
             job.update_progress(0, 1, "building pyramid")
             pyr = build_pyramid(proj, bin_shape=bin_shape)
             job.update_progress(1, 1, "done")
@@ -333,6 +347,7 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
 
     mat_copy = matrix.copy()
     ids_copy = list(sorted_ids)
+    compact = _compact_for(ctx)
 
     def _run(job):
         with thread_dataset_context(ctx):
@@ -340,7 +355,7 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
             def _on_progress(status, message, current, total):
                 job.update_progress(current, total, message)
 
-            proj = fit_projection(mat_copy, ids_copy, on_progress=_on_progress)
+            proj = fit_projection(mat_copy, ids_copy, compact=compact, on_progress=_on_progress)
             job.update_progress(0, 1, "building pyramid")
             pyr = build_pyramid(proj, bin_shape=bin_shape)
             job.update_progress(1, 1, "done")

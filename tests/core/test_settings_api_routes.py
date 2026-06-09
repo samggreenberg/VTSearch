@@ -692,6 +692,15 @@ class TestBrowserSettings:
         assert data["browse_thumbnail_border"]["image"] == 8
         assert data["browse_thumbnail_border"]["video"] == 0
 
+    def test_update_browse_compact_per_type(self, client):
+        res = client.put("/api/settings", json={"browse_compact": {"audio": False, "image": True}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_compact"]["audio"] is False
+        assert data["browse_compact"]["image"] is True
+        # Persists across a fresh read.
+        assert client.get("/api/settings").get_json()["browse_compact"]["audio"] is False
+
     def test_get_settings_includes_browser_prefs(self, client):
         data = client.get("/api/settings").get_json()
         # Present as (possibly empty) dicts so the frontend can index by type.
@@ -700,6 +709,7 @@ class TestBrowserSettings:
             "browse_colormap",
             "browse_icon_size",
             "browse_thumbnail_border",
+            "browse_compact",
         ):
             assert key in data
             assert isinstance(data[key], dict)
@@ -711,5 +721,6 @@ class TestBrowserSettings:
             "browse_colormap",
             "browse_icon_size",
             "browse_thumbnail_border",
+            "browse_compact",
         ):
             assert data.get(key, {}) == {}

@@ -221,12 +221,19 @@ class UserSettings(BaseModel):
     #   the density colour for the pile's item count, so its hue/brightness reads
     #   as the stack height under the tile. Only affects media types that paint
     #   thumbnails (image, video); ``0`` disables it. Clamped to 0..8 px.
+    # - ``browse_compact``: whether the UMAP layout is compacted — clusters slid
+    #   together as rigid bodies to close the empty "oceans" between islands —
+    #   when the projection is (re)built. Unlike the others this affects the
+    #   Stage-1 coordinates, which are computed once and frozen, so a change
+    #   takes effect on the next fresh build or the Browser's Re-project action,
+    #   not retroactively on an already-built layout. Defaults to on per type.
     browse_bin_shape: dict[str, BinShape] = Field(default_factory=dict)
     browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
     browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     browse_thumbnail_border: dict[str, Annotated[int, _clamp(*BROWSE_THUMBNAIL_BORDER_PX)]] = Field(
         default_factory=dict
     )
+    browse_compact: dict[str, bool] = Field(default_factory=dict)
 
     view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
     view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)
