@@ -608,6 +608,11 @@ in git history and the cited source files.
   the dead water between islands disappears. Validated on real LAION-CLAP audio
   embeddings (ESC-50): grid-fill rose ~0.13→0.21 with zero blob distortion. See
   *§Open follow-ups → Active* for the fill-vs-crispness ceiling this trades against.
+  A per-media-type **`browse_compact`** toggle (Settings → Browser, default on)
+  controls it; because the coords are Stage-1 (computed once, frozen/persisted),
+  a change applies to the next build or the Re-project action, not retroactively.
+  The build routes read the setting for the dataset's media type and thread
+  `compact=` into `fit_projection`.
 
 ## Open follow-ups
 
