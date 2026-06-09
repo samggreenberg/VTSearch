@@ -511,6 +511,7 @@ class TestCalibrationCache:
             inclusion_value=0,
             det_ctx=det_ctx,
         )
+        assert det_ctx.calibration_cache is not None
         key_before = det_ctx.calibration_cache[0]
 
         with unittest.mock.patch.object(
@@ -527,6 +528,7 @@ class TestCalibrationCache:
             )
         # No fold refit, and the cache key is unchanged (inclusion is not in it).
         assert patched.call_count == 0
+        assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] == key_before
 
     def test_no_cache_when_det_ctx_missing(self):
