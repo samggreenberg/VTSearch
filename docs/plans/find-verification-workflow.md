@@ -79,6 +79,34 @@ Unverified Bad  = bad_votes  − verified_ids
 4. **Center auto-advance** (the explicit ask): today `find-view.component.ts:439 onMediaVoted` only reloads votes — no advance. Change it so, in find mode, after a vote on the centered item it selects the **next item in the work queue** (next Unverified Good in score order) via `mediaState.selectMedia(nextId)`. The center-panel swipe animation already fires `mediaVoted` after ~180ms (`center-panel.component.ts:260`), so the advance rides on that callback. When the queue empties, leave the center on the last item (or show a "queue clear" state).
 5. **Big Good/Bad buttons must work in find mode.** Verify the `voting-overlay` is rendered and not `disabled` while in find mode (it's gated by the Find scoring-busy `disabled` input today). Wire its `voted` emit through `castVote` → `submitToggleVoteAndRecord` (already the path) and ensure the find-mode vote marks the item verified (item 1/2 above).
 
+## Detector evaluation: the Stats button
+
+The real reason a user verifies a test haystack is to answer **"is this detector worth subscribing to on my data?"** The answer is: of the items I bothered to check, how often did the detector agree with me, and where did it miss? So the verified set doubles as an evaluation sample, and we surface a **Stats** button on the right panel (same affordance as the Datasets Dashboard card's Stats button → `vt-dataset-stats-modal`).
+
+**No new tracked state.** The detector's original call per item already lives in `find_initial_labels` (`scoring.py:353`), and the human's call is the current vote. Crossing them over `verified_ids` gives a 2×2 confusion matrix:
+
+| | Detector said **Good** | Detector said **Bad** |
+|---|---|---|
+| **Human → Good** (Verified Good) | Confirmed positive *(agree)* | Rescued false negative *(correction)* |
+| **Human → Bad** (Verified Bad) | Culled false positive *(correction)* | Confirmed negative *(agree)* |
+
+From those four counts we report:
+
+- **Verified count** — size of the evaluation sample.
+- **Agreements vs. corrections** — `confirmed_good + confirmed_bad` vs. `culled_fp + rescued_fn`, and the **agreement rate**.
+- **Precision on reviewed positives** — `confirmed_good / (confirmed_good + culled_fp)`: of the detector's above-threshold hits the human actually checked, how many held up. This is the single most decision-relevant number for "should I trust its hits."
+- **Misses surfaced** — `rescued_fn`: above-threshold items the human had to pull up from the Bad pile (only populated insofar as the user reviewed below threshold via the left-panel + big-buttons path).
+- **Run context** — the Inclusion and threshold the run was scored at, so the numbers are interpretable.
+
+Because re-scoring preserves each verified item's `find_initial_labels` entry (see the re-score change above), the baseline for "different from the initial assessment" is the detector's call *at the configuration the item was verified under* — the correct comparison as long as the user isn't mid-changing Inclusion. If they change Inclusion, subsequent verifications are measured against the new assessment.
+
+### Backend
+- **`GET /api/find/stats`** (new, `vtsearch/routes/detectors/`): computes the four counts from `verified_ids` × (`good_votes`/`bad_votes`) × `find_initial_labels`, plus the run's `inclusion` and `threshold`, and returns the derived rates. Pure read; no new state, no persistence.
+
+### Frontend
+- **`vt-find-stats-modal`** (new, mirrors `vt-dataset-stats-modal`): a standalone modal on the shared `ModalComponent`, fetches `GET /api/find/stats` on open, renders the 2×2 + summary rates.
+- **Stats button** in the right panel (find mode), beside Browse / Export / To Dataset, emitting a `stats` event that `find-view` handles by opening the modal — same wiring as the dashboard card's `stats` output.
+
 ## State-transition summary
 
 - **Find run** → every item Unverified Good or Unverified Bad; `verified_ids` empty; center seeded on the item just above threshold (existing behavior, `find-view.component.ts:237`).
@@ -98,4 +126,5 @@ Unverified Bad  = bad_votes  − verified_ids
 ## Open follow-ups
 
 - **Pure-threshold Inclusion.** If retrain-per-change is too slow, repurpose the Inclusion knob into a score-threshold slider over frozen scores (run once, slide the green/red line with no retrain/re-embed). Forks the backend (Inclusion stops invalidating the MLP) and the UX ("frozen detector"). Deferred pending real-world latency.
+- **"At what Inclusion would this item have been returned?"** A richer eval signal than the 2×2: for a rescued false-negative, how far would Inclusion have to move for the detector to surface it on its own? The honest version retrains across a sweep of Inclusion values (expensive). A cheap proxy is the item's score margin from the current threshold — "how close the detector came." Deferred; the Stats modal can grow this column later.
 - **Under-threshold (false-negative) review surface.** Currently only reachable item-by-item via the left panel + big buttons. If demand appears, add a dedicated under-threshold work queue (the symmetric "find what the detector missed" flow).
