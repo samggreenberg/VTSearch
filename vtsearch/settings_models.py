@@ -68,7 +68,13 @@ VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BIN_SHAPES: tuple[str, ...] = ("hex", "square")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
 VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
-VALID_PANEL_PX: tuple[int, int] = (150, 500)
+# Allowed range (CSS px) for the saved left/right panel widths. The floor keeps
+# a panel usable; the ceiling is a sanity bound only. The frontend resize logic
+# already constrains a panel to the available layout space (viewport minus the
+# dividers, the center column, and the opposite panel), so legitimate widths
+# never approach this ceiling even on very large displays. Out-of-range values
+# raise on write and clamp on read.
+VALID_PANEL_PX: tuple[int, int] = (150, 10000)
 # Allowed range (CSS px) for the VTSBrowse pile-thumbnail border width. ``0``
 # disables the border; values are clamped into this range on read/write.
 BROWSE_THUMBNAIL_BORDER_PX: tuple[int, int] = (0, 8)
