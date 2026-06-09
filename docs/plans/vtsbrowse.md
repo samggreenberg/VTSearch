@@ -597,6 +597,17 @@ in git history and the cited source files.
 - ~~**Per-theme density colormap + Browser settings tab**~~ — Heat/Ocean/Grayscale
   colormaps resolved against the live theme; per-media-type `browse_colormap` /
   `browse_icon_size` / `browse_bin_shape` settings surfaced in a new Browser tab.
+- ~~**Layout compaction (close the empty oceans)**~~ — `vtscore/projection/compaction.py`
+  `compact_layout()`, run by default on the UMAP path (`fit_projection(..., compact=True)`).
+  A collision-aware force-directed packer: HDBSCAN clusters the 2-D layout, each
+  cluster becomes a rigid disc (noise points fold into their nearest island so the
+  unit count stays bounded by the cluster count), the discs are pulled toward the
+  global centroid with hard non-overlap repulsion, and every point is translated by
+  its cluster's net shift. Because the move is a pure per-cluster translation, each
+  island's internal shape is preserved **exactly** (Procrustes disparity 0) — only
+  the dead water between islands disappears. Validated on real LAION-CLAP audio
+  embeddings (ESC-50): grid-fill rose ~0.13→0.21 with zero blob distortion. See
+  *§Open follow-ups → Active* for the fill-vs-crispness ceiling this trades against.
 
 ## Open follow-ups
 
@@ -642,6 +653,20 @@ in git history and the cited source files.
   the headless cloud container) — see **`docs/plans/vtsbrowse-empirical-tuning.md`**.
 - **WebGL renderer** if the Canvas 2D ceiling is hit (a trigger from the tuning
   pass's performance review, not a standalone feature).
+- **Compaction fill ceiling (crispness-vs-coverage).** `compact_layout` deliberately
+  trades raw canvas coverage for crisp, separable islands. Because it only *translates*
+  clusters, it can close the oceans *between* islands but cannot fill the gaps *within*
+  a cluster or reach the frame corners — so its grid-fill tops out around ~0.21 on the
+  ESC-50 audio benchmark, below what a `min_dist≈0.9` UMAP fit reaches (~0.38). The
+  latter wins on fill only by *inflating* blobs (spreading points across more cells),
+  which blurs clusters and starts merging neighbouring classes (Procrustes disparity
+  ~0.22). Two unexplored levers if more coverage is wanted without the blur: (a) pack
+  noise as its own bounded set of micro-units so they fill inter-island gaps (the
+  prototype hit ~0.27 this way, but at O(N) units — would need a grid/merge cap to
+  scale); (b) a mild anisotropic stretch of the *packed* layout toward the frame
+  aspect ratio to claim the corners. Current defaults (`margin_frac=0.15`,
+  `attract=0.02`, `iters=400`) were tuned on ESC-50 only — fold into the empirical
+  tuning pass once a browser environment is available to judge layouts visually.
 - If/when independent distribution of the projection backend is required, open
   a companion plan for **`vtscore` decoupling + PyPI publish**.
 
