@@ -489,11 +489,16 @@ class TestSettingsModule:
         with pytest.raises(ValueError):
             settings_mod.set_panel_pct_left({"audio": 100})
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left({"audio": 600})
+            settings_mod.set_panel_pct_left({"audio": 20000})
         with pytest.raises(ValueError):
             settings_mod.set_panel_pct_left(100)
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left(600)
+            settings_mod.set_panel_pct_left(20000)
+
+    def test_panel_pct_wide_panel_allowed(self, isolated_settings):
+        """Widths above the old 500px cap are accepted (no upper-bound clip)."""
+        settings_mod.set_panel_pct_left({"audio": 520})
+        assert settings_mod.get_panel_pct_left()["audio"] == 520
 
     def test_panel_pct_invalid_media_type(self):
         with pytest.raises(ValueError):
@@ -508,11 +513,11 @@ class TestSettingsModule:
         settings_mod.set_panel_pct_left({"audio": 300})
         # Manually write an out-of-range value to disk
         raw = json.loads(isolated_settings.read_text())
-        raw["panel_pct_left"]["audio"] = 700
+        raw["panel_pct_left"]["audio"] = 20000
         isolated_settings.write_text(json.dumps(raw))
         settings_mod.reset()
         result = settings_mod.get_panel_pct_left()
-        assert result["audio"] == 500
+        assert result["audio"] == 10000
 
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()

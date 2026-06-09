@@ -463,8 +463,14 @@ class TestSettingsAPI:
     def test_update_panel_pct_left_out_of_range(self, client):
         res = client.put("/api/settings", json={"panel_pct_left": 100})
         assert res.status_code == 400
-        res = client.put("/api/settings", json={"panel_pct_left": 600})
+        res = client.put("/api/settings", json={"panel_pct_left": 20000})
         assert res.status_code == 400
+
+    def test_update_panel_pct_left_wide_panel(self, client):
+        """Widths above the old 500px cap persist (frontend resize allows them)."""
+        res = client.put("/api/settings", json={"panel_pct_left": {"image": 520}})
+        assert res.status_code == 200
+        assert res.get_json()["panel_pct_left"]["image"] == 520
 
     def test_get_settings_includes_panel_pct(self, client):
         res = client.get("/api/settings")
