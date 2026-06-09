@@ -19,6 +19,7 @@ VTSearch Browse routes, not here.
 
 from __future__ import annotations
 
+from vtscore.projection.compaction import compact_layout
 from vtscore.projection.hexbin import hex_center, hexbin_assign
 from vtscore.projection.pyramid import (
     BIN_SHAPES,
@@ -37,6 +38,7 @@ from vtscore.projection.umap_projection import Projection, fit_projection, remov
 
 __all__ = [
     "Projection",
+    "compact_layout",
     "fit_projection",
     "Pyramid",
     "Tile",

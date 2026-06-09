@@ -38,6 +38,13 @@ class _PerMediaTypeIntDict(fields.Dict):
         super().__init__(keys=fields.String(), values=fields.Integer(), **kwargs)
 
 
+class _PerMediaTypeBooleanDict(fields.Dict):
+    """``{media_type_id: bool}`` dict (used for on/off browse toggles)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(keys=fields.String(), values=fields.Boolean(), **kwargs)
+
+
 class AppSettingsSchema(Schema):
     """Full settings dict returned by ``GET /api/settings`` and ``/defaults``.
 
@@ -78,6 +85,8 @@ class AppSettingsSchema(Schema):
     browse_icon_size = _PerMediaTypeStringDict()
     # Pile-thumbnail border width in CSS px, per media type (0 disables).
     browse_thumbnail_border = _PerMediaTypeIntDict()
+    # Whether (re)building the projection compacts the layout, per media type.
+    browse_compact = _PerMediaTypeBooleanDict()
 
     # Per-user, per-media-type
     view_mode_left = _PerMediaTypeStringDict()
@@ -193,6 +202,7 @@ class SettingsUpdateSchema(Schema):
     browse_colormap = fields.Raw()
     browse_icon_size = fields.Raw()
     browse_thumbnail_border = fields.Raw()
+    browse_compact = fields.Raw()
 
     autorun_detectors = fields.List(fields.String())
 

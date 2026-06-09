@@ -183,6 +183,12 @@
             },
             "type": "object"
           },
+          "browse_compact": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
+          },
           "browse_icon_size": {
             "additionalProperties": {
               "type": "string"
@@ -4170,6 +4176,7 @@
           },
           "browse_bin_shape": {},
           "browse_colormap": {},
+          "browse_compact": {},
           "browse_icon_size": {},
           "browse_panel_width": {
             "type": "integer"

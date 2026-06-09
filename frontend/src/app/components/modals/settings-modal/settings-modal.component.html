@@ -273,6 +273,18 @@
                 </div>
               </div>
               <div class="form-group">
+                <label class="form-label" title="Slide clusters together to close the empty space between them when the projection is built">Compaction</label>
+                <div class="toggle-group">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab)" (click)="onBrowseCompactChange(activeBrowseTab, true)" title="Close the empty space between clusters">
+                    On
+                  </button>
+                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseCompact(activeBrowseTab)" (click)="onBrowseCompactChange(activeBrowseTab, false)" title="Keep UMAP's raw spacing">
+                    Off
+                  </button>
+                </div>
+                <p class="form-hint">Slides clusters together to close the empty &ldquo;oceans&rdquo; between them, keeping each cluster&rsquo;s shape intact. Applies to the next projection build or Re-project.</p>
+              </div>
+              <div class="form-group">
                 <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap</label>
                 @if (browseTabUsesThumbnails(activeBrowseTab)) {
                   <select class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">

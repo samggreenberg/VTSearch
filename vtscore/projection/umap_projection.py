@@ -175,6 +175,7 @@ def fit_projection(
     min_dist: float = 0.1,
     min_n_for_umap: int = 10,
     random_state: int | None = None,
+    compact: bool = True,
     on_progress: ProgressCallback | None = None,
 ) -> Projection:
     """Project the ``(N, d)`` embedding *matrix* to a frozen 2-D :class:`Projection`.
@@ -187,6 +188,13 @@ def fit_projection(
     ``random_state`` defaults to ``None`` (unseeded, parallel — the production
     path); pass an int for a reproducible fit.  ``on_progress`` receives coarse
     ``(status, message, current, total)`` milestones if provided.
+
+    ``compact`` (default ``True``) post-processes the UMAP layout with
+    :func:`~vtscore.projection.compaction.compact_layout`, sliding clusters
+    together as rigid bodies to close the empty "oceans" UMAP leaves between
+    islands so the canvas isn't mostly dead water after zoom-to-fit.  It only
+    engages on the UMAP path (the PCA/trivial fallbacks are too small to pack)
+    and preserves each cluster's internal shape exactly.
     """
     mat = np.ascontiguousarray(matrix, dtype=np.float32)
     if mat.ndim != 2:
@@ -231,4 +239,11 @@ def fit_projection(
         on_heartbeat=_heartbeat,
     )
     _progress("projecting", "UMAP fit done", n, n)
+
+    if compact:
+        from vtscore.projection.compaction import compact_layout
+
+        _progress("projecting", "compacting layout", 0, 0)
+        coords = compact_layout(coords)
+
     return Projection(projection_id, list(ids), coords, "umap")
