@@ -40,6 +40,16 @@ export class VoteStateService implements OnDestroy {
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
   /**
+   * Find-mode flag.  In Find the detector flood-fills *every* item into
+   * ``goodVotes`` / ``badVotes`` (its presumption at the cutoff), so a raw
+   * good/bad membership is **not** a human decision — only ``verifiedIds`` is.
+   * When this is set, {@link currentState} treats an *unverified* item as
+   * ``'none'`` so the big Good/Bad buttons read neutral and a click *verifies*
+   * the item (sets an absolute good/bad) instead of toggling the detector's
+   * presumption off.  Set by the Find view; left ``false`` in Label/Train.
+   */
+  private findMode = false;
+  /**
    * Optimistic post-vote state per media, used to preserve the user's click
    * across a polling response that raced ahead of the vote POST.  Cleared
    * deterministically on every vote POST response; the server's reply IS
@@ -99,6 +109,29 @@ export class VoteStateService implements OnDestroy {
   }
 
   /**
+   * Toggle Find-mode verification gating (see {@link findMode}).  The Find
+   * view sets this on enter and clears it on leave so Label/Train keep the
+   * plain "good membership = voted good" behaviour.
+   */
+  setFindMode(on: boolean): void {
+    this.findMode = on;
+  }
+
+  /**
+   * Good/bad state for display, honouring Find-mode verification: an
+   * unverified Find item reads as neither good nor bad (its membership is the
+   * detector's presumption, not a human vote).  Outside Find these mirror raw
+   * ``goodVotes`` / ``badVotes`` membership.
+   */
+  effectiveGood(id: number): boolean {
+    return this.currentState(id) === 'good';
+  }
+
+  effectiveBad(id: number): boolean {
+    return this.currentState(id) === 'bad';
+  }
+
+  /**
    * Optimistically record that *id* is now verified (good/bad vote landed in
    * Find mode) or no longer verified (un-voted).  The server marks the same
    * transition on the vote POST; this just makes the left→right move feel
@@ -142,8 +175,17 @@ export class VoteStateService implements OnDestroy {
     return this.labelsetGoodCount > 0 && this.labelsetBadCount > 0;
   }
 
-  /** Current local polarity for *id*, or ``'none'`` when not voted. */
+  /**
+   * Current local polarity for *id*, or ``'none'`` when not voted.
+   *
+   * In Find mode an *unverified* item reads as ``'none'`` regardless of its
+   * flood-filled good/bad membership: that membership is the detector's
+   * presumption, not a human decision (see {@link findMode}).  This is what
+   * makes the big Good/Bad buttons verify (set an absolute good/bad) on an
+   * unverified item rather than toggle the presumption off.
+   */
   private currentState(id: number): VoteState {
+    if (this.findMode && !this.verifiedIdsSubject.value.has(id)) return 'none';
     if (this.goodVotesSubject.value.has(id)) return 'good';
     if (this.badVotesSubject.value.has(id)) return 'bad';
     return 'none';

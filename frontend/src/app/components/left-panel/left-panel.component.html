@@ -12,7 +12,7 @@
 
       <div class="images-header">
         <h3 class="images-header-title">
-          {{ mediaTypeName }}s ({{ medias.length | number }})
+          {{ mediaTypeName }}s ({{ (sortOrder?.length ?? medias.length) | number }})
         </h3>
         <button
           class="goods-action-btn unverified-export-btn"

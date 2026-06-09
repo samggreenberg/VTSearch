@@ -184,11 +184,11 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   }
 
   get isGood(): boolean {
-    return this.media ? this.voteState.goodVotes.has(this.media.id) : false;
+    return this.media ? this.voteState.effectiveGood(this.media.id) : false;
   }
 
   get isBad(): boolean {
-    return this.media ? this.voteState.badVotes.has(this.media.id) : false;
+    return this.media ? this.voteState.effectiveBad(this.media.id) : false;
   }
 
   /** True when the labeling session is fresh (no votes yet across either
