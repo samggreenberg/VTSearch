@@ -505,3 +505,18 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+// Icon waggle: rotate to 90° (0.3s), hold, rotate back (0.3s), hold; 2s cycle.
+// Signals "a slow job kicked off by this control is running" — the dashboard
+// Find/Train buttons, the dataset-card Browse eye while its projection builds,
+// and import/export submit buttons mid-request all opt in via `.icon-waggle`.
+// Global so any component can apply it; honored by the prefers-reduced-motion
+// rule in styles.scss.
+@keyframes icon-waggle {
+  0%, 65%, 100% { transform: rotate(0deg); }
+  15%, 50% { transform: rotate(90deg); }
+}
+
+.icon-waggle {
+  animation: icon-waggle 2s ease-in-out infinite;
+}
