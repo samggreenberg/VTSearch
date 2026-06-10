@@ -32,6 +32,11 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 - [clipper-chain.md](clipper-chain.md): ordered converter/clipper chains (Phase 1 shipped)
 - [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect with converters + clippers (Phase 1 shipped)
 
+## Find / verification
+
+- [find-verification-workflow.md](find-verification-workflow.md): Find verify loop, frozen scores, Stats (Phases 1–4 shipped; follow-ups open)
+- [coverage-atlas.md](coverage-atlas.md): domain-shift + evidence-aware verification for transferred detectors (design/research writeup only)
+
 ## Import / plugins
 
 - [server-import-ux.md](server-import-ux.md): Server/Services import UX (Phase 1 shipped; UX follow-ups open)
