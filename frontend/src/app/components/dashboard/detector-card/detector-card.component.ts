@@ -50,12 +50,14 @@ export class DetectorCardComponent implements OnChanges {
 
   @Input() deleteConfirmOpen = false;
   @Input() addLabelsOpen = false;
+  @Input() exportOpen = false;
 
   editing = false;
   wasEditing = false;
   editName = '';
   wasDeleteOpen = false;
   wasAddLabelsOpen = false;
+  wasExportOpen = false;
 
   startRename(event: MouseEvent): void {
     event.stopPropagation();
@@ -84,6 +86,9 @@ export class DetectorCardComponent implements OnChanges {
     if (changes['addLabelsOpen'] && !changes['addLabelsOpen'].currentValue && changes['addLabelsOpen'].previousValue) {
       this.wasAddLabelsOpen = true;
     }
+    if (changes['exportOpen'] && !changes['exportOpen'].currentValue && changes['exportOpen'].previousValue) {
+      this.wasExportOpen = true;
+    }
   }
 
   onPencilAnimationEnd(): void {
@@ -101,6 +106,12 @@ export class DetectorCardComponent implements OnChanges {
   onCapAnimationEnd(): void {
     if (!this.addLabelsOpen) {
       this.wasAddLabelsOpen = false;
+    }
+  }
+
+  onExportAnimationEnd(): void {
+    if (!this.exportOpen) {
+      this.wasExportOpen = false;
     }
   }
 
