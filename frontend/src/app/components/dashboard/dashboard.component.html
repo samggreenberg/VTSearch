@@ -269,6 +269,7 @@
                 [loadingTask]="loadingTasksSvc.getInlineDetectorTask(detector.id)"
                 [deleteConfirmOpen]="deletingDetectorId === detector.id"
                 [addLabelsOpen]="modals.addLabels.open && modals.addLabels.detectorId === detector.id"
+                [exportOpen]="modals.export.open && modals.export.detectorName === detector.name"
                 (rowClick)="!isLoading && toggleDetectorSelection(detector.id, $event)"
                 (checkboxToggle)="!isLoading && toggleDetectorCheckbox(detector.id)"
                 (rename)="renameDetector(detector, $event)"

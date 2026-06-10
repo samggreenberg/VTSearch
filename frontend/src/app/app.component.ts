@@ -65,6 +65,8 @@ export class AppComponent {
   achievementsDisabled = false;
   showKeyboardHelp = false;
   gearClosing = false;
+  achievementsClosing = false;
+  helpClosing = false;
   isOnLabelView = false;
   private isOnBrowseView = false;
   settingsViewTab = '';
@@ -175,7 +177,11 @@ export class AppComponent {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (this.isTypingTarget(event.target)) return;
     event.preventDefault();
-    this.showKeyboardHelp = !this.showKeyboardHelp;
+    if (this.showKeyboardHelp) {
+      this.onKeyboardHelpClosed();
+    } else {
+      this.onHelp();
+    }
   }
 
   private isTypingTarget(target: EventTarget | null): boolean {
@@ -193,10 +199,12 @@ export class AppComponent {
 
   onKeyboardHelpClosed(): void {
     this.showKeyboardHelp = false;
+    this.helpClosing = true;
   }
 
   onHelp(): void {
     this.menuOpen = false;
+    this.helpClosing = false;
     this.showKeyboardHelp = true;
   }
 
@@ -274,16 +282,26 @@ export class AppComponent {
 
   onAchievements(): void {
     this.menuOpen = false;
+    this.achievementsClosing = false;
     this.showAchievements = true;
     this.achievements.acknowledgeAll();
   }
 
   onAchievementsClosed(): void {
     this.showAchievements = false;
+    this.achievementsClosing = true;
   }
 
   onGearAnimationEnd(): void {
     this.gearClosing = false;
+  }
+
+  onTrophyAnimationEnd(): void {
+    this.achievementsClosing = false;
+  }
+
+  onHelpAnimationEnd(): void {
+    this.helpClosing = false;
   }
 
   // --- Hoisted new-thing modal handlers (delegate to NewThingFlowsService) ---

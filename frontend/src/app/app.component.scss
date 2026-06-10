@@ -207,6 +207,19 @@ header {
     width: 20px;
     height: 20px;
     color: var(--header-text-dim);
+
+    // Tilt-and-hold while the button's modal is open, mirroring the Settings
+    // gear. trophy-* lives on the Achievements icon, help-* on the Help icon;
+    // both reuse the shared header tilt keyframes.
+    &.trophy-open,
+    &.help-open {
+      animation: header-icon-tilt-open 0.3s ease-in-out forwards;
+    }
+
+    &.trophy-close,
+    &.help-close {
+      animation: header-icon-tilt-close 0.3s ease-in-out forwards;
+    }
   }
 
   &:hover {
@@ -253,11 +266,11 @@ header {
     color: var(--header-text-dim);
 
     &.gear-open {
-      animation: gear-spin-open 0.3s ease-in-out forwards;
+      animation: header-icon-tilt-open 0.3s ease-in-out forwards;
     }
 
     &.gear-close {
-      animation: gear-spin-close 0.3s ease-in-out forwards;
+      animation: header-icon-tilt-close 0.3s ease-in-out forwards;
     }
   }
 
@@ -304,13 +317,13 @@ header {
   font-style: italic;
 }
 
-@keyframes gear-spin-open {
+@keyframes header-icon-tilt-open {
   0% { transform: rotate(0deg); }
   50% { transform: rotate(15deg); }
   100% { transform: rotate(30deg); }
 }
 
-@keyframes gear-spin-close {
+@keyframes header-icon-tilt-close {
   0% { transform: rotate(30deg); }
   50% { transform: rotate(15deg); }
   100% { transform: rotate(0deg); }

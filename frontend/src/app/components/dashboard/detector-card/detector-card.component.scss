@@ -247,6 +247,14 @@ td.actions-col {
   &:hover {
     background: var(--btn-icon-hover-bg);
   }
+
+  .export-active {
+    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
+  }
+
+  .export-inactive {
+    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
+  }
 }
 
 .delete-btn {

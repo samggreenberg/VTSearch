@@ -113,7 +113,9 @@
     aria-label="Achievements"
     title="Achievements: usage milestones and tier progress"
     (click)="onAchievements()"
-  ><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+  ><svg aria-hidden="true" [class.trophy-open]="showAchievements" [class.trophy-close]="achievementsClosing"
+       (animationend)="onTrophyAnimationEnd()"
+       viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M6 4h12v4a6 6 0 0 1-12 0z"/>
       <path d="M6 6H3a2 2 0 0 0 0 4h3"/>
@@ -130,8 +132,10 @@
     class="help-btn"
     aria-label="Help"
     title="Help (?)"
-    (click)="showKeyboardHelp = true"
-  ><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    (click)="onHelp()"
+  ><svg aria-hidden="true" [class.help-open]="showKeyboardHelp" [class.help-close]="helpClosing"
+       (animationend)="onHelpAnimationEnd()"
+       viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.2"/>
       <path d="M5.8 6.2a2.2 2.2 0 014.4 0c0 1.1-.8 1.5-1.5 2-.5.3-.7.7-.7 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
       <circle cx="8" cy="12" r="0.7" fill="currentColor"/>
