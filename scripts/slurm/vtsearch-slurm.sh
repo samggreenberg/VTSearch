@@ -28,12 +28,18 @@ GPU=${VTS_GPU:-l40s}        # GPU type for --gres=gpu:<type>:1
 CPUS=${VTS_CPUS:-8}         # CPU cores
 MEM=${VTS_MEM:-48G}         # memory (one app.py needs headroom for two model loads)
 TIME=${VTS_TIME:-8:00:00}   # walltime
+# Per-user port: GPU nodes hold several GPUs, so SLURM can pack multiple users'
+# jobs onto one physical node where a single shared :5000 would collide. Derive
+# the port from your UID so it's stable across sessions and the tunnel script
+# computes the same value. Range 10000-29999 stays below the OS ephemeral range.
+PORT=${VTS_PORT:-$((10000 + $(id -u) % 20000))}
 
 echo ">>> Requesting 1x $GPU, $CPUS cores, $MEM, ${TIME} walltime on partition '$PART'..."
 echo ">>> (this may queue; once it lands, VTSearch starts and prints its node + tunnel hint)"
 
-# Export the resolved dir/venv so they survive into the srun child shell.
-export VTS_DIR="$DIR" VTS_VENV="$VENV"
+# Export the resolved dir/venv/port so they survive into the srun child shell.
+# app.py reads VTSEARCH_PORT for the dev server's bind port.
+export VTS_DIR="$DIR" VTS_VENV="$VENV" VTSEARCH_PORT="$PORT"
 
 exec srun --job-name=vtsearch --pty \
     -p "$PART" --gres=gpu:${GPU}:1 -c "$CPUS" --mem "$MEM" -t "$TIME" \
@@ -46,9 +52,9 @@ exec srun --job-name=vtsearch --pty \
         node=$(hostname)
         echo
         echo "========================================================="
-        echo "  VTSearch node: $node   (branch: $(git branch --show-current 2>/dev/null))"
+        echo "  VTSearch node: $node   port: $VTSEARCH_PORT   (branch: $(git branch --show-current 2>/dev/null))"
         echo "  On your LOCAL MACHINE, in a new terminal, run:"
-        echo "      vtsearch-tunnel        (then browse http://localhost:5000)"
+        echo "      vtsearch-tunnel        (auto-discovers this node + port)"
         echo "========================================================="
         while true; do
             echo

@@ -3,7 +3,8 @@
 # local machine. Run this LOCALLY, AFTER starting VTSearch on the cluster (the
 # `vtsearch` command from scripts/slurm/vtsearch-slurm.sh).
 #
-# Browse http://localhost:5000 once it connects. Ctrl+C closes the tunnel.
+# It auto-discovers the node and the per-user port. Browse the printed
+# http://localhost:<port> once it connects. Ctrl+C closes the tunnel.
 #
 # Requires an SSH host entry for the cluster login node. By default this script
 # connects to the host alias `cluster`; define it in ~/.ssh/config, e.g.
@@ -32,8 +33,11 @@ if ! ssh -o BatchMode=yes -o ConnectTimeout=8 "$CLUSTER_HOST" true 2>/dev/null; 
 fi
 
 echo ">>> Locating your VTSearch job on the cluster..."
-NODE=$(ssh -o BatchMode=yes "$CLUSTER_HOST" \
-    'squeue --me -h -o "%j %N %T" | awk "\$1==\"vtsearch\" && \$3==\"RUNNING\" {print \$2; exit}"')
+# One round-trip returns the per-user PORT (computed on the cluster with the
+# same UID formula vtsearch-slurm.sh uses, so it matches what the app bound to)
+# followed by the running job's NODE. Port first so an empty node still parses.
+read -r REMOTE_PORT NODE < <(ssh -o BatchMode=yes "$CLUSTER_HOST" \
+    'node=$(squeue --me -h -o "%j %N %T" | awk "\$1==\"vtsearch\" && \$3==\"RUNNING\" {print \$2; exit}"); echo "$((10000 + $(id -u) % 20000)) $node"')
 
 if [ -z "$NODE" ]; then
     echo "!!! No RUNNING VTSearch job found."
@@ -42,11 +46,15 @@ if [ -z "$NODE" ]; then
     exit 1
 fi
 
-echo ">>> VTSearch is on $NODE. Forwarding localhost:5000 -> $NODE:5000."
-echo ">>> Browse  http://localhost:5000   (Ctrl+C here closes the tunnel)"
+# VTS_PORT overrides locally (set it to match if you overrode it on the
+# cluster); otherwise use the cluster-computed per-user port.
+PORT=${VTS_PORT:-$REMOTE_PORT}
+
+echo ">>> VTSearch is on $NODE:$PORT. Forwarding localhost:$PORT -> $NODE:$PORT."
+echo ">>> Browse  http://localhost:$PORT   (Ctrl+C here closes the tunnel)"
 echo ">>> Dropping you into the VTSearch dir on the login node for git/edits."
 # -t: interactive TTY. The remote command cd's into the project (same shared
 # filesystem the compute node sees) and starts a login shell, so this terminal
 # is both the tunnel and a ready-to-use git workspace.
-exec ssh -t -L 5000:"$NODE":5000 "$CLUSTER_HOST" \
+exec ssh -t -L "$PORT":"$NODE":"$PORT" "$CLUSTER_HOST" \
     "cd \"$VTS_DIR\" 2>/dev/null; exec bash -l"

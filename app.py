@@ -786,6 +786,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VTSearch \u2014 media explorer web app")
     parser.add_argument("--local", action="store_true", help="Run in local development mode")
     parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help=(
+            "Port for the dev server to bind (default 5000, or VTSEARCH_PORT "
+            "if set). Useful when several instances share a host, e.g. "
+            "co-located SLURM jobs on a multi-GPU node."
+        ),
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="count",
@@ -1399,10 +1409,14 @@ if __name__ == "__main__":
         # catches an already-*listening* instance; this also covers the
         # model-loading window when the port is briefly still free. Held
         # for the process lifetime (released on exit).
-        _instance_lock = _acquire_single_instance_lock(5000)  # noqa: F841
+        # Port precedence: --port > VTSEARCH_PORT > 5000. Lets several
+        # instances coexist on one host (e.g. co-located SLURM jobs on a
+        # multi-GPU node), where a single shared :5000 would collide.
+        port = args.port or int(os.environ.get("VTSEARCH_PORT", "5000"))
+        _instance_lock = _acquire_single_instance_lock(port)  # noqa: F841
         # Catch a leftover instance before the expensive model load, so the
         # user is prompted up front instead of after a long startup.
-        _preflight_port(5000)
+        _preflight_port(port)
         initialize_server(mode_label="LOCAL" if args.local else "PRODUCTION")
-        print("\U0001f310 Open http://localhost:5000 in your browser", flush=True)
-        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+        print(f"\U0001f310 Open http://localhost:{port} in your browser", flush=True)
+        app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
