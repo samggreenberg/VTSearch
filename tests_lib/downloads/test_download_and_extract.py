@@ -612,28 +612,34 @@ class TestConcurrentDownloads:
 
         def run():
             try:
-                with (
-                    patch.object(dl_module.core, "DATA_DIR", data_dir),
-                    patch.object(dl_module.core, "download_file_with_progress", slow_download),
-                ):
-                    dl_module._download_and_extract(
-                        url="http://example.com/test.zip",
-                        archive_name="test.zip",
-                        extract_to=extract_to,
-                        check_path=check_path,
-                        download_size_mb=1,
-                        dataset_name="Test",
-                        on_progress=lambda *a: None,
-                    )
+                dl_module._download_and_extract(
+                    url="http://example.com/test.zip",
+                    archive_name="test.zip",
+                    extract_to=extract_to,
+                    check_path=check_path,
+                    download_size_mb=1,
+                    dataset_name="Test",
+                    on_progress=lambda *a: None,
+                )
             except Exception as exc:
                 errors.append(exc)
 
-        t1 = threading.Thread(target=run)
-        t2 = threading.Thread(target=run)
-        t1.start()
-        t2.start()
-        t1.join(timeout=30)
-        t2.join(timeout=30)
+        # Patch on the MAIN thread (around start+join) rather than inside each
+        # worker. ``patch.object`` mutates a module-global, so applying it per
+        # thread is not thread-safe: under load a worker could still be inside
+        # its ``with`` block (or hung on the barrier) when the block was meant
+        # to exit, leaking ``slow_download`` into later tests. Keeping the patch
+        # on the main thread guarantees it is restored only after both joins.
+        with (
+            patch.object(dl_module.core, "DATA_DIR", data_dir),
+            patch.object(dl_module.core, "download_file_with_progress", slow_download),
+        ):
+            t1 = threading.Thread(target=run)
+            t2 = threading.Thread(target=run)
+            t1.start()
+            t2.start()
+            t1.join(timeout=30)
+            t2.join(timeout=30)
 
         assert not errors, f"Concurrent downloads raised errors: {errors}"
         assert check_path.exists()
