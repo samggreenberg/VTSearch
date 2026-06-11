@@ -358,8 +358,11 @@ Notable fields:
 
 - `autorun_detectors`: list of registered detector names
   to run during `/api/auto-detect` and the CLI `--autodetect` flow.
-  Toggle a model's flag through the UI or
-  `PUT /api/detectors/registry/<id>/autorun`.
+  This is a **per-user** setting (each user curates their own list in
+  Settings → Auto-Find or via `PUT /api/detectors/registry/<id>/autorun`).
+  A list placed here in `data/settings.json` applies to the built-in
+  `default` user — i.e. single-user deployments and the CLI's default
+  `--autodetect` run, which read through to this file.
 - `saved_datasets_dir`, `detectors_dir`:
   infrastructure directories (overridable for custom data layouts)
 - `max_concurrent_dataset_downloads` /

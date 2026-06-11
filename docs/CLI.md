@@ -13,6 +13,26 @@ maps to `data/detectors/<name>.json`; the CLI re-resolves the
 labelset's origins, embeds them with the dataset's embedder, trains an
 MLP, and applies it to the dataset.  See below for the exact format.
 
+### Which user's Auto-Find list runs
+
+`autorun_detectors` (and the Auto-Find results exporter) are **per-user**:
+each user curates their own list in **Settings → Auto-Find**. By default the
+CLI runs as the built-in **`default`** user, which reads its list from the
+`--settings` file (so the flat-file workflow above is unchanged).
+
+To run *another* user's Auto-Find list (e.g. a nightly cron of their favorite
+detectors), authenticate with `--user` + `--api-key`, mirroring the server's
+`api_key` login:
+
+```bash
+python app.py --autodetect --dataset data.pkl --user alice --api-key "$ALICE_KEY"
+```
+
+The key is checked against `data/api_keys.json` (the same file the server's
+`--login api_key` uses); on success the run reads `alice`'s autorun list and
+results exporter. Without `--user`, the `default` user (and the `--settings`
+file) applies.
+
 **From a pickle file:**
 
 ```bash
