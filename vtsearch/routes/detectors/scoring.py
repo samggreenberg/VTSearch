@@ -362,6 +362,12 @@ def find_label(body: dict):  # noqa: C901
 
     set_find_mode(True)
 
+    # A fresh scoring pass IS the current evaluation, so any "stale" flag left by
+    # a prior corrections-to-detector fold no longer applies.
+    from vtscore.state.core import get_active_detector_context
+
+    get_active_detector_context().find_eval_stale = False
+
     from vtscore.labels.sync import sync_to_labelset_source
 
     sync_to_labelset_source()
@@ -560,6 +566,7 @@ def find_stats():
         "precision": round(precision, 4),
         "inclusion": get_inclusion(),
         "threshold": round(det_ctx.threshold, 4),
+        "stale": getattr(det_ctx, "find_eval_stale", False),
         "sweep": sweep,
     }
 
@@ -572,7 +579,8 @@ def find_stats():
 @require_dataset_header
 @require_detector_header
 def find_corrections_to_detector():
-    """Fold the Find corrections into the active detector's labelset and retrain.
+    """Fold the Find corrections into the active detector's labelset for *future*
+    scoring, leaving the current Find session frozen.
 
     A *correction* is an item whose adopted Find label differs from the
     detector's original call (``find_initial_labels``): a rescued
@@ -581,22 +589,25 @@ def find_corrections_to_detector():
     filter and the Stats "corrections" count.
 
     The correction items are written into the detector's on-disk labelset
-    (superseding any prior entry for the same source media), the detector's MLP
-    is retrained from the *merged* labelset (not the whole-dataset Find
-    predictions), and the registry's training counters are refreshed.
+    (superseding any prior entry for the same source media) and the registry's
+    training counters are refreshed.  The cached MLP is invalidated so the next
+    scoring pass retrains from the merged labelset.
 
-    Destructive by design: it changes the detector, so the current Find
-    evaluation (which scored against the *old* detector) no longer applies.
-    The caller is expected to re-score afterwards.
+    The current Find session is deliberately *not* re-scored or reset: its
+    scores, queue, votes, and verification stay pinned to the detector version
+    that produced them, so the displayed evaluation (and ``GET /api/find/stats``)
+    keeps showing the previous detector's results.  That evaluation is now out of
+    date relative to the retrained detector, which ``find_eval_stale`` records so
+    the Stats note can say so; the retrained detector takes effect the next time
+    the dataset is scored.
     """
     from vtscore.datasets.labelset import LabelSet, element_key
-    from vtscore.detectors.dataset_sync import validated_vote_snapshot
+    from vtscore.detectors.dataset_sync import _detector_file_mtime, validated_vote_snapshot
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
-    from vtscore.detectors.labelset_training import train_from_labelset
     from vtscore.detectors.registry import get_detector as reg_get_detector
     from vtscore.detectors.registry import update_detector
     from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
-    from vtscore.state.core import get_active_detector_context
+    from vtscore.state.core import _state_lock, get_active_detector_context
 
     det_ctx = get_active_detector_context()
     detector_id = det_ctx.detector_id or ""
@@ -634,7 +645,6 @@ def find_corrections_to_detector():
             "name": name,
             "corrections_added": 0,
             "num_labels": len(existing_ls),
-            "trained": False,
         }
 
     corrections_ls = LabelSet.from_clips_and_votes(
@@ -664,19 +674,22 @@ def find_corrections_to_detector():
         data.pop("input_spec", None)
     _write_detector(path, data)
 
-    media_type = data.get("media_type", "") or next(iter(snap.medias.values()), {}).get("media_type", "")
-    trained = train_from_labelset(det_ctx, merged, media_type=media_type, snap=snap.medias)
-
-    # The prior Find evaluation scored against the *old* detector, so its
-    # verified pile and frozen baseline (find_initial_labels / find_scores) no
-    # longer apply.  Clear them so the caller's re-score starts a clean
-    # evaluation against the retrained detector.
-    from vtscore.state.core import _state_lock
-
+    # Freeze the current Find session.  Writing the file bumped its mtime, which
+    # would make the before_request rehydrate wipe the in-memory votes /
+    # find_scores / find_initial_labels and re-derive them from the new labelset.
+    # Re-point the cached labelset + mtime at the file we just wrote so that
+    # rehydrate is a no-op, invalidate the cached MLP so the next scoring pass
+    # retrains from the merged labelset, and flag the displayed evaluation stale.
+    new_mtime = _detector_file_mtime(path)
+    media_type = data.get("media_type", "") or ""
     with _state_lock:
-        det_ctx.verified_ids.clear()
-        det_ctx.find_initial_labels.clear()
-        det_ctx.find_scores.clear()
+        det_ctx.cached_labelset = merged
+        det_ctx.cached_labelset_mtime = new_mtime
+        det_ctx.cached_labelset_media_type = media_type or det_ctx.cached_labelset_media_type
+        det_ctx.labelset_good_count = sum(1 for el in merged.elements if el.label == "good")
+        det_ctx.labelset_bad_count = sum(1 for el in merged.elements if el.label == "bad")
+        det_ctx.model = None
+        det_ctx.find_eval_stale = True
 
     import time as _time
 
@@ -687,7 +700,6 @@ def find_corrections_to_detector():
         "name": name,
         "corrections_added": num_corrections,
         "num_labels": len(merged),
-        "trained": bool(trained),
     }
 
 

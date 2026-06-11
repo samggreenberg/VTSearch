@@ -50,6 +50,7 @@ def clear_votes() -> None:
         ctx.find_initial_labels.clear()
         ctx.verified_ids.clear()
         ctx.find_scores.clear()
+        ctx.find_eval_stale = False
         ds_tree = get_active_context().diversity_tree
         if ds_tree is not None:
             ds_tree.reset_seen()

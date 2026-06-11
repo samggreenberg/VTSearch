@@ -727,6 +727,10 @@ class FindStatsResponseSchema(Schema):
     # Run context.
     inclusion = fields.Integer(required=True)
     threshold = fields.Float(required=True)
+    # True when the detector's labelset changed (Find corrections folded in +
+    # retrain) after this evaluation was scored, so these numbers reflect the
+    # previous detector version.  Drives the "out of date" note in the UI.
+    stale = fields.Boolean(required=True)
     # FP/FN at every inclusion from -10..10 over all adopted items.
     sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
 
@@ -735,7 +739,8 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
     """Response for ``POST /api/find/corrections-to-detector``.
 
     Reports how many corrections were folded into the active detector's
-    labelset, the resulting labelset size, and whether the MLP retrained.
+    labelset and the resulting labelset size.  The current Find session stays
+    frozen; the retrained detector applies on the next scoring pass.
     See docs/plans/find-verification-workflow.md.
     """
 
@@ -743,7 +748,6 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
     name = fields.String(required=True)
     corrections_added = fields.Integer(required=True)
     num_labels = fields.Integer(required=True)
-    trained = fields.Boolean(required=True)
 
 
 __all__ = [

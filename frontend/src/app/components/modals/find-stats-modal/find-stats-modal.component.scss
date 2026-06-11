@@ -3,6 +3,21 @@
 // dataset-stats-modal + _components.scss); only the find-specific confusion
 // grid and the inline chart are styled here.
 
+.stale-note {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 3px solid var(--text-warning);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-warning);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+
+  strong {
+    font-weight: var(--weight-semibold);
+  }
+}
+
 .confusion {
   .row-head {
     font-weight: var(--weight-medium);

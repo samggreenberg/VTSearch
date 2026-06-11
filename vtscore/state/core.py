@@ -359,6 +359,13 @@ class DetectorContext:
         # re-scoring.  Both are in-memory only and never persisted.
         "verified_ids",
         "find_scores",
+        # True when the on-disk labelset has been changed (e.g. Find corrections
+        # folded in + retrain) *since* this frozen Find evaluation was scored, so
+        # the still-displayed find_initial_labels / find_scores reflect the
+        # previous detector version.  Drives the "out of date" note in
+        # ``GET /api/find/stats``.  Cleared on a fresh find-label scoring pass and
+        # on any session reset (clear votes / dataset switch).
+        "find_eval_stale",
         "inclusion",
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
@@ -432,6 +439,10 @@ class DetectorContext:
         # Find-session verification state (see docs/plans/find-verification-workflow.md).
         self.verified_ids: dict[int, None] = {}
         self.find_scores: dict[int, float] = {}
+        # See the slot comment: the displayed Find evaluation is for the detector
+        # version that scored this pass; flipped True when its labelset changes
+        # underneath (corrections folded in + retrain).
+        self.find_eval_stale: bool = False
         self.inclusion: int | None = None
         # Cached in-memory data (never exported)
         self.training_medias: dict[int, dict[str, Any]] = {}
@@ -657,6 +668,7 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "find_initial_labels", _FrozenDict("detector"))
         object.__setattr__(self, "verified_ids", _FrozenDict("detector"))
         object.__setattr__(self, "find_scores", _FrozenDict("detector"))
+        object.__setattr__(self, "find_eval_stale", False)
         object.__setattr__(self, "inclusion", None)
         object.__setattr__(self, "training_medias", _FrozenDict("detector"))
         object.__setattr__(self, "label_embeddings", _FrozenDict("detector"))

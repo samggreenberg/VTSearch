@@ -2717,17 +2717,13 @@
           },
           "ok": {
             "type": "boolean"
-          },
-          "trained": {
-            "type": "boolean"
           }
         },
         "required": [
           "corrections_added",
           "name",
           "num_labels",
-          "ok",
-          "trained"
+          "ok"
         ],
         "type": "object"
       },
@@ -2879,6 +2875,9 @@
           "rescued_false_neg": {
             "type": "integer"
           },
+          "stale": {
+            "type": "boolean"
+          },
           "sweep": {
             "items": {
               "$ref": "#/components/schemas/FindStatsSweepPoint"
@@ -2908,6 +2907,7 @@
           "inclusion",
           "precision",
           "rescued_false_neg",
+          "stale",
           "sweep",
           "threshold",
           "total_bad",
@@ -11150,7 +11150,7 @@
     },
     "/api/find/corrections-to-detector": {
       "post": {
-        "description": "A *correction* is an item whose adopted Find label differs from the\ndetector's original call (``find_initial_labels``): a rescued\nfalse-negative (now good, the detector said bad) or a culled false-positive\n(now bad, the detector said good).  This matches the ``corrections`` export\nfilter and the Stats \"corrections\" count.\n\nThe correction items are written into the detector's on-disk labelset\n(superseding any prior entry for the same source media), the detector's MLP\nis retrained from the *merged* labelset (not the whole-dataset Find\npredictions), and the registry's training counters are refreshed.\n\nDestructive by design: it changes the detector, so the current Find\nevaluation (which scored against the *old* detector) no longer applies.\nThe caller is expected to re-score afterwards.",
+        "description": "A *correction* is an item whose adopted Find label differs from the\ndetector's original call (``find_initial_labels``): a rescued\nfalse-negative (now good, the detector said bad) or a culled false-positive\n(now bad, the detector said good).  This matches the ``corrections`` export\nfilter and the Stats \"corrections\" count.\n\nThe correction items are written into the detector's on-disk labelset\n(superseding any prior entry for the same source media) and the registry's\ntraining counters are refreshed.  The cached MLP is invalidated so the next\nscoring pass retrains from the merged labelset.\n\nThe current Find session is deliberately *not* re-scored or reset: its\nscores, queue, votes, and verification stay pinned to the detector version\nthat produced them, so the displayed evaluation (and ``GET /api/find/stats``)\nkeeps showing the previous detector's results.  That evaluation is now out of\ndate relative to the retrained detector, which ``find_eval_stale`` records so\nthe Stats note can say so; the retrained detector takes effect the next time\nthe dataset is scored.",
         "operationId": "find_corrections_to_detector",
         "responses": {
           "200": {
@@ -11176,7 +11176,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Fold the Find corrections into the active detector's labelset and retrain.",
+        "summary": "Fold the Find corrections into the active detector's labelset for *future*\nscoring, leaving the current Find session frozen.",
         "tags": [
           "detector_scoring"
         ]

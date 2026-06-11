@@ -104,6 +104,7 @@ def ensure_votes_match_active_dataset() -> None:
             det_ctx.find_initial_labels.clear()
             det_ctx.verified_ids.clear()
             det_ctx.find_scores.clear()
+            det_ctx.find_eval_stale = False
             det_ctx.training_medias.clear()
             # The detector now has no votes for the active dataset, so they
             # can't be find/scoring output; let the next vote sync normally.

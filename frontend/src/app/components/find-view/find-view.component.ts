@@ -540,34 +540,30 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Fold the corrections (items whose adopted label differs from the
-   * detector's original call) into the active detector's labelset and retrain
-   * its MLP. This changes the detector, so the current evaluation no longer
-   * applies; on success we re-score the dataset against the retrained detector
-   * from a clean slate (nothing verified).
+   * Fold the corrections (items whose adopted label differs from the detector's
+   * original call) into the active detector's labelset for future use. The
+   * current Find session stays frozen — its scores, queue, votes, and Stats keep
+   * showing the detector version that produced them — so the only visible effect
+   * is the Stats being flagged out of date. The retrained detector applies the
+   * next time the dataset is scored.
    */
   onAddCorrections(): void {
     if (this.sortState.sortBusy) return;
     this.dialog
       .confirmDestructive(
         'Add your corrections to this detector?',
-        "Every item you changed from the detector's call is added to its labelset and the detector is retrained. " +
-          'This changes the detector, so the current evaluation no longer applies and the dataset is re-scored.',
-        'Add & Retrain',
+        "Every item you changed from the detector's call is added to its labelset, so the detector learns from them next time you score. " +
+          'Your current results and evaluation stay as they are — the Stats will be marked out of date — and nothing is re-scored now.',
+        'Add Corrections',
       )
       .then((ok) => {
         if (!ok) return;
-        // Busy spinner for the add+retrain call.  We do NOT clear it in the
-        // success-with-corrections branch: runFindLabel() owns the busy state
-        // from there through the re-score so the overlay never flickers off.
-        this.sortState.setSortBusy(true);
         this.detectorsFindApi
           .addCorrectionsToDetector()
           .pipe(takeUntil(this.destroy$))
           .subscribe({
             next: (resp) => {
               if (resp.corrections_added === 0) {
-                this.sortState.setSortBusy(false);
                 this.toast.success({
                   message: 'No corrections to add',
                   detail: "Every item still matches the detector's original call.",
@@ -577,17 +573,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
               }
               this.toast.success({
                 message: `Added ${resp.corrections_added} correction${resp.corrections_added === 1 ? '' : 's'} to the detector`,
-                detail: `Detector now has ${resp.num_labels} label${resp.num_labels === 1 ? '' : 's'}. Re-scoring with the retrained detector…`,
+                detail: `The detector now has ${resp.num_labels} label${resp.num_labels === 1 ? '' : 's'} and will use them next time you score. Your current results stay put; Stats are now marked out of date.`,
                 dedupKey: 'find-corrections-added',
               });
-              // Fresh evaluation against the changed detector: drop the prior
-              // votes/verifications and re-score (runFindLabel keeps the busy
-              // overlay up until the new scores land).
-              this.voteState.clear();
-              this.runFindLabel();
             },
             error: (err: { error?: { message?: string; error?: string } }) => {
-              this.sortState.setSortBusy(false);
               const body = err?.error;
               const message = body?.message || body?.error || 'Failed to add corrections';
               this.toast.error({ message, dedupKey: 'find-corrections-error' });
