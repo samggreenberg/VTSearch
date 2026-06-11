@@ -68,9 +68,19 @@ The labelset-element shape is shared with :mod:`vtsearch.schemas.labels`.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, ValidationError, fields, validate
 
 from vtsearch.schemas.labels import LabeledElementSchema
+
+
+def _list_of_strings(value):
+    """Validator: *value* must be a ``list`` whose every entry is a ``str``.
+
+    Mirrors the dataset readers validator so non-string items are rejected at
+    the schema layer (422) rather than coerced.
+    """
+    if not isinstance(value, list) or not all(isinstance(r, str) for r in value):
+        raise ValidationError("Must be a list of strings.")
 
 
 class _ExampleSchema(Schema):
@@ -263,6 +273,10 @@ class DetectorRegistryEntrySchema(Schema):
     media_example = fields.String()
     created_by = fields.String()
     created_at = fields.Float()
+    # Access list (mirrors datasets): usernames allowed besides the creator,
+    # ``["*"]`` = public. ``is_owner`` is computed per-request for the caller.
+    readers = fields.List(fields.String())
+    is_owner = fields.Boolean()
     loaded = fields.Boolean()
     detector_loaded = fields.Boolean()
     autorun = fields.Boolean()
@@ -402,6 +416,32 @@ class DetectorRegistryAutorunResponseSchema(Schema):
     autorun = fields.Boolean(required=True)
 
 
+class DetectorRegistryReadersRequestSchema(Schema):
+    """Body for ``PUT /api/detectors/registry/<id>/readers``.
+
+    Declared as ``fields.Raw`` with a custom validator (rather than
+    ``fields.List(fields.String())``) so non-string items are rejected as 422
+    instead of being silently coerced. Mirrors the dataset readers schema.
+    """
+
+    readers = fields.Raw(
+        required=True,
+        validate=_list_of_strings,
+        metadata={
+            "description": 'List of usernames; ``["*"]`` makes the detector public.',
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    )
+
+
+class DetectorRegistryReadersResponseSchema(Schema):
+    """Response for ``PUT /api/detectors/registry/<id>/readers``."""
+
+    ok = fields.Boolean(required=True)
+    readers = fields.List(fields.String(), required=True)
+
+
 class DetectorCancelResponseSchema(Schema):
     """Response for ``POST /api/detectors/cancel/<task_id>``."""
 
@@ -497,6 +537,11 @@ class AutoDetectResponseSchema(Schema):
         values=fields.Nested(_AutoDetectResultSchema),
         required=True,
     )
+    # Present only when an Auto-Find results exporter is configured: the
+    # outcome of auto-exporting these results. ``{exporter, success,
+    # message?, error?, ...}`` (extra keys like ``filepath`` may appear for
+    # file-based exporters). See ``docs/plans/auto-find-settings-tab.md``.
+    auto_export = fields.Dict(keys=fields.String(), values=fields.Raw(), required=False)
 
 
 # ---------------------------------------------------------------------------

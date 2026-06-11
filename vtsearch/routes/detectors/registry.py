@@ -55,6 +55,8 @@ from vtsearch.schemas.detectors import (
     DetectorRegistryListResponseSchema,
     DetectorRegistryLoadRequestSchema,
     DetectorRegistryLoadResponseSchema,
+    DetectorRegistryReadersRequestSchema,
+    DetectorRegistryReadersResponseSchema,
     DetectorRegistryRenameRequestSchema,
     DetectorRegistryRenameResponseSchema,
     DetectorRegistryUnloadResponseSchema,
@@ -77,13 +79,20 @@ detectors_registry_bp = Blueprint(
 @detectors_registry_bp.route("/api/detectors/registry")
 @detectors_registry_bp.response(200, DetectorRegistryListResponseSchema)
 def list_registered_detectors():
-    """Return all registered detectors with their loaded state and autorun flag."""
-    from vtscore.detectors.registry import get_loaded_detector_ids, list_detectors
+    """Return detectors visible to the current user, with loaded/autorun flags.
+
+    Detectors are user-shared like datasets: each entry is the creator's plus
+    anyone the creator added to ``readers`` (or everyone via ``"*"``). The
+    response also carries ``created_by``, ``readers``, and ``is_owner`` so the
+    dashboard can render the access column and gate the security button.
+    """
+    from vtscore.detectors.registry import get_loaded_detector_ids, list_detectors_for_user
     from vtsearch.settings import get_autorun_detectors
 
     from vtscore.state.core import get_detector_context
 
-    entries = list_detectors()
+    current_user = get_current_user()
+    entries = list_detectors_for_user(current_user)
     loaded_ids = get_loaded_detector_ids()
     autorun_names = set(get_autorun_detectors())
     for entry in entries:
@@ -91,6 +100,9 @@ def list_registered_detectors():
         entry["loaded"] = did in loaded_ids
         entry["autorun"] = entry.get("name", "") in autorun_names
         entry.setdefault("last_trained_at", None)
+        entry.setdefault("created_by", "default")
+        entry.setdefault("readers", [])
+        entry["is_owner"] = entry.get("created_by", "default") == current_user
         entry["detector_loaded"] = did in loaded_ids
         # Expose the loaded detector's recorded embedder so the frontend
         # can detect a cross-embedder switch and trigger a label re-embed
@@ -397,6 +409,7 @@ def _maybe_start_label_reembed(det_ctx, entry: dict) -> str | None:
 @detectors_registry_bp.route("/api/detectors/registry/load", methods=["POST"])
 @detectors_registry_bp.arguments(DetectorRegistryLoadRequestSchema)
 @detectors_registry_bp.response(200, DetectorRegistryLoadResponseSchema)
+@detectors_registry_bp.alt_response(403, description="Access denied for the current user.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 def load_detector_route(body: dict):  # noqa: C901
     """Load a detector into memory and make it active.
@@ -405,6 +418,7 @@ def load_detector_route(body: dict):  # noqa: C901
     detector without loading another one.
     """
     from vtscore.detectors.registry import (
+        can_user_access_detector,
         get_detector,
         is_detector_loaded,
     )
@@ -422,6 +436,8 @@ def load_detector_route(body: dict):  # noqa: C901
         entry = get_detector(detector_id)
         if entry is None:
             abort(404, message="Detector not found")
+        if not can_user_access_detector(detector_id, get_current_user()):
+            abort(403, message="You do not have access to this detector")
 
     if good_votes or bad_votes:
         sync_labels_to_loaded_detector()
@@ -644,14 +660,17 @@ def unload_detector_route(detector_id: str):
 
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>", methods=["DELETE"])
 @detectors_registry_bp.response(200, DetectorRegistryDeleteResponseSchema)
+@detectors_registry_bp.alt_response(403, description="Only the detector creator can delete it.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 def delete_registered_detector(detector_id: str):
     """Remove a detector from the registry, including its labelset file."""
-    from vtscore.detectors.registry import get_detector, unregister_detector
+    from vtscore.detectors.registry import get_detector, is_detector_owner, unregister_detector
 
     entry = get_detector(detector_id)
     if entry is None:
         abort(404, message="Detector not found")
+    if not is_detector_owner(detector_id, get_current_user()):
+        abort(403, message="Only the detector creator can delete it")
 
     try:
         det_name = entry.get("name", "")
@@ -711,11 +730,12 @@ def cancel_detector_loading_task(task_id: str):
 @detectors_registry_bp.arguments(DetectorRegistryRenameRequestSchema)
 @detectors_registry_bp.response(200, DetectorRegistryRenameResponseSchema)
 @detectors_registry_bp.alt_response(400, description="Empty name after stripping.")
+@detectors_registry_bp.alt_response(403, description="Only the detector creator can rename it.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 def rename_registered_detector(body: dict, detector_id: str):
     """Rename a registered detector and its on-disk labelset file."""
     from vtscore.detectors.labelset_rename import detect_pending_labelset_move
-    from vtscore.detectors.registry import get_detector, rename_detector
+    from vtscore.detectors.registry import get_detector, is_detector_owner, rename_detector
     from vtscore.state.core import get_detector_context
 
     new_name = body["name"].strip()
@@ -725,6 +745,8 @@ def rename_registered_detector(body: dict, detector_id: str):
     entry = get_detector(detector_id)
     if entry is None:
         abort(404, message="Detector not found")
+    if not is_detector_owner(detector_id, get_current_user()):
+        abort(403, message="Only the detector creator can rename it")
 
     pending_move: dict[str, str] | None = None
     old_name = entry.get("name", "")
@@ -818,16 +840,19 @@ def move_labelset_source_file(body: dict, detector_id: str):
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>/autorun", methods=["PUT"])
 @detectors_registry_bp.arguments(DetectorRegistryAutorunRequestSchema)
 @detectors_registry_bp.response(200, DetectorRegistryAutorunResponseSchema)
+@detectors_registry_bp.alt_response(403, description="Access denied for the current user.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 @detectors_registry_bp.alt_response(500, description="Detector has no associated name.")
 def set_detector_autorun(body: dict, detector_id: str):
-    """Toggle the autorun flag for a registered detector.
+    """Toggle the calling user's autorun flag for a registered detector.
 
-    The flag is stored in ``settings.json`` under ``autorun_detectors`` so the
-    CLI's ``--autodetect`` flow and the active-dataset ``/api/auto-detect``
-    route both see it.
+    The flag is stored per-user under ``autorun_detectors`` (see
+    :func:`vtsearch.settings.add_autorun_detector`), so each user curates their
+    own Auto-Find list. The CLI's ``--autodetect`` flow reads the running
+    user's list (the built-in ``default`` user falls back to the server
+    settings file). The user must be able to access the detector to flag it.
     """
-    from vtscore.detectors.registry import get_detector
+    from vtscore.detectors.registry import can_user_access_detector, get_detector
     from vtsearch.settings import (
         add_autorun_detector,
         remove_autorun_detector,
@@ -836,6 +861,8 @@ def set_detector_autorun(body: dict, detector_id: str):
     entry = get_detector(detector_id)
     if entry is None:
         abort(404, message="Detector not found")
+    if not can_user_access_detector(detector_id, get_current_user()):
+        abort(403, message="You do not have access to this detector")
 
     flag = body["autorun"]
 
@@ -848,6 +875,32 @@ def set_detector_autorun(body: dict, detector_id: str):
     else:
         remove_autorun_detector(name)
     return {"ok": True, "autorun": flag}
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/detectors/registry/<detector_id>/readers
+# ---------------------------------------------------------------------------
+
+
+@detectors_registry_bp.route("/api/detectors/registry/<detector_id>/readers", methods=["PUT"])
+@detectors_registry_bp.arguments(DetectorRegistryReadersRequestSchema)
+@detectors_registry_bp.response(200, DetectorRegistryReadersResponseSchema)
+@detectors_registry_bp.alt_response(403, description="Only the detector creator can update readers.")
+@detectors_registry_bp.alt_response(404, description="Detector not found.")
+def update_detector_readers(body: dict, detector_id: str):
+    """Update a detector's access list. Only the creator may call this.
+
+    Body: ``{"readers": ["alice", "bob"]}``. Use ``["*"]`` to make the
+    detector visible to all users. Mirrors the dataset readers endpoint.
+    """
+    from vtscore.detectors.registry import set_detector_readers
+
+    readers = body["readers"]
+    ok, err = set_detector_readers(detector_id, readers, get_current_user())
+    if not ok:
+        status = 403 if "creator" in err else 404
+        abort(status, message=err)
+    return {"ok": True, "readers": readers}
 
 
 # ---------------------------------------------------------------------------

@@ -287,6 +287,49 @@ def _apply_enable_achievements_guarded(value) -> None:
         abort(400, message=str(exc))
 
 
+def _apply_autofind_exporter(value) -> None:
+    """Validate the Auto-Find results exporter name and persist it.
+
+    ``""``/``None`` clears auto-export. Any other value must name a
+    registered (pickable) exporter; an unknown name aborts 400. Field
+    values are validated lazily at export time against the chosen
+    plugin's schema, not here.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        settings.set_autofind_exporter("")
+        return
+    if not isinstance(value, str):
+        abort(400, message="autofind_exporter must be a string")
+    from vtscore.exporters import list_exporters
+
+    name = value.strip()
+    valid = {exp.name for exp in list_exporters() if not getattr(exp, "hidden_from_picker", False)}
+    if name not in valid:
+        abort(400, message=f"Unknown exporter {name!r}. Available: {sorted(valid)}")
+    settings.set_autofind_exporter(name)
+
+
+def _apply_autofind_exporter_field_values(value) -> None:
+    """Validate and persist the per-exporter ``{name: {key: value}}`` map.
+
+    ``None`` clears every exporter's stored config. Otherwise the value
+    must be a dict whose entries are themselves ``{str: str}`` dicts;
+    non-string values are coerced to strings so the persisted shape stays
+    flat (exporter fields are always rendered/sent as strings).
+    """
+    if value is None:
+        settings.set_autofind_exporter_field_values({})
+        return
+    if not isinstance(value, dict):
+        abort(400, message="autofind_exporter_field_values must be a dict")
+    cleaned: dict[str, dict[str, str]] = {}
+    for exp_name, fvals in value.items():
+        if not isinstance(exp_name, str) or not isinstance(fvals, dict):
+            abort(400, message="autofind_exporter_field_values must map exporter names to field dicts")
+        cleaned[exp_name] = {str(k): "" if v is None else str(v) for k, v in fvals.items()}
+    settings.set_autofind_exporter_field_values(cleaned)
+
+
 def _apply_saved_datasets_dir(value) -> None:
     _apply_dir("saved_datasets_dir", value, settings.set_saved_datasets_dir)
 
@@ -305,6 +348,8 @@ _CUSTOM_SETTERS: dict[str, Callable[[Any], None]] = {
     "enable_achievements": _apply_enable_achievements_guarded,
     "solo_media_type": _apply_solo_media_type,
     "solo_embedder_per_media_type": _apply_solo_embedder_per_media_type,
+    "autofind_exporter": _apply_autofind_exporter,
+    "autofind_exporter_field_values": _apply_autofind_exporter_field_values,
 }
 
 

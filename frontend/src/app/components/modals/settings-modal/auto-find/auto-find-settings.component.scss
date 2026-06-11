@@ -1,0 +1,18 @@
+// Auto-Find settings tab. Most controls reuse global classes
+// (.checkbox-row, .view-tabs, .form-group, .form-hint); only the detector
+// checklist needs local rules.
+
+.detector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+
+.detector-type {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}

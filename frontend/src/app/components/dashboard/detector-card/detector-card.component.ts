@@ -19,6 +19,8 @@ import { formatTimestamp } from '../../../utils/format-date';
 })
 export class DetectorCardComponent implements OnChanges {
   @Input() detector: any;
+  @Input() currentUser = '';
+  @Input() isDefaultLogin = true;
   @Input() columnOrder: string[] = [];
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
@@ -45,6 +47,18 @@ export class DetectorCardComponent implements OnChanges {
   @Output() dismissTask = new EventEmitter<string>();
   @Output() autorunToggle = new EventEmitter<boolean>();
   @Output() checkboxToggle = new EventEmitter<void>();
+  @Output() security = new EventEmitter<void>();
+
+  /** True when the current user created this detector (only the creator may
+   *  rename/delete it or edit its access list). */
+  get isOwner(): boolean {
+    return this.detector?.created_by === this.currentUser;
+  }
+
+  onSecurity(event: MouseEvent): void {
+    event.stopPropagation();
+    this.security.emit();
+  }
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 

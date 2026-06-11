@@ -114,6 +114,12 @@
       @case ('created_at') {
         <td>{{ formatDate(detector.created_at) }}</td>
       }
+      @case ('created_by') {
+        <td>{{ detector.created_by || '-' }}</td>
+      }
+      @case ('readers') {
+        <td [title]="(detector.readers || []).join(', ')">{{ (detector.readers || []).length ? (detector.readers || []).join(', ') : '-' }}</td>
+      }
       @case ('detector_loaded') {
         <td>
           @if (detector.detector_loaded) {
@@ -136,6 +142,13 @@
   }
   <td class="actions-col">
     <div class="actions-cell">
+    @if (!isDefaultLogin) {
+      <button class="security-btn" [class.disabled]="!isOwner" [disabled]="!isOwner" (click)="onSecurity($event)" [attr.aria-label]="isOwner ? 'Edit access list' : 'Only the creator can edit access'" [title]="isOwner ? 'Edit access list' : 'Only the creator can edit access'">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+      </button>
+    }
     <button class="edit-btn" (click)="startRename($event)" aria-label="Rename detector" title="Rename">
       <svg aria-hidden="true" [class.pencil-active]="editing" [class.pencil-inactive]="!editing && wasEditing" (animationend)="onPencilAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M16.5 2.5a2.828 2.828 0 0 1 4 4L7.5 19.5L3 20L3.5 15.5L16.5 2.5z"></path>

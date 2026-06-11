@@ -265,6 +265,12 @@ export interface DetectorRegistryEntry {
   /** Embedder this detector's label-vector cache is built against.
    *  Populated only for loaded detectors; empty for unloaded entries. */
   embedder?: string;
+  /** Username of the detector's creator (shown in multi-user mode). */
+  created_by?: string;
+  /** Usernames granted access besides the creator; ``["*"]`` = public. */
+  readers?: string[];
+  /** Whether the current user created this detector (creator-only actions). */
+  is_owner?: boolean;
   [key: string]: unknown;
 }
 
@@ -342,10 +348,22 @@ export interface AutoDetectDetectorResult {
   [key: string]: unknown;
 }
 
+/** Outcome of auto-exporting Auto-Find results, present on the auto-detect
+ *  response only when a results exporter is configured in settings. */
+export interface AutoFindExportStatus {
+  exporter: string;
+  success: boolean;
+  message?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
 export interface AutoDetectResultsData {
   media_type?: string;
   detectors_run?: string | number;
   results: Record<string, AutoDetectDetectorResult>;
+  /** Auto-export outcome (only when a results exporter ran). */
+  auto_export?: AutoFindExportStatus;
   // Find mode fields
   detectors?: string[];
   datasets?: string[];

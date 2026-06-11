@@ -142,8 +142,6 @@ class ServerSettings(BaseModel):
     max_concurrent_dataset_embeddings: Annotated[int, _clamp(1, 16)] = Field(
         default_factory=_default_concurrent_embeddings
     )
-    autorun_detectors: list[str] = Field(default_factory=list)
-
     # Admin-side plugin hiding. Maps a plugin-family id (e.g.
     # ``"converters"``, ``"embedders"``, ``"importers"`` - the keys used by
     # :mod:`vtscore.plugins.inventory`) to a list of plugin ``name``s that
@@ -198,6 +196,26 @@ class UserSettings(BaseModel):
     autopilot_hard_reds: Annotated[int, _clamp_min(1)] = 4
     autopilot_resort_interval: Annotated[int, _clamp_min(1)] = 10
     autopilot_goal_diversity: Annotated[int, _clamp_min(1)] = 40
+
+    # Auto-Find: each user's own list of detectors that auto-run against a newly
+    # imported dataset, plus what to do with the results. Per-user (everyone
+    # curates their own favorites from the shared detector pool). For the
+    # built-in "default" user, reads fall back to the server settings file when
+    # absent here, so the CLI ``--settings`` flat file and single-user
+    # deployments keep working (see ``_DEFAULT_USER_FALLBACK_KEYS`` and the
+    # read-through in ``vtsearch.settings._read_value``).
+    #
+    # - ``autorun_detectors``: detector names flagged for autorun (each maps to
+    #   a JSON file under ``data/detectors/``).
+    # - ``autofind_exporter``: results-exporter name run after an Auto-Find
+    #   (``""`` = no auto-export; CLI then falls back to the ``gui`` exporter).
+    # - ``autofind_exporter_field_values``: per-exporter field values
+    #   (``{exporter_name: {field_key: value}}``) so switching the picker
+    #   preserves each exporter's configuration.
+    # See ``docs/plans/auto-find-settings-tab.md``.
+    autorun_detectors: list[str] = Field(default_factory=list)
+    autofind_exporter: str = ""
+    autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview

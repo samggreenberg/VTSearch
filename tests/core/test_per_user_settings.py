@@ -86,7 +86,8 @@ class TestPerUserIsolation:
         assert "volume" in out
         # Server-tier keys are filtered out.
         assert "saved_datasets_dir" not in out
-        assert "autorun_detectors" not in out
+        # autorun_detectors is now a per-user key, so it IS surfaced here.
+        assert "autorun_detectors" in out
 
 
 class TestLegacyMigration:

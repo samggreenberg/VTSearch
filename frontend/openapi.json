@@ -158,6 +158,18 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_exporter": {
+            "type": "string"
+          },
+          "autofind_exporter_field_values": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "object"
+          },
           "autopilot_enabled": {
             "type": "boolean"
           },
@@ -177,7 +189,6 @@
             "items": {
               "type": "string"
             },
-            "readOnly": true,
             "type": "array"
           },
           "browse_bin_shape": {
@@ -423,6 +434,10 @@
       "AutoDetectResponse": {
         "additionalProperties": false,
         "properties": {
+          "auto_export": {
+            "additionalProperties": {},
+            "type": "object"
+          },
           "detectors_run": {
             "type": "integer"
           },
@@ -2009,6 +2024,9 @@
           "id": {
             "type": "string"
           },
+          "is_owner": {
+            "type": "boolean"
+          },
           "last_trained_at": {
             "nullable": true,
             "type": "number"
@@ -2027,6 +2045,12 @@
           },
           "num_training": {
             "type": "integer"
+          },
+          "readers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "text_query": {
             "type": "string"
@@ -2086,6 +2110,41 @@
         },
         "required": [
           "ok"
+        ],
+        "type": "object"
+      },
+      "DetectorRegistryReadersRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "readers": {
+            "description": "List of usernames; ``[\"*\"]`` makes the detector public.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "readers"
+        ],
+        "type": "object"
+      },
+      "DetectorRegistryReadersResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "readers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "readers"
         ],
         "type": "object"
       },
@@ -4269,6 +4328,10 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_exporter": {
+            "type": "string"
+          },
+          "autofind_exporter_field_values": {},
           "autopilot_enabled": {
             "type": "boolean"
           },
@@ -9209,6 +9272,7 @@
     },
     "/api/detectors/registry": {
       "get": {
+        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.",
         "operationId": "list_registered_detectors",
         "responses": {
           "200": {
@@ -9225,7 +9289,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return all registered detectors with their loaded state and autorun flag.",
+        "summary": "Return detectors visible to the current user, with loaded/autorun flags.",
         "tags": [
           "detectors_registry"
         ]
@@ -9404,6 +9468,9 @@
             },
             "description": "OK"
           },
+          "403": {
+            "description": "Access denied for the current user."
+          },
           "404": {
             "description": "Detector not found."
           },
@@ -9433,6 +9500,9 @@
               }
             },
             "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector creator can delete it."
           },
           "404": {
             "description": "Detector not found."
@@ -9471,7 +9541,7 @@
         }
       ],
       "put": {
-        "description": "The flag is stored in ``settings.json`` under ``autorun_detectors`` so the\nCLI's ``--autodetect`` flow and the active-dataset ``/api/auto-detect``\nroute both see it.",
+        "description": "The flag is stored per-user under ``autorun_detectors`` (see\n:func:`vtsearch.settings.add_autorun_detector`), so each user curates their\nown Auto-Find list. The CLI's ``--autodetect`` flow reads the running\nuser's list (the built-in ``default`` user falls back to the server\nsettings file). The user must be able to access the detector to flag it.",
         "operationId": "set_detector_autorun",
         "requestBody": {
           "content": {
@@ -9494,6 +9564,9 @@
             },
             "description": "OK"
           },
+          "403": {
+            "description": "Access denied for the current user."
+          },
           "404": {
             "description": "Detector not found."
           },
@@ -9507,7 +9580,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Toggle the autorun flag for a registered detector.",
+        "summary": "Toggle the calling user's autorun flag for a registered detector.",
         "tags": [
           "detectors_registry"
         ]
@@ -9571,6 +9644,61 @@
         ]
       }
     },
+    "/api/detectors/registry/{detector_id}/readers": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "put": {
+        "description": "Body: ``{\"readers\": [\"alice\", \"bob\"]}``. Use ``[\"*\"]`` to make the\ndetector visible to all users. Mirrors the dataset readers endpoint.",
+        "operationId": "update_detector_readers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorRegistryReadersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorRegistryReadersResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector creator can update readers."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Update a detector's access list. Only the creator may call this.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
     "/api/detectors/registry/{detector_id}/rename": {
       "parameters": [
         {
@@ -9608,6 +9736,9 @@
           },
           "400": {
             "description": "Empty name after stripping."
+          },
+          "403": {
+            "description": "Only the detector creator can rename it."
           },
           "404": {
             "description": "Detector not found."

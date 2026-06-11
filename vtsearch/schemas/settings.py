@@ -111,8 +111,19 @@ class AppSettingsSchema(Schema):
     detectors_dir = fields.String(dump_only=True)
     max_concurrent_dataset_downloads = fields.Integer(dump_only=True)
     max_concurrent_dataset_embeddings = fields.Integer(dump_only=True)
-    autorun_detectors = fields.List(fields.String(), dump_only=True)
     dataset_max_age_days = fields.Integer(load_default=None, allow_none=True)
+
+    # Auto-Find (per-user, editable from the Auto-Find settings tab).
+    # ``autorun_detectors`` is each user's own list of detectors that auto-run
+    # on import; ``autofind_exporter`` is the chosen results-exporter name
+    # ("" = none); ``autofind_exporter_field_values`` keeps each exporter's
+    # field values under its own name so switching the picker preserves config.
+    autorun_detectors = fields.List(fields.String())
+    autofind_exporter = fields.String()
+    autofind_exporter_field_values = fields.Dict(
+        keys=fields.String(),
+        values=fields.Dict(keys=fields.String(), values=fields.String()),
+    )
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -211,6 +222,12 @@ class SettingsUpdateSchema(Schema):
     browse_compact = fields.Raw()
 
     autorun_detectors = fields.List(fields.String())
+    # Auto-Find results exporter. ``autofind_exporter`` is validated against the
+    # exporter registry in the route layer; ``autofind_exporter_field_values``
+    # is a free-form ``{exporter_name: {field_key: value}}`` map (per-field
+    # validation runs at export time against the chosen plugin's schema).
+    autofind_exporter = fields.String()
+    autofind_exporter_field_values = fields.Raw()
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()
