@@ -265,9 +265,9 @@ def _is_disabled() -> bool:
     without restarting the process.
     """
     try:
-        from vtsearch.settings import get_disable_achievements
+        from vtsearch.settings import get_enable_achievements
 
-        return bool(get_disable_achievements())
+        return not bool(get_enable_achievements())
     except Exception:
         return False
 
@@ -275,10 +275,10 @@ def _is_disabled() -> bool:
 def wipe_state() -> None:
     """Clear the current user's stored ``achievement_state`` entirely.
 
-    Called from the settings route when ``disable_achievements`` flips
-    from False to True so the counters reset to zero (and stay there
-    while the toggle remains on). Idempotent: running it on an already-empty
-    state is a no-op write.
+    Called from the settings route when ``enable_achievements`` flips
+    from True to False so the counters reset to zero (and stay there
+    while the feature remains off). Idempotent: running it on an
+    already-empty state is a no-op write.
     """
 
     def _apply(cache: dict[str, Any]) -> None:

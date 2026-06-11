@@ -778,13 +778,13 @@ class TestActionHooks:
 
 
 # ---------------------------------------------------------------------------
-# disable_achievements opt-out
+# enable_achievements opt-out
 # ---------------------------------------------------------------------------
 
 
 class TestDisableAchievements:
     def test_record_hooks_are_noops_when_disabled(self):
-        settings_mod.set_disable_achievements(True)
+        settings_mod.set_enable_achievements(False)
         achievements.record_vote("det-1", media_type="audio")
         achievements.record_dataset_load("server_folder")
         achievements.record_detector_import("det-X")
@@ -804,7 +804,7 @@ class TestDisableAchievements:
         achievements.record_dataset_load("server_folder")
         achievements.record_find(500)
         # Flip the toggle through the same code path the route uses.
-        settings_mod.set_disable_achievements(True)
+        settings_mod.set_enable_achievements(False)
         state = achievements.get_full_state()
         for a in state["achievements"]:
             assert a["counter"] == 0
@@ -824,14 +824,14 @@ class TestDisableAchievements:
         achievements.wipe_state()
         assert "achievement_state" not in _user_caches.get(username, {})
 
-    def test_settings_route_wipes_on_false_to_true_transition(self, client):
+    def test_settings_route_wipes_on_true_to_false_transition(self, client):
         # Build up some real progress.
         achievements.record_vote("det-1", media_type="audio")
         achievements.record_find(50)
         # Flip via the public PUT endpoint.
-        resp = client.put("/api/settings", json={"disable_achievements": True})
+        resp = client.put("/api/settings", json={"enable_achievements": False})
         assert resp.status_code == 200
-        assert resp.get_json()["disable_achievements"] is True
+        assert resp.get_json()["enable_achievements"] is False
 
         # State on disk is gone; the public read returns a zeroed shell.
         from vtsearch.auth import get_current_user
@@ -846,8 +846,8 @@ class TestDisableAchievements:
 
     def test_re_enabling_does_not_restore_old_counters(self, client):
         achievements.record_vote("det-1", media_type="audio")
-        client.put("/api/settings", json={"disable_achievements": True})
-        client.put("/api/settings", json={"disable_achievements": False})
+        client.put("/api/settings", json={"enable_achievements": False})
+        client.put("/api/settings", json={"enable_achievements": True})
         # Counters should still be zero; the wipe is permanent.
         state = achievements.get_full_state()
         for a in state["achievements"]:

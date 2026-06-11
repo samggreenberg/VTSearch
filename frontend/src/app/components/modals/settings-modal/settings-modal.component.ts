@@ -227,20 +227,20 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  async onToggleDisableAchievements(value: boolean): Promise<void> {
-    if (value) {
+  async onToggleEnableAchievements(value: boolean): Promise<void> {
+    if (!value) {
       const ok = await this.dialog.confirmDestructive(
         'Turn off achievements?',
-        'All achievement counters, tier progress, and unlocks will be reset to zero. The trophy button and unlock pop-ups will be hidden until you turn this back off.',
+        'All achievement counters, tier progress, and unlocks will be reset to zero. The trophy button and unlock pop-ups will be hidden until you turn this back on.',
         'Turn off',
       );
       if (!ok) {
         // Force-rebind to the previous value so the checkbox snaps back.
-        this.settings = { ...this.settings, disable_achievements: false };
+        this.settings = { ...this.settings, enable_achievements: true };
         return;
       }
     }
-    (this.settings as Record<string, unknown>)['disable_achievements'] = value;
+    (this.settings as Record<string, unknown>)['enable_achievements'] = value;
     this.save();
   }
 

@@ -91,9 +91,9 @@
             <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
             Show metadata panel
           </label>
-          <label class="checkbox-row" title="Hide the trophy button, unlock pop-ups, and the achievements panel. Turning this on zeros all achievement counters and keeps them at zero.">
-            <input type="checkbox" [ngModel]="settings.disable_achievements" (ngModelChange)="onToggleDisableAchievements($event)" />
-            Disable achievements (hide UI &amp; reset counters)
+          <label class="checkbox-row" title="Show the trophy button, unlock pop-ups, and the achievements panel, and track usage milestones. Turning this off zeros all achievement counters and keeps them at zero.">
+            <input type="checkbox" [ngModel]="settings.enable_achievements" (ngModelChange)="onToggleEnableAchievements($event)" />
+            Enable achievements
           </label>
 
           @if (mediaTypes.length > 0) {

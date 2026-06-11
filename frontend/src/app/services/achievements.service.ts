@@ -62,7 +62,7 @@ export class AchievementsService {
 
   constructor() {
     this.settingsState.settings$.subscribe((s) => {
-      const next = !!s?.disable_achievements;
+      const next = s?.enable_achievements === false;
       const flipped = next && !this.disabled;
       this.disabled = next;
       if (flipped) {

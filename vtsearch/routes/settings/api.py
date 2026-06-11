@@ -89,19 +89,19 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
 }
 
 
-def _apply_disable_achievements(value: bool) -> None:
-    """Persist the toggle and wipe stored counters when flipping it on.
+def _apply_enable_achievements(value: bool) -> None:
+    """Persist the toggle and wipe stored counters when flipping it off.
 
     The user-visible promise is that turning the feature off zeroes the
-    achievement counters and keeps them there. Wiping on the False→True
-    transition (rather than every set) makes the off→on→off cycle
+    achievement counters and keeps them there. Wiping on the True→False
+    transition (rather than every set) makes the on→off→on cycle
     deterministic: counters reset on opt-out and start fresh if the user
     ever opts back in.
     """
-    prev = bool(settings.get_disable_achievements())
+    prev = bool(settings.get_enable_achievements())
     coerced = bool(value)
-    settings.set_disable_achievements(coerced)
-    if coerced and not prev:
+    settings.set_enable_achievements(coerced)
+    if prev and not coerced:
         from vtsearch import achievements
 
         achievements.wipe_state()
@@ -280,9 +280,9 @@ def _apply_inclusion_guarded(value) -> None:
         abort(400, message=str(exc))
 
 
-def _apply_disable_achievements_guarded(value) -> None:
+def _apply_enable_achievements_guarded(value) -> None:
     try:
-        _apply_disable_achievements(value)
+        _apply_enable_achievements(value)
     except (TypeError, ValueError) as exc:
         abort(400, message=str(exc))
 
@@ -302,7 +302,7 @@ _CUSTOM_SETTERS: dict[str, Callable[[Any], None]] = {
     "inclusion": _apply_inclusion_guarded,
     "saved_datasets_dir": _apply_saved_datasets_dir,
     "detectors_dir": _apply_detectors_dir,
-    "disable_achievements": _apply_disable_achievements_guarded,
+    "enable_achievements": _apply_enable_achievements_guarded,
     "solo_media_type": _apply_solo_media_type,
     "solo_embedder_per_media_type": _apply_solo_embedder_per_media_type,
 }
