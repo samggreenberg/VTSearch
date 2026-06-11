@@ -622,8 +622,53 @@ def auto_detect(body: dict):
 
         record_find(len(all_ids) * len(results))
 
-    return {
+    response = {
         "media_type": media_type,
         "detectors_run": len(results),
         "results": results,
     }
+    auto_export = _run_autofind_export(response)
+    if auto_export is not None:
+        response["auto_export"] = auto_export
+    return response
+
+
+def _run_autofind_export(response: dict) -> dict | None:
+    """Run the configured Auto-Find results exporter on *response*.
+
+    Returns ``None`` when no exporter is configured (the common case), or a
+    status dict ``{exporter, success, message?, error?}`` otherwise. Export
+    failures are reported in the status block rather than raised: the scored
+    results are valuable on their own, so a misconfigured exporter must not
+    sink the whole request. See ``docs/plans/auto-find-settings-tab.md``.
+    """
+    from vtsearch.settings import (  # noqa: PLC0415
+        get_autofind_exporter,
+        get_autofind_exporter_field_values,
+    )
+
+    exporter_name = get_autofind_exporter()
+    if not exporter_name:
+        return None
+
+    from vtscore.exporters import get_exporter  # noqa: PLC0415
+
+    exporter = get_exporter(exporter_name)
+    if exporter is None:
+        return {"exporter": exporter_name, "success": False, "error": f"Unknown exporter '{exporter_name}'"}
+
+    field_values = dict(get_autofind_exporter_field_values().get(exporter_name, {}))
+    try:
+        from vtscore.plugins.normalize import normalize_field_values  # noqa: PLC0415
+
+        normalize_field_values(exporter, field_values)
+        outcome = exporter.export(response, field_values) or {}
+    except Exception as exc:  # noqa: BLE001 - surfaced to the caller, never raised
+        logger.exception("Auto-Find export via %s failed", exporter_name)
+        return {"exporter": exporter_name, "success": False, "error": str(exc)}
+
+    status = {"exporter": exporter_name, "success": True, "message": outcome.get("message", "Export complete.")}
+    for key, value in outcome.items():
+        if key != "message":
+            status[key] = value
+    return status

@@ -1,0 +1,103 @@
+<p class="info-text">
+  Detectors flagged here run automatically against each dataset as it is
+  imported (an &ldquo;Auto-Find&rdquo;). Choose a results exporter below to have
+  those results emailed, saved, or posted automatically when a run finishes.
+  These apply server-wide.
+</p>
+
+<!-- Auto-Find detectors --------------------------------------------------- -->
+<h4 class="subhead" title="Detectors that auto-run against each newly imported dataset">Auto-Find detectors</h4>
+@if (loadingDetectors) {
+  <p class="empty-state">Loading detectors&hellip;</p>
+} @else if (detectors.length === 0) {
+  <p class="empty-state">No detectors registered yet. Train or import a detector first.</p>
+} @else {
+  <div class="detector-list">
+    @for (d of detectors; track d.id) {
+      <label class="checkbox-row" [title]="'Auto-run ' + d.name + (d.media_type ? ' (' + d.media_type + ')' : '')">
+        <input type="checkbox" [ngModel]="d.autorun" (ngModelChange)="toggleDetector(d, $event)" />
+        {{ d.name }}
+        @if (d.media_type) {
+          <span class="detector-type">{{ d.media_type }}</span>
+        }
+      </label>
+    }
+  </div>
+}
+@if (detectorError) {
+  <p class="error-text">{{ detectorError }}</p>
+}
+
+<!-- Results Exporter ------------------------------------------------------ -->
+<h4 class="subhead" title="What to do with results after an Auto-Find finishes">Results Exporter:</h4>
+@if (loadingExporters) {
+  <p class="empty-state">Loading exporters&hellip;</p>
+} @else {
+  <div class="view-tabs">
+    <button
+      class="view-tab"
+      [class.view-tab--active]="activeExporter === ''"
+      (click)="selectExporter('')"
+      title="Do not export results automatically">
+      None
+    </button>
+    @for (exp of exporters; track exp.name) {
+      <button
+        class="view-tab"
+        [class.view-tab--active]="activeExporter === exp.name"
+        (click)="selectExporter(exp.name)"
+        [title]="exp.description || exp.display_name">
+        <vt-icon [icon]="exp.icon" [size]="14"></vt-icon>
+        {{ exp.display_name || exp.name }}
+      </button>
+    }
+  </div>
+
+  <div class="view-tab-content">
+    @if (activeExporter === '') {
+      <p class="form-hint">
+        Results stay in the app and are not exported automatically. Pick an
+        exporter above to email, save, or post them when an Auto-Find finishes.
+      </p>
+    } @else if (activeFields.length === 0) {
+      <p class="form-hint">This exporter needs no configuration.</p>
+    } @else {
+      @for (field of activeFields; track field.key) {
+        <div class="form-group">
+          <label class="form-label">{{ field.label || field.key }}{{ field.required ? ' *' : '' }}</label>
+          @if (field.field_type === 'select') {
+            <select
+              class="form-select"
+              [ngModel]="fieldValue(field.key)"
+              (ngModelChange)="setFieldValue(field.key, $event)"
+              [attr.aria-label]="field.label || field.key">
+              @for (opt of field.options || []; track opt) {
+                <option [value]="opt">{{ opt }}</option>
+              }
+            </select>
+          } @else if (field.field_type === 'number') {
+            <input
+              type="number"
+              class="form-input"
+              [ngModel]="fieldValue(field.key)"
+              (ngModelChange)="setFieldValue(field.key, $event)"
+              [placeholder]="field.placeholder || field.description || ''"
+              [attr.min]="field.min || null"
+              [attr.max]="field.max || null"
+              [attr.step]="field.step || null" />
+          } @else {
+            <input
+              [type]="inputType(field)"
+              class="form-input"
+              [ngModel]="fieldValue(field.key)"
+              (ngModelChange)="setFieldValue(field.key, $event)"
+              [placeholder]="field.placeholder || field.description || ''" />
+          }
+          @if (field.hint) {
+            <p class="form-hint">{{ field.hint }}</p>
+          }
+        </div>
+      }
+    }
+  </div>
+}

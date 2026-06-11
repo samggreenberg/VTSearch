@@ -144,6 +144,17 @@ class ServerSettings(BaseModel):
     )
     autorun_detectors: list[str] = Field(default_factory=list)
 
+    # Auto-Find results exporter. After an Auto-Find (autodetect) run, the
+    # results are handed to this exporter automatically. ``""`` disables
+    # auto-export (the CLI falls back to the ``gui`` exporter; the server route
+    # simply returns results without exporting). Field values are kept
+    # per-exporter (``{exporter_name: {field_key: value}}``) so switching the
+    # picker preserves each exporter's configuration. Server-tier and shared,
+    # like ``autorun_detectors``, but editable from the Settings → Auto-Find
+    # tab. See ``docs/plans/auto-find-settings-tab.md``.
+    autofind_exporter: str = ""
+    autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)
+
     # Admin-side plugin hiding. Maps a plugin-family id (e.g.
     # ``"converters"``, ``"embedders"``, ``"importers"`` - the keys used by
     # :mod:`vtscore.plugins.inventory`) to a list of plugin ``name``s that

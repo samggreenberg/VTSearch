@@ -781,6 +781,15 @@ def _run_pipeline(
     config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
     autorun_detectors = list(config.autorun_detectors)
 
+    # When no explicit ``--exporter`` was given, fall back to the Auto-Find
+    # results exporter configured in settings (its per-exporter field values
+    # come along too). An explicit ``--exporter`` always wins; if neither is
+    # set the downstream default (``gui``) applies.
+    if exporter_name is None and config.autofind_exporter:
+        exporter_name = config.autofind_exporter
+        if exporter_field_values is None:
+            exporter_field_values = dict(config.autofind_exporter_field_values.get(config.autofind_exporter, {}))
+
     if dry_run:
         _run_dry_run(
             source_description,

@@ -342,10 +342,22 @@ export interface AutoDetectDetectorResult {
   [key: string]: unknown;
 }
 
+/** Outcome of auto-exporting Auto-Find results, present on the auto-detect
+ *  response only when a results exporter is configured in settings. */
+export interface AutoFindExportStatus {
+  exporter: string;
+  success: boolean;
+  message?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
 export interface AutoDetectResultsData {
   media_type?: string;
   detectors_run?: string | number;
   results: Record<string, AutoDetectDetectorResult>;
+  /** Auto-export outcome (only when a results exporter ran). */
+  auto_export?: AutoFindExportStatus;
   // Find mode fields
   detectors?: string[];
   datasets?: string[];

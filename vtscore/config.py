@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 # Data paths are anchored to the repository root, NOT to the current working
@@ -229,6 +229,14 @@ class CoreConfig:
     # Filesystem root for caches, embeddings, model downloads.  Phase 4 will
     # route every hardcoded ``data/`` path through this field.
     data_dir: Path
+
+    # Auto-Find results exporter (server-tier). When an autodetect run has no
+    # explicit ``--exporter``, the CLI falls back to this exporter +
+    # field-value map. ``""`` means "no configured exporter" (CLI defaults to
+    # ``gui``). Defaulted here so library-only ``CoreConfig(...)`` constructions
+    # without the app shim keep working unchanged.
+    autofind_exporter: str = ""
+    autofind_exporter_field_values: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @classmethod
     def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:

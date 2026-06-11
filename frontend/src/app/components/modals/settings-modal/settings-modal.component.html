@@ -33,15 +33,23 @@
           [class.settings-tab--active]="activeSettingsTab === 'imports'"
           (click)="activeSettingsTab = 'imports'"
           title="Default embedder, clipper, and converters to apply when importing each kind of dataset">
-          <vt-icon type="upload" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'imports'"></vt-icon>
+          <vt-icon type="import" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'imports'"></vt-icon>
           Data Imports
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'autofind'"
+          (click)="activeSettingsTab = 'autofind'"
+          title="Detectors that auto-run on import, and what to do with their results">
+          <vt-icon type="auto-find" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'autofind'"></vt-icon>
+          Auto-Find
         </button>
         <button
           class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'browser'"
           (click)="activeSettingsTab = 'browser'"
           title="VTSBrowse projection-browser look per media type: bin shape, density colormap, and cell size">
-          <vt-icon type="grid" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'browser'"></vt-icon>
+          <vt-icon type="eye" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'browser'"></vt-icon>
           Browser
         </button>
         <button
@@ -217,6 +225,16 @@
           ></vt-import-defaults-settings>
         }
 
+        <!-- Auto-Find -->
+        @if (activeSettingsTab === 'autofind') {
+          <h3>Auto-Find</h3>
+          <vt-auto-find-settings
+            [autofindExporter]="autofindExporter"
+            [autofindExporterFieldValues]="autofindExporterFieldValues"
+            (exporterChange)="onAutofindExporterChange($event)"
+          ></vt-auto-find-settings>
+        }
+
         <!-- Autopilot & Actions -->
         @if (activeSettingsTab === 'autopilot') {
           <h3>Autopilot &amp; Actions</h3>
@@ -369,14 +387,6 @@
           <div class="form-group">
             <label class="form-label" title="Maximum number of dataset embedding jobs the server runs in parallel">Max concurrent dataset embeddings</label>
             <div class="server-value">{{ settings.max_concurrent_dataset_embeddings ?? '—' }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" title="Detectors automatically run against each dataset as it is imported">Auto-run detectors</label>
-            @if (autorunDetectorsDisplay) {
-              <div class="server-value">{{ autorunDetectorsDisplay }}</div>
-            } @else {
-              <div class="server-value server-value--empty">None</div>
-            }
           </div>
           <div class="form-group">
             <label class="form-label" title="Plugins hidden from pickers and listings for this deployment (still callable by name). Combines the persisted setting with any --hide-plugin CLI flags.">Hidden plugins</label>

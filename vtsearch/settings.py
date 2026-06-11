@@ -248,6 +248,8 @@ _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 #: should not be reset by the Default button).
 _EXCLUDE_FROM_DEFAULTS = {
     "autorun_detectors",
+    "autofind_exporter",
+    "autofind_exporter_field_values",
     "saved_datasets_dir",
     "detectors_dir",
     "settings_source",

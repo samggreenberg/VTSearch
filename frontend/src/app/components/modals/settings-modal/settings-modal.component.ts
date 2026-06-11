@@ -9,6 +9,10 @@ import { SettingsImporterModalComponent } from '../settings-importer-modal/setti
 import { SettingsExporterModalComponent } from '../settings-exporter-modal/settings-exporter-modal.component';
 import { ImportDefaultsSettingsComponent } from './import-defaults/import-defaults-settings.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
+import {
+  AutoFindExporterChange,
+  AutoFindSettingsComponent,
+} from './auto-find/auto-find-settings.component';
 import { ImportDefaultsByMediaType } from '../../../models/api.models';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
@@ -27,7 +31,7 @@ import {
 @Component({
   selector: 'vt-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, ImportDefaultsSettingsComponent, FieldHintIconComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, ImportDefaultsSettingsComponent, FieldHintIconComponent, AutoFindSettingsComponent],
   templateUrl: './settings-modal.component.html',
   styleUrl: './settings-modal.component.scss',
 })
@@ -444,12 +448,27 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     return this.settings.effective_solo_media_type || null;
   }
 
-  /** Comma-separated list of auto-run detector names for the read-only
-   *  Server tab, or ``''`` when none are configured (so the template can
-   *  fall back to a muted "None"). */
-  get autorunDetectorsDisplay(): string {
-    const list = (this.settings as Record<string, unknown>)['autorun_detectors'] as string[] | undefined;
-    return list && list.length ? list.join(', ') : '';
+  /** Configured Auto-Find results-exporter name (''=none), read from the
+   *  settings object for the Auto-Find tab's child component. */
+  get autofindExporter(): string {
+    return ((this.settings as Record<string, unknown>)['autofind_exporter'] as string) || '';
+  }
+
+  /** Per-exporter saved field values for the Auto-Find tab's child component. */
+  get autofindExporterFieldValues(): Record<string, Record<string, string>> {
+    return (
+      ((this.settings as Record<string, unknown>)['autofind_exporter_field_values'] as Record<
+        string,
+        Record<string, string>
+      >) || {}
+    );
+  }
+
+  /** Persist the user's Auto-Find results-exporter choice + field values. */
+  onAutofindExporterChange(change: AutoFindExporterChange): void {
+    (this.settings as Record<string, unknown>)['autofind_exporter'] = change.exporter;
+    (this.settings as Record<string, unknown>)['autofind_exporter_field_values'] = change.fieldValues;
+    this.save();
   }
 
   /** Effective hidden-plugins map flattened to ``[{family, names}]`` rows

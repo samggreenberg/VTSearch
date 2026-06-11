@@ -497,6 +497,11 @@ class AutoDetectResponseSchema(Schema):
         values=fields.Nested(_AutoDetectResultSchema),
         required=True,
     )
+    # Present only when an Auto-Find results exporter is configured: the
+    # outcome of auto-exporting these results. ``{exporter, success,
+    # message?, error?, ...}`` (extra keys like ``filepath`` may appear for
+    # file-based exporters). See ``docs/plans/auto-find-settings-tab.md``.
+    auto_export = fields.Dict(keys=fields.String(), values=fields.Raw(), required=False)
 
 
 # ---------------------------------------------------------------------------
