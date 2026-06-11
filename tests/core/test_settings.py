@@ -120,8 +120,8 @@ class TestSettingsModule:
     def test_max_concurrent_embeddings_default_from_hardware(self, isolated_settings):
         """The default mirrors the hardware-derived value and is not persisted.
 
-        The concrete scaling (GPU count, CPU cores, total RAM) is unit-tested in
-        ``tests_lib/embedding/test_concurrency_defaults.py``; here we only assert
+        The concrete scaling (CPU cores, total RAM) is unit-tested in
+        ``tests_lib/datasets/test_concurrency_defaults.py``; here we only assert
         the settings layer surfaces that value and doesn't write it to disk.
         """
         from vtscore.embedding.loader import default_concurrent_embeddings
