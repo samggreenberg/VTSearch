@@ -11,6 +11,7 @@ to work unchanged.
 """
 
 import gc
+import logging
 import os
 import re
 import sys
@@ -26,6 +27,8 @@ def _strip_time_suffix(msg: str) -> str:
 from vtscore.config import MODELS_CACHE_DIR, resolve_device
 from vtscore.media.torch_setup import ensure_torch_configured
 
+logger = logging.getLogger(__name__)
+
 
 def get_torch_device():
     """Return the preferred ``torch.device`` for MLP training / scoring.
@@ -39,31 +42,56 @@ def get_torch_device():
     return torch.device(resolve_device())
 
 
-def _detect_cuda_devices() -> int:
-    """Return the count of visible CUDA GPUs, or 0 if none / torch missing.
+# Concurrency defaults are clamped into this range, matching the
+# ``_clamp(1, 16)`` on the settings fields they feed (see
+# ``vtsearch/settings_models.py``). Bounding here means neither the env
+# override nor the hardware probe can hand the settings layer a value it would
+# only reject.
+_CONCURRENCY_MIN = 1
+_CONCURRENCY_MAX = 16
 
-    Imports torch lazily so callers (e.g. settings default factories) can
-    run before torch is loaded. All exceptions degrade to ``0`` - a missing
-    or broken CUDA stack must not block startup.
+
+def _env_concurrency_override(var: str) -> int | None:
+    """Explicit concurrency override read from environment variable *var*.
+
+    Lets a launcher pin concurrency *without* writing ``data/settings.json`` -
+    which would otherwise freeze the value at first-run hardware and defeat the
+    per-startup autodetect. The HLTCOE Grid launcher uses this to give a fat
+    single-GPU SLURM node more parallelism than the conservative auto caps,
+    while a laptop (var unset) keeps its hardware default - so ``python app.py``
+    stays the launch command on both.
+
+    Returns the clamped override, or ``None`` when the var is unset/blank so the
+    hardware probe runs. A non-integer value also returns ``None`` (logged once,
+    never fatal - a launcher typo must not block startup); an out-of-range
+    integer is clamped into ``[_CONCURRENCY_MIN, _CONCURRENCY_MAX]``.
     """
+    raw = os.environ.get(var)
+    if raw is None or not raw.strip():
+        return None
     try:
-        import torch  # noqa: PLC0415
-
-        if torch.cuda.is_available():
-            return int(torch.cuda.device_count())
-    except Exception:
-        pass
-    return 0
+        value = int(raw.strip())
+    except ValueError:
+        logger.warning("Ignoring non-integer %s=%r; falling back to hardware autodetect", var, raw)
+        return None
+    clamped = max(_CONCURRENCY_MIN, min(_CONCURRENCY_MAX, value))
+    if clamped != value:
+        logger.warning("Clamped %s=%d into [%d, %d] -> %d", var, value, _CONCURRENCY_MIN, _CONCURRENCY_MAX, clamped)
+    return clamped
 
 
 def default_concurrent_downloads() -> int:
-    """Default for ``max_concurrent_dataset_downloads`` derived from hardware.
+    """Default for ``max_concurrent_dataset_downloads``.
 
-    The download phase is bandwidth- and disk-bound. Allowing a handful of
-    parallel downloads usually saturates a home connection without thrashing
-    the disk; capped at 4 to keep memory and FD pressure reasonable on small
-    boxes.
+    Honours ``VTSEARCH_MAX_CONCURRENT_DOWNLOADS`` when set; otherwise derives
+    from hardware. The download phase is bandwidth- and disk-bound. Allowing a
+    handful of parallel downloads usually saturates a home connection without
+    thrashing the disk; capped at 4 to keep memory and FD pressure reasonable on
+    small boxes.
     """
+    override = _env_concurrency_override("VTSEARCH_MAX_CONCURRENT_DOWNLOADS")
+    if override is not None:
+        return override
     return max(1, min(4, os.cpu_count() or 1))
 
 
@@ -72,8 +100,14 @@ def default_concurrent_downloads() -> int:
 # boxes at one worker while letting roomy workstations run a few in parallel.
 _RAM_BYTES_PER_CPU_EMBED = 4 * 1024 * 1024 * 1024
 
-# Upper bound on the CPU embed default regardless of how big the box is; a
-# hand override in ``data/settings.json`` can still go higher (clamped to 16).
+# Cores budgeted per concurrent embed job (embedders run on CPU today).
+_CPUS_PER_CPU_EMBED = 4
+
+# Upper bound on the auto-derived embed default regardless of how big the box
+# is. The ``VTSEARCH_MAX_CONCURRENT_EMBEDDINGS`` env override (and a hand edit
+# in ``data/settings.json``) can still go higher, up to the settings clamp of
+# 16 - that env override is the lever for fat cluster nodes that want more
+# parallelism than this conservative auto cap.
 _MAX_CPU_EMBED_DEFAULT = 4
 
 
@@ -103,27 +137,34 @@ def _total_memory_bytes() -> int:
 
 
 def default_concurrent_embeddings() -> int:
-    """Default for ``max_concurrent_dataset_embeddings`` derived from hardware.
+    """Default for ``max_concurrent_dataset_embeddings``.
 
-    The embed phase is CPU/GPU- and RAM-bound, so the default scales with the
-    scarcer of the two resources:
+    Honours ``VTSEARCH_MAX_CONCURRENT_EMBEDDINGS`` when set; otherwise derives
+    from hardware.
 
-    * **GPU boxes** allow one task per visible CUDA device (capped at 2) so two
-      datasets can embed in parallel on a multi-GPU rig without overcommitting a
-      single device's VRAM.
-    * **CPU-only boxes** allow roughly one job per 4 cores and one job per
-      ``_RAM_BYTES_PER_CPU_EMBED`` of total RAM, whichever is smaller, capped at
-      :data:`_MAX_CPU_EMBED_DEFAULT`. Constrained machines (few cores or little
-      RAM) still resolve to 1 - preserving the old fully-serial behaviour where
-      a second concurrent embed would thrash or OOM - while workstations get
-      genuine parallel embedding with no config change. When total RAM can't be
-      read we fall back to 1 rather than guess generously.
+    The embed phase is **CPU- and RAM-bound today**: every embedder loads on CPU
+    regardless of an available GPU (see the ``DEVICE`` note in
+    ``vtscore/config.py`` - device-aware embedding is a future refactor). So the
+    default scales with the scarcer of cores and RAM and ignores GPU count:
+    roughly one job per :data:`_CPUS_PER_CPU_EMBED` cores and one per
+    ``_RAM_BYTES_PER_CPU_EMBED`` of total RAM, whichever is smaller, capped at
+    :data:`_MAX_CPU_EMBED_DEFAULT`. Constrained machines (few cores or little
+    RAM) resolve to 1 - preserving the old fully-serial behaviour where a second
+    concurrent embed would thrash or OOM - while workstations and fat cluster
+    nodes get genuine parallel embedding with no config change. When total RAM
+    can't be read we fall back to 1 rather than guess generously.
+
+    A single-GPU SLURM allocation is exactly the case the old GPU branch got
+    wrong: it returned ``min(2, visible_gpus) == 1`` and serialised every embed
+    on an otherwise capable node. Scaling by the allocation's cores/RAM instead
+    lets such a node ingest several datasets at once; set
+    ``VTSEARCH_MAX_CONCURRENT_EMBEDDINGS`` past the auto cap to go further.
     """
-    gpus = _detect_cuda_devices()
-    if gpus > 0:
-        return max(1, min(2, gpus))
+    override = _env_concurrency_override("VTSEARCH_MAX_CONCURRENT_EMBEDDINGS")
+    if override is not None:
+        return override
 
-    by_cpu = (os.cpu_count() or 1) // 4
+    by_cpu = (os.cpu_count() or 1) // _CPUS_PER_CPU_EMBED
     total_ram = _total_memory_bytes()
     by_ram = total_ram // _RAM_BYTES_PER_CPU_EMBED if total_ram else 1
     return max(1, min(_MAX_CPU_EMBED_DEFAULT, by_cpu, by_ram))
