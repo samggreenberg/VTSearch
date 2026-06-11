@@ -171,6 +171,41 @@ class TestSettingsAPI:
         # List-of-string validation runs in the schema → 422.
         assert res.status_code == 422
 
+    def test_update_autofind_exporter_valid(self, client):
+        res = client.put("/api/settings", json={"autofind_exporter": "server_json_file"})
+        assert res.status_code == 200
+        assert res.get_json()["autofind_exporter"] == "server_json_file"
+
+    def test_update_autofind_exporter_empty_clears(self, client):
+        client.put("/api/settings", json={"autofind_exporter": "server_json_file"})
+        res = client.put("/api/settings", json={"autofind_exporter": ""})
+        assert res.status_code == 200
+        assert res.get_json()["autofind_exporter"] == ""
+
+    def test_update_autofind_exporter_unknown_rejected(self, client):
+        res = client.put("/api/settings", json={"autofind_exporter": "no_such_exporter"})
+        assert res.status_code == 400
+
+    def test_update_autofind_exporter_field_values(self, client):
+        res = client.put(
+            "/api/settings",
+            json={
+                "autofind_exporter_field_values": {
+                    "server_json_file": {"filepath": "/tmp/out.json"},
+                }
+            },
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["autofind_exporter_field_values"]["server_json_file"]["filepath"] == "/tmp/out.json"
+
+    def test_autofind_exporter_excluded_from_defaults(self, client):
+        res = client.get("/api/settings/defaults")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "autofind_exporter" not in data
+        assert "autofind_exporter_field_values" not in data
+
     def test_get_defaults(self, client):
         res = client.get("/api/settings/defaults")
         assert res.status_code == 200

@@ -158,6 +158,18 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_exporter": {
+            "type": "string"
+          },
+          "autofind_exporter_field_values": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "object"
+          },
           "autopilot_enabled": {
             "type": "boolean"
           },
@@ -423,6 +435,10 @@
       "AutoDetectResponse": {
         "additionalProperties": false,
         "properties": {
+          "auto_export": {
+            "additionalProperties": {},
+            "type": "object"
+          },
           "detectors_run": {
             "type": "integer"
           },
@@ -4269,6 +4285,10 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_exporter": {
+            "type": "string"
+          },
+          "autofind_exporter_field_values": {},
           "autopilot_enabled": {
             "type": "boolean"
           },
