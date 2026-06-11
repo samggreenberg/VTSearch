@@ -98,6 +98,16 @@
   to { transform: rotate(90deg); }
 }
 
+// The `+` Add-dataset glyph opts into the shared `.icon-waggle` while datasets
+// are downloading/installing (the button is disabled the whole time via
+// `isLoading`). `inline-block` is required for the waggle's transform to apply
+// to the otherwise-inline span. The `+`'s 90° rotational symmetry means its
+// start/end frames look identical, but `.icon-waggle`'s `ease-in-out` sweep
+// passes smoothly through `×` so the motion still reads.
+.plus-icon {
+  display: inline-block;
+}
+
 .dashboard-section-header {
   flex-shrink: 0;
   display: flex;

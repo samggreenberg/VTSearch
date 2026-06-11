@@ -1040,6 +1040,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
     );
   }
 
+  /** True while one or more datasets are actively downloading/installing
+   *  (`datasetState.loading` is set from the count of active dataset
+   *  loading tasks). This is the slice of `isLoading` that disables the
+   *  `+` Add-dataset button while loads are in flight — saturate the
+   *  concurrent-download limit and several stay active, holding the
+   *  button disabled the whole time. Drives the `+` icon's waggle so the
+   *  disabled button reads as "busy, slots are full" rather than dead. */
+  get addDatasetBusy(): boolean {
+    return this.datasetState.loading;
+  }
+
   get labelEnabled(): boolean {
     const selectedDatasets = this.resolvedSelectedDatasets;
     const selectedModels = this.resolvedSelectedModels;
