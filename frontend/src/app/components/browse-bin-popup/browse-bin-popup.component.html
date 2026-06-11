@@ -3,10 +3,17 @@
   class="bin-popup"
   [style.left.px]="left"
   [style.top.px]="top"
+  [style.maxWidth.px]="maxWidthPx"
   role="dialog"
   aria-label="Bin items">
-  <div class="bin-popup-header">
-    <span class="bin-popup-title" [title]="'Items in this bin (' + ids.length + ')'">
+  <div
+    #header
+    class="bin-popup-header"
+    [class.dragging]="dragging"
+    (pointerdown)="onHeaderPointerDown($event)">
+    <span
+      class="bin-popup-title"
+      [title]="'Items in this bin (' + ids.length + ') — drag to move'">
       {{ ids.length | number }} item{{ ids.length === 1 ? '' : 's' }}
     </span>
     <vt-view-controls
