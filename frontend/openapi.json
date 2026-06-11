@@ -228,9 +228,6 @@
             "readOnly": true,
             "type": "string"
           },
-          "disable_achievements": {
-            "type": "boolean"
-          },
           "effective_solo_embedder_per_media_type": {
             "additionalProperties": {
               "type": "string"
@@ -242,6 +239,9 @@
             "nullable": true,
             "readOnly": true,
             "type": "string"
+          },
+          "enable_achievements": {
+            "type": "boolean"
           },
           "enrich_descriptions": {
             "type": "boolean"
@@ -4311,7 +4311,7 @@
           "detectors_dir": {
             "type": "string"
           },
-          "disable_achievements": {
+          "enable_achievements": {
             "type": "boolean"
           },
           "enrich_descriptions": {
