@@ -1,10 +1,15 @@
 # Demo Datasets
 
-When the app is running, click the hamburger menu in the top-left corner to open the dataset panel. From there you can browse the available demo datasets and load one. Each demo is downloaded and embedded on first use, then cached for instant loading afterward.
+When the app is running, click the **+** button on the **Datasets** card to open the **Add Dataset** dialog, then pick the **Demo** tab. From there you can browse the available demo datasets and load one. Each demo is downloaded and embedded on first use, then cached for instant loading afterward.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="user/assets/importer-picker.dark.png" />
+  <img src="user/assets/importer-picker.light.png" alt="The Demo importer with the Synthetic Media generator and the Downloaded Media catalogue" width="720" />
+</picture>
 
 ## Synthetic (offline)
 
-If you don't have an internet connection (or just want a quick test fixture), pick **Synthetic Dataset** (🏭) from the dataset importer list. Choose `image`, `audio`, or `video` and a size (e.g. 100, 1000, 10000) and the app will generate fake media on the fly:
+If you don't have an internet connection (or just want a quick test fixture), pick **🏭 Synthetic Media** on the **Demo** tab of the dataset importer. Choose `image`, `audio`, or `video` and a size (e.g. 100, 1000, 10000) and the app will generate fake media on the fly:
 
 | Media type | Ideas it cycles through |
 |------------|-------------------------|

@@ -159,6 +159,19 @@ if ! python scripts/check-dockerfiles.py ; then
     exit 1
 fi
 
+# User-docs screenshot wiring: every manifest shot id has both theme PNGs on
+# disk, and every screenshot the user docs embed maps to a manifest id. Cheap,
+# browser-free (see docs/plans/user-docs-screenshots.md); the pixel-diff
+# (check.sh) needs chromium and stays a manual chore.
+echo "Checking user-docs screenshot wiring..."
+if ! python scripts/screenshots/wiring-check.py ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: user-docs screenshot wiring check failed"
+    echo "============================================================"
+    exit 1
+fi
+
 # Split arguments into groups and extra pytest args
 TEST_GROUPS=()
 EXTRA_ARGS=()

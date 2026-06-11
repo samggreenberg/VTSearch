@@ -1,12 +1,12 @@
 # User-Docs Screenshots
 
-**Status:** Proposed. Drafted 2026-06-07; shot list audited 2026-06-09.
-Capture harness still not built (no browser in the drafting/audit
-sessions). **In-app embed plumbing shipped** 2026-06-07: the user guide's
-images now render in the in-app Help panel, theme-matched to the viewer
-(see "Doc-embedding convention" and "What shipped" below). One seed pair
-(`dashboard-loaded.{light,dark}.png`) is a placeholder until the harness
-runs in a browser-ready session.
+**Status:** Shipped 2026-06-10. Drafted 2026-06-07; shot list audited
+2026-06-09; **harness built + all 16 shots captured in light+dark (32 PNGs)
+and embedded** 2026-06-10 in a browser-ready session. The in-app embed
+plumbing shipped 2026-06-07 (images render theme-matched in the Help panel;
+see "Doc-embedding convention"). The seed `dashboard-loaded` placeholder pair
+has been replaced with real captures. See "What shipped" and "Open
+follow-ups" below.
 
 **2026-06-09 audit.** Re-checked every planned shot against the current
 UI and the user guide. Changes: dropped the vague `settings-modal` shot in
@@ -258,15 +258,57 @@ descriptive alt text (= the manifest `caption`) for accessibility.
   pixels were captured (no browser this session); the manifest + harness
   are still owed — see the Capture prompt below.
 
+## What shipped (2026-06-10) — the capture harness
+
+- **Manifest** `docs/user/screenshots.manifest.ts` — all 16 shots, each with
+  `embeddedIn` / `caption` / `themes` / optional `clip` + `annotations`, and a
+  `recipe(page, h)` (functions, not a step array, because region-voting needs a
+  real canvas drag and several shots wait on embedding/projection).
+- **Harness** `scripts/screenshots/capture.ts` (tsx) — determinism knobs
+  (1440×900 @2×, `colorScheme` per theme, animations off via init-script,
+  `data-theme` forced pre-capture, volatile-text masking for dates + the RAM
+  gauge), declarative-annotation overlay, per-shot error isolation, RAM logging.
+- **Fixtures** `scripts/screenshots/ensure-fixtures.mjs` (idempotent) — drives
+  the UI to create `syn-imgs` (60 imgs, SigLIP), a trained throwaway detector
+  `doc-demo` (5 good / 4 bad), and `syn-patch` (24 imgs, DINOv2-patch) for
+  region voting. `refresh.sh` runs it before capturing.
+- **Drivers** `refresh.sh` (regenerate all), `check.sh` (render-to-temp +
+  pixel-diff, manual chore), `wiring-check.py` (docs⇄manifest, no browser —
+  **wired into `run-tests.sh`** after the Dockerfile check).
+- **Embeds** — `<picture>` blocks added at all 16 `embeddedIn` anchors in
+  USER_GUIDE.md, the `dashboard-loaded` hero in README.md, and `importer-picker`
+  in demos.md (placeholder pair replaced).
+- **RAM-safe on the dev box.** The harness drives a *single* running app (it
+  does not boot its own per run): a second instance would load the image
+  embedder twice and OOM the ~3.7 GB box. Determinism still holds via the
+  synthetic generator's fixed seed. Captured with a RAM watchdog armed; free
+  RAM never dropped below ~436 MB (DINOv2 load), well clear of OOM.
+- **Doc/UI drift fixed.** USER_GUIDE.md and demos.md said "click the hamburger
+  menu (☰)" to load a dataset, but the live UI loads datasets via the **+**
+  button → **Add Dataset** dialog (Services/Files/Demo tabs); the hamburger is
+  just Dashboard/Help/Settings. Corrected the prose to match the captured shots.
+
 ## Open follow-ups
 
-- **Real screenshots.** The seed `dashboard-loaded` pair is placeholder
-  art. The capture harness (below) must replace it and fill out the rest
-  of the shot list.
-- **chromium provisioning.** The harness needs Playwright + chromium;
-  the standard test container has neither (CLAUDE.md "No Chrome/Chromium
-  available"). Decide whether `refresh.sh` installs Playwright on demand
-  or assumes a provisioned browser env. Keep it out of `run-tests.sh`.
+- ~~**Real screenshots.**~~ Done 2026-06-10 — all 16 shots captured in both
+  themes and embedded.
+- ~~**chromium provisioning.**~~ Done — Playwright + chromium installed under
+  `scripts/screenshots/` (kept out of `run-tests.sh`; only the browser-free
+  `wiring-check.py` is gated).
+- **Self-booting / temp-data-dir determinism.** The harness currently drives an
+  already-running app against the real `data/` dir (RAM-driven choice). The
+  plan's original intent was a temp data dir per run. Revisit if pixel-diff
+  drift from shared state becomes a problem; the synthetic seed already covers
+  content stability.
+- **Masking gaps.** Dates and the RAM gauge are masked; the **disk gauge** text
+  ("1.9 GB free of 26.6 GB") is split across nodes and slips through — extend
+  `maskVolatile` before relying on `check.sh` pixel-diffs.
+- **Annotation polish.** The declarative `highlight` overlay dims the whole
+  viewport (including modals); a couple of boxes (`importer-subtab-bar`) sit a
+  few px low. Cosmetic; tune the overlay geometry.
+- **autopilot-progress phase.** Captured with phase 3 (Refine Boundary) active
+  thanks to the 9-vote `doc-demo` fixture; if the fixture vote count changes,
+  the active phase in this shot moves with it.
 - ~~**Markdown embed form** for dual-theme images.~~ Resolved
   2026-06-07: `<picture>` + `prefers-color-scheme` (see "Doc-embedding
   convention").

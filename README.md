@@ -2,6 +2,11 @@
 
 A trainable media search tool. VTSearch searches collections of audio clips, images, text paragraphs, videos, and documents using a **detector** (a small trained ranker that scores every item in the collection by how well it matches what you're looking for). You search either by **training a new detector** (vote a handful of items "good" or "bad" and a small neural net learns from your votes to rank the rest of the collection) or by **using an existing detector** (one you saved earlier, exported from another VTSearch instance, or imported from disk). Trained detectors are reusable: apply the same one to any future dataset of the same media type. A natural-language query ("dog barking", "red car in snow") seeds either flow via pretrained embeddings (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text), and also works as a quick stand-alone search when you don't need a trained detector. Several demo datasets are available directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/user/assets/dashboard-loaded.dark.png" />
+  <img src="docs/user/assets/dashboard-loaded.light.png" alt="The VTSearch dashboard with a synthetic dataset loaded and a trained detector listed in the sidebar" width="720" />
+</picture>
+
 ## Setup and running tests
 
 See [docs/SETUP.md](docs/SETUP.md) for prerequisites, getting the code, virtual environment setup, installing dependencies, and running the test suite.
