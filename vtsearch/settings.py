@@ -992,8 +992,8 @@ def get_all() -> dict[str, Any]:
     # plain ``result.update(server_copy)`` above would otherwise leak a legacy
     # server-file autorun list to every named user.
     result["autorun_detectors"] = get_autorun_detectors()
-    result["autofind_exporter"] = get_autofind_exporter()  # noqa: F821  # autogen'd accessor
-    result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()  # noqa: F821  # autogen'd accessor
+    result["autofind_exporter"] = get_autofind_exporter()  # type: ignore[name-defined]  # noqa: F821
+    result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()  # type: ignore[name-defined]  # noqa: F821
     return result
 
 
