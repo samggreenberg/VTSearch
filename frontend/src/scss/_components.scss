@@ -413,6 +413,9 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 }
 
 .view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
