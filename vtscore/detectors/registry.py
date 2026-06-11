@@ -100,6 +100,7 @@ def register_detector(
     media_example: str = "",
     created_by: str = "default",
     embedder: str = "",
+    readers: list[str] | None = None,
 ) -> dict[str, Any]:
     """Add a new detector to the registry and persist.
 
@@ -136,7 +137,7 @@ def register_detector(
         # Access list (mirrors datasets): usernames allowed to see/load this
         # detector besides the creator. Empty = private to the creator;
         # ``["*"]`` = visible to everyone. See ``can_user_access_detector``.
-        "readers": [],
+        "readers": list(readers) if readers else [],
     }
     with _lock:
         entries = _ensure_loaded()
