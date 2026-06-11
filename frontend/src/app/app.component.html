@@ -1,4 +1,5 @@
 <vt-toast-container />
+<vt-offline-banner />
 @if (auth.needsLogin) {
   <vt-login (loggedIn)="auth.checkStatus()" />
 } @else {
