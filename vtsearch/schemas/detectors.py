@@ -68,9 +68,19 @@ The labelset-element shape is shared with :mod:`vtsearch.schemas.labels`.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, ValidationError, fields, validate
 
 from vtsearch.schemas.labels import LabeledElementSchema
+
+
+def _list_of_strings(value):
+    """Validator: *value* must be a ``list`` whose every entry is a ``str``.
+
+    Mirrors the dataset readers validator so non-string items are rejected at
+    the schema layer (422) rather than coerced.
+    """
+    if not isinstance(value, list) or not all(isinstance(r, str) for r in value):
+        raise ValidationError("Must be a list of strings.")
 
 
 class _ExampleSchema(Schema):
@@ -400,6 +410,32 @@ class DetectorRegistryAutorunResponseSchema(Schema):
 
     ok = fields.Boolean(required=True)
     autorun = fields.Boolean(required=True)
+
+
+class DetectorRegistryReadersRequestSchema(Schema):
+    """Body for ``PUT /api/detectors/registry/<id>/readers``.
+
+    Declared as ``fields.Raw`` with a custom validator (rather than
+    ``fields.List(fields.String())``) so non-string items are rejected as 422
+    instead of being silently coerced. Mirrors the dataset readers schema.
+    """
+
+    readers = fields.Raw(
+        required=True,
+        validate=_list_of_strings,
+        metadata={
+            "description": 'List of usernames; ``["*"]`` makes the detector public.',
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    )
+
+
+class DetectorRegistryReadersResponseSchema(Schema):
+    """Response for ``PUT /api/detectors/registry/<id>/readers``."""
+
+    ok = fields.Boolean(required=True)
+    readers = fields.List(fields.String(), required=True)
 
 
 class DetectorCancelResponseSchema(Schema):
