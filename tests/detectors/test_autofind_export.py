@@ -45,9 +45,7 @@ class TestAutofindExport:
     def test_success_writes_json_file(self, isolated_settings, tmp_path):
         out = tmp_path / "autofind_results.json"
         settings.set_autofind_exporter("server_json_file")
-        settings.set_autofind_exporter_field_values(
-            {"server_json_file": {"filepath": str(out)}}
-        )
+        settings.set_autofind_exporter_field_values({"server_json_file": {"filepath": str(out)}})
         status = _run_autofind_export(dict(_SAMPLE_RESULTS))
         assert status is not None
         assert status["exporter"] == "server_json_file"
