@@ -5,6 +5,7 @@ import { combineLatest } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
 import { ToastContainerComponent } from './components/toast-container/toast-container.component';
+import { OfflineBannerComponent } from './components/offline-banner/offline-banner.component';
 import { AchievementUnlockHostComponent } from './components/achievement-unlock-host/achievement-unlock-host.component';
 import { SettingsModalComponent } from './components/modals/settings-modal/settings-modal.component';
 import { AchievementsModalComponent } from './components/modals/achievements-modal/achievements-modal.component';
@@ -44,6 +45,7 @@ import { isPairCompatible } from './utils/context-compat';
     RouterOutlet,
     DialogHostComponent,
     ToastContainerComponent,
+    OfflineBannerComponent,
     AchievementUnlockHostComponent,
     SettingsModalComponent,
     AchievementsModalComponent,

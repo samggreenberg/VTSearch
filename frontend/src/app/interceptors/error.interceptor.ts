@@ -1,7 +1,13 @@
-import { HttpContextToken, HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
+import {
+  HttpContextToken,
+  HttpErrorResponse,
+  HttpEventType,
+  HttpInterceptorFn,
+} from '@angular/common/http';
 import { inject } from '@angular/core';
-import { catchError, throwError } from 'rxjs';
+import { catchError, tap, throwError } from 'rxjs';
 import { ActiveContextService } from '../services/active-context.service';
+import { CONNECTION_PROBE, ConnectionStateService } from '../services/connection-state.service';
 import { ErrorContext, ToastService } from '../services/toast.service';
 
 /**
@@ -29,16 +35,56 @@ export const SKIP_ERROR_TOAST = new HttpContextToken<boolean>(() => false);
  * Repeating the same endpoint+status (e.g. a retry loop hammering a
  * broken backend) replaces the existing toast via dedup key rather
  * than stacking duplicates.
+ *
+ * This interceptor is also the chokepoint for the connection circuit
+ * breaker ({@link ConnectionStateService}): it feeds every outcome to the
+ * service (status 0 → network failure, any HTTP response → reachable) and,
+ * while the breaker is tripped, short-circuits every non-probe request with
+ * an immediate synthetic network error. Suppressing the request at the wire
+ * is the only way to stop the browser console flooding with
+ * `net::ERR_CONNECTION_REFUSED` (the browser logs those itself for every
+ * real failed fetch; JS cannot mute them). Raw network errors (status 0) no
+ * longer raise a toast — the offline banner is their single surface.
  */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const ctx = inject(ActiveContextService);
+  const connection = inject(ConnectionStateService);
+
+  // Circuit breaker: while offline, suppress every request except the
+  // recovery probe. Returns a synthetic status-0 error so callers'
+  // existing error handlers (catchError → EMPTY, etc.) behave exactly as
+  // they would for a real network failure, but no request hits the wire.
+  if (connection.isOffline && !req.context.get(CONNECTION_PROBE)) {
+    return throwError(
+      () =>
+        new HttpErrorResponse({
+          status: 0,
+          statusText: 'Offline (client circuit breaker)',
+          url: req.url,
+          error: new Error('Request suppressed: backend is offline. Click Retry to reconnect.'),
+        }),
+    );
+  }
 
   return next(req).pipe(
+    tap((event) => {
+      // Any full response proves the backend is reachable.
+      if (event.type === HttpEventType.Response) connection.recordSuccess();
+    }),
     catchError((err: unknown) => {
       if (!(err instanceof HttpErrorResponse)) {
         return throwError(() => err);
       }
+      if (err.status === 0) {
+        // True network failure: count it toward the offline threshold and
+        // stay silent (no toast); the offline banner is the surface for this.
+        connection.recordNetworkFailure();
+        return throwError(() => err);
+      }
+      // A non-zero HTTP status means the server answered, so it is reachable
+      // even though this request failed — clear any pending offline tally.
+      connection.recordSuccess();
       if (req.context.get(SKIP_ERROR_TOAST)) {
         return throwError(() => err);
       }
