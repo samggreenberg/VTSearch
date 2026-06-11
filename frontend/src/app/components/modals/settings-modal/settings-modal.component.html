@@ -104,6 +104,9 @@
                   class="view-tab"
                   [class.view-tab--active]="activeViewTab === mt.type_id"
                   (click)="activeViewTab = mt.type_id">
+                  @if (mt.icon) {
+                    <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
+                  }
                   {{ mt.name }}
                 </button>
               }
@@ -256,6 +259,9 @@
                   [class.view-tab--active]="activeBrowseTab === mt.type_id"
                   (click)="activeBrowseTab = mt.type_id"
                   [title]="'Browser settings for ' + mt.name + ' datasets'">
+                  @if (mt.icon) {
+                    <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
+                  }
                   {{ mt.name }}
                 </button>
               }

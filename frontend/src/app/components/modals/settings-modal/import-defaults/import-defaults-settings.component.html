@@ -12,6 +12,9 @@
         [class.view-tab--active]="activeType === mt.type_id"
         (click)="selectTab(mt.type_id)"
         [title]="'Set import defaults for ' + mt.name + ' datasets'">
+        @if (mt.icon) {
+          <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
+        }
         {{ mt.name }}
       </button>
     }
