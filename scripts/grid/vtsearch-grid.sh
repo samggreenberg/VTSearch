@@ -60,8 +60,8 @@ exec srun --job-name=vtsearch --pty \
             echo
             echo ">>> app.py stopped. GPU node ($node) is still yours."
             printf ">>> [Enter] = restart (picks up code changes)   |   q + [Enter] = quit & release node: "
-            read -r ans || break
-            [ "$ans" = "q" ] && break
+            read -r reply || break
+            [ "$reply" = "q" ] && break
         done
         echo ">>> Releasing the allocation. Bye."
     '
