@@ -1437,22 +1437,38 @@ def set_autorun_detectors(value: list[str]) -> None:
 
 
 def add_autorun_detector(name: str) -> None:
-    """Add a detector name to the current user's autorun list (idempotent)."""
-    current = get_autorun_detectors()
-    if name not in current:
-        set_autorun_detectors([*current, name])
+    """Add a detector name to the current user's autorun list (idempotent).
+
+    Atomic per-user read-modify-write: ``mutate_user`` re-reads the on-disk
+    file under the cross-process lock, so a concurrent writer's entry is
+    merged rather than clobbered. The ``seed`` captures the effective value
+    (including the default-user read-through) for the first write, before the
+    user has any entry of its own.
+    """
+    seed = get_autorun_detectors()
+
+    def _add(cache: dict[str, Any]) -> None:
+        base = cache["autorun_detectors"] if "autorun_detectors" in cache else seed
+        cache["autorun_detectors"] = list(dict.fromkeys([*base, name]))
+
+    mutate_user(_add)
 
 
 def remove_autorun_detector(name: str) -> bool:
     """Remove a detector name from the current user's autorun list.
 
-    Returns ``True`` if the name was present.
+    Returns ``True`` if the name was present (pre-read). Atomic per-user RMW,
+    same merge semantics as :func:`add_autorun_detector`.
     """
-    current = get_autorun_detectors()
-    if name not in current:
-        return False
-    set_autorun_detectors([n for n in current if n != name])
-    return True
+    seed = get_autorun_detectors()
+    found = name in seed
+
+    def _remove(cache: dict[str, Any]) -> None:
+        base = cache["autorun_detectors"] if "autorun_detectors" in cache else seed
+        cache["autorun_detectors"] = [n for n in base if n != name]
+
+    mutate_user(_remove)
+    return found
 
 
 def is_autorun_detector(name: str) -> bool:

@@ -842,23 +842,25 @@ class TestConcurrentWrites:
     def test_add_autorun_detector_rmw(self, isolated_settings):
         """Concurrent ``add_autorun_detector`` calls must not lose entries.
 
-        Simulates the cross-process race: our cache says ``[]`` but disk
-        has ``["other-detector"]`` because a sibling process added it.
+        ``autorun_detectors`` is per-user now, so the cross-process race plays
+        out on the (default) user's settings file: our cache says
+        ``["ours-pre"]`` but disk also has ``"sibling"`` because a sibling
+        process added it. The atomic per-user RMW must merge, not clobber.
         """
-        # Force-load the server cache (so add_autorun_detector below
+        # Force-load the per-user cache (so add_autorun_detector below
         # doesn't trigger a fresh load).
         settings_mod.add_autorun_detector("ours-pre")
 
-        # Sibling process directly adds an entry on disk.
-        server_path = isolated_settings._server
-        disk = json.loads(server_path.read_text())
+        # Sibling process directly adds an entry on disk (the per-user file).
+        user_path = isolated_settings._user
+        disk = json.loads(user_path.read_text())
         disk["autorun_detectors"] = list(disk.get("autorun_detectors", [])) + ["sibling"]
-        server_path.write_text(json.dumps(disk))
+        user_path.write_text(json.dumps(disk))
 
         # We add another; should merge with disk, not clobber.
         settings_mod.add_autorun_detector("ours-post")
 
-        final = json.loads(server_path.read_text())
+        final = json.loads(user_path.read_text())
         assert "sibling" in final["autorun_detectors"]
         assert "ours-pre" in final["autorun_detectors"]
         assert "ours-post" in final["autorun_detectors"]
