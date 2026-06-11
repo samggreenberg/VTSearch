@@ -687,3 +687,122 @@ class TestConcurrentDownloads:
         assert check_path.exists()
         # Content should be from the "first download" that finished first.
         assert (check_path / "file.txt").read_text() == "from first download"
+
+
+class _FakeResponse:
+    """Minimal stand-in for a streamed ``requests.Response``.
+
+    Yields the given *chunks* from ``iter_content``; if *fail_after_chunks* is
+    set, raises ``ChunkedEncodingError`` once that many chunks have been yielded
+    (simulating a mid-stream connection drop / ``IncompleteRead``).
+    """
+
+    is_redirect = False
+    is_permanent_redirect = False
+
+    def __init__(self, chunks, status_code=200, headers=None, fail_after_chunks=None):
+        self._chunks = list(chunks)
+        self.status_code = status_code
+        self.headers = headers or {}
+        self._fail_after_chunks = fail_after_chunks
+        self.closed = False
+
+    def raise_for_status(self):
+        import requests
+
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+    def iter_content(self, chunk_size=8192):
+        for i, chunk in enumerate(self._chunks):
+            if self._fail_after_chunks is not None and i >= self._fail_after_chunks:
+                import requests
+
+                raise requests.exceptions.ChunkedEncodingError("Connection broken: IncompleteRead")
+            yield chunk
+
+    def close(self):
+        self.closed = True
+
+
+class TestDownloadResume:
+    """``download_file_with_progress`` recovers from mid-stream connection drops."""
+
+    @staticmethod
+    def _install(monkeypatch, responses):
+        """Patch ``requests.Session.get`` to hand out *responses* in order and
+        record the request headers (so the Range header can be asserted). Also
+        neutralizes the retry backoff sleep."""
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        calls = []
+
+        def fake_get(self, url, *args, headers=None, **kwargs):
+            calls.append({"url": url, "headers": headers})
+            return responses.pop(0)
+
+        monkeypatch.setattr(requests.Session, "get", fake_get)
+        monkeypatch.setattr(dl_core.time, "sleep", lambda *a, **k: None)
+        return calls
+
+    def test_resumes_after_connection_drop(self, tmp_path, monkeypatch):
+        from vtscore.datasets.downloader import core as dl_core
+
+        payload = bytes(range(256)) * 8  # 2048 deterministic bytes
+        chunks = [payload[i : i + 256] for i in range(0, len(payload), 256)]  # 8 chunks
+        # Attempt 1: full-size 200 response that dies after 3 chunks (768 bytes).
+        first = _FakeResponse(chunks, status_code=200, headers={"content-length": str(len(payload))}, fail_after_chunks=3)
+        # Attempt 2: 206 partial response serving the remaining bytes.
+        second = _FakeResponse(
+            chunks[3:],
+            status_code=206,
+            headers={"content-length": str(len(payload) - 768), "Content-Range": f"bytes 768-{len(payload) - 1}/{len(payload)}"},
+        )
+        calls = self._install(monkeypatch, [first, second])
+
+        dest = tmp_path / "archive.tar"
+        reported = []
+        dl_core.download_file_with_progress(
+            "https://example.com/archive.tar", dest, on_progress=lambda *a: reported.append(a)
+        )
+
+        # The file is complete and byte-identical despite the drop.
+        assert dest.read_bytes() == payload
+        # The resume requested exactly the bytes already on disk.
+        assert calls[1]["headers"] == {"Range": "bytes=768-"}
+        # Progress always reported the true total, never a truncated one.
+        assert {a[3] for a in reported} == {len(payload)}
+
+    def test_restarts_when_server_ignores_range(self, tmp_path, monkeypatch):
+        from vtscore.datasets.downloader import core as dl_core
+
+        payload = bytes(range(256)) * 4  # 1024 bytes
+        chunks = [payload[i : i + 256] for i in range(0, len(payload), 256)]  # 4 chunks
+        first = _FakeResponse(chunks, status_code=200, headers={"content-length": str(len(payload))}, fail_after_chunks=2)
+        # Server ignores Range and resends the whole body with 200, not 206.
+        full_again = _FakeResponse(chunks, status_code=200, headers={"content-length": str(len(payload))})
+        self._install(monkeypatch, [first, full_again])
+
+        dest = tmp_path / "archive.tar"
+        dl_core.download_file_with_progress("https://example.com/archive.tar", dest, on_progress=lambda *a: None)
+
+        # Restart-from-scratch must not duplicate the already-written prefix.
+        assert dest.read_bytes() == payload
+
+    def test_raises_after_exhausting_attempts(self, tmp_path, monkeypatch):
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        chunks = [b"x" * 256]
+        dropping = [
+            _FakeResponse(chunks, headers={"content-length": "256"}, fail_after_chunks=0)
+            for _ in range(dl_core._MAX_DOWNLOAD_ATTEMPTS)
+        ]
+        self._install(monkeypatch, dropping)
+
+        dest = tmp_path / "archive.tar"
+        with pytest.raises(requests.exceptions.ChunkedEncodingError):
+            dl_core.download_file_with_progress("https://example.com/archive.tar", dest, on_progress=lambda *a: None)

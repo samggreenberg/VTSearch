@@ -10,6 +10,7 @@ to use these functions outside the Flask app (scripts, notebooks, tests).
 import os
 import shutil
 import tarfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -22,6 +23,24 @@ from vtscore.config import DATA_DIR
 from vtscore.security.url_validation import validate_url
 
 _MAX_REDIRECTS = 10
+
+# Large dataset archives are pulled from flaky third-party CDNs / object stores
+# (Caltech's OSN bucket, Zenodo, HuggingFace, university mirrors) that routinely
+# drop a connection mid-stream on a multi-GB transfer.  When that happens we
+# retry with an HTTP Range request and *resume* from the bytes already on disk
+# instead of restarting from zero, with exponential backoff between attempts.
+_MAX_DOWNLOAD_ATTEMPTS = 6
+_RETRY_BACKOFF_BASE_S = 1.0
+_RETRY_BACKOFF_MAX_S = 30.0
+# Transient HTTP statuses worth retrying (rate-limit + gateway/CDN hiccups).
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+# Connection-level failures (dropped/incomplete read, reset, read timeout) that
+# a resume can recover from.  An IncompleteRead surfaces as ChunkedEncodingError.
+_RETRYABLE_EXCEPTIONS = (
+    requests.exceptions.ChunkedEncodingError,
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+)
 
 # Demo dataset directory paths (derived from DATA_DIR)
 IMAGE_DIR = DATA_DIR / "images"
@@ -110,40 +129,21 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
-def download_file_with_progress(
-    url: str,
-    dest_path: Path,
-    expected_size: int = 0,
-    on_progress: Optional[ProgressCallback] = None,
-) -> None:
-    """Download a file from a URL to a local path, reporting byte-level progress.
+def _open_validated_stream(
+    session: requests.Session, url: str, headers: Optional[dict] = None
+) -> requests.Response:
+    """GET *url* as a stream, following redirects manually so every hop is
+    re-checked by :func:`validate_url`.
 
-    Streams the HTTP response in 8 KB chunks and calls *on_progress*
-    after each chunk so that a polling client can track download progress.
+    We follow redirects by hand (``allow_redirects=False``) so a public URL
+    cannot redirect to an internal host (SSRF), bypassing the up-front check
+    callers performed. The ``(connect, read)`` timeout fails fast on an
+    unresponsive host and aborts if the server stalls for 60s mid-stream.
 
-    Args:
-        url: The HTTP/HTTPS URL to download from.
-        dest_path: Local filesystem path where the downloaded file will be written.
-        expected_size: Expected file size in bytes, used as a fallback when the
-            server does not supply a ``Content-Length`` header. Pass 0 (default)
-            if the size is unknown.
-        on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
-
-    Raises:
-        requests.HTTPError: If the server returns a non-2xx status code.
+    Returns the final, non-redirect response; the caller owns closing it.
     """
-    if on_progress is None:
-        on_progress = _default_progress()
-
-    # (connect_timeout, read_timeout): fail fast on unresponsive hosts
-    # and abort if the server stops streaming bytes for 60s mid-download.
-    # We follow redirects manually so that every hop is re-checked by
-    # validate_url() - otherwise a public URL could redirect to an internal
-    # host (SSRF), bypassing the up-front check that callers performed.
-    session = requests.Session()
     current_url = url
-    response = session.get(current_url, stream=True, timeout=(10, 60), allow_redirects=False)
+    response = session.get(current_url, stream=True, timeout=(10, 60), allow_redirects=False, headers=headers)
     redirects = 0
     while response.is_redirect or response.is_permanent_redirect:
         if redirects >= _MAX_REDIRECTS:
@@ -156,19 +156,131 @@ def download_file_with_progress(
         validate_url(next_url)
         response.close()
         current_url = next_url
-        response = session.get(current_url, stream=True, timeout=(10, 60), allow_redirects=False)
+        response = session.get(current_url, stream=True, timeout=(10, 60), allow_redirects=False, headers=headers)
         redirects += 1
-    response.raise_for_status()
-    total_size = int(response.headers.get("content-length", 0))
-    if total_size == 0:
-        total_size = expected_size
+    return response
 
-    downloaded = 0
-    with open(dest_path, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            size = f.write(chunk)
-            downloaded += size
-            on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
+
+def _total_size_from_headers(response: requests.Response, downloaded: int, expected_size: int) -> int:
+    """Determine the file's full size from response headers.
+
+    Prefers the ``Content-Range`` total of a 206 partial response
+    (``bytes 8104304-1183006719/1183006720``); otherwise adds the remaining
+    ``Content-Length`` to what is already on disk, and finally falls back to
+    the caller-supplied *expected_size*.
+    """
+    content_range = response.headers.get("Content-Range", "")
+    if "/" in content_range:
+        try:
+            return int(content_range.rsplit("/", 1)[1])
+        except ValueError:
+            pass
+    content_length = int(response.headers.get("content-length", 0))
+    if content_length:
+        return downloaded + content_length
+    return expected_size
+
+
+def _backoff_and_notify(
+    on_progress: ProgressCallback, dest_path: Path, attempt: int, downloaded: int, total_size: int
+) -> None:
+    """Report a recoverable interruption and sleep for an exponential backoff."""
+    backoff = min(_RETRY_BACKOFF_BASE_S * (2 ** (attempt - 1)), _RETRY_BACKOFF_MAX_S)
+    on_progress(
+        "downloading",
+        f"Connection interrupted at {downloaded:,} bytes - resuming {dest_path.name} "
+        f"(attempt {attempt + 1}/{_MAX_DOWNLOAD_ATTEMPTS})...",
+        downloaded,
+        total_size,
+    )
+    time.sleep(backoff)
+
+
+def download_file_with_progress(
+    url: str,
+    dest_path: Path,
+    expected_size: int = 0,
+    on_progress: Optional[ProgressCallback] = None,
+) -> None:
+    """Download a file from a URL to a local path, reporting byte-level progress.
+
+    Streams the HTTP response in 8 KB chunks and calls *on_progress* after each
+    chunk so that a polling client can track download progress.
+
+    The transfer is resilient to mid-stream connection drops: if the server
+    closes the connection early (surfacing as ``ChunkedEncodingError`` /
+    ``IncompleteRead``), times out, or returns a transient 5xx/429, the download
+    retries up to ``_MAX_DOWNLOAD_ATTEMPTS`` times with exponential backoff,
+    resuming from the bytes already on disk via an HTTP ``Range`` request rather
+    than restarting from zero. Servers that ignore ``Range`` (resending the full
+    body) or transport-compress the response are handled by restarting the file.
+
+    Args:
+        url: The HTTP/HTTPS URL to download from.
+        dest_path: Local filesystem path where the downloaded file will be written.
+        expected_size: Expected file size in bytes, used as a fallback when the
+            server does not supply a ``Content-Length`` header. Pass 0 (default)
+            if the size is unknown.
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Raises:
+        requests.HTTPError: If the server returns a non-retryable error status.
+        requests.exceptions.ChunkedEncodingError / ConnectionError / Timeout: If
+            the connection keeps failing after the final retry attempt.
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+
+    session = requests.Session()
+    downloaded = 0  # bytes already on disk at dest_path
+    total_size = 0  # full size of the file once known
+    # Resume relies on the server honoring Range requests on the *raw* body.
+    # If a hop transport-compresses the response (Content-Encoding), byte
+    # offsets no longer line up with iter_content's decoded output, so we fall
+    # back to restarting the file rather than risk a corrupt resume.
+    resume_ok = True
+
+    for attempt in range(1, _MAX_DOWNLOAD_ATTEMPTS + 1):
+        last_attempt = attempt == _MAX_DOWNLOAD_ATTEMPTS
+        use_range = downloaded > 0 and resume_ok
+        if not use_range:
+            downloaded = 0  # first attempt, or a resume we can't safely do -> start over
+        headers = {"Range": f"bytes={downloaded}-"} if use_range else None
+
+        response = None
+        try:
+            response = _open_validated_stream(session, url, headers)
+
+            # Transient server-side error: back off and retry (resuming if we can).
+            if response.status_code in _RETRYABLE_STATUS and not last_attempt:
+                _backoff_and_notify(on_progress, dest_path, attempt, downloaded, total_size)
+                continue
+            response.raise_for_status()
+
+            if response.headers.get("Content-Encoding"):
+                resume_ok = False
+            # We asked to resume but the server resent the whole body (200, not
+            # 206 Partial Content): it ignored Range, so restart from scratch.
+            if use_range and response.status_code != 206:
+                downloaded = 0
+
+            if total_size == 0:
+                total_size = _total_size_from_headers(response, downloaded, expected_size)
+
+            mode = "ab" if downloaded else "wb"
+            with open(dest_path, mode) as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    downloaded += f.write(chunk)
+                    on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
+            return  # stream consumed cleanly
+        except _RETRYABLE_EXCEPTIONS:
+            if last_attempt:
+                raise
+            _backoff_and_notify(on_progress, dest_path, attempt, downloaded, total_size)
+        finally:
+            if response is not None:
+                response.close()
 
 
 _GZIP_MAGIC = b"\x1f\x8b"
