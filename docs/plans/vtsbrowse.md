@@ -617,6 +617,15 @@ in git history and the cited source files.
 ## Open follow-ups
 
 **Shipped (struck through):**
+- ~~**Wider cell-size range + full-res at large zoom**~~ — the browse canvas's
+  bigger/smaller buttons now walk nine named levels (`XS`..`XL`, then `2XL`..`5XL`)
+  instead of five, so a user can blow a cell up close to the full media. Past the
+  point where a cell is drawn wider than the thumbnail's native longest side
+  (`THUMB_NATIVE_MAX_DIM`, 384px), `BrowseCanvasComponent.getThumb` fetches the
+  full-res `/image` instead of the capped `/thumbnail` (the cache is dropped when
+  the zoom crosses the threshold so cells reload sharp; only a few such giant cells
+  fit on screen, so the LRU still bounds memory). The backend `BrowseIconSize`
+  literal / `VALID_BROWSE_ICON_SIZES` accept the four new labels.
 - ~~**Live elapsed-time during the UMAP fit**~~ — fit runs on a worker thread and
   ticks a 1 s elapsed-seconds heartbeat (`total=0` → indeterminate progress bar),
   since UMAP's numba epoch loop exposes no per-epoch callback.
