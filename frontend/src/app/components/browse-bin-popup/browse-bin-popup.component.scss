@@ -92,7 +92,10 @@
   color: var(--text-vote);
 
   // --- List mode: a horizontal row (thumbnail + name) --------------------
-  height: 36px;
+  // The row height is bound per render from ``rowSize`` (thumbnail size +
+  // padding), so the entry just fills it; the Larger/Smaller buttons resize
+  // the list thumbnails the same way they resize grid cells.
+  height: 100%;
   display: flex;
   align-items: center;
   gap: var(--space-md);
@@ -124,22 +127,40 @@
     padding: 2px;
     border-radius: var(--radius-sm);
     width: var(--popup-cell, 80px);
+    // Hover-pop: the whole tile scales up over its neighbors (raised above
+    // them) the way a hovered cell magnifies on the browse canvas.
+    position: relative;
+    transition: transform 0.12s ease;
+    transform-origin: center center;
 
     &.selected {
       // The list's inset accent bar reads oddly under a square thumbnail; use
       // a ring instead so the whole cell shows as selected.
       box-shadow: 0 0 0 2px var(--accent);
     }
+
+    &:hover {
+      z-index: 3;
+      transform: scale(1.4);
+    }
+
+    &:hover .bin-popup-thumb-wrap,
+    &:hover .bin-popup-placeholder {
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
   }
 }
 
-// List-mode thumbnail/placeholder: fixed 28px square.
+// Thumbnail/placeholder square. Sized to the chosen icon size (``--popup-cell``,
+// bound per row) in both modes so the Larger/Smaller buttons resize list rows
+// too; falls back to a compact square if the variable is ever absent.
 .bin-popup-thumb-wrap {
   display: block;
-  width: 28px;
-  height: 28px;
+  width: var(--popup-cell, 28px);
+  height: var(--popup-cell, 28px);
   border-radius: var(--radius-sm);
   flex-shrink: 0;
+  transition: box-shadow 0.12s ease;
 }
 
 .bin-popup-thumb {
@@ -155,13 +176,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--popup-cell, 28px);
+  height: var(--popup-cell, 28px);
   border-radius: var(--radius-sm);
   background: var(--bg-body);
   color: var(--text-muted);
   font-size: var(--font-lg);
   flex-shrink: 0;
+  transition: box-shadow 0.12s ease;
 }
 
 .bin-popup-name {
@@ -174,15 +196,9 @@
   text-overflow: ellipsis;
 }
 
-// Grid mode resizes the thumbnail to the chosen cell size and stacks the name
-// underneath it, truncated to the cell width.
+// Grid mode stacks the name under the thumbnail (sized by the shared
+// ``--popup-cell`` rule above), truncated to the cell width.
 .bin-popup-entry.grid {
-  .bin-popup-thumb-wrap,
-  .bin-popup-placeholder {
-    width: var(--popup-cell, 80px);
-    height: var(--popup-cell, 80px);
-  }
-
   .bin-popup-name {
     flex: 0 0 auto;
     width: 100%;

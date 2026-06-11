@@ -22,8 +22,10 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 
-/** Row stride (px) for the virtualized list mode; matches ``.bin-popup-entry``. */
-const LIST_ROW_HEIGHT = 36;
+/** Vertical room (px) reserved around a list-mode thumbnail (its row height is
+ *  the chosen thumbnail size plus this padding), so the Larger/Smaller buttons
+ *  scale list rows the same way they scale grid cells. */
+const LIST_ROW_PADDING = 8;
 /** Vertical room (px) reserved under a grid thumbnail for its truncated name. */
 const GRID_LABEL_HEIGHT = 18;
 /** Gap (px) between grid cells (and grid rows); matches ``--space-2xs``-ish. */
@@ -234,11 +236,13 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     this.rows = rows;
   }
 
-  /** Pixel stride of one virtual row (a list entry, or a grid row of cells). */
+  /** Pixel stride of one virtual row (a list entry, or a grid row of cells).
+   *  Both modes scale with the chosen thumbnail size so the Larger/Smaller
+   *  controls take effect in list view as well as grid view. */
   get rowSize(): number {
     return this.viewMode === 'grid'
       ? this.gridGoalWidth + GRID_LABEL_HEIGHT + GRID_GAP
-      : LIST_ROW_HEIGHT;
+      : this.gridGoalWidth + LIST_ROW_PADDING;
   }
 
   /** Height (px) the body takes: just enough for its rows, capped (to the room
