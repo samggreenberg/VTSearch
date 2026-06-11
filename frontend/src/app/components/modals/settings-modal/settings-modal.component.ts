@@ -8,6 +8,7 @@ import { IconComponent } from '../../icon/icon.component';
 import { SettingsImporterModalComponent } from '../settings-importer-modal/settings-importer-modal.component';
 import { SettingsExporterModalComponent } from '../settings-exporter-modal/settings-exporter-modal.component';
 import { ImportDefaultsSettingsComponent } from './import-defaults/import-defaults-settings.component';
+import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { ImportDefaultsByMediaType } from '../../../models/api.models';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
@@ -26,7 +27,7 @@ import {
 @Component({
   selector: 'vt-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, ImportDefaultsSettingsComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, ImportDefaultsSettingsComponent, FieldHintIconComponent],
   templateUrl: './settings-modal.component.html',
   styleUrl: './settings-modal.component.scss',
 })

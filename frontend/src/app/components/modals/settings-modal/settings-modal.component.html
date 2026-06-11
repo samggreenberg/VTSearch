@@ -68,7 +68,9 @@
             </select>
           </div>
           <div class="form-group" title="Streamline the UI for a single media type. Importer and detector flows will hide their media-type pickers and lock to this type; converters that produce other types are filtered out.">
-            <label class="form-label">Solo media type</label>
+            <label class="form-label">Solo media type@if (soloMediaTypeNote) {
+              <vt-field-hint-icon [hint]="soloMediaTypeNote"></vt-field-hint-icon>
+            }</label>
             <select
               class="form-select"
               [ngModel]="soloMediaTypeSelectValue"
@@ -79,9 +81,6 @@
                 <option [value]="mt.type_id">{{ mt.name }}</option>
               }
             </select>
-            @if (soloMediaTypeNote) {
-              <p class="form-hint">{{ soloMediaTypeNote }}</p>
-            }
           </div>
           <label class="checkbox-row" title="Animate media transitions when voting (swipe left/right effect)">
             <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
@@ -209,7 +208,7 @@
 
         <!-- Data Imports -->
         @if (activeSettingsTab === 'imports') {
-          <h3>Data Imports</h3>
+          <h3>Data Imports<vt-field-hint-icon hint="Default import settings per media type. These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type."></vt-field-hint-icon></h3>
           <vt-import-defaults-settings
             [mediaTypes]="mediaTypes"
             [defaults]="importDefaults"
@@ -246,11 +245,7 @@
 
         <!-- Browser (VTSBrowse projection browser) -->
         @if (activeSettingsTab === 'browser') {
-          <h3>Browser</h3>
-          <p class="info-text">
-            How the VTSBrowse projection browser looks, per media type. The same controls
-            live on the browse canvas itself; changes here are remembered for next time.
-          </p>
+          <h3>Browser<vt-field-hint-icon hint="How the VTSBrowse projection browser looks, per media type. The same controls live on the browse canvas itself; changes here are remembered for next time."></vt-field-hint-icon></h3>
           @if (mediaTypes.length > 0) {
             <div class="view-tabs">
               @for (mt of mediaTypes; track mt.type_id) {
@@ -279,7 +274,7 @@
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Slide clusters together to close the empty space between them when the projection is built">Compaction</label>
+                <label class="form-label" title="Slide clusters together to close the empty space between them when the projection is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty “oceans” between them, keeping each cluster’s shape intact. Applies to the next projection build or Re-project."></vt-field-hint-icon></label>
                 <div class="toggle-group">
                   <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab)" (click)="onBrowseCompactChange(activeBrowseTab, true)" title="Close the empty space between clusters">
                     On
@@ -288,15 +283,13 @@
                     Off
                   </button>
                 </div>
-                <p class="form-hint">Slides clusters together to close the empty &ldquo;oceans&rdquo; between them, keeping each cluster&rsquo;s shape intact. Applies to the next projection build or Re-project.</p>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap</label>
+                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab) ? 'Thumbnail datasets (image, video) always use grayscale, so the density shading never tints the thumbnails.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
                 @if (browseTabUsesThumbnails(activeBrowseTab)) {
                   <select class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">
                     <option value="gray" selected>Grayscale</option>
                   </select>
-                  <p class="form-hint">Thumbnail datasets (image, video) always use grayscale, so the density shading never tints the thumbnails.</p>
                 } @else {
                   <select class="form-select" [ngModel]="getBrowseColormap(activeBrowseTab)" (ngModelChange)="onBrowseColormapChange(activeBrowseTab, $event)" aria-label="Browser colormap">
                     <option value="auto">Auto (match theme)</option>
@@ -304,7 +297,6 @@
                     <option value="ocean">Ocean (blue)</option>
                     <option value="gray">Grayscale</option>
                   </select>
-                  <p class="form-hint">Darker bins mean more items in light mode; brighter bins mean more in dark mode.</p>
                 }
               </div>
               <div class="form-group">
@@ -320,7 +312,7 @@
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border</label>
+                <label class="form-label" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border<vt-field-hint-icon hint="Only affects datasets that show thumbnails (image, video). Draws a colored band around each stacked tile; its color shows how many items are piled there. Set to 0 to hide it."></vt-field-hint-icon></label>
                 <input
                   class="form-input"
                   type="number"
@@ -330,10 +322,9 @@
                   [ngModel]="getBrowseThumbnailBorder(activeBrowseTab)"
                   (ngModelChange)="onBrowseThumbnailBorderChange(activeBrowseTab, $event)"
                   aria-label="Browser thumbnail border width" />
-                <p class="form-hint">Only affects datasets that show thumbnails (image, video). Draws a colored band around each stacked tile; its color shows how many items are piled there. Set to 0 to hide it.</p>
               </div>
               <div class="form-group">
-                <label class="form-label" title="How a right-clicked bin's items are shown in the popup">Bin popup</label>
+                <label class="form-label" title="How a right-clicked bin's items are shown in the popup">Bin popup<vt-field-hint-icon hint="How the right-click bin popup shows a bin’s items. Changing it on a popup while browsing remembers the choice here for this media type."></vt-field-hint-icon></label>
                 <div class="toggle-group">
                   <button class="toggle-btn" [class.toggle-btn--active]="getPopupViewMode(activeBrowseTab) === 'grid'" (click)="onPopupViewModeChange(activeBrowseTab, 'grid')" title="Show a right-clicked bin's items as a thumbnail grid">
                     Grid
@@ -342,7 +333,6 @@
                     List
                   </button>
                 </div>
-                <p class="form-hint">How the right-click bin popup shows a bin&rsquo;s items. Changing it on a popup while browsing remembers the choice here for this media type.</p>
               </div>
               <div class="form-group">
                 <label class="form-label" title="Thumbnail size in the bin popup's grid">Popup thumbnail size</label>
@@ -362,11 +352,7 @@
 
         <!-- Server Settings (read-only) -->
         @if (activeSettingsTab === 'server') {
-          <h3>Server Settings</h3>
-          <p class="info-text">
-            These are fixed when the server starts (via config file, environment, or CLI flags)
-            and shared by everyone. They&rsquo;re shown here for reference and can&rsquo;t be changed.
-          </p>
+          <h3>Server Settings<vt-field-hint-icon hint="These are fixed when the server starts (via config file, environment, or CLI flags) and shared by everyone. They’re shown here for reference and can’t be changed."></vt-field-hint-icon></h3>
 
           <div class="form-group">
             <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory</label>
