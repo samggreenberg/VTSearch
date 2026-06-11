@@ -72,6 +72,8 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "focus_mode_right": settings.set_focus_mode_right,
     "panel_pct_left": settings.set_panel_pct_left,
     "panel_pct_right": settings.set_panel_pct_right,
+    "view_mode_popup": settings.set_view_mode_popup,
+    "grid_icon_size_popup": settings.set_grid_icon_size_popup,
     "autopilot_enabled": settings.set_autopilot_enabled,
     "hide_autopilot": settings.set_hide_autopilot,
     "autopilot_top_greens": settings.set_autopilot_top_greens,
