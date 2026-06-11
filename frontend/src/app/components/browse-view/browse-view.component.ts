@@ -89,9 +89,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * instead re-bins a smaller region more finely. The persisted per-media value
    * is the size *label* (see {@link ICON_SIZES}), not the multiplier.
    */
-  private readonly HEX_SCALES = [0.5, 0.75, 1, 1.6, 2.5, 4, 6.25];
-  /** Named icon sizes, index-aligned with {@link HEX_SCALES}. */
-  static readonly ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'] as const;
+  private readonly HEX_SCALES = [0.5, 0.75, 1, 1.6, 2.5, 4, 6.25, 10, 16];
+  /** Named icon sizes, index-aligned with {@link HEX_SCALES}. The top steps
+   * (4XL/5XL) render a cell close to the full media, so some users use them to
+   * inspect (essentially) the whole image rather than a thumbnail. */
+  static readonly ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'] as const;
   hexScaleIndex = 2;
 
   /**

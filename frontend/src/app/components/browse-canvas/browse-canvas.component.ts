@@ -77,6 +77,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   /** On-screen bin radius (CSS px) the "M" thumbnail size targets, and the
    * default before any saved size is applied. See {@link targetRadius}. */
   static readonly DEFAULT_TARGET_RADIUS = 28;
+  /** Longest side (px) the ``/thumbnail`` route caps images at (mirrors
+   * ``vtscore`` ``DEFAULT_MAX_DIM``). Once a cell is drawn wider than this the
+   * capped thumbnail would upscale, so at those zoom levels the canvas fetches
+   * the full-res ``/image`` instead. See {@link useFullResThumbs}. */
+  static readonly THUMB_NATIVE_MAX_DIM = 384;
   /**
    * Target on-screen bin radius in CSS px: the size each bin/thumbnail aims to
    * render at. Level selection picks the pyramid level whose bins land closest
@@ -124,6 +129,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   /** Media ids whose thumbnail failed to load, so we don't retry every frame. */
   private thumbFailed = new Set<number>();
   private readonly MAX_THUMBS = 2048;
+  /** Resolution tier the {@link thumbCache} is currently filled at. Flips to
+   * ``true`` once the zoom is large enough that {@link getThumb} fetches the
+   * full-res ``/image`` instead of the capped ``/thumbnail``; crossing the
+   * threshold drops the cache so cells reload at the matching resolution. */
+  private thumbsAreFullRes = false;
 
   private ctx!: CanvasRenderingContext2D;
   private width = 0;
@@ -290,6 +300,25 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     return usesThumbnails(this.mediaType);
   }
 
+  /** At the largest zoom levels a cell is drawn wider (in device px) than the
+   * thumbnail's native longest side, so painting the capped ``/thumbnail`` would
+   * just upscale a blurry bitmap. Past that point fetch the full-res ``/image``
+   * instead. Only a handful of such giant cells fit on screen at once, so the
+   * LRU still bounds memory. */
+  private get useFullResThumbs(): boolean {
+    return 2 * this.targetRadius * this.dpr > BrowseCanvasComponent.THUMB_NATIVE_MAX_DIM;
+  }
+
+  /** Drop the thumbnail cache when the zoom crosses the full-res threshold so
+   * cells reload at the resolution matching the new tier. Cheap no-op while the
+   * tier is unchanged. */
+  private syncThumbResolutionTier(): void {
+    if (this.useFullResThumbs === this.thumbsAreFullRes) return;
+    this.thumbsAreFullRes = this.useFullResThumbs;
+    this.thumbCache.clear();
+    this.thumbFailed.clear();
+  }
+
   /** Geometry (hex or square) for the active projection's bin shape. */
   private get geom(): BinGeometry {
     return binGeometry(this.meta?.bin_shape);
@@ -453,6 +482,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     canvas.style.width = `${this.width / rootZoom}px`;
     canvas.style.height = `${this.height / rootZoom}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    // A devicePixelRatio change (e.g. dragging to a different-density display)
+    // can also cross the full-res threshold, so re-evaluate the tier here.
+    this.syncThumbResolutionTier();
     // The initial fit may have run against the 800x600 fallback (meta arrived
     // before layout). Now that the real size is known, refit to it so the
     // framing and the viewport bounds published to the minimap match the actual
@@ -1298,11 +1330,15 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.thumbCache.delete(representativeId);
       this.thumbFailed.add(representativeId);
     };
-    // Downscaled tile, not full-res /image: a browse projection can hold
-    // thousands of points, so painting full-size bitmaps onto the hexes would
-    // exhaust memory. The /thumbnail route serves the frame for video via the
-    // same image_response hook, then downscales it.
-    img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/thumbnail`);
+    // Downscaled /thumbnail by default: a browse projection can hold thousands
+    // of points, so painting full-size bitmaps onto every hex would exhaust
+    // memory. The /thumbnail route serves the frame for video via the same
+    // image_response hook, then downscales it. At the largest zoom levels,
+    // though, a cell is drawn wider than the thumbnail's native resolution, so
+    // we fetch the full-res /image instead (only a few such giant cells fit on
+    // screen, so memory stays bounded). See {@link useFullResThumbs}.
+    const endpoint = this.thumbsAreFullRes ? 'image' : 'thumbnail';
+    img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/${endpoint}`);
     this.thumbCache.set(representativeId, img);
     return null;
   }
@@ -1651,6 +1687,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.transform.zoom *= radius / this.targetRadius;
     }
     this.targetRadius = radius;
+    // A large enough size crosses into full-res /image territory; drop any
+    // capped thumbnails so cells reload sharp (and vice versa on shrink).
+    this.syncThumbResolutionTier();
     // On initial load (the user hasn't framed yet) a saved cell size changes the
     // bin radius, so re-fit to keep the whole projection in view rather than
     // letting the now-larger edge bins spill past the default-radius framing.

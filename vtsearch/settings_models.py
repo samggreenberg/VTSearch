@@ -58,8 +58,12 @@ BinShape = Literal["hex", "square"]
 # VTSBrowse density colormap preset. ``auto`` follows the active theme (Ocean
 # in light mode, Heat in dark/high-viz); the rest lock to a specific map.
 BrowseColormap = Literal["auto", "heat", "ocean", "gray"]
-# VTSBrowse on-screen cell size, shared label set with the grid icon size.
-BrowseIconSize = Literal["XS", "S", "M", "L", "XL"]
+# VTSBrowse on-screen cell size. Extends the grid icon size label set with four
+# larger steps (2XL..5XL): the browse canvas's bigger/smaller buttons walk nine
+# zoom levels, index-aligned with the frontend ``ICON_SIZES`` array. The largest
+# steps render a cell close to the full media, so the canvas serves the original
+# image rather than a low-res thumbnail at those sizes.
+BrowseIconSize = Literal["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_VIEW_MODES: tuple[str, ...] = ("grid", "list")
@@ -67,7 +71,7 @@ VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BIN_SHAPES: tuple[str, ...] = ("hex", "square")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
-VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
+VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL")
 # Allowed range (CSS px) for the saved left/right panel widths. The floor keeps
 # a panel usable; the ceiling is a sanity bound only. The frontend resize logic
 # already constrains a panel to the available layout space (viewport minus the
