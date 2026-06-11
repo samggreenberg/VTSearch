@@ -415,7 +415,13 @@
     <span class="settings-saved" [class.settings-saved--visible]="savedVisible" role="status" aria-live="polite" title="Settings auto-save as you change them">&#10003; saved</span>
     <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
     <button class="btn btn--secondary" (click)="openImporter()" title="Import settings from a file">Import</button>
-    <button class="btn btn--secondary" (click)="openExporter()" title="Export settings to a file">Export</button>
+    <button class="btn btn--secondary" (click)="openExporter()" aria-label="Export" title="Export settings to a file">
+      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"></path>
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <line x1="12" y1="12" x2="21" y2="3"></line>
+      </svg>
+    </button>
     <button class="btn btn--primary" (click)="close()" title="Close the settings panel">Close</button>
   </div>
 </vt-modal>

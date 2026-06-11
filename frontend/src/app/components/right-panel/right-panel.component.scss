@@ -121,7 +121,10 @@
 
 .export-btn {
   flex: 1;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
 }
 
 .browse-btn {
