@@ -186,14 +186,14 @@ class UserSettings(BaseModel):
     label_hint_dismissed: bool = False
     autopilot_enabled: bool = True
     hide_autopilot: bool = False
-    # When True, the Achievements tab/button and unlock pop-ups are
+    # When False, the Achievements tab/button and unlock pop-ups are
     # hidden, every ``record_*`` hook is a no-op, and ``get_full_state``
     # returns zeroed counters with no pending announcements. Flipping it
-    # on also wipes any stored ``achievement_state`` so the counters
-    # start at zero if the user ever turns the feature back on. See the
-    # ``disable_achievements`` route handler in
-    # ``vtsearch/routes/settings/api.py``.
-    disable_achievements: bool = False
+    # off also wipes any stored ``achievement_state`` so the counters
+    # start at zero if the user ever turns the feature back on. Defaults
+    # to True (achievements on). See the ``enable_achievements`` route
+    # handler in ``vtsearch/routes/settings/api.py``.
+    enable_achievements: bool = True
     autopilot_top_greens: Annotated[int, _clamp_min(1)] = 3
     autopilot_hard_reds: Annotated[int, _clamp_min(1)] = 4
     autopilot_resort_interval: Annotated[int, _clamp_min(1)] = 10

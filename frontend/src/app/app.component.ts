@@ -104,7 +104,7 @@ export class AppComponent {
     this.auth.checkStatus();
     this.settingsState.load();
     this.settingsState.settings$.subscribe((s) => {
-      this.achievementsDisabled = !!s?.disable_achievements;
+      this.achievementsDisabled = s?.enable_achievements === false;
     });
     this.achievements.refresh();
     this.achievements.openPanelRequest$.subscribe(() => {

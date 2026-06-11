@@ -71,7 +71,7 @@ class AppSettingsSchema(Schema):
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()
     autopilot_goal_diversity = fields.Integer()
-    disable_achievements = fields.Boolean()
+    enable_achievements = fields.Boolean()
 
     # VTSBrowse side-panel width (CSS px). Persisted but not shown as a
     # Settings-modal widget; the panel's draggable divider drives it.
@@ -197,7 +197,7 @@ class SettingsUpdateSchema(Schema):
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()
     autopilot_goal_diversity = fields.Integer()
-    disable_achievements = fields.Boolean()
+    enable_achievements = fields.Boolean()
 
     browse_panel_width = fields.Integer()
 
