@@ -24,6 +24,15 @@
   padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  // Drag handle: grab the header to move the popup. Don't let text select while
+  // dragging, and don't let the browser claim the gesture for scroll/zoom.
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+
+  &.dragging {
+    cursor: grabbing;
+  }
 }
 
 .bin-popup-title {

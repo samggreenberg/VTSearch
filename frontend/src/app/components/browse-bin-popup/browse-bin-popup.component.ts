@@ -33,10 +33,15 @@ const GRID_GAP = 4;
 const GRID_CONTENT_WIDTH = 256;
 /** Tallest the scrolling body grows before it caps and scrolls internally. */
 const MAX_BODY_PX = 400;
+/** Shortest the scrolling body is ever squeezed to when the visible region is
+ *  too short to fit the full popup; below this it just scrolls internally. */
+const MIN_BODY_PX = 80;
 /** Extra rows of metadata prefetched beyond the visible window. */
 const PREFETCH_BUFFER = 50;
 /** Gap (px) kept between the popup and the visible edge when clamping. */
 const EDGE_MARGIN = 8;
+/** Default popup width (px); mirrors ``width`` in the component SCSS. */
+const POPUP_WIDTH = 280;
 
 /**
  * The bin popup: a small floating panel showing the media items in the bin the
@@ -84,12 +89,26 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   @Output() dismissed = new EventEmitter<void>();
 
   @ViewChild('panel') private panelRef?: ElementRef<HTMLElement>;
+  @ViewChild('header') private headerRef?: ElementRef<HTMLElement>;
   @ViewChild(CdkVirtualScrollViewport) private viewport?: CdkVirtualScrollViewport;
   @ViewChild('audioEl') private audioRef?: ElementRef<HTMLAudioElement>;
 
   /** Clamped on-screen position; starts at the anchor and is nudged inward. */
   left = 0;
   top = 0;
+  /** Max width (px) the popup may take; shrunk to fit a narrow visible region. */
+  maxWidthPx = POPUP_WIDTH;
+  /** True once the user has dragged the popup by its header. While set, the
+   *  popup keeps the user's chosen spot (re-clamped to stay on-screen) instead
+   *  of re-anchoring to the summon point on content changes. Reset per bin. */
+  dragged = false;
+  /** True only mid-drag (pointer down on the header, not yet released). */
+  dragging = false;
+  private dragStart = { x: 0, y: 0, left: 0, top: 0 };
+
+  /** Body height cap (px) for the current visible region; the body never grows
+   *  past this, so a short region can't push the popup off the bottom edge. */
+  bodyCapPx = MAX_BODY_PX;
 
   /** The bin's member ids, in bin order — a locality-preserving 1-D (Hilbert)
    *  traversal of the layout, so spatially/semantically similar items sit
@@ -125,6 +144,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     if (changes['memberIds']) {
       this.ids = this.memberIds ?? [];
       this.stopAudio();
+      // A fresh bin is a fresh popup: forget any drag from the previous one so
+      // it re-anchors to the new summon point.
+      this.dragged = false;
       this.rebuildRows();
       // A fresh bin: jump the list back to the top and prefetch its first window.
       this.viewport?.scrollToIndex(0);
@@ -135,8 +157,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       this.applyViewPrefs();
     }
     if (changes['x'] || changes['y'] || changes['bounds'] || changes['memberIds']) {
-      this.left = this.x;
-      this.top = this.y;
+      // Re-anchor to the summon point, unless the user has dragged the popup —
+      // then keep their spot (``place`` re-clamps it back on-screen if needed).
+      if (!this.dragged) {
+        this.left = this.x;
+        this.top = this.y;
+      }
       // Measure + clamp after the new content lays out.
       setTimeout(() => this.place());
     }
@@ -215,9 +241,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       : LIST_ROW_HEIGHT;
   }
 
-  /** Height (px) the body takes: just enough for its rows, capped then scrolled. */
+  /** Height (px) the body takes: just enough for its rows, capped (to the room
+   *  the visible region leaves, see {@link bodyCapPx}) then scrolled. */
   get bodyHeight(): number {
-    return Math.min(Math.max(this.rows.length, 1) * this.rowSize, MAX_BODY_PX);
+    return Math.min(Math.max(this.rows.length, 1) * this.rowSize, this.bodyCapPx);
   }
 
   get isGrid(): boolean {
@@ -240,6 +267,35 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   @HostListener('document:keydown.escape')
   onEscape(): void {
     this.dismissed.emit();
+  }
+
+  // --- Dragging (move the popup by its header) ------------------------------
+
+  /** Begin a drag when the user presses the header (but not the close button or
+   *  the view controls, which keep their own click behavior). */
+  onHeaderPointerDown(event: PointerEvent): void {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest('button, vt-view-controls')) return;
+    event.preventDefault();
+    this.dragging = true;
+    this.dragged = true;
+    this.dragStart = { x: event.clientX, y: event.clientY, left: this.left, top: this.top };
+    // Keep receiving moves even if the pointer outruns the header.
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+  }
+
+  @HostListener('document:pointermove', ['$event'])
+  onPointerMove(event: PointerEvent): void {
+    if (!this.dragging) return;
+    const dx = event.clientX - this.dragStart.x;
+    const dy = event.clientY - this.dragStart.y;
+    // Clamp as we go so the popup can't be dragged off the visible region.
+    this.clampInto(this.dragStart.left + dx, this.dragStart.top + dy);
+  }
+
+  @HostListener('document:pointerup')
+  onPointerUp(): void {
+    this.dragging = false;
   }
 
   // --- Selection (click stays open so the user can scroll + multi-select) ---
@@ -338,13 +394,23 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
 
   // --- Positioning ---------------------------------------------------------
 
-  /** Clamp the popup inside the *visible* part of the canvas — the canvas rect
-   *  intersected with the viewport — so it never spills off an edge, onto the
-   *  side panel, or below the bottom of the window. */
+  /** Re-clamp the popup, anchoring at the summon point unless the user has
+   *  dragged it (then keep their spot, just nudged back on-screen if needed). */
   private place(): void {
+    this.clampInto(this.dragged ? this.left : this.x, this.dragged ? this.top : this.y);
+  }
+
+  /** Clamp ``(desiredLeft, desiredTop)`` so the *whole* popup sits inside the
+   *  visible part of the canvas — the canvas rect intersected with the viewport
+   *  — so it never spills off an edge, onto the side panel, or below the bottom
+   *  of the window. Sizing is derived from known quantities (the fixed width and
+   *  the header + body heights) rather than a possibly-mid-layout measurement,
+   *  so the clamp is correct even before the virtualized body has settled. When
+   *  the region is too short to hold the full popup, the body is capped (and
+   *  scrolls internally) so the popup still fits top-to-bottom. */
+  private clampInto(desiredLeft: number, desiredTop: number): void {
     const panel = this.panelRef?.nativeElement;
     if (!panel) return;
-    const rect = panel.getBoundingClientRect();
     const b = this.bounds;
     // Visible region = canvas rect clipped to the viewport. Clipping to the
     // window is what keeps the popup fully on-screen when the canvas extends
@@ -353,13 +419,26 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     const regionTop = Math.max(b ? b.top : 0, 0);
     const regionRight = Math.min(b ? b.right : window.innerWidth, window.innerWidth);
     const regionBottom = Math.min(b ? b.bottom : window.innerHeight, window.innerHeight);
-    let l = this.x;
-    let t = this.y;
-    if (l + rect.width + EDGE_MARGIN > regionRight) {
-      l = regionRight - rect.width - EDGE_MARGIN;
+    // The header is always rendered (not virtualized), so its height is reliable
+    // immediately; fall back to a sane default before the view exists.
+    const headerH = this.headerRef?.nativeElement.getBoundingClientRect().height ?? 37;
+    // Squeeze the scrolling body to whatever vertical room the region leaves, so
+    // a short canvas can't make the popup taller than what's visible.
+    this.bodyCapPx = Math.max(
+      MIN_BODY_PX,
+      Math.min(MAX_BODY_PX, regionBottom - regionTop - 2 * EDGE_MARGIN - headerH),
+    );
+    // Likewise shrink the width to fit a narrow region.
+    this.maxWidthPx = Math.max(0, regionRight - regionLeft - 2 * EDGE_MARGIN);
+    const width = Math.min(POPUP_WIDTH, this.maxWidthPx);
+    const height = headerH + this.bodyHeight;
+    let l = desiredLeft;
+    let t = desiredTop;
+    if (l + width + EDGE_MARGIN > regionRight) {
+      l = regionRight - width - EDGE_MARGIN;
     }
-    if (t + rect.height + EDGE_MARGIN > regionBottom) {
-      t = regionBottom - rect.height - EDGE_MARGIN;
+    if (t + height + EDGE_MARGIN > regionBottom) {
+      t = regionBottom - height - EDGE_MARGIN;
     }
     // Never push the top-left off the opposite edge (popup larger than region).
     this.left = Math.max(regionLeft + EDGE_MARGIN, l);
