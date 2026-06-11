@@ -707,9 +707,7 @@ def _maybe_migrate_legacy_settings_locked() -> None:
     # keys; leave them in place rather than moving them into the default user's
     # file (which would also rewrite a CLI ``--settings`` file under the user).
     legacy_user_entries = {
-        k: v
-        for k, v in _server_cache.items()
-        if k not in _SERVER_KEYS and k not in _DEFAULT_USER_FALLBACK_KEYS
+        k: v for k, v in _server_cache.items() if k not in _SERVER_KEYS and k not in _DEFAULT_USER_FALLBACK_KEYS
     }
     if not legacy_user_entries:
         return
@@ -735,9 +733,7 @@ def _maybe_migrate_legacy_settings_locked() -> None:
     # in-memory cache, or _server_cache and disk would silently diverge. Keep
     # the default-user fallback keys in the server file (they are read through
     # there, not migrated out).
-    new_server = {
-        k: v for k, v in _server_cache.items() if k in _SERVER_KEYS or k in _DEFAULT_USER_FALLBACK_KEYS
-    }
+    new_server = {k: v for k, v in _server_cache.items() if k in _SERVER_KEYS or k in _DEFAULT_USER_FALLBACK_KEYS}
     try:
         _atomic_write(_server_settings_path(), new_server)
     except Exception as exc:
