@@ -98,6 +98,27 @@
   to { transform: rotate(90deg); }
 }
 
+// The `+` Add-dataset glyph waggles while datasets are downloading/installing
+// (the button is disabled the whole time via `isLoading`). This mirrors the
+// shared `.icon-waggle` rhythm — tip over, hold, tip back, hold; one cycle per
+// 2s — but stops at 45° instead of 90°: a `+` has 90° rotational symmetry, so
+// the standard waggle would be invisible on it, whereas 45° tips it into an `×`
+// and back so the motion actually reads. `inline-block` is required for the
+// transform to apply to the otherwise-inline span. Honored by the
+// prefers-reduced-motion rule in styles.scss.
+.plus-icon {
+  display: inline-block;
+}
+
+.plus-waggle {
+  animation: plus-waggle 2s ease-in-out infinite;
+}
+
+@keyframes plus-waggle {
+  0%, 65%, 100% { transform: rotate(0deg); }
+  15%, 50% { transform: rotate(45deg); }
+}
+
 .dashboard-section-header {
   flex-shrink: 0;
   display: flex;

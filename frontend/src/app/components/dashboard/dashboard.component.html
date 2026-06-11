@@ -27,6 +27,7 @@
           (click)="openImporterModal()" title="Import a new dataset"><span class="plus-icon"
             [class.plus-open]="importerModalOpen"
             [class.plus-close]="importerClosing"
+            [class.plus-waggle]="addDatasetBusy"
             (animationend)="onImporterAnimationEnd()">+</span></button>
       </div>
     </div>
