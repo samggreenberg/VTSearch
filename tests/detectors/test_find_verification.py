@@ -12,9 +12,12 @@ See docs/plans/find-verification-workflow.md.
 from __future__ import annotations
 
 import app as app_module
+from helpers import setup_trainable_model_in_registry
+from tests import load_detector_and_wait
+from vtscore.detectors.store import _detector_path, _read_detector
 from vtscore.state.core import get_active_detector_context
 from vtscore.state.votes import rethreshold_unverified_find_items
-from vtsearch.state import set_find_initial_labels, set_find_scores, set_vote
+from vtsearch.state import set_find_initial_labels, set_find_scores, set_vote, snapshot_medias
 
 
 class TestMarkVerified:
@@ -213,3 +216,131 @@ class TestFindStats:
         assert data["agreement_rate"] == 0.0
         assert data["precision"] == 0.0
         assert len(data["sweep"]) == 21
+
+
+class TestCorrectionsToDetector:
+    """``POST /api/find/corrections-to-detector`` folds the Find corrections
+    into the active detector's labelset for future scoring while leaving the
+    current Find session frozen (and flagged out of date)."""
+
+    def _labelset_labels(self, name: str) -> list[dict]:
+        """Return the on-disk labelset entries for detector *name*."""
+        data = _read_detector(_detector_path(name))
+        assert data is not None
+        return data["labelset"]["labels"]
+
+    def _setup_find(self, client):
+        """Register + load a detector, then run find-label so it enters find
+        mode with a full ``find_initial_labels`` baseline."""
+        detector_id = setup_trainable_model_in_registry(
+            "corrections-model",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        load_detector_and_wait(client, detector_id)
+        resp = client.post("/api/find-label", json={"detector_id": detector_id})
+        assert resp.status_code == 200, resp.get_json()
+        return detector_id
+
+    def _make_two_corrections(self, client):
+        """Flip the detector's call on one good and one bad item; return the ids."""
+        ctx = get_active_detector_context()
+        initial = dict(ctx.find_initial_labels)
+        good_item = next(cid for cid, lbl in initial.items() if lbl == "good")
+        bad_item = next(cid for cid, lbl in initial.items() if lbl == "bad")
+        assert client.post(f"/api/medias/{good_item}/vote", json={"target": "bad"}).status_code == 200
+        assert client.post(f"/api/medias/{bad_item}/vote", json={"target": "good"}).status_code == 200
+        return good_item, bad_item
+
+    def test_no_find_run_returns_400(self, client):
+        """Without a find-label baseline there are no corrections to take."""
+        detector_id = setup_trainable_model_in_registry(
+            "no-find-run",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        load_detector_and_wait(client, detector_id)
+        resp = client.post("/api/find/corrections-to-detector")
+        assert resp.status_code == 400
+
+    def test_no_corrections_is_noop(self, client):
+        """Right after find-label, every adopted label matches the detector's
+        call, so there is nothing to add and the labelset is untouched."""
+        self._setup_find(client)
+        before = len(self._labelset_labels("corrections-model"))
+        resp = client.post("/api/find/corrections-to-detector")
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+        assert data["corrections_added"] == 0
+        after = len(self._labelset_labels("corrections-model"))
+        assert after == before
+        # Nothing changed, so the evaluation is not stale.
+        assert get_active_detector_context().find_eval_stale is False
+
+    def test_corrections_added_to_labelset(self, client):
+        """Flipping the detector's call on two items folds those corrections
+        into the labelset with the human label."""
+        self._setup_find(client)
+        good_item, bad_item = self._make_two_corrections(client)
+
+        resp = client.post("/api/find/corrections-to-detector")
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+        assert data["corrections_added"] == 2
+
+        labels = self._labelset_labels("corrections-model")
+        by_md5 = {el["md5"]: el["label"] for el in labels}
+        assert by_md5[app_module.medias[good_item]["md5"]] == "bad"
+        assert by_md5[app_module.medias[bad_item]["md5"]] == "good"
+        assert data["num_labels"] == len(labels)
+
+    def test_session_frozen_and_marked_stale(self, client):
+        """The Find session is NOT reset: votes / verified / find baseline hold,
+        the cached MLP is invalidated for the next scoring pass, and the
+        evaluation is flagged stale."""
+        self._setup_find(client)
+        good_item, bad_item = self._make_two_corrections(client)
+        ctx = get_active_detector_context()
+        initial_before = dict(ctx.find_initial_labels)
+        scores_before = dict(ctx.find_scores)
+
+        resp = client.post("/api/find/corrections-to-detector")
+        assert resp.status_code == 200, resp.get_json()
+
+        # Frozen: the find baseline, scores, and verifications are untouched.
+        assert dict(ctx.find_initial_labels) == initial_before
+        assert dict(ctx.find_scores) == scores_before
+        assert good_item in ctx.verified_ids
+        assert bad_item in ctx.verified_ids
+        assert good_item in ctx.bad_votes  # the human vote held
+        assert bad_item in ctx.good_votes
+        # The cached MLP is dropped so the next scoring pass retrains.
+        assert ctx.model is None
+        assert ctx.find_eval_stale is True
+
+    def test_stale_survives_rehydrate_and_shows_in_stats(self, client):
+        """A follow-up request must not rehydrate the frozen votes away (the
+        labelset write bumped the file mtime), and Stats reports ``stale``."""
+        self._setup_find(client)
+        self._make_two_corrections(client)
+        assert client.post("/api/find/corrections-to-detector").status_code == 200
+
+        # A later request runs before_request -> ensure_votes_match_active_dataset.
+        # The cached-mtime re-point must keep it a no-op so the frozen eval holds.
+        data = client.get("/api/find/stats").get_json()
+        assert data["stale"] is True
+        assert data["corrections"] == 2
+
+    def test_fresh_find_label_clears_stale(self, client):
+        """Re-scoring (a genuine new evaluation) clears the stale flag."""
+        detector_id = self._setup_find(client)
+        self._make_two_corrections(client)
+        assert client.post("/api/find/corrections-to-detector").status_code == 200
+        assert get_active_detector_context().find_eval_stale is True
+
+        resp = client.post("/api/find-label", json={"detector_id": detector_id})
+        assert resp.status_code == 200, resp.get_json()
+        assert get_active_detector_context().find_eval_stale is False
+        assert client.get("/api/find/stats").get_json()["stale"] is False

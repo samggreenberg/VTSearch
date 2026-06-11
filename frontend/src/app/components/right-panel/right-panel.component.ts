@@ -66,6 +66,8 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Output() exportLabels = new EventEmitter<'good' | 'bad'>();
   /** Find mode: open the detector-evaluation Stats modal. */
   @Output() stats = new EventEmitter<void>();
+  /** Find mode: fold the corrections into the detector's labelset and retrain. */
+  @Output() addCorrections = new EventEmitter<void>();
 
   goodIds: number[] = [];
   badIds: number[] = [];
@@ -215,6 +217,10 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   onStats(): void {
     this.stats.emit();
+  }
+
+  onAddCorrections(): void {
+    this.addCorrections.emit();
   }
 
   onDetectorRenamed(newName: string): void {

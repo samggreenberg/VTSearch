@@ -539,6 +539,53 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.showStats = true;
   }
 
+  /**
+   * Fold the corrections (items whose adopted label differs from the detector's
+   * original call) into the active detector's labelset for future use. The
+   * current Find session stays frozen — its scores, queue, votes, and Stats keep
+   * showing the detector version that produced them — so the only visible effect
+   * is the Stats being flagged out of date. The retrained detector applies the
+   * next time the dataset is scored.
+   */
+  onAddCorrections(): void {
+    if (this.sortState.sortBusy) return;
+    this.dialog
+      .confirmDestructive(
+        'Add your corrections to this detector?',
+        "Every item you changed from the detector's call is added to its labelset, so the detector learns from them next time you score. " +
+          'Your current results and evaluation stay as they are — the Stats will be marked out of date — and nothing is re-scored now.',
+        'Add Corrections',
+      )
+      .then((ok) => {
+        if (!ok) return;
+        this.detectorsFindApi
+          .addCorrectionsToDetector()
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: (resp) => {
+              if (resp.corrections_added === 0) {
+                this.toast.success({
+                  message: 'No corrections to add',
+                  detail: "Every item still matches the detector's original call.",
+                  dedupKey: 'find-corrections-none',
+                });
+                return;
+              }
+              this.toast.success({
+                message: `Added ${resp.corrections_added} correction${resp.corrections_added === 1 ? '' : 's'} to the detector`,
+                detail: `The detector now has ${resp.num_labels} label${resp.num_labels === 1 ? '' : 's'} and will use them next time you score. Your current results stay put; Stats are now marked out of date.`,
+                dedupKey: 'find-corrections-added',
+              });
+            },
+            error: (err: { error?: { message?: string; error?: string } }) => {
+              const body = err?.error;
+              const message = body?.message || body?.error || 'Failed to add corrections';
+              this.toast.error({ message, dedupKey: 'find-corrections-error' });
+            },
+          });
+      });
+  }
+
   /** Open the export modal pre-set to a label filter (good / bad / unverified). */
   onExportRequest(filter: LabelFilter): void {
     this.exportFilter = filter;

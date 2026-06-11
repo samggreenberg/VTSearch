@@ -22,6 +22,7 @@ from vtsearch.routes._shared import require_dataset_header, require_detector_hea
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
+    FindCorrectionsToDetectorResponseSchema,
     FindLabelRequestSchema,
     FindLabelResponseSchema,
     FindStatsResponseSchema,
@@ -361,6 +362,12 @@ def find_label(body: dict):  # noqa: C901
 
     set_find_mode(True)
 
+    # A fresh scoring pass IS the current evaluation, so any "stale" flag left by
+    # a prior corrections-to-detector fold no longer applies.
+    from vtscore.state.core import get_active_detector_context
+
+    get_active_detector_context().find_eval_stale = False
+
     from vtscore.labels.sync import sync_to_labelset_source
 
     sync_to_labelset_source()
@@ -559,7 +566,140 @@ def find_stats():
         "precision": round(precision, 4),
         "inclusion": get_inclusion(),
         "threshold": round(det_ctx.threshold, 4),
+        "stale": getattr(det_ctx, "find_eval_stale", False),
         "sweep": sweep,
+    }
+
+
+@detector_scoring_bp.route("/api/find/corrections-to-detector", methods=["POST"])
+@detector_scoring_bp.response(200, FindCorrectionsToDetectorResponseSchema)
+@detector_scoring_bp.alt_response(400, description="No Find run to take corrections from.")
+@detector_scoring_bp.alt_response(404, description="No active detector to update.")
+@detector_scoring_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
+@require_dataset_header
+@require_detector_header
+def find_corrections_to_detector():
+    """Fold the Find corrections into the active detector's labelset for *future*
+    scoring, leaving the current Find session frozen.
+
+    A *correction* is an item whose adopted Find label differs from the
+    detector's original call (``find_initial_labels``): a rescued
+    false-negative (now good, the detector said bad) or a culled false-positive
+    (now bad, the detector said good).  This matches the ``corrections`` export
+    filter and the Stats "corrections" count.
+
+    The correction items are written into the detector's on-disk labelset
+    (superseding any prior entry for the same source media) and the registry's
+    training counters are refreshed.  The cached MLP is invalidated so the next
+    scoring pass retrains from the merged labelset.
+
+    The current Find session is deliberately *not* re-scored or reset: its
+    scores, queue, votes, and verification stay pinned to the detector version
+    that produced them, so the displayed evaluation (and ``GET /api/find/stats``)
+    keeps showing the previous detector's results.  That evaluation is now out of
+    date relative to the retrained detector, which ``find_eval_stale`` records so
+    the Stats note can say so; the retrained detector takes effect the next time
+    the dataset is scored.
+    """
+    from vtscore.datasets.labelset import LabelSet, element_key
+    from vtscore.detectors.dataset_sync import _detector_file_mtime, validated_vote_snapshot
+    from vtscore.detectors.input_spec import extract_input_spec_from_medias
+    from vtscore.detectors.registry import get_detector as reg_get_detector
+    from vtscore.detectors.registry import update_detector
+    from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+    from vtscore.state.core import _state_lock, get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    detector_id = det_ctx.detector_id or ""
+    reg = reg_get_detector(detector_id) if detector_id else None
+    if reg is None or not reg.get("name"):
+        abort(404, message="No active detector to update")
+    name = reg["name"]
+
+    path = _detector_path(name)
+    data = _read_detector(path)
+    if data is None:
+        abort(404, message=f"Detector '{name}' not found")
+
+    # Atomic (medias, good_votes, bad_votes, region boxes) snapshot keyed in the
+    # active dataset's cid space, so the votes we compose with the medias can't
+    # straddle a concurrent dataset switch on this detector.
+    snap = validated_vote_snapshot()
+    if not snap.safe:
+        abort(409, message="Cannot add corrections: detector vote state is not aligned with the active dataset")
+
+    initial = det_ctx.find_initial_labels
+    if not initial:
+        abort(400, message="No Find run to take corrections from. Score the dataset first.")
+
+    existing_ls = LabelSet.from_dict(data.get("labelset") or {})
+
+    # A correction's adopted label differs from the detector's original call.
+    corr_good = {cid: None for cid in snap.good_votes if initial.get(cid) == "bad"}
+    corr_bad = {cid: None for cid in snap.bad_votes if initial.get(cid) == "good"}
+    num_corrections = len(corr_good) + len(corr_bad)
+
+    if num_corrections == 0:
+        return {
+            "ok": True,
+            "name": name,
+            "corrections_added": 0,
+            "num_labels": len(existing_ls),
+        }
+
+    corrections_ls = LabelSet.from_clips_and_votes(
+        snap.medias,
+        corr_good,
+        corr_bad,
+        expand_dupes=False,
+        vote_region_boxes=snap.vote_region_boxes,
+    )
+
+    # Merge: a correction supersedes any prior entry for the same source media
+    # (so a culled false-positive flips its old "good" entry to "bad").
+    corr_keys = {element_key(el) for el in corrections_ls.elements}
+    corr_keys.discard(None)
+    merged_elements = [el for el in existing_ls.elements if element_key(el) not in corr_keys]
+    merged_elements.extend(corrections_ls.elements)
+    merged = LabelSet(merged_elements)
+
+    data["labelset"] = merged.to_dict()
+
+    # Keep the stored input_spec in sync with the active dataset's clipper, as
+    # ``save_detector_labels`` does.
+    captured_spec = extract_input_spec_from_medias(snap.medias)
+    if captured_spec is not None:
+        data["input_spec"] = captured_spec
+    elif "input_spec" in data:
+        data.pop("input_spec", None)
+    _write_detector(path, data)
+
+    # Freeze the current Find session.  Writing the file bumped its mtime, which
+    # would make the before_request rehydrate wipe the in-memory votes /
+    # find_scores / find_initial_labels and re-derive them from the new labelset.
+    # Re-point the cached labelset + mtime at the file we just wrote so that
+    # rehydrate is a no-op, invalidate the cached MLP so the next scoring pass
+    # retrains from the merged labelset, and flag the displayed evaluation stale.
+    new_mtime = _detector_file_mtime(path)
+    media_type = data.get("media_type", "") or ""
+    with _state_lock:
+        det_ctx.cached_labelset = merged
+        det_ctx.cached_labelset_mtime = new_mtime
+        det_ctx.cached_labelset_media_type = media_type or det_ctx.cached_labelset_media_type
+        det_ctx.labelset_good_count = sum(1 for el in merged.elements if el.label == "good")
+        det_ctx.labelset_bad_count = sum(1 for el in merged.elements if el.label == "bad")
+        det_ctx.model = None
+        det_ctx.find_eval_stale = True
+
+    import time as _time
+
+    update_detector(reg["id"], num_training=len(merged), last_trained_at=_time.time())
+
+    return {
+        "ok": True,
+        "name": name,
+        "corrections_added": num_corrections,
+        "num_labels": len(merged),
     }
 
 

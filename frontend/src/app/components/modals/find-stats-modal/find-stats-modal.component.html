@@ -4,6 +4,13 @@
   } @else if (error) {
     <p class="error-text">{{ error }}</p>
   } @else if (stats) {
+    @if (stats.stale) {
+      <p class="stale-note" role="note">
+        ⚠ Out of date: these numbers evaluate the detector <strong>before</strong> your last corrections were added.
+        They're kept here because the recent evaluation is more useful than none; re-score the dataset (re-enter Find) to
+        evaluate the retrained detector.
+      </p>
+    }
     <table class="stats-table">
       <tbody>
         <tr>

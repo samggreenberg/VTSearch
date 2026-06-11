@@ -2703,6 +2703,30 @@
         ],
         "type": "object"
       },
+      "FindCorrectionsToDetectorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "corrections_added": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "num_labels": {
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "corrections_added",
+          "name",
+          "num_labels",
+          "ok"
+        ],
+        "type": "object"
+      },
       "FindLabelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2851,6 +2875,9 @@
           "rescued_false_neg": {
             "type": "integer"
           },
+          "stale": {
+            "type": "boolean"
+          },
           "sweep": {
             "items": {
               "$ref": "#/components/schemas/FindStatsSweepPoint"
@@ -2880,6 +2907,7 @@
           "inclusion",
           "precision",
           "rescued_false_neg",
+          "stale",
           "sweep",
           "threshold",
           "total_bad",
@@ -11117,6 +11145,40 @@
         "summary": "Pre-flight check: report how many detector labels can be resolved.",
         "tags": [
           "detector_find"
+        ]
+      }
+    },
+    "/api/find/corrections-to-detector": {
+      "post": {
+        "description": "A *correction* is an item whose adopted Find label differs from the\ndetector's original call (``find_initial_labels``): a rescued\nfalse-negative (now good, the detector said bad) or a culled false-positive\n(now bad, the detector said good).  This matches the ``corrections`` export\nfilter and the Stats \"corrections\" count.\n\nThe correction items are written into the detector's on-disk labelset\n(superseding any prior entry for the same source media) and the registry's\ntraining counters are refreshed.  The cached MLP is invalidated so the next\nscoring pass retrains from the merged labelset.\n\nThe current Find session is deliberately *not* re-scored or reset: its\nscores, queue, votes, and verification stay pinned to the detector version\nthat produced them, so the displayed evaluation (and ``GET /api/find/stats``)\nkeeps showing the previous detector's results.  That evaluation is now out of\ndate relative to the retrained detector, which ``find_eval_stale`` records so\nthe Stats note can say so; the retrained detector takes effect the next time\nthe dataset is scored.",
+        "operationId": "find_corrections_to_detector",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindCorrectionsToDetectorResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No Find run to take corrections from."
+          },
+          "404": {
+            "description": "No active detector to update."
+          },
+          "409": {
+            "description": "Detector vote state is not aligned with the active dataset."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Fold the Find corrections into the active detector's labelset for *future*\nscoring, leaving the current Find session frozen.",
+        "tags": [
+          "detector_scoring"
         ]
       }
     },
