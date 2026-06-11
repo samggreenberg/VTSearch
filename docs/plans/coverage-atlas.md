@@ -296,44 +296,44 @@ No GPU anywhere; nothing exceeds what a dataset load already costs.
 
 ## 12. References
 
-1. K. Lee, K. Lee, H. Lee, J. Shin. *A Simple Unified Framework for Detecting Out-of-Distribution Samples and Adversarial Attacks.* NeurIPS 2018.
-2. J. Ren, S. Fort, J. Liu, A. G. Roy, S. Padhy, B. Lakshminarayanan. *A Simple Fix to Mahalanobis Distance for Improving Near-OOD Detection.* arXiv:2106.09022 (ICML 2021 UDL workshop).
-3. Y. Sun, Y. Ming, X. Zhu, Y. Li. *Out-of-Distribution Detection with Deep Nearest Neighbors.* ICML 2022.
-4. M. Kulldorff. *A Spatial Scan Statistic.* Communications in Statistics — Theory and Methods, 26(6), 1997.
-5. D. B. Neill. *Fast Subset Scan for Spatial Pattern Detection.* Journal of the Royal Statistical Society B, 74(2), 2012.
-6. D. Yekutieli. *Hierarchical False Discovery Rate–Controlling Methodology.* JASA 103(481), 2008.
-7. B. Lakshminarayanan, D. M. Roy, Y. W. Teh. *Mondrian Forests: Efficient Online Random Forests.* NeurIPS 2014.
-8. E. Nalisnick, A. Matsukawa, Y. W. Teh, D. Görür, B. Lakshminarayanan. *Do Deep Generative Models Know What They Don't Know?* ICLR 2019.
-9. D. Hendrycks, K. Gimpel. *A Baseline for Detecting Misclassified and Out-of-Distribution Examples in Neural Networks.* ICLR 2017.
-10. M. Hein, M. Andriushchenko, J. Bitterwolf. *Why ReLU Networks Yield High-Confidence Predictions Far Away from the Training Data and How to Mitigate the Problem.* CVPR 2019.
-11. H. Jiang, B. Kim, M. Guan, M. Gupta. *To Trust or Not to Trust a Classifier.* NeurIPS 2018.
-12. V. Vovk, A. Gammerman, G. Shafer. *Algorithmic Learning in a Random World.* Springer, 2005. See also A. N. Angelopoulos, S. Bates, *A Gentle Introduction to Conformal Prediction and Distribution-Free Uncertainty Quantification*, arXiv:2107.07511, 2021.
-13. A. Banerjee, I. S. Dhillon, J. Ghosh, S. Sra. *Clustering on the Unit Hypersphere Using von Mises–Fisher Distributions.* JMLR 6, 2005.
-14. Z. Karnin, K. Lang, E. Liberty. *Optimal Quantile Approximation in Streams.* FOCS 2016. (KLL sketch.)
-15. T. Dunning, O. Ertl. *Computing Extremely Accurate Quantiles Using t-Digests.* arXiv:1902.04023, 2019.
-16. T. Zhang, R. Ramakrishnan, M. Livny. *BIRCH: An Efficient Data Clustering Method for Very Large Databases.* SIGMOD 1996.
-17. T. F. Chan, G. H. Golub, R. J. LeVeque. *Algorithms for Computing the Sample Variance: Analysis and Recommendations.* The American Statistician 37(3), 1983.
-18. A. Gretton, K. Borgwardt, M. Rasch, B. Schölkopf, A. Smola. *A Kernel Two-Sample Test.* JMLR 13, 2012.
-19. W. Liang, Y. Zhang, Y. Kwon, S. Yeung, J. Zou. *Mind the Gap: Understanding the Modality Gap in Multi-modal Contrastive Representation Learning.* NeurIPS 2022.
-20. M. Bogomolov, C. B. Peterson, Y. Benjamini, C. Sabatti. *Hypotheses on a Tree: New Error Rates and Controlling Strategies.* Biometrika 108(3), 2021.
-21. P. Ram, A. G. Gray. *Density Estimation Trees.* KDD 2011. See also A. Criminisi, J. Shotton (eds.), *Decision Forests for Computer Vision and Medical Image Analysis*, Springer 2013, ch. on density forests.
-22. D. Lopez-Paz, M. Oquab. *Revisiting Classifier Two-Sample Tests.* ICLR 2017.
-23. Z. C. Lipton, Y.-X. Wang, A. Smola. *Detecting and Correcting for Label Shift with Black Box Predictors.* ICML 2018.
-24. S. Rabanser, S. Günnemann, Z. C. Lipton. *Failing Loudly: An Empirical Study of Methods for Detecting Dataset Shift.* NeurIPS 2019.
-25. M. Sugiyama, T. Suzuki, T. Kanamori. *Density Ratio Estimation in Machine Learning.* Cambridge University Press, 2012.
-26. C. Sawade, N. Landwehr, S. Bickel, T. Scheffer. *Active Risk Estimation.* ICML 2010.
-27. P. N. Bennett, V. R. Carvalho. *Online Stratified Sampling: Evaluating Classifiers at Web-Scale.* CIKM 2010.
-28. S. Farquhar, Y. Gal, T. Rainforth. *On Statistical Bias in Active Learning: How and When to Fix It.* ICLR 2021. See also J. Kossen, S. Farquhar, Y. Gal, T. Rainforth, *Active Testing: Sample-Efficient Model Evaluation*, ICML 2021.
-29. R. Garnett, Y. Krishnamurthy, X. Xiong, J. Schneider, R. Mann. *Bayesian Optimal Active Search and Surveying.* ICML 2012.
-30. J. Gama, I. Žliobaitė, A. Bifet, M. Pechenizkiy, A. Bouchachia. *A Survey on Concept Drift Adaptation.* ACM Computing Surveys 46(4), 2014.
-31. L. Yang et al. *CADE: Detecting and Explaining Concept Drift Samples for Security Applications.* USENIX Security 2021.
-32. I. J. Good. *The Population Frequencies of Species and the Estimation of Population Parameters.* Biometrika 40, 1953.
-33. J. X. Morris, V. Kuleshov, V. Shmatikov, A. M. Rush. *Text Embeddings Reveal (Almost) As Much As Text.* EMNLP 2023.
-34. B. Coleman, A. Shrivastava. *Sub-linear RACE Sketches for Approximate Kernel Density Estimation on Streaming Data.* WWW 2020.
-35. J. M. Phillips, W. M. Tai. *Near-Optimal Coresets of Kernel Density Estimates.* Discrete & Computational Geometry 63, 2020 (SoCG 2018).
-36. L. Ma, W. H. Wong. *Coupling Optional Pólya Trees and the Two Sample Problem.* JASA 106(496), 2011.
-37. J. Soriano, L. Ma. *Probabilistic Multi-Resolution Scanning for Two-Sample Differences.* JRSS-B 79(2), 2017.
-38. S. Garg, S. Balakrishnan, Z. C. Lipton, B. Neyshabur, H. Sedghi. *Leveraging Unlabeled Data to Predict Out-of-Distribution Performance.* ICLR 2022. (ATC.)
-39. D. Guillory, V. Shankar, S. Ebrahimi, T. Darrell, L. Schmidt. *Predicting with Confidence on Unseen Distributions.* ICCV 2021. (Difference of confidences.)
-40. C. Baek, Y. Jiang, A. Raghunathan, J. Z. Kolter. *Agreement-on-the-Line: Predicting the Performance of Neural Networks under Distribution Shift.* NeurIPS 2022.
-41. S. Garg, S. Balakrishnan, J. Z. Kolter. *(Almost) Provable Error Bounds Under Distribution Shift via Disagreement Discrepancy.* NeurIPS 2023.
+1. K. Lee, K. Lee, H. Lee, J. Shin. *A Simple Unified Framework for Detecting Out-of-Distribution Samples and Adversarial Attacks.* NeurIPS 2018. [[arXiv]](https://arxiv.org/abs/1807.03888)
+2. J. Ren, S. Fort, J. Liu, A. G. Roy, S. Padhy, B. Lakshminarayanan. *A Simple Fix to Mahalanobis Distance for Improving Near-OOD Detection.* arXiv:2106.09022 (ICML 2021 UDL workshop). [[arXiv]](https://arxiv.org/abs/2106.09022)
+3. Y. Sun, Y. Ming, X. Zhu, Y. Li. *Out-of-Distribution Detection with Deep Nearest Neighbors.* ICML 2022. [[arXiv]](https://arxiv.org/abs/2204.06507)
+4. M. Kulldorff. *A Spatial Scan Statistic.* Communications in Statistics — Theory and Methods, 26(6), 1997. [[DOI]](https://doi.org/10.1080/03610929708831995)
+5. D. B. Neill. *Fast Subset Scan for Spatial Pattern Detection.* Journal of the Royal Statistical Society B, 74(2), 2012. [[DOI]](https://doi.org/10.1111/j.1467-9868.2011.01014.x)
+6. D. Yekutieli. *Hierarchical False Discovery Rate–Controlling Methodology.* JASA 103(481), 2008. [[DOI]](https://doi.org/10.1198/016214508000000181)
+7. B. Lakshminarayanan, D. M. Roy, Y. W. Teh. *Mondrian Forests: Efficient Online Random Forests.* NeurIPS 2014. [[arXiv]](https://arxiv.org/abs/1406.2673)
+8. E. Nalisnick, A. Matsukawa, Y. W. Teh, D. Görür, B. Lakshminarayanan. *Do Deep Generative Models Know What They Don't Know?* ICLR 2019. [[arXiv]](https://arxiv.org/abs/1810.09136)
+9. D. Hendrycks, K. Gimpel. *A Baseline for Detecting Misclassified and Out-of-Distribution Examples in Neural Networks.* ICLR 2017. [[arXiv]](https://arxiv.org/abs/1610.02136)
+10. M. Hein, M. Andriushchenko, J. Bitterwolf. *Why ReLU Networks Yield High-Confidence Predictions Far Away from the Training Data and How to Mitigate the Problem.* CVPR 2019. [[arXiv]](https://arxiv.org/abs/1812.05720)
+11. H. Jiang, B. Kim, M. Guan, M. Gupta. *To Trust or Not to Trust a Classifier.* NeurIPS 2018. [[arXiv]](https://arxiv.org/abs/1805.11783)
+12. V. Vovk, A. Gammerman, G. Shafer. *Algorithmic Learning in a Random World.* Springer, 2005. [[Springer]](https://link.springer.com/book/10.1007/b106715) See also A. N. Angelopoulos, S. Bates, *A Gentle Introduction to Conformal Prediction and Distribution-Free Uncertainty Quantification*, arXiv:2107.07511, 2021. [[arXiv]](https://arxiv.org/abs/2107.07511)
+13. A. Banerjee, I. S. Dhillon, J. Ghosh, S. Sra. *Clustering on the Unit Hypersphere Using von Mises–Fisher Distributions.* JMLR 6, 2005. [[JMLR]](https://jmlr.csail.mit.edu/papers/v6/banerjee05a.html)
+14. Z. Karnin, K. Lang, E. Liberty. *Optimal Quantile Approximation in Streams.* FOCS 2016. (KLL sketch.) [[arXiv]](https://arxiv.org/abs/1603.05346)
+15. T. Dunning, O. Ertl. *Computing Extremely Accurate Quantiles Using t-Digests.* arXiv:1902.04023, 2019. [[arXiv]](https://arxiv.org/abs/1902.04023)
+16. T. Zhang, R. Ramakrishnan, M. Livny. *BIRCH: An Efficient Data Clustering Method for Very Large Databases.* SIGMOD 1996. [[ACM]](https://dl.acm.org/doi/10.1145/233269.233324)
+17. T. F. Chan, G. H. Golub, R. J. LeVeque. *Algorithms for Computing the Sample Variance: Analysis and Recommendations.* The American Statistician 37(3), 1983. [[DOI]](https://doi.org/10.1080/00031305.1983.10483115)
+18. A. Gretton, K. Borgwardt, M. Rasch, B. Schölkopf, A. Smola. *A Kernel Two-Sample Test.* JMLR 13, 2012. [[JMLR]](https://jmlr.org/papers/v13/gretton12a.html)
+19. W. Liang, Y. Zhang, Y. Kwon, S. Yeung, J. Zou. *Mind the Gap: Understanding the Modality Gap in Multi-modal Contrastive Representation Learning.* NeurIPS 2022. [[arXiv]](https://arxiv.org/abs/2203.02053)
+20. M. Bogomolov, C. B. Peterson, Y. Benjamini, C. Sabatti. *Hypotheses on a Tree: New Error Rates and Controlling Strategies.* Biometrika 108(3), 2021. [[arXiv]](https://arxiv.org/abs/1705.07529)
+21. P. Ram, A. G. Gray. *Density Estimation Trees.* KDD 2011. [[ACM]](https://dl.acm.org/doi/10.1145/2020408.2020507) See also A. Criminisi, J. Shotton (eds.), *Decision Forests for Computer Vision and Medical Image Analysis*, Springer 2013, ch. on density forests.
+22. D. Lopez-Paz, M. Oquab. *Revisiting Classifier Two-Sample Tests.* ICLR 2017. [[arXiv]](https://arxiv.org/abs/1610.06545)
+23. Z. C. Lipton, Y.-X. Wang, A. Smola. *Detecting and Correcting for Label Shift with Black Box Predictors.* ICML 2018. [[arXiv]](https://arxiv.org/abs/1802.03916)
+24. S. Rabanser, S. Günnemann, Z. C. Lipton. *Failing Loudly: An Empirical Study of Methods for Detecting Dataset Shift.* NeurIPS 2019. [[arXiv]](https://arxiv.org/abs/1810.11953)
+25. M. Sugiyama, T. Suzuki, T. Kanamori. *Density Ratio Estimation in Machine Learning.* Cambridge University Press, 2012. [[Cambridge]](https://www.cambridge.org/core/books/density-ratio-estimation-in-machine-learning/BCBEA6AEAADD66569B1E85DDDEAA7648)
+26. C. Sawade, N. Landwehr, S. Bickel, T. Scheffer. *Active Risk Estimation.* ICML 2010. [[PDF]](https://icml.cc/Conferences/2010/papers/285.pdf)
+27. P. N. Bennett, V. R. Carvalho. *Online Stratified Sampling: Evaluating Classifiers at Web-Scale.* CIKM 2010. [[ACM]](https://dl.acm.org/doi/10.1145/1871437.1871677)
+28. S. Farquhar, Y. Gal, T. Rainforth. *On Statistical Bias in Active Learning: How and When to Fix It.* ICLR 2021. [[arXiv]](https://arxiv.org/abs/2101.11665) See also J. Kossen, S. Farquhar, Y. Gal, T. Rainforth, *Active Testing: Sample-Efficient Model Evaluation*, ICML 2021. [[arXiv]](https://arxiv.org/abs/2103.05331)
+29. R. Garnett, Y. Krishnamurthy, X. Xiong, J. Schneider, R. Mann. *Bayesian Optimal Active Search and Surveying.* ICML 2012. [[arXiv]](https://arxiv.org/abs/1206.6406)
+30. J. Gama, I. Žliobaitė, A. Bifet, M. Pechenizkiy, A. Bouchachia. *A Survey on Concept Drift Adaptation.* ACM Computing Surveys 46(4), 2014. [[ACM]](https://dl.acm.org/doi/10.1145/2523813)
+31. L. Yang et al. *CADE: Detecting and Explaining Concept Drift Samples for Security Applications.* USENIX Security 2021. [[USENIX]](https://www.usenix.org/conference/usenixsecurity21/presentation/yang-limin)
+32. I. J. Good. *The Population Frequencies of Species and the Estimation of Population Parameters.* Biometrika 40, 1953. [[DOI]](https://doi.org/10.1093/biomet/40.3-4.237)
+33. J. X. Morris, V. Kuleshov, V. Shmatikov, A. M. Rush. *Text Embeddings Reveal (Almost) As Much As Text.* EMNLP 2023. [[ACL]](https://aclanthology.org/2023.emnlp-main.765)
+34. B. Coleman, A. Shrivastava. *Sub-linear RACE Sketches for Approximate Kernel Density Estimation on Streaming Data.* WWW 2020. [[arXiv]](https://arxiv.org/abs/1912.02283)
+35. J. M. Phillips, W. M. Tai. *Near-Optimal Coresets of Kernel Density Estimates.* Discrete & Computational Geometry 63, 2020 (SoCG 2018). [[arXiv]](https://arxiv.org/abs/1802.01751)
+36. L. Ma, W. H. Wong. *Coupling Optional Pólya Trees and the Two Sample Problem.* JASA 106(496), 2011. [[arXiv]](https://arxiv.org/abs/1011.1253)
+37. J. Soriano, L. Ma. *Probabilistic Multi-Resolution Scanning for Two-Sample Differences.* JRSS-B 79(2), 2017. [[arXiv]](https://arxiv.org/abs/1404.3753)
+38. S. Garg, S. Balakrishnan, Z. C. Lipton, B. Neyshabur, H. Sedghi. *Leveraging Unlabeled Data to Predict Out-of-Distribution Performance.* ICLR 2022. (ATC.) [[arXiv]](https://arxiv.org/abs/2201.04234)
+39. D. Guillory, V. Shankar, S. Ebrahimi, T. Darrell, L. Schmidt. *Predicting with Confidence on Unseen Distributions.* ICCV 2021. (Difference of confidences.) [[arXiv]](https://arxiv.org/abs/2107.03315)
+40. C. Baek, Y. Jiang, A. Raghunathan, J. Z. Kolter. *Agreement-on-the-Line: Predicting the Performance of Neural Networks under Distribution Shift.* NeurIPS 2022. [[arXiv]](https://arxiv.org/abs/2206.13089)
+41. S. Garg, S. Balakrishnan, J. Z. Kolter. *(Almost) Provable Error Bounds Under Distribution Shift via Disagreement Discrepancy.* NeurIPS 2023. [[arXiv]](https://arxiv.org/abs/2306.00312)
