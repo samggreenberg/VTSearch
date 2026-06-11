@@ -2703,6 +2703,34 @@
         ],
         "type": "object"
       },
+      "FindCorrectionsToDetectorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "corrections_added": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "num_labels": {
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "trained": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "corrections_added",
+          "name",
+          "num_labels",
+          "ok",
+          "trained"
+        ],
+        "type": "object"
+      },
       "FindLabelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11117,6 +11145,40 @@
         "summary": "Pre-flight check: report how many detector labels can be resolved.",
         "tags": [
           "detector_find"
+        ]
+      }
+    },
+    "/api/find/corrections-to-detector": {
+      "post": {
+        "description": "A *correction* is an item whose adopted Find label differs from the\ndetector's original call (``find_initial_labels``): a rescued\nfalse-negative (now good, the detector said bad) or a culled false-positive\n(now bad, the detector said good).  This matches the ``corrections`` export\nfilter and the Stats \"corrections\" count.\n\nThe correction items are written into the detector's on-disk labelset\n(superseding any prior entry for the same source media), the detector's MLP\nis retrained from the *merged* labelset (not the whole-dataset Find\npredictions), and the registry's training counters are refreshed.\n\nDestructive by design: it changes the detector, so the current Find\nevaluation (which scored against the *old* detector) no longer applies.\nThe caller is expected to re-score afterwards.",
+        "operationId": "find_corrections_to_detector",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindCorrectionsToDetectorResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No Find run to take corrections from."
+          },
+          "404": {
+            "description": "No active detector to update."
+          },
+          "409": {
+            "description": "Detector vote state is not aligned with the active dataset."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Fold the Find corrections into the active detector's labelset and retrain.",
+        "tags": [
+          "detector_scoring"
         ]
       }
     },

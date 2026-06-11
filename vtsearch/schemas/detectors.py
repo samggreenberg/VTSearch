@@ -731,6 +731,21 @@ class FindStatsResponseSchema(Schema):
     sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
 
 
+class FindCorrectionsToDetectorResponseSchema(Schema):
+    """Response for ``POST /api/find/corrections-to-detector``.
+
+    Reports how many corrections were folded into the active detector's
+    labelset, the resulting labelset size, and whether the MLP retrained.
+    See docs/plans/find-verification-workflow.md.
+    """
+
+    ok = fields.Boolean(required=True)
+    name = fields.String(required=True)
+    corrections_added = fields.Integer(required=True)
+    num_labels = fields.Integer(required=True)
+    trained = fields.Boolean(required=True)
+
+
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
@@ -767,6 +782,7 @@ __all__ = [
     "FindCancelResponseSchema",
     "FindCheckLabelsRequestSchema",
     "FindCheckLabelsResponseSchema",
+    "FindCorrectionsToDetectorResponseSchema",
     "FindLabelRequestSchema",
     "FindLabelResponseSchema",
     "FindRequestSchema",

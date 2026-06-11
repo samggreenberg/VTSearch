@@ -127,6 +127,20 @@
     </vt-label-list>
   }
 
+  @if (mode === 'find') {
+    <div class="corrections-row">
+      <button
+        class="panel-btn corrections-btn"
+        [disabled]="disabled"
+        (click)="onAddCorrections()"
+        title="Add the corrections you've made (items you changed from the detector's call) into this detector's labelset and retrain it. This changes the detector, so the current evaluation no longer applies."
+      >
+        <vt-icon type="graduation" [size]="16"></vt-icon>
+        Add Corrections to Detector
+      </button>
+    </div>
+  }
+
   @if (mode !== 'find') {
     <div class="export-row">
       <button class="panel-btn export-btn" [disabled]="disabled" (click)="onExport()" aria-label="Export" title="Export labeled items to clipboard, file, email, or webhook">

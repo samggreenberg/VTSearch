@@ -12,10 +12,12 @@ import type { FindLabelResponse } from '../generated/api-client/models/find-labe
 import type { FindRequest } from '../generated/api-client/models/find-request';
 import type { FindResponse } from '../generated/api-client/models/find-response';
 import type { FindStatsResponse } from '../generated/api-client/models/find-stats-response';
+import type { FindCorrectionsToDetectorResponse } from '../generated/api-client/models/find-corrections-to-detector-response';
 import { cancelFind } from '../generated/api-client/fn/detector-find/cancel-find';
 import { findCheckLabels } from '../generated/api-client/fn/detector-find/find-check-labels';
 import { findLabel } from '../generated/api-client/fn/detector-scoring/find-label';
 import { findStats } from '../generated/api-client/fn/detector-scoring/find-stats';
+import { findCorrectionsToDetector } from '../generated/api-client/fn/detector-scoring/find-corrections-to-detector';
 import { multiFind } from '../generated/api-client/fn/detector-find/multi-find';
 
 /** Multi-dataset Find, single-label Find, the check-labels precheck, and
@@ -50,5 +52,12 @@ export class DetectorsFindApiService {
    *  + the FP/FN-vs-inclusion sweep). Pure read. */
   getFindStats(): Observable<FindStatsResponse> {
     return findStats(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  /** Fold the Find corrections into the active detector's labelset and retrain
+   *  its MLP. Destructive: changes the detector, so the current Find evaluation
+   *  no longer applies and the caller should re-score afterwards. */
+  addCorrectionsToDetector(): Observable<FindCorrectionsToDetectorResponse> {
+    return findCorrectionsToDetector(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 }
