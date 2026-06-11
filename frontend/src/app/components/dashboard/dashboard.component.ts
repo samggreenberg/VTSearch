@@ -122,7 +122,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   get visibleDetectorColumns(): DetectorColumn[] {
-    return this.detectorCols.columnOrder;
+    let cols = this.detectorCols.columnOrder;
+    if (this.isDefaultLogin) {
+      cols = cols.filter((c) => c !== 'created_by' && c !== 'readers');
+    }
+    return cols;
   }
 
   onDatasetHeaderClick(col: string): void {
@@ -739,6 +743,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .map((s: string) => s.trim())
       .filter((s: string) => s.length > 0);
     this.datasetsRegistryApi.updateReaders(dataset.id, readers).subscribe({
+      next: () => this.datasetState.refresh(),
+    });
+  }
+
+  async editDetectorSecurity(detector: DetectorRegistryEntry): Promise<void> {
+    const current = (detector.readers || []).join(', ');
+    const result = await this.dialog.prompt(
+      `Edit access list for "${detector.name}".\nEnter usernames separated by commas, or * for public:`,
+      current,
+    );
+    if (result === null) return;
+    const readers = result
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
+    this.detectorsRegistryApi.updateReaders(detector.id, readers).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }

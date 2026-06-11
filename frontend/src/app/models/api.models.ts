@@ -265,6 +265,12 @@ export interface DetectorRegistryEntry {
   /** Embedder this detector's label-vector cache is built against.
    *  Populated only for loaded detectors; empty for unloaded entries. */
   embedder?: string;
+  /** Username of the detector's creator (shown in multi-user mode). */
+  created_by?: string;
+  /** Usernames granted access besides the creator; ``["*"]`` = public. */
+  readers?: string[];
+  /** Whether the current user created this detector (creator-only actions). */
+  is_owner?: boolean;
   [key: string]: unknown;
 }
 

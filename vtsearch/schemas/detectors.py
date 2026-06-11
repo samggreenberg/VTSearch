@@ -273,6 +273,10 @@ class DetectorRegistryEntrySchema(Schema):
     media_example = fields.String()
     created_by = fields.String()
     created_at = fields.Float()
+    # Access list (mirrors datasets): usernames allowed besides the creator,
+    # ``["*"]`` = public. ``is_owner`` is computed per-request for the caller.
+    readers = fields.List(fields.String())
+    is_owner = fields.Boolean()
     loaded = fields.Boolean()
     detector_loaded = fields.Boolean()
     autorun = fields.Boolean()

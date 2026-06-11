@@ -263,6 +263,8 @@
             @for (detector of sortedDetectors; track detector.id) {
               <vt-detector-card
                 [detector]="detector"
+                [currentUser]="currentUser"
+                [isDefaultLogin]="isDefaultLogin"
                 [columnOrder]="visibleDetectorColumns"
                 [selected]="isDetectorSelected(detector.id)"
                 [dimmed]="isLoading && !isDetectorSelected(detector.id)"
@@ -279,6 +281,7 @@
                 (export)="openExportModal(detector)"
                 (addLabels)="openAddLabelsModal(detector)"
                 (autorunToggle)="toggleAutorun(detector, $event)"
+                (security)="editDetectorSecurity(detector)"
                 (cancelTask)="loadingTasksSvc.cancelDetectorLoadingTask($event)"
                 (dismissTask)="loadingTasksSvc.dismissDetectorLoadingTask($event)"
               />
