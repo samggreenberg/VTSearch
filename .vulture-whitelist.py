@@ -151,6 +151,7 @@ set_dataset_max_age_days  # noqa: F821
 # ---------------------------------------------------------------------------
 cached_labelset_mtime  # noqa: F821
 votes_dataset_id  # noqa: F821
+find_mode  # noqa: F821 - DetectorContext flag; reads live in vtscore.state.votes / vtscore.detectors.*
 
 # ---------------------------------------------------------------------------
 # ``tests/helpers.py`` exports test helpers; ``make_wav_file`` is consumed
