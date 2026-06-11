@@ -222,6 +222,12 @@ class TestCorrectionsToDetector:
     """``POST /api/find/corrections-to-detector`` folds the Find corrections
     into the active detector's labelset and retrains it."""
 
+    def _labelset_labels(self, name: str) -> list[dict]:
+        """Return the on-disk labelset entries for detector *name*."""
+        data = _read_detector(_detector_path(name))
+        assert data is not None
+        return data["labelset"]["labels"]
+
     def _setup_find(self, client):
         """Register + load a detector, then run find-label so it enters find
         mode with a full ``find_initial_labels`` baseline."""
@@ -252,13 +258,13 @@ class TestCorrectionsToDetector:
         """Right after find-label, every adopted label matches the detector's
         call, so there is nothing to add and the labelset is untouched."""
         self._setup_find(client)
-        before = len(_read_detector(_detector_path("corrections-model"))["labelset"]["labels"])
+        before = len(self._labelset_labels("corrections-model"))
         resp = client.post("/api/find/corrections-to-detector")
         assert resp.status_code == 200, resp.get_json()
         data = resp.get_json()
         assert data["corrections_added"] == 0
         assert data["trained"] is False
-        after = len(_read_detector(_detector_path("corrections-model"))["labelset"]["labels"])
+        after = len(self._labelset_labels("corrections-model"))
         assert after == before
 
     def test_corrections_added_and_retrained(self, client):
@@ -282,7 +288,7 @@ class TestCorrectionsToDetector:
         assert data["trained"] is True
 
         # The on-disk labelset now carries the human label for both items.
-        labels = _read_detector(_detector_path("corrections-model"))["labelset"]["labels"]
+        labels = self._labelset_labels("corrections-model")
         by_md5 = {el["md5"]: el["label"] for el in labels}
         assert by_md5[app_module.medias[good_item]["md5"]] == "bad"
         assert by_md5[app_module.medias[bad_item]["md5"]] == "good"
