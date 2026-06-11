@@ -4,7 +4,7 @@
 # Run this in a terminal ON THE CLUSTER (a login node) and LEAVE IT RUNNING --
 # it holds the SLURM allocation and the app. When the allocation lands, it
 # prints the compute node it got and a hint for the tunnel script you run on
-# your laptop (see scripts/grid/vtsearch-tunnel.sh).
+# your local machine (see scripts/slurm/vtsearch-tunnel.sh).
 #
 # Ctrl+C stops the APP but KEEPS the node, then offers to restart it (handy
 # after a git pull / code edit). Type q at that prompt to release the node and
@@ -12,7 +12,7 @@
 #
 # Install: copy this somewhere on your PATH on the cluster and make it
 # executable, e.g.
-#     cp scripts/grid/vtsearch-grid.sh ~/.local/bin/vtsearch && chmod +x ~/.local/bin/vtsearch
+#     cp scripts/slurm/vtsearch-slurm.sh ~/.local/bin/vtsearch && chmod +x ~/.local/bin/vtsearch
 #
 # Override any default with an env var, e.g.:  VTS_MEM=64G VTS_GPU=a100 vtsearch
 set -u
@@ -47,7 +47,7 @@ exec srun --job-name=vtsearch --pty \
         echo
         echo "========================================================="
         echo "  VTSearch node: $node   (branch: $(git branch --show-current 2>/dev/null))"
-        echo "  On your LAPTOP, in a new terminal, run:"
+        echo "  On your LOCAL MACHINE, in a new terminal, run:"
         echo "      vtsearch-tunnel        (then browse http://localhost:5000)"
         echo "========================================================="
         while true; do
