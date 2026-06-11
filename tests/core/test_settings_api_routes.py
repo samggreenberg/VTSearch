@@ -715,6 +715,16 @@ class TestBrowserSettings:
         res = client.put("/api/settings", json={"browse_icon_size": {"audio": "huge"}})
         assert res.status_code == 400
 
+    def test_update_browse_icon_size_accepts_larger_levels(self, client):
+        # The browse canvas walks seven zoom levels (XS..XXXL), two beyond the
+        # grid icon size's XS..XL; the backend must accept the larger labels the
+        # bigger/smaller buttons persist.
+        res = client.put("/api/settings", json={"browse_icon_size": {"audio": "XXL", "image": "xxxl"}})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["browse_icon_size"]["audio"] == "XXL"
+        assert data["browse_icon_size"]["image"] == "XXXL"
+
     def test_update_browse_thumbnail_border_per_type(self, client):
         res = client.put("/api/settings", json={"browse_thumbnail_border": {"image": 3, "video": 0}})
         assert res.status_code == 200
