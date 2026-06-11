@@ -68,7 +68,9 @@
             </select>
           </div>
           <div class="form-group" title="Streamline the UI for a single media type. Importer and detector flows will hide their media-type pickers and lock to this type; converters that produce other types are filtered out.">
-            <label class="form-label">Solo media type</label>
+            <label class="form-label">Solo media type@if (soloMediaTypeNote) {
+              <vt-field-hint-icon [hint]="soloMediaTypeNote"></vt-field-hint-icon>
+            }</label>
             <select
               class="form-select"
               [ngModel]="soloMediaTypeSelectValue"
@@ -79,9 +81,6 @@
                 <option [value]="mt.type_id">{{ mt.name }}</option>
               }
             </select>
-            @if (soloMediaTypeNote) {
-              <p class="form-hint">{{ soloMediaTypeNote }}</p>
-            }
           </div>
           <label class="checkbox-row" title="Animate media transitions when voting (swipe left/right effect)">
             <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
@@ -209,7 +208,7 @@
 
         <!-- Data Imports -->
         @if (activeSettingsTab === 'imports') {
-          <h3>Data Imports</h3>
+          <h3>Data Imports<vt-field-hint-icon hint="Default import settings per media type. These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type."></vt-field-hint-icon></h3>
           <vt-import-defaults-settings
             [mediaTypes]="mediaTypes"
             [defaults]="importDefaults"
@@ -246,11 +245,7 @@
 
         <!-- Browser (VTSBrowse projection browser) -->
         @if (activeSettingsTab === 'browser') {
-          <h3>Browser</h3>
-          <p class="info-text">
-            How the VTSBrowse projection browser looks, per media type. The same controls
-            live on the browse canvas itself; changes here are remembered for next time.
-          </p>
+          <h3>Browser<vt-field-hint-icon hint="How the VTSBrowse projection browser looks, per media type. The same controls live on the browse canvas itself; changes here are remembered for next time."></vt-field-hint-icon></h3>
           @if (mediaTypes.length > 0) {
             <div class="view-tabs">
               @for (mt of mediaTypes; track mt.type_id) {
@@ -357,11 +352,7 @@
 
         <!-- Server Settings (read-only) -->
         @if (activeSettingsTab === 'server') {
-          <h3>Server Settings</h3>
-          <p class="info-text">
-            These are fixed when the server starts (via config file, environment, or CLI flags)
-            and shared by everyone. They&rsquo;re shown here for reference and can&rsquo;t be changed.
-          </p>
+          <h3>Server Settings<vt-field-hint-icon hint="These are fixed when the server starts (via config file, environment, or CLI flags) and shared by everyone. They’re shown here for reference and can’t be changed."></vt-field-hint-icon></h3>
 
           <div class="form-group">
             <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory</label>

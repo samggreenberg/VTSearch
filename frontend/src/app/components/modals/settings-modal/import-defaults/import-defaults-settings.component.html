@@ -1,10 +1,6 @@
 @if (visibleTypes.length === 0) {
   <p class="empty-state">No media types registered.</p>
 } @else {
-  <p class="info-text import-defaults-intro" title="These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type.">
-    Default import settings per media type.
-  </p>
-
   <div class="view-tabs">
     @for (mt of visibleTypes; track mt.type_id) {
       <button
