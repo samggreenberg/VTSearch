@@ -129,9 +129,7 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
-def _open_validated_stream(
-    session: requests.Session, url: str, headers: Optional[dict] = None
-) -> requests.Response:
+def _open_validated_stream(session: requests.Session, url: str, headers: Optional[dict] = None) -> requests.Response:
     """GET *url* as a stream, following redirects manually so every hop is
     re-checked by :func:`validate_url`.
 
@@ -196,7 +194,7 @@ def _backoff_and_notify(
     time.sleep(backoff)
 
 
-def download_file_with_progress(
+def download_file_with_progress(  # noqa: C901
     url: str,
     dest_path: Path,
     expected_size: int = 0,

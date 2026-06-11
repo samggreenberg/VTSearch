@@ -753,12 +753,17 @@ class TestDownloadResume:
         payload = bytes(range(256)) * 8  # 2048 deterministic bytes
         chunks = [payload[i : i + 256] for i in range(0, len(payload), 256)]  # 8 chunks
         # Attempt 1: full-size 200 response that dies after 3 chunks (768 bytes).
-        first = _FakeResponse(chunks, status_code=200, headers={"content-length": str(len(payload))}, fail_after_chunks=3)
+        first = _FakeResponse(
+            chunks, status_code=200, headers={"content-length": str(len(payload))}, fail_after_chunks=3
+        )
         # Attempt 2: 206 partial response serving the remaining bytes.
         second = _FakeResponse(
             chunks[3:],
             status_code=206,
-            headers={"content-length": str(len(payload) - 768), "Content-Range": f"bytes 768-{len(payload) - 1}/{len(payload)}"},
+            headers={
+                "content-length": str(len(payload) - 768),
+                "Content-Range": f"bytes 768-{len(payload) - 1}/{len(payload)}",
+            },
         )
         calls = self._install(monkeypatch, [first, second])
 
@@ -780,7 +785,9 @@ class TestDownloadResume:
 
         payload = bytes(range(256)) * 4  # 1024 bytes
         chunks = [payload[i : i + 256] for i in range(0, len(payload), 256)]  # 4 chunks
-        first = _FakeResponse(chunks, status_code=200, headers={"content-length": str(len(payload))}, fail_after_chunks=2)
+        first = _FakeResponse(
+            chunks, status_code=200, headers={"content-length": str(len(payload))}, fail_after_chunks=2
+        )
         # Server ignores Range and resends the whole body with 200, not 206.
         full_again = _FakeResponse(chunks, status_code=200, headers={"content-length": str(len(payload))})
         self._install(monkeypatch, [first, full_again])
