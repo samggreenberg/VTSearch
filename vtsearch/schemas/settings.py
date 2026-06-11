@@ -111,17 +111,19 @@ class AppSettingsSchema(Schema):
     detectors_dir = fields.String(dump_only=True)
     max_concurrent_dataset_downloads = fields.Integer(dump_only=True)
     max_concurrent_dataset_embeddings = fields.Integer(dump_only=True)
-    autorun_detectors = fields.List(fields.String(), dump_only=True)
-    # Auto-Find results exporter (server-tier but editable from the Auto-Find
-    # tab). ``autofind_exporter`` is the chosen exporter name ("" = none);
-    # ``autofind_exporter_field_values`` keeps each exporter's field values
-    # under its own name so switching the picker preserves prior config.
+    dataset_max_age_days = fields.Integer(load_default=None, allow_none=True)
+
+    # Auto-Find (per-user, editable from the Auto-Find settings tab).
+    # ``autorun_detectors`` is each user's own list of detectors that auto-run
+    # on import; ``autofind_exporter`` is the chosen results-exporter name
+    # ("" = none); ``autofind_exporter_field_values`` keeps each exporter's
+    # field values under its own name so switching the picker preserves config.
+    autorun_detectors = fields.List(fields.String())
     autofind_exporter = fields.String()
     autofind_exporter_field_values = fields.Dict(
         keys=fields.String(),
         values=fields.Dict(keys=fields.String(), values=fields.String()),
     )
-    dataset_max_age_days = fields.Integer(load_default=None, allow_none=True)
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
