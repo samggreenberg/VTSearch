@@ -385,23 +385,11 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  // --- Browser tab: right-click bin-popup view prefs ---
-  // The bin popup keeps its own per-media-type view mode + thumbnail size
-  // (``view_mode_popup`` / ``grid_icon_size_popup``), independent of the
-  // left/right panels. The popup's in-header controls write the same maps, so
-  // these widgets and the live popup stay in step.
-
-  getPopupViewMode(typeId: string): string {
-    const dict = this.settings.view_mode_popup as Record<string, string> | undefined;
-    return (dict && dict[typeId]) || 'grid';
-  }
-
-  onPopupViewModeChange(typeId: string, value: string): void {
-    const dict = { ...((this.settings.view_mode_popup as Record<string, string> | undefined) || {}) };
-    dict[typeId] = value;
-    (this.settings as Record<string, unknown>)['view_mode_popup'] = dict;
-    this.save();
-  }
+  // --- Browser tab: right-click bin-popup thumbnail size ---
+  // The bin popup keeps its own per-media-type thumbnail size
+  // (``grid_icon_size_popup``), independent of the left/right panels. The
+  // popup's in-header size buttons write the same map, so this widget and the
+  // live popup stay in step. (The popup is grid-only — it has no list mode.)
 
   getPopupGridIconSize(typeId: string): string {
     const dict = this.settings.grid_icon_size_popup as Record<string, string> | undefined;

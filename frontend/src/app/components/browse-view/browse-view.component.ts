@@ -311,8 +311,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     return this.hexScaleIndex === this.HEX_SCALES.length - 1;
   }
 
-  /** Target bin radius (CSS px) for the current named thumbnail size. */
-  private get thumbnailRadius(): number {
+  /** Target bin radius (CSS px) for the current named thumbnail size. Also
+   *  passed to the bin popup so its preview pane tracks the on-canvas hover
+   *  size. */
+  get thumbnailRadius(): number {
     return BrowseCanvasComponent.DEFAULT_TARGET_RADIUS * this.HEX_SCALES[this.hexScaleIndex];
   }
 

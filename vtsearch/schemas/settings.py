@@ -97,9 +97,8 @@ class AppSettingsSchema(Schema):
     focus_mode_right = _PerMediaTypeStringDict()
     panel_pct_left = _PerMediaTypeNumberDict()
     panel_pct_right = _PerMediaTypeNumberDict()
-    # VTSBrowse bin-popup view mode + thumbnail size, per media type. Driven by
-    # the popup's own view controls and the Settings → Browser tab.
-    view_mode_popup = _PerMediaTypeStringDict()
+    # VTSBrowse bin-popup thumbnail size, per media type. Driven by the popup's
+    # own size buttons and the Settings → Browser tab. (The popup is grid-only.)
     grid_icon_size_popup = _PerMediaTypeStringDict()
 
     # Server-tier. These are fixed at server start (config file /
@@ -199,7 +198,6 @@ class SettingsUpdateSchema(Schema):
     focus_mode_right = fields.Raw()
     panel_pct_left = fields.Raw()
     panel_pct_right = fields.Raw()
-    view_mode_popup = fields.Raw()
     grid_icon_size_popup = fields.Raw()
 
     autopilot_enabled = fields.Boolean()

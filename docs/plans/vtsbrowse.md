@@ -682,6 +682,20 @@ in git history and the cited source files.
   produced. *Open follow-up:* if a future ordering wants true 1-D-UMAP semantics
   (not just a space-filling linearization of the 2-D layout), it would need that
   second fit and a persisted `order` field on `Projection`.
+- ~~**Bin-popup detail preview**~~ — the right-click bin popup is now grid-only
+  (the List/Grid toggle and the `view_mode_popup` setting were removed end to
+  end) and pairs the member grid with a large preview pane on its left, shown
+  for thumbnail media (image/video). Hovering a grid thumbnail paints that
+  item's *full-resolution* original (`/api/medias/<id>/image`, not its grid
+  thumbnail) into the pane; the pane opens on the bin's representative so even a
+  singleton lands on a large high-res view with no hover. The pane is sized to
+  +50% of the item's on-canvas mouse-over break-out at the current main-canvas
+  thumbnail size (`hoverThumbRadius` is passed from `browse-view`), so it tracks
+  the icon-size setting. The grid thumbnails no longer magnify on hover (the
+  preview pane replaces that affordance). *Open follow-up:* the pane is gated on
+  `usesThumbnails` (image/video); documents render a grid thumbnail but get no
+  large preview — if document detail-viewing is wanted, widen the gate and pick a
+  full-res document endpoint.
 
 **Active:**
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable
