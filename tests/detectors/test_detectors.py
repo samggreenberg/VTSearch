@@ -785,6 +785,7 @@ class TestDetectorStats:
         detector_id = self._register(client, name="CountMe")
         path = _detector_path("CountMe")
         data = _read_detector(path)
+        assert data is not None
         data["labelset"] = {
             "labels": [
                 {"md5": "a" * 32, "label": "good"},
