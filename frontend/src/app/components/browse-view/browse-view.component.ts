@@ -429,8 +429,13 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private switchBinShape(shape: BinShape, persist: boolean): void {
     if (shape === this.binShape) return;
     this.binShape = shape;
-    this.tileCache.setBinShape(shape);
     if (persist) this.persistBrowsePref('browse_bin_shape', shape);
+    // Don't repoint the tile cache here. While ``ready``, the canvas stays
+    // mounted across the switch (so pan/zoom survive), and its redraw loop
+    // keeps fetching tiles. Flipping the cache to a shape whose pyramid isn't
+    // built yet would make those fetches 404 until the build lands. Instead,
+    // the cache is repointed only once the new shape is confirmed ready — in
+    // ``applyMeta``/``pollBuildStatus`` (keyed to the shape the meta is for).
     if (this.status === 'ready') {
       this.ensureShape();
     } else {
@@ -450,11 +455,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (resp) => {
           if (resp.status === 'ready') {
+            const shape = this.binShape;
             this.projectionApi
-              .getMeta(this.binShape, this.subset)
+              .getMeta(shape, this.subset)
               .pipe(takeUntil(this.destroy$))
               .subscribe({
-                next: (meta) => this.applyMeta(meta),
+                next: (meta) => this.applyMeta(meta, shape),
                 error: () => this.loadProjection(),
               });
           } else {
@@ -647,14 +653,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.status = 'done';
       return;
     }
+    const shape = this.binShape;
     this.projectionApi
-      .subsetRemove(this.binShape, removedIds)
+      .subsetRemove(shape, removedIds)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (meta) => {
           // Leave the viewport where the user had it; don't yank the camera to
           // re-fit the survivors. They can hit Zoom Fit if they want that.
-          this.applyMeta(meta);
+          this.applyMeta(meta, shape);
         },
         error: () =>
           this.toast.error({
@@ -696,11 +703,12 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private loadProjection(): void {
     this.status = 'loading';
     this.polling = false;
+    const shape = this.binShape;
     this.projectionApi
-      .getMeta(this.binShape, this.subset)
+      .getMeta(shape, this.subset)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (meta) => this.applyMeta(meta),
+        next: (meta) => this.applyMeta(meta, shape),
         error: (err) => {
           // The meta endpoint reports "idle" rather than 404/409, but treat a
           // missing projection defensively the same way: build it, don't ask.
@@ -715,8 +723,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       });
   }
 
-  /** Route a freshly-fetched meta to the right state, auto-building if absent. */
-  private applyMeta(meta: ProjectionMeta): void {
+  /**
+   * Route a freshly-fetched meta to the right state, auto-building if absent.
+   * ``shape`` is the bin shape this meta was fetched for — passed explicitly
+   * (rather than read from ``this.binShape``) because ``applyBrowsePrefsFor‐
+   * MediaType`` below can switch the active shape mid-call; the tile cache must
+   * be pointed at the shape that is actually ready, not the one we're switching
+   * to.
+   */
+  private applyMeta(meta: ProjectionMeta, shape: BinShape): void {
     this.meta = meta;
     if (meta.media_type) {
       this.mediaType = meta.media_type;
@@ -726,6 +741,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.tileCache.setContentVersion(meta.content_version ?? 0);
 
     if (meta.point_count > 0) {
+      // This shape's pyramid is built, so the canvas can render it without
+      // 404ing — only now is it safe to point the tile cache at it.
+      this.tileCache.setBinShape(shape);
       this.status = 'ready';
       return;
     }
@@ -751,9 +769,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.polling) return;
     this.polling = true;
     this.pollErrors = 0;
+    const shape = this.binShape;
     const poll = (): void => {
       this.projectionApi
-        .getMeta(this.binShape, this.subset)
+        .getMeta(shape, this.subset)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: (meta) => {
@@ -765,6 +784,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             }
             this.tileCache.setProjectionId(meta.projection_id);
             if (meta.point_count > 0) {
+              // Build finished — point the cache at the now-built shape before
+              // the canvas remounts and starts fetching its tiles.
+              this.tileCache.setBinShape(shape);
               this.polling = false;
               this.status = 'ready';
               return;

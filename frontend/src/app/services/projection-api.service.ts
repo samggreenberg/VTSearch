@@ -90,8 +90,13 @@ export class ProjectionApiService {
     const params: Record<string, string> = {};
     if (subset) params['subset'] = '1';
     if (cacheToken) params['v'] = cacheToken;
-    return Object.keys(params).length
-      ? this.http.get<TilePayload>(url, { params })
-      : this.http.get<TilePayload>(url);
+    // Suppress the global error toast: a tile can 404 transiently when it is
+    // requested for a bin shape whose pyramid hasn't finished building (e.g.
+    // mid bin-shape switch). The caller (TileCacheService) already recovers by
+    // rendering an empty tile and refetching once the build lands, so the
+    // failure is expected and self-healing — surfacing it as a banner would
+    // just alarm the user. Mirrors getMeta's SKIP_ERROR_TOAST rationale.
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    return this.http.get<TilePayload>(url, { params, context });
   }
 }
