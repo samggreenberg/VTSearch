@@ -20,6 +20,14 @@ export const browseContextGuard: CanActivateFn = (route) => {
     return router.parseUrl('/dashboard');
   }
 
+  // Ephemeral detector-positives browse contexts (`__detpos__<id>`) are built
+  // server-side and reached via the X-Dataset-Id header; they are deliberately
+  // absent from the dataset registry, so skip the registry/load checks. The
+  // dashboard's Browse button already set the active context before navigating.
+  if (datasetId.startsWith('__detpos__')) {
+    return true;
+  }
+
   if (!datasetState.loaded) {
     datasetState.refresh();
   }

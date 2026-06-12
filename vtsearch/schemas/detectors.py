@@ -442,6 +442,55 @@ class DetectorRegistryReadersResponseSchema(Schema):
     readers = fields.List(fields.String(), required=True)
 
 
+class DetectorRegistryStatsResponseSchema(Schema):
+    """Response for ``GET /api/detectors/registry/<id>/stats``.
+
+    Counts and metadata only — never embeddings or MLP weights (see the
+    "No Persisted Vectors" rule). ``num_positive_resolved`` is how many of
+    the detector's positive labels currently resolve into the active
+    dataset (the set the Browse button would project), with
+    ``active_dataset_name`` naming that dataset (``""`` when none is loaded).
+    """
+
+    name = fields.String(required=True)
+    media_type = fields.String(required=True)
+    num_positive = fields.Integer(required=True)
+    num_negative = fields.Integer(required=True)
+    num_total = fields.Integer(required=True)
+    num_positive_resolved = fields.Integer(required=True)
+    active_dataset_name = fields.String(required=True)
+    embedder = fields.String(required=True)
+    text_query = fields.String(required=True)
+    media_example = fields.String(required=True)
+    clipper = fields.String(required=True)
+    created_at = fields.Raw(allow_none=True)
+    last_trained_at = fields.Raw(allow_none=True)
+    created_by = fields.String(required=True)
+    readers = fields.List(fields.String(), required=True)
+    autofind = fields.Boolean(required=True)
+
+
+class DetectorBrowsePositivesResponseSchema(Schema):
+    """Response for ``POST /api/detectors/registry/<id>/browse-positives``.
+
+    ``dataset_id`` is the synthetic, in-memory browse context the canvas
+    navigates to; ``task_id`` is the detector-loading task whose progress the
+    dashboard row renders while the positives are resolved + embedded.
+    """
+
+    ok = fields.Boolean(required=True)
+    dataset_id = fields.String(required=True)
+    task_id = fields.String(required=True)
+    media_type = fields.String(required=True)
+
+
+class DetectorBrowsePositivesReleaseResponseSchema(Schema):
+    """Response for ``POST /api/detectors/registry/<id>/browse-positives/release``."""
+
+    ok = fields.Boolean(required=True)
+    released = fields.Boolean(required=True)
+
+
 class DetectorCancelResponseSchema(Schema):
     """Response for ``POST /api/detectors/cancel/<task_id>``."""
 
@@ -758,6 +807,8 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
+    "DetectorBrowsePositivesReleaseResponseSchema",
+    "DetectorBrowsePositivesResponseSchema",
     "DetectorCancelResponseSchema",
     "DetectorCombineRequestSchema",
     "DetectorCombineResponseSchema",
@@ -783,6 +834,7 @@ __all__ = [
     "DetectorRegistryLoadResponseSchema",
     "DetectorRegistryRenameRequestSchema",
     "DetectorRegistryRenameResponseSchema",
+    "DetectorRegistryStatsResponseSchema",
     "DetectorRegistryUnloadResponseSchema",
     "DetectorRenameRequestSchema",
     "DetectorRenameResponseSchema",

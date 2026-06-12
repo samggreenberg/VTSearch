@@ -43,6 +43,8 @@ export class DetectorCardComponent implements OnChanges {
   @Output() addLabels = new EventEmitter<void>();
   @Output() load = new EventEmitter<void>();
   @Output() unload = new EventEmitter<void>();
+  @Output() browse = new EventEmitter<void>();
+  @Output() stats = new EventEmitter<void>();
   @Output() cancelTask = new EventEmitter<string>();
   @Output() dismissTask = new EventEmitter<string>();
   @Output() checkboxToggle = new EventEmitter<void>();
@@ -64,6 +66,7 @@ export class DetectorCardComponent implements OnChanges {
   @Input() deleteConfirmOpen = false;
   @Input() addLabelsOpen = false;
   @Input() exportOpen = false;
+  @Input() statsOpen = false;
 
   editing = false;
   wasEditing = false;
@@ -71,6 +74,7 @@ export class DetectorCardComponent implements OnChanges {
   wasDeleteOpen = false;
   wasAddLabelsOpen = false;
   wasExportOpen = false;
+  wasStatsOpen = false;
 
   startRename(event: MouseEvent): void {
     event.stopPropagation();
@@ -102,6 +106,9 @@ export class DetectorCardComponent implements OnChanges {
     if (changes['exportOpen'] && !changes['exportOpen'].currentValue && changes['exportOpen'].previousValue) {
       this.wasExportOpen = true;
     }
+    if (changes['statsOpen'] && !changes['statsOpen'].currentValue && changes['statsOpen'].previousValue) {
+      this.wasStatsOpen = true;
+    }
   }
 
   onPencilAnimationEnd(): void {
@@ -128,6 +135,12 @@ export class DetectorCardComponent implements OnChanges {
     }
   }
 
+  onPieAnimationEnd(): void {
+    if (!this.statsOpen) {
+      this.wasStatsOpen = false;
+    }
+  }
+
   onRenameKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
       this.confirmRename();
@@ -139,6 +152,16 @@ export class DetectorCardComponent implements OnChanges {
   onLoad(event: MouseEvent): void {
     event.stopPropagation();
     this.load.emit();
+  }
+
+  onBrowse(event: MouseEvent): void {
+    event.stopPropagation();
+    this.browse.emit();
+  }
+
+  onStats(event: MouseEvent): void {
+    event.stopPropagation();
+    this.stats.emit();
   }
 
   onDelete(event: MouseEvent): void {

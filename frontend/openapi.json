@@ -1561,6 +1561,46 @@
         ],
         "type": "object"
       },
+      "DetectorBrowsePositivesReleaseResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "released": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "released"
+        ],
+        "type": "object"
+      },
+      "DetectorBrowsePositivesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "media_type",
+          "ok",
+          "task_id"
+        ],
+        "type": "object"
+      },
       "DetectorCancelResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2193,6 +2233,79 @@
         "required": [
           "name",
           "ok"
+        ],
+        "type": "object"
+      },
+      "DetectorRegistryStatsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_dataset_name": {
+            "type": "string"
+          },
+          "autofind": {
+            "type": "boolean"
+          },
+          "clipper": {
+            "type": "string"
+          },
+          "created_at": {
+            "nullable": true
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "embedder": {
+            "type": "string"
+          },
+          "last_trained_at": {
+            "nullable": true
+          },
+          "media_example": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "num_negative": {
+            "type": "integer"
+          },
+          "num_positive": {
+            "type": "integer"
+          },
+          "num_positive_resolved": {
+            "type": "integer"
+          },
+          "num_total": {
+            "type": "integer"
+          },
+          "readers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text_query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active_dataset_name",
+          "autofind",
+          "clipper",
+          "created_by",
+          "embedder",
+          "media_example",
+          "media_type",
+          "name",
+          "num_negative",
+          "num_positive",
+          "num_positive_resolved",
+          "num_total",
+          "readers",
+          "text_query"
         ],
         "type": "object"
       },
@@ -9621,6 +9734,84 @@
         ]
       }
     },
+    "/api/detectors/registry/{detector_id}/browse-positives": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Resolves every positive label's origin to its file and embeds it with the\n**detector's** embedder (reusing the loaded detector's cached vectors when\nit's already in that space), assembles a throwaway ``DatasetContext`` whose\nmedia carry those embeddings + preview bytes, projects it, and registers it\nunder a synthetic ``dataset_id`` the browse view can open. Nothing is\npersisted \u2014 the context (vectors and bytes) lives only in memory until\nreleased. Mixed-source detectors work: a positive needn't be in any loaded\ndataset, only origin-resolvable.\n\nReturns immediately with the ``dataset_id`` and the ``task_id`` whose\nprogress the detector's dashboard row renders while the build runs.",
+        "operationId": "browse_detector_positives",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorBrowsePositivesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Prepare an in-memory VTSBrowse map of just this detector's positives.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
+    "/api/detectors/registry/{detector_id}/browse-positives/release": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Called when the user leaves the browse view. Idempotent: ``released`` is\n``False`` when there was nothing to drop.",
+        "operationId": "release_detector_positives_browse",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorBrowsePositivesReleaseResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Free the ephemeral positives-browse context for *detector_id*.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
     "/api/detectors/registry/{detector_id}/labelset-source/move-file": {
       "parameters": [
         {
@@ -9790,6 +9981,48 @@
           "detectors_registry"
         ]
       }
+    },
+    "/api/detectors/registry/{detector_id}/stats": {
+      "get": {
+        "description": "Counts/metadata only \u2014 no embeddings or MLP weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project.",
+        "operationId": "get_detector_stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorRegistryStatsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return labelset composition and provenance for a registered detector.",
+        "tags": [
+          "detectors_registry"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/detectors/registry/{detector_id}/unload": {
       "parameters": [

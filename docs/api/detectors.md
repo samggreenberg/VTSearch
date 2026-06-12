@@ -240,3 +240,73 @@ PUT /api/detectors/registry/{detector_id}/rename
 **Body:** `{"name": "New Name"}`
 
 → `{"ok": true, "name": "New Name"}`
+
+### Detector statistics
+
+```
+GET /api/detectors/registry/{detector_id}/stats
+```
+
+Returns labelset composition and provenance for a registered detector.
+Counts and metadata only — never embeddings or MLP weights.
+`num_positive_resolved` / `active_dataset_name` report how many of the
+detector's positive labels currently resolve into the loaded dataset (the
+set the dashboard's Browse button projects).
+
+→ ```json
+{
+  "name": "cat-sounds",
+  "media_type": "audio",
+  "num_positive": 24,
+  "num_negative": 18,
+  "num_total": 42,
+  "num_positive_resolved": 20,
+  "active_dataset_name": "ESC-50",
+  "embedder": "laion_clap",
+  "text_query": "cat meowing",
+  "media_example": "",
+  "clipper": "",
+  "created_at": 1743412500.0,
+  "last_trained_at": 1743419700.0,
+  "created_by": "default",
+  "readers": [],
+  "autofind": false
+}
+```
+
+403 if the caller cannot access the detector; 404 if it does not exist.
+
+### Browse a detector's positives
+
+```
+POST /api/detectors/registry/{detector_id}/browse-positives
+```
+
+Prepare an in-memory VTSBrowse map of just this detector's positive labels.
+Each positive's origin is resolved to its file and embedded with the
+**detector's own** embedder (not whatever dataset is selected) — so
+mixed-source detectors work and no dataset need be loaded. The resulting
+throwaway context (vectors + preview bytes, never persisted) is registered
+under a synthetic `dataset_id` the browse view opens.
+
+→ ```json
+{
+  "ok": true,
+  "dataset_id": "__detpos__<detector_id>",
+  "task_id": "_detbrowse_<id>",
+  "media_type": "audio"
+}
+```
+
+The build runs in the background; its progress rides the detector-loading
+task channel (the dashboard row shows it). 409 if the detector has no
+positive labels; 403/404 as above.
+
+```
+POST /api/detectors/registry/{detector_id}/browse-positives/release
+```
+
+Free the ephemeral positives-browse context (called when leaving the view).
+Idempotent.
+
+→ `{"ok": true, "released": true}`
