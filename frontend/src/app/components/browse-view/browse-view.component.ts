@@ -19,6 +19,7 @@ import { ProjectionApiService } from '../../services/projection-api.service';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
+import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
@@ -187,6 +188,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     private tileCache: TileCacheService,
     private activeContext: ActiveContextService,
     private datasetsRegistryApi: DatasetsRegistryApiService,
+    private detectorsRegistryApi: DetectorsRegistryApiService,
     private settingsState: SettingsStateService,
     private route: ActivatedRoute,
     private router: Router,
@@ -265,6 +267,27 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
     this.tileCache.clear();
+    this.releaseEphemeralPositivesContext();
+  }
+
+  /** Free a detector-positives browse context (`__detpos__<detectorId>`) when
+   *  leaving the view, so its in-memory vectors + preview bytes aren't leaked. */
+  private releaseEphemeralPositivesContext(): void {
+    const datasetId = this.route.snapshot.paramMap.get('datasetId') || '';
+    const prefix = '__detpos__';
+    if (!datasetId.startsWith(prefix)) return;
+    const detectorId = datasetId.slice(prefix.length);
+    // Clear the active pair if it still points at this throwaway context, so
+    // dashboard requests don't keep tagging a released id (unless the user
+    // already switched to another dataset, in which case leave that alone).
+    if (this.activeContext.datasetId === datasetId) {
+      this.activeContext.setActive('', '');
+    }
+    this.detectorsRegistryApi.releasePositivesBrowse(detectorId).subscribe({
+      error: () => {
+        /* best-effort cleanup; the context is harmless if it lingers */
+      },
+    });
   }
 
   onHexHover(event: HexHoverEvent | null): void {

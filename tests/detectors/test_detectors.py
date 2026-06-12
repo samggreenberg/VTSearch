@@ -816,6 +816,51 @@ class TestDetectorStats:
         assert res.status_code == 404
 
 
+class TestDetectorBrowsePositives:
+    """Tests for the detector-positives browse endpoints."""
+
+    def _register(self, client, name="BrowseMe"):
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": name, "media_type": "audio", "text_query": "x"},
+        )
+        assert res.status_code == 201
+        return res.get_json()["detector"]["id"]
+
+    def test_browse_positives_404_for_unknown(self, client):
+        res = client.post("/api/detectors/registry/nonexistent_id/browse-positives")
+        assert res.status_code == 404
+
+    def test_browse_positives_409_without_positives(self, client):
+        detector_id = self._register(client)
+        res = client.post(f"/api/detectors/registry/{detector_id}/browse-positives")
+        assert res.status_code == 409
+
+    def test_browse_positives_returns_synthetic_dataset_id(self, client):
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+
+        detector_id = self._register(client, name="BrowsePos")
+        path = _detector_path("BrowsePos")
+        data = _read_detector(path)
+        assert data is not None
+        data["labelset"] = {"labels": [{"md5": "a" * 32, "label": "good"}]}
+        _write_detector(path, data)
+
+        res = client.post(f"/api/detectors/registry/{detector_id}/browse-positives")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["ok"] is True
+        assert data["dataset_id"] == f"__detpos__{detector_id}"
+        assert data["task_id"]
+
+    def test_release_is_idempotent(self, client):
+        detector_id = self._register(client)
+        # Nothing built yet → released is False, still ok.
+        res = client.post(f"/api/detectors/registry/{detector_id}/browse-positives/release")
+        assert res.status_code == 200
+        assert res.get_json() == {"ok": True, "released": False}
+
+
 class TestLoadModelEndpoint:
     """Tests for POST /api/detectors/registry/load."""
 

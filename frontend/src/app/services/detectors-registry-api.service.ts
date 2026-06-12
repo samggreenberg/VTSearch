@@ -16,9 +16,13 @@ import type { DetectorRegistryRenameResponse } from '../generated/api-client/mod
 import type { DetectorRegistryReadersResponse } from '../generated/api-client/models/detector-registry-readers-response';
 import type { DetectorRegistryStatsResponse } from '../generated/api-client/models/detector-registry-stats-response';
 import type { DetectorRegistryUnloadResponse } from '../generated/api-client/models/detector-registry-unload-response';
+import type { DetectorBrowsePositivesResponse } from '../generated/api-client/models/detector-browse-positives-response';
+import type { DetectorBrowsePositivesReleaseResponse } from '../generated/api-client/models/detector-browse-positives-release-response';
+import { browseDetectorPositives } from '../generated/api-client/fn/detectors-registry/browse-detector-positives';
 import { cancelDetectorLoadingTask } from '../generated/api-client/fn/detectors-registry/cancel-detector-loading-task';
 import { deleteRegisteredDetector } from '../generated/api-client/fn/detectors-registry/delete-registered-detector';
 import { getDetectorStats } from '../generated/api-client/fn/detectors-registry/get-detector-stats';
+import { releaseDetectorPositivesBrowse } from '../generated/api-client/fn/detectors-registry/release-detector-positives-browse';
 import { listRegisteredDetectors } from '../generated/api-client/fn/detectors-registry/list-registered-detectors';
 import { loadDetectorRoute } from '../generated/api-client/fn/detectors-registry/load-detector-route';
 import { moveLabelsetSourceFile } from '../generated/api-client/fn/detectors-registry/move-labelset-source-file';
@@ -165,6 +169,22 @@ export class DetectorsRegistryApiService {
 
   getDetectorStats(detectorId: string): Observable<DetectorRegistryStatsResponse> {
     return getDetectorStats(this.http, this.config.rootUrl, {
+      detector_id: detectorId,
+    }).pipe(map((r) => r.body));
+  }
+
+  /** Prepare an in-memory VTSBrowse map of this detector's positives,
+   *  embedded with the detector's own embedder. Returns the synthetic
+   *  ``dataset_id`` to navigate to plus the progress ``task_id``. */
+  browsePositives(detectorId: string): Observable<DetectorBrowsePositivesResponse> {
+    return browseDetectorPositives(this.http, this.config.rootUrl, {
+      detector_id: detectorId,
+    }).pipe(map((r) => r.body));
+  }
+
+  /** Free the ephemeral positives-browse context when leaving the view. */
+  releasePositivesBrowse(detectorId: string): Observable<DetectorBrowsePositivesReleaseResponse> {
+    return releaseDetectorPositivesBrowse(this.http, this.config.rootUrl, {
       detector_id: detectorId,
     }).pipe(map((r) => r.body));
   }

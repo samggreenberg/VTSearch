@@ -8,8 +8,6 @@ import { DatasetsRegistryApiService } from '../../services/datasets-registry-api
 import { DatasetsUiApiService } from '../../services/datasets-ui-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
-import { DetectorsCrudApiService } from '../../services/detectors-crud-api.service';
-import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { ToastService } from '../../services/toast.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
@@ -169,8 +167,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private datasetsUiApi: DatasetsUiApiService,
     private detectorsFindApi: DetectorsFindApiService,
     private detectorsRegistryApi: DetectorsRegistryApiService,
-    private detectorsCrudApi: DetectorsCrudApiService,
-    private browseSubset: BrowseSubsetService,
     private toast: ToastService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
@@ -869,43 +865,41 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.modals.openDetectorStats(model.id, model.name);
   }
 
-  /** Launch the VTSBrowse view over just this detector's positively-labeled
-   *  elements. Loads the detector (and its dataset) if needed so the labels
-   *  resolve into the active dataset, then hands the resolved positive ids to
-   *  the browse subset projection — mirroring Find's "Browse positives". The
-   *  positives are projected against the *active* dataset, so a compatible
-   *  dataset must be loaded for there to be anything to show. */
+  /** Launch the VTSBrowse view over just this detector's positive labels.
+   *  The backend resolves each positive's origin and embeds it with the
+   *  *detector's own* embedder (mixed sources included, no dataset required),
+   *  building a throwaway in-memory browse context; we show that build's
+   *  progress on the detector row, then navigate once it's ready. */
   browseDetector(model: DetectorRegistryEntry): void {
-    const datasetId = this.activeContext.datasetId;
-    if (!datasetId) {
-      this.toast.error({
-        message: 'Load a dataset first',
-        detail: `Browsing "${model.name}" projects its positives against a loaded dataset, but none is active.`,
-      });
-      return;
-    }
-    this.contextSwitch
-      .applyActivePair(datasetId, model.id)
-      .pipe(take(1))
-      .subscribe(() => {
-        this.detectorsCrudApi.getLabelsDetail(model.name).subscribe({
-          next: (detail) => {
-            const ids = (detail.good ?? [])
-              .map((g) => g.cid)
-              .filter((cid): cid is number => cid != null);
-            if (ids.length === 0) {
-              this.toast.error({
-                message: 'No positives to browse',
-                detail: `None of "${model.name}"'s positive labels resolve into the active dataset.`,
-              });
-              return;
-            }
-            this.browseSubset.set({ datasetId, ids, label: `${model.name} — positives` });
-            this.router.navigate(['/browse', datasetId], { queryParams: { subset: 1 } });
-          },
-          error: () => this.toast.error({ message: 'Failed to load detector labels' }),
-        });
-      });
+    this.detectorsRegistryApi.browsePositives(model.id).subscribe({
+      next: (resp) => {
+        this.loadingTasksSvc.startDetectorProgressPolling();
+        let seenRunning = false;
+        this.progressEvents.detectorLoadingTasks$
+          .pipe(
+            filter((tasks) => {
+              const t = tasks.find((x) => x.task_id === resp.task_id);
+              if (t && t.status !== 'idle' && !t.error) {
+                seenRunning = true;
+                return false;
+              }
+              // Finished (idle), errored, or vanished after we saw it running.
+              return (!!t && (t.status === 'idle' || !!t.error)) || (!t && seenRunning);
+            }),
+            take(1),
+            takeUntil(this.destroy$),
+          )
+          .subscribe(() => {
+            const failed = this.progressEvents.detectorLoadingTasks.some(
+              (t) => t.task_id === resp.task_id && !!t.error,
+            );
+            if (failed) return; // ToastService surfaces the build error from the SSE task
+            this.activeContext.setActive(resp.dataset_id, '');
+            this.router.navigate(['/browse', resp.dataset_id]);
+          });
+      },
+      error: () => this.toast.error({ message: 'Failed to prepare browse' }),
+    });
   }
 
   // --- Export / Add-Labels modal openers (state lives on DashboardModalsService) ---

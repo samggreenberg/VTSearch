@@ -470,6 +470,27 @@ class DetectorRegistryStatsResponseSchema(Schema):
     autofind = fields.Boolean(required=True)
 
 
+class DetectorBrowsePositivesResponseSchema(Schema):
+    """Response for ``POST /api/detectors/registry/<id>/browse-positives``.
+
+    ``dataset_id`` is the synthetic, in-memory browse context the canvas
+    navigates to; ``task_id`` is the detector-loading task whose progress the
+    dashboard row renders while the positives are resolved + embedded.
+    """
+
+    ok = fields.Boolean(required=True)
+    dataset_id = fields.String(required=True)
+    task_id = fields.String(required=True)
+    media_type = fields.String(required=True)
+
+
+class DetectorBrowsePositivesReleaseResponseSchema(Schema):
+    """Response for ``POST /api/detectors/registry/<id>/browse-positives/release``."""
+
+    ok = fields.Boolean(required=True)
+    released = fields.Boolean(required=True)
+
+
 class DetectorCancelResponseSchema(Schema):
     """Response for ``POST /api/detectors/cancel/<task_id>``."""
 
@@ -786,6 +807,8 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
+    "DetectorBrowsePositivesReleaseResponseSchema",
+    "DetectorBrowsePositivesResponseSchema",
     "DetectorCancelResponseSchema",
     "DetectorCombineRequestSchema",
     "DetectorCombineResponseSchema",
