@@ -20,7 +20,7 @@ GET /api/settings
   "calibrate_count": 2,
   "calibration_fraction": 0.5,
   "audio_playing": true,
-  "swipe_animation": true,
+  "show_animations": true,
   "show_metadata": true,
   "view_mode_left": {},
   "view_mode_right": {},
@@ -62,7 +62,7 @@ PUT /api/settings
 Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `"highviz"`), `inclusion` (int, -10 to +10), `enrich_descriptions` (bool),
 `safe_thresholds` (bool), `calibrate_count` (int), `calibration_fraction`
-(number), `audio_playing` (bool), `swipe_animation` (bool),
+(number), `audio_playing` (bool), `show_animations` (bool),
 `show_metadata` (bool), `view_mode_left` (dict), `view_mode_right` (dict),
 `focus_mode_left` (dict), `focus_mode_right` (dict), `grid_icon_size_left`
 (dict), `grid_icon_size_right` (dict), `panel_pct_left` (dict),

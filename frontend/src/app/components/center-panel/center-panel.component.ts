@@ -41,7 +41,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   isVoting = false;
   volume = 1;
   audioPlaying = true;
-  swipeAnimation = true;
+  showAnimations = true;
   showMetadata = true;
   swipeClass = '';
   spinningVote: 'good' | 'bad' | null = null;
@@ -251,7 +251,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
       .submitToggleVoteAndRecord(this.media.id, vote, this.mediaDisplayName(this.media), regionBox)
       .subscribe({
         next: () => {
-          const animate = this.swipeAnimation && !!this.media && !prefersReducedMotion();
+          const animate = this.showAnimations && !!this.media && !prefersReducedMotion();
           if (animate) {
             this.swipeClass = vote === 'good' ? 'swipe-right' : 'swipe-left';
             this.spinningVote = vote;
@@ -291,7 +291,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
         if (!settings) return;
         this.volume = settings.volume ?? 1;
         this.audioPlaying = settings.audio_playing !== false;
-        this.swipeAnimation = settings.swipe_animation !== false;
+        this.showAnimations = settings.show_animations !== false;
         this.showMetadata = settings.show_metadata !== false;
         this.labelHintDismissed = settings.label_hint_dismissed === true;
       }),
