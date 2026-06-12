@@ -179,7 +179,11 @@ class UserSettings(BaseModel):
     calibrate_count: Annotated[int, _clamp(1, 100)] = DEFAULT_CALIBRATE_COUNT
     calibration_fraction: Annotated[float, _clamp(0.0, 1.0)] = 0.5
     audio_playing: bool = True
-    swipe_animation: bool = True
+    # Master switch for decorative motion (vote swipe, icon spins/waggles/tilts,
+    # toast/banner slide-ins, smooth scrolling, projection-browser zoom tweens).
+    # When False the frontend mirrors the OS "reduce motion" behavior. See the
+    # "Show Animations" checkbox in the appearance settings.
+    show_animations: bool = True
     show_metadata: bool = True
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session

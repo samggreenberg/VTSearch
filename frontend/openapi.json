@@ -343,6 +343,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "show_animations": {
+            "type": "boolean"
+          },
           "show_metadata": {
             "type": "boolean"
           },
@@ -357,9 +360,6 @@
             "type": "string"
           },
           "solo_media_type_explicit": {
-            "type": "boolean"
-          },
-          "swipe_animation": {
             "type": "boolean"
           },
           "theme": {
@@ -4432,6 +4432,9 @@
           "saved_datasets_dir": {
             "type": "string"
           },
+          "show_animations": {
+            "type": "boolean"
+          },
           "show_metadata": {
             "type": "boolean"
           },
@@ -4441,9 +4444,6 @@
           "solo_media_type": {
             "nullable": true,
             "type": "string"
-          },
-          "swipe_animation": {
-            "type": "boolean"
           },
           "theme": {
             "enum": [

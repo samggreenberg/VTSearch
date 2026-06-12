@@ -61,7 +61,7 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "calibrate_count": _state_set_calibrate_count,
     "calibration_fraction": _state_set_calibration_fraction,
     "audio_playing": settings.set_audio_playing,
-    "swipe_animation": settings.set_swipe_animation,
+    "show_animations": settings.set_show_animations,
     "show_metadata": settings.set_show_metadata,
     "label_hint_dismissed": settings.set_label_hint_dismissed,
     "view_mode_left": settings.set_view_mode_left,

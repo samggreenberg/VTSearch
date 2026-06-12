@@ -90,9 +90,9 @@
               }
             </select>
           </div>
-          <label class="checkbox-row" title="Animate media transitions when voting (swipe left/right effect)">
-            <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
-            Swipe animation
+          <label class="checkbox-row" title="Turn decorative motion on or off across the whole app">
+            <input type="checkbox" [ngModel]="settings.show_animations" (ngModelChange)="onToggle('show_animations', $event)" />
+            Show Animations<vt-field-hint-icon hint="Turns decorative motion on or off everywhere at once: the swipe transition when you vote, icon spins/waggles/tilts on buttons and cards, toast and banner slide-ins, smooth scrolling, and projection-browser zoom tweens. (Your operating system’s “reduce motion” setting disables the same things.)"></vt-field-hint-icon>
           </label>
           <label class="checkbox-row" title="Show the collapsible metadata tray below the media viewer (name, type, MD5, custom fields)">
             <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />

@@ -62,7 +62,7 @@ class AppSettingsSchema(Schema):
     calibrate_count = fields.Integer()
     calibration_fraction = fields.Float()
     audio_playing = fields.Boolean()
-    swipe_animation = fields.Boolean()
+    show_animations = fields.Boolean()
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
     autopilot_enabled = fields.Boolean()
@@ -187,7 +187,7 @@ class SettingsUpdateSchema(Schema):
     calibrate_count = fields.Integer()
     calibration_fraction = fields.Float()
     audio_playing = fields.Boolean()
-    swipe_animation = fields.Boolean()
+    show_animations = fields.Boolean()
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
 

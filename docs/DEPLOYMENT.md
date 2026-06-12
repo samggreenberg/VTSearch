@@ -330,7 +330,7 @@ and auto-saved on every change. Schema:
   "calibrate_count": 2,
   "calibration_fraction": 0.5,
   "audio_playing": true,
-  "swipe_animation": true,
+  "show_animations": true,
   "show_metadata": true,
   "view_mode_left": {},
   "view_mode_right": {},

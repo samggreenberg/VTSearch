@@ -32,10 +32,10 @@ html {
   zoom: 1.1;
 }
 
-// Honor OS-level "reduce motion" requests (also a useful escape hatch for
-// thin clients with no GPU compositing, where long CSS animations can pin a
-// software-rendered browser).
-@media (prefers-reduced-motion: reduce) {
+// Blanket "kill decorative motion" rule. Shared between the OS-level
+// reduce-motion media query and the app-level "Show Animations" toggle so a
+// single definition governs both paths.
+@mixin suppress-motion {
   *,
   *::before,
   *::after {
@@ -44,4 +44,21 @@ html {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+// Honor OS-level "reduce motion" requests (also a useful escape hatch for
+// thin clients with no GPU compositing, where long CSS animations can pin a
+// software-rendered browser).
+@media (prefers-reduced-motion: reduce) {
+  @include suppress-motion;
+}
+
+// App-level "Show Animations" setting. When the user turns it off,
+// SettingsStateService adds `.animations-off` to <html>, mirroring the
+// OS reduce-motion behavior above so one checkbox silences every decorative
+// animation and transition at once (vote swipe, icon spins/waggles/tilts,
+// toast/banner slide-ins, etc.). JS-driven motion gates on the matching
+// `prefersReducedMotion()` util.
+html.animations-off {
+  @include suppress-motion;
 }

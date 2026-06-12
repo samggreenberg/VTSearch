@@ -11,7 +11,7 @@ describe('SettingsModalComponent', () => {
   const mockSettings = {
     volume: 50,
     theme: 'dark',
-    swipe_animation: true,
+    show_animations: true,
     view_mode_left: { audio: 'list', image: 'grid' },
     view_mode_right: { audio: 'grid', image: 'list' },
     enrich_descriptions: false,
@@ -82,8 +82,8 @@ describe('SettingsModalComponent', () => {
 
   it('should toggle boolean setting and save', () => {
     flushInit();
-    component.onToggle('swipe_animation', false);
-    expect(component.settings.swipe_animation).toBeFalse();
+    component.onToggle('show_animations', false);
+    expect(component.settings.show_animations).toBeFalse();
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 

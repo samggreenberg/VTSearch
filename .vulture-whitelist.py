@@ -131,7 +131,7 @@ with_detector_context  # noqa: F821
 # can't connect it to the dynamic definition or the runtime callers.
 # ---------------------------------------------------------------------------
 get_audio_playing  # noqa: F821
-get_swipe_animation  # noqa: F821
+get_show_animations  # noqa: F821
 get_hide_autopilot  # noqa: F821
 get_autopilot_resort_interval  # noqa: F821
 get_browse_panel_width  # noqa: F821
