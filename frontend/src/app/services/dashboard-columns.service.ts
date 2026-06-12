@@ -9,7 +9,6 @@ export type DatasetColumn =
   | 'expires_at'
   | 'created_by'
   | 'readers'
-  | 'loaded'
   | 'actions';
 
 export type DetectorColumn =
@@ -21,7 +20,6 @@ export type DetectorColumn =
   | 'created_at'
   | 'created_by'
   | 'readers'
-  | 'detector_loaded'
   | 'actions';
 
 // `name` is pinned at the far left and `actions` at the far right; both are
@@ -36,7 +34,6 @@ const DATASET_COLUMNS_DEFAULT: DatasetColumn[] = [
   'expires_at',
   'created_by',
   'readers',
-  'loaded',
 ];
 
 const DETECTOR_COLUMNS_DEFAULT: DetectorColumn[] = [
@@ -47,7 +44,6 @@ const DETECTOR_COLUMNS_DEFAULT: DetectorColumn[] = [
   'created_at',
   'created_by',
   'readers',
-  'detector_loaded',
 ];
 
 const DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
@@ -61,7 +57,6 @@ export const DATASET_COL_META: Record<string, ColMeta> = {
   expires_at: { label: 'Age-Off', title: 'When this dataset ages off and is automatically removed (click to sort)', sortable: true },
   created_by: { label: 'Creator', title: 'User who created this dataset (click to sort)', sortable: true },
   readers: { label: 'Readers', title: 'Users with access to this dataset (click to sort)', sortable: true },
-  loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
   actions: { label: 'Actions', title: 'Available operations for this dataset', sortable: false },
 };
 
@@ -74,7 +69,6 @@ export const DETECTOR_COL_META: Record<string, ColMeta> = {
   created_at: { label: 'Created', title: 'When the detector was created (click to sort)', sortable: true },
   created_by: { label: 'Creator', title: 'User who created this detector (click to sort)', sortable: true },
   readers: { label: 'Readers', title: 'Users with access to this detector (click to sort)', sortable: true },
-  detector_loaded: { label: 'Loaded?', title: "Whether the detector's inference data is cached in memory", sortable: false },
   actions: { label: 'Actions', title: 'Available operations for this detector', sortable: false },
 };
 

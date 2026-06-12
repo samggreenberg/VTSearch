@@ -115,16 +115,7 @@ td.actions-col {
   opacity: 0.7;
 }
 
-.status-icon,
-.status-loaded {
-  color: inherit;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xs);
-}
-
-.load-action,
+.load-btn,
 .autorun-toggle {
   background: none;
   border: none;
