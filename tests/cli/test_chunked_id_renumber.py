@@ -57,7 +57,7 @@ def _write_pickle_dataset(path: Path, medias: dict) -> None:
 
 def _settings_file_with_detector(tmp_path: Path, detector_name: str) -> Path:
     settings = {
-        "autorun_detectors": [detector_name],
+        "autofind_detectors": [detector_name],
         "detectors_dir": str(get_detectors_dir()),
     }
     p = tmp_path / "settings.json"

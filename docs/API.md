@@ -10,7 +10,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | [Authentication & UI](api/auth.md) | Auth status, login/logout, static assets |
 | [Medias & Sorting](api/medias.md) | Media listing/streaming, text/learned/example sort, votes & labels, pile upload |
 | [Labeling & Diversity](api/labeling.md) | Inclusion, thresholds, labeling progress, diversity tree |
-| [Detectors](api/detectors.md) | Detector CRUD, detector registry, autorun toggle, loading SSE |
+| [Detectors](api/detectors.md) | Detector CRUD, detector registry, Auto-Find toggle, loading SSE |
 | [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, converters, file browsing |
 | [Import & Export](api/io.md) | Result exporters, label importers, processor importers |
 | [Settings](api/settings.md) | App settings, autorun processors, settings sources, labelset sources |

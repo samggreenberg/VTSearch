@@ -872,6 +872,26 @@ class TestFilepathTemplateExpansion:
         assert expected.exists()
         assert result["filepath"] == str(expected.resolve())
 
+    def test_date_only_templates_expand(self, tmp_path):
+        """{YYYYMMDD} and the {YYYY}/{MM}/{DD} parts expand to today's UTC
+        date, so a daily scheduled Auto-Find can write date-named files."""
+        from datetime import datetime as real_dt
+        from datetime import timezone
+
+        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.plugins.normalize import normalize_field_values
+
+        exp = ServerJsonLabelsetExporter()
+        template = str(tmp_path / "d_{YYYYMMDD}" / "{YYYY}.{MM}.{DD}.json")
+
+        with mock.patch("vtscore.plugins.normalize.datetime") as mock_dt:
+            mock_dt.now.return_value = real_dt(2026, 4, 1, 23, 59, 59, tzinfo=timezone.utc)
+            result = exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
+
+        expected = tmp_path / "d_20260401" / "2026.04.01.json"
+        assert expected.exists()
+        assert result["filepath"] == str(expected.resolve())
+
     def test_username_template_expands(self, tmp_path):
         """The {username} template substitutes get_current_user(), sanitised."""
         from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter

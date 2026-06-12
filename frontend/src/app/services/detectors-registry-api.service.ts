@@ -6,7 +6,7 @@ import { map } from 'rxjs/operators';
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { DetectorCancelResponse } from '../generated/api-client/models/detector-cancel-response';
 import type { DetectorLabelsetMoveResponse } from '../generated/api-client/models/detector-labelset-move-response';
-import type { DetectorRegistryAutorunResponse } from '../generated/api-client/models/detector-registry-autorun-response';
+import type { DetectorRegistryAutofindResponse } from '../generated/api-client/models/detector-registry-autofind-response';
 import type { DetectorRegistryCreateRequest } from '../generated/api-client/models/detector-registry-create-request';
 import type { DetectorRegistryCreateResponse } from '../generated/api-client/models/detector-registry-create-response';
 import type { DetectorRegistryDeleteResponse } from '../generated/api-client/models/detector-registry-delete-response';
@@ -22,12 +22,12 @@ import { loadDetectorRoute } from '../generated/api-client/fn/detectors-registry
 import { moveLabelsetSourceFile } from '../generated/api-client/fn/detectors-registry/move-labelset-source-file';
 import { registerDetectorRoute } from '../generated/api-client/fn/detectors-registry/register-detector-route';
 import { renameRegisteredDetector } from '../generated/api-client/fn/detectors-registry/rename-registered-detector';
-import { setDetectorAutorun } from '../generated/api-client/fn/detectors-registry/set-detector-autorun';
+import { setDetectorAutofind } from '../generated/api-client/fn/detectors-registry/set-detector-autofind';
 import { updateDetectorReaders } from '../generated/api-client/fn/detectors-registry/update-detector-readers';
 import { unloadDetectorRoute } from '../generated/api-client/fn/detectors-registry/unload-detector-route';
 import { VtDialogService } from './dialog.service';
 
-/** Detector registry: list / load / unload / rename / cancel / autorun /
+/** Detector registry: list / load / unload / rename / cancel / autofind /
  *  labelset-move / from-labelset. */
 @Injectable({ providedIn: 'root' })
 export class DetectorsRegistryApiService {
@@ -145,10 +145,10 @@ export class DetectorsRegistryApiService {
     }).pipe(map((r) => r.body));
   }
 
-  setAutorun(detectorId: string, autorun: boolean): Observable<DetectorRegistryAutorunResponse> {
-    return setDetectorAutorun(this.http, this.config.rootUrl, {
+  setAutofind(detectorId: string, autofind: boolean): Observable<DetectorRegistryAutofindResponse> {
+    return setDetectorAutofind(this.http, this.config.rootUrl, {
       detector_id: detectorId,
-      body: { autorun },
+      body: { autofind },
     }).pipe(map((r) => r.body));
   }
 

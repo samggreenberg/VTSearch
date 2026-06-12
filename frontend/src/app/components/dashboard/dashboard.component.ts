@@ -784,9 +784,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId = model.id;
+    const autofindWarning = model.autofind
+      ? ' This detector is on your Auto-Find list; deleting it removes it from that list too.'
+      : '';
     const ok = await this.dialog.confirmDestructive(
       `Delete detector "${model.name}"?`,
-      '(This deletes your labels. The underlying media is unaffected.)',
+      `(This deletes your labels. The underlying media is unaffected.${autofindWarning})`,
     );
     this.deletingDetectorId = '';
     if (!ok) return;
@@ -848,12 +851,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   unloadDetector(model: DetectorRegistryEntry): void {
     this.detectorsRegistryApi.unloadDetector(model.id).subscribe({
-      next: () => this.datasetState.refresh(),
-    });
-  }
-
-  toggleAutorun(model: DetectorRegistryEntry, autorun: boolean): void {
-    this.detectorsRegistryApi.setAutorun(model.id, autorun).subscribe({
       next: () => this.datasetState.refresh(),
     });
   }

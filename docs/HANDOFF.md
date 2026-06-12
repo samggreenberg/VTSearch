@@ -352,7 +352,7 @@ can work with different datasets/models simultaneously via
 `X-Dataset-Id`/`X-Detector-Id` headers. Settings are split into two
 tiers: a small set of server-wide infrastructure keys
 (`saved_datasets_dir`, `detectors_dir`, `max_concurrent_*`,
-`autorun_detectors`) live in
+`autofind_detectors`) live in
 `data/settings.json` and are shared across users; everything else
 (theme, volume, view/focus/panel modes, autopilot config, achievements
 state, and the per-user `settings_source`) lives in

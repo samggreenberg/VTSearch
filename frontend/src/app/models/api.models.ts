@@ -260,7 +260,8 @@ export interface DetectorRegistryEntry {
   media_example?: string;
   loaded?: boolean;
   detector_loaded?: boolean;
-  autorun?: boolean;
+  /** Whether this detector is on the current user's Auto-Find list. */
+  autofind?: boolean;
   last_trained_at?: number | null;
   /** Embedder this detector's label-vector cache is built against.
    *  Populated only for loaded detectors; empty for unloaded entries. */
@@ -362,6 +363,8 @@ export interface AutoDetectResultsData {
   media_type?: string;
   detectors_run?: string | number;
   results: Record<string, AutoDetectDetectorResult>;
+  /** Auto-Find list entries whose detector file no longer exists on disk. */
+  missing_detectors?: string[];
   /** Auto-export outcome (only when a results exporter ran). */
   auto_export?: AutoFindExportStatus;
   // Find mode fields

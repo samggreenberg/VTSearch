@@ -67,9 +67,9 @@ def _make_audio_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
     return out
 
 
-def _settings_file(tmp_path: Path, autorun: list[str]) -> Path:
+def _settings_file(tmp_path: Path, autofind: list[str]) -> Path:
     settings = {
-        "autorun_detectors": list(autorun),
+        "autofind_detectors": list(autofind),
         "detectors_dir": str(get_detectors_dir()),
     }
     p = tmp_path / "settings.json"
@@ -323,8 +323,8 @@ class TestRunPipelineFile:
         body = json.loads(out_path.read_text())
         assert "yaml-detector" in body.get("results", {})
 
-    def test_detectors_override_ignores_settings_autorun_list(self, client, tmp_path, monkeypatch):
-        """`detectors:` in the YAML overrides the settings file's autorun
+    def test_detectors_override_ignores_settings_autofind_list(self, client, tmp_path, monkeypatch):
+        """`detectors:` in the YAML overrides the settings file's Auto-Find
         list for that run only; the file on disk must NOT be touched."""
         files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
         _stub_resolve(monkeypatch, files)
@@ -360,7 +360,7 @@ class TestRunPipelineFile:
         assert "from-yaml" in body.get("results", {})
         # The settings file itself must not have been rewritten.
         on_disk = json.loads(settings_path.read_text())
-        assert on_disk["autorun_detectors"] == ["nonexistent-detector"]
+        assert on_disk["autofind_detectors"] == ["nonexistent-detector"]
 
     def test_missing_file_exits_with_nonzero_status(self, tmp_path):
         from vtscore.cli_pipeline import run_pipeline_file

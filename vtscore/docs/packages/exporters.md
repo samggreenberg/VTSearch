@@ -170,7 +170,7 @@ documented in detail in [`plugins.md#pluginfield`](plugins.md#pluginfield).
 
 | Name | Target | Notes |
 |------|--------|-------|
-| `server_json_file` | Writes a JSON file to the server filesystem | Atomic write via tmp + rename; supports `{YYYYMMDD-HHMMSS}` / `{detector_name}` / `{username}` template variables in the path; default path under `DATA_DIR` |
+| `server_json_file` | Writes a JSON file to the server filesystem | Atomic write via tmp + rename; supports `{YYYYMMDD-HHMMSS}` / `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` / `{detector_name}` / `{username}` template variables in the path; default path under `DATA_DIR` |
 | `server_csv_file` | Writes a CSV file to the server filesystem | Atomic write; auto-detects which optional clip columns (`clip_start`, `clip_end`, `clip_box`) are present; cells beginning with `=`/`+`/`-`/`@`/`\t`/`\r` are quote-prefixed to defeat formula injection |
 | `webhook` | `POST`s the results dict as JSON to a URL | Optional `Authorization` header (`password` field), 30s timeout, redirects disabled, URL validated by `vtscore.security.validate_url` (SSRF guard) |
 | `email_smtp` | Sends an email via direct MX delivery | Resolves the recipient domain's MX record (`dnspython`), connects on port 25, sends a multipart plain+HTML summary. Requires a sender domain you control |
@@ -202,13 +202,14 @@ its Holder API client (see `vtscore/exporters/holder/__init__.py:46`).
 
 ## Template variables in path fields
 
-File-based exporters interpolate three placeholders in their path
+File-based exporters interpolate these placeholders in their path
 fields via `resolve_export_filepath`
 (`vtscore/exporters/_template.py:19`):
 
 | Placeholder | Substituted with |
 |-------------|------------------|
 | `{YYYYMMDD-HHMMSS}` | Current UTC timestamp, e.g. `20260516-143022` - included in the default path so consecutive runs do not silently overwrite each other |
+| `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` | Current UTC date parts, so a scheduled (e.g. daily) Auto-Find can write to a path named after today's date, e.g. `results_{YYYY}.{MM}.{DD}.csv` |
 | `{detector_name}` | The active `DetectorContext.name`, sanitised by `vtscore.security.sanitize_template_value` |
 | `{username}` | The current request user (from `vtsearch.auth.get_current_user`), sanitised the same way; falls back to `"default"` |
 

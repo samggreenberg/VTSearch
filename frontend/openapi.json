@@ -158,6 +158,12 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_detectors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "autofind_exporter": {
             "type": "string"
           },
@@ -184,12 +190,6 @@
           },
           "autopilot_top_greens": {
             "type": "integer"
-          },
-          "autorun_detectors": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "browse_bin_shape": {
             "additionalProperties": {
@@ -444,6 +444,12 @@
           "media_type": {
             "type": "string"
           },
+          "missing_detectors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "results": {
             "additionalProperties": {
               "$ref": "#/components/schemas/_AutoDetectResult"
@@ -454,6 +460,7 @@
         "required": [
           "detectors_run",
           "media_type",
+          "missing_detectors",
           "results"
         ],
         "type": "object"
@@ -1908,22 +1915,22 @@
         ],
         "type": "object"
       },
-      "DetectorRegistryAutorunRequest": {
+      "DetectorRegistryAutofindRequest": {
         "additionalProperties": false,
         "properties": {
-          "autorun": {
+          "autofind": {
             "type": "boolean"
           }
         },
         "required": [
-          "autorun"
+          "autofind"
         ],
         "type": "object"
       },
-      "DetectorRegistryAutorunResponse": {
+      "DetectorRegistryAutofindResponse": {
         "additionalProperties": false,
         "properties": {
-          "autorun": {
+          "autofind": {
             "type": "boolean"
           },
           "ok": {
@@ -1931,7 +1938,7 @@
           }
         },
         "required": [
-          "autorun",
+          "autofind",
           "ok"
         ],
         "type": "object"
@@ -2006,7 +2013,7 @@
       "DetectorRegistryEntry": {
         "additionalProperties": true,
         "properties": {
-          "autorun": {
+          "autofind": {
             "type": "boolean"
           },
           "created_at": {
@@ -4356,6 +4363,12 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_detectors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "autofind_exporter": {
             "type": "string"
           },
@@ -4374,12 +4387,6 @@
           },
           "autopilot_top_greens": {
             "type": "integer"
-          },
-          "autorun_detectors": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "browse_bin_shape": {},
           "browse_colormap": {},
@@ -6659,7 +6666,7 @@
     },
     "/api/auto-detect": {
       "post": {
-        "description": "Iterates :func:`~vtsearch.settings.get_autorun_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single autorun detector.",
+        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single Auto-Find detector.",
         "operationId": "auto_detect",
         "requestBody": {
           "content": {
@@ -6683,10 +6690,10 @@
             "description": "OK"
           },
           "400": {
-            "description": "No medias loaded, or no autorun detectors match the active media type."
+            "description": "No medias loaded, or no Auto-Find detectors match the active media type."
           },
           "404": {
-            "description": "Named detector is not flagged for autorun."
+            "description": "Named detector is not flagged for Auto-Find."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -6695,7 +6702,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Score the active dataset with every detector flagged for autorun.",
+        "summary": "Score the active dataset with every detector flagged for Auto-Find.",
         "tags": [
           "detector_scoring"
         ]
@@ -9317,7 +9324,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return detectors visible to the current user, with loaded/autorun flags.",
+        "summary": "Return detectors visible to the current user, with loaded/Auto-Find flags.",
         "tags": [
           "detectors_registry"
         ]
@@ -9556,7 +9563,7 @@
         }
       ]
     },
-    "/api/detectors/registry/{detector_id}/autorun": {
+    "/api/detectors/registry/{detector_id}/autofind": {
       "parameters": [
         {
           "in": "path",
@@ -9569,13 +9576,13 @@
         }
       ],
       "put": {
-        "description": "The flag is stored per-user under ``autorun_detectors`` (see\n:func:`vtsearch.settings.add_autorun_detector`), so each user curates their\nown Auto-Find list. The CLI's ``--autodetect`` flow reads the running\nuser's list (the built-in ``default`` user falls back to the server\nsettings file). The user must be able to access the detector to flag it.",
-        "operationId": "set_detector_autorun",
+        "description": "The flag is stored per-user under ``autofind_detectors`` (see\n:func:`vtsearch.settings.add_autofind_detector`), so each user curates their\nown Auto-Find list. The CLI's ``--autodetect`` flow reads the running\nuser's list (the built-in ``default`` user falls back to the server\nsettings file). The user must be able to access the detector to flag it.",
+        "operationId": "set_detector_autofind",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DetectorRegistryAutorunRequest"
+                "$ref": "#/components/schemas/DetectorRegistryAutofindRequest"
               }
             }
           },
@@ -9586,7 +9593,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DetectorRegistryAutorunResponse"
+                  "$ref": "#/components/schemas/DetectorRegistryAutofindResponse"
                 }
               }
             },
@@ -9608,7 +9615,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Toggle the calling user's autorun flag for a registered detector.",
+        "summary": "Toggle the calling user's Auto-Find flag for a registered detector.",
         "tags": [
           "detectors_registry"
         ]
@@ -13781,11 +13788,11 @@
       "name": "detectors_labels"
     },
     {
-      "description": "Register, load, unload, rename, and toggle autorun on detectors.",
+      "description": "Register, load, unload, rename, and toggle Auto-Find on detectors.",
       "name": "detectors_registry"
     },
     {
-      "description": "Run a detector against the active dataset (find-label) or run every autorun detector at once (auto-detect).",
+      "description": "Run a detector against the active dataset (find-label) or run every Auto-Find detector at once (auto-detect).",
       "name": "detector_scoring"
     },
     {

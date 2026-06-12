@@ -8,7 +8,8 @@ behaviours that used to be plugin-author responsibility:
    trust ``field_values[key]`` is the trimmed form.
 2. **Template variable substitution** for fields that declare
    :attr:`PluginField.template_vars`.  Recognised names -
-   ``YYYYMMDD-HHMMSS``, ``detector_name``, ``detector_id``,
+   ``YYYYMMDD-HHMMSS``, ``YYYYMMDD``, ``YYYY``, ``MM``, ``DD``,
+   ``detector_name``, ``detector_id``,
    ``username`` - are resolved and run through
    :func:`~vtscore.security.path_validation.sanitize_template_value`
    so attacker-controlled values cannot escape the directory implied
@@ -47,7 +48,18 @@ if TYPE_CHECKING:
 
 _TEXT_LIKE_TYPES = frozenset({"text", "url", "email", "password", "folder", "server_path", "select"})
 
-_KNOWN_TEMPLATE_VARS = frozenset({"YYYYMMDD-HHMMSS", "detector_name", "detector_id", "username"})
+#: strftime format per date/time template var. ``YYYYMMDD-HHMMSS`` is unique
+#: per run; the date-only forms let a scheduled (e.g. daily) Auto-Find write
+#: to a path named after today's date - ``results_{YYYY}.{MM}.{DD}.csv``.
+_DATETIME_TEMPLATE_VARS = {
+    "YYYYMMDD-HHMMSS": "%Y%m%d-%H%M%S",
+    "YYYYMMDD": "%Y%m%d",
+    "YYYY": "%Y",
+    "MM": "%m",
+    "DD": "%d",
+}
+
+_KNOWN_TEMPLATE_VARS = frozenset({*_DATETIME_TEMPLATE_VARS, "detector_name", "detector_id", "username"})
 
 
 def _resolve_template_var(name: str) -> str:
@@ -56,8 +68,8 @@ def _resolve_template_var(name: str) -> str:
     Raises :class:`ValueError` for unknown names so a typo in a plugin
     schema fails fast at the first request.
     """
-    if name == "YYYYMMDD-HHMMSS":
-        return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    if name in _DATETIME_TEMPLATE_VARS:
+        return datetime.now(timezone.utc).strftime(_DATETIME_TEMPLATE_VARS[name])
 
     if name in ("detector_name", "detector_id"):
         from vtscore.state.core import get_active_detector_context  # noqa: PLC0415

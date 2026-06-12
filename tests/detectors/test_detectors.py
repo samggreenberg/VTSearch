@@ -734,21 +734,21 @@ class TestDeleteRegisteredModel:
         assert get_detector(detector_id) is None
         assert not is_detector_loaded(detector_id)
 
-    def test_delete_removes_autorun_flag(self, client):
-        """Deleting a model that is flagged for autorun clears it from settings."""
+    def test_delete_removes_autofind_flag(self, client):
+        """Deleting a model that is flagged for Auto-Find clears it from settings."""
         from vtscore.detectors.registry import get_detector
-        from vtsearch.settings import add_autorun_detector, get_autorun_detectors
+        from vtsearch.settings import add_autofind_detector, get_autofind_detectors
 
         res = client.post(
             "/api/detectors/registry",
             json={"name": "DetDel", "media_type": "audio"},
         )
         detector_id = res.get_json()["detector"]["id"]
-        add_autorun_detector("DetDel")
+        add_autofind_detector("DetDel")
 
         res = client.delete(f"/api/detectors/registry/{detector_id}")
         assert res.status_code == 200
-        assert "DetDel" not in get_autorun_detectors()
+        assert "DetDel" not in get_autofind_detectors()
         assert get_detector(detector_id) is None
 
 

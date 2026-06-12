@@ -3,7 +3,7 @@
 Covers:
 - Settings file read/write (vtsearch.settings)
 - Volume persistence
-- autorun_detectors list management
+- autofind_detectors list management
 - Flask API routes: GET/PUT /api/settings
 """
 
@@ -26,7 +26,7 @@ class TestSettingsModule:
     def test_defaults_when_no_file(self):
         data = settings_mod.get_all()
         assert data["volume"] == 1.0
-        assert data["autorun_detectors"] == []
+        assert data["autofind_detectors"] == []
 
     def test_get_set_volume(self, isolated_settings):
         settings_mod.set_volume(0.42)
@@ -66,44 +66,44 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_inclusion() == 7
 
-    def test_autorun_detectors_default_empty(self):
-        assert settings_mod.get_autorun_detectors() == []
+    def test_autofind_detectors_default_empty(self):
+        assert settings_mod.get_autofind_detectors() == []
 
-    def test_add_autorun_trainable_model(self, isolated_settings):
-        settings_mod.add_autorun_detector("model-a")
-        assert settings_mod.get_autorun_detectors() == ["model-a"]
+    def test_add_autofind_trainable_model(self, isolated_settings):
+        settings_mod.add_autofind_detector("model-a")
+        assert settings_mod.get_autofind_detectors() == ["model-a"]
 
-    def test_add_autorun_trainable_model_idempotent(self, isolated_settings):
-        settings_mod.add_autorun_detector("model-a")
-        settings_mod.add_autorun_detector("model-a")
-        assert settings_mod.get_autorun_detectors() == ["model-a"]
+    def test_add_autofind_trainable_model_idempotent(self, isolated_settings):
+        settings_mod.add_autofind_detector("model-a")
+        settings_mod.add_autofind_detector("model-a")
+        assert settings_mod.get_autofind_detectors() == ["model-a"]
 
-    def test_remove_autorun_trainable_model(self, isolated_settings):
-        settings_mod.add_autorun_detector("model-a")
-        assert settings_mod.remove_autorun_detector("model-a") is True
-        assert settings_mod.get_autorun_detectors() == []
+    def test_remove_autofind_trainable_model(self, isolated_settings):
+        settings_mod.add_autofind_detector("model-a")
+        assert settings_mod.remove_autofind_detector("model-a") is True
+        assert settings_mod.get_autofind_detectors() == []
 
-    def test_remove_autorun_trainable_model_nonexistent(self):
-        assert settings_mod.remove_autorun_detector("nope") is False
+    def test_remove_autofind_trainable_model_nonexistent(self):
+        assert settings_mod.remove_autofind_detector("nope") is False
 
-    def test_is_autorun_trainable_model(self, isolated_settings):
-        settings_mod.add_autorun_detector("model-a")
-        assert settings_mod.is_autorun_detector("model-a") is True
-        assert settings_mod.is_autorun_detector("model-b") is False
+    def test_is_autofind_trainable_model(self, isolated_settings):
+        settings_mod.add_autofind_detector("model-a")
+        assert settings_mod.is_autofind_detector("model-a") is True
+        assert settings_mod.is_autofind_detector("model-b") is False
 
-    def test_autorun_detectors_persists_across_reset(self, isolated_settings):
-        settings_mod.add_autorun_detector("model-a")
-        settings_mod.add_autorun_detector("model-b")
+    def test_autofind_detectors_persists_across_reset(self, isolated_settings):
+        settings_mod.add_autofind_detector("model-a")
+        settings_mod.add_autofind_detector("model-b")
         settings_mod.reset()
-        assert settings_mod.get_autorun_detectors() == ["model-a", "model-b"]
+        assert settings_mod.get_autofind_detectors() == ["model-a", "model-b"]
 
-    def test_set_autorun_detectors(self, isolated_settings):
-        settings_mod.set_autorun_detectors(["x", "y", "z"])
-        assert settings_mod.get_autorun_detectors() == ["x", "y", "z"]
+    def test_set_autofind_detectors(self, isolated_settings):
+        settings_mod.set_autofind_detectors(["x", "y", "z"])
+        assert settings_mod.get_autofind_detectors() == ["x", "y", "z"]
 
-    def test_set_autorun_detectors_deduplicates(self, isolated_settings):
-        settings_mod.set_autorun_detectors(["x", "y", "x"])
-        assert settings_mod.get_autorun_detectors() == ["x", "y"]
+    def test_set_autofind_detectors_deduplicates(self, isolated_settings):
+        settings_mod.set_autofind_detectors(["x", "y", "x"])
+        assert settings_mod.get_autofind_detectors() == ["x", "y"]
 
     def test_max_concurrent_downloads_default_from_hardware(self, isolated_settings):
         """With no override on disk, the default scales with cpu_count (cap 4)."""
@@ -143,13 +143,13 @@ class TestSettingsModule:
 
     def test_persistence_survives_reset(self, isolated_settings):
         settings_mod.set_volume(0.7)
-        settings_mod.add_autorun_detector("p")
+        settings_mod.add_autofind_detector("p")
 
         # Simulate restart
         settings_mod.reset()
 
         assert settings_mod.get_volume() == pytest.approx(0.7)
-        assert settings_mod.get_autorun_detectors() == ["p"]
+        assert settings_mod.get_autofind_detectors() == ["p"]
 
     def test_get_set_calibrate_count(self, isolated_settings):
         settings_mod.set_calibrate_count(5)
@@ -557,7 +557,7 @@ class TestSettingsModule:
         assert defaults["autopilot_top_greens"] == 3
         assert defaults["autopilot_hard_reds"] == 4
         assert defaults["autopilot_goal_diversity"] == 40
-        assert "autorun_detectors" not in defaults
+        assert "autofind_detectors" not in defaults
         # Directory settings excluded from defaults (not reset by Default button)
         assert "saved_datasets_dir" not in defaults
         assert "detectors_dir" not in defaults
@@ -648,7 +648,7 @@ class TestSettingsModule:
         settings_mod.reset()
         # Should fall back to defaults
         assert settings_mod.get_volume() == 1.0
-        assert settings_mod.get_autorun_detectors() == []
+        assert settings_mod.get_autofind_detectors() == []
 
     def test_last_embedder_per_media_type_default(self):
         assert settings_mod.get_last_embedder_per_media_type() == {}
@@ -839,28 +839,28 @@ class TestConcurrentWrites:
         assert final["theme"] == "dark"
         assert final["achievement_state"]["counters"]["votes_cast"] == 101
 
-    def test_add_autorun_detector_rmw(self, isolated_settings):
-        """Concurrent ``add_autorun_detector`` calls must not lose entries.
+    def test_add_autofind_detector_rmw(self, isolated_settings):
+        """Concurrent ``add_autofind_detector`` calls must not lose entries.
 
-        ``autorun_detectors`` is per-user now, so the cross-process race plays
+        ``autofind_detectors`` is per-user now, so the cross-process race plays
         out on the (default) user's settings file: our cache says
         ``["ours-pre"]`` but disk also has ``"sibling"`` because a sibling
         process added it. The atomic per-user RMW must merge, not clobber.
         """
-        # Force-load the per-user cache (so add_autorun_detector below
+        # Force-load the per-user cache (so add_autofind_detector below
         # doesn't trigger a fresh load).
-        settings_mod.add_autorun_detector("ours-pre")
+        settings_mod.add_autofind_detector("ours-pre")
 
         # Sibling process directly adds an entry on disk (the per-user file).
         user_path = isolated_settings._user
         disk = json.loads(user_path.read_text())
-        disk["autorun_detectors"] = list(disk.get("autorun_detectors", [])) + ["sibling"]
+        disk["autofind_detectors"] = list(disk.get("autofind_detectors", [])) + ["sibling"]
         user_path.write_text(json.dumps(disk))
 
         # We add another; should merge with disk, not clobber.
-        settings_mod.add_autorun_detector("ours-post")
+        settings_mod.add_autofind_detector("ours-post")
 
         final = json.loads(user_path.read_text())
-        assert "sibling" in final["autorun_detectors"]
-        assert "ours-pre" in final["autorun_detectors"]
-        assert "ours-post" in final["autorun_detectors"]
+        assert "sibling" in final["autofind_detectors"]
+        assert "ours-pre" in final["autofind_detectors"]
+        assert "ours-post" in final["autofind_detectors"]

@@ -214,7 +214,7 @@ class CoreConfig:
     detectors_dir: Path
     max_concurrent_dataset_downloads: int
     max_concurrent_dataset_embeddings: int
-    autorun_detectors: tuple[str, ...]
+    autofind_detectors: tuple[str, ...]
 
     dataset_max_age_days: int | None
 

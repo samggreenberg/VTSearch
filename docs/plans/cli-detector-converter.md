@@ -155,7 +155,7 @@ Key points:
 
 - `input_spec` is optional. Detectors without it behave exactly as today: direct media-type match, no conversion, default clipper.
 - Existing detector JSON files continue to work unchanged.
-- The in-memory `autorun_detectors` dict gains the same optional `input_spec` key.
+- The in-memory `autofind_detectors` dict gains the same optional `input_spec` key.
 
 ### 5. Detector matching becomes richer
 

@@ -45,7 +45,6 @@ export class DetectorCardComponent implements OnChanges {
   @Output() unload = new EventEmitter<void>();
   @Output() cancelTask = new EventEmitter<string>();
   @Output() dismissTask = new EventEmitter<string>();
-  @Output() autorunToggle = new EventEmitter<boolean>();
   @Output() checkboxToggle = new EventEmitter<void>();
   @Output() security = new EventEmitter<void>();
 
@@ -155,11 +154,6 @@ export class DetectorCardComponent implements OnChanges {
   onExport(event: MouseEvent): void {
     event.stopPropagation();
     this.export.emit();
-  }
-
-  onAutorunToggle(event: MouseEvent): void {
-    event.stopPropagation();
-    this.autorunToggle.emit(!this.detector.autorun);
   }
 
   onCheckboxClick(event: MouseEvent): void {

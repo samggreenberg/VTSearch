@@ -36,7 +36,7 @@ detector_scoring_bp = Blueprint(
     "detector_scoring",
     __name__,
     description="Run a detector against the active dataset (find-label) "
-    "or run every autorun detector at once (auto-detect).",
+    "or run every Auto-Find detector at once (auto-detect).",
 )
 
 # Keys excluded from API responses (large binary/vector data).
@@ -74,7 +74,7 @@ def _resolve_or_train_detector(  # noqa: C901
 
     det_ctx = get_detector_context(detector_id)
     if det_ctx is not None:
-        # Defense against H5: scoring autorun detectors iterates contexts
+        # Defense against H5: scoring Auto-Find detectors iterates contexts
         # that aren't the active one, so the before_request hook can't
         # have invalidated their stale MLPs.  Drop them here so the next
         # branch trains fresh against *snap*'s embedder.
@@ -395,34 +395,46 @@ def find_label(body: dict):  # noqa: C901
     }
 
 
-def _resolve_autorun_names(body: dict, media_type: str) -> list[str]:
-    """Return the autorun detector names to consider for this request.
+def _resolve_autofind_names(body: dict, media_type: str) -> list[str]:
+    """Return the Auto-Find detector names to consider for this request.
 
-    Aborts with 404 when ``detector_name`` is given but not in the autorun
-    list, and with 400 when no autorun detectors are configured at all.
+    Aborts with 404 when ``detector_name`` is given but not in the Auto-Find
+    list, and with 400 when no Auto-Find detectors are configured at all.
     """
-    from vtsearch.settings import get_autorun_detectors  # noqa: PLC0415
+    from vtsearch.settings import get_autofind_detectors  # noqa: PLC0415
 
-    autorun_names = get_autorun_detectors()
+    autofind_names = get_autofind_detectors()
     single_name = body.get("detector_name") or ""
     if single_name:
-        if single_name not in autorun_names:
-            abort(404, message=f"Detector '{single_name}' not flagged for autorun")
+        if single_name not in autofind_names:
+            abort(404, message=f"Detector '{single_name}' not flagged for Auto-Find")
         return [single_name]
-    if not autorun_names:
-        abort(400, message=f"No autorun detectors found for media type: {media_type}")
-    return autorun_names
+    if not autofind_names:
+        abort(400, message=f"No Auto-Find detectors found for media type: {media_type}")
+    return autofind_names
 
 
-def _collect_detectors_for_media_type(autorun_names: list[str], media_type: str) -> list[tuple[str, dict, dict | None]]:
-    """Load detector data + registry entry for each autorun name matching *media_type*."""
+def _collect_detectors_for_media_type(
+    autofind_names: list[str], media_type: str
+) -> tuple[list[tuple[str, dict, dict | None]], list[str]]:
+    """Load detector data + registry entry for each Auto-Find name matching *media_type*.
+
+    Returns ``(detectors, missing)``: *missing* holds names whose detector
+    file no longer exists on disk (a stale Auto-Find reference). Names whose
+    media type simply doesn't match the active dataset are skipped without
+    being reported - those are legitimately inapplicable, not broken.
+    """
     from vtscore.detectors.registry import find_by_name, list_detectors  # noqa: PLC0415
     from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
 
     detectors: list[tuple[str, dict, dict | None]] = []
-    for name in autorun_names:
+    missing: list[str] = []
+    for name in autofind_names:
         det_data = _read_detector(_detector_path(name))
-        if det_data is None or det_data.get("media_type", "") != media_type:
+        if det_data is None:
+            missing.append(name)
+            continue
+        if det_data.get("media_type", "") != media_type:
             continue
         reg_entry = find_by_name(name)
         if reg_entry is None:
@@ -432,7 +444,7 @@ def _collect_detectors_for_media_type(autorun_names: list[str], media_type: str)
                     reg_entry = entry
                     break
         detectors.append((name, det_data, reg_entry))
-    return detectors
+    return detectors, missing
 
 
 def _score_detector_for_auto_detect(
@@ -708,15 +720,15 @@ def find_corrections_to_detector():
 @detector_scoring_bp.response(200, AutoDetectResponseSchema)
 @detector_scoring_bp.alt_response(
     400,
-    description="No medias loaded, or no autorun detectors match the active media type.",
+    description="No medias loaded, or no Auto-Find detectors match the active media type.",
 )
-@detector_scoring_bp.alt_response(404, description="Named detector is not flagged for autorun.")
+@detector_scoring_bp.alt_response(404, description="Named detector is not flagged for Auto-Find.")
 def auto_detect(body: dict):
-    """Score the active dataset with every detector flagged for autorun.
+    """Score the active dataset with every detector flagged for Auto-Find.
 
-    Iterates :func:`~vtsearch.settings.get_autorun_detectors` and trains each
+    Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each
     one's MLP on demand from its on-disk labelset.  Returns one result column
-    per detector. Pass ``detector_name`` to run a single autorun detector.
+    per detector. Pass ``detector_name`` to run a single Auto-Find detector.
     """
     import torch  # noqa: PLC0415
 
@@ -729,10 +741,18 @@ def auto_detect(body: dict):
     # Clear a leftover cancel flag from a previously-cancelled run.
     find_progress.reset_cancel()
 
-    autorun_names = _resolve_autorun_names(body, media_type)
-    detectors_to_run = _collect_detectors_for_media_type(autorun_names, media_type)
+    autofind_names = _resolve_autofind_names(body, media_type)
+    detectors_to_run, missing_detectors = _collect_detectors_for_media_type(autofind_names, media_type)
     if not detectors_to_run:
-        abort(400, message=f"No autorun detectors found for media type: {media_type}")
+        if missing_detectors:
+            abort(
+                400,
+                message=(
+                    f"No Auto-Find detectors found for media type: {media_type}. "
+                    f"Missing detector file(s) for: {', '.join(missing_detectors)}"
+                ),
+            )
+        abort(400, message=f"No Auto-Find detectors found for media type: {media_type}")
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
 
@@ -766,6 +786,7 @@ def auto_detect(body: dict):
         "media_type": media_type,
         "detectors_run": len(results),
         "results": results,
+        "missing_detectors": missing_detectors,
     }
     auto_export = _run_autofind_export(response)
     if auto_export is not None:

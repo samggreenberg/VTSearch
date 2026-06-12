@@ -8,7 +8,7 @@ Detectors are user-shared just like datasets (see
 - Only the creator can modify readers, rename, or delete a detector
 - ``PUT /api/detectors/registry/<id>/readers`` works correctly
 - ``GET /api/detectors/registry`` filters by access
-- Load, delete, rename, and autorun-toggle enforce access/ownership
+- Load, delete, rename, and Auto-Find-toggle enforce access/ownership
 """
 
 from __future__ import annotations
@@ -193,9 +193,9 @@ class TestAccessEnforcement:
         resp = client.put(f"/api/detectors/registry/{e['id']}/rename", json={"name": "new"})
         assert resp.status_code == 403
 
-    def test_autorun_toggle_on_inaccessible_denied(self, client):
+    def test_autofind_toggle_on_inaccessible_denied(self, client):
         e = _make_detector("ar1", created_by="other_user")
-        resp = client.put(f"/api/detectors/registry/{e['id']}/autorun", json={"autorun": True})
+        resp = client.put(f"/api/detectors/registry/{e['id']}/autofind", json={"autofind": True})
         assert resp.status_code == 403
 
 
@@ -233,22 +233,22 @@ class TestMultiUserDetectorFlow:
         finally:
             set_login_provider(original)
 
-    def test_per_user_autorun_is_isolated(self, client):
-        """Flagging a detector for autorun affects only the calling user."""
+    def test_per_user_autofind_is_isolated(self, client):
+        """Flagging a detector for Auto-Find affects only the calling user."""
         original = get_login_provider()
         try:
             set_login_provider(TrivialLoginProvider())
 
-            # Alice creates a public detector and flags it for her autorun.
+            # Alice creates a public detector and flags it for her Auto-Find list.
             client.post("/api/auth/login", json={"username": "alice"})
             e = _make_detector("flow2", created_by="alice", readers=["*"])
-            assert client.put(f"/api/detectors/registry/{e['id']}/autorun", json={"autorun": True}).status_code == 200
-            alice_autorun = client.get("/api/settings").get_json()["autorun_detectors"]
-            assert e["name"] in alice_autorun
+            assert client.put(f"/api/detectors/registry/{e['id']}/autofind", json={"autofind": True}).status_code == 200
+            alice_autofind = client.get("/api/settings").get_json()["autofind_detectors"]
+            assert e["name"] in alice_autofind
 
-            # Bob can see it (public) but his autorun list is untouched.
+            # Bob can see it (public) but his Auto-Find list is untouched.
             client.post("/api/auth/login", json={"username": "bob"})
-            bob_autorun = client.get("/api/settings").get_json()["autorun_detectors"]
-            assert e["name"] not in bob_autorun
+            bob_autofind = client.get("/api/settings").get_json()["autofind_detectors"]
+            assert e["name"] not in bob_autofind
         finally:
             set_login_provider(original)

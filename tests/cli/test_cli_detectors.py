@@ -1,6 +1,6 @@
 """Tests for the detector CLI autodetect path.
 
-Exercises the new ``autorun_detectors`` settings key, the
+Exercises the new ``autofind_detectors`` settings key, the
 ``--import-labels-into`` one-shot import flow, and the clear-error path
 when a labelset's origin files can't be resolved from the CLI environment.
 """
@@ -76,7 +76,7 @@ def _settings_file_with_detectors(tmp_path: Path, tm_names: list[str]) -> Path:
     the directory to the production default after conftest redirected it.
     """
     settings = {
-        "autorun_detectors": list(tm_names),
+        "autofind_detectors": list(tm_names),
         "detectors_dir": str(get_detectors_dir()),
     }
     settings_path = tmp_path / "settings.json"
@@ -85,13 +85,13 @@ def _settings_file_with_detectors(tmp_path: Path, tm_names: list[str]) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# autorun_detectors in settings drives CLI autodetect
+# autofind_detectors in settings drives CLI autodetect
 # ---------------------------------------------------------------------------
 
 
-class TestAutorunDetectorsCLI:
+class TestAutofindDetectorsCLI:
     def test_settings_drives_trainable_model_scoring(self, client, tmp_path, monkeypatch):
-        """A settings file with autorun_detectors scores the dataset
+        """A settings file with autofind_detectors scores the dataset
         with each named detector.  No autorun_processors needed."""
         files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
         _stub_resolve(monkeypatch, files)

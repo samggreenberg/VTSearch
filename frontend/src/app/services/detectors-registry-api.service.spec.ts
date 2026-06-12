@@ -21,11 +21,11 @@ describe('DetectorsRegistryApiService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('setAutorun should PUT to the model registry', () => {
-    service.setAutorun('m1', true).subscribe();
-    const req = httpMock.expectOne('/api/detectors/registry/m1/autorun');
+  it('setAutofind should PUT to the model registry', () => {
+    service.setAutofind('m1', true).subscribe();
+    const req = httpMock.expectOne('/api/detectors/registry/m1/autofind');
     expect(req.request.method).toBe('PUT');
-    expect(req.request.body).toEqual({ autorun: true });
+    expect(req.request.body).toEqual({ autofind: true });
     req.flush({ ok: true });
   });
 });

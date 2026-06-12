@@ -295,7 +295,7 @@ data/
 │   └── models--intfloat--e5-base-v2/
 ├── embeddings/                       # Cached dataset embeddings (.pkl files)
 ├── detectors/                 # Persistent detector definitions (.json)
-├── settings.json                     # User preferences, autorun config, thresholds
+├── settings.json                     # User preferences, Auto-Find config, thresholds
 ├── audio/                            # Audio media files
 ├── video/                            # Video media files
 ├── images/                           # Image media files
@@ -340,7 +340,7 @@ and auto-saved on every change. Schema:
   "grid_icon_size_right": {},
   "panel_pct_left": {},
   "panel_pct_right": {},
-  "autorun_detectors": [],
+  "autofind_detectors": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
@@ -356,10 +356,10 @@ and auto-saved on every change. Schema:
 
 Notable fields:
 
-- `autorun_detectors`: list of registered detector names
+- `autofind_detectors`: list of registered detector names
   to run during `/api/auto-detect` and the CLI `--autodetect` flow.
   This is a **per-user** setting (each user curates their own list in
-  Settings → Auto-Find or via `PUT /api/detectors/registry/<id>/autorun`).
+  Settings → Auto-Find or via `PUT /api/detectors/registry/<id>/autofind`).
   A list placed here in `data/settings.json` applies to the built-in
   `default` user — i.e. single-user deployments and the CLI's default
   `--autodetect` run, which read through to this file.

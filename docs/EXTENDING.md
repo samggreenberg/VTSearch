@@ -265,7 +265,7 @@ See [EXTENDING-processors.md](EXTENDING-processors.md).
 
 For ML classifiers, create a detector instead: register it via
 `POST /api/detectors/registry`, label items in the right pane, and toggle
-its autorun flag with `PUT /api/detectors/registry/<id>/autorun`.
+its Auto-Find flag with `PUT /api/detectors/registry/<id>/autofind`.
 
 ### New Login Provider Checklist
 

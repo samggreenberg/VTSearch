@@ -49,11 +49,12 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
             description="Where on the server to write the JSON results file.",
             hint=(
                 "Absolute or relative path; parent directories are created automatically.\n"
-                "Template variables: {YYYYMMDD-HHMMSS}, {detector_name}, {username}."
+                "Template variables: {YYYYMMDD-HHMMSS}, {YYYYMMDD}, {YYYY}, {MM}, {DD}, "
+                "{detector_name}, {username}."
             ),
             placeholder=_DEFAULT_JSON_PATH,
             default=_DEFAULT_JSON_PATH,
-            template_vars=("YYYYMMDD-HHMMSS", "detector_name", "username"),
+            template_vars=("YYYYMMDD-HHMMSS", "YYYYMMDD", "YYYY", "MM", "DD", "detector_name", "username"),
         ),
     ]
 

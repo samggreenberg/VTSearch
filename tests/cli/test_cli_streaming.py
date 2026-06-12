@@ -56,7 +56,7 @@ def _write_pickle_dataset(path: Path, medias: dict) -> None:
 
 
 def _settings_file_with_detector(tmp_path: Path, detector_name: str) -> Path:
-    settings = {"autorun_detectors": [detector_name], "detectors_dir": str(get_detectors_dir())}
+    settings = {"autofind_detectors": [detector_name], "detectors_dir": str(get_detectors_dir())}
     p = tmp_path / "settings.json"
     p.write_text(json.dumps(settings))
     return p
@@ -193,7 +193,7 @@ class TestStreamingExporterGuard:
                 exporter_name="webhook",
                 exporter_field_values={},
                 override_detectors=None,
-                autorun_detectors=[],
+                autofind_detectors=[],
                 keep_negatives=False,
                 empty_error="none",
             )

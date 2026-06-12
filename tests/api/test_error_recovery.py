@@ -154,14 +154,14 @@ class TestMissingRequiredFields:
         # Required-field validation runs in the rename schema → 422.
         assert resp.status_code == 422
 
-    def test_autorun_flag_missing_value(self, client):
+    def test_autofind_flag_missing_value(self, client):
         resp = client.post(
             "/api/detectors/registry",
             json={"name": "ad_test", "media_type": "audio"},
         )
         detector_id = resp.get_json()["detector"]["id"]
-        resp = client.put(f"/api/detectors/registry/{detector_id}/autorun", json={})
-        # Required-field validation runs in the autorun schema → 422.
+        resp = client.put(f"/api/detectors/registry/{detector_id}/autofind", json={})
+        # Required-field validation runs in the autofind schema → 422.
         assert resp.status_code == 422
 
     def test_fill_from_sort_missing_threshold(self, client):
@@ -325,10 +325,10 @@ class TestNonexistentResources:
         )
         assert resp.status_code == 404
 
-    def test_autorun_nonexistent_model(self, client):
+    def test_autofind_nonexistent_model(self, client):
         resp = client.put(
-            "/api/detectors/registry/does_not_exist/autorun",
-            json={"autorun": False},
+            "/api/detectors/registry/does_not_exist/autofind",
+            json={"autofind": False},
         )
         assert resp.status_code == 404
 
