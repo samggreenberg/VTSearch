@@ -252,8 +252,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private static readonly RUBBER_GIVE = 0.5;
   /** Cap on pan overshoot, as a fraction of the viewport extent on that axis. */
   private static readonly RUBBER_PAN_MAX = 0.18;
-  /** Cap on zoom-out overshoot past the fit, in natural-log units
-   *  (≈26% extra zoom-out at exp(-0.3)). */
+  /** Cap on zoom overshoot past either limit (the zoom-out fit floor or the
+   *  zoom-in finest-level ceiling), in natural-log units (≈26%/≈35% extra zoom
+   *  out/in at exp(∓0.3)). Shared by {@link softFloorZoom} and {@link softCeilZoom}. */
   private static readonly RUBBER_ZOOM_MAX = 0.3;
   /** Snap-back duration. */
   private static readonly SETTLE_MS = 320;
@@ -549,6 +550,33 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   /**
+   * The zoom ceiling: the most you can zoom *in* before bins render larger than
+   * they ever do during normal browsing. Symmetric to {@link computeFitZoom}
+   * (the floor). Level selection ({@link levelForEffZoom}) keeps each bin within
+   * `[targetRadius/√2, targetRadius·√2]` by handing off to a finer pyramid level
+   * as you zoom in — but at the finest level (`levels.length - 1`) there's
+   * nothing finer to switch to, so once the zoom passes the point where that
+   * level would hand off (`idealLevel = maxLevel + 0.5`, where bins sit at their
+   * normal-browsing max of `targetRadius·√2`) the bins just upscale and keep
+   * growing without bound. Cap the zoom there so the thumbnails can't *stay*
+   * bigger than that normal max.
+   *
+   * Tracks {@link targetRadius}, so making the thumbnails bigger (the +/- size
+   * buttons scale zoom and `targetRadius` together) lifts the ceiling in
+   * lock-step rather than fighting the resize.
+   */
+  private computeMaxZoom(): number {
+    const minZoom = this.computeFitZoom();
+    if (!this.meta || this.meta.levels.length === 0) return minZoom;
+    const maxLevel = this.meta.levels.length - 1;
+    const maxZoom = (this.targetRadius * Math.pow(2, maxLevel + 0.5)) / this.meta.base_radius;
+    // A tiny projection can fit whole at a zoom already past its finest-level
+    // size; never let the ceiling drop below the floor (that would invert the
+    // clamp and trap the view between two crossed limits).
+    return Math.max(maxZoom, minZoom);
+  }
+
+  /**
    * Keep the view within the useful bounds: never zoomed out past the
    * whole-projection fit, never panned so the viewport *centre* leaves the
    * content. Mutates {@link transform} in place; callers re-select the level and
@@ -576,15 +604,17 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   /**
-   * The hard-clamped form of `t` (zoom floored at the whole-projection fit, pan
-   * reined inside the content rectangle — see {@link clampView}). Pure: returns
+   * The hard-clamped form of `t` (zoom floored at the whole-projection fit and
+   * capped at the finest-level ceiling {@link computeMaxZoom}, pan reined inside
+   * the content rectangle — see {@link clampView}). Pure: returns
    * a fresh transform without touching {@link transform}, so the boundary-settle
    * animation can compute its destination while the live view is still
    * mid-overshoot. Caller is responsible for the meta/size guards.
    */
   private clampedTransform(t: ViewTransform): ViewTransform {
     const minZoom = this.computeFitZoom();
-    const zoom = Math.max(t.zoom, minZoom);
+    const maxZoom = this.computeMaxZoom();
+    const zoom = Math.min(Math.max(t.zoom, minZoom), maxZoom);
     const lim = this.panLimits(zoom);
     return {
       zoom,
@@ -693,6 +723,21 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const over = Math.log(minZoom / rawZoom); // > 0: how far past the floor, in log units
     const damped = this.rubber(over, BrowseCanvasComponent.RUBBER_ZOOM_MAX);
     return minZoom * Math.exp(-damped);
+  }
+
+  /**
+   * Soft analogue of the zoom ceiling in {@link clampView}: a zoom above the
+   * finest-level cap ({@link computeMaxZoom}) is allowed but resisted in log
+   * space (perceptually even with the rest of zooming), so wheeling in at the
+   * edge keeps responding — the bins grow a touch past their normal-browsing max
+   * — before the settle springs it back. Mirror of {@link softFloorZoom}.
+   */
+  private softCeilZoom(rawZoom: number): number {
+    const maxZoom = this.computeMaxZoom();
+    if (rawZoom <= maxZoom) return rawZoom;
+    const over = Math.log(rawZoom / maxZoom); // > 0: how far past the ceiling, in log units
+    const damped = this.rubber(over, BrowseCanvasComponent.RUBBER_ZOOM_MAX);
+    return maxZoom * Math.exp(damped);
   }
 
   /** Pyramid level whose bins render closest to the current thumbnail size
@@ -1643,10 +1688,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const prevLevel = this.activeLevel;
     const [projX, projY] = this.screenToProj(anchorX, anchorY);
     const rawZoom = Math.max(0.01, Math.min(100000, this.transform.zoom * factor));
-    // Below the whole-projection fit the zoom-out is resisted, not blocked, so
-    // the wheel keeps responding at the edge; the overshoot is sprung back by
-    // the debounced settle once the wheel goes quiet.
-    const newZoom = this.softFloorZoom(rawZoom);
+    // Below the whole-projection fit the zoom-out is resisted, not blocked, and
+    // above the finest-level ceiling the zoom-in is likewise resisted, so the
+    // wheel keeps responding at either edge; the overshoot is sprung back by the
+    // debounced settle once the wheel goes quiet. (The two limits never overlap —
+    // computeMaxZoom floors at computeFitZoom — so the order of the two soft
+    // clamps doesn't matter.)
+    const newZoom = this.softCeilZoom(this.softFloorZoom(rawZoom));
     // Keep the point under the cursor fixed while zooming.
     this.transform.centerX = projX - (anchorX - this.width / 2) / newZoom;
     this.transform.centerY = projY - (anchorY - this.height / 2) / newZoom;
