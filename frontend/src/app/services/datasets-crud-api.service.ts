@@ -1,8 +1,9 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { ClearStagingResponse } from '../generated/api-client/models/clear-staging-response';
 import type { DatasetAllImportersListResponse } from '../generated/api-client/models/dataset-all-importers-list-response';
@@ -65,18 +66,23 @@ export class DatasetsCrudApiService {
     );
   }
 
+  /** Best-effort media-type hint for a picked folder. A 404 here is an
+   *  expected, benign outcome (the path may not exist yet, e.g. a partially
+   *  typed absolute path), and every caller handles the failure itself by
+   *  clearing its detection state. Pass {@link SKIP_ERROR_TOAST} so the probe
+   *  never raises a global error toast. */
   detectMediaType(
     source: string,
     path: string,
     recursive: boolean,
     limit = 50,
   ): Observable<DetectMediaTypeResponse> {
-    return detectMediaType(this.http, this.config.rootUrl, {
-      source,
-      path,
-      recursive,
-      limit,
-    }).pipe(map((r) => r.body));
+    return detectMediaType(
+      this.http,
+      this.config.rootUrl,
+      { source, path, recursive, limit },
+      new HttpContext().set(SKIP_ERROR_TOAST, true),
+    ).pipe(map((r) => r.body));
   }
 
   getAvailableFiles(): Observable<DatasetAvailableFilesResponse> {
