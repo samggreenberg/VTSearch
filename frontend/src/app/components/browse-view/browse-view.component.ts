@@ -72,7 +72,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * view, pushed up from the canvas. The legend labels the yellow end with it.
    */
   densityMax = 1;
-  status: 'loading' | 'building' | 'ready' | 'error' = 'loading';
+  status: 'loading' | 'building' | 'ready' | 'error' | 'done' = 'loading';
   errorMessage = '';
   buildProgress = 0;
   buildTotal = 0;
@@ -89,9 +89,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * instead re-bins a smaller region more finely. The persisted per-media value
    * is the size *label* (see {@link ICON_SIZES}), not the multiplier.
    */
-  private readonly HEX_SCALES = [0.5, 0.75, 1, 1.6, 2.5, 4, 6.25];
-  /** Named icon sizes, index-aligned with {@link HEX_SCALES}. */
-  static readonly ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'] as const;
+  private readonly HEX_SCALES = [0.5, 0.75, 1, 1.6, 2.5, 4, 6.25, 10, 16];
+  /** Named icon sizes, index-aligned with {@link HEX_SCALES}. The top steps
+   * (4XL/5XL) render a cell close to the full media, so some users use them to
+   * inspect (essentially) the whole image rather than a thumbnail. */
+  static readonly ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'] as const;
   hexScaleIndex = 2;
 
   /**
@@ -190,7 +192,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     private router: Router,
     private browseSubset: BrowseSubsetService,
     private selection: BrowseSelectionService,
-    private browseViewport: BrowseViewportService,
     private mediasApi: MediasApiService,
     private dialog: VtDialogService,
     private toast: ToastService,
@@ -599,57 +600,51 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Cull the hand-selected items from a Find-positives browse: confirm, mark
-   * them Bad in the detector's labels (so they leave the Find view's Good
-   * list), then drop them from this browse by re-fitting the subset over the
-   * reduced id set. Subset mode only — wired up via the selection panel's
-   * ``canRemoveGood`` affordance, which is itself gated on ``subset``.
+   * Verify the hand-selected items in a Find-positives browse: mark them
+   * good/bad in the detector's labels *and* verify them (Find-mode bulk votes
+   * land in ``verified_ids``), so they leave the unverified set, then drop them
+   * from this browse by re-binning the layout over the reduced id set. Both
+   * "Verified Good" (*target* ``good``) and "Verified Bad" (*target* ``bad``)
+   * route here. Subset mode only — wired via the selection panel's ``canVerify``
+   * affordance, itself gated on ``subset``.
    */
-  onRemoveGood(): void {
+  onVerify(target: 'good' | 'bad'): void {
     const ids = this.selection.ids();
     if (ids.length === 0) return;
-    const n = ids.length;
-    this.dialog
-      .confirmDestructive(
-        `Remove ${n} item${n === 1 ? '' : 's'} from Good?`,
-        "(They'll be marked Bad in the Find results and removed from this browse. The underlying media is unaffected.)",
-        'Remove',
-      )
-      .then((ok) => {
-        if (!ok) return;
-        // 1) Mark them Bad in the detector's labels (one bulk request).
-        this.mediasApi
-          .voteBulk(ids, 'bad')
-          .pipe(takeUntil(this.destroy$))
-          .subscribe({
-            next: () => this.dropFromBrowse(ids),
-            error: () =>
-              this.toast.error({ message: 'Failed to remove the selected items from Good.' }),
-          });
+    this.mediasApi
+      .voteBulk(ids, target)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => this.dropFromBrowse(ids, target),
+        error: () =>
+          this.toast.error({ message: 'Failed to verify the selected items.' }),
       });
   }
 
   /**
-   * Drop *removedIds* from the browse after they've been marked Bad. The
-   * remaining items keep their exact 2-D positions and bins — the server
-   * re-bins the frozen layout in place (no UMAP re-fit), returning the same
-   * ``projection_id`` with a bumped ``content_version`` so only the tile cache
-   * refreshes. The canvas then zooms to fit the survivors (via the one-shot
-   * fit request below), since the old framing leaves dead space wherever the
-   * culled items used to be.
+   * Drop *removedIds* from the browse after they've been verified as *target*
+   * (good/bad). The remaining items keep their exact 2-D positions and bins —
+   * the server re-bins the frozen layout in place (no UMAP re-fit), returning
+   * the same ``projection_id`` with a bumped ``content_version`` so only the
+   * tile cache refreshes. The viewport is left exactly where the user had it:
+   * verifying may leave dead space where the culled items used to be, but a
+   * surprise zoom-to-fit jump is more disruptive than that dead space. The
+   * user can hit Zoom Fit themselves if they want to re-frame.
    */
-  private dropFromBrowse(removedIds: number[]): void {
+  private dropFromBrowse(removedIds: number[], target: 'good' | 'bad'): void {
     const removed = new Set(removedIds);
     const remaining = this.subsetIds.filter((id) => !removed.has(id));
     this.selection.clear();
+    const label = target === 'good' ? 'Verified Good' : 'Verified Bad';
     this.toast.success({
-      message: `Removed ${removedIds.length} item${removedIds.length === 1 ? '' : 's'} from Good.`,
+      message: `Marked ${removedIds.length} item${removedIds.length === 1 ? '' : 's'} ${label}.`,
     });
     this.subsetIds = remaining;
     if (remaining.length === 0) {
-      // Nothing left to project; the cull emptied the browse.
-      this.status = 'error';
-      this.errorMessage = 'All positives were removed. Go back to Find to start over.';
+      // Nothing left to project; verifying emptied the browse. This is a
+      // success, not an error — render the ``done`` state (green, with a
+      // Back to Find button) rather than the red error state.
+      this.status = 'done';
       return;
     }
     this.projectionApi
@@ -657,14 +652,13 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (meta) => {
-          // The survivors' bounds shrank; re-frame to them rather than leaving
-          // dead space where the culled cluster was.
-          this.browseViewport.requestFitOnNextMeta();
+          // Leave the viewport where the user had it; don't yank the camera to
+          // re-fit the survivors. They can hit Zoom Fit if they want that.
           this.applyMeta(meta);
         },
         error: () =>
           this.toast.error({
-            message: 'Items were removed from Good, but the browse view could not refresh.',
+            message: 'Items were verified, but the browse view could not refresh.',
           }),
       });
   }
@@ -684,8 +678,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   /**
    * Return to the Find view this browse was launched from, preserving the
-   * cull: the flag tells the Find view to skip its automatic re-scoring (which
-   * would re-promote the removed items) and just show the updated labels.
+   * verifications: the flag tells the Find view to skip its automatic
+   * re-scoring (which would re-promote the items it re-scores) and just show
+   * the updated labels, with the verified items now in the right-panel pile.
    */
   private backToFind(): void {
     const datasetId = this.activeContext.datasetId;

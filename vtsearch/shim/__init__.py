@@ -175,6 +175,10 @@ def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
         autopilot_goal_diversity=_settings.get_autopilot_goal_diversity(),
         inclusion=_settings.get_inclusion(),
         data_dir=DATA_DIR,
+        autofind_exporter=_settings.get_autofind_exporter(),
+        autofind_exporter_field_values={
+            name: dict(vals) for name, vals in _settings.get_autofind_exporter_field_values().items()
+        },
     )
 
 

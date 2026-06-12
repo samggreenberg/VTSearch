@@ -374,8 +374,8 @@ class TestCalibrationSkippedForTinyLabels:
 
         with unittest.mock.patch.object(
             thresholds,
-            "calculate_cross_calibration_threshold",
-            wraps=thresholds.calculate_cross_calibration_threshold,
+            "compute_fold_orderings",
+            wraps=thresholds.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -428,8 +428,8 @@ class TestCalibrationCache:
 
         with unittest.mock.patch.object(
             thresholds,
-            "calculate_cross_calibration_threshold",
-            side_effect=AssertionError("calibration should be cached on repeat call"),
+            "compute_fold_orderings",
+            side_effect=AssertionError("fold orderings should be cached on repeat call"),
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -481,8 +481,8 @@ class TestCalibrationCache:
 
         with unittest.mock.patch.object(
             thresholds,
-            "calculate_cross_calibration_threshold",
-            wraps=thresholds.calculate_cross_calibration_threshold,
+            "compute_fold_orderings",
+            wraps=thresholds.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -494,7 +494,10 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] != first_key
 
-    def test_inclusion_change_invalidates_cache(self):
+    def test_inclusion_change_reuses_cached_orderings(self):
+        """Inclusion is a pure threshold knob now: changing it must reuse the
+        cached fold orderings (no fold refit) and only re-run the cheap
+        min-cost search.  See docs/plans/find-verification-workflow.md."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
@@ -508,11 +511,13 @@ class TestCalibrationCache:
             inclusion_value=0,
             det_ctx=det_ctx,
         )
+        assert det_ctx.calibration_cache is not None
+        key_before = det_ctx.calibration_cache[0]
 
         with unittest.mock.patch.object(
             thresholds,
-            "calculate_cross_calibration_threshold",
-            wraps=thresholds.calculate_cross_calibration_threshold,
+            "compute_fold_orderings",
+            wraps=thresholds.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -521,7 +526,10 @@ class TestCalibrationCache:
                 inclusion_value=2,
                 det_ctx=det_ctx,
             )
-        assert patched.call_count == 1
+        # No fold refit, and the cache key is unchanged (inclusion is not in it).
+        assert patched.call_count == 0
+        assert det_ctx.calibration_cache is not None
+        assert det_ctx.calibration_cache[0] == key_before
 
     def test_no_cache_when_det_ctx_missing(self):
         """Without a det_ctx, every call must recompute calibration."""
@@ -532,8 +540,8 @@ class TestCalibrationCache:
 
         with unittest.mock.patch.object(
             thresholds,
-            "calculate_cross_calibration_threshold",
-            wraps=thresholds.calculate_cross_calibration_threshold,
+            "compute_fold_orderings",
+            wraps=thresholds.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,

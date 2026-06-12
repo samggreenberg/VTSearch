@@ -68,9 +68,19 @@ The labelset-element shape is shared with :mod:`vtsearch.schemas.labels`.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, ValidationError, fields, validate
 
 from vtsearch.schemas.labels import LabeledElementSchema
+
+
+def _list_of_strings(value):
+    """Validator: *value* must be a ``list`` whose every entry is a ``str``.
+
+    Mirrors the dataset readers validator so non-string items are rejected at
+    the schema layer (422) rather than coerced.
+    """
+    if not isinstance(value, list) or not all(isinstance(r, str) for r in value):
+        raise ValidationError("Must be a list of strings.")
 
 
 class _ExampleSchema(Schema):
@@ -263,6 +273,10 @@ class DetectorRegistryEntrySchema(Schema):
     media_example = fields.String()
     created_by = fields.String()
     created_at = fields.Float()
+    # Access list (mirrors datasets): usernames allowed besides the creator,
+    # ``["*"]`` = public. ``is_owner`` is computed per-request for the caller.
+    readers = fields.List(fields.String())
+    is_owner = fields.Boolean()
     loaded = fields.Boolean()
     detector_loaded = fields.Boolean()
     autorun = fields.Boolean()
@@ -402,6 +416,32 @@ class DetectorRegistryAutorunResponseSchema(Schema):
     autorun = fields.Boolean(required=True)
 
 
+class DetectorRegistryReadersRequestSchema(Schema):
+    """Body for ``PUT /api/detectors/registry/<id>/readers``.
+
+    Declared as ``fields.Raw`` with a custom validator (rather than
+    ``fields.List(fields.String())``) so non-string items are rejected as 422
+    instead of being silently coerced. Mirrors the dataset readers schema.
+    """
+
+    readers = fields.Raw(
+        required=True,
+        validate=_list_of_strings,
+        metadata={
+            "description": 'List of usernames; ``["*"]`` makes the detector public.',
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    )
+
+
+class DetectorRegistryReadersResponseSchema(Schema):
+    """Response for ``PUT /api/detectors/registry/<id>/readers``."""
+
+    ok = fields.Boolean(required=True)
+    readers = fields.List(fields.String(), required=True)
+
+
 class DetectorCancelResponseSchema(Schema):
     """Response for ``POST /api/detectors/cancel/<task_id>``."""
 
@@ -497,6 +537,11 @@ class AutoDetectResponseSchema(Schema):
         values=fields.Nested(_AutoDetectResultSchema),
         required=True,
     )
+    # Present only when an Auto-Find results exporter is configured: the
+    # outcome of auto-exporting these results. ``{exporter, success,
+    # message?, error?, ...}`` (extra keys like ``filepath`` may appear for
+    # file-based exporters). See ``docs/plans/auto-find-settings-tab.md``.
+    auto_export = fields.Dict(keys=fields.String(), values=fields.Raw(), required=False)
 
 
 # ---------------------------------------------------------------------------
@@ -650,6 +695,61 @@ class DetectorLabelVoteResponseSchema(Schema):
     action = fields.String(required=True)
 
 
+class FindStatsSweepPointSchema(Schema):
+    """One point on the Stats FP/FN-vs-inclusion sweep."""
+
+    inclusion = fields.Integer(required=True)
+    threshold = fields.Float(required=True)
+    false_pos = fields.Integer(required=True)
+    false_neg = fields.Integer(required=True)
+
+
+class FindStatsResponseSchema(Schema):
+    """Response for ``GET /api/find/stats`` (detector evaluation over the
+    adopted Find label set). See docs/plans/find-verification-workflow.md."""
+
+    # Adopted totals over ALL items (unverified flood-filled at the current
+    # cutoff, like Export/Browse/ToDataset); verified_count is how many of
+    # those the human actually checked.
+    total_good = fields.Integer(required=True)
+    total_bad = fields.Integer(required=True)
+    verified_count = fields.Integer(required=True)
+    # 2x2 confusion of adopted label vs. the detector's call (find_initial_labels).
+    confirmed_good = fields.Integer(required=True)
+    confirmed_bad = fields.Integer(required=True)
+    culled_false_pos = fields.Integer(required=True)
+    rescued_false_neg = fields.Integer(required=True)
+    # Derived rates.
+    agreements = fields.Integer(required=True)
+    corrections = fields.Integer(required=True)
+    agreement_rate = fields.Float(required=True)
+    precision = fields.Float(required=True)
+    # Run context.
+    inclusion = fields.Integer(required=True)
+    threshold = fields.Float(required=True)
+    # True when the detector's labelset changed (Find corrections folded in +
+    # retrain) after this evaluation was scored, so these numbers reflect the
+    # previous detector version.  Drives the "out of date" note in the UI.
+    stale = fields.Boolean(required=True)
+    # FP/FN at every inclusion from -10..10 over all adopted items.
+    sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
+
+
+class FindCorrectionsToDetectorResponseSchema(Schema):
+    """Response for ``POST /api/find/corrections-to-detector``.
+
+    Reports how many corrections were folded into the active detector's
+    labelset and the resulting labelset size.  The current Find session stays
+    frozen; the retrained detector applies on the next scoring pass.
+    See docs/plans/find-verification-workflow.md.
+    """
+
+    ok = fields.Boolean(required=True)
+    name = fields.String(required=True)
+    corrections_added = fields.Integer(required=True)
+    num_labels = fields.Integer(required=True)
+
+
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
@@ -686,9 +786,12 @@ __all__ = [
     "FindCancelResponseSchema",
     "FindCheckLabelsRequestSchema",
     "FindCheckLabelsResponseSchema",
+    "FindCorrectionsToDetectorResponseSchema",
     "FindLabelRequestSchema",
     "FindLabelResponseSchema",
     "FindRequestSchema",
     "FindResponseSchema",
+    "FindStatsResponseSchema",
+    "FindStatsSweepPointSchema",
     "PendingLabelsetMoveSchema",
 ]

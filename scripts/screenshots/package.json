@@ -1,0 +1,15 @@
+{
+  "name": "vtsearch-screenshots",
+  "version": "0.0.0",
+  "private": true,
+  "description": "User-docs screenshot capture harness (see docs/plans/user-docs-screenshots.md). Not part of the app build.",
+  "type": "module",
+  "scripts": {
+    "capture": "tsx capture.ts"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2"
+  }
+}

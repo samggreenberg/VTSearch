@@ -1,12 +1,15 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subject, Subscription } from 'rxjs';
+import { combineLatest, Subject, Subscription } from 'rxjs';
 import { finalize, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
+import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
+import { FindStatsModalComponent } from '../modals/find-stats-modal/find-stats-modal.component';
+import type { LabelFilter } from '../../services/sorting-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
@@ -17,7 +20,8 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
-import { SortStateService } from '../../services/sort-state.service';
+import { SortStateService, SortedItem } from '../../services/sort-state.service';
+import { SortingApiService } from '../../services/sorting-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
@@ -28,7 +32,15 @@ import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/gr
 @Component({
   selector: 'vt-find-view',
   standalone: true,
-  imports: [CommonModule, LeftPanelComponent, CenterPanelComponent, RightPanelComponent, ProgressBarComponent],
+  imports: [
+    CommonModule,
+    LeftPanelComponent,
+    CenterPanelComponent,
+    RightPanelComponent,
+    ProgressBarComponent,
+    ExportModalComponent,
+    FindStatsModalComponent,
+  ],
   templateUrl: './find-view.component.html',
   styleUrl: './find-view.component.scss',
 })
@@ -50,6 +62,31 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private currentMediaType = '';
   leftWidth = 260;
   rightWidth = 300;
+
+  /** Verified ids (Find mode): the right-panel confirmed pile. */
+  verifiedIds: Set<number> = new Set();
+  /**
+   * The left work queue: the scored ranking with verified items removed. The
+   * left panel is the *unverified* pile — once an item is verified it knows
+   * its colour and moves to the right, so it drops off the left (and out of
+   * the stripe).  Recomputed only when the ranking or the verified set
+   * changes (not every change-detection cycle) so the media-list / stripe
+   * don't rebuild needlessly.  Fed to both the media-list and the stripe so
+   * their index spaces stay aligned for stripe-click navigation.
+   */
+  unverifiedSortOrder: SortedItem[] | null = null;
+  /**
+   * Stable empty vote sets handed to the left panel in Find mode: the left
+   * shows only unverified items, which carry no colour, so the media-list and
+   * stripe must never paint green/red there.  A shared frozen reference keeps
+   * the inputs identity-stable across change detection.
+   */
+  readonly noVotes: Set<number> = new Set();
+  /** Export modal visibility + the label filter it opens on. */
+  showExport = false;
+  exportFilter: LabelFilter = 'good';
+  /** Detector-evaluation Stats modal visibility. */
+  showStats = false;
 
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
@@ -76,6 +113,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     public mediaState: MediaStateService,
     public voteState: VoteStateService,
     public sortState: SortStateService,
+    private sortingApi: SortingApiService,
     private settingsState: SettingsStateService,
     private progressEvents: ProgressEventsService,
     private browseSubset: BrowseSubsetService,
@@ -85,8 +123,21 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit(): void {
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
+    // Find mode: an item's good/bad is the detector's presumption until a
+    // human verifies it, so the big buttons read neutral and a click verifies
+    // (rather than toggling the presumption off).  Cleared in ngOnDestroy.
+    this.voteState.setFindMode(true);
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
+    // The left work queue = the ranking minus verified items. Recompute it
+    // only when the ranking or the verified set changes.
+    combineLatest([this.sortState.sortOrder$, this.voteState.verifiedIds$])
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(([order, verified]) => {
+        this.verifiedIds = verified;
+        this.unverifiedSortOrder =
+          order && verified.size > 0 ? order.filter((item) => !verified.has(item.id)) : order;
+      });
     this.loadSettings();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
@@ -110,11 +161,17 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       });
 
     // Run find-label to score and label all medias — unless we're returning
-    // from the Browser after a "Remove from Good" cull. In that case the
-    // backend vote lists already reflect the removed items (now Bad), and the
-    // loadVotes() above refreshes them; re-running find here would re-score
-    // with the unchanged model and re-promote those items to Good, undoing
-    // the cull. Keep the cull instead (the user's decision).
+    // from the Browser after verifying a selection there. In that case the
+    // backend vote lists already reflect the verified items (now Verified
+    // Good/Bad), and the loadVotes() above refreshes them; re-running find here
+    // would re-score with the unchanged model and could re-promote those items,
+    // undoing the verification. Keep the verifications instead.
+    // Seed the inclusion slider from the active detector's context value
+    // (GET /api/inclusion resolves per-detector, falling back to the
+    // user-settings default the first time it's read). This keeps Find's
+    // slider in step with whatever the detector was last trained at.
+    this.seedInclusion();
+
     if (!this.browseSubset.consumeReturningToFind()) {
       this.runFindLabel();
     }
@@ -145,7 +202,16 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
+    this.seedInclusion();
     this.runFindLabel();
+  }
+
+  /** Pull the active detector's per-detector inclusion into the slider. */
+  private seedInclusion(): void {
+    this.sortingApi
+      .getInclusion()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({ next: (resp) => this.sortState.setInclusion(resp.inclusion) });
   }
 
   ngAfterViewInit(): void {
@@ -156,6 +222,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.stopProgressPolling();
     this.destroy$.next();
     this.destroy$.complete();
+    this.voteState.setFindMode(false);
     this.voteState.stopPolling();
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
@@ -216,20 +283,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');
           this.sortState.setSortProgress(0, 0);
-          // Select the item just above the threshold (last item with score >= threshold)
-          if (threshold != null && sorted.length > 0) {
-            let aboveId: number | null = null;
-            for (const item of sorted) {
-              if (item.score >= threshold) {
-                aboveId = item.id;
-              } else {
-                break;
-              }
-            }
-            if (aboveId != null) {
-              this.mediaState.selectMedia(aboveId);
-            }
-          }
+          // Seed the centre on the marginal positive (lowest item ≥ cutoff).
+          // With nothing verified yet this is the same rule auto-advance uses,
+          // so seed and advance unify.
+          this.queueEmptyNotified = false;
+          this.advanceToMarginalPositive();
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
         },
@@ -387,6 +445,34 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mediaState.selectMedia(id);
   }
 
+  /**
+   * Inclusion change in Find: a pure cutoff slide, **no retrain**. Inclusion
+   * is the FP/FN cost weight in the labelset min-cost threshold search; the
+   * model and every item's frozen score are inclusion-independent, so the
+   * slider only moves the green/red line over the cached scores. POST
+   * /api/inclusion re-derives the cutoff from the cached fold orderings and
+   * re-splits the *unverified* items server-side (verified items hold). We
+   * reconcile the new threshold (moves the line) and the re-split votes on the
+   * cheap response — there is no scoring spinner.
+   */
+  onInclusionChange(value: number): void {
+    if (this.sortState.sortBusy) return;
+    this.sortState.setInclusion(value);
+    this.sortingApi
+      .setInclusion(value)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          if (resp.threshold != null && this.sortState.sortOrder) {
+            this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold);
+          }
+          // The server re-thresholded the unverified items over the frozen
+          // scores; pull the new good/bad split back for the left/right panes.
+          this.voteState.loadVotes();
+        },
+      });
+  }
+
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
     if (this.sortState.sortBusy) return;
     const m = this.mediaState.getMedia(event.id);
@@ -402,43 +488,180 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
-    // In find mode: re-fetch labelset counters but skip a re-sort. The local
-    // vote state has already been reconciled from the POST response inside
-    // submitToggleVote, so a follow-up GET /api/votes only refreshes counts.
+    // A single-item manual vote (big button or hover) verifies the item: it
+    // moves out of the left work queue into the right verified pile. Mirror
+    // the server's mark-verified optimistically so the move feels instant —
+    // the resulting local polarity (good/bad vs. un-voted) decides verified.
+    const verified =
+      this.voteState.goodVotes.has(event.id) || this.voteState.badVotes.has(event.id);
+    this.voteState.setOptimisticVerified(event.id, verified);
+    // Re-fetch labelset counters + the authoritative verified set.
     this.voteState.loadVotes();
+    // Auto-advance to the marginal positive (the lowest unverified item still
+    // above the cutoff), so "just sit and vote" walks the boundary upward.
+    this.advanceToMarginalPositive();
   }
 
   /**
-   * Browse the positive results of this Find run as their own UMAP projection.
-   * The positives are the current "good" list (the above-threshold items plus
-   * any manual corrections). We stash the ids for the browse view and navigate
-   * to `/browse/:datasetId?subset=1`, where they're UMAP'd on their own.
+   * Select the next item to review: the lowest-scored unverified item still
+   * above the cutoff (the Unverified Good nearest the line). This is a cheap
+   * active-learning order — always the most marginal positive next. The queue
+   * is empty exactly when no unverified item remains above the cutoff; that is
+   * the done state.  Mirrors the initial seed in {@link runFindLabel}.
+   */
+  private advanceToMarginalPositive(): void {
+    const order = this.sortState.sortOrder;
+    const threshold = this.sortState.threshold;
+    if (!order || threshold == null) return;
+    const verified = this.voteState.verifiedIds;
+    let target: number | null = null;
+    for (const item of order) {
+      if (item.score < threshold) break; // below the cutoff: nothing left above
+      if (!verified.has(item.id)) target = item.id;
+    }
+    if (target != null) {
+      this.queueEmptyNotified = false;
+      this.mediaState.selectMedia(target);
+    } else if (!this.queueEmptyNotified) {
+      this.queueEmptyNotified = true;
+      this.toast.success({
+        message: 'All positives reviewed',
+        detail: 'Every item above the cutoff has been verified. Check Stats or Export your results.',
+        dedupKey: 'find-queue-empty',
+      });
+    }
+  }
+
+  private queueEmptyNotified = false;
+
+  /** Open the detector-evaluation Stats modal. */
+  onStats(): void {
+    this.showStats = true;
+  }
+
+  /**
+   * Fold the corrections (items whose adopted label differs from the detector's
+   * original call) into the active detector's labelset for future use. The
+   * current Find session stays frozen — its scores, queue, votes, and Stats keep
+   * showing the detector version that produced them — so the only visible effect
+   * is the Stats being flagged out of date. The retrained detector applies the
+   * next time the dataset is scored.
+   */
+  onAddCorrections(): void {
+    if (this.sortState.sortBusy) return;
+    this.dialog
+      .confirmDestructive(
+        'Add your corrections to this detector?',
+        "Every item you changed from the detector's call is added to its labelset, so the detector learns from them next time you score. " +
+          'Your current results and evaluation stay as they are — the Stats will be marked out of date — and nothing is re-scored now.',
+        'Add Corrections',
+      )
+      .then((ok) => {
+        if (!ok) return;
+        this.detectorsFindApi
+          .addCorrectionsToDetector()
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: (resp) => {
+              if (resp.corrections_added === 0) {
+                this.toast.success({
+                  message: 'No corrections to add',
+                  detail: "Every item still matches the detector's original call.",
+                  dedupKey: 'find-corrections-none',
+                });
+                return;
+              }
+              this.toast.success({
+                message: `Added ${resp.corrections_added} correction${resp.corrections_added === 1 ? '' : 's'} to the detector`,
+                detail: `The detector now has ${resp.num_labels} label${resp.num_labels === 1 ? '' : 's'} and will use them next time you score. Your current results stay put; Stats are now marked out of date.`,
+                dedupKey: 'find-corrections-added',
+              });
+            },
+            error: (err: { error?: { message?: string; error?: string } }) => {
+              const body = err?.error;
+              const message = body?.message || body?.error || 'Failed to add corrections';
+              this.toast.error({ message, dedupKey: 'find-corrections-error' });
+            },
+          });
+      });
+  }
+
+  /** Open the export modal pre-set to a label filter (good / bad / unverified). */
+  onExportRequest(filter: LabelFilter): void {
+    this.exportFilter = filter;
+    this.showExport = true;
+  }
+
+  /**
+   * Ids of the unverified positives: the above-threshold items (``goodVotes``)
+   * the human hasn't acted on yet (``goodVotes − verifiedIds``). The left
+   * work-queue actions (Browse / To Dataset / Export) all scope over exactly
+   * this set, as opposed to the right panel's full-good-set actions.
+   */
+  private unverifiedGoodIds(): number[] {
+    const verified = this.voteState.verifiedIds;
+    return Array.from(this.voteState.goodVotes).filter((id) => !verified.has(id));
+  }
+
+  /**
+   * Browse the full positive set of this Find run (verified + unverified good)
+   * as their own UMAP projection. Right-panel action; the left panel's Browse
+   * scopes to the unverified positives instead ({@link onBrowseUnverified}).
    */
   onBrowse(): void {
+    this.browseIds(Array.from(this.voteState.goodVotes), 'positives');
+  }
+
+  /**
+   * Browse only the unverified positives (above the cutoff, not yet acted on).
+   * Verifying a selection in the browse drops it from the canvas — it's no
+   * longer unverified. Left-panel work-queue action.
+   */
+  onBrowseUnverified(): void {
+    this.browseIds(this.unverifiedGoodIds(), 'unverified positives');
+  }
+
+  /**
+   * Stash *ids* for the browse view and navigate to
+   * `/browse/:datasetId?subset=1`, where they're UMAP'd on their own. *suffix*
+   * names the subset in the browse header (e.g. "<detector> — positives").
+   */
+  private browseIds(ids: number[], suffix: string): void {
     const datasetId = this.activeContext.datasetId;
-    if (!datasetId) return;
-    const ids = Array.from(this.voteState.goodVotes);
-    if (ids.length === 0) return;
+    if (!datasetId || ids.length === 0) return;
     const modelId = this.activeContext.modelId;
     const detectorName =
       this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
     this.browseSubset.set({
       datasetId,
       ids,
-      label: `${detectorName} — positives`,
+      label: `${detectorName} — ${suffix}`,
     });
     this.router.navigate(['/browse', datasetId], { queryParams: { subset: 1 } });
   }
 
   /**
-   * Promote the current Goods pile into its own saved dataset. The
-   * promoted items keep their origins and embeddings; the new dataset
-   * gets a fresh created date but inherits this dataset's death date.
-   * We prompt for a name (prefilled "<dataset> <detector> Results"),
-   * then create + register it and confirm with a toast (staying in Find).
+   * Promote the full Goods pile (verified + unverified) into its own saved
+   * dataset. Right-panel action; the left panel promotes the unverified
+   * positives instead ({@link onToDatasetUnverified}).
    */
   onToDataset(): void {
-    const ids = Array.from(this.voteState.goodVotes);
+    this.toDatasetFromIds(Array.from(this.voteState.goodVotes));
+  }
+
+  /** Promote only the unverified positives into their own dataset. */
+  onToDatasetUnverified(): void {
+    this.toDatasetFromIds(this.unverifiedGoodIds());
+  }
+
+  /**
+   * Promote *ids* into their own saved dataset. The promoted items keep their
+   * origins and embeddings; the new dataset gets a fresh created date but
+   * inherits this dataset's death date. We prompt for a name (prefilled
+   * "<dataset> <detector> Results"), then create + register it and confirm
+   * with a toast (staying in Find).
+   */
+  private toDatasetFromIds(ids: number[]): void {
     if (ids.length === 0) return;
     const modelId = this.activeContext.modelId;
     const detectorName =

@@ -121,10 +121,31 @@
 
 .export-btn {
   flex: 1;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
 }
 
 .browse-btn {
   flex: 1;
   text-align: center;
+}
+
+// Find mode: "Add Corrections to Detector" sits at the foot of the verified
+// (right) pile, where we deal with the human-decided labels. Carries the same
+// graduation-cap mark as the dashboard's Train button.
+.corrections-row {
+  display: flex;
+  padding: var(--space-md) var(--space-xl);
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+}
+
+.corrections-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
 }

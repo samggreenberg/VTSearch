@@ -33,15 +33,23 @@
           [class.settings-tab--active]="activeSettingsTab === 'imports'"
           (click)="activeSettingsTab = 'imports'"
           title="Default embedder, clipper, and converters to apply when importing each kind of dataset">
-          <vt-icon type="upload" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'imports'"></vt-icon>
+          <vt-icon type="import" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'imports'"></vt-icon>
           Data Imports
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab === 'autofind'"
+          (click)="activeSettingsTab = 'autofind'"
+          title="Detectors that auto-run on import, and what to do with their results">
+          <vt-icon type="auto-find" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'autofind'"></vt-icon>
+          Auto-Find
         </button>
         <button
           class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab === 'browser'"
           (click)="activeSettingsTab = 'browser'"
           title="VTSBrowse projection-browser look per media type: bin shape, density colormap, and cell size">
-          <vt-icon type="grid" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'browser'"></vt-icon>
+          <vt-icon type="eye" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'browser'"></vt-icon>
           Browser
         </button>
         <button
@@ -68,7 +76,9 @@
             </select>
           </div>
           <div class="form-group" title="Streamline the UI for a single media type. Importer and detector flows will hide their media-type pickers and lock to this type; converters that produce other types are filtered out.">
-            <label class="form-label">Solo media type</label>
+            <label class="form-label">Solo media type@if (soloMediaTypeNote) {
+              <vt-field-hint-icon [hint]="soloMediaTypeNote"></vt-field-hint-icon>
+            }</label>
             <select
               class="form-select"
               [ngModel]="soloMediaTypeSelectValue"
@@ -79,9 +89,6 @@
                 <option [value]="mt.type_id">{{ mt.name }}</option>
               }
             </select>
-            @if (soloMediaTypeNote) {
-              <p class="form-hint">{{ soloMediaTypeNote }}</p>
-            }
           </div>
           <label class="checkbox-row" title="Animate media transitions when voting (swipe left/right effect)">
             <input type="checkbox" [ngModel]="settings.swipe_animation" (ngModelChange)="onToggle('swipe_animation', $event)" />
@@ -91,9 +98,9 @@
             <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
             Show metadata panel
           </label>
-          <label class="checkbox-row" title="Hide the trophy button, unlock pop-ups, and the achievements panel. Turning this on zeros all achievement counters and keeps them at zero.">
-            <input type="checkbox" [ngModel]="settings.disable_achievements" (ngModelChange)="onToggleDisableAchievements($event)" />
-            Disable achievements (hide UI &amp; reset counters)
+          <label class="checkbox-row" title="Show the trophy button, unlock pop-ups, and the achievements panel, and track usage milestones. Turning this off zeros all achievement counters and keeps them at zero.">
+            <input type="checkbox" [ngModel]="settings.enable_achievements" (ngModelChange)="onToggleEnableAchievements($event)" />
+            Enable achievements
           </label>
 
           @if (mediaTypes.length > 0) {
@@ -104,6 +111,9 @@
                   class="view-tab"
                   [class.view-tab--active]="activeViewTab === mt.type_id"
                   (click)="activeViewTab = mt.type_id">
+                  @if (mt.icon) {
+                    <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
+                  }
                   {{ mt.name }}
                 </button>
               }
@@ -206,13 +216,23 @@
 
         <!-- Data Imports -->
         @if (activeSettingsTab === 'imports') {
-          <h3>Data Imports</h3>
+          <h3>Data Imports<vt-field-hint-icon hint="Default import settings per media type. These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type."></vt-field-hint-icon></h3>
           <vt-import-defaults-settings
             [mediaTypes]="mediaTypes"
             [defaults]="importDefaults"
             [effectiveSoloMediaType]="effectiveSoloMediaType"
             (defaultsChange)="onImportDefaultsChange($event)"
           ></vt-import-defaults-settings>
+        }
+
+        <!-- Auto-Find -->
+        @if (activeSettingsTab === 'autofind') {
+          <h3>Auto-Find</h3>
+          <vt-auto-find-settings
+            [autofindExporter]="autofindExporter"
+            [autofindExporterFieldValues]="autofindExporterFieldValues"
+            (exporterChange)="onAutofindExporterChange($event)"
+          ></vt-auto-find-settings>
         }
 
         <!-- Autopilot & Actions -->
@@ -243,11 +263,7 @@
 
         <!-- Browser (VTSBrowse projection browser) -->
         @if (activeSettingsTab === 'browser') {
-          <h3>Browser</h3>
-          <p class="info-text">
-            How the VTSBrowse projection browser looks, per media type. The same controls
-            live on the browse canvas itself; changes here are remembered for next time.
-          </p>
+          <h3>Browser<vt-field-hint-icon hint="How the VTSBrowse projection browser looks, per media type. The same controls live on the browse canvas itself; changes here are remembered for next time."></vt-field-hint-icon></h3>
           @if (mediaTypes.length > 0) {
             <div class="view-tabs">
               @for (mt of mediaTypes; track mt.type_id) {
@@ -256,6 +272,9 @@
                   [class.view-tab--active]="activeBrowseTab === mt.type_id"
                   (click)="activeBrowseTab = mt.type_id"
                   [title]="'Browser settings for ' + mt.name + ' datasets'">
+                  @if (mt.icon) {
+                    <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
+                  }
                   {{ mt.name }}
                 </button>
               }
@@ -273,12 +292,22 @@
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap</label>
+                <label class="form-label" title="Slide clusters together to close the empty space between them when the projection is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty “oceans” between them, keeping each cluster’s shape intact. Applies to the next projection build or Re-project."></vt-field-hint-icon></label>
+                <div class="toggle-group">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab)" (click)="onBrowseCompactChange(activeBrowseTab, true)" title="Close the empty space between clusters">
+                    On
+                  </button>
+                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseCompact(activeBrowseTab)" (click)="onBrowseCompactChange(activeBrowseTab, false)" title="Keep UMAP's raw spacing">
+                    Off
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab) ? 'Thumbnail datasets (image, video) always use grayscale, so the density shading never tints the thumbnails.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
                 @if (browseTabUsesThumbnails(activeBrowseTab)) {
                   <select class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">
                     <option value="gray" selected>Grayscale</option>
                   </select>
-                  <p class="form-hint">Thumbnail datasets (image, video) always use grayscale, so the density shading never tints the thumbnails.</p>
                 } @else {
                   <select class="form-select" [ngModel]="getBrowseColormap(activeBrowseTab)" (ngModelChange)="onBrowseColormapChange(activeBrowseTab, $event)" aria-label="Browser colormap">
                     <option value="auto">Auto (match theme)</option>
@@ -286,7 +315,6 @@
                     <option value="ocean">Ocean (blue)</option>
                     <option value="gray">Grayscale</option>
                   </select>
-                  <p class="form-hint">Darker bins mean more items in light mode; brighter bins mean more in dark mode.</p>
                 }
               </div>
               <div class="form-group">
@@ -297,12 +325,14 @@
                   <option value="M">M</option>
                   <option value="L">L</option>
                   <option value="XL">XL</option>
-                  <option value="XXL">XXL</option>
-                  <option value="XXXL">XXXL</option>
+                  <option value="2XL">2XL</option>
+                  <option value="3XL">3XL</option>
+                  <option value="4XL">4XL</option>
+                  <option value="5XL">5XL</option>
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border</label>
+                <label class="form-label" title="Width in pixels of the colored border drawn around stacked (pile) thumbnails">Thumbnail border<vt-field-hint-icon hint="Only affects datasets that show thumbnails (image, video). Draws a colored band around each stacked tile; its color shows how many items are piled there. Set to 0 to hide it."></vt-field-hint-icon></label>
                 <input
                   class="form-input"
                   type="number"
@@ -312,7 +342,27 @@
                   [ngModel]="getBrowseThumbnailBorder(activeBrowseTab)"
                   (ngModelChange)="onBrowseThumbnailBorderChange(activeBrowseTab, $event)"
                   aria-label="Browser thumbnail border width" />
-                <p class="form-hint">Only affects datasets that show thumbnails (image, video). Draws a colored band around each stacked tile; its color shows how many items are piled there. Set to 0 to hide it.</p>
+              </div>
+              <div class="form-group">
+                <label class="form-label" title="How a right-clicked bin's items are shown in the popup">Bin popup<vt-field-hint-icon hint="How the right-click bin popup shows a bin’s items. Changing it on a popup while browsing remembers the choice here for this media type."></vt-field-hint-icon></label>
+                <div class="toggle-group">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getPopupViewMode(activeBrowseTab) === 'grid'" (click)="onPopupViewModeChange(activeBrowseTab, 'grid')" title="Show a right-clicked bin's items as a thumbnail grid">
+                    Grid
+                  </button>
+                  <button class="toggle-btn" [class.toggle-btn--active]="getPopupViewMode(activeBrowseTab) === 'list'" (click)="onPopupViewModeChange(activeBrowseTab, 'list')" title="Show a right-clicked bin's items as a list">
+                    List
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" title="Thumbnail size in the bin popup's grid">Popup thumbnail size</label>
+                <select class="form-select" [ngModel]="getPopupGridIconSize(activeBrowseTab)" (ngModelChange)="onPopupGridIconSizeChange(activeBrowseTab, $event)" [disabled]="getPopupViewMode(activeBrowseTab) === 'list'" aria-label="Bin popup thumbnail size">
+                  <option value="XS">XS</option>
+                  <option value="S">S</option>
+                  <option value="M">M</option>
+                  <option value="L">L</option>
+                  <option value="XL">XL</option>
+                </select>
               </div>
             </div>
           } @else {
@@ -322,11 +372,7 @@
 
         <!-- Server Settings (read-only) -->
         @if (activeSettingsTab === 'server') {
-          <h3>Server Settings</h3>
-          <p class="info-text">
-            These are fixed when the server starts (via config file, environment, or CLI flags)
-            and shared by everyone. They&rsquo;re shown here for reference and can&rsquo;t be changed.
-          </p>
+          <h3>Server Settings<vt-field-hint-icon hint="These are fixed when the server starts (via config file, environment, or CLI flags) and shared by everyone. They’re shown here for reference and can’t be changed."></vt-field-hint-icon></h3>
 
           <div class="form-group">
             <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory</label>
@@ -343,14 +389,6 @@
           <div class="form-group">
             <label class="form-label" title="Maximum number of dataset embedding jobs the server runs in parallel">Max concurrent dataset embeddings</label>
             <div class="server-value">{{ settings.max_concurrent_dataset_embeddings ?? '—' }}</div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" title="Detectors automatically run against each dataset as it is imported">Auto-run detectors</label>
-            @if (autorunDetectorsDisplay) {
-              <div class="server-value">{{ autorunDetectorsDisplay }}</div>
-            } @else {
-              <div class="server-value server-value--empty">None</div>
-            }
           </div>
           <div class="form-group">
             <label class="form-label" title="Plugins hidden from pickers and listings for this deployment (still callable by name). Combines the persisted setting with any --hide-plugin CLI flags.">Hidden plugins</label>
@@ -381,7 +419,13 @@
     <span class="settings-saved" [class.settings-saved--visible]="savedVisible" role="status" aria-live="polite" title="Settings auto-save as you change them">&#10003; saved</span>
     <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
     <button class="btn btn--secondary" (click)="openImporter()" title="Import settings from a file">Import</button>
-    <button class="btn btn--secondary" (click)="openExporter()" title="Export settings to a file">Export</button>
+    <button class="btn btn--secondary" (click)="openExporter()" aria-label="Export" title="Export settings to a file">
+      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"></path>
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <line x1="12" y1="12" x2="21" y2="3"></line>
+      </svg>
+    </button>
     <button class="btn btn--primary" (click)="close()" title="Close the settings panel">Close</button>
   </div>
 </vt-modal>

@@ -12,6 +12,17 @@
     }
   </div>
 
+  <!-- Auto-export status (only when a results exporter ran) -->
+  @if (data.auto_export; as ax) {
+    <div class="auto-export-status" [class.auto-export-status--error]="!ax.success">
+      @if (ax.success) {
+        &#10003; Auto-exported via {{ ax.exporter }}{{ ax.message ? ' — ' + ax.message : '' }}
+      } @else {
+        &#9888; Auto-export via {{ ax.exporter }} failed{{ ax.error ? ': ' + ax.error : '' }}
+      }
+    </div>
+  }
+
   <!-- Results table -->
   <div class="results-table-wrapper">
     @if (displayHits.length === 0) {

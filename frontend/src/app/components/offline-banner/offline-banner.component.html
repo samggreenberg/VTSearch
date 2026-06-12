@@ -1,0 +1,33 @@
+@if ((connection.status$ | async) === 'offline') {
+  <div class="offline-banner" role="alert" aria-live="assertive">
+    <svg
+      class="offline-banner__icon"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path d="M1 1l14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+      <path
+        d="M3.2 6.4a8 8 0 019.6 0M5.4 9a4.8 4.8 0 015.2 0"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        fill="none"
+      />
+      <circle cx="8" cy="12" r="0.9" fill="currentColor" />
+    </svg>
+    <span class="offline-banner__text">
+      <strong>Can't reach the server.</strong>
+      Background updates are paused.
+    </span>
+    <button
+      type="button"
+      class="offline-banner__retry"
+      (click)="connection.retry()"
+      [disabled]="connection.retrying$ | async"
+    >
+      {{ (connection.retrying$ | async) ? 'Retrying…' : 'Retry' }}
+    </button>
+  </div>
+}

@@ -32,8 +32,12 @@
   }
 </td>
 @if (loadingTask && !loadingTask.error) {
-  <!-- Inline progress: replace remaining columns (middle + actions) with a progress bar -->
-  <td [attr.colspan]="columnOrder.length + 1">
+  <!-- Inline progress: replace the middle columns with a progress bar. For a
+       projection build (the Browse button's pre-build) we keep the actions
+       column so the Browse eye stays put and waggles, mirroring how Find/Train
+       waggle while their job runs; a plain dataset load replaces the actions
+       column too. -->
+  <td [attr.colspan]="taskKind === 'projection' ? columnOrder.length : columnOrder.length + 1">
     <div class="inline-loading-progress">
       <div class="progress-context">
         <div class="progress-header">{{ taskProgressInfo.header }}</div>
@@ -57,6 +61,18 @@
       </div>
     </div>
   </td>
+  @if (taskKind === 'projection') {
+    <td class="actions-col">
+      <div class="actions-cell">
+        <button class="browse-btn" type="button" disabled aria-label="Building projection for browse" title="Building projection…">
+          <svg class="icon-waggle" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
+      </div>
+    </td>
+  }
 } @else if (loadingTask && loadingTask.error) {
   <!-- Inline error: replace remaining columns (middle + actions) with error message -->
   <td [attr.colspan]="columnOrder.length + 1">

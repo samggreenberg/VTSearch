@@ -65,12 +65,14 @@ class LabelsExportQuerySchema(Schema):
     goods_only = fields.Boolean(load_default=False, metadata={"description": "If true, export only good labels."})
     label_filter = fields.String(
         load_default="",
-        validate=validate.OneOf(["", "good", "bad", "both", "corrections"]),
+        validate=validate.OneOf(["", "good", "bad", "both", "corrections", "unverified", "verified"]),
         metadata={
             "description": (
-                "Filter mode: ``good``, ``bad``, ``both`` (default), or "
+                "Filter mode: ``good``, ``bad``, ``both`` (default), "
                 "``corrections`` (entries where the user changed the "
-                "detector's original label). Overrides ``goods_only``."
+                "detector's original label), ``unverified`` (Find work-queue "
+                "items the human hasn't acted on), or ``verified`` (items the "
+                "human has confirmed). Overrides ``goods_only``."
             ),
         },
     )

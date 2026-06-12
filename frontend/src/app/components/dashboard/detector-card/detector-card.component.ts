@@ -19,6 +19,8 @@ import { formatTimestamp } from '../../../utils/format-date';
 })
 export class DetectorCardComponent implements OnChanges {
   @Input() detector: any;
+  @Input() currentUser = '';
+  @Input() isDefaultLogin = true;
   @Input() columnOrder: string[] = [];
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
@@ -45,17 +47,31 @@ export class DetectorCardComponent implements OnChanges {
   @Output() dismissTask = new EventEmitter<string>();
   @Output() autorunToggle = new EventEmitter<boolean>();
   @Output() checkboxToggle = new EventEmitter<void>();
+  @Output() security = new EventEmitter<void>();
+
+  /** True when the current user created this detector (only the creator may
+   *  rename/delete it or edit its access list). */
+  get isOwner(): boolean {
+    return this.detector?.created_by === this.currentUser;
+  }
+
+  onSecurity(event: MouseEvent): void {
+    event.stopPropagation();
+    this.security.emit();
+  }
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
   @Input() deleteConfirmOpen = false;
   @Input() addLabelsOpen = false;
+  @Input() exportOpen = false;
 
   editing = false;
   wasEditing = false;
   editName = '';
   wasDeleteOpen = false;
   wasAddLabelsOpen = false;
+  wasExportOpen = false;
 
   startRename(event: MouseEvent): void {
     event.stopPropagation();
@@ -84,6 +100,9 @@ export class DetectorCardComponent implements OnChanges {
     if (changes['addLabelsOpen'] && !changes['addLabelsOpen'].currentValue && changes['addLabelsOpen'].previousValue) {
       this.wasAddLabelsOpen = true;
     }
+    if (changes['exportOpen'] && !changes['exportOpen'].currentValue && changes['exportOpen'].previousValue) {
+      this.wasExportOpen = true;
+    }
   }
 
   onPencilAnimationEnd(): void {
@@ -101,6 +120,12 @@ export class DetectorCardComponent implements OnChanges {
   onCapAnimationEnd(): void {
     if (!this.addLabelsOpen) {
       this.wasAddLabelsOpen = false;
+    }
+  }
+
+  onExportAnimationEnd(): void {
+    if (!this.exportOpen) {
+      this.wasExportOpen = false;
     }
   }
 

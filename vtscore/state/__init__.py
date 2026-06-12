@@ -66,9 +66,12 @@ from vtscore.state.votes import (  # noqa: F401
     apply_labels_bulk_with_click_time,
     clear_votes,
     get_find_initial_labels,
+    get_find_scores,
     get_learned_scores,
     get_textsort_suggestions,
+    rethreshold_unverified_find_items,
     set_find_initial_labels,
+    set_find_scores,
     set_vote,
     toggle_vote,
     update_learned_scores,
@@ -218,7 +221,15 @@ def set_inclusion(value: int) -> None:
         from vtscore.detectors.labeling_progress import clear_progress_cache
 
         clear_progress_cache()
-        _core.invalidate_loaded_detector_models()
+        # Inclusion is a pure cutoff knob: re-threshold from the cached fold
+        # orderings instead of dropping the (inclusion-independent) MLP, so the
+        # scores stay frozen across a slide.  See docs/plans/find-verification-workflow.md.
+        _core.recompute_detector_thresholds_for_inclusion(value)
+        # In Find mode the unverified items' good/bad labels are derived from
+        # the cutoff, so the new threshold must re-split them over the frozen
+        # find_scores (no-op in Train mode / before a scoring pass).  Verified
+        # items keep their human vote.
+        rethreshold_unverified_find_items()
 
 
 def get_dataset_display_name() -> str | None:

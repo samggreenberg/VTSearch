@@ -22,8 +22,10 @@ from vtsearch.routes._shared import require_dataset_header, require_detector_hea
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
+    FindCorrectionsToDetectorResponseSchema,
     FindLabelRequestSchema,
     FindLabelResponseSchema,
+    FindStatsResponseSchema,
 )
 from vtscore.utils.scores import sigmoid_to_finite_scores
 from vtsearch.state import snapshot_medias
@@ -61,6 +63,11 @@ def _resolve_or_train_detector(  # noqa: C901
     on demand from the detector's labelset, embedding label media via its
     origin importer.  Returns ``(None, _, diag)`` when training is not
     possible.
+
+    Inclusion changes don't need special handling here: ``set_inclusion``
+    invalidates every loaded context's cached MLP, so after a slider move the
+    ``det_ctx.model`` short-circuit below is skipped and the cold branch
+    retrains at the new (per-detector) inclusion.
     """
     from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
     from vtscore.state.core import get_detector_context
@@ -216,6 +223,7 @@ def find_label(body: dict):  # noqa: C901
     from vtsearch.state import (
         apply_labels_bulk_with_click_time,
         set_find_initial_labels,
+        set_find_scores,
     )
 
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
@@ -346,10 +354,19 @@ def find_label(body: dict):  # noqa: C901
     apply_labels_bulk_with_click_time(label_pairs, replace_all=True, record_achievement=False)
 
     set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
+    # Freeze the single-pass scores so the cutoff (Inclusion) re-thresholds
+    # without re-scoring, and the Stats FP/FN sweep can read them.
+    set_find_scores({entry["id"]: entry["score"] for entry in results})
 
     from vtscore.detectors.registry import set_find_mode
 
     set_find_mode(True)
+
+    # A fresh scoring pass IS the current evaluation, so any "stale" flag left by
+    # a prior corrections-to-detector fold no longer applies.
+    from vtscore.state.core import get_active_detector_context
+
+    get_active_detector_context().find_eval_stale = False
 
     from vtscore.labels.sync import sync_to_labelset_source
 
@@ -472,6 +489,220 @@ def _score_detector_for_auto_detect(
         return None
 
 
+@detector_scoring_bp.route("/api/find/stats", methods=["GET"])
+@detector_scoring_bp.response(200, FindStatsResponseSchema)
+def find_stats():
+    """Detector-evaluation stats over the **adopted** Find label set.
+
+    Like Export / Browse / To-Dataset, this treats unverified items as if
+    verified at their current cutoff: truth is the full ``good_votes`` /
+    ``bad_votes`` set (human votes flood-filled with the detector's call on
+    everything untouched).  This can give false confidence in the detector -
+    that's the price of not verifying every item - but it reports the real
+    counts.  Crosses each item's adopted label against the detector's original
+    call (``find_initial_labels``) for a 2x2 confusion, and sweeps the
+    calibrated threshold across inclusion -10..10 (from the cached fold
+    orderings) for false-positive / false-negative counts at every cutoff.
+    Pure read; no new state.  See docs/plans/find-verification-workflow.md.
+    """
+    from vtscore.state.core import get_active_detector_context
+    from vtscore.training.thresholds import threshold_from_fold_orderings
+    from vtsearch.state import get_inclusion
+
+    det_ctx = get_active_detector_context()
+    good = det_ctx.good_votes
+    bad = det_ctx.bad_votes
+    initial = det_ctx.find_initial_labels
+    scores = det_ctx.find_scores
+
+    # Confusion of adopted label (truth, over ALL items) vs. the detector's
+    # original call.  Unverified items adopted the detector's call, so they
+    # land in the confirmed cells; corrections come from human overrides.
+    confirmed_good = sum(1 for cid in good if initial.get(cid) != "bad")
+    rescued_fn = sum(1 for cid in good if initial.get(cid) == "bad")
+    confirmed_bad = sum(1 for cid in bad if initial.get(cid) != "good")
+    culled_fp = sum(1 for cid in bad if initial.get(cid) == "good")
+
+    total_good = len(good)
+    total_bad = len(bad)
+    total_items = total_good + total_bad
+    agreements = confirmed_good + confirmed_bad
+    corrections = culled_fp + rescued_fn
+    agreement_rate = agreements / total_items if total_items else 0.0
+    detector_positives = confirmed_good + culled_fp
+    precision = confirmed_good / detector_positives if detector_positives else 0.0
+
+    # Sweep FP/FN over ALL adopted items at every inclusion's threshold.
+    # Adopted-bad above the line are false positives; adopted-good below it are
+    # false negatives.  Thresholds come from the cached fold orderings
+    # (inclusion-independent), so this is cheap.
+    cache = det_ctx.calibration_cache
+    orderings = cache[1][0] if (cache is not None and cache[1][1] is None) else []
+    good_scores = [scores[c] for c in good if c in scores]
+    bad_scores = [scores[c] for c in bad if c in scores]
+    sweep = []
+    for incl in range(-10, 11):
+        t_i = threshold_from_fold_orderings(orderings, incl) if orderings else det_ctx.threshold
+        sweep.append(
+            {
+                "inclusion": incl,
+                "threshold": round(t_i, 4),
+                "false_pos": sum(1 for s in bad_scores if s >= t_i),
+                "false_neg": sum(1 for s in good_scores if s < t_i),
+            }
+        )
+
+    return {
+        "total_good": total_good,
+        "total_bad": total_bad,
+        "verified_count": len(det_ctx.verified_ids),
+        "confirmed_good": confirmed_good,
+        "confirmed_bad": confirmed_bad,
+        "culled_false_pos": culled_fp,
+        "rescued_false_neg": rescued_fn,
+        "agreements": agreements,
+        "corrections": corrections,
+        "agreement_rate": round(agreement_rate, 4),
+        "precision": round(precision, 4),
+        "inclusion": get_inclusion(),
+        "threshold": round(det_ctx.threshold, 4),
+        "stale": getattr(det_ctx, "find_eval_stale", False),
+        "sweep": sweep,
+    }
+
+
+@detector_scoring_bp.route("/api/find/corrections-to-detector", methods=["POST"])
+@detector_scoring_bp.response(200, FindCorrectionsToDetectorResponseSchema)
+@detector_scoring_bp.alt_response(400, description="No Find run to take corrections from.")
+@detector_scoring_bp.alt_response(404, description="No active detector to update.")
+@detector_scoring_bp.alt_response(409, description="Detector vote state is not aligned with the active dataset.")
+@require_dataset_header
+@require_detector_header
+def find_corrections_to_detector():
+    """Fold the Find corrections into the active detector's labelset for *future*
+    scoring, leaving the current Find session frozen.
+
+    A *correction* is an item whose adopted Find label differs from the
+    detector's original call (``find_initial_labels``): a rescued
+    false-negative (now good, the detector said bad) or a culled false-positive
+    (now bad, the detector said good).  This matches the ``corrections`` export
+    filter and the Stats "corrections" count.
+
+    The correction items are written into the detector's on-disk labelset
+    (superseding any prior entry for the same source media) and the registry's
+    training counters are refreshed.  The cached MLP is invalidated so the next
+    scoring pass retrains from the merged labelset.
+
+    The current Find session is deliberately *not* re-scored or reset: its
+    scores, queue, votes, and verification stay pinned to the detector version
+    that produced them, so the displayed evaluation (and ``GET /api/find/stats``)
+    keeps showing the previous detector's results.  That evaluation is now out of
+    date relative to the retrained detector, which ``find_eval_stale`` records so
+    the Stats note can say so; the retrained detector takes effect the next time
+    the dataset is scored.
+    """
+    from vtscore.datasets.labelset import LabelSet, element_key
+    from vtscore.detectors.dataset_sync import _detector_file_mtime, validated_vote_snapshot
+    from vtscore.detectors.input_spec import extract_input_spec_from_medias
+    from vtscore.detectors.registry import get_detector as reg_get_detector
+    from vtscore.detectors.registry import update_detector
+    from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+    from vtscore.state.core import _state_lock, get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    detector_id = det_ctx.detector_id or ""
+    reg = reg_get_detector(detector_id) if detector_id else None
+    if reg is None or not reg.get("name"):
+        abort(404, message="No active detector to update")
+    name = reg["name"]
+
+    path = _detector_path(name)
+    data = _read_detector(path)
+    if data is None:
+        abort(404, message=f"Detector '{name}' not found")
+
+    # Atomic (medias, good_votes, bad_votes, region boxes) snapshot keyed in the
+    # active dataset's cid space, so the votes we compose with the medias can't
+    # straddle a concurrent dataset switch on this detector.
+    snap = validated_vote_snapshot()
+    if not snap.safe:
+        abort(409, message="Cannot add corrections: detector vote state is not aligned with the active dataset")
+
+    initial = det_ctx.find_initial_labels
+    if not initial:
+        abort(400, message="No Find run to take corrections from. Score the dataset first.")
+
+    existing_ls = LabelSet.from_dict(data.get("labelset") or {})
+
+    # A correction's adopted label differs from the detector's original call.
+    corr_good = {cid: None for cid in snap.good_votes if initial.get(cid) == "bad"}
+    corr_bad = {cid: None for cid in snap.bad_votes if initial.get(cid) == "good"}
+    num_corrections = len(corr_good) + len(corr_bad)
+
+    if num_corrections == 0:
+        return {
+            "ok": True,
+            "name": name,
+            "corrections_added": 0,
+            "num_labels": len(existing_ls),
+        }
+
+    corrections_ls = LabelSet.from_clips_and_votes(
+        snap.medias,
+        corr_good,
+        corr_bad,
+        expand_dupes=False,
+        vote_region_boxes=snap.vote_region_boxes,
+    )
+
+    # Merge: a correction supersedes any prior entry for the same source media
+    # (so a culled false-positive flips its old "good" entry to "bad").
+    corr_keys = {element_key(el) for el in corrections_ls.elements}
+    corr_keys.discard(None)
+    merged_elements = [el for el in existing_ls.elements if element_key(el) not in corr_keys]
+    merged_elements.extend(corrections_ls.elements)
+    merged = LabelSet(merged_elements)
+
+    data["labelset"] = merged.to_dict()
+
+    # Keep the stored input_spec in sync with the active dataset's clipper, as
+    # ``save_detector_labels`` does.
+    captured_spec = extract_input_spec_from_medias(snap.medias)
+    if captured_spec is not None:
+        data["input_spec"] = captured_spec
+    elif "input_spec" in data:
+        data.pop("input_spec", None)
+    _write_detector(path, data)
+
+    # Freeze the current Find session.  Writing the file bumped its mtime, which
+    # would make the before_request rehydrate wipe the in-memory votes /
+    # find_scores / find_initial_labels and re-derive them from the new labelset.
+    # Re-point the cached labelset + mtime at the file we just wrote so that
+    # rehydrate is a no-op, invalidate the cached MLP so the next scoring pass
+    # retrains from the merged labelset, and flag the displayed evaluation stale.
+    new_mtime = _detector_file_mtime(path)
+    media_type = data.get("media_type", "") or ""
+    with _state_lock:
+        det_ctx.cached_labelset = merged
+        det_ctx.cached_labelset_mtime = new_mtime
+        det_ctx.cached_labelset_media_type = media_type or det_ctx.cached_labelset_media_type
+        det_ctx.labelset_good_count = sum(1 for el in merged.elements if el.label == "good")
+        det_ctx.labelset_bad_count = sum(1 for el in merged.elements if el.label == "bad")
+        det_ctx.model = None
+        det_ctx.find_eval_stale = True
+
+    import time as _time
+
+    update_detector(reg["id"], num_training=len(merged), last_trained_at=_time.time())
+
+    return {
+        "ok": True,
+        "name": name,
+        "corrections_added": num_corrections,
+        "num_labels": len(merged),
+    }
+
+
 @detector_scoring_bp.route("/api/auto-detect", methods=["POST"])
 @detector_scoring_bp.arguments(AutoDetectRequestSchema)
 @detector_scoring_bp.response(200, AutoDetectResponseSchema)
@@ -531,8 +762,53 @@ def auto_detect(body: dict):
 
         record_find(len(all_ids) * len(results))
 
-    return {
+    response = {
         "media_type": media_type,
         "detectors_run": len(results),
         "results": results,
     }
+    auto_export = _run_autofind_export(response)
+    if auto_export is not None:
+        response["auto_export"] = auto_export
+    return response
+
+
+def _run_autofind_export(response: dict) -> dict | None:
+    """Run the configured Auto-Find results exporter on *response*.
+
+    Returns ``None`` when no exporter is configured (the common case), or a
+    status dict ``{exporter, success, message?, error?}`` otherwise. Export
+    failures are reported in the status block rather than raised: the scored
+    results are valuable on their own, so a misconfigured exporter must not
+    sink the whole request. See ``docs/plans/auto-find-settings-tab.md``.
+    """
+    from vtsearch.settings import (  # noqa: PLC0415
+        get_autofind_exporter,
+        get_autofind_exporter_field_values,
+    )
+
+    exporter_name = get_autofind_exporter()
+    if not exporter_name:
+        return None
+
+    from vtscore.exporters import get_exporter  # noqa: PLC0415
+
+    exporter = get_exporter(exporter_name)
+    if exporter is None:
+        return {"exporter": exporter_name, "success": False, "error": f"Unknown exporter '{exporter_name}'"}
+
+    field_values = dict(get_autofind_exporter_field_values().get(exporter_name, {}))
+    try:
+        from vtscore.plugins.normalize import normalize_field_values  # noqa: PLC0415
+
+        normalize_field_values(exporter, field_values)
+        outcome = exporter.export(response, field_values) or {}
+    except Exception as exc:  # noqa: BLE001 - surfaced to the caller, never raised
+        logger.exception("Auto-Find export via %s failed", exporter_name)
+        return {"exporter": exporter_name, "success": False, "error": str(exc)}
+
+    status = {"exporter": exporter_name, "success": True, "message": outcome.get("message", "Export complete.")}
+    for key, value in outcome.items():
+        if key != "message":
+            status[key] = value
+    return status

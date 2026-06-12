@@ -136,6 +136,49 @@ describe('VoteStateService', () => {
     });
   });
 
+  describe('Find-mode verification gating', () => {
+    /** Push a /api/votes payload (with a verified array) through applyVotes. */
+    const flushVotes = (good: number[], bad: number[], verified: number[]) => {
+      service.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good, bad, verified, click_times: {}, learned_scores: {} });
+    };
+
+    it('treats a flood-filled but unverified item as having no vote', () => {
+      // Detector presumption: item 5 is good, but the human has not verified.
+      flushVotes([5], [], []);
+      service.setFindMode(true);
+
+      // Buttons read neutral...
+      expect(service.effectiveGood(5)).toBeFalse();
+      expect(service.effectiveBad(5)).toBeFalse();
+      // ...and clicking Good verifies (sets absolute good) rather than toggling off.
+      expect(service.toggleTargetFor(5, 'good')).toBe('good');
+      // Clicking Bad flips the presumption to a verified bad (cull).
+      expect(service.toggleTargetFor(5, 'bad')).toBe('bad');
+    });
+
+    it('honours the real vote once an item is verified', () => {
+      flushVotes([5], [], [5]);
+      service.setFindMode(true);
+
+      expect(service.effectiveGood(5)).toBeTrue();
+      expect(service.effectiveBad(5)).toBeFalse();
+      // A verified-good item toggles off when Good is clicked again.
+      expect(service.toggleTargetFor(5, 'good')).toBe('none');
+      // ...and flips to bad when Bad is clicked.
+      expect(service.toggleTargetFor(5, 'bad')).toBe('bad');
+    });
+
+    it('outside Find mode, membership alone decides state', () => {
+      flushVotes([5], [], []);
+      // findMode left false (default).
+      expect(service.effectiveGood(5)).toBeTrue();
+      expect(service.toggleTargetFor(5, 'good')).toBe('none');
+    });
+  });
+
   describe('applyOptimisticState (absolute target)', () => {
     it('sets good and assigns a click time', () => {
       service.applyOptimisticState(5, 'good');

@@ -8,7 +8,6 @@
 
 import {
   SQRT3,
-  HEX_ANGLES,
   traceCellPath as traceHexCellPath,
   densityColor,
   resolveColormap,
@@ -17,6 +16,12 @@ import type { BinShape } from '../../models/projection.models';
 
 export { SQRT3, densityColor, resolveColormap };
 export type { BinShape };
+
+/** Offset from a cell centre to a neighbour centre, in units of `radius`. */
+export interface NeighborOffset {
+  dx: number;
+  dy: number;
+}
 
 export interface BinGeometry {
   readonly shape: BinShape;
@@ -44,78 +49,36 @@ export interface BinGeometry {
    */
   contains(ox: number, oy: number, radius: number): boolean;
   /**
-   * Half-width / half-height of the cell's bounding box at the given screen
-   * `radius`. Used to contain-fit a thumbnail inside a cell: a hex is wider
-   * than tall (`√3·radius` × `2·radius`) while a square is `√3·radius` on a
-   * side, so the fit box differs by shape.
+   * Offsets, in units of `radius`, from a cell centre to each immediately
+   * adjacent cell centre — six for a hex, four for a square. Multiply by a
+   * screen `radius` to get neighbour-centre offsets in screen px. Used to size
+   * a hovered thumbnail so it grows until its edge just reaches the nearest
+   * neighbour centre, never covering one.
    */
-  contentHalfExtent(radius: number): { hw: number; hh: number };
-  /**
-   * Trace the pile cell outline clipped to the centered axis-aligned rectangle
-   * of half-extents `(hw, hh)` as the current path. This is the cell shape with
-   * the corners that stick out past the rectangle lopped off — used to draw a
-   * hovered thumbnail tile trimmed to the thumbnail's contain-fit rectangle, so
-   * the enlarged tile doesn't paint background over its neighbours. The outer
-   * `radius` (and so the shape away from the cut) is unchanged.
-   */
-  traceTrimmedCell(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    radius: number,
-    hw: number,
-    hh: number,
-  ): void;
+  neighborOffsets(): readonly NeighborOffset[];
 }
 
-// Sutherland–Hodgman clip of a convex polygon (local coords, centered on the
-// origin) against one axis-aligned half-plane, returning the clipped polygon.
-type Pt = { x: number; y: number };
-function clipHalfPlane(poly: Pt[], axis: 'x' | 'y', value: number, keepGreater: boolean): Pt[] {
-  if (poly.length === 0) return poly;
-  const inside = (p: Pt) => (keepGreater ? p[axis] >= value : p[axis] <= value);
-  const crossing = (a: Pt, b: Pt): Pt => {
-    const t = (value - a[axis]) / (b[axis] - a[axis]);
-    return axis === 'x'
-      ? { x: value, y: a.y + (b.y - a.y) * t }
-      : { x: a.x + (b.x - a.x) * t, y: value };
-  };
-  const out: Pt[] = [];
-  for (let i = 0; i < poly.length; i++) {
-    const cur = poly[i];
-    const prev = poly[(i + poly.length - 1) % poly.length];
-    const curIn = inside(cur);
-    if (curIn) {
-      if (!inside(prev)) out.push(crossing(prev, cur));
-      out.push(cur);
-    } else if (inside(prev)) {
-      out.push(crossing(prev, cur));
-    }
-  }
-  return out;
-}
+// Pointy-top hex neighbours: two along the row at ±√3·radius, and four in the
+// rows above/below offset half a column (±√3/2·radius) and ±1.5·radius — the
+// same spacing as `dx`/`dy`. All six sit one centre-distance (√3·radius) away.
+const HEX_NEIGHBORS: readonly NeighborOffset[] = [
+  { dx: SQRT3, dy: 0 },
+  { dx: -SQRT3, dy: 0 },
+  { dx: SQRT3 / 2, dy: 1.5 },
+  { dx: SQRT3 / 2, dy: -1.5 },
+  { dx: -SQRT3 / 2, dy: 1.5 },
+  { dx: -SQRT3 / 2, dy: -1.5 },
+];
 
-// Trace `verts` (local, origin-centered) clipped to the `±hw × ±hh` rectangle as
-// the current path at screen center `(cx, cy)`.
-function traceClippedPolygon(
-  ctx: CanvasRenderingContext2D,
-  verts: Pt[],
-  cx: number,
-  cy: number,
-  hw: number,
-  hh: number,
-): void {
-  let poly = clipHalfPlane(verts, 'x', -hw, true);
-  poly = clipHalfPlane(poly, 'x', hw, false);
-  poly = clipHalfPlane(poly, 'y', -hh, true);
-  poly = clipHalfPlane(poly, 'y', hh, false);
-  ctx.beginPath();
-  poly.forEach((p, i) => {
-    if (i === 0) ctx.moveTo(cx + p.x, cy + p.y);
-    else ctx.lineTo(cx + p.x, cy + p.y);
-  });
-  ctx.closePath();
-}
+// Square neighbours: the four edge-adjacent cells at ±√3·radius (the diagonal
+// corners are deliberately excluded — the thumbnail may grow past a corner so
+// long as it doesn't reach an edge neighbour's centre).
+const SQUARE_NEIGHBORS: readonly NeighborOffset[] = [
+  { dx: SQRT3, dy: 0 },
+  { dx: -SQRT3, dy: 0 },
+  { dx: 0, dy: SQRT3 },
+  { dx: 0, dy: -SQRT3 },
+];
 
 // Pointy-top hexagon: column spacing `radius·√3`, row spacing `radius·1.5`.
 // Hit-tested against the circumscribed circle (matching the original canvas).
@@ -125,14 +88,7 @@ const HEX_GEOMETRY: BinGeometry = {
   dy: (radius) => radius * 1.5,
   traceCell: (ctx, cx, cy, radius, single) => traceHexCellPath(ctx, cx, cy, radius, single),
   contains: (ox, oy, radius) => ox * ox + oy * oy < radius * radius,
-  contentHalfExtent: (radius) => ({ hw: (radius * SQRT3) / 2, hh: radius }),
-  traceTrimmedCell: (ctx, cx, cy, radius, hw, hh) => {
-    const verts = HEX_ANGLES.map((a) => ({
-      x: radius * Math.cos(a),
-      y: radius * Math.sin(a),
-    }));
-    traceClippedPolygon(ctx, verts, cx, cy, hw, hh);
-  },
+  neighborOffsets: () => HEX_NEIGHBORS,
 };
 
 // Corner radius of a square-mode singleton, as a fraction of its half-side. A
@@ -162,20 +118,7 @@ const SQUARE_GEOMETRY: BinGeometry = {
     const half = (radius * SQRT3) / 2;
     return Math.abs(ox) < half && Math.abs(oy) < half;
   },
-  contentHalfExtent: (radius) => {
-    const half = (radius * SQRT3) / 2;
-    return { hw: half, hh: half };
-  },
-  traceTrimmedCell: (ctx, cx, cy, radius, hw, hh) => {
-    const half = (radius * SQRT3) / 2;
-    const verts: Pt[] = [
-      { x: -half, y: -half },
-      { x: half, y: -half },
-      { x: half, y: half },
-      { x: -half, y: half },
-    ];
-    traceClippedPolygon(ctx, verts, cx, cy, hw, hh);
-  },
+  neighborOffsets: () => SQUARE_NEIGHBORS,
 };
 
 /** The geometry for a bin shape; defaults to hex for an unset/unknown shape. */

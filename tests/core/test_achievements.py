@@ -3,10 +3,11 @@
 Covers:
 - record_* helpers (vote, dataset load, detector import, find)
 - counter → tier index mapping
-- pending_announcements computation
-- acknowledge tracking
+- pending_announcements computation (notification dot)
+- pending_toasts computation (one-time unlock toast)
+- acknowledge / mark_toasted tracking (independent watermarks)
 - importer exclusion for datasets_loaded
-- /api/achievements and /api/achievements/<id>/acknowledge routes
+- /api/achievements and /api/achievements/<id>/{acknowledge,mark-toasted} routes
 """
 
 from __future__ import annotations
@@ -35,6 +36,10 @@ def _pending_for(state: dict, category: str) -> list[dict]:
     return [p for p in state["pending_announcements"] if p["id"] == category]
 
 
+def _toasts_for(state: dict, category: str) -> list[dict]:
+    return [p for p in state["pending_toasts"] if p["id"] == category]
+
+
 # ---------------------------------------------------------------------------
 # Empty / defaults
 # ---------------------------------------------------------------------------
@@ -45,6 +50,7 @@ class TestEmptyState:
         state = achievements.get_full_state()
         assert state["tier_names"] == ["Bronze", "Silver", "Gold", "Platinum"]
         assert state["pending_announcements"] == []
+        assert state["pending_toasts"] == []
         assert len(state["achievements"]) == 10
         for a in state["achievements"]:
             assert a["counter"] == 0
@@ -558,6 +564,65 @@ class TestTiers:
 
 
 # ---------------------------------------------------------------------------
+# One-time toast watermark (independent of the notification dot)
+# ---------------------------------------------------------------------------
+
+
+class TestToasts:
+    def test_new_unlock_pends_a_toast(self):
+        achievements.record_dataset_load("server_folder")  # Bronze
+        state = achievements.get_full_state()
+        toasts = _toasts_for(state, "datasets_loaded")
+        assert len(toasts) == 1
+        assert toasts[0]["tier_idx"] == 0
+        assert toasts[0]["tier_name"] == "Bronze"
+        assert toasts[0]["threshold"] == 1
+
+    def test_mark_toasted_clears_toast_but_keeps_dot(self):
+        # The whole point: toasting once must NOT clear the notification dot.
+        achievements.record_dataset_load("server_folder")
+        assert achievements.mark_toasted("datasets_loaded", 0) is True
+        state = achievements.get_full_state()
+        assert _toasts_for(state, "datasets_loaded") == []
+        # The dot (pending_announcements) stays lit until the panel is opened.
+        assert [p["tier_idx"] for p in _pending_for(state, "datasets_loaded")] == [0]
+
+    def test_acknowledge_does_not_clear_an_unseen_toast_after_marking(self):
+        # Marking toasted leaves the dot; opening the panel then clears it,
+        # and a re-toast never happens (toasted stays advanced).
+        achievements.record_dataset_load("server_folder")
+        achievements.mark_toasted("datasets_loaded", 0)
+        achievements.acknowledge("datasets_loaded", 0)
+        state = achievements.get_full_state()
+        assert _toasts_for(state, "datasets_loaded") == []
+        assert _pending_for(state, "datasets_loaded") == []
+
+    def test_acknowledge_also_advances_toasted(self):
+        # Opening the panel (acknowledge) implies the toast need not fire later.
+        achievements.record_dataset_load("server_folder")
+        achievements.acknowledge("datasets_loaded", 0)
+        state = achievements.get_full_state()
+        assert _toasts_for(state, "datasets_loaded") == []
+
+    def test_mark_toasted_lower_tier_is_noop(self):
+        achievements.record_dataset_load("server_folder")
+        assert achievements.mark_toasted("datasets_loaded", 0) is True
+        assert achievements.mark_toasted("datasets_loaded", 0) is False
+
+    def test_jumping_multiple_tiers_pends_each_toast(self):
+        achievements.record_find(2500)  # Bronze + Silver in one go
+        state = achievements.get_full_state()
+        assert [p["tier_idx"] for p in _toasts_for(state, "find_media")] == [0, 1]
+
+    def test_invalid_category_mark_toasted_returns_false(self):
+        assert achievements.mark_toasted("not_a_real_category", 0) is False
+
+    def test_invalid_tier_idx_mark_toasted_returns_false(self):
+        assert achievements.mark_toasted("datasets_loaded", 99) is False
+        assert achievements.mark_toasted("datasets_loaded", -1) is False
+
+
+# ---------------------------------------------------------------------------
 # Persistence in settings.json
 # ---------------------------------------------------------------------------
 
@@ -632,6 +697,27 @@ class TestAchievementsApi:
         # Schema validation: missing required "tier_idx" → 422.
         assert resp.status_code == 422
 
+    def test_mark_toasted_endpoint(self, client):
+        achievements.record_dataset_load("server_folder")
+        resp = client.post(
+            "/api/achievements/datasets_loaded/mark-toasted",
+            json={"tier_idx": 0},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["changed"] is True
+
+        # The toast is gone, but the dot remains for the panel to clear.
+        body = client.get("/api/achievements").get_json()
+        assert _toasts_for(body, "datasets_loaded") == []
+        assert [p["tier_idx"] for p in _pending_for(body, "datasets_loaded")] == [0]
+
+        # Second call returns changed=False.
+        resp = client.post(
+            "/api/achievements/datasets_loaded/mark-toasted",
+            json={"tier_idx": 0},
+        )
+        assert resp.get_json()["changed"] is False
+
 
 # ---------------------------------------------------------------------------
 # Integration hooks via real action endpoints
@@ -692,13 +778,13 @@ class TestActionHooks:
 
 
 # ---------------------------------------------------------------------------
-# disable_achievements opt-out
+# enable_achievements opt-out
 # ---------------------------------------------------------------------------
 
 
 class TestDisableAchievements:
     def test_record_hooks_are_noops_when_disabled(self):
-        settings_mod.set_disable_achievements(True)
+        settings_mod.set_enable_achievements(False)
         achievements.record_vote("det-1", media_type="audio")
         achievements.record_dataset_load("server_folder")
         achievements.record_detector_import("det-X")
@@ -718,7 +804,7 @@ class TestDisableAchievements:
         achievements.record_dataset_load("server_folder")
         achievements.record_find(500)
         # Flip the toggle through the same code path the route uses.
-        settings_mod.set_disable_achievements(True)
+        settings_mod.set_enable_achievements(False)
         state = achievements.get_full_state()
         for a in state["achievements"]:
             assert a["counter"] == 0
@@ -738,14 +824,14 @@ class TestDisableAchievements:
         achievements.wipe_state()
         assert "achievement_state" not in _user_caches.get(username, {})
 
-    def test_settings_route_wipes_on_false_to_true_transition(self, client):
+    def test_settings_route_wipes_on_true_to_false_transition(self, client):
         # Build up some real progress.
         achievements.record_vote("det-1", media_type="audio")
         achievements.record_find(50)
         # Flip via the public PUT endpoint.
-        resp = client.put("/api/settings", json={"disable_achievements": True})
+        resp = client.put("/api/settings", json={"enable_achievements": False})
         assert resp.status_code == 200
-        assert resp.get_json()["disable_achievements"] is True
+        assert resp.get_json()["enable_achievements"] is False
 
         # State on disk is gone; the public read returns a zeroed shell.
         from vtsearch.auth import get_current_user
@@ -760,8 +846,8 @@ class TestDisableAchievements:
 
     def test_re_enabling_does_not_restore_old_counters(self, client):
         achievements.record_vote("det-1", media_type="audio")
-        client.put("/api/settings", json={"disable_achievements": True})
-        client.put("/api/settings", json={"disable_achievements": False})
+        client.put("/api/settings", json={"enable_achievements": False})
+        client.put("/api/settings", json={"enable_achievements": True})
         # Counters should still be zero; the wipe is permanent.
         state = achievements.get_full_state()
         for a in state["achievements"]:

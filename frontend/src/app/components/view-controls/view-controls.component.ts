@@ -18,7 +18,7 @@ type IconSize = (typeof ICON_SIZES)[number];
   styleUrl: './view-controls.component.scss',
 })
 export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
-  @Input() side: 'left' | 'right' = 'left';
+  @Input() side: 'left' | 'right' | 'popup' = 'left';
   @Input() currentMediaType = '';
   /**
    * Whether to show the click/hover focus toggle. The VTSBrowse selection
@@ -26,6 +26,14 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
    * good/bad voting, so it hides the focus group with ``[showFocus]="false"``.
    */
   @Input() showFocus = true;
+  /**
+   * Whether the thumbnail-size buttons stay active in list mode. The
+   * left/right Find panels keep the historic behavior (size applies to grid
+   * only, so the buttons disable in list mode), but the VTSBrowse bin popup
+   * scales its list-mode thumbnails too, so it opts in with
+   * ``[allowSizeInList]="true"``.
+   */
+  @Input() allowSizeInList = false;
 
   viewMode: 'grid' | 'list' = 'list';
   focusMode: 'click' | 'hover' = 'click';
@@ -67,6 +75,8 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private defaultViewMode(): 'grid' | 'list' {
+    // Left panel reads as a list by default; the right panel and the
+    // VTSBrowse bin popup default to a thumbnail grid.
     return this.side === 'left' ? 'list' : 'grid';
   }
 
@@ -90,7 +100,7 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   bumpSize(delta: 1 | -1): void {
-    if (!this.currentMediaType || this.viewMode === 'list') return;
+    if (!this.currentMediaType || (this.viewMode === 'list' && !this.allowSizeInList)) return;
     const idx = ICON_SIZES.indexOf(this.gridIconSize);
     const next = ICON_SIZES[Math.max(0, Math.min(ICON_SIZES.length - 1, idx + delta))];
     if (next === this.gridIconSize) return;

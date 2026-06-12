@@ -3,11 +3,58 @@
     <div class="dataset-name" [title]="datasetName">{{ datasetName }}</div>
   }
   @if (panelMode === 'find') {
-    <!-- Find mode: simplified view (media list header, media items, and stripe only) -->
+    <!-- Find mode: simplified view (inclusion control, media list header, media items, and stripe). -->
     <div class="tab-panel-manual" role="region" aria-label="Find results">
+      <!-- Inclusion cutoff plus the unverified-positives work-queue actions
+           (Browse / To Dataset / Export). All three scope over the unverified
+           items above the cutoff — the above-threshold items the human hasn't
+           acted on yet. -->
+      <div class="find-inclusion-row">
+        <vt-inclusion-slider
+          [value]="inclusion"
+          (valueChange)="inclusionChange.emit($event)"
+        />
+        <div class="goods-actions find-queue-actions">
+          <button
+            class="goods-action-btn"
+            [disabled]="disabled || unverifiedGoodCount === 0"
+            (click)="browse.emit()"
+            aria-label="Browse unverified positives"
+            title="Browse the unverified positives (above-threshold items you haven't acted on) as their own 2-D UMAP projection"
+          >
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+          <button
+            class="goods-action-btn"
+            [disabled]="disabled || unverifiedGoodCount === 0"
+            (click)="toDataset.emit()"
+            aria-label="Unverified positives to dataset"
+            title="Promote the unverified positives (above-threshold items you haven't acted on) into their own dataset"
+          >
+            <vt-icon type="cubes" [size]="14"></vt-icon>
+          </button>
+          <button
+            class="goods-action-btn"
+            [disabled]="disabled || unverifiedGoodCount === 0"
+            (click)="unverifiedExport.emit()"
+            aria-label="Export unverified positives"
+            title="Export the unverified positives (above-threshold items you haven't acted on) — e.g. to re-import as a dataset"
+          >
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="12" y1="12" x2="21" y2="3"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <div class="images-header">
         <h3 class="images-header-title">
-          {{ mediaTypeName }}s ({{ medias.length | number }})
+          {{ mediaTypeName }}s ({{ (sortOrder?.length ?? medias.length) | number }})
         </h3>
         <vt-view-controls
           side="left"

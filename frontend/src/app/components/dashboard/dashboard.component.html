@@ -27,6 +27,7 @@
           (click)="openImporterModal()" title="Import a new dataset"><span class="plus-icon"
             [class.plus-open]="importerModalOpen"
             [class.plus-close]="importerClosing"
+            [class.icon-waggle]="addDatasetBusy"
             (animationend)="onImporterAnimationEnd()">+</span></button>
       </div>
     </div>
@@ -263,12 +264,15 @@
             @for (detector of sortedDetectors; track detector.id) {
               <vt-detector-card
                 [detector]="detector"
+                [currentUser]="currentUser"
+                [isDefaultLogin]="isDefaultLogin"
                 [columnOrder]="visibleDetectorColumns"
                 [selected]="isDetectorSelected(detector.id)"
                 [dimmed]="isLoading && !isDetectorSelected(detector.id)"
                 [loadingTask]="loadingTasksSvc.getInlineDetectorTask(detector.id)"
                 [deleteConfirmOpen]="deletingDetectorId === detector.id"
                 [addLabelsOpen]="modals.addLabels.open && modals.addLabels.detectorId === detector.id"
+                [exportOpen]="modals.export.open && modals.export.detectorName === detector.name"
                 (rowClick)="!isLoading && toggleDetectorSelection(detector.id, $event)"
                 (checkboxToggle)="!isLoading && toggleDetectorCheckbox(detector.id)"
                 (rename)="renameDetector(detector, $event)"
@@ -278,6 +282,7 @@
                 (export)="openExportModal(detector)"
                 (addLabels)="openAddLabelsModal(detector)"
                 (autorunToggle)="toggleAutorun(detector, $event)"
+                (security)="editDetectorSecurity(detector)"
                 (cancelTask)="loadingTasksSvc.cancelDetectorLoadingTask($event)"
                 (dismissTask)="loadingTasksSvc.dismissDetectorLoadingTask($event)"
               />

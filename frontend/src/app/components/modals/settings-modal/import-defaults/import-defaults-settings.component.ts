@@ -20,6 +20,7 @@ import {
   SourceSpec,
 } from '../../../../models/api.models';
 import { DatasetsListingsApiService } from '../../../../services/datasets-listings-api.service';
+import { IconComponent } from '../../../icon/icon.component';
 import { SourceSpecsPickerComponent } from '../../../dashboard/dataset-importer-modal/source-specs-picker/source-specs-picker.component';
 import {
   ClipperChooserComponent,
@@ -40,7 +41,7 @@ import {
 @Component({
   selector: 'vt-import-defaults-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, SourceSpecsPickerComponent, ClipperChooserComponent],
+  imports: [CommonModule, FormsModule, IconComponent, SourceSpecsPickerComponent, ClipperChooserComponent],
   templateUrl: './import-defaults-settings.component.html',
   styleUrl: './import-defaults-settings.component.scss',
 })

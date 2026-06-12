@@ -8,6 +8,11 @@ import { IconComponent } from '../../icon/icon.component';
 import { SettingsImporterModalComponent } from '../settings-importer-modal/settings-importer-modal.component';
 import { SettingsExporterModalComponent } from '../settings-exporter-modal/settings-exporter-modal.component';
 import { ImportDefaultsSettingsComponent } from './import-defaults/import-defaults-settings.component';
+import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
+import {
+  AutoFindExporterChange,
+  AutoFindSettingsComponent,
+} from './auto-find/auto-find-settings.component';
 import { ImportDefaultsByMediaType } from '../../../models/api.models';
 import { SettingsApiService } from '../../../services/settings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
@@ -26,7 +31,7 @@ import {
 @Component({
   selector: 'vt-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, ImportDefaultsSettingsComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, SettingsImporterModalComponent, SettingsExporterModalComponent, ImportDefaultsSettingsComponent, FieldHintIconComponent, AutoFindSettingsComponent],
   templateUrl: './settings-modal.component.html',
   styleUrl: './settings-modal.component.scss',
 })
@@ -227,20 +232,20 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  async onToggleDisableAchievements(value: boolean): Promise<void> {
-    if (value) {
+  async onToggleEnableAchievements(value: boolean): Promise<void> {
+    if (!value) {
       const ok = await this.dialog.confirmDestructive(
         'Turn off achievements?',
-        'All achievement counters, tier progress, and unlocks will be reset to zero. The trophy button and unlock pop-ups will be hidden until you turn this back off.',
+        'All achievement counters, tier progress, and unlocks will be reset to zero. The trophy button and unlock pop-ups will be hidden until you turn this back on.',
         'Turn off',
       );
       if (!ok) {
         // Force-rebind to the previous value so the checkbox snaps back.
-        this.settings = { ...this.settings, disable_achievements: false };
+        this.settings = { ...this.settings, enable_achievements: true };
         return;
       }
     }
-    (this.settings as Record<string, unknown>)['disable_achievements'] = value;
+    (this.settings as Record<string, unknown>)['enable_achievements'] = value;
     this.save();
   }
 
@@ -362,6 +367,54 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /** Whether the projection is compacted for *typeId* (oceans closed),
+   *  defaulting to on when the user hasn't set one for this media type. */
+  getBrowseCompact(typeId: string): boolean {
+    const dict = this.settings.browse_compact as Record<string, boolean> | undefined;
+    const value = dict?.[typeId];
+    return value == null ? true : value;
+  }
+
+  /** Write the per-media-type compaction toggle and persist. Takes effect on
+   *  the next projection build or the Browser's Re-project action, since the
+   *  layout coordinates are computed once and frozen. */
+  onBrowseCompactChange(typeId: string, value: boolean): void {
+    const dict = { ...((this.settings.browse_compact as Record<string, boolean> | undefined) || {}) };
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)['browse_compact'] = dict;
+    this.save();
+  }
+
+  // --- Browser tab: right-click bin-popup view prefs ---
+  // The bin popup keeps its own per-media-type view mode + thumbnail size
+  // (``view_mode_popup`` / ``grid_icon_size_popup``), independent of the
+  // left/right panels. The popup's in-header controls write the same maps, so
+  // these widgets and the live popup stay in step.
+
+  getPopupViewMode(typeId: string): string {
+    const dict = this.settings.view_mode_popup as Record<string, string> | undefined;
+    return (dict && dict[typeId]) || 'grid';
+  }
+
+  onPopupViewModeChange(typeId: string, value: string): void {
+    const dict = { ...((this.settings.view_mode_popup as Record<string, string> | undefined) || {}) };
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)['view_mode_popup'] = dict;
+    this.save();
+  }
+
+  getPopupGridIconSize(typeId: string): string {
+    const dict = this.settings.grid_icon_size_popup as Record<string, string> | undefined;
+    return (dict && dict[typeId]) || 'M';
+  }
+
+  onPopupGridIconSizeChange(typeId: string, value: string): void {
+    const dict = { ...((this.settings.grid_icon_size_popup as Record<string, string> | undefined) || {}) };
+    dict[typeId] = value;
+    (this.settings as Record<string, unknown>)['grid_icon_size_popup'] = dict;
+    this.save();
+  }
+
   onNumberChange(key: string, value: number): void {
     (this.settings as Record<string, unknown>)[key] = value;
     this.save();
@@ -395,12 +448,27 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     return this.settings.effective_solo_media_type || null;
   }
 
-  /** Comma-separated list of auto-run detector names for the read-only
-   *  Server tab, or ``''`` when none are configured (so the template can
-   *  fall back to a muted "None"). */
-  get autorunDetectorsDisplay(): string {
-    const list = (this.settings as Record<string, unknown>)['autorun_detectors'] as string[] | undefined;
-    return list && list.length ? list.join(', ') : '';
+  /** Configured Auto-Find results-exporter name (''=none), read from the
+   *  settings object for the Auto-Find tab's child component. */
+  get autofindExporter(): string {
+    return ((this.settings as Record<string, unknown>)['autofind_exporter'] as string) || '';
+  }
+
+  /** Per-exporter saved field values for the Auto-Find tab's child component. */
+  get autofindExporterFieldValues(): Record<string, Record<string, string>> {
+    return (
+      ((this.settings as Record<string, unknown>)['autofind_exporter_field_values'] as Record<
+        string,
+        Record<string, string>
+      >) || {}
+    );
+  }
+
+  /** Persist the user's Auto-Find results-exporter choice + field values. */
+  onAutofindExporterChange(change: AutoFindExporterChange): void {
+    (this.settings as Record<string, unknown>)['autofind_exporter'] = change.exporter;
+    (this.settings as Record<string, unknown>)['autofind_exporter_field_values'] = change.fieldValues;
+    this.save();
   }
 
   /** Effective hidden-plugins map flattened to ``[{family, names}]`` rows

@@ -52,9 +52,11 @@ export interface BrowseContextMenuEvent {
   bounds: DOMRect;
 }
 
-/** How much larger the hovered cell is drawn relative to its neighbours so it
- *  lifts off the grid. The border is reserved for selection state, so hover is
- *  signalled by this size bump + a soft drop shadow instead of a ring. */
+/** How much larger a hovered *flat-density* cell (audio/text — no thumbnail) is
+ *  drawn relative to its neighbours so it lifts off the grid. The border is
+ *  reserved for selection state, so hover is signalled by this size bump + a
+ *  soft drop shadow instead of a ring. Thumbnail cells ignore this and size
+ *  their break-out rectangle by the neighbour-centre rule (`hoverThumbRect`). */
 const HOVER_RADIUS_SCALE = 1.38;
 
 @Component({
@@ -75,6 +77,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   /** On-screen bin radius (CSS px) the "M" thumbnail size targets, and the
    * default before any saved size is applied. See {@link targetRadius}. */
   static readonly DEFAULT_TARGET_RADIUS = 28;
+  /** Longest side (px) the ``/thumbnail`` route caps images at (mirrors
+   * ``vtscore`` ``DEFAULT_MAX_DIM``). Once a cell is drawn wider than this the
+   * capped thumbnail would upscale, so at those zoom levels the canvas fetches
+   * the full-res ``/image`` instead. See {@link useFullResThumbs}. */
+  static readonly THUMB_NATIVE_MAX_DIM = 384;
   /**
    * Target on-screen bin radius in CSS px: the size each bin/thumbnail aims to
    * render at. Level selection picks the pyramid level whose bins land closest
@@ -122,6 +129,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   /** Media ids whose thumbnail failed to load, so we don't retry every frame. */
   private thumbFailed = new Set<number>();
   private readonly MAX_THUMBS = 2048;
+  /** Resolution tier the {@link thumbCache} is currently filled at. Flips to
+   * ``true`` once the zoom is large enough that {@link getThumb} fetches the
+   * full-res ``/image`` instead of the capped ``/thumbnail``; crossing the
+   * threshold drops the cache so cells reload at the matching resolution. */
+  private thumbsAreFullRes = false;
 
   private ctx!: CanvasRenderingContext2D;
   private width = 0;
@@ -288,6 +300,25 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     return usesThumbnails(this.mediaType);
   }
 
+  /** At the largest zoom levels a cell is drawn wider (in device px) than the
+   * thumbnail's native longest side, so painting the capped ``/thumbnail`` would
+   * just upscale a blurry bitmap. Past that point fetch the full-res ``/image``
+   * instead. Only a handful of such giant cells fit on screen at once, so the
+   * LRU still bounds memory. */
+  private get useFullResThumbs(): boolean {
+    return 2 * this.targetRadius * this.dpr > BrowseCanvasComponent.THUMB_NATIVE_MAX_DIM;
+  }
+
+  /** Drop the thumbnail cache when the zoom crosses the full-res threshold so
+   * cells reload at the resolution matching the new tier. Cheap no-op while the
+   * tier is unchanged. */
+  private syncThumbResolutionTier(): void {
+    if (this.useFullResThumbs === this.thumbsAreFullRes) return;
+    this.thumbsAreFullRes = this.useFullResThumbs;
+    this.thumbCache.clear();
+    this.thumbFailed.clear();
+  }
+
   /** Geometry (hex or square) for the active projection's bin shape. */
   private get geom(): BinGeometry {
     return binGeometry(this.meta?.bin_shape);
@@ -380,10 +411,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
           this.selection.clear();
         }
         this.fitToData();
-      } else if (this.viewport.consumeFitOnNextMeta()) {
-        // Same projection id, but the view asked for a re-frame (e.g. a
-        // Remove-from-Good cull shrank the bounds): fit to what remains.
-        this.fitToData();
       } else {
         this.updateActiveLevel();
       }
@@ -455,6 +482,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     canvas.style.width = `${this.width / rootZoom}px`;
     canvas.style.height = `${this.height / rootZoom}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    // A devicePixelRatio change (e.g. dragging to a different-density display)
+    // can also cross the full-res threshold, so re-evaluate the tier here.
+    this.syncThumbResolutionTier();
     // The initial fit may have run against the 800x600 fallback (meta arrived
     // before layout). Now that the real size is known, refit to it so the
     // framing and the viewport bounds published to the minimap match the actual
@@ -531,10 +561,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * draw out that far past their centres. Clamping the centre (not the whole
    * span) is deliberate: it lets any point in the content be parked at screen
    * centre, at the cost of blank margin past the edge (see {@link clampAxis}).
-   * When the viewport is larger than the content on an axis (e.g. after zooming
-   * out from an off-centre view) it is centred on that axis rather than allowed
-   * to drift — so a zoom-out from the top third reveals the *content* re-centred
-   * to fill the frame, even though that nudges the view off the original spot.
+   * The `[lo, hi]` clamp holds at every zoom — even when the viewport is larger
+   * than the content — so you can always pull an edge bin to the centre of the
+   * current zoom. (Use Zoom Fit to re-frame the whole projection; the passive
+   * clamp no longer force-recentres on zoom-out.)
    */
   private clampView(): void {
     if (!this.meta || this.meta.point_count === 0) return;
@@ -558,8 +588,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const lim = this.panLimits(zoom);
     return {
       zoom,
-      centerX: lim ? this.clampAxis(t.centerX, lim.loX, lim.hiX, lim.viewX) : t.centerX,
-      centerY: lim ? this.clampAxis(t.centerY, lim.loY, lim.hiY, lim.viewY) : t.centerY,
+      centerX: lim ? this.clampAxis(t.centerX, lim.loX, lim.hiX) : t.centerX,
+      centerY: lim ? this.clampAxis(t.centerY, lim.loY, lim.hiY) : t.centerY,
     };
   }
 
@@ -567,8 +597,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * Pan-centre limits at zoom `z`: the content rectangle the viewport *centre*
    * is held within (the bin-centre `bounds` grown by the edge bins' circumradius
    * `r`, since those bins draw out that far past their centres) plus the viewport
-   * extent on each axis (used to detect when the content is fully in frame and to
-   * scale the rubber-band give). Returns null when there's no data to frame.
+   * extent on each axis (used to scale the rubber-band give). Returns null when
+   * there's no data to frame.
    */
   private panLimits(
     z: number,
@@ -584,17 +614,21 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * point in the content can be brought to screen centre (drag the top-left bin
    * out from under the Back button and park it dead-centre if you like). The cost
    * is blank margin past the content edge: at centre = `lo` the viewport spills
-   * half its extent (`viewExtent / 2`) past the edge into background. That spill
-   * is half the viewport, so it's larger when zoomed out and smaller when zoomed
-   * in — the wall sits further from the data the further out you are, which is the
-   * price of being able to centre an edge point at any zoom. When the viewport is
-   * wider than the whole content (`viewExtent >= hi - lo`, i.e. at/near the
-   * whole-projection fit) panning can't reveal anything new, so centre it
-   * (`(lo + hi) / 2`) for equal margins instead of stranding the content to one
-   * side.
+   * half its extent past the edge into background. That spill is half the
+   * viewport, so it's larger when zoomed out and smaller when zoomed in — the
+   * wall sits further from the data the further out you are, which is the price of
+   * being able to centre an edge point at any zoom.
+   *
+   * The clamp is `[lo, hi]` at *every* zoom, including when the viewport is wider
+   * than the whole content (at/near the whole-projection fit): we deliberately do
+   * NOT pin the centre to `(lo + hi) / 2` there. Pinning froze panning the moment
+   * an axis's viewport grew past its content span — which killed all panning when
+   * zoomed out, and (because the test is per-axis) let you centre an edge bin
+   * vertically but not horizontally whenever the content's aspect ratio differed
+   * from the viewport's. Keeping the full `[lo, hi]` range on both axes lets you
+   * pull any bin to the centre of the current zoom, all the way out.
    */
-  private clampAxis(center: number, lo: number, hi: number, viewExtent: number): number {
-    if (viewExtent >= hi - lo) return (lo + hi) / 2;
+  private clampAxis(center: number, lo: number, hi: number): number {
     return Math.min(Math.max(center, lo), hi);
   }
 
@@ -634,16 +668,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   /**
-   * {@link clampAxis} with elastic edges: inside the allowed range it's the
-   * identity; past either edge (or away from the pinned centre when the content
-   * is narrower than the viewport) it returns a rubber-banded overshoot.
+   * {@link clampAxis} with elastic edges: inside `[lo, hi]` it's the identity;
+   * past either edge it returns a rubber-banded overshoot. Like {@link clampAxis}
+   * it uses the full `[lo, hi]` range at every zoom (no centre-pinning when the
+   * viewport is wider than the content), so a drag can pull any bin to the centre
+   * even at the furthest zoom.
    */
   private rubberAxis(center: number, lo: number, hi: number, viewExtent: number): number {
     const maxOver = BrowseCanvasComponent.RUBBER_PAN_MAX * viewExtent;
-    if (viewExtent >= hi - lo) {
-      const mid = (lo + hi) / 2;
-      return mid + this.rubber(center - mid, maxOver);
-    }
     if (center < lo) return lo + this.rubber(center - lo, maxOver);
     if (center > hi) return hi + this.rubber(center - hi, maxOver);
     return center;
@@ -1121,19 +1153,24 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   ): void {
     // A cell with one item is drawn as a disc (slightly smaller than the cell);
     // multi-item cells keep their full shape so they tile the space. The hovered
-    // cell instead passes `trim`: its outline is the cell clipped to the
-    // thumbnail's contain-fit rectangle, so the enlarged tile is just the
-    // thumbnail with the protruding corners lopped off rather than background
-    // bars painted over the neighbours.
+    // cell instead passes `trim`: a plain rectangle of the thumbnail's native
+    // aspect ratio, so the enlarged tile breaks out of the bin silhouette and
+    // shows the whole frame (no hex/square clip, no background bars).
     const single = cell.count === 1;
-    if (trim) this.geom.traceTrimmedCell(ctx, cx, cy, radius, trim.hw, trim.hh);
-    else this.geom.traceCell(ctx, cx, cy, radius, single);
+    if (trim) {
+      ctx.beginPath();
+      ctx.rect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
+      ctx.closePath();
+    } else {
+      this.geom.traceCell(ctx, cx, cy, radius, single);
+    }
 
     // Image / video: paint the central item's thumbnail clipped to the cell.
     // Until it loads, fall back to the density shading below so the cell is
     // never blank. Grid cells cover-fit (fill the bin, cropping the edges); the
-    // hovered cell instead draws the thumbnail contain-fit into `trim`, which
-    // its trimmed outline matches, so the whole frame shows with no letterbox.
+    // hovered cell instead draws the whole thumbnail to fill `trim`, whose
+    // rectangle already carries the image's aspect ratio, so it shows undistorted
+    // and uncropped.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
     if (thumb) {
       ctx.save();
@@ -1204,13 +1241,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     cmap: ResolvedColormap,
     selectionActive: boolean,
   ): void {
-    const bumped = radius * HOVER_RADIUS_SCALE;
-    // With a thumbnail, trim the tile to the thumbnail's contain-fit rectangle
-    // so the enlarged cell is just the (whole) thumbnail — no background bars
-    // reaching over the neighbours. Without one (flat density), keep the full
-    // bumped cell.
+    // A hovered thumbnail breaks out of its bin: it's shown whole at its native
+    // aspect ratio as a plain rectangle (no silhouette), sized to grow until its
+    // edge just reaches the nearest neighbour cell's centre (`hoverThumbRect`).
+    // A non-thumbnail (flat density) cell has no such rectangle, so it keeps its
+    // silhouette and simply lifts off with a fixed size bump.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
-    const trim = thumb ? this.containRect(thumb, bumped) : null;
+    const trim = thumb ? this.hoverThumbRect(thumb, radius) : null;
+    const bumped = radius * HOVER_RADIUS_SCALE;
 
     // Cast a single clean drop shadow from an opaque base shape first, then
     // paint the real (shadow-free) cell on top so the fill/border don't each
@@ -1219,13 +1257,20 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
     ctx.shadowBlur = Math.max(4, radius * 0.3);
     ctx.shadowOffsetY = Math.max(1, radius * 0.1);
-    if (trim) this.geom.traceTrimmedCell(ctx, cx, cy, bumped, trim.hw, trim.hh);
-    else this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
+    if (trim) {
+      ctx.beginPath();
+      ctx.rect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
+      ctx.closePath();
+    } else {
+      this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
+    }
     ctx.fillStyle = this.themeColor('--bg-body');
     ctx.fill();
     ctx.restore();
 
-    this.drawHex(ctx, cx, cy, bumped, cell, cmap, selectionActive, trim);
+    // `radius` is unused for the shape when `trim` is set (the rectangle drives
+    // it), so the un-bumped radius is fine there; flat-density cells use the bump.
+    this.drawHex(ctx, cx, cy, trim ? radius : bumped, cell, cmap, selectionActive, trim);
   }
 
   /** Cover-fit an image over the hex's 2*radius square (the path must be clipped). */
@@ -1243,13 +1288,25 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
   }
 
-  /** Half-extents of an image contain-fit into the cell's bounding box at the
-   *  given `radius`. The fit box follows the shape (hex is wider than tall,
-   *  square is even) so wide thumbnails aren't re-cropped by the silhouette. */
-  private containRect(img: HTMLImageElement, radius: number): { hw: number; hh: number } {
-    const { hw, hh } = this.geom.contentHalfExtent(radius);
-    const scale = Math.min((hw * 2) / img.naturalWidth, (hh * 2) / img.naturalHeight);
-    return { hw: (img.naturalWidth * scale) / 2, hh: (img.naturalHeight * scale) / 2 };
+  /**
+   * Half-extents of a hovered thumbnail. On hover the thumbnail breaks out of
+   * its bin and is shown whole at its native aspect ratio, grown as large as
+   * possible under one rule: no neighbouring cell's centre may be covered. The
+   * rectangle (aspect = image width / height) is centred on the cell, so a
+   * neighbour at screen offset `(ox, oy)` stays uncovered while the half-height
+   * `H` satisfies `H ≤ max(|ox| / aspect, |oy|)`; the binding neighbour is the
+   * tightest of those (four for a square, six for a hex), and the rectangle's
+   * edge then just touches that centre. Wide images grow until they reach the
+   * side neighbours, tall ones until they reach the top/bottom — each axis
+   * limited by whichever neighbour it would otherwise overrun.
+   */
+  private hoverThumbRect(img: HTMLImageElement, radius: number): { hw: number; hh: number } {
+    const aspect = img.naturalWidth / img.naturalHeight;
+    let hh = Infinity;
+    for (const { dx, dy } of this.geom.neighborOffsets()) {
+      hh = Math.min(hh, Math.max((Math.abs(dx) * radius) / aspect, Math.abs(dy) * radius));
+    }
+    return { hw: aspect * hh, hh };
   }
 
   /**
@@ -1273,11 +1330,15 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.thumbCache.delete(representativeId);
       this.thumbFailed.add(representativeId);
     };
-    // Downscaled tile, not full-res /image: a browse projection can hold
-    // thousands of points, so painting full-size bitmaps onto the hexes would
-    // exhaust memory. The /thumbnail route serves the frame for video via the
-    // same image_response hook, then downscales it.
-    img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/thumbnail`);
+    // Downscaled /thumbnail by default: a browse projection can hold thousands
+    // of points, so painting full-size bitmaps onto every hex would exhaust
+    // memory. The /thumbnail route serves the frame for video via the same
+    // image_response hook, then downscales it. At the largest zoom levels,
+    // though, a cell is drawn wider than the thumbnail's native resolution, so
+    // we fetch the full-res /image instead (only a few such giant cells fit on
+    // screen, so memory stays bounded). See {@link useFullResThumbs}.
+    const endpoint = this.thumbsAreFullRes ? 'image' : 'thumbnail';
+    img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/${endpoint}`);
     this.thumbCache.set(representativeId, img);
     return null;
   }
@@ -1626,6 +1687,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.transform.zoom *= radius / this.targetRadius;
     }
     this.targetRadius = radius;
+    // A large enough size crosses into full-res /image territory; drop any
+    // capped thumbnails so cells reload sharp (and vice versa on shrink).
+    this.syncThumbResolutionTier();
     // On initial load (the user hasn't framed yet) a saved cell size changes the
     // bin radius, so re-fit to keep the whole projection in view rather than
     // letting the now-larger edge bins spill past the default-radius framing.

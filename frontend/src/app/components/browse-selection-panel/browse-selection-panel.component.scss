@@ -56,12 +56,39 @@
 }
 
 .bsp-actions {
+  display: flex;
+  gap: var(--space-sm);
   padding: 0 var(--space-lg) var(--space-sm);
   flex-shrink: 0;
 }
 
-.bsp-remove-good {
-  width: 100%;
+// Verify Good / Bad are a symmetric pair: identical shape, distinguished only
+// by color (green = good, red = bad). Both are filled so neither reads as the
+// "primary" action over the other.
+.bsp-verify-good,
+.bsp-verify-bad {
+  flex: 1;
+  color: var(--btn-filled-text);
+}
+
+.bsp-verify-good {
+  background: var(--color-good);
+  border-color: var(--color-good);
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-good) 85%, var(--bg-body));
+    border-color: color-mix(in srgb, var(--color-good) 85%, var(--bg-body));
+  }
+}
+
+.bsp-verify-bad {
+  background: var(--color-bad);
+  border-color: var(--color-bad);
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-bad) 85%, var(--bg-body));
+    border-color: color-mix(in srgb, var(--color-bad) 85%, var(--bg-body));
+  }
 }
 
 .bsp-toolbar {

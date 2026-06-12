@@ -1,0 +1,116 @@
+// `.loading-text`, `.error-text`, `.stats-table`, `.stat-label`,
+// `.stat-value`, and `.section-title` are shared utilities (see
+// dataset-stats-modal + _components.scss); only the find-specific confusion
+// grid and the inline chart are styled here.
+
+.stale-note {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-left: 3px solid var(--text-warning);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-warning);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+
+  strong {
+    font-weight: var(--weight-semibold);
+  }
+}
+
+.confusion {
+  .row-head {
+    font-weight: var(--weight-medium);
+    color: var(--text-secondary);
+    text-align: left;
+  }
+
+  .cell {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .agree {
+    color: var(--text-primary);
+  }
+
+  .correct {
+    color: var(--color-accent, var(--text-primary));
+    font-weight: var(--weight-semibold);
+  }
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.chart-wrap {
+  margin-top: var(--space-sm);
+}
+
+.fpfn-chart {
+  width: 100%;
+  height: 150px;
+
+  .axis {
+    stroke: var(--border-subtle);
+    stroke-width: 1;
+  }
+
+  .tick {
+    fill: var(--text-muted);
+    font-size: 8px;
+  }
+
+  .current {
+    stroke: var(--text-muted);
+    stroke-width: 1;
+    stroke-dasharray: 3 2;
+  }
+
+  .line-fp {
+    fill: none;
+    stroke: var(--color-bad);
+    stroke-width: 1.5;
+  }
+
+  .line-fn {
+    fill: none;
+    stroke: var(--color-good);
+    stroke-width: 1.5;
+  }
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-top: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs, 4px);
+}
+
+.swatch {
+  width: 12px;
+  height: 3px;
+  border-radius: 1px;
+}
+
+.swatch-fp {
+  background: var(--color-bad);
+}
+
+.swatch-fn {
+  background: var(--color-good);
+}
+
+.swatch-current {
+  background: var(--text-muted);
+}

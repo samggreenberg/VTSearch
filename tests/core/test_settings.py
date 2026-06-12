@@ -120,8 +120,8 @@ class TestSettingsModule:
     def test_max_concurrent_embeddings_default_from_hardware(self, isolated_settings):
         """The default mirrors the hardware-derived value and is not persisted.
 
-        The concrete scaling (GPU count, CPU cores, total RAM) is unit-tested in
-        ``tests_lib/embedding/test_concurrency_defaults.py``; here we only assert
+        The concrete scaling (CPU cores, total RAM) is unit-tested in
+        ``tests_lib/datasets/test_concurrency_defaults.py``; here we only assert
         the settings layer surfaces that value and doesn't write it to disk.
         """
         from vtscore.embedding.loader import default_concurrent_embeddings
@@ -489,11 +489,16 @@ class TestSettingsModule:
         with pytest.raises(ValueError):
             settings_mod.set_panel_pct_left({"audio": 100})
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left({"audio": 600})
+            settings_mod.set_panel_pct_left({"audio": 20000})
         with pytest.raises(ValueError):
             settings_mod.set_panel_pct_left(100)
         with pytest.raises(ValueError):
-            settings_mod.set_panel_pct_left(600)
+            settings_mod.set_panel_pct_left(20000)
+
+    def test_panel_pct_wide_panel_allowed(self, isolated_settings):
+        """Widths above the old 500px cap are accepted (no upper-bound clip)."""
+        settings_mod.set_panel_pct_left({"audio": 520})
+        assert settings_mod.get_panel_pct_left()["audio"] == 520
 
     def test_panel_pct_invalid_media_type(self):
         with pytest.raises(ValueError):
@@ -508,11 +513,11 @@ class TestSettingsModule:
         settings_mod.set_panel_pct_left({"audio": 300})
         # Manually write an out-of-range value to disk
         raw = json.loads(isolated_settings.read_text())
-        raw["panel_pct_left"]["audio"] = 700
+        raw["panel_pct_left"]["audio"] = 20000
         isolated_settings.write_text(json.dumps(raw))
         settings_mod.reset()
         result = settings_mod.get_panel_pct_left()
-        assert result["audio"] == 500
+        assert result["audio"] == 10000
 
     def test_get_defaults(self):
         defaults = settings_mod.get_defaults()
@@ -837,23 +842,25 @@ class TestConcurrentWrites:
     def test_add_autorun_detector_rmw(self, isolated_settings):
         """Concurrent ``add_autorun_detector`` calls must not lose entries.
 
-        Simulates the cross-process race: our cache says ``[]`` but disk
-        has ``["other-detector"]`` because a sibling process added it.
+        ``autorun_detectors`` is per-user now, so the cross-process race plays
+        out on the (default) user's settings file: our cache says
+        ``["ours-pre"]`` but disk also has ``"sibling"`` because a sibling
+        process added it. The atomic per-user RMW must merge, not clobber.
         """
-        # Force-load the server cache (so add_autorun_detector below
+        # Force-load the per-user cache (so add_autorun_detector below
         # doesn't trigger a fresh load).
         settings_mod.add_autorun_detector("ours-pre")
 
-        # Sibling process directly adds an entry on disk.
-        server_path = isolated_settings._server
-        disk = json.loads(server_path.read_text())
+        # Sibling process directly adds an entry on disk (the per-user file).
+        user_path = isolated_settings._user
+        disk = json.loads(user_path.read_text())
         disk["autorun_detectors"] = list(disk.get("autorun_detectors", [])) + ["sibling"]
-        server_path.write_text(json.dumps(disk))
+        user_path.write_text(json.dumps(disk))
 
         # We add another; should merge with disk, not clobber.
         settings_mod.add_autorun_detector("ours-post")
 
-        final = json.loads(server_path.read_text())
+        final = json.loads(user_path.read_text())
         assert "sibling" in final["autorun_detectors"]
         assert "ours-pre" in final["autorun_detectors"]
         assert "ours-post" in final["autorun_detectors"]

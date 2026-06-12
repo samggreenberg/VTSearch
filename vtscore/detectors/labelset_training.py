@@ -403,7 +403,7 @@ def labelset_train_and_score(
             det_ctx=det_ctx,
         )
 
-    model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
+    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap
 

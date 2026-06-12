@@ -37,11 +37,11 @@ export class BrowseSubsetService {
 
   /**
    * Flag the reverse handoff: the user clicked "Back to Find" from the browse
-   * view after culling false-positives. The Find view consumes this on init
-   * to SKIP its automatic re-run of detector scoring — which would otherwise
-   * re-promote the just-removed items back to Good with the unchanged model —
-   * and instead just refresh the (already-updated) vote lists. Single-shot,
-   * like {@link take}.
+   * view after verifying a selection (Verified Good / Verified Bad). The Find
+   * view consumes this on init to SKIP its automatic re-run of detector
+   * scoring — which would otherwise re-promote the just-verified items with the
+   * unchanged model — and instead just refresh the (already-updated) vote
+   * lists. Single-shot, like {@link take}.
    */
   markReturningToFind(): void {
     this.returningToFind = true;

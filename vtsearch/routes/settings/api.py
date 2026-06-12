@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from flask_smorest import Blueprint, abort
+from marshmallow import fields
 
 from vtsearch import settings
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
@@ -71,6 +72,8 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "focus_mode_right": settings.set_focus_mode_right,
     "panel_pct_left": settings.set_panel_pct_left,
     "panel_pct_right": settings.set_panel_pct_right,
+    "view_mode_popup": settings.set_view_mode_popup,
+    "grid_icon_size_popup": settings.set_grid_icon_size_popup,
     "autopilot_enabled": settings.set_autopilot_enabled,
     "hide_autopilot": settings.set_hide_autopilot,
     "autopilot_top_greens": settings.set_autopilot_top_greens,
@@ -84,22 +87,23 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "browse_colormap": settings.set_browse_colormap,
     "browse_icon_size": settings.set_browse_icon_size,
     "browse_thumbnail_border": settings.set_browse_thumbnail_border,
+    "browse_compact": settings.set_browse_compact,
 }
 
 
-def _apply_disable_achievements(value: bool) -> None:
-    """Persist the toggle and wipe stored counters when flipping it on.
+def _apply_enable_achievements(value: bool) -> None:
+    """Persist the toggle and wipe stored counters when flipping it off.
 
     The user-visible promise is that turning the feature off zeroes the
-    achievement counters and keeps them there. Wiping on the False→True
-    transition (rather than every set) makes the off→on→off cycle
+    achievement counters and keeps them there. Wiping on the True→False
+    transition (rather than every set) makes the on→off→on cycle
     deterministic: counters reset on opt-out and start fresh if the user
     ever opts back in.
     """
-    prev = bool(settings.get_disable_achievements())
+    prev = bool(settings.get_enable_achievements())
     coerced = bool(value)
-    settings.set_disable_achievements(coerced)
-    if coerced and not prev:
+    settings.set_enable_achievements(coerced)
+    if prev and not coerced:
         from vtsearch import achievements
 
         achievements.wipe_state()
@@ -194,6 +198,33 @@ def _apply_dir(key: str, value: str, setter) -> None:
     setter(value.strip())
 
 
+#: Schema fields declared as dicts (``browse_*``, the per-media-type
+#: embedder maps, ``import_defaults_by_media_type`` …). A persisted or
+#: hand-edited settings file from an older build can carry a stale scalar
+#: where one of these is now expected (e.g. a pre-per-media-type
+#: ``browse_bin_shape: "hex"``). Marshmallow's ``Dict`` field calls
+#: ``.items()`` while dumping, so a bare string there would 500 the entire
+#: settings endpoint. Derived from the schema so it stays in sync as
+#: fields are added.
+_DICT_FIELD_NAMES = frozenset(
+    name for name, field in AppSettingsSchema().fields.items() if isinstance(field, fields.Dict)
+)
+
+
+def _coerce_dict_fields(data: dict) -> dict:
+    """Replace any non-dict value in a schema dict field with ``{}``.
+
+    Mirrors how the per-side getters (``view_mode`` etc.) already coerce a
+    junk persisted value back to its default on read: a stale scalar left
+    over from an older settings file resolves to "never set" rather than
+    crashing the serializer. Mutates and returns *data*.
+    """
+    for name in _DICT_FIELD_NAMES:
+        if name in data and not isinstance(data[name], dict):
+            data[name] = {}
+    return data
+
+
 def _with_effective(data: dict) -> dict:
     """Overlay the resolver-computed (read-only) views onto *data*.
 
@@ -205,7 +236,11 @@ def _with_effective(data: dict) -> dict:
     * ``hidden_plugins`` - the persisted server setting unioned with any
       ``--hide-plugin`` CLI flags, normalised to sorted lists so the
       "Server" settings tab can render what's actually in force.
+
+    Stale dict fields are coerced to ``{}`` first so a corrupt persisted
+    value can't 500 the endpoint (see :func:`_coerce_dict_fields`).
     """
+    _coerce_dict_fields(data)
     data["effective_solo_media_type"] = settings.get_effective_solo_media_type()
     data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
     data["hidden_plugins"] = {
@@ -247,11 +282,54 @@ def _apply_inclusion_guarded(value) -> None:
         abort(400, message=str(exc))
 
 
-def _apply_disable_achievements_guarded(value) -> None:
+def _apply_enable_achievements_guarded(value) -> None:
     try:
-        _apply_disable_achievements(value)
+        _apply_enable_achievements(value)
     except (TypeError, ValueError) as exc:
         abort(400, message=str(exc))
+
+
+def _apply_autofind_exporter(value) -> None:
+    """Validate the Auto-Find results exporter name and persist it.
+
+    ``""``/``None`` clears auto-export. Any other value must name a
+    registered (pickable) exporter; an unknown name aborts 400. Field
+    values are validated lazily at export time against the chosen
+    plugin's schema, not here.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        settings.set_autofind_exporter("")
+        return
+    if not isinstance(value, str):
+        abort(400, message="autofind_exporter must be a string")
+    from vtscore.exporters import list_exporters
+
+    name = value.strip()
+    valid = {exp.name for exp in list_exporters() if not getattr(exp, "hidden_from_picker", False)}
+    if name not in valid:
+        abort(400, message=f"Unknown exporter {name!r}. Available: {sorted(valid)}")
+    settings.set_autofind_exporter(name)
+
+
+def _apply_autofind_exporter_field_values(value) -> None:
+    """Validate and persist the per-exporter ``{name: {key: value}}`` map.
+
+    ``None`` clears every exporter's stored config. Otherwise the value
+    must be a dict whose entries are themselves ``{str: str}`` dicts;
+    non-string values are coerced to strings so the persisted shape stays
+    flat (exporter fields are always rendered/sent as strings).
+    """
+    if value is None:
+        settings.set_autofind_exporter_field_values({})
+        return
+    if not isinstance(value, dict):
+        abort(400, message="autofind_exporter_field_values must be a dict")
+    cleaned: dict[str, dict[str, str]] = {}
+    for exp_name, fvals in value.items():
+        if not isinstance(exp_name, str) or not isinstance(fvals, dict):
+            abort(400, message="autofind_exporter_field_values must map exporter names to field dicts")
+        cleaned[exp_name] = {str(k): "" if v is None else str(v) for k, v in fvals.items()}
+    settings.set_autofind_exporter_field_values(cleaned)
 
 
 def _apply_saved_datasets_dir(value) -> None:
@@ -269,9 +347,11 @@ _CUSTOM_SETTERS: dict[str, Callable[[Any], None]] = {
     "inclusion": _apply_inclusion_guarded,
     "saved_datasets_dir": _apply_saved_datasets_dir,
     "detectors_dir": _apply_detectors_dir,
-    "disable_achievements": _apply_disable_achievements_guarded,
+    "enable_achievements": _apply_enable_achievements_guarded,
     "solo_media_type": _apply_solo_media_type,
     "solo_embedder_per_media_type": _apply_solo_embedder_per_media_type,
+    "autofind_exporter": _apply_autofind_exporter,
+    "autofind_exporter_field_values": _apply_autofind_exporter_field_values,
 }
 
 

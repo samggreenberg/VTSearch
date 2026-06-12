@@ -83,8 +83,8 @@ if TYPE_CHECKING:
     def set_autopilot_enabled(value: bool) -> None: ...
     def get_hide_autopilot() -> bool: ...
     def set_hide_autopilot(value: bool) -> None: ...
-    def get_disable_achievements() -> bool: ...
-    def set_disable_achievements(value: bool) -> None: ...
+    def get_enable_achievements() -> bool: ...
+    def set_enable_achievements(value: bool) -> None: ...
     def get_browse_panel_width() -> int: ...
     def set_browse_panel_width(value: int) -> None: ...
     def get_browse_bin_shape() -> dict[str, str]: ...
@@ -95,6 +95,8 @@ if TYPE_CHECKING:
     def set_browse_icon_size(value: dict[str, str]) -> None: ...
     def get_browse_thumbnail_border() -> dict[str, int]: ...
     def set_browse_thumbnail_border(value: dict[str, int]) -> None: ...
+    def get_browse_compact() -> dict[str, bool]: ...
+    def set_browse_compact(value: dict[str, bool]) -> None: ...
     def get_autopilot_top_greens() -> int: ...
     def set_autopilot_top_greens(value: int) -> None: ...
     def get_autopilot_hard_reds() -> int: ...
@@ -242,10 +244,24 @@ def __getattr__(name: str) -> Any:
 #: Reading ``model_fields`` doesn't instantiate the model, so this stays eager.
 _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 
+#: Per-user keys for which the built-in "default" user reads through to the
+#: *server* settings file when the key is absent from its own per-user file.
+#: These are the Auto-Find knobs: per-user in multi-user deployments, but the
+#: single-user GUI (everyone is "default") and the CLI ``--settings`` flat file
+#: still expect a value placed in ``settings.json`` to take effect. The
+#: read-through (see :func:`_read_value`) makes that work without the
+#: destructive legacy migration moving them out of the server file (see
+#: :func:`_maybe_migrate_legacy_settings_locked`, which skips these keys).
+_DEFAULT_USER_FALLBACK_KEYS: frozenset[str] = frozenset(
+    {"autorun_detectors", "autofind_exporter", "autofind_exporter_field_values"}
+)
+
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
 #: should not be reset by the Default button).
 _EXCLUDE_FROM_DEFAULTS = {
     "autorun_detectors",
+    "autofind_exporter",
+    "autofind_exporter_field_values",
     "saved_datasets_dir",
     "detectors_dir",
     "settings_source",
@@ -686,7 +702,13 @@ def _maybe_migrate_legacy_settings_locked() -> None:
         return
     _legacy_migrated = True
     assert _server_cache is not None
-    legacy_user_entries = {k: v for k, v in _server_cache.items() if k not in _SERVER_KEYS}
+    # ``_DEFAULT_USER_FALLBACK_KEYS`` legitimately live in the server file (the
+    # default user reads through to them), so they are NOT "orphaned per-user"
+    # keys; leave them in place rather than moving them into the default user's
+    # file (which would also rewrite a CLI ``--settings`` file under the user).
+    legacy_user_entries = {
+        k: v for k, v in _server_cache.items() if k not in _SERVER_KEYS and k not in _DEFAULT_USER_FALLBACK_KEYS
+    }
     if not legacy_user_entries:
         return
 
@@ -707,16 +729,18 @@ def _maybe_migrate_legacy_settings_locked() -> None:
         logger.warning("Legacy settings migration to %s failed: %s", user_path, exc)
         return
 
-    # Build the server-tier-only shape first; a failure here must not pop
-    # the in-memory cache, or _server_cache and disk would silently diverge.
-    new_server = {k: v for k, v in _server_cache.items() if k in _SERVER_KEYS}
+    # Build the server-tier shape first; a failure here must not pop the
+    # in-memory cache, or _server_cache and disk would silently diverge. Keep
+    # the default-user fallback keys in the server file (they are read through
+    # there, not migrated out).
+    new_server = {k: v for k, v in _server_cache.items() if k in _SERVER_KEYS or k in _DEFAULT_USER_FALLBACK_KEYS}
     try:
         _atomic_write(_server_settings_path(), new_server)
     except Exception as exc:
         logger.warning("Failed to rewrite server settings after legacy migration: %s", exc)
         return
     for k in list(_server_cache.keys()):
-        if k not in _SERVER_KEYS:
+        if k not in _SERVER_KEYS and k not in _DEFAULT_USER_FALLBACK_KEYS:
             _server_cache.pop(k, None)
 
     # Refresh the default user's cache if it was already materialised
@@ -833,7 +857,18 @@ def _read_value(key: str) -> Any:
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    return _ensure_user_loaded(username).get(key, _user_defaults().get(key))
+    user_cache = _ensure_user_loaded(username)
+    if key in user_cache:
+        return user_cache[key]
+    # Default-user read-through: the single-user GUI and the CLI ``--settings``
+    # flat file carry these Auto-Find keys in the server settings file. Honor
+    # them for the built-in "default" user when not set in its own file, so
+    # those workflows keep working without making the setting truly server-wide.
+    if username == "default" and key in _DEFAULT_USER_FALLBACK_KEYS:
+        server_cache = _ensure_server_loaded()
+        if key in server_cache:
+            return server_cache[key]
+    return _user_defaults().get(key)
 
 
 def _write_value(key: str, value: Any) -> None:
@@ -952,6 +987,13 @@ def get_all() -> dict[str, Any]:
     result["focus_mode_right"] = get_focus_mode_right()
     result["panel_pct_left"] = get_panel_pct_left()
     result["panel_pct_right"] = get_panel_pct_right()
+    # Auto-Find keys go through their accessors so the default-user read-through
+    # (and per-user isolation for named users) is applied consistently: the
+    # plain ``result.update(server_copy)`` above would otherwise leak a legacy
+    # server-file autorun list to every named user.
+    result["autorun_detectors"] = get_autorun_detectors()
+    result["autofind_exporter"] = get_autofind_exporter()  # type: ignore[name-defined]  # noqa: F821
+    result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()  # type: ignore[name-defined]  # noqa: F821
     return result
 
 
@@ -1373,58 +1415,55 @@ def apply_user_solo_embedder_per_media_type(value: dict[str, str] | None) -> Non
 
 
 def get_autorun_detectors() -> list[str]:
-    """Return the list of detector names flagged for autorun.
+    """Return the current user's list of detector names flagged for autorun.
 
     Each name maps to a JSON file under ``data/detectors/``; scoring resolves
     the labelset's origins, re-embeds, trains an MLP, and applies it to the
-    loaded dataset.
+    loaded dataset. Per-user (with a read-through to the server file for the
+    built-in "default" user; see :func:`_read_value`).
     """
-    with _settings_lock:
-        raw = _ensure_server_loaded().get("autorun_detectors", [])
-        if isinstance(raw, list):
-            return list(raw)
-        return []
+    raw = _read_value("autorun_detectors")
+    return list(raw) if isinstance(raw, list) else []
 
 
 def set_autorun_detectors(value: list[str]) -> None:
-    """Set and persist the full list of autorun detector names."""
-    _ensure_server_loaded()
+    """Set and persist the current user's full autorun detector list."""
     deduped = list(dict.fromkeys(value))  # dedupe, preserve order
-    _mutate_server_locked(lambda c: c.__setitem__("autorun_detectors", deduped))
+    _write_value("autorun_detectors", deduped)
 
 
 def add_autorun_detector(name: str) -> None:
-    """Add a detector name to the autorun list (idempotent).
+    """Add a detector name to the current user's autorun list (idempotent).
 
-    Single read-modify-write under the file lock: two processes adding
-    different names concurrently can no longer clobber each other's
-    addition.
+    Atomic per-user read-modify-write: ``mutate_user`` re-reads the on-disk
+    file under the cross-process lock, so a concurrent writer's entry is
+    merged rather than clobbered. The ``seed`` captures the effective value
+    (including the default-user read-through) for the first write, before the
+    user has any entry of its own.
     """
-    _ensure_server_loaded()
+    seed = get_autorun_detectors()
 
     def _add(cache: dict[str, Any]) -> None:
-        current = list(cache.get("autorun_detectors", []))
-        if name not in current:
-            current.append(name)
-            cache["autorun_detectors"] = current
+        base = cache["autorun_detectors"] if "autorun_detectors" in cache else seed
+        cache["autorun_detectors"] = list(dict.fromkeys([*base, name]))
 
-    _mutate_server_locked(_add)
+    mutate_user(_add)
 
 
 def remove_autorun_detector(name: str) -> bool:
-    """Remove a detector name from the autorun list. Returns True if found."""
-    _ensure_server_loaded()
-    found = False
+    """Remove a detector name from the current user's autorun list.
+
+    Returns ``True`` if the name was present (pre-read). Atomic per-user RMW,
+    same merge semantics as :func:`add_autorun_detector`.
+    """
+    seed = get_autorun_detectors()
+    found = name in seed
 
     def _remove(cache: dict[str, Any]) -> None:
-        nonlocal found
-        current = list(cache.get("autorun_detectors", []))
-        if name in current:
-            current.remove(name)
-            cache["autorun_detectors"] = current
-            found = True
+        base = cache["autorun_detectors"] if "autorun_detectors" in cache else seed
+        cache["autorun_detectors"] = [n for n in base if n != name]
 
-    _mutate_server_locked(_remove)
+    mutate_user(_remove)
     return found
 
 

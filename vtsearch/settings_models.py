@@ -58,8 +58,12 @@ BinShape = Literal["hex", "square"]
 # VTSBrowse density colormap preset. ``auto`` follows the active theme (Ocean
 # in light mode, Heat in dark/high-viz); the rest lock to a specific map.
 BrowseColormap = Literal["auto", "heat", "ocean", "gray"]
-# VTSBrowse on-screen cell size, shared label set with the grid icon size.
-BrowseIconSize = Literal["XS", "S", "M", "L", "XL"]
+# VTSBrowse on-screen cell size. Extends the grid icon size label set with four
+# larger steps (2XL..5XL): the browse canvas's bigger/smaller buttons walk nine
+# zoom levels, index-aligned with the frontend ``ICON_SIZES`` array. The largest
+# steps render a cell close to the full media, so the canvas serves the original
+# image rather than a low-res thumbnail at those sizes.
+BrowseIconSize = Literal["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_VIEW_MODES: tuple[str, ...] = ("grid", "list")
@@ -67,8 +71,14 @@ VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BIN_SHAPES: tuple[str, ...] = ("hex", "square")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
-VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
-VALID_PANEL_PX: tuple[int, int] = (150, 500)
+VALID_BROWSE_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL")
+# Allowed range (CSS px) for the saved left/right panel widths. The floor keeps
+# a panel usable; the ceiling is a sanity bound only. The frontend resize logic
+# already constrains a panel to the available layout space (viewport minus the
+# dividers, the center column, and the opposite panel), so legitimate widths
+# never approach this ceiling even on very large displays. Out-of-range values
+# raise on write and clamp on read.
+VALID_PANEL_PX: tuple[int, int] = (150, 10000)
 # Allowed range (CSS px) for the VTSBrowse pile-thumbnail border width. ``0``
 # disables the border; values are clamped into this range on read/write.
 BROWSE_THUMBNAIL_BORDER_PX: tuple[int, int] = (0, 8)
@@ -136,8 +146,6 @@ class ServerSettings(BaseModel):
     max_concurrent_dataset_embeddings: Annotated[int, _clamp(1, 16)] = Field(
         default_factory=_default_concurrent_embeddings
     )
-    autorun_detectors: list[str] = Field(default_factory=list)
-
     # Admin-side plugin hiding. Maps a plugin-family id (e.g.
     # ``"converters"``, ``"embedders"``, ``"importers"`` - the keys used by
     # :mod:`vtscore.plugins.inventory`) to a list of plugin ``name``s that
@@ -180,18 +188,38 @@ class UserSettings(BaseModel):
     label_hint_dismissed: bool = False
     autopilot_enabled: bool = True
     hide_autopilot: bool = False
-    # When True, the Achievements tab/button and unlock pop-ups are
+    # When False, the Achievements tab/button and unlock pop-ups are
     # hidden, every ``record_*`` hook is a no-op, and ``get_full_state``
     # returns zeroed counters with no pending announcements. Flipping it
-    # on also wipes any stored ``achievement_state`` so the counters
-    # start at zero if the user ever turns the feature back on. See the
-    # ``disable_achievements`` route handler in
-    # ``vtsearch/routes/settings/api.py``.
-    disable_achievements: bool = False
+    # off also wipes any stored ``achievement_state`` so the counters
+    # start at zero if the user ever turns the feature back on. Defaults
+    # to True (achievements on). See the ``enable_achievements`` route
+    # handler in ``vtsearch/routes/settings/api.py``.
+    enable_achievements: bool = True
     autopilot_top_greens: Annotated[int, _clamp_min(1)] = 3
     autopilot_hard_reds: Annotated[int, _clamp_min(1)] = 4
     autopilot_resort_interval: Annotated[int, _clamp_min(1)] = 10
     autopilot_goal_diversity: Annotated[int, _clamp_min(1)] = 40
+
+    # Auto-Find: each user's own list of detectors that auto-run against a newly
+    # imported dataset, plus what to do with the results. Per-user (everyone
+    # curates their own favorites from the shared detector pool). For the
+    # built-in "default" user, reads fall back to the server settings file when
+    # absent here, so the CLI ``--settings`` flat file and single-user
+    # deployments keep working (see ``_DEFAULT_USER_FALLBACK_KEYS`` and the
+    # read-through in ``vtsearch.settings._read_value``).
+    #
+    # - ``autorun_detectors``: detector names flagged for autorun (each maps to
+    #   a JSON file under ``data/detectors/``).
+    # - ``autofind_exporter``: results-exporter name run after an Auto-Find
+    #   (``""`` = no auto-export; CLI then falls back to the ``gui`` exporter).
+    # - ``autofind_exporter_field_values``: per-exporter field values
+    #   (``{exporter_name: {field_key: value}}``) so switching the picker
+    #   preserves each exporter's configuration.
+    # See ``docs/plans/auto-find-settings-tab.md``.
+    autorun_detectors: list[str] = Field(default_factory=list)
+    autofind_exporter: str = ""
+    autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview
@@ -221,12 +249,19 @@ class UserSettings(BaseModel):
     #   the density colour for the pile's item count, so its hue/brightness reads
     #   as the stack height under the tile. Only affects media types that paint
     #   thumbnails (image, video); ``0`` disables it. Clamped to 0..8 px.
+    # - ``browse_compact``: whether the UMAP layout is compacted — clusters slid
+    #   together as rigid bodies to close the empty "oceans" between islands —
+    #   when the projection is (re)built. Unlike the others this affects the
+    #   Stage-1 coordinates, which are computed once and frozen, so a change
+    #   takes effect on the next fresh build or the Browser's Re-project action,
+    #   not retroactively on an already-built layout. Defaults to on per type.
     browse_bin_shape: dict[str, BinShape] = Field(default_factory=dict)
     browse_colormap: dict[str, BrowseColormap] = Field(default_factory=dict)
     browse_icon_size: dict[str, Annotated[BrowseIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     browse_thumbnail_border: dict[str, Annotated[int, _clamp(*BROWSE_THUMBNAIL_BORDER_PX)]] = Field(
         default_factory=dict
     )
+    browse_compact: dict[str, bool] = Field(default_factory=dict)
 
     view_mode_left: dict[str, ViewMode] = Field(default_factory=dict)
     view_mode_right: dict[str, ViewMode] = Field(default_factory=dict)
@@ -234,6 +269,19 @@ class UserSettings(BaseModel):
     grid_icon_size_right: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     focus_mode_left: dict[str, FocusMode] = Field(default_factory=dict)
     focus_mode_right: dict[str, FocusMode] = Field(default_factory=dict)
+
+    # VTSBrowse bin-popup display prefs, per media type. The right-click bin
+    # popup renders the bin's members like a mini Find panel with its own
+    # List/Grid + thumbnail-size controls, independent of the left/right
+    # panels. Empty entries fall back on the frontend to grid + ``M``.
+    # Driven by the popup's own view-controls AND the Settings → Browser tab;
+    # both write the same maps keyed by the active dataset's media type, so
+    # tuning the popup while browsing one bin becomes the default for every
+    # future popup of that media type. Unlike ``view_mode_{left,right}`` these
+    # are plain per-media-type dicts (no per-side machinery): the popup is a
+    # single, third context, so it uses the generic Pydantic-driven accessors.
+    view_mode_popup: dict[str, ViewMode] = Field(default_factory=dict)
+    grid_icon_size_popup: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
 

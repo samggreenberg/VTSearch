@@ -15,6 +15,7 @@ import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { LabelSessionService } from '../../../services/label-session.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
+import type { LabelFilter } from '../../../services/sorting-api.service';
 import { ImporterField } from '../../../models/api.models';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import type { LabeledElement } from '../../../generated/api-client/models/labeled-element';
@@ -41,6 +42,13 @@ export interface ColumnDef {
 })
 export class ExportModalComponent implements OnInit, OnDestroy {
   @Input() detectorName = '';
+  /**
+   * The filter the modal opens on. ``unverified`` / ``verified`` are
+   * server-side partitions (by Find ``verified_ids``) that can't be derived
+   * client-side, so the modal fetches them with that ``label_filter``; the
+   * other values are client-side category filters over the full fetched set.
+   */
+  @Input() initialFilter: LabelFilter = 'good';
   @Output() closed = new EventEmitter<void>();
   @Output() exported = new EventEmitter<void>();
 
@@ -56,8 +64,15 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   /** Column definitions with selection state, built dynamically from API response. */
   columns: ColumnDef[] = [];
 
-  /** Filter which labels to show/export. Defaults to good-only. */
+  /** Client-side category filter over the fetched set (radio buttons). */
   labelFilter: 'good' | 'bad' | 'both' | 'corrections' = 'good';
+
+  /**
+   * Server-side partition the labels were fetched with. ``both`` fetches
+   * everything (the radios then slice it); ``unverified`` / ``verified`` fetch
+   * the Find work-queue / confirmed pile, which can't be sliced client-side.
+   */
+  serverFilter: 'both' | 'unverified' | 'verified' = 'both';
 
   /** Active export tab: 'clipboard' or an exporter name. */
   activeTab = 'clipboard';
@@ -105,6 +120,21 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Split the requested filter into a server-side partition (unverified /
+    // verified are fetched with that label_filter) and a client-side category.
+    if (this.initialFilter === 'unverified' || this.initialFilter === 'verified') {
+      this.serverFilter = this.initialFilter;
+      this.labelFilter = 'both';
+    } else if (this.initialFilter === 'unverified_good') {
+      // The left work-queue export: the unverified partition (server-side),
+      // sliced to the above-threshold good category (client-side).
+      this.serverFilter = 'unverified';
+      this.labelFilter = 'good';
+    } else {
+      this.serverFilter = 'both';
+      this.labelFilter = this.initialFilter;
+    }
+
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => {
         this.datasetName = status.display_name || '';
@@ -122,7 +152,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       },
     });
 
-    this.sortingApi.exportLabels(false, { enrich: true }).pipe(takeUntil(this.destroy$)).subscribe({
+    const labelFilter = this.serverFilter === 'both' ? undefined : this.serverFilter;
+    this.sortingApi.exportLabels(false, { enrich: true, labelFilter }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (data) => {
         this.labels = data.labels || [];
         this.labelsLoaded = true;
@@ -234,6 +265,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
    *  e.g. "Good-MyDetector-MyDataset.json" */
   private buildDefaultFilename(ext: string): string {
     const parts: string[] = [];
+    if (this.serverFilter === 'unverified') parts.push('Unverified');
+    else if (this.serverFilter === 'verified') parts.push('Verified');
     if (this.labelFilter === 'good') parts.push('Good');
     else if (this.labelFilter === 'bad') parts.push('Bad');
     else if (this.labelFilter === 'corrections') parts.push('Corrections');
@@ -405,6 +438,16 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     if (name.includes('webhook')) return 'webhook';
     if (name.includes('server') || name.includes('file')) return 'server';
     return 'upload';
+  }
+
+  /** Modal heading, noting the server-side partition (and category slice) when present. */
+  get modalTitle(): string {
+    if (this.serverFilter === 'unverified') {
+      // The left work-queue export opens on the above-threshold good slice.
+      return this.labelFilter === 'good' ? 'Export Unverified Good' : 'Export Unverified';
+    }
+    if (this.serverFilter === 'verified') return 'Export Verified';
+    return 'Export';
   }
 
   close(): void {

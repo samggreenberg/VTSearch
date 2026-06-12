@@ -1,4 +1,4 @@
-<vt-modal title="Export" [open]="true" (closed)="close()">
+<vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
   <!-- Category Filter -->
   <div class="export-section">
     <h3 title="Filter which labeled items to include in the export">Categories</h3>
@@ -222,6 +222,7 @@
             [disabled]="!hasLabels || submitting"
             title="Send exported data to the selected destination"
           >
+            <svg aria-hidden="true" [class.icon-waggle]="submitting" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"/><polyline points="15 3 21 3 21 9"/><line x1="12" y1="12" x2="21" y2="3"/></svg>
             @if (submitting) {
               Exporting {{ filteredLabels.length | number }} labels to {{ activeTabExporter.display_name || activeTabExporter.name }}…
             } @else {

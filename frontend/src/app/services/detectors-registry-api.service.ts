@@ -13,6 +13,7 @@ import type { DetectorRegistryDeleteResponse } from '../generated/api-client/mod
 import type { DetectorRegistryListResponse } from '../generated/api-client/models/detector-registry-list-response';
 import type { DetectorRegistryLoadResponse } from '../generated/api-client/models/detector-registry-load-response';
 import type { DetectorRegistryRenameResponse } from '../generated/api-client/models/detector-registry-rename-response';
+import type { DetectorRegistryReadersResponse } from '../generated/api-client/models/detector-registry-readers-response';
 import type { DetectorRegistryUnloadResponse } from '../generated/api-client/models/detector-registry-unload-response';
 import { cancelDetectorLoadingTask } from '../generated/api-client/fn/detectors-registry/cancel-detector-loading-task';
 import { deleteRegisteredDetector } from '../generated/api-client/fn/detectors-registry/delete-registered-detector';
@@ -22,6 +23,7 @@ import { moveLabelsetSourceFile } from '../generated/api-client/fn/detectors-reg
 import { registerDetectorRoute } from '../generated/api-client/fn/detectors-registry/register-detector-route';
 import { renameRegisteredDetector } from '../generated/api-client/fn/detectors-registry/rename-registered-detector';
 import { setDetectorAutorun } from '../generated/api-client/fn/detectors-registry/set-detector-autorun';
+import { updateDetectorReaders } from '../generated/api-client/fn/detectors-registry/update-detector-readers';
 import { unloadDetectorRoute } from '../generated/api-client/fn/detectors-registry/unload-detector-route';
 import { VtDialogService } from './dialog.service';
 
@@ -147,6 +149,15 @@ export class DetectorsRegistryApiService {
     return setDetectorAutorun(this.http, this.config.rootUrl, {
       detector_id: detectorId,
       body: { autorun },
+    }).pipe(map((r) => r.body));
+  }
+
+  /** Update a detector's access list (creator-only on the backend).
+   *  ``["*"]`` makes it visible to all users. */
+  updateReaders(detectorId: string, readers: string[]): Observable<DetectorRegistryReadersResponse> {
+    return updateDetectorReaders(this.http, this.config.rootUrl, {
+      detector_id: detectorId,
+      body: { readers },
     }).pipe(map((r) => r.body));
   }
 }

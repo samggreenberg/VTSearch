@@ -20,6 +20,7 @@ import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
+import { IconComponent } from '../icon/icon.component';
 import { Media, MediaTypeInfo, EmbedderInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
@@ -40,6 +41,7 @@ export type { SortMode, SelectMode, SortedItem };
     StripeOverviewComponent,
     AutopilotPanelComponent,
     ViewControlsComponent,
+    IconComponent,
   ],
   templateUrl: './left-panel.component.html',
   styleUrl: './left-panel.component.scss',
@@ -97,6 +99,12 @@ export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
   @Output() indicatorClick = new EventEmitter<string>();
   /** User clicked the Cancel button on the running sort progress bar. */
   @Output() sortCancel = new EventEmitter<void>();
+  /** Find mode: browse the unverified positives as their own UMAP projection. */
+  @Output() browse = new EventEmitter<void>();
+  /** Find mode: promote the unverified positives into their own dataset. */
+  @Output() toDataset = new EventEmitter<void>();
+  /** Find mode: export the unverified positives (above-threshold work queue). */
+  @Output() unverifiedExport = new EventEmitter<void>();
   @Output() autopilotStart = new EventEmitter<void>();
   @Output() autopilotStop = new EventEmitter<void>();
   @Output() autopilotRefocus = new EventEmitter<void>();
@@ -188,6 +196,24 @@ export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
     }
     const info = this.embedderInfos.find((e) => e.name === embedderName);
     this.textSortAvailable = info ? info.supports_text !== false : true;
+  }
+
+  /**
+   * Count of unverified positives: items above the cutoff in the work-queue
+   * ranking. In Find mode ``sortOrder`` is the *unverified* ranking (verified
+   * items are filtered out upstream), so the above-threshold slice is exactly
+   * the unverified positives. Gates the Find work-queue action buttons —
+   * Browse / To Dataset / Export all operate on exactly this set.
+   */
+  get unverifiedGoodCount(): number {
+    const order = this.sortOrder;
+    if (!order || this.threshold == null) return 0;
+    const cutoff = this.threshold;
+    let n = 0;
+    for (const item of order) {
+      if (item.score >= cutoff) n++;
+    }
+    return n;
   }
 
   onStripeClick(index: number): void {

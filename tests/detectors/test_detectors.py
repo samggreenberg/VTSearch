@@ -952,7 +952,7 @@ class TestEmbedderMismatchInvalidatesStaleModel:
         det_ctx.label_embeddings["e1"] = "vec"  # type: ignore[assignment]
         det_ctx.last_learned_scores[1] = 0.7
         det_ctx.training_medias[1] = {"id": 1}
-        det_ctx.calibration_cache = ("sig", 0.5)
+        det_ctx.calibration_cache = ("sig", ([([0.1], [1.0])], None))
         return det_ctx
 
     def test_helper_drops_caches_on_mismatch(self):

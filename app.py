@@ -814,6 +814,25 @@ if __name__ == "__main__":
         help="Run a detector on a dataset from the command line and print predicted-Good items",
     )
     parser.add_argument(
+        "--user",
+        type=str,
+        default=None,
+        help=(
+            "Run --autodetect as this user, so their per-user Auto-Find list "
+            "(autorun_detectors) and results exporter apply. Requires --api-key "
+            "to authenticate against data/api_keys.json (same credentials as the "
+            "server's api_key login). Without --user the run uses the built-in "
+            "'default' user, which reads the --settings file."
+        ),
+    )
+    parser.add_argument(
+        "--api-key",
+        dest="api_key",
+        type=str,
+        default=None,
+        help="Bearer key authenticating --user against data/api_keys.json.",
+    )
+    parser.add_argument(
         "--list-plugins",
         action="store_true",
         dest="list_plugins",
@@ -1200,6 +1219,37 @@ if __name__ == "__main__":
         cli_progress.set_format(args.progress_format)
         if args.progress_format == "json":
             set_progress_callback(cli_progress.progress_callback)
+
+        # Establish (and authenticate) the user this Auto-Find runs as, mirroring
+        # the server's api_key login. With --user the run reads that user's
+        # per-user autorun list + results exporter; without it, the built-in
+        # "default" user applies (which reads the --settings flat file).
+        if args.user:
+            from vtscore.config import DATA_DIR
+
+            from vtsearch.auth import ApiKeyLoginProvider, set_thread_user
+
+            if not args.api_key:
+                parser.error("--user requires --api-key <key> to authenticate against data/api_keys.json")
+
+            class _CliRequest:
+                headers = {"Authorization": f"Bearer {args.api_key}"}
+
+            _req = _CliRequest()
+            _provider = ApiKeyLoginProvider(keys_file=DATA_DIR / "api_keys.json")
+            if not _provider.is_authenticated(_req):
+                parser.error("Invalid --api-key: no matching key in data/api_keys.json")
+            _authed = _provider.get_user(_req)
+            if _authed != args.user:
+                parser.error(f"--api-key authenticates as {_authed!r}, not --user {args.user!r}")
+            set_thread_user(args.user)
+            cli_progress.emit(
+                "authenticated_user",
+                text=f"Running Auto-Find as user {args.user!r}.",
+                user=args.user,
+            )
+        elif args.api_key:
+            parser.error("--api-key requires --user <name>")
 
         # Collect exporter field values if an exporter was specified
         exporter_field_values = None

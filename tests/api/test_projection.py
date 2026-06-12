@@ -691,3 +691,55 @@ class TestForceReproject:
         after = ctx._subset_projection
         assert after.projection_id != first_id
         assert after.ids == ids
+
+
+class TestBrowseCompactSetting:
+    """The per-media-type ``browse_compact`` preference flows into the UMAP fit.
+
+    ``compact`` controls Stage-1 coordinates, so the build route reads the
+    setting for the dataset's media type and threads it into ``fit_projection``.
+    Defaults to on; the Settings → Browser toggle can turn it off per type.
+    """
+
+    @staticmethod
+    def _capturing_fake(captured: dict):
+        def fake(matrix, ids, **kwargs):
+            captured["compact"] = kwargs.get("compact")
+            return _fake_fit_projection(matrix, ids, **kwargs)
+
+        return fake
+
+    def _media_type(self, ctx) -> str:
+        first = next(iter(ctx.medias.values()))
+        return first.get("media_type", "audio")
+
+    def test_compact_on_by_default(self, client):
+        captured: dict = {}
+        with patch("vtscore.projection.fit_projection", side_effect=self._capturing_fake(captured)):
+            client.post("/api/projection/build")
+            _wait_projection()
+        assert captured["compact"] is True
+
+    def test_compact_setting_disables_packing(self, client):
+        ctx = get_active_context()
+        media_type = self._media_type(ctx)
+        resp = client.put("/api/settings", json={"browse_compact": {media_type: False}})
+        assert resp.status_code == 200
+
+        captured: dict = {}
+        with patch("vtscore.projection.fit_projection", side_effect=self._capturing_fake(captured)):
+            client.post("/api/projection/build")
+            _wait_projection()
+        assert captured["compact"] is False
+
+    def test_compact_setting_applies_to_subset_build(self, client):
+        ctx = get_active_context()
+        media_type = self._media_type(ctx)
+        client.put("/api/settings", json={"browse_compact": {media_type: False}})
+        ids = sorted(ctx.medias.keys())[:4]
+
+        captured: dict = {}
+        with patch("vtscore.projection.fit_projection", side_effect=self._capturing_fake(captured)):
+            client.post("/api/projection/build", json={"ids": ids})
+            _wait_projection()
+        assert captured["compact"] is False

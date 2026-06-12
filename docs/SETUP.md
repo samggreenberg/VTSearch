@@ -16,6 +16,11 @@
   - [GPU](#gpu)
   - [Data persistence](#data-persistence)
   - [Rebuilding](#rebuilding)
+- [Running on a SLURM GPU cluster (Grid)](#running-on-a-slurm-gpu-cluster-grid)
+  - [One-time setup on the cluster](#one-time-setup-on-the-cluster)
+  - [One-time setup on your laptop](#one-time-setup-on-your-laptop)
+  - [Daily workflow](#daily-workflow)
+  - [Tuning the allocation](#tuning-the-allocation)
 - [Running the tests](#running-the-tests)
 - [Environment variables](#environment-variables)
 - [Next steps](#next-steps)
@@ -372,6 +377,158 @@ docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (
 ```
 
 Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
+
+## Running on a SLURM GPU cluster (Grid)
+
+VTSearch is happiest with a GPU (for embedding and detector training). On a
+shared SLURM cluster — like the JHU HLTCOE "Grid" — you don't run heavy work on
+the login nodes; you ask SLURM for a GPU compute node and run the app there,
+then forward its port back to your laptop so you can use the browser UI.
+
+Two helper scripts in [`scripts/grid/`](../scripts/grid/) automate the loop:
+
+- **`vtsearch-grid.sh`** runs *on the cluster*. It allocates a GPU node with
+  `srun`, activates the virtualenv, and runs `app.py` on the node — printing
+  which node it landed on. It holds the allocation until you quit.
+- **`vtsearch-tunnel.sh`** runs *on your laptop*. It finds your running
+  VTSearch job, SSH-forwards `localhost:5000` to that compute node, and drops
+  you into the project directory for git/edits.
+
+Both scripts are parameterized entirely by environment variables (no hard-coded
+usernames, hostnames, or paths), so they should adapt to most SLURM clusters
+with a shared filesystem.
+
+### One-time setup on the cluster
+
+1. **SSH in** to a login node and clone VTSearch onto the cluster's shared
+   filesystem. Many clusters give each user a large scratch/experiment area
+   (the HLTCOE Grid uses `/exp/$USER`); the helper scripts default to
+   `/exp/$USER/projects/VTSearch`, but you can put it anywhere and set
+   `VTS_DIR` (see [Tuning](#tuning-the-allocation)).
+
+   ```bash
+   mkdir -p /exp/$USER/projects && cd /exp/$USER/projects
+   git clone git@github.com:samggreenberg/VTSearch.git
+   cd VTSearch
+   ```
+
+2. **Create the virtualenv and install the GPU dependencies.** Match the CUDA
+   wheel to your cluster's drivers (HLTCOE L40S nodes use CUDA 12.4 → `cu124`):
+
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   bash scripts/install-gpu.sh cu124     # or cu121 / cu118 to match your cluster
+   ```
+
+   The scripts default to a venv named `.venv` in the project dir; override with
+   `VTS_VENV` if yours differs.
+
+3. **Build the frontend** (needs Node.js 22+; see [Building the
+   frontend](#building-the-frontend)):
+
+   ```bash
+   cd frontend && npm install && npm run build:prod && cd ..
+   ```
+
+4. **Install the launcher on your PATH** so you can just type `vtsearch`:
+
+   ```bash
+   mkdir -p ~/.local/bin
+   cp scripts/grid/vtsearch-grid.sh ~/.local/bin/vtsearch
+   chmod +x ~/.local/bin/vtsearch
+   ```
+
+   > **Tip:** caches (HuggingFace, pip, etc.) can be large; on clusters where
+   > `/home` is small, redirect them onto your scratch area in `~/.bashrc`
+   > (e.g. `export HF_HOME=/exp/$USER/.cache/huggingface`). Setting `HF_TOKEN`
+   > there too avoids anonymous Hugging Face rate limits on a shared egress IP.
+
+### One-time setup on your laptop
+
+1. **Add an SSH host entry** for the cluster login node so the tunnel script
+   can reach it by a short name. In `~/.ssh/config`:
+
+   ```sshconfig
+   Host grid
+       HostName login.your-cluster.edu     # e.g. login1.hltcoe.jhu.edu
+       User your-cluster-username
+       IdentityFile ~/.ssh/id_ed25519
+   ```
+
+   Verify it works: `ssh grid true` should connect without prompting. If your
+   cluster is only reachable through a VPN or campus network, connect to that
+   first.
+
+2. **Install the tunnel script** on your PATH:
+
+   ```bash
+   mkdir -p ~/.local/bin
+   cp scripts/grid/vtsearch-tunnel.sh ~/.local/bin/vtsearch-tunnel
+   chmod +x ~/.local/bin/vtsearch-tunnel
+   ```
+
+   (Clone VTSearch on your laptop too, or just copy the one script — it only
+   needs SSH access to the cluster.) If you named your SSH host something other
+   than `grid`, point the script at it with `GRID_HOST=mycluster vtsearch-tunnel`.
+
+### Daily workflow
+
+1. **On the cluster**, start VTSearch and leave the terminal running:
+
+   ```bash
+   ssh grid
+   vtsearch
+   ```
+
+   This queues a GPU allocation; once it lands, the app starts and the terminal
+   prints the compute node it got. Keep this terminal open — closing it releases
+   the node.
+
+2. **On your laptop**, in a second terminal, open the tunnel:
+
+   ```bash
+   vtsearch-tunnel
+   ```
+
+   It finds the running job automatically (no need to know the node name),
+   forwards `localhost:5000`, and drops you into the project directory on the
+   login node for git pulls / edits. Browse **http://localhost:5000**.
+
+3. **To pick up code changes**: pull on the cluster, then in the `vtsearch`
+   terminal press **Ctrl+C** (this stops `app.py` but *keeps* the GPU node) and
+   press **Enter** to restart the app. Press **q** then Enter to release the
+   node and quit.
+
+> Interactive SLURM jobs don't persist — you re-allocate each session. Only run
+> **one** `app.py` per allocation; VTSearch keeps all model/dataset state in one
+> process, and a second copy would double the memory and can OOM the job.
+
+### Tuning the allocation
+
+`vtsearch-grid.sh` reads these environment variables (defaults shown). Set them
+inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Path to the VTSearch checkout on the cluster |
+| `VTS_VENV` | `.venv` | Virtualenv to activate (relative to `VTS_DIR`, or absolute) |
+| `VTS_PART` | `gpu` | SLURM partition |
+| `VTS_GPU` | `l40s` | GPU type requested via `--gres=gpu:<type>:1` |
+| `VTS_CPUS` | `8` | CPU cores |
+| `VTS_MEM` | `48G` | Memory (headroom for two model loads in one process) |
+| `VTS_TIME` | `8:00:00` | Walltime |
+
+`vtsearch-tunnel.sh` reads:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `GRID_HOST` | `grid` | SSH host alias for the cluster login node |
+| `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Project dir to drop into on the login node |
+
+Adjust `VTS_GPU`, `VTS_PART`, and the CUDA wheel in `install-gpu.sh` to match
+your cluster's hardware. Check what's available with `sinfo` and your cluster's
+documentation.
 
 ## Running the tests
 

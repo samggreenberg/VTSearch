@@ -100,6 +100,7 @@ def register_detector(
     media_example: str = "",
     created_by: str = "default",
     embedder: str = "",
+    readers: list[str] | None = None,
 ) -> dict[str, Any]:
     """Add a new detector to the registry and persist.
 
@@ -133,6 +134,10 @@ def register_detector(
         "created_by": created_by,
         "created_at": time.time(),
         "embedder": embedder,
+        # Access list (mirrors datasets): usernames allowed to see/load this
+        # detector besides the creator. Empty = private to the creator;
+        # ``["*"]`` = visible to everyone. See ``can_user_access_detector``.
+        "readers": list(readers) if readers else [],
     }
     with _lock:
         entries = _ensure_loaded()
@@ -210,6 +215,74 @@ def find_by_name(name: str) -> dict[str, Any] | None:
             if entry.get("name") == name:
                 return dict(entry)
     return None
+
+
+# ---------------------------------------------------------------------------
+# Access control (mirrors vtscore.datasets.registry)
+#
+# Detectors are user-shared just like datasets: the creator always has access,
+# plus anyone listed in ``readers`` (or everyone when ``readers`` contains the
+# wildcard ``"*"``). Entries created before this feature have no ``readers``
+# key; ``.get("readers", [])`` treats them as private to their creator.
+# ---------------------------------------------------------------------------
+
+
+def can_user_access_detector(detector_id: str, username: str) -> bool:
+    """Return ``True`` if *username* may view/load the detector.
+
+    Granted when the user is the creator, is listed in ``readers``, or
+    ``readers`` contains the wildcard ``"*"``.
+    """
+    with _lock:
+        for entry in _ensure_loaded():
+            if entry["id"] == detector_id:
+                if entry.get("created_by", "default") == username:
+                    return True
+                readers = entry.get("readers", [])
+                return username in readers or "*" in readers
+    return False
+
+
+def is_detector_owner(detector_id: str, username: str) -> bool:
+    """Return ``True`` if *username* is the creator of the detector."""
+    with _lock:
+        for entry in _ensure_loaded():
+            if entry["id"] == detector_id:
+                return entry.get("created_by", "default") == username
+    return False
+
+
+def list_detectors_for_user(username: str) -> list[dict[str, Any]]:
+    """Return only detectors *username* is allowed to see.
+
+    Visible when the user is the creator, is listed in ``readers``, or
+    ``"*"`` is in ``readers``.
+    """
+    with _lock:
+        result = []
+        for entry in _ensure_loaded():
+            creator = entry.get("created_by", "default")
+            readers = entry.get("readers", [])
+            if creator == username or username in readers or "*" in readers:
+                result.append(dict(entry))
+        return result
+
+
+def set_detector_readers(detector_id: str, readers: list[str], requesting_user: str) -> tuple[bool, str]:
+    """Update a detector's ``readers`` list. Only the creator may call this.
+
+    Returns ``(success, error_message)``.
+    """
+    with _lock:
+        entries = _ensure_loaded()
+        for entry in entries:
+            if entry["id"] == detector_id:
+                if entry.get("created_by", "default") != requesting_user:
+                    return False, "Only the detector creator can modify readers"
+                entry["readers"] = readers
+                _save(entries)
+                return True, ""
+        return False, "Detector not found"
 
 
 def add_loaded_detector_id(detector_id: str) -> None:

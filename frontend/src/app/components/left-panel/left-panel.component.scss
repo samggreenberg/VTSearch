@@ -122,7 +122,55 @@
 }
 
 .view-controls-slot {
+  margin-left: var(--space-xs);
+}
+
+// Find mode: the Inclusion cutoff and the unverified-positives work-queue
+// actions share one row, with the action cluster pushed to the right edge.
+.find-inclusion-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-xs);
+  flex-shrink: 0;
+}
+
+// Icon-only action cluster (Browse / To Dataset / Export) sitting next to the
+// Inclusion control. Mirrors the right panel's ``.goods-actions``: compact,
+// borderless, tooltip-labelled.
+.find-queue-actions {
   margin-left: auto;
+}
+
+.goods-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.goods-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xs);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 0;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  &:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
 }
 
 .media-list-container {

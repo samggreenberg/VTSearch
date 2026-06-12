@@ -597,10 +597,35 @@ in git history and the cited source files.
 - ~~**Per-theme density colormap + Browser settings tab**~~ — Heat/Ocean/Grayscale
   colormaps resolved against the live theme; per-media-type `browse_colormap` /
   `browse_icon_size` / `browse_bin_shape` settings surfaced in a new Browser tab.
+- ~~**Layout compaction (close the empty oceans)**~~ — `vtscore/projection/compaction.py`
+  `compact_layout()`, run by default on the UMAP path (`fit_projection(..., compact=True)`).
+  A collision-aware force-directed packer: HDBSCAN clusters the 2-D layout, each
+  cluster becomes a rigid disc (noise points fold into their nearest island so the
+  unit count stays bounded by the cluster count), the discs are pulled toward the
+  global centroid with hard non-overlap repulsion, and every point is translated by
+  its cluster's net shift. Because the move is a pure per-cluster translation, each
+  island's internal shape is preserved **exactly** (Procrustes disparity 0) — only
+  the dead water between islands disappears. Validated on real LAION-CLAP audio
+  embeddings (ESC-50): grid-fill rose ~0.13→0.21 with zero blob distortion. See
+  *§Open follow-ups → Active* for the fill-vs-crispness ceiling this trades against.
+  A per-media-type **`browse_compact`** toggle (Settings → Browser, default on)
+  controls it; because the coords are Stage-1 (computed once, frozen/persisted),
+  a change applies to the next build or the Re-project action, not retroactively.
+  The build routes read the setting for the dataset's media type and thread
+  `compact=` into `fit_projection`.
 
 ## Open follow-ups
 
 **Shipped (struck through):**
+- ~~**Wider cell-size range + full-res at large zoom**~~ — the browse canvas's
+  bigger/smaller buttons now walk nine named levels (`XS`..`XL`, then `2XL`..`5XL`)
+  instead of five, so a user can blow a cell up close to the full media. Past the
+  point where a cell is drawn wider than the thumbnail's native longest side
+  (`THUMB_NATIVE_MAX_DIM`, 384px), `BrowseCanvasComponent.getThumb` fetches the
+  full-res `/image` instead of the capped `/thumbnail` (the cache is dropped when
+  the zoom crosses the threshold so cells reload sharp; only a few such giant cells
+  fit on screen, so the LRU still bounds memory). The backend `BrowseIconSize`
+  literal / `VALID_BROWSE_ICON_SIZES` accept the four new labels.
 - ~~**Live elapsed-time during the UMAP fit**~~ — fit runs on a worker thread and
   ticks a 1 s elapsed-seconds heartbeat (`total=0` → indeterminate progress bar),
   since UMAP's numba epoch loop exposes no per-epoch callback.
@@ -620,6 +645,19 @@ in git history and the cited source files.
   button UMAPs only the positive ids into an ephemeral, never-persisted `_subset_*`
   projection (`?subset=1`). *Known limitation:* in-memory id handoff, so a hard
   reload of the subset URL loses it.
+- ~~**Bin-popup member ordering**~~ — a bin's `member_ids` are served in a
+  locality-preserving 1-D order (a Hilbert space-filling-curve traversal of the
+  frozen 2-D layout, `_hilbert_order` in `pyramid.py`) rather than by media id,
+  so a dense bin lists similar items together (cats with cats, dogs with dogs)
+  and hiding items keeps the survivors' relative order. Derived from the 2-D
+  coords with no second UMAP fit, and recomputed wherever the `_member_index`
+  cache is (re)built, so it rebuilds/caches/trashes exactly like the coords. The
+  earlier idea — a *separate* 1-D UMAP fit, persisted alongside the 2-D coords —
+  was dropped because it would roughly double the projection build time for a
+  marginal gain over the curve, which already linearizes the layout UMAP
+  produced. *Open follow-up:* if a future ordering wants true 1-D-UMAP semantics
+  (not just a space-filling linearization of the 2-D layout), it would need that
+  second fit and a persisted `order` field on `Projection`.
 
 **Active:**
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable
@@ -642,6 +680,20 @@ in git history and the cited source files.
   the headless cloud container) — see **`docs/plans/vtsbrowse-empirical-tuning.md`**.
 - **WebGL renderer** if the Canvas 2D ceiling is hit (a trigger from the tuning
   pass's performance review, not a standalone feature).
+- **Compaction fill ceiling (crispness-vs-coverage).** `compact_layout` deliberately
+  trades raw canvas coverage for crisp, separable islands. Because it only *translates*
+  clusters, it can close the oceans *between* islands but cannot fill the gaps *within*
+  a cluster or reach the frame corners — so its grid-fill tops out around ~0.21 on the
+  ESC-50 audio benchmark, below what a `min_dist≈0.9` UMAP fit reaches (~0.38). The
+  latter wins on fill only by *inflating* blobs (spreading points across more cells),
+  which blurs clusters and starts merging neighbouring classes (Procrustes disparity
+  ~0.22). Two unexplored levers if more coverage is wanted without the blur: (a) pack
+  noise as its own bounded set of micro-units so they fill inter-island gaps (the
+  prototype hit ~0.27 this way, but at O(N) units — would need a grid/merge cap to
+  scale); (b) a mild anisotropic stretch of the *packed* layout toward the frame
+  aspect ratio to claim the corners. Current defaults (`margin_frac=0.15`,
+  `attract=0.02`, `iters=400`) were tuned on ESC-50 only — fold into the empirical
+  tuning pass once a browser environment is available to judge layouts visually.
 - If/when independent distribution of the projection backend is required, open
   a companion plan for **`vtscore` decoupling + PyPI publish**.
 

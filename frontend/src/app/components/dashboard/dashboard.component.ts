@@ -122,7 +122,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   get visibleDetectorColumns(): DetectorColumn[] {
-    return this.detectorCols.columnOrder;
+    let cols = this.detectorCols.columnOrder;
+    if (this.isDefaultLogin) {
+      cols = cols.filter((c) => c !== 'created_by' && c !== 'readers');
+    }
+    return cols;
   }
 
   onDatasetHeaderClick(col: string): void {
@@ -743,6 +747,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  async editDetectorSecurity(detector: DetectorRegistryEntry): Promise<void> {
+    const current = (detector.readers || []).join(', ');
+    const result = await this.dialog.prompt(
+      `Edit access list for "${detector.name}".\nEnter usernames separated by commas, or * for public:`,
+      current,
+    );
+    if (result === null) return;
+    const readers = result
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
+    this.detectorsRegistryApi.updateReaders(detector.id, readers).subscribe({
+      next: () => this.datasetState.refresh(),
+    });
+  }
+
   showDatasetStats(dataset: DatasetRegistryEntry): void {
     this.modals.openStats(dataset.id, dataset.name);
   }
@@ -1018,6 +1038,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.contextSwitch.switching ||
       this.datasetState.loading
     );
+  }
+
+  /** True while one or more datasets are actively downloading/installing
+   *  (`datasetState.loading` is set from the count of active dataset
+   *  loading tasks). This is the slice of `isLoading` that disables the
+   *  `+` Add-dataset button while loads are in flight — saturate the
+   *  concurrent-download limit and several stay active, holding the
+   *  button disabled the whole time. Drives the `+` icon's waggle so the
+   *  disabled button reads as "busy, slots are full" rather than dead. */
+  get addDatasetBusy(): boolean {
+    return this.datasetState.loading;
   }
 
   get labelEnabled(): boolean {

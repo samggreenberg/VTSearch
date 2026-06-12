@@ -151,6 +151,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((modelId) => this.refreshTrainableModelName(modelId));
     this.refreshTrainableModelName(this.activeContext.modelId);
+    this.seedInclusion();
 
     // Reload data when the active pair changes via the top-bar switcher.
     // Skip the first emission; `ngOnInit` above already triggered the
@@ -240,6 +241,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
+    // Re-seed the slider for the detector we just switched to.
+    this.seedInclusion();
 
     if (this.sortState.sortMode === 'learned') {
       this.rehydrateLearnedSub = this.voteState.labelsetGoodCount$
@@ -334,9 +337,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.setAutopilotCollapsed(true);
         } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {
           this.setAutopilotCollapsed(false);
-        }
-        if (settings.inclusion != null) {
-          this.sortState.setInclusion(settings.inclusion);
         }
         if (settings.autopilot_resort_interval != null) {
           this.resortInterval = settings.autopilot_resort_interval;
@@ -588,6 +588,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // --- Inclusion ---
+
+  /**
+   * Seed the slider from the active detector's per-detector inclusion
+   * (GET /api/inclusion, which falls back to the user-settings default the
+   * first time it's read for a detector). Called on entry and on every
+   * detector switch so the slider tracks the detector, not a stale global.
+   */
+  private seedInclusion(): void {
+    this.sortingApi
+      .getInclusion()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({ next: (resp) => this.sortState.setInclusion(resp.inclusion) });
+  }
 
   onInclusionChange(value: number): void {
     this.sortState.setInclusion(value);

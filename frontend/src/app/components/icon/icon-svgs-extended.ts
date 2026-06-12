@@ -32,6 +32,22 @@ export const EXTENDED_ICON_SVGS: Record<string, string> = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="9" y1="14" x2="15" y2="14"/></svg>',
   upload:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
+  // Data-import glyph: a rounded box whose upper-LEFT corner is open, with a
+  // diagonal arrow running from that corner INTO the centre. A deliberate
+  // mirror of the export icon (open top-right, arrow pointing out) so the two
+  // read as a matched in/out pair.
+  import:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3h5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-5"/><polyline points="12 6 12 12 6 12"/><line x1="3" y1="3" x2="12" y2="12"/></svg>',
+  // Browse glyph: an eye, matching the Browse buttons used throughout the app
+  // (dashboard dataset cards, the Find right-panel goods actions, etc.).
+  eye:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  // Auto-Find glyph: a small magnifying glass (the Find icon) sitting inside a
+  // ring built from three arrows chasing each other clockwise — the "keep
+  // searching automatically" idea. Three ~90 deg arcs (r=8.5 about the centre)
+  // with 30 deg gaps, each capped by an arrowhead pointing clockwise.
+  'auto-find':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 A8.5 8.5 0 0 1 20.5 12"/><polyline points="19 9.8 20.5 12 22 9.8"/><path d="M19.36 16.25 A8.5 8.5 0 0 1 7.75 19.36"/><polyline points="10.41 19.16 7.75 19.36 8.91 21.76"/><path d="M4.64 16.25 A8.5 8.5 0 0 1 7.75 4.64"/><polyline points="6.59 7.04 7.75 4.64 5.09 4.44"/><circle cx="11" cy="11" r="2.6"/><line x1="12.85" y1="12.85" x2="14.4" y2="14.4"/></svg>',
   database:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>',
   graduation:

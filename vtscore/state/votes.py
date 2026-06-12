@@ -13,6 +13,8 @@ Phase 3 of ``../docs/architecture.md``.
 
 from __future__ import annotations
 
+from typing import Any
+
 from vtscore.state.clicks import assign_click_time, remove_click_time
 from vtscore.state.core import (
     _state_lock,
@@ -46,6 +48,9 @@ def clear_votes() -> None:
         ctx.click_counter = 0
         ctx.last_learned_scores.clear()
         ctx.find_initial_labels.clear()
+        ctx.verified_ids.clear()
+        ctx.find_scores.clear()
+        ctx.find_eval_stale = False
         ds_tree = get_active_context().diversity_tree
         if ds_tree is not None:
             ds_tree.reset_seen()
@@ -120,6 +125,68 @@ def get_find_initial_labels() -> dict[int, str]:
     """Return a copy of the find-label initial labels."""
     with _state_lock:
         return get_active_detector_context().find_initial_labels.copy()
+
+
+def set_find_scores(scores: dict[int, float]) -> None:
+    """Store the frozen per-item detector scores from a find-label run.
+
+    These are the single-pass scores the cutoff (Inclusion) slides over
+    without re-scoring, and the basis for the Stats FP/FN sweep.  In-memory
+    only.  See docs/plans/find-verification-workflow.md.
+    """
+    with _state_lock:
+        ctx = get_active_detector_context()
+        ctx.find_scores.clear()
+        ctx.find_scores.update(scores)
+
+
+def get_find_scores() -> dict[int, float]:
+    """Return a copy of the frozen find-label scores."""
+    with _state_lock:
+        return dict(get_active_detector_context().find_scores)
+
+
+def rethreshold_unverified_find_items() -> None:
+    """Re-split *unverified* Find items good/bad at the current cutoff.
+
+    Inclusion is a pure cutoff knob: sliding it moves
+    :attr:`DetectorContext.threshold` over the frozen ``find_scores`` with no
+    re-scoring.  Every scored item the human has not verified is re-assigned
+    good/bad purely by whether its frozen score clears the (already updated)
+    threshold; verified items keep their human vote wherever their score
+    lands, and ``find_initial_labels`` (the eval baseline at the default
+    cutoff) is left untouched.  Existing click-times are preserved so the
+    right-scroll ordering doesn't churn on a slide.
+
+    No-op outside Find mode or before a scoring pass has frozen ``find_scores``
+    (e.g. Train-mode inclusion changes).  Must run *after*
+    :func:`recompute_detector_thresholds_for_inclusion` has updated the
+    threshold.  See docs/plans/find-verification-workflow.md.
+    """
+    with _state_lock:
+        ctx = get_active_detector_context()
+        # The request-missing sentinel (no detector identified) exposes none of
+        # these fields; guard with getattr so an Inclusion/settings write with
+        # no detector context is a clean no-op rather than an AttributeError.
+        if not getattr(ctx, "find_mode", False) or not getattr(ctx, "find_scores", None):
+            return
+        threshold = ctx.threshold
+        good_votes = ctx.good_votes
+        bad_votes = ctx.bad_votes
+        verified = ctx.verified_ids
+        for media_id, score in ctx.find_scores.items():
+            if media_id in verified:
+                continue
+            if score >= threshold:
+                if media_id in good_votes:
+                    continue
+                bad_votes.pop(media_id, None)
+                good_votes[media_id] = None
+            else:
+                if media_id in bad_votes:
+                    continue
+                good_votes.pop(media_id, None)
+                bad_votes[media_id] = None
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +303,24 @@ def _needs_progress_invalidate(old_label: str, new_label: str) -> bool:
     return old_label != "none" and old_label != new_label
 
 
+def _mark_verified_if_find_mode(ctx: Any, media_id: int, new_label: str) -> None:
+    """In Find mode, a manual single-item vote *verifies* the item.
+
+    The big Good/Bad buttons and the hover-vote both land here (via the
+    ``/api/medias/<id>/vote`` endpoint → :func:`set_vote`).  A good/bad vote
+    moves the item out of the left work queue into the right verified pile;
+    un-voting (``none``) returns it to unverified.  The bulk find-label scoring
+    path does *not* go through here, so detector-assigned labels stay
+    unverified by construction.  See docs/plans/find-verification-workflow.md.
+    """
+    if not getattr(ctx, "find_mode", False):
+        return
+    if new_label in ("good", "bad"):
+        ctx.verified_ids[media_id] = None
+    else:
+        ctx.verified_ids.pop(media_id, None)
+
+
 def set_vote(
     media_id: int,
     target: str,
@@ -272,6 +357,7 @@ def set_vote(
     """
     with _state_lock:
         result = _set_vote_locked(media_id, target, region_box=region_box)
+        _mark_verified_if_find_mode(get_active_detector_context(), media_id, result[1])
     # Progress-cache invalidation runs *after* ``_state_lock`` is released so
     # we never establish a ``_state_lock → _progress_lock`` ordering across
     # the two modules (audit M1).
@@ -319,6 +405,7 @@ def toggle_vote(
             target,
             region_box=region_box if target == "good" else None,
         )
+        _mark_verified_if_find_mode(ctx, media_id, new)
     # See the lock-ordering note on :func:`set_vote`.
     if _needs_progress_invalidate(old, new):
         from vtscore.detectors.labeling_progress import invalidate_progress_cache_from

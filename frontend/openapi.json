@@ -51,6 +51,14 @@
             "type": "array"
           },
           "pending_announcements": {
+            "description": "Milestones not yet seen in the panel; lights the notification dot.",
+            "items": {
+              "$ref": "#/components/schemas/_PendingAnnouncement"
+            },
+            "type": "array"
+          },
+          "pending_toasts": {
+            "description": "Milestones whose one-time unlock toast hasn't fired yet.",
             "items": {
               "$ref": "#/components/schemas/_PendingAnnouncement"
             },
@@ -69,6 +77,7 @@
           "hours",
           "media_types",
           "pending_announcements",
+          "pending_toasts",
           "tier_names"
         ],
         "type": "object"
@@ -149,6 +158,18 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_exporter": {
+            "type": "string"
+          },
+          "autofind_exporter_field_values": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "object"
+          },
           "autopilot_enabled": {
             "type": "boolean"
           },
@@ -168,7 +189,6 @@
             "items": {
               "type": "string"
             },
-            "readOnly": true,
             "type": "array"
           },
           "browse_bin_shape": {
@@ -180,6 +200,12 @@
           "browse_colormap": {
             "additionalProperties": {
               "type": "string"
+            },
+            "type": "object"
+          },
+          "browse_compact": {
+            "additionalProperties": {
+              "type": "boolean"
             },
             "type": "object"
           },
@@ -213,9 +239,6 @@
             "readOnly": true,
             "type": "string"
           },
-          "disable_achievements": {
-            "type": "boolean"
-          },
           "effective_solo_embedder_per_media_type": {
             "additionalProperties": {
               "type": "string"
@@ -227,6 +250,9 @@
             "nullable": true,
             "readOnly": true,
             "type": "string"
+          },
+          "enable_achievements": {
+            "type": "boolean"
           },
           "enrich_descriptions": {
             "type": "boolean"
@@ -244,6 +270,12 @@
             "type": "object"
           },
           "grid_icon_size_left": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "grid_icon_size_popup": {
             "additionalProperties": {
               "type": "string"
             },
@@ -345,6 +377,12 @@
             },
             "type": "object"
           },
+          "view_mode_popup": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
           "view_mode_right": {
             "additionalProperties": {
               "type": "string"
@@ -396,6 +434,10 @@
       "AutoDetectResponse": {
         "additionalProperties": false,
         "properties": {
+          "auto_export": {
+            "additionalProperties": {},
+            "type": "object"
+          },
           "detectors_run": {
             "type": "integer"
           },
@@ -1982,6 +2024,9 @@
           "id": {
             "type": "string"
           },
+          "is_owner": {
+            "type": "boolean"
+          },
           "last_trained_at": {
             "nullable": true,
             "type": "number"
@@ -2000,6 +2045,12 @@
           },
           "num_training": {
             "type": "integer"
+          },
+          "readers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "text_query": {
             "type": "string"
@@ -2059,6 +2110,41 @@
         },
         "required": [
           "ok"
+        ],
+        "type": "object"
+      },
+      "DetectorRegistryReadersRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "readers": {
+            "description": "List of usernames; ``[\"*\"]`` makes the detector public.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "readers"
+        ],
+        "type": "object"
+      },
+      "DetectorRegistryReadersResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "readers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "readers"
         ],
         "type": "object"
       },
@@ -2617,6 +2703,30 @@
         ],
         "type": "object"
       },
+      "FindCorrectionsToDetectorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "corrections_added": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "num_labels": {
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "corrections_added",
+          "name",
+          "num_labels",
+          "ok"
+        ],
+        "type": "object"
+      },
       "FindLabelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2735,6 +2845,101 @@
         ],
         "type": "object"
       },
+      "FindStatsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement_rate": {
+            "type": "number"
+          },
+          "agreements": {
+            "type": "integer"
+          },
+          "confirmed_bad": {
+            "type": "integer"
+          },
+          "confirmed_good": {
+            "type": "integer"
+          },
+          "corrections": {
+            "type": "integer"
+          },
+          "culled_false_pos": {
+            "type": "integer"
+          },
+          "inclusion": {
+            "type": "integer"
+          },
+          "precision": {
+            "type": "number"
+          },
+          "rescued_false_neg": {
+            "type": "integer"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "sweep": {
+            "items": {
+              "$ref": "#/components/schemas/FindStatsSweepPoint"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "total_bad": {
+            "type": "integer"
+          },
+          "total_good": {
+            "type": "integer"
+          },
+          "verified_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agreement_rate",
+          "agreements",
+          "confirmed_bad",
+          "confirmed_good",
+          "corrections",
+          "culled_false_pos",
+          "inclusion",
+          "precision",
+          "rescued_false_neg",
+          "stale",
+          "sweep",
+          "threshold",
+          "total_bad",
+          "total_good",
+          "verified_count"
+        ],
+        "type": "object"
+      },
+      "FindStatsSweepPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "false_neg": {
+            "type": "integer"
+          },
+          "false_pos": {
+            "type": "integer"
+          },
+          "inclusion": {
+            "type": "integer"
+          },
+          "threshold": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "false_neg",
+          "false_pos",
+          "inclusion",
+          "threshold"
+        ],
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -2836,6 +3041,10 @@
         "properties": {
           "inclusion": {
             "type": "integer"
+          },
+          "threshold": {
+            "nullable": true,
+            "type": "number"
           }
         },
         "required": [
@@ -4147,6 +4356,10 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_exporter": {
+            "type": "string"
+          },
+          "autofind_exporter_field_values": {},
           "autopilot_enabled": {
             "type": "boolean"
           },
@@ -4170,6 +4383,7 @@
           },
           "browse_bin_shape": {},
           "browse_colormap": {},
+          "browse_compact": {},
           "browse_icon_size": {},
           "browse_panel_width": {
             "type": "integer"
@@ -4188,7 +4402,7 @@
           "detectors_dir": {
             "type": "string"
           },
-          "disable_achievements": {
+          "enable_achievements": {
             "type": "boolean"
           },
           "enrich_descriptions": {
@@ -4197,6 +4411,7 @@
           "focus_mode_left": {},
           "focus_mode_right": {},
           "grid_icon_size_left": {},
+          "grid_icon_size_popup": {},
           "grid_icon_size_right": {},
           "hide_autopilot": {
             "type": "boolean"
@@ -4240,6 +4455,7 @@
             "type": "string"
           },
           "view_mode_left": {},
+          "view_mode_popup": {},
           "view_mode_right": {},
           "volume": {
             "type": "number"
@@ -4513,6 +4729,12 @@
               "type": "number"
             },
             "type": "object"
+          },
+          "verified": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -4521,7 +4743,8 @@
           "good",
           "labelset_bad_count",
           "labelset_good_count",
-          "learned_scores"
+          "learned_scores",
+          "verified"
         ],
         "type": "object"
       },
@@ -6289,7 +6512,55 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Mark *category_id*'s tier as announced.",
+        "summary": "Mark *category_id*'s tier as announced (seen in the panel).",
+        "tags": [
+          "achievements"
+        ]
+      }
+    },
+    "/api/achievements/{category_id}/mark-toasted": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "category_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "mark_toasted",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcknowledgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcknowledgeResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Mark *category_id*'s tier's unlock toast as shown so it fires once.",
         "tags": [
           "achievements"
         ]
@@ -9029,6 +9300,7 @@
     },
     "/api/detectors/registry": {
       "get": {
+        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.",
         "operationId": "list_registered_detectors",
         "responses": {
           "200": {
@@ -9045,7 +9317,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return all registered detectors with their loaded state and autorun flag.",
+        "summary": "Return detectors visible to the current user, with loaded/autorun flags.",
         "tags": [
           "detectors_registry"
         ]
@@ -9224,6 +9496,9 @@
             },
             "description": "OK"
           },
+          "403": {
+            "description": "Access denied for the current user."
+          },
           "404": {
             "description": "Detector not found."
           },
@@ -9253,6 +9528,9 @@
               }
             },
             "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector creator can delete it."
           },
           "404": {
             "description": "Detector not found."
@@ -9291,7 +9569,7 @@
         }
       ],
       "put": {
-        "description": "The flag is stored in ``settings.json`` under ``autorun_detectors`` so the\nCLI's ``--autodetect`` flow and the active-dataset ``/api/auto-detect``\nroute both see it.",
+        "description": "The flag is stored per-user under ``autorun_detectors`` (see\n:func:`vtsearch.settings.add_autorun_detector`), so each user curates their\nown Auto-Find list. The CLI's ``--autodetect`` flow reads the running\nuser's list (the built-in ``default`` user falls back to the server\nsettings file). The user must be able to access the detector to flag it.",
         "operationId": "set_detector_autorun",
         "requestBody": {
           "content": {
@@ -9314,6 +9592,9 @@
             },
             "description": "OK"
           },
+          "403": {
+            "description": "Access denied for the current user."
+          },
           "404": {
             "description": "Detector not found."
           },
@@ -9327,7 +9608,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Toggle the autorun flag for a registered detector.",
+        "summary": "Toggle the calling user's autorun flag for a registered detector.",
         "tags": [
           "detectors_registry"
         ]
@@ -9391,6 +9672,61 @@
         ]
       }
     },
+    "/api/detectors/registry/{detector_id}/readers": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "put": {
+        "description": "Body: ``{\"readers\": [\"alice\", \"bob\"]}``. Use ``[\"*\"]`` to make the\ndetector visible to all users. Mirrors the dataset readers endpoint.",
+        "operationId": "update_detector_readers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectorRegistryReadersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorRegistryReadersResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Only the detector creator can update readers."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Update a detector's access list. Only the creator may call this.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
     "/api/detectors/registry/{detector_id}/rename": {
       "parameters": [
         {
@@ -9428,6 +9764,9 @@
           },
           "400": {
             "description": "Empty name after stripping."
+          },
+          "403": {
+            "description": "Only the detector creator can rename it."
           },
           "404": {
             "description": "Detector not found."
@@ -10809,6 +11148,65 @@
         ]
       }
     },
+    "/api/find/corrections-to-detector": {
+      "post": {
+        "description": "A *correction* is an item whose adopted Find label differs from the\ndetector's original call (``find_initial_labels``): a rescued\nfalse-negative (now good, the detector said bad) or a culled false-positive\n(now bad, the detector said good).  This matches the ``corrections`` export\nfilter and the Stats \"corrections\" count.\n\nThe correction items are written into the detector's on-disk labelset\n(superseding any prior entry for the same source media) and the registry's\ntraining counters are refreshed.  The cached MLP is invalidated so the next\nscoring pass retrains from the merged labelset.\n\nThe current Find session is deliberately *not* re-scored or reset: its\nscores, queue, votes, and verification stay pinned to the detector version\nthat produced them, so the displayed evaluation (and ``GET /api/find/stats``)\nkeeps showing the previous detector's results.  That evaluation is now out of\ndate relative to the retrained detector, which ``find_eval_stale`` records so\nthe Stats note can say so; the retrained detector takes effect the next time\nthe dataset is scored.",
+        "operationId": "find_corrections_to_detector",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindCorrectionsToDetectorResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "No Find run to take corrections from."
+          },
+          "404": {
+            "description": "No active detector to update."
+          },
+          "409": {
+            "description": "Detector vote state is not aligned with the active dataset."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Fold the Find corrections into the active detector's labelset for *future*\nscoring, leaving the current Find session frozen.",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
+    },
+    "/api/find/stats": {
+      "get": {
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (from the cached fold\norderings) for false-positive / false-negative counts at every cutoff.\nPure read; no new state.  See docs/plans/find-verification-workflow.md.",
+        "operationId": "find_stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindStatsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Detector-evaluation stats over the **adopted** Find label set.",
+        "tags": [
+          "detector_scoring"
+        ]
+      }
+    },
     "/api/inclusion": {
       "get": {
         "operationId": "get_inclusion_route",
@@ -10827,12 +11225,13 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Get the current Inclusion setting.",
+        "summary": "Get the current Inclusion setting and the cutoff it resolves to.",
         "tags": [
           "sorting"
         ]
       },
       "post": {
+        "description": "Inclusion is a pure cutoff knob: this re-derives the active detector's\nthreshold from its cached fold orderings (no MLP retrain) and, in Find\nmode, re-splits the unverified items over the frozen scores.  The new\ncutoff is returned so the Find slider can move the green/red line.",
         "operationId": "set_inclusion_route",
         "requestBody": {
           "content": {
@@ -11281,7 +11680,7 @@
             }
           },
           {
-            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), or ``corrections`` (entries where the user changed the detector's original label). Overrides ``goods_only``.",
+            "description": "Filter mode: ``good``, ``bad``, ``both`` (default), ``corrections`` (entries where the user changed the detector's original label), ``unverified`` (Find work-queue items the human hasn't acted on), or ``verified`` (items the human has confirmed). Overrides ``goods_only``.",
             "in": "query",
             "name": "label_filter",
             "required": false,
@@ -11292,7 +11691,9 @@
                 "good",
                 "bad",
                 "both",
-                "corrections"
+                "corrections",
+                "unverified",
+                "verified"
               ],
               "type": "string"
             }
@@ -11734,7 +12135,7 @@
     },
     "/api/medias/vote-bulk": {
       "post": {
-        "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics, then the detector\nlabelset is persisted **once** rather than per id.  Bulk votes are\nimage-level (no region boxes).  Powers the Browser's \"Remove from Good\"\ncull, which marks a hand-selected set of false-positives ``bad`` and\ndrops them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
+        "description": "Mirrors ``/api/medias/<id>/vote`` for a batch: each id is set to\n``target`` with the same idempotent semantics (including Find-mode\nverification \u2014 a good/bad target marks the item verified), then the\ndetector labelset is persisted **once** rather than per id.  Bulk votes\nare image-level (no region boxes).  Powers the Browser's \"Verified Good\" /\n\"Verified Bad\" actions, which mark a hand-selected set good/bad, verify\nthem, and drop them from the browse.\n\nIds that aren't in the loaded dataset are skipped and reported back in\n``missing``; ``changed`` counts only the ids whose state actually moved\n(idempotent re-applies don't count).",
         "operationId": "vote_media_bulk",
         "requestBody": {
           "content": {

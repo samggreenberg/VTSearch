@@ -64,7 +64,7 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
       this.applyState(state);
     });
     this.settingsState.settings$.pipe(takeUntil(this.destroy$)).subscribe((s) => {
-      this.disableAchievements = !!s?.disable_achievements;
+      this.disableAchievements = s?.enable_achievements === false;
       if (this.lastState) this.applyState(this.lastState);
     });
     this.achievements.refresh();

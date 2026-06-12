@@ -51,6 +51,11 @@ def train_and_threshold(
     3. Optional safe-threshold blending when ``get_safe_thresholds()`` is
        enabled and *snap* is provided.
 
+    ``inclusion`` is read from ``get_inclusion()``, which resolves to the
+    *active detector context's* inclusion (seeded from the user's settings
+    default the first time it's read for a detector). Both Train and Find
+    therefore train at the same per-detector inclusion within a session.
+
     Args:
         X_list: Embedding vectors (list of numpy arrays).
         y_list: Binary labels (1.0 = good, 0.0 = bad).
@@ -93,7 +98,7 @@ def train_and_threshold(
             calibration_fraction=get_calibration_fraction(),
         )
 
-    model = train_model(X, y, input_dim, get_inclusion())
+    model = train_model(X, y, input_dim)
 
     if safe:
         from vtscore.embedding.matrix import get_embedding_matrix_for_snap
@@ -362,7 +367,7 @@ def train_and_score(
 
     # Training is image-level in v1 - the MLP only ever sees one vector
     # per voted media, mirroring the "vote on whole images" rule.
-    model = train_model(X, y, input_dim, inclusion_value, hidden_dim=hidden_dim)
+    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     all_ids, scores, best_region = _score_all_media(model, clips_dict)
 
@@ -502,7 +507,7 @@ def train_detector_from_origins(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
         )
-    model = train_model(X, y, input_dim, inclusion)
+    model = train_model(X, y, input_dim)
 
     state_dict = model.state_dict()
     weights = {k: v.cpu().tolist() for k, v in state_dict.items()}

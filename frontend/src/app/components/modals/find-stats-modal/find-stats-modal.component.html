@@ -1,0 +1,103 @@
+<vt-modal [open]="true" title="Detector Stats" (closed)="close()">
+  @if (loading) {
+    <p class="loading-text">Loading stats…</p>
+  } @else if (error) {
+    <p class="error-text">{{ error }}</p>
+  } @else if (stats) {
+    @if (stats.stale) {
+      <p class="stale-note" role="note">
+        ⚠ Out of date: these numbers evaluate the detector <strong>before</strong> your last corrections were added.
+        They're kept here because the recent evaluation is more useful than none; re-score the dataset (re-enter Find) to
+        evaluate the retrained detector.
+      </p>
+    }
+    <table class="stats-table">
+      <tbody>
+        <tr>
+          <td class="stat-label" title="Items the detector kept as positive (adopted, all items)">Good</td>
+          <td class="stat-value">{{ stats.total_good | number }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Items the detector dropped as negative (adopted, all items)">Bad</td>
+          <td class="stat-value">{{ stats.total_bad | number }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="How many items you actually reviewed by hand (the rest adopt the detector's call)">Verified by hand</td>
+          <td class="stat-value">{{ stats.verified_count | number }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="section-title">Adopted vs. detector's original call</h3>
+    <table class="stats-table confusion">
+      <thead>
+        <tr>
+          <th></th>
+          <th title="The detector's call at the default calibrated cutoff">Detector Good</th>
+          <th title="The detector's call at the default calibrated cutoff">Detector Bad</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th class="row-head">Kept Good</th>
+          <td class="cell agree" title="Confirmed positive (you and the detector agree)">{{ stats.confirmed_good | number }}</td>
+          <td class="cell correct" title="Rescued false negative (you promoted an item the detector dropped)">{{ stats.rescued_false_neg | number }}</td>
+        </tr>
+        <tr>
+          <th class="row-head">Marked Bad</th>
+          <td class="cell correct" title="Culled false positive (you dropped an item the detector kept)">{{ stats.culled_false_pos | number }}</td>
+          <td class="cell agree" title="Confirmed negative (you and the detector agree)">{{ stats.confirmed_bad | number }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="stats-table">
+      <tbody>
+        <tr>
+          <td class="stat-label" title="Items where the adopted label matches the detector's original call, over all items">Agreement rate</td>
+          <td class="stat-value">{{ agreementPct }} <span class="muted">({{ stats.agreements | number }} agree / {{ stats.corrections | number }} corrections)</span></td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Of everything the detector called good, how much the adopted set keeps (inflated by unverified items)">Precision</td>
+          <td class="stat-value">{{ precisionPct }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="section-title" title="As inclusion rises the cutoff drops: false positives climb, false negatives fall. Read off the inclusion that best balances the two on your data.">False pos / false neg vs. inclusion</h3>
+    <div class="chart-wrap">
+      <svg
+        class="fpfn-chart"
+        [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="False positive and false negative counts across inclusion -10 to 10"
+      >
+        <!-- axes -->
+        <line class="axis" [attr.x1]="axisLeft" [attr.y1]="axisTop" [attr.x2]="axisLeft" [attr.y2]="axisBottom" />
+        <line class="axis" [attr.x1]="axisLeft" [attr.y1]="axisBottom" [attr.x2]="axisRight" [attr.y2]="axisBottom" />
+        <!-- y-axis labels: 0 and max -->
+        <text class="tick" [attr.x]="axisLeft - 4" [attr.y]="axisBottom" text-anchor="end" dominant-baseline="middle">0</text>
+        <text class="tick" [attr.x]="axisLeft - 4" [attr.y]="axisTop + 4" text-anchor="end">{{ maxCount }}</text>
+        <!-- x-axis labels: -10, 0, 10 -->
+        <text class="tick" [attr.x]="axisLeft" [attr.y]="axisBottom + 12" text-anchor="middle">-10</text>
+        <text class="tick" [attr.x]="(axisLeft + axisRight) / 2" [attr.y]="axisBottom + 12" text-anchor="middle">0</text>
+        <text class="tick" [attr.x]="axisRight" [attr.y]="axisBottom + 12" text-anchor="middle">10</text>
+        <!-- current inclusion marker -->
+        <line class="current" [attr.x1]="currentX" [attr.y1]="axisTop" [attr.x2]="currentX" [attr.y2]="axisBottom" />
+        <!-- the two curves -->
+        <polyline class="line-fp" [attr.points]="fpPolyline" />
+        <polyline class="line-fn" [attr.points]="fnPolyline" />
+      </svg>
+      <div class="chart-legend">
+        <span class="legend-item"><span class="swatch swatch-fp"></span>False positives</span>
+        <span class="legend-item"><span class="swatch swatch-fn"></span>False negatives</span>
+        <span class="legend-item"><span class="swatch swatch-current"></span>Current (incl {{ stats.inclusion }})</span>
+      </div>
+    </div>
+  }
+
+  <div modal-footer>
+    <button class="btn btn--secondary" (click)="close()">Close</button>
+  </div>
+</vt-modal>

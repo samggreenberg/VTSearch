@@ -28,6 +28,14 @@
         <button class="btn btn--secondary" (click)="onBuild()">Retry</button>
       </div>
     }
+    @case ('done') {
+      <div class="browse-status">
+        <p class="browse-status-message browse-status-success">
+          All items were verified. Go back to Find to see your results.
+        </p>
+        <button class="btn btn--primary" (click)="back()">Back to Find</button>
+      </div>
+    }
     @case ('ready') {
       <div class="browse-content" #content [style.--browse-panel-width]="panelWidth + 'px'">
         <div class="browse-main">
@@ -181,8 +189,9 @@
           <vt-browse-selection-panel
             class="browse-side-selection"
             [mediaType]="mediaType"
-            [canRemoveGood]="subset"
-            (removeGood)="onRemoveGood()"
+            [canVerify]="subset"
+            (verifyGood)="onVerify('good')"
+            (verifyBad)="onVerify('bad')"
           />
           <div class="browse-side-meta">
             <div class="browse-side-minimap">

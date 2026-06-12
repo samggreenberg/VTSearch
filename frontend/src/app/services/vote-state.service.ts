@@ -31,6 +31,7 @@ const UNDO_STACK_MAX = 20;
 export class VoteStateService implements OnDestroy {
   private readonly goodVotesSubject = new BehaviorSubject<Set<number>>(new Set());
   private readonly badVotesSubject = new BehaviorSubject<Set<number>>(new Set());
+  private readonly verifiedIdsSubject = new BehaviorSubject<Set<number>>(new Set());
   private readonly clickTimesSubject = new BehaviorSubject<Record<string, number>>({});
   private readonly learnedScoresSubject = new BehaviorSubject<Record<string, number>>({});
   private readonly labelsetGoodCountSubject = new BehaviorSubject<number>(0);
@@ -38,6 +39,16 @@ export class VoteStateService implements OnDestroy {
   private readonly destroy$ = new Subject<void>();
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
+  /**
+   * Find-mode flag.  In Find the detector flood-fills *every* item into
+   * ``goodVotes`` / ``badVotes`` (its presumption at the cutoff), so a raw
+   * good/bad membership is **not** a human decision — only ``verifiedIds`` is.
+   * When this is set, {@link currentState} treats an *unverified* item as
+   * ``'none'`` so the big Good/Bad buttons read neutral and a click *verifies*
+   * the item (sets an absolute good/bad) instead of toggling the detector's
+   * presumption off.  Set by the Find view; left ``false`` in Label/Train.
+   */
+  private findMode = false;
   /**
    * Optimistic post-vote state per media, used to preserve the user's click
    * across a polling response that raced ahead of the vote POST.  Cleared
@@ -48,6 +59,14 @@ export class VoteStateService implements OnDestroy {
    */
   private pendingOptimistic = new Map<number, { state: VoteState; clickTime: number | null }>();
 
+  /**
+   * Optimistic verified state per media (Find mode): ``true`` = just verified,
+   * ``false`` = just un-verified.  Merged over the server's ``verified`` array
+   * in {@link applyVotes} and cleared once the server confirms, so a 2s poll
+   * that raced ahead of the vote POST doesn't flicker the left/right split.
+   */
+  private pendingVerified = new Map<number, boolean>();
+
   /** Past votes available to undo, most-recent last.  Capped at UNDO_STACK_MAX. */
   private past: UndoEntry[] = [];
   /** Votes that have been undone and can be redone via Cmd/Ctrl-Shift-Z. */
@@ -56,6 +75,8 @@ export class VoteStateService implements OnDestroy {
 
   readonly goodVotes$ = this.goodVotesSubject.asObservable();
   readonly badVotes$ = this.badVotesSubject.asObservable();
+  /** Find mode: ids the human has explicitly verified (acted on). */
+  readonly verifiedIds$ = this.verifiedIdsSubject.asObservable();
   readonly clickTimes$ = this.clickTimesSubject.asObservable();
   readonly learnedScores$ = this.learnedScoresSubject.asObservable();
   readonly labelsetGoodCount$ = this.labelsetGoodCountSubject.asObservable();
@@ -81,6 +102,47 @@ export class VoteStateService implements OnDestroy {
 
   get badVotes(): Set<number> {
     return this.badVotesSubject.value;
+  }
+
+  get verifiedIds(): Set<number> {
+    return this.verifiedIdsSubject.value;
+  }
+
+  /**
+   * Toggle Find-mode verification gating (see {@link findMode}).  The Find
+   * view sets this on enter and clears it on leave so Label/Train keep the
+   * plain "good membership = voted good" behaviour.
+   */
+  setFindMode(on: boolean): void {
+    this.findMode = on;
+  }
+
+  /**
+   * Good/bad state for display, honouring Find-mode verification: an
+   * unverified Find item reads as neither good nor bad (its membership is the
+   * detector's presumption, not a human vote).  Outside Find these mirror raw
+   * ``goodVotes`` / ``badVotes`` membership.
+   */
+  effectiveGood(id: number): boolean {
+    return this.currentState(id) === 'good';
+  }
+
+  effectiveBad(id: number): boolean {
+    return this.currentState(id) === 'bad';
+  }
+
+  /**
+   * Optimistically record that *id* is now verified (good/bad vote landed in
+   * Find mode) or no longer verified (un-voted).  The server marks the same
+   * transition on the vote POST; this just makes the left→right move feel
+   * instant.  Reconciled by {@link applyVotes} on the next ``/api/votes`` read.
+   */
+  setOptimisticVerified(id: number, verified: boolean): void {
+    this.pendingVerified.set(id, verified);
+    const next = new Set(this.verifiedIdsSubject.value);
+    if (verified) next.add(id);
+    else next.delete(id);
+    this.verifiedIdsSubject.next(next);
   }
 
   get clickTimes(): Record<string, number> {
@@ -113,8 +175,17 @@ export class VoteStateService implements OnDestroy {
     return this.labelsetGoodCount > 0 && this.labelsetBadCount > 0;
   }
 
-  /** Current local polarity for *id*, or ``'none'`` when not voted. */
+  /**
+   * Current local polarity for *id*, or ``'none'`` when not voted.
+   *
+   * In Find mode an *unverified* item reads as ``'none'`` regardless of its
+   * flood-filled good/bad membership: that membership is the detector's
+   * presumption, not a human decision (see {@link findMode}).  This is what
+   * makes the big Good/Bad buttons verify (set an absolute good/bad) on an
+   * unverified item rather than toggle the presumption off.
+   */
   private currentState(id: number): VoteState {
+    if (this.findMode && !this.verifiedIdsSubject.value.has(id)) return 'none';
     if (this.goodVotesSubject.value.has(id)) return 'good';
     if (this.badVotesSubject.value.has(id)) return 'bad';
     return 'none';
@@ -288,11 +359,13 @@ export class VoteStateService implements OnDestroy {
   clear(): void {
     this.goodVotesSubject.next(new Set());
     this.badVotesSubject.next(new Set());
+    this.verifiedIdsSubject.next(new Set());
     this.clickTimesSubject.next({});
     this.learnedScoresSubject.next({});
     this.labelsetGoodCountSubject.next(0);
     this.labelsetBadCountSubject.next(0);
     this.pendingOptimistic.clear();
+    this.pendingVerified.clear();
     this.past = [];
     this.future = [];
   }
@@ -391,8 +464,23 @@ export class VoteStateService implements OnDestroy {
       }
     }
 
+    // Verified ids: start from the server set, then apply pending optimistic
+    // overrides (clearing each once the server already agrees) so an in-flight
+    // verify/un-verify isn't clobbered by a poll that raced the vote POST.
+    const verified = new Set(votes.verified ?? []);
+    for (const [id, want] of this.pendingVerified) {
+      if (verified.has(id) === want) {
+        this.pendingVerified.delete(id);
+      } else if (want) {
+        verified.add(id);
+      } else {
+        verified.delete(id);
+      }
+    }
+
     this.goodVotesSubject.next(good);
     this.badVotesSubject.next(bad);
+    this.verifiedIdsSubject.next(verified);
     this.clickTimesSubject.next(times);
     this.learnedScoresSubject.next(votes.learned_scores);
     this.labelsetGoodCountSubject.next(votes.labelset_good_count ?? good.size);

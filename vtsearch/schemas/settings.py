@@ -38,6 +38,13 @@ class _PerMediaTypeIntDict(fields.Dict):
         super().__init__(keys=fields.String(), values=fields.Integer(), **kwargs)
 
 
+class _PerMediaTypeBooleanDict(fields.Dict):
+    """``{media_type_id: bool}`` dict (used for on/off browse toggles)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(keys=fields.String(), values=fields.Boolean(), **kwargs)
+
+
 class AppSettingsSchema(Schema):
     """Full settings dict returned by ``GET /api/settings`` and ``/defaults``.
 
@@ -64,7 +71,7 @@ class AppSettingsSchema(Schema):
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()
     autopilot_goal_diversity = fields.Integer()
-    disable_achievements = fields.Boolean()
+    enable_achievements = fields.Boolean()
 
     # VTSBrowse side-panel width (CSS px). Persisted but not shown as a
     # Settings-modal widget; the panel's draggable divider drives it.
@@ -78,6 +85,8 @@ class AppSettingsSchema(Schema):
     browse_icon_size = _PerMediaTypeStringDict()
     # Pile-thumbnail border width in CSS px, per media type (0 disables).
     browse_thumbnail_border = _PerMediaTypeIntDict()
+    # Whether (re)building the projection compacts the layout, per media type.
+    browse_compact = _PerMediaTypeBooleanDict()
 
     # Per-user, per-media-type
     view_mode_left = _PerMediaTypeStringDict()
@@ -88,6 +97,10 @@ class AppSettingsSchema(Schema):
     focus_mode_right = _PerMediaTypeStringDict()
     panel_pct_left = _PerMediaTypeNumberDict()
     panel_pct_right = _PerMediaTypeNumberDict()
+    # VTSBrowse bin-popup view mode + thumbnail size, per media type. Driven by
+    # the popup's own view controls and the Settings → Browser tab.
+    view_mode_popup = _PerMediaTypeStringDict()
+    grid_icon_size_popup = _PerMediaTypeStringDict()
 
     # Server-tier. These are fixed at server start (config file /
     # environment / CLI flags) and shared across all users; the frontend
@@ -98,8 +111,19 @@ class AppSettingsSchema(Schema):
     detectors_dir = fields.String(dump_only=True)
     max_concurrent_dataset_downloads = fields.Integer(dump_only=True)
     max_concurrent_dataset_embeddings = fields.Integer(dump_only=True)
-    autorun_detectors = fields.List(fields.String(), dump_only=True)
     dataset_max_age_days = fields.Integer(load_default=None, allow_none=True)
+
+    # Auto-Find (per-user, editable from the Auto-Find settings tab).
+    # ``autorun_detectors`` is each user's own list of detectors that auto-run
+    # on import; ``autofind_exporter`` is the chosen results-exporter name
+    # ("" = none); ``autofind_exporter_field_values`` keeps each exporter's
+    # field values under its own name so switching the picker preserves config.
+    autorun_detectors = fields.List(fields.String())
+    autofind_exporter = fields.String()
+    autofind_exporter_field_values = fields.Dict(
+        keys=fields.String(),
+        values=fields.Dict(keys=fields.String(), values=fields.String()),
+    )
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -175,6 +199,8 @@ class SettingsUpdateSchema(Schema):
     focus_mode_right = fields.Raw()
     panel_pct_left = fields.Raw()
     panel_pct_right = fields.Raw()
+    view_mode_popup = fields.Raw()
+    grid_icon_size_popup = fields.Raw()
 
     autopilot_enabled = fields.Boolean()
     hide_autopilot = fields.Boolean()
@@ -182,7 +208,7 @@ class SettingsUpdateSchema(Schema):
     autopilot_hard_reds = fields.Integer()
     autopilot_resort_interval = fields.Integer()
     autopilot_goal_diversity = fields.Integer()
-    disable_achievements = fields.Boolean()
+    enable_achievements = fields.Boolean()
 
     browse_panel_width = fields.Integer()
 
@@ -193,8 +219,15 @@ class SettingsUpdateSchema(Schema):
     browse_colormap = fields.Raw()
     browse_icon_size = fields.Raw()
     browse_thumbnail_border = fields.Raw()
+    browse_compact = fields.Raw()
 
     autorun_detectors = fields.List(fields.String())
+    # Auto-Find results exporter. ``autofind_exporter`` is validated against the
+    # exporter registry in the route layer; ``autofind_exporter_field_values``
+    # is a free-form ``{exporter_name: {field_key: value}}`` map (per-field
+    # validation runs at export time against the chosen plugin's schema).
+    autofind_exporter = fields.String()
+    autofind_exporter_field_values = fields.Raw()
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()

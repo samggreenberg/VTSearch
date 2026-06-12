@@ -71,26 +71,26 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
 def _calibration_cache_key(
     X_list: list,
     y_list: list[float],
-    inclusion_value: int,
     calibrate_count: int,
     calibration_fraction: float,
     hidden_dim: int,
 ) -> tuple:
-    """Build a deterministic cache key for cross-calibration inputs.
+    """Build a deterministic cache key for the calibration **fold orderings**.
 
-    ``calculate_cross_calibration_threshold`` is a deterministic function of
-    these inputs (the RNG is seeded with 42 at every call site that uses the
-    cache), so two calls with matching keys must produce the same threshold.
-    The key encodes the raw training vectors (not just the label IDs) so that
-    a labelset re-resolved to different embeddings - e.g. after the embedder
-    changes - invalidates the cache automatically.
+    The orderings (per-fold held-out scores + labels) are a deterministic
+    function of these inputs (RNG seeded with 42 at every cached call site)
+    and are **inclusion-independent** - ``inclusion`` is deliberately *not* in
+    the key, so an Inclusion change hits the cache and only re-runs the cheap
+    min-cost search.  The key encodes the raw training vectors (not just label
+    IDs) so a labelset re-resolved to different embeddings - e.g. after the
+    embedder changes - invalidates the cache automatically.  See
+    docs/plans/find-verification-workflow.md.
     """
     X_bytes = np.stack(X_list).astype(np.float32, copy=False).tobytes()
     y_bytes = np.asarray(y_list, dtype=np.float32).tobytes()
     return (
         X_bytes,
         y_bytes,
-        int(inclusion_value),
         int(calibrate_count),
         float(calibration_fraction),
         int(hidden_dim),
@@ -110,47 +110,43 @@ def cross_calibration_threshold_cached(
 ) -> float:
     """Memoized wrapper around :func:`calculate_cross_calibration_threshold`.
 
-    When *det_ctx* is provided, stores the last computed threshold on
-    ``det_ctx.calibration_cache`` and reuses it on the next call when every
-    input matches.  This is the common case during interactive sorting: the
-    user toggles ``inclusion`` or loads a new media item, the labels stay
-    the same, and recomputing two ~200-epoch fold fits would produce the
-    same number we computed last time.
+    When *det_ctx* is provided, caches the inclusion-independent **fold
+    orderings** on ``det_ctx.calibration_cache`` as ``(key, (orderings,
+    fallback))`` and reuses them whenever the (labels, calibrate settings)
+    key matches.  This is the common case during interactive sorting: the
+    user toggles ``inclusion`` or loads a new media item, the labels stay the
+    same, and the only work left is re-running the cheap min-cost search over
+    the cached orderings - no ~200-epoch fold fits.
 
-    A real label change produces a different cache key and falls through
-    to a fresh calibration - no explicit invalidation needed.
+    A real label change produces a different cache key and falls through to a
+    fresh calibration - no explicit invalidation needed.
     """
+    payload: tuple[list[tuple[list[float], list[float]]], float | None] | None = None
+    key = None
     if det_ctx is not None:
-        key = _calibration_cache_key(
-            X_list,
-            y_list,
-            inclusion_value,
-            calibrate_count,
-            calibration_fraction,
-            hidden_dim,
-        )
+        key = _calibration_cache_key(X_list, y_list, calibrate_count, calibration_fraction, hidden_dim)
         cached = getattr(det_ctx, "calibration_cache", None)
         if cached is not None and cached[0] == key:
-            return cached[1]
-    else:
-        key = None
+            payload = cached[1]
 
-    rng = np.random.RandomState(42)
-    threshold = calculate_cross_calibration_threshold(
-        X_list,
-        y_list,
-        input_dim,
-        inclusion_value,
-        rng=rng,
-        calibrate_count=calibrate_count,
-        calibration_fraction=calibration_fraction,
-        hidden_dim=hidden_dim,
-    )
+    if payload is None:
+        rng = np.random.RandomState(42)
+        payload = compute_fold_orderings(
+            X_list,
+            y_list,
+            input_dim,
+            rng=rng,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
+        )
+        if det_ctx is not None and key is not None:
+            det_ctx.calibration_cache = (key, payload)
 
-    if det_ctx is not None and key is not None:
-        det_ctx.calibration_cache = (key, threshold)
-
-    return threshold
+    orderings, fallback = payload
+    if fallback is not None:
+        return fallback
+    return threshold_from_fold_orderings(orderings, inclusion_value)
 
 
 def find_optimal_threshold(
@@ -224,6 +220,97 @@ def find_optimal_threshold(
     return float(sorted_scores[best_idx])
 
 
+def compute_fold_orderings(
+    X_list: list[np.ndarray],
+    y_list: list[float],
+    input_dim: int,
+    rng: np.random.RandomState | None = None,
+    calibrate_count: int = 2,
+    calibration_fraction: float = 0.5,
+    hidden_dim: int | None = None,
+) -> tuple[list[tuple[list[float], list[float]]], float | None]:
+    """Train the K calibration folds and return their held-out orderings.
+
+    Each ordering is a ``(cal_scores, cal_labels)`` pair: the fold model's
+    sigmoid scores on its held-out calibration split, and that split's true
+    labels.  Because :func:`train_model` is inclusion-independent, these
+    orderings do **not** depend on ``inclusion`` - so they can be cached once
+    and re-thresholded at any inclusion via :func:`threshold_from_fold_orderings`
+    (and swept across all inclusions for the Stats chart).  See
+    docs/plans/find-verification-workflow.md.
+
+    Returns ``(orderings, fallback)``.  When calibration is not possible the
+    orderings are empty and ``fallback`` is the sentinel threshold the public
+    wrapper must return (mirrors :func:`calculate_cross_calibration_threshold`'s
+    historical early-returns); otherwise ``fallback`` is ``None``.
+    """
+    n = len(X_list)
+    if n < 4:
+        return [], 0.5
+
+    _rng = rng if rng is not None else np.random
+    X_np = np.array(X_list)
+    y_np = np.array(y_list)
+
+    n_cal = max(1, round(n * calibration_fraction))
+    n_train = n - n_cal
+    if n_train < 2 or n_cal < 1:
+        return [], NO_GOOD_THRESHOLD
+
+    pos_idx = np.where(y_np == 1.0)[0]
+    neg_idx = np.where(y_np == 0.0)[0]
+    if len(pos_idx) < 2 or len(neg_idx) < 2:
+        return [], 0.5
+
+    import torch  # noqa: PLC0415
+
+    from vtscore.training.mlp import train_model  # noqa: PLC0415
+
+    calibrate_count = max(1, calibrate_count)
+
+    def _per_class_n_train(class_total: int) -> int:
+        target = round(class_total * n_train / n)
+        return max(1, min(class_total - 1, target))
+
+    n_train_pos = _per_class_n_train(len(pos_idx))
+    n_train_neg = _per_class_n_train(len(neg_idx))
+
+    orderings: list[tuple[list[float], list[float]]] = []
+    for _ in range(calibrate_count):
+        pos_perm = _rng.permutation(pos_idx)
+        neg_perm = _rng.permutation(neg_idx)
+        train_idx = np.concatenate([pos_perm[:n_train_pos], neg_perm[:n_train_neg]])
+        cal_idx = np.concatenate([pos_perm[n_train_pos:], neg_perm[n_train_neg:]])
+
+        X_train = torch.tensor(X_np[train_idx], dtype=torch.float32)
+        y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
+        X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32)
+
+        model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim)
+
+        with torch.no_grad():
+            X_cal = X_cal.to(next(model.parameters()).device)
+            scores = torch.sigmoid(model(X_cal)).squeeze(1).cpu().tolist()
+        orderings.append((scores, y_np[cal_idx].tolist()))
+
+    return orderings, None
+
+
+def threshold_from_fold_orderings(
+    fold_orderings: list[tuple[list[float], list[float]]],
+    inclusion_value: int,
+) -> float:
+    """Average the per-fold min-cost thresholds at *inclusion_value*.
+
+    Cheap: just re-runs :func:`find_optimal_threshold` over each fold's cached
+    ``(scores, labels)``.  Callers must pass a non-empty ``fold_orderings``
+    (the empty case is handled via the ``fallback`` from
+    :func:`compute_fold_orderings`).
+    """
+    thresholds = [find_optimal_threshold(s, lbls, inclusion_value) for s, lbls in fold_orderings]
+    return sum(thresholds) / len(thresholds)
+
+
 def calculate_cross_calibration_threshold(
     X_list: list[np.ndarray],
     y_list: list[float],
@@ -256,8 +343,11 @@ def calculate_cross_calibration_threshold(
         y_list: List of binary labels (1.0 for good, 0.0 for bad),
             aligned with ``X_list``.
         input_dim: Dimensionality of the embeddings.
-        inclusion_value: Integer in ``[-10, 10]`` passed to :func:`train_model`
-            and :func:`find_optimal_threshold` to control the FPR/FNR trade-off.
+        inclusion_value: Integer in ``[-10, 10]`` passed to
+            :func:`find_optimal_threshold` to control the FPR/FNR trade-off.
+            It does **not** enter model training (the fold models are
+            inclusion-independent), so the same fold scores can be re-thresholded
+            at any inclusion - see docs/plans/find-verification-workflow.md.
         rng: Optional seeded RandomState for reproducible splits. Falls back
             to the global ``np.random`` state when ``None``.
         calibrate_count: Number of random Train/Calibrate splits (default 2).
@@ -280,68 +370,18 @@ def calculate_cross_calibration_threshold(
         (a finite sentinel above the sigmoid range) if
         ``calibration_fraction`` makes a valid split impossible.
     """
-    n = len(X_list)
-    if n < 4:
-        return 0.5
-
-    _rng = rng if rng is not None else np.random
-    X_np = np.array(X_list)
-    y_np = np.array(y_list)
-
-    # Split sizes: calibration_fraction of n goes to calibrate, rest to train
-    n_cal = max(1, round(n * calibration_fraction))
-    n_train = n - n_cal
-    if n_train < 2 or n_cal < 1:
-        return NO_GOOD_THRESHOLD
-
-    # Stratify by class so every fold's train side has both classes - an
-    # unstratified random split could produce a single-class y_train on
-    # small or skewed labelsets, and ``train_model`` (correctly) refuses
-    # to fit BCE on that.  Needs at least two of each class to guarantee
-    # the train side stays mixed; below that we cannot calibrate
-    # reliably and fall back to the neutral 0.5 sentinel.
-    pos_idx = np.where(y_np == 1.0)[0]
-    neg_idx = np.where(y_np == 0.0)[0]
-    if len(pos_idx) < 2 or len(neg_idx) < 2:
-        return 0.5
-
-    import torch  # noqa: PLC0415
-
-    from vtscore.training.mlp import train_model  # noqa: PLC0415
-
-    calibrate_count = max(1, calibrate_count)
-    thresholds: list[float] = []
-
-    # Per-class train counts proportional to ``n_train / n`` but clamped to
-    # ``[1, class_total - 1]`` so the train side keeps at least one of each
-    # class (the H6 invariant) and the cal side is non-empty for at least
-    # one class.
-    def _per_class_n_train(class_total: int) -> int:
-        target = round(class_total * n_train / n)
-        return max(1, min(class_total - 1, target))
-
-    n_train_pos = _per_class_n_train(len(pos_idx))
-    n_train_neg = _per_class_n_train(len(neg_idx))
-
-    for _ in range(calibrate_count):
-        pos_perm = _rng.permutation(pos_idx)
-        neg_perm = _rng.permutation(neg_idx)
-        train_idx = np.concatenate([pos_perm[:n_train_pos], neg_perm[:n_train_neg]])
-        cal_idx = np.concatenate([pos_perm[n_train_pos:], neg_perm[n_train_neg:]])
-
-        X_train = torch.tensor(X_np[train_idx], dtype=torch.float32)
-        y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
-        X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32)
-
-        model = train_model(X_train, y_train, input_dim, inclusion_value, hidden_dim=hidden_dim)
-
-        with torch.no_grad():
-            X_cal = X_cal.to(next(model.parameters()).device)
-            scores = torch.sigmoid(model(X_cal)).squeeze(1).cpu().tolist()
-        t = find_optimal_threshold(scores, y_np[cal_idx].tolist(), inclusion_value)
-        thresholds.append(t)
-
-    return sum(thresholds) / len(thresholds)
+    orderings, fallback = compute_fold_orderings(
+        X_list,
+        y_list,
+        input_dim,
+        rng=rng,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        hidden_dim=hidden_dim,
+    )
+    if fallback is not None:
+        return fallback
+    return threshold_from_fold_orderings(orderings, inclusion_value)
 
 
 def calculate_safe_threshold(

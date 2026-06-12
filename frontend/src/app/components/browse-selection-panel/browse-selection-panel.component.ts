@@ -46,15 +46,19 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   @Input() mediaType = '';
 
   /**
-   * Whether to offer the "Remove from Good" cull action. Only meaningful when
-   * browsing a Find run's positives (subset mode): the action marks the
-   * selected items Bad in the detector's labels and drops them from the
-   * browse. The browse view owns the actual mutation + re-projection.
+   * Whether to offer the verify actions. Only meaningful when browsing a Find
+   * run's positives (subset mode): "Verified Good" / "Verified Bad" mark the
+   * selected items good/bad in the detector's labels *and* verify them, so they
+   * leave the unverified set and drop from the browse. The browse view owns the
+   * actual mutation + re-projection.
    */
-  @Input() canRemoveGood = false;
+  @Input() canVerify = false;
 
-  /** Emitted when the user confirms the "Remove from Good" cull. */
-  @Output() removeGood = new EventEmitter<void>();
+  /** Emitted when the user marks the selection Verified Good. */
+  @Output() verifyGood = new EventEmitter<void>();
+
+  /** Emitted when the user marks the selection Verified Bad. */
+  @Output() verifyBad = new EventEmitter<void>();
 
   count = 0;
   sortMode: SelectionSortMode = 'time-desc';
@@ -163,10 +167,16 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     this.selection.clear();
   }
 
-  /** Ask the browse view to mark the selected items Bad and remove them. */
-  onRemoveGood(): void {
+  /** Ask the browse view to mark the selected items Verified Good and drop them. */
+  onVerifyGood(): void {
     if (this.count === 0) return;
-    this.removeGood.emit();
+    this.verifyGood.emit();
+  }
+
+  /** Ask the browse view to mark the selected items Verified Bad and drop them. */
+  onVerifyBad(): void {
+    if (this.count === 0) return;
+    this.verifyBad.emit();
   }
 
   /** Clicking a selected item drops it from the selection. */
