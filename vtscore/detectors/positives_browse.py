@@ -47,6 +47,45 @@ def detpos_dataset_id(detector_id: str) -> str:
     return f"{DETPOS_PREFIX}{detector_id}"
 
 
+def _materialize_positive(
+    elem,
+    *,
+    media_type: str,
+    embedder_name: str,
+    cached: np.ndarray | None,
+) -> dict[str, Any] | None:
+    """Resolve + embed one positive into a media dict, or ``None`` to skip it.
+
+    Reads the origin file once: its bytes power the preview, and (when no
+    cached vector is supplied) the same path is embedded with *embedder_name*.
+    """
+    from vtscore.detectors.resolver import embed_file, resolve_file_context
+
+    emb = np.asarray(cached, dtype=np.float32) if cached is not None else None
+    media_bytes: bytes | None = None
+    with resolve_file_context(elem.origin, elem.origin_name, elem.filename) as file_path:
+        if file_path is not None and file_path.is_file():
+            try:
+                media_bytes = file_path.read_bytes()
+            except OSError:
+                media_bytes = None
+            if emb is None and media_bytes is not None:
+                emb = embed_file(file_path, media_type, embedder_name)
+
+    if emb is None or media_bytes is None:
+        return None
+    return {
+        "media_type": media_type,
+        "embedding": np.asarray(emb, dtype=np.float32),
+        "media_bytes": media_bytes,
+        "filename": elem.filename or elem.origin_name or "",
+        "origin_name": elem.origin_name or "",
+        "origin": elem.origin or {},
+        "md5": elem.md5 or "",
+        "embedder": embedder_name,
+    }
+
+
 def build_positives_browse_context(
     detector_data: dict[str, Any],
     dataset_id: str,
@@ -69,55 +108,29 @@ def build_positives_browse_context(
     a ready projection on arrival. Raises :class:`ValueError` when no positive
     could be resolved + embedded (nothing to browse).
     """
-    from vtscore.detectors.resolver import embed_file, resolve_file_context
-
     media_type = detector_data.get("media_type", "") or ""
     labelset = LabelSet.from_dict(detector_data.get("labelset") or {})
     positives = [el for el in labelset.elements if el.label == "good"]
 
     medias: dict[int, dict[str, Any]] = {}
     total = len(positives)
-    next_cid = 0
     for idx, elem in enumerate(positives):
         if on_progress is not None:
             on_progress(idx, total, "Resolving positives…")
-
-        # Resolve the backing file once: bytes power the preview, and (when we
-        # have no cached vector) the same path is embedded with the detector's
-        # embedder. The ``with`` block keeps temp-materialised sources alive.
-        emb: np.ndarray | None = None
-        if cached_embeddings is not None:
-            cached = cached_embeddings.get(stable_element_id(elem))
-            if cached is not None:
-                emb = np.asarray(cached, dtype=np.float32)
-
-        media_bytes: bytes | None = None
-        with resolve_file_context(elem.origin, elem.origin_name, elem.filename) as file_path:
-            if file_path is not None and file_path.is_file():
-                try:
-                    media_bytes = file_path.read_bytes()
-                except OSError:
-                    media_bytes = None
-                if emb is None and media_bytes is not None:
-                    emb = embed_file(file_path, media_type, embedder_name)
-
-        if emb is None or media_bytes is None:
-            # Origin couldn't be located or embedded → it simply won't appear
-            # on the map. Skipping keeps a partially-resolvable detector usable.
+        cached = cached_embeddings.get(stable_element_id(elem)) if cached_embeddings is not None else None
+        # An origin that can't be located or embedded simply won't appear on
+        # the map — skipping keeps a partially-resolvable detector usable.
+        media = _materialize_positive(
+            elem,
+            media_type=media_type,
+            embedder_name=embedder_name,
+            cached=cached,
+        )
+        if media is None:
             continue
-
-        medias[next_cid] = {
-            "id": next_cid,
-            "media_type": media_type,
-            "embedding": np.asarray(emb, dtype=np.float32),
-            "media_bytes": media_bytes,
-            "filename": elem.filename or elem.origin_name or "",
-            "origin_name": elem.origin_name or "",
-            "origin": elem.origin or {},
-            "md5": elem.md5 or "",
-            "embedder": embedder_name,
-        }
-        next_cid += 1
+        cid = len(medias)
+        media["id"] = cid
+        medias[cid] = media
 
     if not medias:
         raise ValueError(

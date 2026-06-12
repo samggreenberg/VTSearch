@@ -1041,6 +1041,56 @@ def _detector_browse_embedder(entry: dict, media_type: str) -> str:
     return avail[0].name if avail else ""
 
 
+def _run_positives_browse_build(
+    tracker,
+    task_id: str,
+    detector_data: dict,
+    dataset_id: str,
+    *,
+    embedder_name: str,
+    cached_embeddings: dict | None,
+    display_name: str,
+) -> None:
+    """Background worker: build + register the ephemeral browse context.
+
+    Mirrors the error handling of the detector-load task: a cancel or an
+    "empty after resolution" :class:`ValueError` surfaces as a task error on
+    the detector row; anything else logs a traceback and surfaces its message.
+    """
+    from vtscore.concurrency.progress import CancelledError, detector_loading_tasks
+    from vtscore.detectors.positives_browse import build_positives_browse_context
+    from vtscore.state.core import register_context
+
+    def _on_progress(current: int, total: int, message: str) -> None:
+        tracker.check_cancelled()
+        tracker.update("loading", message, current, total, step=1, total_steps=1)
+
+    try:
+        ctx = build_positives_browse_context(
+            detector_data,
+            dataset_id,
+            embedder_name=embedder_name,
+            cached_embeddings=cached_embeddings,
+            display_name=display_name,
+            on_progress=_on_progress,
+        )
+        register_context(ctx)
+        tracker.update("idle", "", 0, 0, step=None, total_steps=None)
+    except CancelledError:
+        tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+    except ValueError as e:
+        tracker.update("idle", "", 0, 0, error=str(e), step=None, total_steps=None)
+    except Exception as e:
+        import traceback as _tb
+
+        _tb.print_exc()
+        tracker.update(
+            "idle", "", 0, 0, error=str(e) or repr(e) or "Unknown error preparing browse", step=None, total_steps=None
+        )
+    finally:
+        detector_loading_tasks.mark_finished(task_id)
+
+
 @detectors_registry_bp.route("/api/detectors/registry/<detector_id>/browse-positives", methods=["POST"])
 @detectors_registry_bp.response(200, DetectorBrowsePositivesResponseSchema)
 @detectors_registry_bp.alt_response(403, description="Access denied for the current user.")
@@ -1060,14 +1110,15 @@ def browse_detector_positives(detector_id: str):
     Returns immediately with the ``dataset_id`` and the ``task_id`` whose
     progress the detector's dashboard row renders while the build runs.
     """
-    from vtscore.concurrency.progress import CancelledError, detector_loading_tasks
-    from vtscore.detectors.positives_browse import build_positives_browse_context, detpos_dataset_id
+    from vtscore.concurrency.progress import detector_loading_tasks
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.positives_browse import detpos_dataset_id
     from vtscore.detectors.registry import (
         can_user_access_detector,
         get_detector,
         get_loaded_detector_ids,
     )
-    from vtscore.state.core import get_detector_context, register_context, unregister_context
+    from vtscore.state.core import get_detector_context, unregister_context
     from vtsearch.threading import spawn
 
     entry = get_detector(detector_id)
@@ -1079,8 +1130,6 @@ def browse_detector_positives(detector_id: str):
     name = entry.get("name", "") or ""
     data = _read_detector(_detector_path(name)) or {}
     media_type = entry.get("media_type", "") or data.get("media_type", "") or ""
-
-    from vtscore.datasets.labelset import LabelSet
 
     labelset = LabelSet.from_dict(data.get("labelset") or {})
     if not any(el.label == "good" for el in labelset.elements):
@@ -1110,37 +1159,19 @@ def browse_detector_positives(detector_id: str):
     )
     tracker.update("loading", "Preparing browse…", 0, 0, step=1, total_steps=1)
 
-    def build_task():
-        try:
-            def _on_progress(current: int, total: int, message: str) -> None:
-                tracker.check_cancelled()
-                tracker.update("loading", message, current, total, step=1, total_steps=1)
-
-            try:
-                ctx = build_positives_browse_context(
-                    data,
-                    dataset_id,
-                    embedder_name=embedder_name,
-                    cached_embeddings=cached_embeddings,
-                    display_name=f"{name} — positives" if name else "Detector positives",
-                    on_progress=_on_progress,
-                )
-                register_context(ctx)
-                tracker.update("idle", "", 0, 0, step=None, total_steps=None)
-            except CancelledError:
-                tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
-            except ValueError as e:
-                tracker.update("idle", "", 0, 0, error=str(e), step=None, total_steps=None)
-            except Exception as e:
-                import traceback as _tb
-
-                _tb.print_exc()
-                error_msg = str(e) or repr(e) or "Unknown error preparing browse"
-                tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
-        finally:
-            detector_loading_tasks.mark_finished(task_id)
-
-    spawn(build_task, name=f"det-browse-{detector_id[:8]}")
+    display_name = f"{name} — positives" if name else "Detector positives"
+    spawn(
+        lambda: _run_positives_browse_build(
+            tracker,
+            task_id,
+            data,
+            dataset_id,
+            embedder_name=embedder_name,
+            cached_embeddings=cached_embeddings,
+            display_name=display_name,
+        ),
+        name=f"det-browse-{detector_id[:8]}",
+    )
     return {
         "ok": True,
         "dataset_id": dataset_id,
