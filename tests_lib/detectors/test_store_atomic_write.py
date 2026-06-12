@@ -29,13 +29,13 @@ class TestDetectorAtomicWrite:
         clobber or chase each other's in-flight tmp.
         """
         seen: list[str] = []
-        real_open = store.open
+        real_replace = store.os.replace
 
-        def spy_open(file, *args, **kwargs):
-            seen.append(str(file))
-            return real_open(file, *args, **kwargs)
+        def spy_replace(src, dst, *args, **kwargs):
+            seen.append(str(src))
+            return real_replace(src, dst, *args, **kwargs)
 
-        monkeypatch.setattr(store, "open", spy_open, raising=False)
+        monkeypatch.setattr(store.os, "replace", spy_replace)
 
         path = tmp_path / "mammals.json"
         _write_detector(path, {"name": "mammals", "labelset": {"labels": []}})
