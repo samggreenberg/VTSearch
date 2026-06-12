@@ -14,9 +14,11 @@ import type { DetectorRegistryListResponse } from '../generated/api-client/model
 import type { DetectorRegistryLoadResponse } from '../generated/api-client/models/detector-registry-load-response';
 import type { DetectorRegistryRenameResponse } from '../generated/api-client/models/detector-registry-rename-response';
 import type { DetectorRegistryReadersResponse } from '../generated/api-client/models/detector-registry-readers-response';
+import type { DetectorRegistryStatsResponse } from '../generated/api-client/models/detector-registry-stats-response';
 import type { DetectorRegistryUnloadResponse } from '../generated/api-client/models/detector-registry-unload-response';
 import { cancelDetectorLoadingTask } from '../generated/api-client/fn/detectors-registry/cancel-detector-loading-task';
 import { deleteRegisteredDetector } from '../generated/api-client/fn/detectors-registry/delete-registered-detector';
+import { getDetectorStats } from '../generated/api-client/fn/detectors-registry/get-detector-stats';
 import { listRegisteredDetectors } from '../generated/api-client/fn/detectors-registry/list-registered-detectors';
 import { loadDetectorRoute } from '../generated/api-client/fn/detectors-registry/load-detector-route';
 import { moveLabelsetSourceFile } from '../generated/api-client/fn/detectors-registry/move-labelset-source-file';
@@ -158,6 +160,12 @@ export class DetectorsRegistryApiService {
     return updateDetectorReaders(this.http, this.config.rootUrl, {
       detector_id: detectorId,
       body: { readers },
+    }).pipe(map((r) => r.body));
+  }
+
+  getDetectorStats(detectorId: string): Observable<DetectorRegistryStatsResponse> {
+    return getDetectorStats(this.http, this.config.rootUrl, {
+      detector_id: detectorId,
     }).pipe(map((r) => r.body));
   }
 }

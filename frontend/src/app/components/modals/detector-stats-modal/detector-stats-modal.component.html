@@ -1,0 +1,90 @@
+<vt-modal [open]="true" [title]="'Stats: ' + detectorName" (closed)="close()">
+  @if (loading) {
+    <p class="loading-text">Loading stats...</p>
+  } @else if (error) {
+    <p class="error-text">{{ error }}</p>
+  } @else if (stats) {
+    <table class="stats-table">
+      <tbody>
+        <tr>
+          <td class="stat-label" title="Positively-labeled elements in this detector's labelset">Positives</td>
+          <td class="stat-value">{{ stats.num_positive | number }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Negatively-labeled elements in this detector's labelset">Negatives</td>
+          <td class="stat-value">{{ stats.num_negative | number }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Total labeled elements (positives + negatives)">Total labels</td>
+          <td class="stat-value">{{ stats.num_total | number }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="How many positives currently resolve into the loaded dataset — the set the Browse button would project">In current dataset</td>
+          <td class="stat-value">{{ resolvedSummary }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="section-title">Creation</h3>
+    <table class="stats-table">
+      <tbody>
+        <tr>
+          <td class="stat-label" title="The media type this detector operates on">Media type</td>
+          <td class="stat-value">{{ (stats.media_type | titlecase) || '-' }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="MediaEmbedder whose space the labels are resolved against">Embedder</td>
+          <td class="stat-value">{{ (stats.embedder | titlecase) || '-' }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Clipper granularity this detector was trained on">Clipper</td>
+          <td class="stat-value">{{ stats.clipper || '-' }}</td>
+        </tr>
+        @if (stats.text_query) {
+          <tr>
+            <td class="stat-label" title="Text query this detector was seeded from">Text query</td>
+            <td class="stat-value">{{ stats.text_query }}</td>
+          </tr>
+        }
+        @if (stats.media_example) {
+          <tr>
+            <td class="stat-label" title="Media example this detector was seeded from">Media example</td>
+            <td class="stat-value">{{ stats.media_example }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <h3 class="section-title">Provenance</h3>
+    <table class="stats-table">
+      <tbody>
+        <tr>
+          <td class="stat-label" title="When this detector was created">Created</td>
+          <td class="stat-value">{{ formatTimestamp(stats.created_at) }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="When this detector's labelset was last trained">Last trained</td>
+          <td class="stat-value">{{ formatTimestamp(stats.last_trained_at) }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="The user who created this detector">Created by</td>
+          <td class="stat-value">{{ stats.created_by || '-' }}</td>
+        </tr>
+        <tr>
+          <td class="stat-label" title="Whether this detector runs automatically during CLI autodetect">Auto-Find</td>
+          <td class="stat-value">{{ stats.autofind ? 'On' : 'Off' }}</td>
+        </tr>
+        @if (stats.readers.length > 0) {
+          <tr>
+            <td class="stat-label" title="Users who can access this detector (* means everyone)">Access</td>
+            <td class="stat-value">{{ stats.readers.join(', ') }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  <div modal-footer>
+    <button class="btn btn--secondary" (click)="close()">Close</button>
+  </div>
+</vt-modal>

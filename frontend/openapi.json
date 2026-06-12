@@ -2196,6 +2196,79 @@
         ],
         "type": "object"
       },
+      "DetectorRegistryStatsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_dataset_name": {
+            "type": "string"
+          },
+          "autofind": {
+            "type": "boolean"
+          },
+          "clipper": {
+            "type": "string"
+          },
+          "created_at": {
+            "nullable": true
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "embedder": {
+            "type": "string"
+          },
+          "last_trained_at": {
+            "nullable": true
+          },
+          "media_example": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "num_negative": {
+            "type": "integer"
+          },
+          "num_positive": {
+            "type": "integer"
+          },
+          "num_positive_resolved": {
+            "type": "integer"
+          },
+          "num_total": {
+            "type": "integer"
+          },
+          "readers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text_query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active_dataset_name",
+          "autofind",
+          "clipper",
+          "created_by",
+          "embedder",
+          "media_example",
+          "media_type",
+          "name",
+          "num_negative",
+          "num_positive",
+          "num_positive_resolved",
+          "num_total",
+          "readers",
+          "text_query"
+        ],
+        "type": "object"
+      },
       "DetectorRegistryUnloadResponse": {
         "additionalProperties": false,
         "properties": {
@@ -9790,6 +9863,48 @@
           "detectors_registry"
         ]
       }
+    },
+    "/api/detectors/registry/{detector_id}/stats": {
+      "get": {
+        "description": "Counts/metadata only \u2014 no embeddings or MLP weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project.",
+        "operationId": "get_detector_stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorRegistryStatsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return labelset composition and provenance for a registered detector.",
+        "tags": [
+          "detectors_registry"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/detectors/registry/{detector_id}/unload": {
       "parameters": [

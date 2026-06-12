@@ -8,6 +8,9 @@ import { DatasetsRegistryApiService } from '../../services/datasets-registry-api
 import { DatasetsUiApiService } from '../../services/datasets-ui-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
+import { DetectorsCrudApiService } from '../../services/detectors-crud-api.service';
+import { BrowseSubsetService } from '../../services/browse-subset.service';
+import { ToastService } from '../../services/toast.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
@@ -43,6 +46,7 @@ import { CombineDetectorsModalComponent } from './combine-detectors-modal/combin
 import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
+import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
@@ -60,6 +64,7 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
     LabelExporterModalComponent,
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
+    DetectorStatsModalComponent,
     IconComponent,
     UsageBarComponent,
     SkeletonComponent,
@@ -164,6 +169,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private datasetsUiApi: DatasetsUiApiService,
     private detectorsFindApi: DetectorsFindApiService,
     private detectorsRegistryApi: DetectorsRegistryApiService,
+    private detectorsCrudApi: DetectorsCrudApiService,
+    private browseSubset: BrowseSubsetService,
+    private toast: ToastService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
     public datasetState: DatasetStateService,
@@ -853,6 +861,51 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.detectorsRegistryApi.unloadDetector(model.id).subscribe({
       next: () => this.datasetState.refresh(),
     });
+  }
+
+  /** Open the read-only stats modal for a detector (labelset composition +
+   *  provenance). Mirrors `showDatasetStats`. */
+  showDetectorStats(model: DetectorRegistryEntry): void {
+    this.modals.openDetectorStats(model.id, model.name);
+  }
+
+  /** Launch the VTSBrowse view over just this detector's positively-labeled
+   *  elements. Loads the detector (and its dataset) if needed so the labels
+   *  resolve into the active dataset, then hands the resolved positive ids to
+   *  the browse subset projection — mirroring Find's "Browse positives". The
+   *  positives are projected against the *active* dataset, so a compatible
+   *  dataset must be loaded for there to be anything to show. */
+  browseDetector(model: DetectorRegistryEntry): void {
+    const datasetId = this.activeContext.datasetId;
+    if (!datasetId) {
+      this.toast.error({
+        message: 'Load a dataset first',
+        detail: `Browsing "${model.name}" projects its positives against a loaded dataset, but none is active.`,
+      });
+      return;
+    }
+    this.contextSwitch
+      .applyActivePair(datasetId, model.id)
+      .pipe(take(1))
+      .subscribe(() => {
+        this.detectorsCrudApi.getLabelsDetail(model.name).subscribe({
+          next: (detail) => {
+            const ids = (detail.good ?? [])
+              .map((g) => g.cid)
+              .filter((cid): cid is number => cid != null);
+            if (ids.length === 0) {
+              this.toast.error({
+                message: 'No positives to browse',
+                detail: `None of "${model.name}"'s positive labels resolve into the active dataset.`,
+              });
+              return;
+            }
+            this.browseSubset.set({ datasetId, ids, label: `${model.name} — positives` });
+            this.router.navigate(['/browse', datasetId], { queryParams: { subset: 1 } });
+          },
+          error: () => this.toast.error({ message: 'Failed to load detector labels' }),
+        });
+      });
   }
 
   // --- Export / Add-Labels modal openers (state lives on DashboardModalsService) ---

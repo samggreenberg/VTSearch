@@ -132,6 +132,48 @@ td.actions-col {
   }
 }
 
+.browse-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+  }
+}
+
+.stats-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+  }
+
+  .pie-active {
+    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
+  }
+
+  .pie-inactive {
+    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
+  }
+}
+
 // Inline loading progress (replaces data columns while loading). Mirrors the
 // stack layout used by the dataset card's `.inline-loading-progress` so the
 // dashboard's loading rows have a consistent shape.

@@ -59,6 +59,7 @@ from vtsearch.schemas.detectors import (
     DetectorRegistryReadersResponseSchema,
     DetectorRegistryRenameRequestSchema,
     DetectorRegistryRenameResponseSchema,
+    DetectorRegistryStatsResponseSchema,
     DetectorRegistryUnloadResponseSchema,
 )
 
@@ -901,6 +902,118 @@ def update_detector_readers(body: dict, detector_id: str):
         status = 403 if "creator" in err else 404
         abort(status, message=err)
     return {"ok": True, "readers": readers}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/detectors/registry/<detector_id>/stats
+# ---------------------------------------------------------------------------
+
+
+def _resolved_positive_count(elements) -> int:
+    """How many of *elements* (positives) resolve into the active dataset.
+
+    Builds the media lookup once and resolves every element against it, so
+    this is one pass rather than one rebuild per element. Returns 0 when no
+    dataset is loaded.
+    """
+    from vtsearch.state import build_media_lookup, resolve_media_ids, snapshot_medias
+
+    snap = snapshot_medias()
+    if not snap:
+        return 0
+    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
+    count = 0
+    for el in elements:
+        if resolve_media_ids(el.to_dict(), origin_lookup, md5_lookup, name_lookup):
+            count += 1
+    return count
+
+
+def _active_dataset_name() -> str:
+    """Display name of the active dataset, or ``""`` when none is loaded."""
+    from vtsearch.state import get_active_context
+
+    ds_id = get_active_context().dataset_id
+    if not ds_id:
+        return ""
+    from vtscore.datasets.registry import get_dataset
+
+    entry = get_dataset(ds_id)
+    return (entry or {}).get("name", "") if entry else ""
+
+
+@detectors_registry_bp.route("/api/detectors/registry/<detector_id>/stats")
+@detectors_registry_bp.response(200, DetectorRegistryStatsResponseSchema)
+@detectors_registry_bp.alt_response(403, description="Access denied for the current user.")
+@detectors_registry_bp.alt_response(404, description="Detector not found.")
+def get_detector_stats(detector_id: str):
+    """Return labelset composition and provenance for a registered detector.
+
+    Counts/metadata only — no embeddings or MLP weights are read or
+    returned (the labelset file is the canonical persisted form). The
+    ``num_positive_resolved`` / ``active_dataset_name`` pair reports how
+    much of the positive set the Browse button could currently project.
+    """
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.registry import (
+        can_user_access_detector,
+        get_detector,
+        get_loaded_detector_ids,
+    )
+    from vtscore.media import get_clipper
+    from vtscore.state.core import get_detector_context
+    from vtsearch.settings import get_autofind_detectors
+
+    entry = get_detector(detector_id)
+    if entry is None:
+        abort(404, message="Detector not found")
+    if not can_user_access_detector(detector_id, get_current_user()):
+        abort(403, message="You do not have access to this detector")
+
+    name = entry.get("name", "") or ""
+    data = _read_detector(_detector_path(name)) or {}
+
+    labelset = LabelSet.from_dict(data.get("labelset") or {})
+    positives = [el for el in labelset.elements if el.label == "good"]
+    negatives = [el for el in labelset.elements if el.label == "bad"]
+
+    # Embedder: the loaded context's live value wins (it reflects the space
+    # the labels are currently resolved against); otherwise the registry's
+    # persisted stamp.
+    if detector_id in get_loaded_detector_ids():
+        ctx = get_detector_context(detector_id)
+        embedder = (ctx.embedder if ctx is not None else "") or entry.get("embedder", "") or ""
+    else:
+        embedder = entry.get("embedder", "") or ""
+
+    input_spec = data.get("input_spec") or {}
+    raw_clipper = (input_spec.get("clipper", "") if isinstance(input_spec, dict) else "") or ""
+    if not raw_clipper or raw_clipper.endswith("_default"):
+        clipper_display = ""
+    else:
+        try:
+            clipper_display = get_clipper(raw_clipper).display_name
+        except KeyError:
+            clipper_display = raw_clipper
+
+    return {
+        "name": name,
+        "media_type": entry.get("media_type", "") or "",
+        "num_positive": len(positives),
+        "num_negative": len(negatives),
+        "num_total": len(labelset.elements),
+        "num_positive_resolved": _resolved_positive_count(positives),
+        "active_dataset_name": _active_dataset_name(),
+        "embedder": embedder,
+        "text_query": data.get("text_query", "") or "",
+        "media_example": data.get("media_example", "") or "",
+        "clipper": clipper_display,
+        "created_at": entry.get("created_at"),
+        "last_trained_at": entry.get("last_trained_at"),
+        "created_by": entry.get("created_by", "default") or "default",
+        "readers": entry.get("readers", []) or [],
+        "autofind": name in set(get_autofind_detectors()),
+    }
 
 
 # ---------------------------------------------------------------------------

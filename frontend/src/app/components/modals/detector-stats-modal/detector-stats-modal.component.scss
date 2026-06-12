@@ -1,0 +1,32 @@
+.loading-text {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+// `.error-text` comes from `_components.scss` (uses `--color-bad`).
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-lg);
+
+  th,
+  td {
+    padding: var(--space-sm) var(--space-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}
+
+.stat-label {
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.stat-value {
+  color: var(--text-primary);
+}
+
+// Section rhythm provided by the shared `.section-title` utility in
+// _components.scss.

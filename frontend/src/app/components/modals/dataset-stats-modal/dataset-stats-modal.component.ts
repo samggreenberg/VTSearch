@@ -52,13 +52,22 @@ export class DatasetStatsModalComponent implements OnInit {
     return src?.importer || '';
   }
 
-  get originParams(): { key: string; value: string }[] {
+  get originParams(): { key: string; label: string; value: string }[] {
     const src = this.stats?.source as { params?: Record<string, unknown> } | undefined;
     const params = src?.params;
     if (!params) return [];
     return Object.entries(params)
       .filter(([, v]) => v !== '' && v != null)
-      .map(([key, value]) => ({ key, value: String(value) }));
+      .map(([key, value]) => ({ key, label: this.formatParamKey(key), value: String(value) }));
+  }
+
+  /** Render a raw origin-param key (e.g. ``media_type``, ``name``) as a label
+   *  that matches the hardcoded stat labels: underscores become spaces and the
+   *  first letter is capitalized, so a demo dataset's ``name`` param reads
+   *  "Name" alongside "Importer" / "Clipper" / "Embedder" instead of lowercase. */
+  private formatParamKey(key: string): string {
+    const spaced = key.replace(/_/g, ' ');
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   }
 
   formatTimestamp(ts: number | null): string {

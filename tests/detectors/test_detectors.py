@@ -752,6 +752,69 @@ class TestDeleteRegisteredModel:
         assert get_detector(detector_id) is None
 
 
+class TestDetectorStats:
+    """Tests for GET /api/detectors/registry/<detector_id>/stats."""
+
+    def _register(self, client, name="StatMe", **extra):
+        body = {"name": name, "media_type": "audio", "text_query": "meow", **extra}
+        res = client.post("/api/detectors/registry", json=body)
+        assert res.status_code == 201
+        return res.get_json()["detector"]["id"]
+
+    def test_stats_basic_shape(self, client):
+        detector_id = self._register(client)
+        res = client.get(f"/api/detectors/registry/{detector_id}/stats")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["name"] == "StatMe"
+        assert data["media_type"] == "audio"
+        assert data["text_query"] == "meow"
+        assert data["num_positive"] == 0
+        assert data["num_negative"] == 0
+        assert data["num_total"] == 0
+        assert data["autofind"] is False
+        # Resolution + provenance fields are always present.
+        assert "num_positive_resolved" in data
+        assert "active_dataset_name" in data
+        assert "created_by" in data
+        assert isinstance(data["readers"], list)
+
+    def test_stats_counts_positives_and_negatives(self, client):
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+
+        detector_id = self._register(client, name="CountMe")
+        path = _detector_path("CountMe")
+        data = _read_detector(path)
+        data["labelset"] = {
+            "labels": [
+                {"md5": "a" * 32, "label": "good"},
+                {"md5": "b" * 32, "label": "good"},
+                {"md5": "c" * 32, "label": "bad"},
+            ]
+        }
+        _write_detector(path, data)
+
+        res = client.get(f"/api/detectors/registry/{detector_id}/stats")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["num_positive"] == 2
+        assert data["num_negative"] == 1
+        assert data["num_total"] == 3
+
+    def test_stats_reflects_autofind_flag(self, client):
+        from vtsearch.settings import add_autofind_detector
+
+        detector_id = self._register(client, name="AutoStat")
+        add_autofind_detector("AutoStat")
+        res = client.get(f"/api/detectors/registry/{detector_id}/stats")
+        assert res.status_code == 200
+        assert res.get_json()["autofind"] is True
+
+    def test_stats_404_for_unknown_detector(self, client):
+        res = client.get("/api/detectors/registry/nonexistent_id/stats")
+        assert res.status_code == 404
+
+
 class TestLoadModelEndpoint:
     """Tests for POST /api/detectors/registry/load."""
 
