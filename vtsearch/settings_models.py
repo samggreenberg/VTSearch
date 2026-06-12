@@ -209,15 +209,15 @@ class UserSettings(BaseModel):
     # deployments keep working (see ``_DEFAULT_USER_FALLBACK_KEYS`` and the
     # read-through in ``vtsearch.settings._read_value``).
     #
-    # - ``autorun_detectors``: detector names flagged for autorun (each maps to
-    #   a JSON file under ``data/detectors/``).
+    # - ``autofind_detectors``: detector names flagged for Auto-Find (each maps
+    #   to a JSON file under ``data/detectors/``).
     # - ``autofind_exporter``: results-exporter name run after an Auto-Find
     #   (``""`` = no auto-export; CLI then falls back to the ``gui`` exporter).
     # - ``autofind_exporter_field_values``: per-exporter field values
     #   (``{exporter_name: {field_key: value}}``) so switching the picker
     #   preserves each exporter's configuration.
     # See ``docs/plans/auto-find-settings-tab.md``.
-    autorun_detectors: list[str] = Field(default_factory=list)
+    autofind_detectors: list[str] = Field(default_factory=list)
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)
 

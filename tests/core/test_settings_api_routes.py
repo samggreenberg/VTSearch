@@ -1,7 +1,7 @@
 """Settings API route tests.
 
 Covers Flask API routes: GET/PUT /api/settings,
-including autorun_detectors persistence.
+including autofind_detectors persistence.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ class TestSettingsAPI:
         assert res.status_code == 200
         data = res.get_json()
         assert "volume" in data
-        assert "autorun_detectors" in data
+        assert "autofind_detectors" in data
 
     def test_get_settings_tolerates_stale_scalar_dict_field(self, client, isolated_settings):
         """A stale scalar where a per-media-type dict is expected must not 500.
@@ -154,19 +154,19 @@ class TestSettingsAPI:
         # the current settings dict.
         assert res.status_code == 200
 
-    def test_update_autorun_detectors(self, client):
+    def test_update_autofind_detectors(self, client):
         res = client.put(
             "/api/settings",
-            json={"autorun_detectors": ["model-a", "model-b"]},
+            json={"autofind_detectors": ["model-a", "model-b"]},
         )
         assert res.status_code == 200
         data = res.get_json()
-        assert data["autorun_detectors"] == ["model-a", "model-b"]
+        assert data["autofind_detectors"] == ["model-a", "model-b"]
 
-    def test_update_autorun_detectors_invalid(self, client):
+    def test_update_autofind_detectors_invalid(self, client):
         res = client.put(
             "/api/settings",
-            json={"autorun_detectors": "not a list"},
+            json={"autofind_detectors": "not a list"},
         )
         # List-of-string validation runs in the schema → 422.
         assert res.status_code == 422
@@ -223,7 +223,7 @@ class TestSettingsAPI:
         assert isinstance(data["focus_mode_right"], dict)
         for v in data["focus_mode_right"].values():
             assert v == "click"
-        assert "autorun_detectors" not in data
+        assert "autofind_detectors" not in data
         assert "saved_datasets_dir" not in data
         assert "detectors_dir" not in data
 
@@ -650,7 +650,7 @@ class TestServerSettingsReadOnly:
             "detectors_dir",
             "max_concurrent_dataset_downloads",
             "max_concurrent_dataset_embeddings",
-            "autorun_detectors",
+            "autofind_detectors",
             "hidden_plugins",
         ):
             assert key in data, key

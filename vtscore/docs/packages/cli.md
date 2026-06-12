@@ -2,7 +2,7 @@
 
 The Flask-free command-line entry points for VTSearch's autodetect
 workflow: load a dataset (from pickle or via an importer), train each
-autorun detector against it, score every media, and hand the results
+Auto-Find detector against it, score every media, and hand the results
 to an exporter. Three modules cooperate - `vtscore.cli` is the
 imperative pipeline (four entry-point functions plus helpers),
 `vtscore.cli_pipeline` parses YAML pipeline files into the same call
@@ -151,7 +151,7 @@ Source:
   Chunk size: whole dataset
 
 Settings: data/settings.json
-Autorun detectors (1):
+Auto-Find detectors (1):
   - my-detector  [media_type=audio, labels=42, file=data/detectors/my-detector.json]
 
 Exporter: server_json_file
@@ -187,7 +187,7 @@ All four entry points delegate to `_run_pipeline` (defined at
 1. Build a `CoreConfig` via `CoreConfig.from_settings(settings_path=...)`.
 2. If `dry_run`, validate + emit the plan and return.
 3. Otherwise, iterate the *media_source* iterator chunk by chunk.
-4. On the first non-empty chunk, train each autorun (or override)
+4. On the first non-empty chunk, train each Auto-Find (or override)
    detector via `_load_and_train_detectors`. Detectors with a
    `media_type` mismatch or an `input_spec.clipper` mismatch against
    the loaded dataset are *skipped* with a warning event, not
@@ -223,7 +223,7 @@ dispatch.
 | `dataset`       | `str` path            | Path to a dataset pickle.                                                |
 | `importer`      | `{name, fields?}`     | Importer name + per-field values. Mutually exclusive with `dataset`.     |
 | `settings`      | `str` path            | Override settings file path.                                             |
-| `detectors`     | `list[str]`           | Override `autorun_detectors` for this run only.                          |
+| `detectors`     | `list[str]`           | Override `autofind_detectors` for this run only.                          |
 | `chunk_size`    | positive `int`        | Stream the source in chunks of this size.                                |
 | `import_labels` | `{detector, file, importer?}` | Run a label importer + merge into a detector before scoring.   |
 | `exporter`      | `{name, fields?}`     | Exporter name + per-field values.                                        |
@@ -335,7 +335,7 @@ each row lists the extra fields.
 | `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli.py`      |
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
 | `export_complete`  | `message: str`                                                    | `_run_exporter` in `cli.py`           |
-| `dry_run_plan`     | `source`, `settings_path`, `autorun_detectors`, `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
+| `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors`, `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
 | `progress`         | `status: str`, optional `message`, `current`, `total`, `pct`      | `progress_callback`                   |
 | `error`            | `message: str`                                                    | `emit_error` in JSON mode             |
 

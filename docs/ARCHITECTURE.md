@@ -536,7 +536,7 @@ tiers.  **Server tier** (shared, `data/settings.json`): `saved_datasets_dir`,
 `calibrate_count`, `calibration_fraction`, `audio_playing`, `swipe_animation`,
 `show_metadata`, `view_mode_*`, `grid_icon_size_*`, `focus_mode_*`,
 `panel_pct_*`, `autopilot_*`, `solo_media_type`, `settings_source`,
-`achievement_state`, and the **Auto-Find** keys `autorun_detectors`,
+`achievement_state`, and the **Auto-Find** keys `autofind_detectors`,
 `autofind_exporter`, `autofind_exporter_field_values`.  The Auto-Find keys read
 through to the server file for the built-in `default` user (CLI / single-user
 back-compat); see `_DEFAULT_USER_FALLBACK_KEYS`.  Theme supports three modes:

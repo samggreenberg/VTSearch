@@ -521,34 +521,34 @@ class TestDashboardModelRegistryColumns:
         assert isinstance(m["created_at"], (int, float))
         assert m["created_at"] > 0
 
-    def test_model_registry_includes_autorun_false_by_default(self, client):
-        """Detectors that are not flagged for autorun show autorun=False."""
-        register_detector(name="no-autorun", media_type="image")
+    def test_model_registry_includes_autofind_false_by_default(self, client):
+        """Detectors that are not flagged for Auto-Find show autofind=False."""
+        register_detector(name="no-autofind", media_type="image")
         resp = client.get("/api/detectors/registry")
         data = resp.get_json()
         m = data["detectors"][0]
-        assert m["autorun"] is False
+        assert m["autofind"] is False
 
-    def test_autorun_toggle_via_api(self, client):
-        """Toggling autorun via PUT updates the model registry response."""
-        from vtsearch.settings import get_autorun_detectors
+    def test_autofind_toggle_via_api(self, client):
+        """Toggling Auto-Find via PUT updates the model registry response."""
+        from vtsearch.settings import get_autofind_detectors
 
         entry = register_detector(name="toggle-det", media_type="audio")
 
         resp = client.get("/api/detectors/registry")
         m = resp.get_json()["detectors"][0]
-        assert m["autorun"] is False
+        assert m["autofind"] is False
 
         resp = client.put(
-            f"/api/detectors/registry/{entry['id']}/autorun",
-            json={"autorun": True},
+            f"/api/detectors/registry/{entry['id']}/autofind",
+            json={"autofind": True},
         )
         assert resp.status_code == 200
-        assert "toggle-det" in get_autorun_detectors()
+        assert "toggle-det" in get_autofind_detectors()
 
         resp = client.get("/api/detectors/registry")
         m = resp.get_json()["detectors"][0]
-        assert m["autorun"] is True
+        assert m["autofind"] is True
 
     def test_model_registry_includes_loaded_field(self, client):
         """Registered models include the loaded boolean (not shown in UI)."""
@@ -598,52 +598,52 @@ class TestDashboardModelRegistryColumns:
         assert m["last_trained_at"] >= now
 
 
-class TestAutorunCheckboxPersistence:
-    """Tests that toggling autorun via the API persists the setting."""
+class TestAutofindCheckboxPersistence:
+    """Tests that toggling Auto-Find via the API persists the setting."""
 
-    def test_autorun_toggle_persists_to_settings(self, client):
-        """Toggling autorun on saves the model name to settings."""
-        from vtsearch.settings import get_autorun_detectors
+    def test_autofind_toggle_persists_to_settings(self, client):
+        """Toggling Auto-Find on saves the model name to settings."""
+        from vtsearch.settings import get_autofind_detectors
 
         entry = register_detector(name="persist-det", media_type="audio")
 
         resp = client.put(
-            f"/api/detectors/registry/{entry['id']}/autorun",
-            json={"autorun": True},
+            f"/api/detectors/registry/{entry['id']}/autofind",
+            json={"autofind": True},
         )
         assert resp.status_code == 200
-        assert "persist-det" in get_autorun_detectors()
+        assert "persist-det" in get_autofind_detectors()
 
-    def test_autorun_toggle_off_removes_from_settings(self, client):
-        """Toggling autorun off removes the model name from settings."""
-        from vtsearch.settings import add_autorun_detector, get_autorun_detectors
+    def test_autofind_toggle_off_removes_from_settings(self, client):
+        """Toggling Auto-Find off removes the model name from settings."""
+        from vtsearch.settings import add_autofind_detector, get_autofind_detectors
 
         entry = register_detector(name="remove-det", media_type="audio")
-        add_autorun_detector("remove-det")
+        add_autofind_detector("remove-det")
 
         resp = client.put(
-            f"/api/detectors/registry/{entry['id']}/autorun",
-            json={"autorun": False},
+            f"/api/detectors/registry/{entry['id']}/autofind",
+            json={"autofind": False},
         )
         assert resp.status_code == 200
-        assert "remove-det" not in get_autorun_detectors()
+        assert "remove-det" not in get_autofind_detectors()
 
-    def test_model_registry_settings_drives_autorun_flag(self, client):
-        """Adding a name to autorun_detectors flips the registry flag."""
-        from vtsearch.settings import add_autorun_detector
+    def test_model_registry_settings_drives_autofind_flag(self, client):
+        """Adding a name to autofind_detectors flips the registry flag."""
+        from vtsearch.settings import add_autofind_detector
 
         register_detector(name="settings-det", media_type="audio")
-        add_autorun_detector("settings-det")
+        add_autofind_detector("settings-det")
 
         resp = client.get("/api/detectors/registry")
         m = resp.get_json()["detectors"][0]
-        assert m["autorun"] is True
+        assert m["autofind"] is True
 
-    def test_autorun_not_in_settings_defaults(self, client):
-        """autorun_detectors should not appear in the defaults endpoint."""
+    def test_autofind_not_in_settings_defaults(self, client):
+        """autofind_detectors should not appear in the defaults endpoint."""
         resp = client.get("/api/settings/defaults")
         data = resp.get_json()
-        assert "autorun_detectors" not in data
+        assert "autofind_detectors" not in data
 
 
 class TestDashboardColumnHeaders:
@@ -669,7 +669,7 @@ class TestDashboardColumnHeaders:
         for path in globmod.glob("static/*.js"):
             resp = client.get(f"/{path}")
             combined += resp.data.decode("utf-8")
-        assert "Autorun" in combined
+        assert "Last Trained" in combined
         assert "Trainable" in combined
 
 

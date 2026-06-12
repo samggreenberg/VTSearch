@@ -80,7 +80,7 @@ _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
     "autopilot_hard_reds": settings.set_autopilot_hard_reds,
     "autopilot_resort_interval": settings.set_autopilot_resort_interval,
     "autopilot_goal_diversity": settings.set_autopilot_goal_diversity,
-    "autorun_detectors": settings.set_autorun_detectors,
+    "autofind_detectors": settings.set_autofind_detectors,
     "import_defaults_by_media_type": settings.set_import_defaults_by_media_type,
     "browse_panel_width": settings.set_browse_panel_width,
     "browse_bin_shape": settings.set_browse_bin_shape,

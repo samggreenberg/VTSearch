@@ -109,7 +109,7 @@ POST /api/processor-importers/import/{importer_name}
 
 **Form or Body:** importer-specific fields. `name` is required.
 
-Runs the importer and saves the result as an autorun detector.
+Runs the importer and saves the result as a registered detector.
 
 → `{"success": true, "name": "...", "media_type": "audio"}`
 

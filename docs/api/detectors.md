@@ -136,7 +136,7 @@ GET /api/detectors/registry
       "num_training": 50,
       "loaded": true,
       "detector_loaded": true,
-      "autorun": false,
+      "autofind": false,
       "last_trained_at": 1234567890.0
     }
   ]
@@ -145,8 +145,8 @@ GET /api/detectors/registry
 
 `name` is the slug used to look up the on-disk labelset file at
 `data/detectors/<name>.json`. The MLP is trained on demand from the
-labelset and lives only in RAM. `autorun` mirrors whether the
-detector's name appears in `autorun_detectors` settings (toggle it with
+labelset and lives only in RAM. `autofind` mirrors whether the
+detector's name appears in `autofind_detectors` settings (toggle it with
 the route below).
 
 ### Register detector
@@ -167,16 +167,16 @@ POST /api/detectors/registry
 
 → `{"ok": true, "detector": {...}}` (201)
 
-### Toggle autorun flag
+### Toggle Auto-Find flag
 
 ```
-PUT /api/detectors/registry/{detector_id}/autorun
+PUT /api/detectors/registry/{detector_id}/autofind
 ```
 
-**Body:** `{"autorun": true}`
+**Body:** `{"autofind": true}`
 
-→ `{"ok": true, "autorun": true}` (writes the detector's name into
-`autorun_detectors` so `/api/auto-detect` and the CLI
+→ `{"ok": true, "autofind": true}` (writes the detector's name into
+`autofind_detectors` so `/api/auto-detect` and the CLI
 `--autodetect` flow pick it up).
 
 ### Load / unload detector
@@ -227,7 +227,7 @@ POST /api/detectors/cancel/{task_id}
 DELETE /api/detectors/registry/{detector_id}
 ```
 
-Also cleans up the on-disk labelset file and clears the autorun flag.
+Also cleans up the on-disk labelset file and clears the Auto-Find flag.
 
 → `{"ok": true}`
 

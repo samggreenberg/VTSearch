@@ -137,7 +137,7 @@ Cross-section interaction agents:
   ctx so a dataset switch invalidates immediately; the scoring fast
   paths (`_resolve_or_train_detector` for find-label / auto-detect,
   `_select_scorer` in multi-dataset Find) repeat the check
-  per-detector to cover autorun loops and cross-dataset Find where the
+  per-detector to cover Auto-Find loops and cross-dataset Find where the
   active ctx wrapper alone isn't enough.  The helper deliberately
   leaves `label_embeddings` and `embedder` alone so the load
   endpoint's progress-tracked `_maybe_start_label_reembed()` flow
@@ -444,7 +444,7 @@ Cross-section interaction agents:
   (which can transitively trigger setter writes via sync-from-source).
   Covered by `TestConcurrentWrites` in `tests/core/test_settings.py`
   (RMW key-preservation, unique tmp filename pattern, two-thread
-  no-deadlock, `mutate_user` nested-dict RMW, `add_autorun_detector`
+  no-deadlock, `mutate_user` nested-dict RMW, `add_autofind_detector`
   cross-process merge).
 
   **Open follow-ups:**

@@ -25,8 +25,8 @@ Registry endpoints (``vtsearch/routes/detectors/registry.py``):
 * ``DELETE /api/detectors/registry/<id>``              -> :class:`DetectorRegistryDeleteResponseSchema`
 * ``PUT    /api/detectors/registry/<id>/rename``       -> :class:`DetectorRegistryRenameRequestSchema` ->
                                                          :class:`DetectorRegistryRenameResponseSchema`
-* ``PUT    /api/detectors/registry/<id>/autorun``      -> :class:`DetectorRegistryAutorunRequestSchema` ->
-                                                         :class:`DetectorRegistryAutorunResponseSchema`
+* ``PUT    /api/detectors/registry/<id>/autofind``      -> :class:`DetectorRegistryAutofindRequestSchema` ->
+                                                         :class:`DetectorRegistryAutofindResponseSchema`
 * ``POST   /api/detectors/cancel/<task_id>``           -> :class:`DetectorCancelResponseSchema`
 
 Scoring endpoints (``vtsearch/routes/detectors/scoring.py``):
@@ -258,7 +258,7 @@ class DetectorCombineResponseSchema(Schema):
 class DetectorRegistryEntrySchema(Schema):
     """One entry in the in-memory detector registry.
 
-    The ``loaded`` / ``detector_loaded`` / ``autorun`` / ``last_trained_at``
+    The ``loaded`` / ``detector_loaded`` / ``autofind`` / ``last_trained_at``
     fields are added by ``GET /api/detectors/registry`` (they are not
     persisted on the registry entry itself). They are absent on the
     response from ``POST /api/detectors/registry`` (registration). Both
@@ -279,7 +279,7 @@ class DetectorRegistryEntrySchema(Schema):
     is_owner = fields.Boolean()
     loaded = fields.Boolean()
     detector_loaded = fields.Boolean()
-    autorun = fields.Boolean()
+    autofind = fields.Boolean()
     last_trained_at = fields.Float(allow_none=True)
     # Stamped the first time a detector trains against a dataset and
     # persisted on the registry entry, so the smart preload predictor and
@@ -403,17 +403,17 @@ class DetectorLabelsetMoveResponseSchema(Schema):
     new_path = fields.String(required=True)
 
 
-class DetectorRegistryAutorunRequestSchema(Schema):
-    """Body for ``PUT /api/detectors/registry/<id>/autorun``."""
+class DetectorRegistryAutofindRequestSchema(Schema):
+    """Body for ``PUT /api/detectors/registry/<id>/autofind``."""
 
-    autorun = fields.Boolean(required=True)
+    autofind = fields.Boolean(required=True)
 
 
-class DetectorRegistryAutorunResponseSchema(Schema):
-    """Response for ``PUT /api/detectors/registry/<id>/autorun``."""
+class DetectorRegistryAutofindResponseSchema(Schema):
+    """Response for ``PUT /api/detectors/registry/<id>/autofind``."""
 
     ok = fields.Boolean(required=True)
-    autorun = fields.Boolean(required=True)
+    autofind = fields.Boolean(required=True)
 
 
 class DetectorRegistryReadersRequestSchema(Schema):
@@ -514,10 +514,10 @@ class _AutoDetectResultSchema(Schema):
 class AutoDetectRequestSchema(Schema):
     """Body for ``POST /api/auto-detect``.
 
-    The body is optional; omitting ``detector_name`` runs every autorun
+    The body is optional; omitting ``detector_name`` runs every Auto-Find
     detector for the active dataset's media type. Passing a name restricts
     the run to that one detector (which must already be flagged for
-    autorun; otherwise the handler returns 404).
+    Auto-Find; otherwise the handler returns 404).
     """
 
     detector_name = fields.String(load_default="")
@@ -537,6 +537,11 @@ class AutoDetectResponseSchema(Schema):
         values=fields.Nested(_AutoDetectResultSchema),
         required=True,
     )
+    # Names from the caller's ``autofind_detectors`` list whose detector file
+    # no longer exists on disk (deleted out from under the list, or a stale
+    # reference from another user's deletion). Reported so a scheduled run
+    # never silently drops a detector the user thinks is still active.
+    missing_detectors = fields.List(fields.String(), required=True)
     # Present only when an Auto-Find results exporter is configured: the
     # outcome of auto-exporting these results. ``{exporter, success,
     # message?, error?, ...}`` (extra keys like ``filepath`` may appear for
@@ -767,8 +772,8 @@ __all__ = [
     "DetectorLabelsetMoveResponseSchema",
     "DetectorLabelVoteRequestSchema",
     "DetectorLabelVoteResponseSchema",
-    "DetectorRegistryAutorunRequestSchema",
-    "DetectorRegistryAutorunResponseSchema",
+    "DetectorRegistryAutofindRequestSchema",
+    "DetectorRegistryAutofindResponseSchema",
     "DetectorRegistryCreateRequestSchema",
     "DetectorRegistryCreateResponseSchema",
     "DetectorRegistryDeleteResponseSchema",

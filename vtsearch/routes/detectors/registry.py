@@ -15,7 +15,7 @@ DELETE /api/detectors/registry/<id>                   Remove a detector from the
 PUT    /api/detectors/registry/<id>/rename            Rename a registered detector.
 POST   /api/detectors/registry/<id>/labelset-source/move-file
                                                       Move an orphaned labelset file after a rename.
-PUT    /api/detectors/registry/<id>/autorun           Toggle the detector's autorun flag.
+PUT    /api/detectors/registry/<id>/autofind           Toggle the detector's Auto-Find flag.
 POST   /api/detectors/cancel/<task_id>                Cancel a load task.
 
 Migrated to ``flask_smorest`` so the routes are described in
@@ -47,8 +47,8 @@ from vtsearch.schemas.detectors import (
     DetectorCancelResponseSchema,
     DetectorLabelsetMoveRequestSchema,
     DetectorLabelsetMoveResponseSchema,
-    DetectorRegistryAutorunRequestSchema,
-    DetectorRegistryAutorunResponseSchema,
+    DetectorRegistryAutofindRequestSchema,
+    DetectorRegistryAutofindResponseSchema,
     DetectorRegistryCreateRequestSchema,
     DetectorRegistryCreateResponseSchema,
     DetectorRegistryDeleteResponseSchema,
@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 detectors_registry_bp = Blueprint(
     "detectors_registry",
     __name__,
-    description="Register, load, unload, rename, and toggle autorun on detectors.",
+    description="Register, load, unload, rename, and toggle Auto-Find on detectors.",
 )
 
 
@@ -79,7 +79,7 @@ detectors_registry_bp = Blueprint(
 @detectors_registry_bp.route("/api/detectors/registry")
 @detectors_registry_bp.response(200, DetectorRegistryListResponseSchema)
 def list_registered_detectors():
-    """Return detectors visible to the current user, with loaded/autorun flags.
+    """Return detectors visible to the current user, with loaded/Auto-Find flags.
 
     Detectors are user-shared like datasets: each entry is the creator's plus
     anyone the creator added to ``readers`` (or everyone via ``"*"``). The
@@ -87,18 +87,18 @@ def list_registered_detectors():
     dashboard can render the access column and gate the security button.
     """
     from vtscore.detectors.registry import get_loaded_detector_ids, list_detectors_for_user
-    from vtsearch.settings import get_autorun_detectors
+    from vtsearch.settings import get_autofind_detectors
 
     from vtscore.state.core import get_detector_context
 
     current_user = get_current_user()
     entries = list_detectors_for_user(current_user)
     loaded_ids = get_loaded_detector_ids()
-    autorun_names = set(get_autorun_detectors())
+    autofind_names = set(get_autofind_detectors())
     for entry in entries:
         did = entry["id"]
         entry["loaded"] = did in loaded_ids
-        entry["autorun"] = entry.get("name", "") in autorun_names
+        entry["autofind"] = entry.get("name", "") in autofind_names
         entry.setdefault("last_trained_at", None)
         entry.setdefault("created_by", "default")
         entry.setdefault("readers", [])
@@ -691,13 +691,13 @@ def delete_registered_detector(detector_id: str):
     except Exception:
         logger.exception("Failed to unregister detector context for %s", detector_id)
 
-    # Drop autorun flag if set.
+    # Drop Auto-Find flag if set.
     try:
-        from vtsearch.settings import remove_autorun_detector
+        from vtsearch.settings import remove_autofind_detector
 
-        remove_autorun_detector(entry.get("name", ""))
+        remove_autofind_detector(entry.get("name", ""))
     except Exception:
-        logger.exception("Failed to drop autorun flag for %s", detector_id)
+        logger.exception("Failed to drop Auto-Find flag for %s", detector_id)
 
     unregister_detector(detector_id)
     return {"ok": True}
@@ -760,16 +760,16 @@ def rename_registered_detector(body: dict, detector_id: str):
             if new_path != old_path:
                 old_path.unlink(missing_ok=True)
 
-        # Rename autorun setting if present.
+        # Rename Auto-Find entry if present.
         try:
-            from vtsearch.settings import get_autorun_detectors, set_autorun_detectors
+            from vtsearch.settings import get_autofind_detectors, set_autofind_detectors
 
-            current = get_autorun_detectors()
+            current = get_autofind_detectors()
             if old_name in current:
                 current = [new_name if n == old_name else n for n in current]
-                set_autorun_detectors(current)
+                set_autofind_detectors(current)
         except Exception:
-            logger.exception("Failed to rename autorun entry for %s", detector_id)
+            logger.exception("Failed to rename Auto-Find entry for %s", detector_id)
 
         # Update the loaded in-memory context so future syncs use the new
         # name in {detector_name} template substitution, and detect any
@@ -833,29 +833,29 @@ def move_labelset_source_file(body: dict, detector_id: str):
 
 
 # ---------------------------------------------------------------------------
-# PUT /api/detectors/registry/<detector_id>/autorun
+# PUT /api/detectors/registry/<detector_id>/autofind
 # ---------------------------------------------------------------------------
 
 
-@detectors_registry_bp.route("/api/detectors/registry/<detector_id>/autorun", methods=["PUT"])
-@detectors_registry_bp.arguments(DetectorRegistryAutorunRequestSchema)
-@detectors_registry_bp.response(200, DetectorRegistryAutorunResponseSchema)
+@detectors_registry_bp.route("/api/detectors/registry/<detector_id>/autofind", methods=["PUT"])
+@detectors_registry_bp.arguments(DetectorRegistryAutofindRequestSchema)
+@detectors_registry_bp.response(200, DetectorRegistryAutofindResponseSchema)
 @detectors_registry_bp.alt_response(403, description="Access denied for the current user.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 @detectors_registry_bp.alt_response(500, description="Detector has no associated name.")
-def set_detector_autorun(body: dict, detector_id: str):
-    """Toggle the calling user's autorun flag for a registered detector.
+def set_detector_autofind(body: dict, detector_id: str):
+    """Toggle the calling user's Auto-Find flag for a registered detector.
 
-    The flag is stored per-user under ``autorun_detectors`` (see
-    :func:`vtsearch.settings.add_autorun_detector`), so each user curates their
+    The flag is stored per-user under ``autofind_detectors`` (see
+    :func:`vtsearch.settings.add_autofind_detector`), so each user curates their
     own Auto-Find list. The CLI's ``--autodetect`` flow reads the running
     user's list (the built-in ``default`` user falls back to the server
     settings file). The user must be able to access the detector to flag it.
     """
     from vtscore.detectors.registry import can_user_access_detector, get_detector
     from vtsearch.settings import (
-        add_autorun_detector,
-        remove_autorun_detector,
+        add_autofind_detector,
+        remove_autofind_detector,
     )
 
     entry = get_detector(detector_id)
@@ -864,17 +864,17 @@ def set_detector_autorun(body: dict, detector_id: str):
     if not can_user_access_detector(detector_id, get_current_user()):
         abort(403, message="You do not have access to this detector")
 
-    flag = body["autorun"]
+    flag = body["autofind"]
 
     name = entry.get("name", "")
     if not name:
         abort(500, message="Detector has no name")
 
     if flag:
-        add_autorun_detector(name)
+        add_autofind_detector(name)
     else:
-        remove_autorun_detector(name)
-    return {"ok": True, "autorun": flag}
+        remove_autofind_detector(name)
+    return {"ok": True, "autofind": flag}
 
 
 # ---------------------------------------------------------------------------

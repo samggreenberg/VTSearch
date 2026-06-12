@@ -819,7 +819,7 @@ if __name__ == "__main__":
         default=None,
         help=(
             "Run --autodetect as this user, so their per-user Auto-Find list "
-            "(autorun_detectors) and results exporter apply. Requires --api-key "
+            "(autofind_detectors) and results exporter apply. Requires --api-key "
             "to authenticate against data/api_keys.json (same credentials as the "
             "server's api_key login). Without --user the run uses the built-in "
             "'default' user, which reads the --settings file."
@@ -1222,7 +1222,7 @@ if __name__ == "__main__":
 
         # Establish (and authenticate) the user this Auto-Find runs as, mirroring
         # the server's api_key login. With --user the run reads that user's
-        # per-user autorun list + results exporter; without it, the built-in
+        # per-user Auto-Find list + results exporter; without it, the built-in
         # "default" user applies (which reads the --settings flat file).
         if args.user:
             from vtscore.config import DATA_DIR

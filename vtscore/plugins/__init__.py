@@ -174,7 +174,8 @@ class PluginField:
     #: :func:`vtscore.security.path_validation.sanitize_template_value`
     #: so attacker-controlled values cannot escape the directory implied
     #: by an admin-configured template.  Supported names:
-    #: ``"YYYYMMDD-HHMMSS"``, ``"detector_name"``, ``"detector_id"``,
+    #: ``"YYYYMMDD-HHMMSS"``, ``"YYYYMMDD"``, ``"YYYY"``, ``"MM"``,
+    #: ``"DD"``, ``"detector_name"``, ``"detector_id"``,
     #: ``"username"``.  Empty tuple (the default) means the framework
     #: performs no substitution and the value reaches the plugin
     #: verbatim.

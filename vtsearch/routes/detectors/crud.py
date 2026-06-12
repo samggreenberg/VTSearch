@@ -252,16 +252,16 @@ def rename_detector(body: dict, name: str):
             ctx.name = new_name
         _rename_in_registry(registry_id, new_name)
 
-    # Rename autorun flag if present.
+    # Rename Auto-Find entry if present.
     try:
-        from vtsearch.settings import get_autorun_detectors, set_autorun_detectors
+        from vtsearch.settings import get_autofind_detectors, set_autofind_detectors
 
-        current = get_autorun_detectors()
+        current = get_autofind_detectors()
         if name in current:
             current = [new_name if n == name else n for n in current]
-            set_autorun_detectors(current)
+            set_autofind_detectors(current)
     except Exception:
-        logger.exception("Failed to rename autorun entry for %s", name)
+        logger.exception("Failed to rename Auto-Find entry for %s", name)
 
     return {
         "success": True,

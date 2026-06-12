@@ -170,14 +170,14 @@ class TestFindModeIsPerDetector:
 
 
 class TestAutoDetect:
-    """``POST /api/auto-detect`` iterates detectors flagged for autorun."""
+    """``POST /api/auto-detect`` iterates detectors flagged for Auto-Find."""
 
-    def test_no_autorun_models_returns_400(self, client):
+    def test_no_autofind_models_returns_400(self, client):
         resp = client.post("/api/auto-detect", json={})
         assert resp.status_code == 400
 
-    def test_autorun_model_runs(self, client):
-        from vtsearch.settings import add_autorun_detector
+    def test_autofind_model_runs(self, client):
+        from vtsearch.settings import add_autofind_detector
 
         setup_trainable_model_in_registry(
             "auto-detect-model",
@@ -185,7 +185,7 @@ class TestAutoDetect:
             bad_ids=[18, 19, 20],
             snap=snapshot_medias(),
         )
-        add_autorun_detector("auto-detect-model")
+        add_autofind_detector("auto-detect-model")
 
         resp = client.post("/api/auto-detect", json={})
         assert resp.status_code == 200, resp.get_json()
@@ -198,8 +198,8 @@ class TestAutoDetect:
         assert "negative_hits" in result
         assert len(result["hits"]) + len(result["negative_hits"]) == app_module.NUM_MEDIAS
 
-    def test_autorun_filters_by_media_type(self, client):
-        from vtsearch.settings import add_autorun_detector
+    def test_autofind_filters_by_media_type(self, client):
+        from vtsearch.settings import add_autofind_detector
 
         # Image-only model should be skipped on an audio dataset.
         setup_trainable_model_in_registry(
@@ -209,7 +209,35 @@ class TestAutoDetect:
             snap=snapshot_medias(),
             media_type="image",
         )
-        add_autorun_detector("image-only")
+        add_autofind_detector("image-only")
 
         resp = client.post("/api/auto-detect", json={})
         assert resp.status_code == 400
+
+    def test_missing_detector_is_reported_not_silently_skipped(self, client):
+        """A stale Auto-Find entry (detector file deleted) shows up in
+        ``missing_detectors`` while the surviving detectors still run."""
+        from vtsearch.settings import add_autofind_detector
+
+        setup_trainable_model_in_registry(
+            "auto-detect-survivor",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        add_autofind_detector("auto-detect-survivor")
+        add_autofind_detector("gone-detector")  # no file on disk
+
+        resp = client.post("/api/auto-detect", json={})
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+        assert data["missing_detectors"] == ["gone-detector"]
+        assert "auto-detect-survivor" in data["results"]
+
+    def test_all_detectors_missing_returns_400_naming_them(self, client):
+        from vtsearch.settings import add_autofind_detector
+
+        add_autofind_detector("gone-detector")
+        resp = client.post("/api/auto-detect", json={})
+        assert resp.status_code == 400
+        assert "gone-detector" in resp.get_json()["message"]

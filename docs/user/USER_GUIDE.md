@@ -470,7 +470,7 @@ and a pair of action buttons underneath.
   map, see below), **Rename** (pencil), **Stats** (pie chart), and
   **Delete** (trash).
 - **Detectors** - every saved detector. Each row shows media type,
-  training count, whether it's an **autorun** (scored automatically
+  training count, whether it's an **Auto-Find** detector (scored automatically
   during CLI autodetect), last-trained / created dates, and loaded
   state. Per-row icon buttons: **Rename**, **Add Labels** (import
   labels into this detector), **Export**, and **Delete**.
@@ -596,7 +596,7 @@ Two ways to bring in existing work:
   dashboard both have "import detector" options. A detector file
   contains the trained detector weights plus the threshold and
   metadata needed to score a new dataset. Once imported, you can
-  use it for Load-sort or for autorun scoring.
+  use it for Load-sort or for Auto-Find scoring.
 
 ---
 

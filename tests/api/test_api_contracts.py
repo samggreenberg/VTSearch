@@ -349,9 +349,9 @@ class TestSettingsContract:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "volume" in data
-        assert "autorun_detectors" in data
+        assert "autofind_detectors" in data
         assert isinstance(data["volume"], (int, float))
-        assert isinstance(data["autorun_detectors"], list)
+        assert isinstance(data["autofind_detectors"], list)
 
     def test_get_defaults_returns_dict(self, client):
         resp = client.get("/api/settings/defaults")

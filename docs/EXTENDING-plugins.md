@@ -1058,8 +1058,8 @@ classifier:
 1. Use `POST /api/detectors` (or
    `POST /api/detectors/registry/from-labelset/<importer>`) to create a
    detector file under `data/detectors/<name>.json`.
-2. Toggle its autorun flag with
-   `PUT /api/detectors/registry/<id>/autorun` so it runs from
+2. Toggle its Auto-Find flag with
+   `PUT /api/detectors/registry/<id>/autofind` so it runs from
    `/api/auto-detect` and the CLI's `--autodetect` flow.
 3. The MLP itself lives only in RAM; it's trained on demand from the
    labelset's origins each time the model is loaded or scored.

@@ -2,7 +2,7 @@
   Detectors flagged here run automatically against each dataset as it is
   imported (an &ldquo;Auto-Find&rdquo;). Choose a results exporter below to have
   those results emailed, saved, or posted automatically when a run finishes.
-  These apply server-wide.
+  These are your own settings; every user curates their own Auto-Find list.
 </p>
 
 <!-- Auto-Find detectors --------------------------------------------------- -->
@@ -14,8 +14,8 @@
 } @else {
   <div class="detector-list">
     @for (d of detectors; track d.id) {
-      <label class="checkbox-row" [title]="'Auto-run ' + d.name + (d.media_type ? ' (' + d.media_type + ')' : '')">
-        <input type="checkbox" [ngModel]="d.autorun" (ngModelChange)="toggleDetector(d, $event)" />
+      <label class="checkbox-row" [title]="'Auto-Find ' + d.name + (d.media_type ? ' (' + d.media_type + ')' : '')">
+        <input type="checkbox" [ngModel]="d.autofind" (ngModelChange)="toggleDetector(d, $event)" />
         {{ d.name }}
         @if (d.media_type) {
           <span class="detector-type">{{ d.media_type }}</span>
