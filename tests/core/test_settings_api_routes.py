@@ -408,20 +408,6 @@ class TestSettingsAPI:
         assert "grid_icon_size_left" in data
         assert "grid_icon_size_right" in data
 
-    def test_update_view_mode_popup_per_type(self, client):
-        res = client.put("/api/settings", json={"view_mode_popup": {"audio": "list", "image": "grid"}})
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["view_mode_popup"]["audio"] == "list"
-        assert data["view_mode_popup"]["image"] == "grid"
-
-        res2 = client.get("/api/settings")
-        assert res2.get_json()["view_mode_popup"]["audio"] == "list"
-
-    def test_update_view_mode_popup_invalid(self, client):
-        res = client.put("/api/settings", json={"view_mode_popup": {"audio": "invalid"}})
-        assert res.status_code == 400
-
     def test_update_grid_icon_size_popup_per_type(self, client):
         res = client.put("/api/settings", json={"grid_icon_size_popup": {"audio": "S", "video": "L"}})
         assert res.status_code == 200

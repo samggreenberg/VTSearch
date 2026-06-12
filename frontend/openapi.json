@@ -377,12 +377,6 @@
             },
             "type": "object"
           },
-          "view_mode_popup": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
           "view_mode_right": {
             "additionalProperties": {
               "type": "string"
@@ -4575,7 +4569,6 @@
             "type": "string"
           },
           "view_mode_left": {},
-          "view_mode_popup": {},
           "view_mode_right": {},
           "volume": {
             "type": "number"
