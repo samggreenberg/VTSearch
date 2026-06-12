@@ -150,7 +150,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   panelWidth = 300;
   /** Clamp + divider geometry, mirroring the Find view's panel dividers. */
-  private static readonly PANEL_MIN = 260;
+  private static readonly PANEL_MIN = 160;
   private static readonly PANEL_MAX = 800;
   private static readonly CANVAS_MIN = 200;
   private static readonly DIVIDER_WIDTH = 8;
