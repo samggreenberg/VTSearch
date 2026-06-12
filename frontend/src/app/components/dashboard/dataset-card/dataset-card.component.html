@@ -123,28 +123,19 @@
       @case ('readers') {
         <td [title]="(dataset.readers || []).join(', ')">{{ (dataset.readers || []).length ? (dataset.readers || []).join(', ') : '-' }}</td>
       }
-      @case ('loaded') {
-        <td>
-          @if (dataset.loaded) {
-            <span class="status-loaded" aria-label="Loaded" title="Dataset is loaded">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-            </span>
-          } @else {
-            <button class="load-action" (click)="onLoad($event)" title="Click to load this dataset" aria-label="Load dataset">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          }
-        </td>
-      }
     }
   }
   <td class="actions-col">
     <div class="actions-cell">
+    @if (!dataset.loaded) {
+      <button class="load-btn" (click)="onLoad($event)" aria-label="Load dataset" title="Load dataset">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 3h5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-5"/>
+          <polyline points="12 6 12 12 6 12"/>
+          <line x1="3" y1="3" x2="12" y2="12"/>
+        </svg>
+      </button>
+    }
     <button class="browse-btn" (click)="onBrowse($event)" aria-label="Browse dataset" title="Browse dataset">
       <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path>
