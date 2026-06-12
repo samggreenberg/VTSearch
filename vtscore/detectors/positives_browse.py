@@ -133,9 +133,7 @@ def build_positives_browse_context(
         medias[cid] = media
 
     if not medias:
-        raise ValueError(
-            "None of this detector's positive labels could be resolved and embedded — nothing to browse."
-        )
+        raise ValueError("None of this detector's positive labels could be resolved and embedded — nothing to browse.")
 
     ctx = DatasetContext(dataset_id)
     ctx.medias = medias
