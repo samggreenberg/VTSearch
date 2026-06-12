@@ -47,13 +47,13 @@ const PREVIEW_GAP = 8;
 const MIN_PREVIEW_PX = 96;
 /** Largest the preview pane grows, regardless of icon size, so an extreme
  *  thumbnail-size setting can't make the popup absurdly large. */
-const MAX_PREVIEW_PX = 520;
+const MAX_PREVIEW_PX = 720;
 /**
  * How much larger the preview pane is than the item's on-canvas mouse-over size.
- * The brief: "50% larger than the mouse-over size when we hover in the main
- * canvas." 1.5 == +50%.
+ * Sized well past the bare hover break-out so the zoom-in pane reads as a proper
+ * detail view rather than a slightly-enlarged thumbnail. 2.0 == +100%.
  */
-const PREVIEW_OVERSIZE = 1.5;
+const PREVIEW_OVERSIZE = 2.0;
 /**
  * Full on-screen extent (px) of a square thumbnail's hover break-out on the main
  * canvas, as a multiple of the bin radius. A hovered thumbnail grows until its
@@ -141,6 +141,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   /** Body height cap (px) for the current visible region; the body never grows
    *  past this, so a short region can't push the popup off the bottom edge. */
   bodyCapPx = MAX_BODY_PX;
+
+  /** Preview-pane height cap (px) for the current visible region. The preview is
+   *  allowed to grow taller than {@link bodyCapPx} (which only governs the
+   *  scrolling grid), so a large zoom-in view isn't truncated to the grid's cap;
+   *  it is still kept within the visible region so the popup stays on-screen. */
+  previewCapPx = MAX_PREVIEW_PX;
 
   /** The bin's member ids, in bin order — a locality-preserving 1-D (Hilbert)
    *  traversal of the layout, so spatially/semantically similar items sit
@@ -295,22 +301,29 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     return Math.min(Math.max(this.rows.length, 1) * this.rowSize, this.bodyCapPx);
   }
 
-  /** Side (px) of the square preview pane: 50% larger than the item's on-canvas
+  /** Side (px) of the square preview pane: scaled up from the item's on-canvas
    *  mouse-over break-out at the current main-canvas thumbnail size, clamped to
    *  the room the visible region leaves. Zero when there is no preview. */
   get previewSize(): number {
     if (!this.showPreview) return 0;
     const desired = this.hoverThumbRadius * HOVER_EXTENT_PER_RADIUS * PREVIEW_OVERSIZE;
-    // Keep it within the vertical room the region leaves and a sane absolute cap.
-    return Math.round(
-      Math.max(MIN_PREVIEW_PX, Math.min(desired, MAX_PREVIEW_PX, this.bodyCapPx)),
-    );
+    // Keep it within the vertical room the region leaves (which already folds in
+    // the absolute MAX_PREVIEW_PX cap via ``previewCapPx``).
+    return Math.round(Math.max(MIN_PREVIEW_PX, Math.min(desired, this.previewCapPx)));
   }
 
-  /** Height (px) of the body row: tall enough for the grid, but at least the
-   *  preview pane's height so the pane is shown in full. Capped to the region. */
+  /** True for a one-member bin that has a preview pane: the grid would just
+   *  repeat the single item already shown large in the pane, so we drop it and
+   *  show only the zoom-in canvas. */
+  get previewOnly(): boolean {
+    return this.showPreview && this.ids.length === 1;
+  }
+
+  /** Height (px) of the body row: tall enough for the grid (capped to the
+   *  region), but at least the preview pane's height so the pane is shown in
+   *  full. The preview may exceed the grid's cap; both are region-bounded. */
   get bodyHeight(): number {
-    return Math.min(this.bodyCapPx, Math.max(this.gridHeight, this.previewSize));
+    return Math.max(this.gridHeight, this.previewSize);
   }
 
   // --- Dismissal -----------------------------------------------------------
@@ -509,14 +522,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     const headerH = this.headerRef?.nativeElement.getBoundingClientRect().height ?? 37;
     // Squeeze the scrolling body to whatever vertical room the region leaves, so
     // a short canvas can't make the popup taller than what's visible.
-    this.bodyCapPx = Math.max(
-      MIN_BODY_PX,
-      Math.min(MAX_BODY_PX, regionBottom - regionTop - 2 * EDGE_MARGIN - headerH),
-    );
+    const regionRoom = regionBottom - regionTop - 2 * EDGE_MARGIN - headerH;
+    this.bodyCapPx = Math.max(MIN_BODY_PX, Math.min(MAX_BODY_PX, regionRoom));
+    // The preview gets its own, larger cap: it may grow past the grid's body cap,
+    // bounded only by the visible region and the absolute MAX_PREVIEW_PX.
+    this.previewCapPx = Math.max(MIN_PREVIEW_PX, Math.min(MAX_PREVIEW_PX, regionRoom));
     // Likewise shrink the overall width to fit a narrow region.
     this.maxWidthPx = Math.max(0, regionRight - regionLeft - 2 * EDGE_MARGIN);
-    const previewW = this.previewSize ? this.previewSize + PREVIEW_GAP : 0;
-    const width = Math.min(previewW + GRID_COLUMN_WIDTH, this.maxWidthPx);
+    // A singleton bin drops the grid column and shows only the preview pane.
+    const gridW = this.previewOnly ? 0 : GRID_COLUMN_WIDTH;
+    const previewW = this.previewSize ? this.previewSize + (gridW ? PREVIEW_GAP : 0) : 0;
+    const width = Math.min(previewW + gridW, this.maxWidthPx);
     const height = headerH + this.bodyHeight;
     let l = desiredLeft;
     let t = desiredTop;
