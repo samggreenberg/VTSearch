@@ -33,6 +33,12 @@ export interface StatsState {
   datasetName: string;
 }
 
+export interface DetectorStatsState {
+  open: boolean;
+  detectorId: string;
+  detectorName: string;
+}
+
 /**
  * Singleton owner of the Dashboard's row-action and selection-action
  * modal states. Lifting these out of `DashboardComponent` keeps the
@@ -71,6 +77,11 @@ export class DashboardModalsService {
     datasetId: '',
     datasetName: '',
   });
+  private readonly detectorStatsSubject = new BehaviorSubject<DetectorStatsState>({
+    open: false,
+    detectorId: '',
+    detectorName: '',
+  });
 
   readonly combineDatasets$ = this.combineDatasetsSubject.asObservable();
   readonly combineDetectors$ = this.combineDetectorsSubject.asObservable();
@@ -78,6 +89,7 @@ export class DashboardModalsService {
   readonly addLabels$ = this.addLabelsSubject.asObservable();
   readonly findResults$ = this.findResultsSubject.asObservable();
   readonly stats$ = this.statsSubject.asObservable();
+  readonly detectorStats$ = this.detectorStatsSubject.asObservable();
 
   get combineDatasets(): CombineDatasetsState {
     return this.combineDatasetsSubject.value;
@@ -101,6 +113,10 @@ export class DashboardModalsService {
 
   get stats(): StatsState {
     return this.statsSubject.value;
+  }
+
+  get detectorStats(): DetectorStatsState {
+    return this.detectorStatsSubject.value;
   }
 
   openCombineDatasets(datasets: DatasetRegistryEntry[]): void {
@@ -149,5 +165,13 @@ export class DashboardModalsService {
 
   closeStats(): void {
     this.statsSubject.next({ open: false, datasetId: '', datasetName: '' });
+  }
+
+  openDetectorStats(detectorId: string, detectorName: string): void {
+    this.detectorStatsSubject.next({ open: true, detectorId, detectorName });
+  }
+
+  closeDetectorStats(): void {
+    this.detectorStatsSubject.next({ open: false, detectorId: '', detectorName: '' });
   }
 }

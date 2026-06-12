@@ -7,9 +7,11 @@ persist or inspect detector data without importing the full route blueprint.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
+import uuid
 from pathlib import Path
 
 from vtscore.config import DATA_DIR
@@ -51,9 +53,22 @@ def _read_detector(path: Path) -> dict | None:
 
 def _write_detector(path: Path, data: dict) -> None:
     get_detectors_dir().mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    # Per-writer unique tmp suffix so two threads (or two processes) racing to
+    # overwrite the same detector file can't truncate each other's in-flight
+    # tmp file or chase one that was already renamed away (which surfaced as
+    # ``FileNotFoundError: '<name>.json.tmp' -> '<name>.json'`` from
+    # ``os.replace``).  Mirrors ``vtsearch.settings._atomic_write`` and
+    # ``vtscore.io.atomic_write_text``.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        # Best-effort tmp cleanup so a failed write doesn't leak a
+        # half-written tmp file next to the destination.
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise

@@ -62,7 +62,7 @@ class AppSettingsSchema(Schema):
     calibrate_count = fields.Integer()
     calibration_fraction = fields.Float()
     audio_playing = fields.Boolean()
-    swipe_animation = fields.Boolean()
+    show_animations = fields.Boolean()
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
     autopilot_enabled = fields.Boolean()
@@ -97,9 +97,8 @@ class AppSettingsSchema(Schema):
     focus_mode_right = _PerMediaTypeStringDict()
     panel_pct_left = _PerMediaTypeNumberDict()
     panel_pct_right = _PerMediaTypeNumberDict()
-    # VTSBrowse bin-popup view mode + thumbnail size, per media type. Driven by
-    # the popup's own view controls and the Settings → Browser tab.
-    view_mode_popup = _PerMediaTypeStringDict()
+    # VTSBrowse bin-popup thumbnail size, per media type. Driven by the popup's
+    # own size buttons and the Settings → Browser tab. (The popup is grid-only.)
     grid_icon_size_popup = _PerMediaTypeStringDict()
 
     # Server-tier. These are fixed at server start (config file /
@@ -114,11 +113,11 @@ class AppSettingsSchema(Schema):
     dataset_max_age_days = fields.Integer(load_default=None, allow_none=True)
 
     # Auto-Find (per-user, editable from the Auto-Find settings tab).
-    # ``autorun_detectors`` is each user's own list of detectors that auto-run
+    # ``autofind_detectors`` is each user's own list of detectors that auto-run
     # on import; ``autofind_exporter`` is the chosen results-exporter name
     # ("" = none); ``autofind_exporter_field_values`` keeps each exporter's
     # field values under its own name so switching the picker preserves config.
-    autorun_detectors = fields.List(fields.String())
+    autofind_detectors = fields.List(fields.String())
     autofind_exporter = fields.String()
     autofind_exporter_field_values = fields.Dict(
         keys=fields.String(),
@@ -187,7 +186,7 @@ class SettingsUpdateSchema(Schema):
     calibrate_count = fields.Integer()
     calibration_fraction = fields.Float()
     audio_playing = fields.Boolean()
-    swipe_animation = fields.Boolean()
+    show_animations = fields.Boolean()
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
 
@@ -199,7 +198,6 @@ class SettingsUpdateSchema(Schema):
     focus_mode_right = fields.Raw()
     panel_pct_left = fields.Raw()
     panel_pct_right = fields.Raw()
-    view_mode_popup = fields.Raw()
     grid_icon_size_popup = fields.Raw()
 
     autopilot_enabled = fields.Boolean()
@@ -221,7 +219,7 @@ class SettingsUpdateSchema(Schema):
     browse_thumbnail_border = fields.Raw()
     browse_compact = fields.Raw()
 
-    autorun_detectors = fields.List(fields.String())
+    autofind_detectors = fields.List(fields.String())
     # Auto-Find results exporter. ``autofind_exporter`` is validated against the
     # exporter registry in the route layer; ``autofind_exporter_field_values``
     # is a free-form ``{exporter_name: {field_key: value}}`` map (per-field

@@ -115,17 +115,7 @@ td.actions-col {
   opacity: 0.7;
 }
 
-.status-icon,
-.status-loaded {
-  color: inherit;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xs);
-}
-
-.load-action,
-.autorun-toggle {
+.load-btn {
   background: none;
   border: none;
   color: var(--text-primary);
@@ -139,6 +129,48 @@ td.actions-col {
 
   &:hover {
     background: var(--btn-icon-hover-bg);
+  }
+}
+
+.browse-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+  }
+}
+
+.stats-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+  }
+
+  .pie-active {
+    animation: icon-rotate-open var(--transition-slow) ease-in-out forwards;
+  }
+
+  .pie-inactive {
+    animation: icon-rotate-close var(--transition-slow) ease-in-out forwards;
   }
 }
 

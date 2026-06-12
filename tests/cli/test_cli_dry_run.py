@@ -51,7 +51,7 @@ def _write_trainable_model(name: str, labelset: dict, media_type: str = "audio")
 
 def _settings_file_with_detectors(tmp_path: Path, tm_names: list[str]) -> Path:
     settings = {
-        "autorun_detectors": list(tm_names),
+        "autofind_detectors": list(tm_names),
         "detectors_dir": str(get_detectors_dir()),
     }
     settings_path = tmp_path / "settings.json"
@@ -100,7 +100,7 @@ class TestDryRunPickle:
         assert "DRY RUN" in out
         assert "Dataset pickle:" in out
         assert str(dataset_path) in out
-        assert "Autorun detectors (1)" in out
+        assert "Auto-Find detectors (1)" in out
         assert "dry-tm" in out
         assert "media_type=audio" in out
         assert "labels=2" in out
@@ -190,7 +190,7 @@ class TestDryRunPickle:
         assert "ghost-tm" in out
         assert "MISSING" in out
 
-    def test_dry_run_empty_autorun_list_calls_it_out(self, client, tmp_path, capsys):
+    def test_dry_run_empty_autofind_list_calls_it_out(self, client, tmp_path, capsys):
         dataset_path = _make_dataset_file(tmp_path, app_module.medias)
         settings_path = _settings_file_with_detectors(tmp_path, [])
 
@@ -199,7 +199,7 @@ class TestDryRunPickle:
         autodetect_main(str(dataset_path), settings_path=str(settings_path), dry_run=True)
 
         out = capsys.readouterr().out
-        assert "Autorun detectors: (none" in out
+        assert "Auto-Find detectors: (none" in out
 
 
 class TestDryRunImporter:

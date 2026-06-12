@@ -4,6 +4,7 @@ import { takeUntil, tap } from 'rxjs/operators';
 import type { AppSettings } from '../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../generated/api-client/models/settings-update';
 import { SettingsApiService } from './settings-api.service';
+import { ANIMATIONS_OFF_CLASS } from '../utils/reduced-motion';
 
 @Injectable({ providedIn: 'root' })
 export class SettingsStateService implements OnDestroy {
@@ -32,7 +33,7 @@ export class SettingsStateService implements OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (settings) => {
-          this.settingsSubject.next(settings);
+          this.emit(settings);
           this.loading = false;
         },
         error: () => {
@@ -44,11 +45,26 @@ export class SettingsStateService implements OnDestroy {
   update(changes: SettingsUpdate): Observable<AppSettings> {
     return this.settingsApi.updateSettings(changes).pipe(
       takeUntil(this.destroy$),
-      tap((updated) => this.settingsSubject.next(updated)),
+      tap((updated) => this.emit(updated)),
     );
   }
 
   clear(): void {
-    this.settingsSubject.next(null);
+    this.emit(null);
+  }
+
+  /**
+   * Publish new settings and reflect document-level effects. Currently this
+   * mirrors the "Show Animations" toggle onto `<html>` as the
+   * `animations-off` class, which the global stylesheet and the
+   * `prefersReducedMotion()` util both honor so the one setting silences every
+   * decorative animation at once.
+   */
+  private emit(settings: AppSettings | null): void {
+    this.settingsSubject.next(settings);
+    if (typeof document !== 'undefined') {
+      const animationsOff = settings?.show_animations === false;
+      document.documentElement.classList.toggle(ANIMATIONS_OFF_CLASS, animationsOff);
+    }
   }
 }

@@ -113,6 +113,8 @@ this pattern.
 time:
 
 - `{YYYYMMDD-HHMMSS}` - current UTC timestamp
+- `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` - current UTC date parts (for
+  date-stamped paths from scheduled runs, e.g. `results_{YYYY}.{MM}.{DD}.csv`)
 - `{detector_name}` / `{detector_id}` - active detector identity
 - `{username}` - current user (single-user installs: `"default"`)
 

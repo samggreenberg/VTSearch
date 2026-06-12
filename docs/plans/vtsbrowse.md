@@ -645,6 +645,30 @@ in git history and the cited source files.
   button UMAPs only the positive ids into an ephemeral, never-persisted `_subset_*`
   projection (`?subset=1`). *Known limitation:* in-memory id handoff, so a hard
   reload of the subset URL loses it.
+- ~~**Browse a saved detector's positives (dataset-free)**~~ — the dashboard's
+  detector-row `Browse` button maps just that detector's positive labels,
+  independent of any selected dataset. `POST /api/detectors/registry/<id>/browse-positives`
+  resolves each positive's origin and embeds it with the **detector's own**
+  embedder (so mixed-source detectors work and no dataset need be loaded;
+  reuses the loaded detector's `label_embeddings` when it's already in that
+  space), assembles a throwaway in-memory `DatasetContext` keyed
+  `__detpos__<id>` (vectors + preview bytes, never persisted), projects it,
+  and registers it. The browse stack is reused unchanged: the canvas reads
+  tiles + previews via the standard `/api/medias/<id>/...` endpoints off the
+  context's `media_bytes`. The guard skips the registry check for the
+  `__detpos__` prefix; the browse view releases the context (and clears the
+  active pair) on exit. Build runs async with progress on the detector row
+  (`_detbrowse_*` detector-loading task). See `vtscore/detectors/positives_browse.py`.
+  *Open follow-ups:* (a) clipped/region positives are embedded image-level
+  (`embed_file`), not patch-pooled like training — fine for layout, but it can
+  place a region-voted item slightly differently than its trained vector;
+  reuse the cached `label_embeddings` covers the loaded-detector case exactly.
+  (b) Ephemeral-context cleanup leans on the browse-view's release call (plus
+  rebuild-evict and process exit); there's no server-side TTL, so a client that
+  vanishes mid-browse leaves the context until the next browse of that detector.
+  (c) Preview bytes are held in memory for the session — fine for labelset-sized
+  sets, but a very large positive set would be heavy; a lazy `media_path`/origin
+  re-resolution path could replace the eager byte read if that ever bites.
 - ~~**Bin-popup member ordering**~~ — a bin's `member_ids` are served in a
   locality-preserving 1-D order (a Hilbert space-filling-curve traversal of the
   frozen 2-D layout, `_hilbert_order` in `pyramid.py`) rather than by media id,
@@ -658,6 +682,20 @@ in git history and the cited source files.
   produced. *Open follow-up:* if a future ordering wants true 1-D-UMAP semantics
   (not just a space-filling linearization of the 2-D layout), it would need that
   second fit and a persisted `order` field on `Projection`.
+- ~~**Bin-popup detail preview**~~ — the right-click bin popup is now grid-only
+  (the List/Grid toggle and the `view_mode_popup` setting were removed end to
+  end) and pairs the member grid with a large preview pane on its left, shown
+  for thumbnail media (image/video). Hovering a grid thumbnail paints that
+  item's *full-resolution* original (`/api/medias/<id>/image`, not its grid
+  thumbnail) into the pane; the pane opens on the bin's representative so even a
+  singleton lands on a large high-res view with no hover. The pane is sized to
+  +50% of the item's on-canvas mouse-over break-out at the current main-canvas
+  thumbnail size (`hoverThumbRadius` is passed from `browse-view`), so it tracks
+  the icon-size setting. The grid thumbnails no longer magnify on hover (the
+  preview pane replaces that affordance). *Open follow-up:* the pane is gated on
+  `usesThumbnails` (image/video); documents render a grid thumbnail but get no
+  large preview — if document detail-viewing is wanted, widen the gate and pick a
+  full-res document endpoint.
 
 **Active:**
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable

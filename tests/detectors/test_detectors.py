@@ -734,22 +734,131 @@ class TestDeleteRegisteredModel:
         assert get_detector(detector_id) is None
         assert not is_detector_loaded(detector_id)
 
-    def test_delete_removes_autorun_flag(self, client):
-        """Deleting a model that is flagged for autorun clears it from settings."""
+    def test_delete_removes_autofind_flag(self, client):
+        """Deleting a model that is flagged for Auto-Find clears it from settings."""
         from vtscore.detectors.registry import get_detector
-        from vtsearch.settings import add_autorun_detector, get_autorun_detectors
+        from vtsearch.settings import add_autofind_detector, get_autofind_detectors
 
         res = client.post(
             "/api/detectors/registry",
             json={"name": "DetDel", "media_type": "audio"},
         )
         detector_id = res.get_json()["detector"]["id"]
-        add_autorun_detector("DetDel")
+        add_autofind_detector("DetDel")
 
         res = client.delete(f"/api/detectors/registry/{detector_id}")
         assert res.status_code == 200
-        assert "DetDel" not in get_autorun_detectors()
+        assert "DetDel" not in get_autofind_detectors()
         assert get_detector(detector_id) is None
+
+
+class TestDetectorStats:
+    """Tests for GET /api/detectors/registry/<detector_id>/stats."""
+
+    def _register(self, client, name="StatMe", **extra):
+        body = {"name": name, "media_type": "audio", "text_query": "meow", **extra}
+        res = client.post("/api/detectors/registry", json=body)
+        assert res.status_code == 201
+        return res.get_json()["detector"]["id"]
+
+    def test_stats_basic_shape(self, client):
+        detector_id = self._register(client)
+        res = client.get(f"/api/detectors/registry/{detector_id}/stats")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["name"] == "StatMe"
+        assert data["media_type"] == "audio"
+        assert data["text_query"] == "meow"
+        assert data["num_positive"] == 0
+        assert data["num_negative"] == 0
+        assert data["num_total"] == 0
+        assert data["autofind"] is False
+        # Resolution + provenance fields are always present.
+        assert "num_positive_resolved" in data
+        assert "active_dataset_name" in data
+        assert "created_by" in data
+        assert isinstance(data["readers"], list)
+
+    def test_stats_counts_positives_and_negatives(self, client):
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+
+        detector_id = self._register(client, name="CountMe")
+        path = _detector_path("CountMe")
+        data = _read_detector(path)
+        assert data is not None
+        data["labelset"] = {
+            "labels": [
+                {"md5": "a" * 32, "label": "good"},
+                {"md5": "b" * 32, "label": "good"},
+                {"md5": "c" * 32, "label": "bad"},
+            ]
+        }
+        _write_detector(path, data)
+
+        res = client.get(f"/api/detectors/registry/{detector_id}/stats")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["num_positive"] == 2
+        assert data["num_negative"] == 1
+        assert data["num_total"] == 3
+
+    def test_stats_reflects_autofind_flag(self, client):
+        from vtsearch.settings import add_autofind_detector
+
+        detector_id = self._register(client, name="AutoStat")
+        add_autofind_detector("AutoStat")
+        res = client.get(f"/api/detectors/registry/{detector_id}/stats")
+        assert res.status_code == 200
+        assert res.get_json()["autofind"] is True
+
+    def test_stats_404_for_unknown_detector(self, client):
+        res = client.get("/api/detectors/registry/nonexistent_id/stats")
+        assert res.status_code == 404
+
+
+class TestDetectorBrowsePositives:
+    """Tests for the detector-positives browse endpoints."""
+
+    def _register(self, client, name="BrowseMe"):
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": name, "media_type": "audio", "text_query": "x"},
+        )
+        assert res.status_code == 201
+        return res.get_json()["detector"]["id"]
+
+    def test_browse_positives_404_for_unknown(self, client):
+        res = client.post("/api/detectors/registry/nonexistent_id/browse-positives")
+        assert res.status_code == 404
+
+    def test_browse_positives_409_without_positives(self, client):
+        detector_id = self._register(client)
+        res = client.post(f"/api/detectors/registry/{detector_id}/browse-positives")
+        assert res.status_code == 409
+
+    def test_browse_positives_returns_synthetic_dataset_id(self, client):
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+
+        detector_id = self._register(client, name="BrowsePos")
+        path = _detector_path("BrowsePos")
+        data = _read_detector(path)
+        assert data is not None
+        data["labelset"] = {"labels": [{"md5": "a" * 32, "label": "good"}]}
+        _write_detector(path, data)
+
+        res = client.post(f"/api/detectors/registry/{detector_id}/browse-positives")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["ok"] is True
+        assert data["dataset_id"] == f"__detpos__{detector_id}"
+        assert data["task_id"]
+
+    def test_release_is_idempotent(self, client):
+        detector_id = self._register(client)
+        # Nothing built yet → released is False, still ok.
+        res = client.post(f"/api/detectors/registry/{detector_id}/browse-positives/release")
+        assert res.status_code == 200
+        assert res.get_json() == {"ok": True, "released": False}
 
 
 class TestLoadModelEndpoint:

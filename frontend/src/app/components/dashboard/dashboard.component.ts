@@ -8,6 +8,7 @@ import { DatasetsRegistryApiService } from '../../services/datasets-registry-api
 import { DatasetsUiApiService } from '../../services/datasets-ui-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
+import { ToastService } from '../../services/toast.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { DatasetStateService } from '../../services/dataset-state.service';
@@ -43,6 +44,7 @@ import { CombineDetectorsModalComponent } from './combine-detectors-modal/combin
 import { LabelExporterModalComponent } from '../modals/label-exporter-modal/label-exporter-modal.component';
 import { LabelImporterModalComponent } from '../modals/label-importer-modal/label-importer-modal.component';
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
+import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
@@ -60,6 +62,7 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
     LabelExporterModalComponent,
     LabelImporterModalComponent,
     DatasetStatsModalComponent,
+    DetectorStatsModalComponent,
     IconComponent,
     UsageBarComponent,
     SkeletonComponent,
@@ -164,6 +167,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private datasetsUiApi: DatasetsUiApiService,
     private detectorsFindApi: DetectorsFindApiService,
     private detectorsRegistryApi: DetectorsRegistryApiService,
+    private toast: ToastService,
     private dialog: VtDialogService,
     private labelSession: LabelSessionService,
     public datasetState: DatasetStateService,
@@ -784,9 +788,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
     this.deletingDetectorId = model.id;
+    const autofindWarning = model.autofind
+      ? ' This detector is on your Auto-Find list; deleting it removes it from that list too.'
+      : '';
     const ok = await this.dialog.confirmDestructive(
       `Delete detector "${model.name}"?`,
-      '(This deletes your labels. The underlying media is unaffected.)',
+      `(This deletes your labels. The underlying media is unaffected.${autofindWarning})`,
     );
     this.deletingDetectorId = '';
     if (!ok) return;
@@ -852,9 +859,46 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  toggleAutorun(model: DetectorRegistryEntry, autorun: boolean): void {
-    this.detectorsRegistryApi.setAutorun(model.id, autorun).subscribe({
-      next: () => this.datasetState.refresh(),
+  /** Open the read-only stats modal for a detector (labelset composition +
+   *  provenance). Mirrors `showDatasetStats`. */
+  showDetectorStats(model: DetectorRegistryEntry): void {
+    this.modals.openDetectorStats(model.id, model.name);
+  }
+
+  /** Launch the VTSBrowse view over just this detector's positive labels.
+   *  The backend resolves each positive's origin and embeds it with the
+   *  *detector's own* embedder (mixed sources included, no dataset required),
+   *  building a throwaway in-memory browse context; we show that build's
+   *  progress on the detector row, then navigate once it's ready. */
+  browseDetector(model: DetectorRegistryEntry): void {
+    this.detectorsRegistryApi.browsePositives(model.id).subscribe({
+      next: (resp) => {
+        this.loadingTasksSvc.startDetectorProgressPolling();
+        let seenRunning = false;
+        this.progressEvents.detectorLoadingTasks$
+          .pipe(
+            filter((tasks) => {
+              const t = tasks.find((x) => x.task_id === resp.task_id);
+              if (t && t.status !== 'idle' && !t.error) {
+                seenRunning = true;
+                return false;
+              }
+              // Finished (idle), errored, or vanished after we saw it running.
+              return (!!t && (t.status === 'idle' || !!t.error)) || (!t && seenRunning);
+            }),
+            take(1),
+            takeUntil(this.destroy$),
+          )
+          .subscribe(() => {
+            const failed = this.progressEvents.detectorLoadingTasks.some(
+              (t) => t.task_id === resp.task_id && !!t.error,
+            );
+            if (failed) return; // ToastService surfaces the build error from the SSE task
+            this.activeContext.setActive(resp.dataset_id, '');
+            this.router.navigate(['/browse', resp.dataset_id]);
+          });
+      },
+      error: () => this.toast.error({ message: 'Failed to prepare browse' }),
     });
   }
 

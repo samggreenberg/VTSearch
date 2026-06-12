@@ -32,11 +32,12 @@ html {
   zoom: 1.1;
 }
 
-// Honor OS-level "reduce motion" requests (also a useful escape hatch for
-// thin clients with no GPU compositing, where long CSS animations can pin a
-// software-rendered browser).
-@media (prefers-reduced-motion: reduce) {
-  *,
+// Blanket "kill decorative motion" rule. Shared between the OS-level
+// reduce-motion media query and the app-level "Show Animations" toggle so a
+// single definition governs both paths. `$target` lets the app toggle exempt
+// elements (e.g. the progress bar) that the OS path still calms.
+@mixin suppress-motion($target: '*') {
+  #{$target},
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
@@ -44,4 +45,26 @@ html {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+// Honor OS-level "reduce motion" requests (also a useful escape hatch for
+// thin clients with no GPU compositing, where long CSS animations can pin a
+// software-rendered browser).
+@media (prefers-reduced-motion: reduce) {
+  @include suppress-motion;
+}
+
+// App-level "Show Animations" setting. When the user turns it off,
+// SettingsStateService adds `.animations-off` to <html>, mirroring the
+// OS reduce-motion behavior above so one checkbox silences every decorative
+// animation and transition at once (vote swipe, icon spins/waggles/tilts,
+// toast/banner slide-ins, etc.). JS-driven motion gates on the matching
+// `prefersReducedMotion()` util.
+//
+// `.progress-fill` is exempt: a progress bar's indeterminate sweep (and its
+// determinate fill) is functional feedback, not decorative flourish, so it
+// keeps moving when the user turns animations off. The OS reduce-motion path
+// above still calms it for users who ask the platform for reduced motion.
+html.animations-off {
+  @include suppress-motion('*:not(.progress-fill)');
 }

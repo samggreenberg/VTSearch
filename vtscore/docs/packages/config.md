@@ -46,7 +46,7 @@ stale state from a previous run.
 | `detectors_dir`                   | `Path`         | server      | Where detector JSON files are read from / written to.                                            |
 | `max_concurrent_dataset_downloads`| `int`          | server      | Cap on parallel dataset downloads (bandwidth/disk-bound stage).                                  |
 | `max_concurrent_dataset_embeddings`| `int`         | server      | Cap on parallel dataset embedding (CPU/GPU-bound stage).                                         |
-| `autorun_detectors`               | `tuple[str, ...]` | server   | Detector names to train + score automatically on every freshly-loaded dataset.                   |
+| `autofind_detectors`               | `tuple[str, ...]` | server   | Detector names to train + score automatically on every freshly-loaded dataset.                   |
 | `safe_thresholds`                 | `bool`         | per-user    | When `True`, prefer cross-calibrated thresholds with explicit margin over GMM-fit thresholds.    |
 | `calibrate_count`                 | `int`          | per-user    | Number of fold-training passes used to calibrate the operating threshold. Min 1.                 |
 | `calibration_fraction`            | `float`        | per-user    | Fraction of labels held out per calibration fold. Typical 0.5.                                   |
@@ -71,7 +71,7 @@ config = CoreConfig(
     detectors_dir=DATA_DIR / "detectors",
     max_concurrent_dataset_downloads=2,
     max_concurrent_dataset_embeddings=1,
-    autorun_detectors=(),
+    autofind_detectors=(),
     safe_thresholds=True,
     calibrate_count=1,
     calibration_fraction=0.5,

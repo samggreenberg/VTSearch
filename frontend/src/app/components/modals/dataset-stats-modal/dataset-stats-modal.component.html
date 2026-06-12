@@ -40,7 +40,7 @@
         }
         @for (p of originParams; track p.key) {
           <tr>
-            <td class="stat-label" [title]="'Importer field: ' + p.key">{{ p.key }}</td>
+            <td class="stat-label" [title]="'Importer field: ' + p.key">{{ p.label }}</td>
             <td class="stat-value">{{ p.value }}</td>
           </tr>
         }

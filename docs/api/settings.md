@@ -20,7 +20,7 @@ GET /api/settings
   "calibrate_count": 2,
   "calibration_fraction": 0.5,
   "audio_playing": true,
-  "swipe_animation": true,
+  "show_animations": true,
   "show_metadata": true,
   "view_mode_left": {},
   "view_mode_right": {},
@@ -30,7 +30,7 @@ GET /api/settings
   "grid_icon_size_right": {},
   "panel_pct_left": {},
   "panel_pct_right": {},
-  "autorun_detectors": [],
+  "autofind_detectors": [],
   "autopilot_enabled": true,
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
@@ -62,7 +62,7 @@ PUT /api/settings
 Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `"highviz"`), `inclusion` (int, -10 to +10), `enrich_descriptions` (bool),
 `safe_thresholds` (bool), `calibrate_count` (int), `calibration_fraction`
-(number), `audio_playing` (bool), `swipe_animation` (bool),
+(number), `audio_playing` (bool), `show_animations` (bool),
 `show_metadata` (bool), `view_mode_left` (dict), `view_mode_right` (dict),
 `focus_mode_left` (dict), `focus_mode_right` (dict), `grid_icon_size_left`
 (dict), `grid_icon_size_right` (dict), `panel_pct_left` (dict),
@@ -70,7 +70,7 @@ Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `autopilot_enabled` (bool),
 `hide_autopilot` (bool), `autopilot_top_greens` (int),
 `autopilot_hard_reds` (int), `autopilot_resort_interval` (int),
-`autopilot_goal_diversity` (int), `autorun_detectors` (list of detector names),
+`autopilot_goal_diversity` (int), `autofind_detectors` (list of detector names),
 `saved_datasets_dir` (string path), `detectors_dir` (string path).
 
 ### Get default settings
@@ -80,14 +80,14 @@ GET /api/settings/defaults
 ```
 
 → Default values for all settings (excluding infrastructure keys like
-`autorun_detectors`, `saved_datasets_dir`, `detectors_dir`,
+`autofind_detectors`, `saved_datasets_dir`, `detectors_dir`,
 and `settings_source`).
 
-### Detector autorun
+### Detector Auto-Find flag
 
-`autorun_detectors` is a flat list of registered detector names that
+`autofind_detectors` is a flat list of registered detector names that
 should run during `/api/auto-detect` and the CLI's `--autodetect` flow.
-Toggle a detector via `PUT /api/detectors/registry/{detector_id}/autorun`
+Toggle a detector via `PUT /api/detectors/registry/{detector_id}/autofind`
 (see `docs/api/detectors.md`); the registry endpoint is the source of
 truth and writes through to this settings list.
 

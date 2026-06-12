@@ -34,6 +34,12 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
    * ``[allowSizeInList]="true"``.
    */
   @Input() allowSizeInList = false;
+  /**
+   * Whether to show the Grid/List toggle. The VTSBrowse bin popup is grid-only
+   * (it pairs the grid with a large hover preview), so it hides the toggle with
+   * ``[showViewMode]="false"`` while keeping the thumbnail-size buttons.
+   */
+  @Input() showViewMode = true;
 
   viewMode: 'grid' | 'list' = 'list';
   focusMode: 'click' | 'hover' = 'click';

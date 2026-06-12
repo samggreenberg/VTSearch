@@ -921,7 +921,7 @@ The following names appear in `vtsearch.state` today but are app-side concerns a
   `dataset_display_name`, `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
   `enrich_descriptions`; these are `_ProxyDict` / `_ProxyList` objects that read
   `flask.g`. They stay in the app as a thin shim that delegates to library contexts.
-- `autorun_detectors`, `autorun_extractors`, `autorun_localizers` and their CRUD
+- `autofind_detectors`, `autorun_extractors`, `autorun_localizers` and their CRUD
   (`add_autorun_extractor`, `remove_autorun_extractor`, `rename_autorun_extractor`,
   `get_autorun_extractors`, `get_autorun_extractors_by_media`, and the matching
   `_autorun_localizer` set); *policy* about which processors to run automatically,
@@ -1181,7 +1181,7 @@ def autodetect_main(
     *,
     dry_run: bool = False,
 ) -> None:
-    """Load a pickled dataset, run every autorun detector, export the hits."""
+    """Load a pickled dataset, run every Auto-Find detector, export the hits."""
 
 def autodetect_importer_main(
     importer_name: str,
@@ -1304,7 +1304,7 @@ decides when X happens, what gets persisted, and where it shows up."**
    `Processor` / `Detector` / `Localizer` / `Extractor` ABCs and the code that
    applies them to media stay in `vtscore`; the *ability* to run a processor is
    a library concern. The registry of which processors to autorun
-   (`autorun_detectors`, `autorun_extractors`, `autorun_localizers`) plus its
+   (`autofind_detectors`, `autorun_extractors`, `autorun_localizers`) plus its
    CRUD (`add_autorun_extractor`, `remove_autorun_localizer`, etc.) is *policy*
    the app owns; it stays in `vtsearch/`. The library accepts the resolved list
    as an argument when a caller wants to run it.

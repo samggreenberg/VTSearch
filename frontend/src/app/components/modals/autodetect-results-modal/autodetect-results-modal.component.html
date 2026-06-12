@@ -12,6 +12,15 @@
     }
   </div>
 
+  <!-- Stale Auto-Find references (detector files deleted out from under the list) -->
+  @if (data.missing_detectors?.length) {
+    <div class="auto-export-status auto-export-status--error">
+      &#9888; Skipped {{ data.missing_detectors!.length }} Auto-Find detector(s) whose
+      file no longer exists: {{ data.missing_detectors!.join(', ') }}.
+      Remove them from your Auto-Find list in Settings.
+    </div>
+  }
+
   <!-- Auto-export status (only when a results exporter ran) -->
   @if (data.auto_export; as ax) {
     <div class="auto-export-status" [class.auto-export-status--error]="!ax.success">

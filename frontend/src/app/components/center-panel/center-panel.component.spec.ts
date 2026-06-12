@@ -88,7 +88,7 @@ describe('CenterPanelComponent', () => {
 
   it('should send vote request on castVote', () => {
     component.media = mockMedia;
-    component.swipeAnimation = false;
+    component.showAnimations = false;
     fixture.detectChanges();
 
     let emitted: { id: number; vote: string } | undefined;
@@ -109,7 +109,7 @@ describe('CenterPanelComponent', () => {
 
   it('should prevent double voting', () => {
     component.media = mockMedia;
-    component.swipeAnimation = false;
+    component.showAnimations = false;
     fixture.detectChanges();
     component.isVoting = true;
     component.castVote('good');
@@ -159,7 +159,7 @@ describe('CenterPanelComponent', () => {
 
     function setup(): void {
       component.media = imageMedia;
-      component.swipeAnimation = false;
+      component.showAnimations = false;
       fixture.detectChanges();
     }
 
@@ -223,7 +223,7 @@ describe('CenterPanelComponent', () => {
 
     function setup(): void {
       component.media = imageMedia;
-      component.swipeAnimation = false;
+      component.showAnimations = false;
       fixture.detectChanges();
     }
 

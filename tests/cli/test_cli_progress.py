@@ -215,7 +215,7 @@ def _make_audio_files(tmp_path: Path, names: list[str]) -> dict[str, Path]:
 
 def _settings_with_detectors(tmp_path: Path, names: list[str]) -> Path:
     settings = {
-        "autorun_detectors": list(names),
+        "autofind_detectors": list(names),
         "detectors_dir": str(get_detectors_dir()),
     }
     settings_path = tmp_path / "settings.json"

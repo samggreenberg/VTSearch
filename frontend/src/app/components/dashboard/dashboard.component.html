@@ -273,15 +273,17 @@
                 [deleteConfirmOpen]="deletingDetectorId === detector.id"
                 [addLabelsOpen]="modals.addLabels.open && modals.addLabels.detectorId === detector.id"
                 [exportOpen]="modals.export.open && modals.export.detectorName === detector.name"
+                [statsOpen]="modals.detectorStats.open && modals.detectorStats.detectorId === detector.id"
                 (rowClick)="!isLoading && toggleDetectorSelection(detector.id, $event)"
                 (checkboxToggle)="!isLoading && toggleDetectorCheckbox(detector.id)"
                 (rename)="renameDetector(detector, $event)"
                 (delete)="deleteDetector(detector)"
                 (load)="loadDetector(detector)"
                 (unload)="unloadDetector(detector)"
+                (browse)="browseDetector(detector)"
+                (stats)="showDetectorStats(detector)"
                 (export)="openExportModal(detector)"
                 (addLabels)="openAddLabelsModal(detector)"
-                (autorunToggle)="toggleAutorun(detector, $event)"
                 (security)="editDetectorSecurity(detector)"
                 (cancelTask)="loadingTasksSvc.cancelDetectorLoadingTask($event)"
                 (dismissTask)="loadingTasksSvc.dismissDetectorLoadingTask($event)"
@@ -384,5 +386,13 @@
     [datasetId]="modals.stats.datasetId"
     [datasetName]="modals.stats.datasetName"
     (closed)="modals.closeStats()"
+  />
+}
+
+@if (modals.detectorStats.open) {
+  <vt-detector-stats-modal
+    [detectorId]="modals.detectorStats.detectorId"
+    [detectorName]="modals.detectorStats.detectorName"
+    (closed)="modals.closeDetectorStats()"
   />
 }

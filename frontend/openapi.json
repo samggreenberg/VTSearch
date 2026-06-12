@@ -158,6 +158,12 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_detectors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "autofind_exporter": {
             "type": "string"
           },
@@ -184,12 +190,6 @@
           },
           "autopilot_top_greens": {
             "type": "integer"
-          },
-          "autorun_detectors": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "browse_bin_shape": {
             "additionalProperties": {
@@ -343,6 +343,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "show_animations": {
+            "type": "boolean"
+          },
           "show_metadata": {
             "type": "boolean"
           },
@@ -359,9 +362,6 @@
           "solo_media_type_explicit": {
             "type": "boolean"
           },
-          "swipe_animation": {
-            "type": "boolean"
-          },
           "theme": {
             "enum": [
               "dark",
@@ -372,12 +372,6 @@
             "type": "string"
           },
           "view_mode_left": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "view_mode_popup": {
             "additionalProperties": {
               "type": "string"
             },
@@ -444,6 +438,12 @@
           "media_type": {
             "type": "string"
           },
+          "missing_detectors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "results": {
             "additionalProperties": {
               "$ref": "#/components/schemas/_AutoDetectResult"
@@ -454,6 +454,7 @@
         "required": [
           "detectors_run",
           "media_type",
+          "missing_detectors",
           "results"
         ],
         "type": "object"
@@ -1554,6 +1555,46 @@
         ],
         "type": "object"
       },
+      "DetectorBrowsePositivesReleaseResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "released": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "released"
+        ],
+        "type": "object"
+      },
+      "DetectorBrowsePositivesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "media_type",
+          "ok",
+          "task_id"
+        ],
+        "type": "object"
+      },
       "DetectorCancelResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1908,22 +1949,22 @@
         ],
         "type": "object"
       },
-      "DetectorRegistryAutorunRequest": {
+      "DetectorRegistryAutofindRequest": {
         "additionalProperties": false,
         "properties": {
-          "autorun": {
+          "autofind": {
             "type": "boolean"
           }
         },
         "required": [
-          "autorun"
+          "autofind"
         ],
         "type": "object"
       },
-      "DetectorRegistryAutorunResponse": {
+      "DetectorRegistryAutofindResponse": {
         "additionalProperties": false,
         "properties": {
-          "autorun": {
+          "autofind": {
             "type": "boolean"
           },
           "ok": {
@@ -1931,7 +1972,7 @@
           }
         },
         "required": [
-          "autorun",
+          "autofind",
           "ok"
         ],
         "type": "object"
@@ -2006,7 +2047,7 @@
       "DetectorRegistryEntry": {
         "additionalProperties": true,
         "properties": {
-          "autorun": {
+          "autofind": {
             "type": "boolean"
           },
           "created_at": {
@@ -2186,6 +2227,79 @@
         "required": [
           "name",
           "ok"
+        ],
+        "type": "object"
+      },
+      "DetectorRegistryStatsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active_dataset_name": {
+            "type": "string"
+          },
+          "autofind": {
+            "type": "boolean"
+          },
+          "clipper": {
+            "type": "string"
+          },
+          "created_at": {
+            "nullable": true
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "embedder": {
+            "type": "string"
+          },
+          "last_trained_at": {
+            "nullable": true
+          },
+          "media_example": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "num_negative": {
+            "type": "integer"
+          },
+          "num_positive": {
+            "type": "integer"
+          },
+          "num_positive_resolved": {
+            "type": "integer"
+          },
+          "num_total": {
+            "type": "integer"
+          },
+          "readers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text_query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active_dataset_name",
+          "autofind",
+          "clipper",
+          "created_by",
+          "embedder",
+          "media_example",
+          "media_type",
+          "name",
+          "num_negative",
+          "num_positive",
+          "num_positive_resolved",
+          "num_total",
+          "readers",
+          "text_query"
         ],
         "type": "object"
       },
@@ -4356,6 +4470,12 @@
           "audio_playing": {
             "type": "boolean"
           },
+          "autofind_detectors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "autofind_exporter": {
             "type": "string"
           },
@@ -4374,12 +4494,6 @@
           },
           "autopilot_top_greens": {
             "type": "integer"
-          },
-          "autorun_detectors": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "browse_bin_shape": {},
           "browse_colormap": {},
@@ -4432,6 +4546,9 @@
           "saved_datasets_dir": {
             "type": "string"
           },
+          "show_animations": {
+            "type": "boolean"
+          },
           "show_metadata": {
             "type": "boolean"
           },
@@ -4441,9 +4558,6 @@
           "solo_media_type": {
             "nullable": true,
             "type": "string"
-          },
-          "swipe_animation": {
-            "type": "boolean"
           },
           "theme": {
             "enum": [
@@ -4455,7 +4569,6 @@
             "type": "string"
           },
           "view_mode_left": {},
-          "view_mode_popup": {},
           "view_mode_right": {},
           "volume": {
             "type": "number"
@@ -6659,7 +6772,7 @@
     },
     "/api/auto-detect": {
       "post": {
-        "description": "Iterates :func:`~vtsearch.settings.get_autorun_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single autorun detector.",
+        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single Auto-Find detector.",
         "operationId": "auto_detect",
         "requestBody": {
           "content": {
@@ -6683,10 +6796,10 @@
             "description": "OK"
           },
           "400": {
-            "description": "No medias loaded, or no autorun detectors match the active media type."
+            "description": "No medias loaded, or no Auto-Find detectors match the active media type."
           },
           "404": {
-            "description": "Named detector is not flagged for autorun."
+            "description": "Named detector is not flagged for Auto-Find."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -6695,7 +6808,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Score the active dataset with every detector flagged for autorun.",
+        "summary": "Score the active dataset with every detector flagged for Auto-Find.",
         "tags": [
           "detector_scoring"
         ]
@@ -9317,7 +9430,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Return detectors visible to the current user, with loaded/autorun flags.",
+        "summary": "Return detectors visible to the current user, with loaded/Auto-Find flags.",
         "tags": [
           "detectors_registry"
         ]
@@ -9556,7 +9669,7 @@
         }
       ]
     },
-    "/api/detectors/registry/{detector_id}/autorun": {
+    "/api/detectors/registry/{detector_id}/autofind": {
       "parameters": [
         {
           "in": "path",
@@ -9569,13 +9682,13 @@
         }
       ],
       "put": {
-        "description": "The flag is stored per-user under ``autorun_detectors`` (see\n:func:`vtsearch.settings.add_autorun_detector`), so each user curates their\nown Auto-Find list. The CLI's ``--autodetect`` flow reads the running\nuser's list (the built-in ``default`` user falls back to the server\nsettings file). The user must be able to access the detector to flag it.",
-        "operationId": "set_detector_autorun",
+        "description": "The flag is stored per-user under ``autofind_detectors`` (see\n:func:`vtsearch.settings.add_autofind_detector`), so each user curates their\nown Auto-Find list. The CLI's ``--autodetect`` flow reads the running\nuser's list (the built-in ``default`` user falls back to the server\nsettings file). The user must be able to access the detector to flag it.",
+        "operationId": "set_detector_autofind",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DetectorRegistryAutorunRequest"
+                "$ref": "#/components/schemas/DetectorRegistryAutofindRequest"
               }
             }
           },
@@ -9586,7 +9699,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DetectorRegistryAutorunResponse"
+                  "$ref": "#/components/schemas/DetectorRegistryAutofindResponse"
                 }
               }
             },
@@ -9608,7 +9721,85 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Toggle the calling user's autorun flag for a registered detector.",
+        "summary": "Toggle the calling user's Auto-Find flag for a registered detector.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
+    "/api/detectors/registry/{detector_id}/browse-positives": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Resolves every positive label's origin to its file and embeds it with the\n**detector's** embedder (reusing the loaded detector's cached vectors when\nit's already in that space), assembles a throwaway ``DatasetContext`` whose\nmedia carry those embeddings + preview bytes, projects it, and registers it\nunder a synthetic ``dataset_id`` the browse view can open. Nothing is\npersisted \u2014 the context (vectors and bytes) lives only in memory until\nreleased. Mixed-source detectors work: a positive needn't be in any loaded\ndataset, only origin-resolvable.\n\nReturns immediately with the ``dataset_id`` and the ``task_id`` whose\nprogress the detector's dashboard row renders while the build runs.",
+        "operationId": "browse_detector_positives",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorBrowsePositivesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Prepare an in-memory VTSBrowse map of just this detector's positives.",
+        "tags": [
+          "detectors_registry"
+        ]
+      }
+    },
+    "/api/detectors/registry/{detector_id}/browse-positives/release": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Called when the user leaves the browse view. Idempotent: ``released`` is\n``False`` when there was nothing to drop.",
+        "operationId": "release_detector_positives_browse",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorBrowsePositivesReleaseResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Free the ephemeral positives-browse context for *detector_id*.",
         "tags": [
           "detectors_registry"
         ]
@@ -9783,6 +9974,48 @@
           "detectors_registry"
         ]
       }
+    },
+    "/api/detectors/registry/{detector_id}/stats": {
+      "get": {
+        "description": "Counts/metadata only \u2014 no embeddings or MLP weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project.",
+        "operationId": "get_detector_stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectorRegistryStatsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Detector not found."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return labelset composition and provenance for a registered detector.",
+        "tags": [
+          "detectors_registry"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "detector_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/detectors/registry/{detector_id}/unload": {
       "parameters": [
@@ -13781,11 +14014,11 @@
       "name": "detectors_labels"
     },
     {
-      "description": "Register, load, unload, rename, and toggle autorun on detectors.",
+      "description": "Register, load, unload, rename, and toggle Auto-Find on detectors.",
       "name": "detectors_registry"
     },
     {
-      "description": "Run a detector against the active dataset (find-label) or run every autorun detector at once (auto-detect).",
+      "description": "Run a detector against the active dataset (find-label) or run every Auto-Find detector at once (auto-detect).",
       "name": "detector_scoring"
     },
     {

@@ -92,22 +92,6 @@
       @case ('num_training') {
         <td>{{ (detector.num_training ?? 0) | number }}</td>
       }
-      @case ('autodetect') {
-        <td>
-          <button class="autorun-toggle" (click)="onAutorunToggle($event)" aria-label="Autorun" title="Include in CLI autorun">
-            @if (detector.autorun) {
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-            } @else {
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            }
-          </button>
-        </td>
-      }
       @case ('last_trained_at') {
         <td>{{ formatDate(detector.last_trained_at) }}</td>
       }
@@ -120,28 +104,25 @@
       @case ('readers') {
         <td [title]="(detector.readers || []).join(', ')">{{ (detector.readers || []).length ? (detector.readers || []).join(', ') : '-' }}</td>
       }
-      @case ('detector_loaded') {
-        <td>
-          @if (detector.detector_loaded) {
-            <span class="status-loaded" aria-label="Loaded" title="Detector is loaded">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-            </span>
-          } @else {
-            <button class="load-action" (click)="onLoad($event)" title="Click to load this detector" aria-label="Load detector">
-              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          }
-        </td>
-      }
     }
   }
   <td class="actions-col">
     <div class="actions-cell">
+    @if (!detector.detector_loaded) {
+      <button class="load-btn" (click)="onLoad($event)" aria-label="Load detector" title="Load detector">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 3h5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-5"/>
+          <polyline points="12 6 12 12 6 12"/>
+          <line x1="3" y1="3" x2="12" y2="12"/>
+        </svg>
+      </button>
+    }
+    <button class="browse-btn" (click)="onBrowse($event)" aria-label="Browse this detector's positives" title="Browse positives">
+      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    </button>
     @if (!isDefaultLogin) {
       <button class="security-btn" [class.disabled]="!isOwner" [disabled]="!isOwner" (click)="onSecurity($event)" [attr.aria-label]="isOwner ? 'Edit access list' : 'Only the creator can edit access'" [title]="isOwner ? 'Edit access list' : 'Only the creator can edit access'">
         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -164,6 +145,15 @@
         <path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"></path>
         <polyline points="15 3 21 3 21 9"></polyline>
         <line x1="12" y1="12" x2="21" y2="3"></line>
+      </svg>
+    </button>
+    <button class="stats-btn" (click)="onStats($event)" aria-label="Detector stats" title="Stats">
+      <svg aria-hidden="true" [class.pie-active]="statsOpen" [class.pie-inactive]="!statsOpen && wasStatsOpen" (animationend)="onPieAnimationEnd()" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a10 10 0 0 1 0 20"/>
+        <line x1="12" y1="12" x2="12" y2="2"/>
+        <line x1="12" y1="12" x2="20.66" y2="17"/>
+        <line x1="12" y1="12" x2="2" y2="12"/>
       </svg>
     </button>
     <button class="delete-btn" (click)="onDelete($event)" aria-label="Delete detector" title="Delete">

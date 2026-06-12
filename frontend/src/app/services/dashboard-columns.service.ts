@@ -9,19 +9,16 @@ export type DatasetColumn =
   | 'expires_at'
   | 'created_by'
   | 'readers'
-  | 'loaded'
   | 'actions';
 
 export type DetectorColumn =
   | 'name'
   | 'media_type'
   | 'num_training'
-  | 'autodetect'
   | 'last_trained_at'
   | 'created_at'
   | 'created_by'
   | 'readers'
-  | 'detector_loaded'
   | 'actions';
 
 // `name` is pinned at the far left and `actions` at the far right; both are
@@ -36,18 +33,15 @@ const DATASET_COLUMNS_DEFAULT: DatasetColumn[] = [
   'expires_at',
   'created_by',
   'readers',
-  'loaded',
 ];
 
 const DETECTOR_COLUMNS_DEFAULT: DetectorColumn[] = [
   'media_type',
   'num_training',
-  'autodetect',
   'last_trained_at',
   'created_at',
   'created_by',
   'readers',
-  'detector_loaded',
 ];
 
 const DATASET_COL_ORDER_KEY = 'vtsearch.dashboard.datasetColumnOrder';
@@ -61,7 +55,6 @@ export const DATASET_COL_META: Record<string, ColMeta> = {
   expires_at: { label: 'Age-Off', title: 'When this dataset ages off and is automatically removed (click to sort)', sortable: true },
   created_by: { label: 'Creator', title: 'User who created this dataset (click to sort)', sortable: true },
   readers: { label: 'Readers', title: 'Users with access to this dataset (click to sort)', sortable: true },
-  loaded: { label: 'Loaded?', title: 'Whether the dataset is currently loaded in memory', sortable: false },
   actions: { label: 'Actions', title: 'Available operations for this dataset', sortable: false },
 };
 
@@ -69,12 +62,10 @@ export const DETECTOR_COL_META: Record<string, ColMeta> = {
   name: { label: 'Name', title: 'Detector display name (click to sort)', sortable: true },
   media_type: { label: 'Type', title: 'Media type this detector operates on (click to sort)', sortable: true },
   num_training: { label: '# Training', title: 'Number of labeled training examples (click to sort)', sortable: true },
-  autodetect: { label: 'Auto-Find?', title: 'Include this detector in your Auto-Find list (click to sort)', sortable: true },
   last_trained_at: { label: 'Last Trained', title: 'When the detector was last trained (click to sort)', sortable: true },
   created_at: { label: 'Created', title: 'When the detector was created (click to sort)', sortable: true },
   created_by: { label: 'Creator', title: 'User who created this detector (click to sort)', sortable: true },
   readers: { label: 'Readers', title: 'Users with access to this detector (click to sort)', sortable: true },
-  detector_loaded: { label: 'Loaded?', title: "Whether the detector's inference data is cached in memory", sortable: false },
   actions: { label: 'Actions', title: 'Available operations for this detector', sortable: false },
 };
 

@@ -448,7 +448,7 @@ should expose a paginated query interface: "give me sort positions X–Y".
 
 **File:** `vtscore/cli.py` (autodetect), `vtsearch/routes/detectors/scoring.py`
 
-`--autodetect` iterates over all autorun detectors and, for each one that
+`--autodetect` iterates over all Auto-Find detectors and, for each one that
 has unresolved labels, resolves+embeds them before scoring all N items.
 Label resolution is serial within each detector.  With 10 detectors each
 having 1 000 unresolved labels at 50 ms/label: **500 s just for resolution**,

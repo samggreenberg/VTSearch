@@ -4,7 +4,7 @@ Settings are split across two tiers:
 
 * **Server tier** - shared, single-file settings used to bring the
   process up: dataset/detector directories, concurrency limits, the
-  autoload-embedder / autorun-detector lists. Stored in
+  autoload-embedder / Auto-Find detector lists. Stored in
   ``data/settings.json`` (path = :data:`SETTINGS_PATH`). Loaded once at
   startup, before any user has logged in.
 * **Per-user tier** - every other key (preferences, autopilot config,
@@ -73,8 +73,8 @@ if TYPE_CHECKING:
     def set_calibration_fraction(value: float) -> None: ...
     def get_audio_playing() -> bool: ...
     def set_audio_playing(value: bool) -> None: ...
-    def get_swipe_animation() -> bool: ...
-    def set_swipe_animation(value: bool) -> None: ...
+    def get_show_animations() -> bool: ...
+    def set_show_animations(value: bool) -> None: ...
     def get_show_metadata() -> bool: ...
     def set_show_metadata(value: bool) -> None: ...
     def get_label_hint_dismissed() -> bool: ...
@@ -253,13 +253,13 @@ _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 #: destructive legacy migration moving them out of the server file (see
 #: :func:`_maybe_migrate_legacy_settings_locked`, which skips these keys).
 _DEFAULT_USER_FALLBACK_KEYS: frozenset[str] = frozenset(
-    {"autorun_detectors", "autofind_exporter", "autofind_exporter_field_values"}
+    {"autofind_detectors", "autofind_exporter", "autofind_exporter_field_values"}
 )
 
 #: Keys excluded from the "defaults" endpoint (infrastructure settings that
 #: should not be reset by the Default button).
 _EXCLUDE_FROM_DEFAULTS = {
-    "autorun_detectors",
+    "autofind_detectors",
     "autofind_exporter",
     "autofind_exporter_field_values",
     "saved_datasets_dir",
@@ -990,8 +990,8 @@ def get_all() -> dict[str, Any]:
     # Auto-Find keys go through their accessors so the default-user read-through
     # (and per-user isolation for named users) is applied consistently: the
     # plain ``result.update(server_copy)`` above would otherwise leak a legacy
-    # server-file autorun list to every named user.
-    result["autorun_detectors"] = get_autorun_detectors()
+    # server-file Auto-Find list to every named user.
+    result["autofind_detectors"] = get_autofind_detectors()
     result["autofind_exporter"] = get_autofind_exporter()  # type: ignore[name-defined]  # noqa: F821
     result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()  # type: ignore[name-defined]  # noqa: F821
     return result
@@ -1049,10 +1049,10 @@ def _make_scalar_accessors(model: type, key: str):
     return getter, setter
 
 
-# Generate accessors for every field in both models. The ``autorun_detectors``
+# Generate accessors for every field in both models. The ``autofind_detectors``
 # key on ServerSettings is excluded because it has hand-written accessors
 # below with extra semantics (dedupe, add/remove/is_).
-_SKIP_AUTOGEN = {"autorun_detectors", "saved_datasets_dir", "detectors_dir"}
+_SKIP_AUTOGEN = {"autofind_detectors", "saved_datasets_dir", "detectors_dir"}
 _PER_SIDE_KEYS = {
     "view_mode_left",
     "view_mode_right",
@@ -1414,26 +1414,26 @@ def apply_user_solo_embedder_per_media_type(value: dict[str, str] | None) -> Non
     set_solo_embedder_per_media_type(cleaned)  # type: ignore[name-defined]  # autogen'd accessor
 
 
-def get_autorun_detectors() -> list[str]:
-    """Return the current user's list of detector names flagged for autorun.
+def get_autofind_detectors() -> list[str]:
+    """Return the current user's list of detector names flagged for Auto-Find.
 
     Each name maps to a JSON file under ``data/detectors/``; scoring resolves
     the labelset's origins, re-embeds, trains an MLP, and applies it to the
     loaded dataset. Per-user (with a read-through to the server file for the
     built-in "default" user; see :func:`_read_value`).
     """
-    raw = _read_value("autorun_detectors")
+    raw = _read_value("autofind_detectors")
     return list(raw) if isinstance(raw, list) else []
 
 
-def set_autorun_detectors(value: list[str]) -> None:
-    """Set and persist the current user's full autorun detector list."""
+def set_autofind_detectors(value: list[str]) -> None:
+    """Set and persist the current user's full Auto-Find detector list."""
     deduped = list(dict.fromkeys(value))  # dedupe, preserve order
-    _write_value("autorun_detectors", deduped)
+    _write_value("autofind_detectors", deduped)
 
 
-def add_autorun_detector(name: str) -> None:
-    """Add a detector name to the current user's autorun list (idempotent).
+def add_autofind_detector(name: str) -> None:
+    """Add a detector name to the current user's Auto-Find list (idempotent).
 
     Atomic per-user read-modify-write: ``mutate_user`` re-reads the on-disk
     file under the cross-process lock, so a concurrent writer's entry is
@@ -1441,35 +1441,35 @@ def add_autorun_detector(name: str) -> None:
     (including the default-user read-through) for the first write, before the
     user has any entry of its own.
     """
-    seed = get_autorun_detectors()
+    seed = get_autofind_detectors()
 
     def _add(cache: dict[str, Any]) -> None:
-        base = cache["autorun_detectors"] if "autorun_detectors" in cache else seed
-        cache["autorun_detectors"] = list(dict.fromkeys([*base, name]))
+        base = cache["autofind_detectors"] if "autofind_detectors" in cache else seed
+        cache["autofind_detectors"] = list(dict.fromkeys([*base, name]))
 
     mutate_user(_add)
 
 
-def remove_autorun_detector(name: str) -> bool:
-    """Remove a detector name from the current user's autorun list.
+def remove_autofind_detector(name: str) -> bool:
+    """Remove a detector name from the current user's Auto-Find list.
 
     Returns ``True`` if the name was present (pre-read). Atomic per-user RMW,
-    same merge semantics as :func:`add_autorun_detector`.
+    same merge semantics as :func:`add_autofind_detector`.
     """
-    seed = get_autorun_detectors()
+    seed = get_autofind_detectors()
     found = name in seed
 
     def _remove(cache: dict[str, Any]) -> None:
-        base = cache["autorun_detectors"] if "autorun_detectors" in cache else seed
-        cache["autorun_detectors"] = [n for n in base if n != name]
+        base = cache["autofind_detectors"] if "autofind_detectors" in cache else seed
+        cache["autofind_detectors"] = [n for n in base if n != name]
 
     mutate_user(_remove)
     return found
 
 
-def is_autorun_detector(name: str) -> bool:
-    """Check whether a detector name is in the autorun list."""
-    return name in get_autorun_detectors()
+def is_autofind_detector(name: str) -> bool:
+    """Check whether a detector name is in the Auto-Find list."""
+    return name in get_autofind_detectors()
 
 
 # -------------------------------------------------------------------

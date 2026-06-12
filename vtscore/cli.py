@@ -1,7 +1,7 @@
 """Command-line interface utilities for VTSearch.
 
 The only CLI workflow is autodetect: load a dataset (from pickle or via an
-importer), score it against the detectors flagged for autorun in the settings
+importer), score it against the detectors flagged for Auto-Find in the settings
 file, and export the results.
 """
 
@@ -27,7 +27,7 @@ def _list_importer_names() -> list[str]:
     return [imp.name for imp in list_importers()]
 
 
-def _summarize_autorun_detectors(detector_names: list[str]) -> list[dict[str, Any]]:
+def _summarize_autofind_detectors(detector_names: list[str]) -> list[dict[str, Any]]:
     """Read each named detector's on-disk JSON and return a small summary.
 
     Used by ``--dry-run`` to describe which detectors would be trained and
@@ -83,7 +83,7 @@ def _print_dry_run_plan(
     *,
     source_description: dict[str, Any],
     settings_path: str | None,
-    autorun_detectors: list[str],
+    autofind_detectors: list[str],
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
 ) -> None:
@@ -95,11 +95,11 @@ def _print_dry_run_plan(
     print("", flush=True)
 
     print(f"Settings: {settings_path or '(default: data/settings.json)'}", flush=True)
-    if not autorun_detectors:
-        print("Autorun detectors: (none - pipeline would abort with an error)", flush=True)
+    if not autofind_detectors:
+        print("Auto-Find detectors: (none - pipeline would abort with an error)", flush=True)
     else:
-        summaries = _summarize_autorun_detectors(autorun_detectors)
-        print(f"Autorun detectors ({len(summaries)}):", flush=True)
+        summaries = _summarize_autofind_detectors(autofind_detectors)
+        print(f"Auto-Find detectors ({len(summaries)}):", flush=True)
         for s in summaries:
             if s.get("missing"):
                 print(f"  - {s['name']}  [MISSING - {s['path']}]", flush=True)
@@ -493,7 +493,7 @@ def _validate_dry_run_exporter(exporter_name: str, exporter_field_values: dict[s
 def _emit_dry_run_plan(
     source_description: dict[str, Any],
     settings_path: str | None,
-    autorun_detectors: list[str],
+    autofind_detectors: list[str],
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
 ) -> None:
@@ -503,7 +503,7 @@ def _emit_dry_run_plan(
             "dry_run_plan",
             source=source_description,
             settings_path=settings_path,
-            autorun_detectors=_summarize_autorun_detectors(autorun_detectors),
+            autofind_detectors=_summarize_autofind_detectors(autofind_detectors),
             exporter=exporter_name,
             exporter_field_values=exporter_field_values or {},
         )
@@ -511,7 +511,7 @@ def _emit_dry_run_plan(
         _print_dry_run_plan(
             source_description=source_description,
             settings_path=settings_path,
-            autorun_detectors=autorun_detectors,
+            autofind_detectors=autofind_detectors,
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
         )
@@ -520,7 +520,7 @@ def _emit_dry_run_plan(
 def _run_dry_run(
     source_description: dict[str, Any] | None,
     settings_path: str | None,
-    autorun_detectors: list[str],
+    autofind_detectors: list[str],
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
 ) -> None:
@@ -529,29 +529,29 @@ def _run_dry_run(
     _validate_dry_run_source(sd)
     if exporter_name:
         _validate_dry_run_exporter(exporter_name, exporter_field_values)
-    _emit_dry_run_plan(sd, settings_path, autorun_detectors, exporter_name, exporter_field_values)
+    _emit_dry_run_plan(sd, settings_path, autofind_detectors, exporter_name, exporter_field_values)
 
 
 def _train_detectors_for_first_chunk(
     chunk_medias: dict[int, dict[str, Any]],
     media_type: str,
     override_detectors: list[str] | None,
-    autorun_detectors: list[str],
+    autofind_detectors: list[str],
 ) -> dict[str, dict[str, Any]]:
-    """Train each autorun (or override) detector once against the first chunk.
+    """Train each Auto-Find (or override) detector once against the first chunk.
 
     Raises :class:`ValueError` when no detector applies to *media_type* -
     that's almost always a settings-file misconfiguration the caller wants
     surfaced immediately.
     """
-    detector_names = list(override_detectors) if override_detectors is not None else list(autorun_detectors)
+    detector_names = list(override_detectors) if override_detectors is not None else list(autofind_detectors)
     detector_mlps: dict[str, dict[str, Any]] = (
         _load_and_train_detectors(detector_names, media_type, chunk_medias) if detector_names else {}
     )
     if not detector_mlps:
         raise ValueError(
-            f"No autorun detectors found for media type: {media_type}. "
-            "Add detectors to the settings file's autorun_detectors list."
+            f"No Auto-Find detectors found for media type: {media_type}. "
+            "Add detectors to the settings file's autofind_detectors list."
         )
     return detector_mlps
 
@@ -599,7 +599,7 @@ def _run_live_pipeline(
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
     override_detectors: list[str] | None,
-    autorun_detectors: list[str],
+    autofind_detectors: list[str],
     empty_error: str,
 ) -> None:
     """Iterate *media_source*, score each chunk, and run the exporter on the merged results."""
@@ -619,7 +619,7 @@ def _run_live_pipeline(
         if media_type is None:
             media_type = _detect_media_type(chunk_medias)
             detector_mlps = _train_detectors_for_first_chunk(
-                chunk_medias, media_type, override_detectors, autorun_detectors
+                chunk_medias, media_type, override_detectors, autofind_detectors
             )
 
         if detector_mlps:
@@ -692,7 +692,7 @@ def _run_streaming_pipeline(
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
     override_detectors: list[str] | None,
-    autorun_detectors: list[str],
+    autofind_detectors: list[str],
     keep_negatives: bool,
     empty_error: str,
 ) -> None:
@@ -729,7 +729,7 @@ def _run_streaming_pipeline(
 
     apply_custom_metadata_md5(first_chunk)
     media_type = _detect_media_type(first_chunk)
-    detector_mlps = _train_detectors_for_first_chunk(first_chunk, media_type, override_detectors, autorun_detectors)
+    detector_mlps = _train_detectors_for_first_chunk(first_chunk, media_type, override_detectors, autofind_detectors)
 
     header = {
         "media_type": media_type,
@@ -769,7 +769,7 @@ def _run_pipeline(
     the iterator, so no importer runs and no embedding or scoring occurs.
 
     When *override_detectors* is supplied, that list of detector names is
-    used in place of the settings file's ``autorun_detectors``.  The pipeline
+    used in place of the settings file's ``autofind_detectors``.  The pipeline
     YAML loader uses this to declare detectors inline without mutating the
     settings file on disk.
     """
@@ -779,7 +779,7 @@ def _run_pipeline(
     # redirect through the same call) so this function - and the helpers
     # below - never import ``vtsearch.settings`` directly.
     config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
-    autorun_detectors = list(config.autorun_detectors)
+    autofind_detectors = list(config.autofind_detectors)
 
     # When no explicit ``--exporter`` was given, fall back to the Auto-Find
     # results exporter configured in settings (its per-exporter field values
@@ -794,7 +794,7 @@ def _run_pipeline(
         _run_dry_run(
             source_description,
             settings_path,
-            autorun_detectors,
+            autofind_detectors,
             exporter_name,
             exporter_field_values,
         )
@@ -806,7 +806,7 @@ def _run_pipeline(
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
             override_detectors=override_detectors,
-            autorun_detectors=autorun_detectors,
+            autofind_detectors=autofind_detectors,
             keep_negatives=keep_negatives,
             empty_error=empty_error,
         )
@@ -817,7 +817,7 @@ def _run_pipeline(
         exporter_name=exporter_name,
         exporter_field_values=exporter_field_values,
         override_detectors=override_detectors,
-        autorun_detectors=autorun_detectors,
+        autofind_detectors=autofind_detectors,
         empty_error=empty_error,
     )
 
@@ -830,7 +830,7 @@ def autodetect_main(
     *,
     dry_run: bool = False,
 ) -> None:
-    """CLI entry point: run autodetect with all autorun detectors."""
+    """CLI entry point: run autodetect with all Auto-Find detectors."""
     try:
         _run_pipeline(
             _load_pickle_whole(dataset_path) if not dry_run else iter(()),

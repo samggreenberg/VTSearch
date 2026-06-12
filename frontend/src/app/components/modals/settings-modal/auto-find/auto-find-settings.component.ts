@@ -19,11 +19,11 @@ import { DetectorsRegistryApiService } from '../../../../services/detectors-regi
 import { ExportersApiService } from '../../../../services/exporters-api.service';
 import type { ExporterEntry } from '../../../../generated/api-client/models/exporter-entry';
 
-/** One registered detector, narrowed to what the autorun checklist needs. */
-interface AutorunDetectorEntry {
+/** One registered detector, narrowed to what the Auto-Find checklist needs. */
+interface AutofindDetectorEntry {
   id: string;
   name: string;
-  autorun: boolean;
+  autofind: boolean;
   media_type: string;
 }
 
@@ -39,10 +39,10 @@ export interface AutoFindExporterChange {
  *
  * Two sections:
  *  1. **Auto-Find detectors** - an editable checklist of every registered
- *     detector. Each checkbox drives the existing per-detector autorun toggle
- *     (`PUT /api/detectors/registry/<id>/autorun`), which persists into the
- *     shared `autorun_detectors` list. (Moved here from the read-only Server
- *     tab.)
+ *     detector. Each checkbox drives the per-detector Auto-Find toggle
+ *     (`PUT /api/detectors/registry/<id>/autofind`), which persists into the
+ *     caller's per-user `autofind_detectors` list. (Moved here from the
+ *     read-only Server tab.)
  *  2. **Results Exporter** - a tab strip with one tab per pickable exporter
  *     (plus "None"). The active tab is the exporter that runs automatically
  *     after an Auto-Find; its tab body renders that exporter's own fields.
@@ -67,7 +67,7 @@ export class AutoFindSettingsComponent implements OnInit, OnChanges, OnDestroy {
    *  persist whenever the user changes the exporter or any of its fields. */
   @Output() exporterChange = new EventEmitter<AutoFindExporterChange>();
 
-  detectors: AutorunDetectorEntry[] = [];
+  detectors: AutofindDetectorEntry[] = [];
   exporters: ExporterEntry[] = [];
   loadingDetectors = true;
   loadingExporters = true;
@@ -108,7 +108,7 @@ export class AutoFindSettingsComponent implements OnInit, OnChanges, OnDestroy {
           this.detectors = (res.detectors || []).map((d) => ({
             id: String((d as Record<string, unknown>)['id'] ?? ''),
             name: String((d as Record<string, unknown>)['name'] ?? ''),
-            autorun: Boolean((d as Record<string, unknown>)['autorun']),
+            autofind: Boolean((d as Record<string, unknown>)['autofind']),
             media_type: String((d as Record<string, unknown>)['media_type'] ?? ''),
           }));
           this.loadingDetectors = false;
@@ -140,19 +140,19 @@ export class AutoFindSettingsComponent implements OnInit, OnChanges, OnDestroy {
 
   // --- Auto-Find detectors -------------------------------------------------
 
-  /** Toggle a detector's autorun flag. Persists immediately via the existing
-   *  registry endpoint; the shared ``autorun_detectors`` list is the backing
-   *  store, so this affects every user (autorun is a deployment-level knob). */
-  toggleDetector(detector: AutorunDetectorEntry, checked: boolean): void {
-    const prev = detector.autorun;
-    detector.autorun = checked;
+  /** Toggle a detector's Auto-Find flag. Persists immediately via the
+   *  registry endpoint into the calling user's own ``autofind_detectors``
+   *  list (each user curates their own Auto-Find list). */
+  toggleDetector(detector: AutofindDetectorEntry, checked: boolean): void {
+    const prev = detector.autofind;
+    detector.autofind = checked;
     this.detectorsRegistryApi
-      .setAutorun(detector.id, checked)
+      .setAutofind(detector.id, checked)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         error: () => {
-          detector.autorun = prev; // revert on failure
-          this.detectorError = `Failed to update autorun for "${detector.name}"`;
+          detector.autofind = prev; // revert on failure
+          this.detectorError = `Failed to update Auto-Find for "${detector.name}"`;
         },
       });
   }

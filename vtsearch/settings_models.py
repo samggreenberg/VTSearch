@@ -179,7 +179,11 @@ class UserSettings(BaseModel):
     calibrate_count: Annotated[int, _clamp(1, 100)] = DEFAULT_CALIBRATE_COUNT
     calibration_fraction: Annotated[float, _clamp(0.0, 1.0)] = 0.5
     audio_playing: bool = True
-    swipe_animation: bool = True
+    # Master switch for decorative motion (vote swipe, icon spins/waggles/tilts,
+    # toast/banner slide-ins, smooth scrolling, projection-browser zoom tweens).
+    # When False the frontend mirrors the OS "reduce motion" behavior. See the
+    # "Show Animations" checkbox in the appearance settings.
+    show_animations: bool = True
     show_metadata: bool = True
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session
@@ -209,15 +213,15 @@ class UserSettings(BaseModel):
     # deployments keep working (see ``_DEFAULT_USER_FALLBACK_KEYS`` and the
     # read-through in ``vtsearch.settings._read_value``).
     #
-    # - ``autorun_detectors``: detector names flagged for autorun (each maps to
-    #   a JSON file under ``data/detectors/``).
+    # - ``autofind_detectors``: detector names flagged for Auto-Find (each maps
+    #   to a JSON file under ``data/detectors/``).
     # - ``autofind_exporter``: results-exporter name run after an Auto-Find
     #   (``""`` = no auto-export; CLI then falls back to the ``gui`` exporter).
     # - ``autofind_exporter_field_values``: per-exporter field values
     #   (``{exporter_name: {field_key: value}}``) so switching the picker
     #   preserves each exporter's configuration.
     # See ``docs/plans/auto-find-settings-tab.md``.
-    autorun_detectors: list[str] = Field(default_factory=list)
+    autofind_detectors: list[str] = Field(default_factory=list)
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)
 
@@ -270,17 +274,17 @@ class UserSettings(BaseModel):
     focus_mode_left: dict[str, FocusMode] = Field(default_factory=dict)
     focus_mode_right: dict[str, FocusMode] = Field(default_factory=dict)
 
-    # VTSBrowse bin-popup display prefs, per media type. The right-click bin
-    # popup renders the bin's members like a mini Find panel with its own
-    # List/Grid + thumbnail-size controls, independent of the left/right
-    # panels. Empty entries fall back on the frontend to grid + ``M``.
-    # Driven by the popup's own view-controls AND the Settings → Browser tab;
-    # both write the same maps keyed by the active dataset's media type, so
-    # tuning the popup while browsing one bin becomes the default for every
-    # future popup of that media type. Unlike ``view_mode_{left,right}`` these
-    # are plain per-media-type dicts (no per-side machinery): the popup is a
-    # single, third context, so it uses the generic Pydantic-driven accessors.
-    view_mode_popup: dict[str, ViewMode] = Field(default_factory=dict)
+    # VTSBrowse bin-popup thumbnail size, per media type. The right-click bin
+    # popup renders the bin's members as a thumbnail grid (always grid; there is
+    # no list mode) beside a large hover-preview pane, with its own size control
+    # independent of the left/right panels. Empty entries fall back on the
+    # frontend to ``M``. Driven by the popup's own size buttons AND the
+    # Settings → Browser tab; both write the same map keyed by the active
+    # dataset's media type, so tuning the popup while browsing one bin becomes
+    # the default for every future popup of that media type. Unlike
+    # ``grid_icon_size_{left,right}`` this is a plain per-media-type dict (no
+    # per-side machinery): the popup is a single, third context, so it uses the
+    # generic Pydantic-driven accessors.
     grid_icon_size_popup: dict[str, Annotated[GridIconSize, BeforeValidator(_upper)]] = Field(default_factory=dict)
     panel_pct_left: dict[str, int] = Field(default_factory=dict)
     panel_pct_right: dict[str, int] = Field(default_factory=dict)
