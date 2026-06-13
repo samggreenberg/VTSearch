@@ -143,7 +143,7 @@ sync by hand.
 
 ## Theme D — Schema/type drift across boundaries
 
-The same data shapes are independently re-declared in up to four type
+The same data shapes are independently redeclared in up to four type
 systems with nothing enforcing agreement:
 
 - Backend: **Pydantic** (`settings_models.py`) + **Marshmallow**
