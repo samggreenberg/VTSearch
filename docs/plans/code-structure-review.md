@@ -224,9 +224,19 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
 
 ## What shipped
 
-_(nothing yet)_
+- **Theme A, slice 1 (A1):** the cold-path detector model resolution/training
+  logic moved out of the `find-label` / `auto-detect` route handler into
+  `vtscore/detectors/model_loading.py` (`resolve_or_train_detector`). It had
+  no Flask/request-context dependency; the route is now request↔library glue.
+  Full suite green.
 
 ## Open follow-ups
 
-All themes above except the slice of Theme A currently in progress.
+- **Theme A, remaining:** extract `_maybe_start_label_reembed` from
+  `detectors/registry.py` (→ `vtscore.detectors.embedder_sync`), pull the
+  learned-sort orchestration helpers out of `routes/sorting.py`, decouple
+  `vtscore/detectors/workflow.py` from `flask.g` (A2 — use the passed-in
+  `det_ctx` directly instead of the proxy/`override_detector_context`
+  machinery), and merge the two training pipelines (A3).
+- **Themes B–F:** see the prioritized backlog above; none started.
 </content>
