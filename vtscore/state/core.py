@@ -17,7 +17,7 @@ The app-side facade
 Module-level convenience names (``medias``, ``good_votes``, …) used to
 live here as proxy objects, but they belong to the app layer; the
 library never imports them.  They now live in
-:mod:`vtsearch.shim.state_proxies` and are re-exported from
+:mod:`vtsearch.state_proxies` and are re-exported from
 :mod:`vtsearch.state` so existing app-tier imports continue to work.
 See Phase 3 of ``../docs/architecture.md``.
 """
