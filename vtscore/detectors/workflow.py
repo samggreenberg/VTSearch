@@ -44,14 +44,11 @@ def apply_and_retrain(  # noqa: C901
     Returns ``(resolved_count, trained_bool)``.
     """
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
-    from vtsearch.state import (
+    from vtscore.state import (
         apply_label,
-        bad_votes,
         build_media_lookup,
-        good_votes,
         resolve_media_ids,
         snapshot_medias,
-        vote_region_boxes,
     )
     from vtscore.state.core import _state_lock, override_detector_context
 
@@ -79,8 +76,8 @@ def apply_and_retrain(  # noqa: C901
         # 2) Build the *proposed* vote dicts (current + new resolutions)
         #    for a dry-run training pass.  Same-side dedup is automatic
         #    via dict; new opposite-side labels supersede the old ones.
-        proposed_good = dict(good_votes)
-        proposed_bad = dict(bad_votes)
+        proposed_good = dict(det_ctx.good_votes)
+        proposed_bad = dict(det_ctx.bad_votes)
         for cid, label in resolved_pairs:
             if label == "good":
                 proposed_bad.pop(cid, None)
@@ -96,7 +93,7 @@ def apply_and_retrain(  # noqa: C901
         new_threshold = 0.5
         if proposed_good and proposed_bad:
             from vtscore.detectors.training import train_and_score
-            from vtsearch.state import (
+            from vtscore.state import (
                 get_calibrate_count,
                 get_calibration_fraction,
                 get_inclusion,
@@ -111,7 +108,7 @@ def apply_and_retrain(  # noqa: C901
                 safe_thresholds=get_safe_thresholds(),
                 calibrate_count=get_calibrate_count(),
                 calibration_fraction=get_calibration_fraction(),
-                vote_region_boxes=dict(vote_region_boxes),
+                vote_region_boxes=dict(det_ctx.vote_region_boxes),
                 det_ctx=det_ctx,
             )
 
@@ -162,7 +159,7 @@ def apply_and_retrain(  # noqa: C901
             det_ctx.model = new_model
             det_ctx.threshold = new_threshold
             training = {}
-            for cid in list(good_votes) + list(bad_votes):
+            for cid in list(det_ctx.good_votes) + list(det_ctx.bad_votes):
                 if cid in snap:
                     training[cid] = snap[cid]
             det_ctx.training_medias = training
