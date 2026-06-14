@@ -1,9 +1,11 @@
 # Code-structure review
 
-**Status:** Review complete; acting on **Theme A** (the `vtscore` ↔ `vtsearch`
-boundary) first. The other themes are scoped below as a prioritized backlog
-for later passes. See "What shipped" + "Open follow-ups" at the bottom for
-live status.
+**Status:** Review complete. **Theme A** (the `vtscore` ↔ `vtsearch`
+boundary) is shipped: A1 (fat-controller extractions), A2 (workflow
+de-coupling), and A3 (training-pipeline merge) all landed. The other themes
+are scoped below as a prioritized backlog for later passes; the broader
+inverse-leak sweep is the one remaining Theme A item. See "What shipped" +
+"Open follow-ups" at the bottom for live status.
 
 This is a systematic, repo-wide structural review: where have design
 decisions that were right at small scale been outgrown, and what is worth
@@ -208,7 +210,8 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
 ## Prioritized backlog
 
 1. **Theme A** — extract fat-controller logic into `vtscore`; de-couple
-   `workflow.py` from `flask.g`. (In progress.)
+   `workflow.py` from `flask.g`; merge the two training pipelines. (Shipped;
+   only the broader inverse-leak sweep remains — see Open follow-ups.)
 2. **Theme C quick wins** — settings `SettingSpec` registry; `_ClapBase`
    mixin; per-side settings factory.
 3. **Theme E** — "shim" rename; `labelset_ops` facade.
@@ -259,13 +262,21 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
   settings/votes, short-circuits on the signature cache, and owns only the
   job-result envelope. `_validate_learned_sort_inputs` stays in the route
   because it calls `abort()` (a 400 request-layer concern). Full suite green.
+- **Theme A, slice 5 (A3):** the two detector training pipelines now share a
+  single core. `vtscore/detectors/training.py` grew `_train_and_score_xy`,
+  which owns the guard → threshold → train → score → format tail; both
+  `train_and_score` (vote-driven) and
+  `labelset_training.labelset_train_and_score` (labelset-driven) now just
+  assemble their own `(X_list, y_list)` (`_build_vote_xy` /
+  `populate_label_embeddings` + `build_xy_from_labelset`) and defer to it. The
+  labelset path thereby picks up the vote path's region-aware scoring
+  (`_score_all_media`) and NaN sanitisation it previously lacked, and the
+  duplicated patch-region pooling (`_training_vec_for_vote`'s inline pooling vs
+  `labelset_training._pool_box_from_media`) collapsed into one
+  `pool_box_from_media` helper in `training.py`. Full suite green.
 
 ## Open follow-ups
 
-- **Theme A, remaining:** merge the two training pipelines (A3) —
-  `vtscore/detectors/training.py` and `labelset_training.py` both implement
-  resolve → build X/y → threshold → train → score; consolidate behind a shared
-  training-data-builder seam and one parameterized scoring function.
 - **Theme A, broader inverse-leak sweep (not in original A2 scope):** ~15 other
   `vtscore/` modules still import from `vtsearch` (e.g.
   `detectors/label_sync.py`, `detectors/training.py`, `state/votes.py`,
