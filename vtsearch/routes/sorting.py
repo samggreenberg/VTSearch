@@ -32,8 +32,6 @@ from vtsearch.routes._shared import (
 
 from vtscore.config import DATA_DIR
 import vtscore.security.path_validation as _paths
-from vtscore.detectors.labeling_progress import inject_live_model
-from vtscore.detectors.training import train_and_score
 from vtscore.embedding import embed_text_query
 from vtsearch.schemas.sorting import (
     DiversityTreeNextResponseSchema,
@@ -72,7 +70,6 @@ from vtsearch.state import (
     set_inclusion,
     set_safe_thresholds,
     snapshot_medias,
-    update_learned_scores,
     vote_region_boxes,
 )
 from vtscore.concurrency.progress import update_sort_progress
@@ -231,26 +228,6 @@ def _learned_sort_done_payload(job) -> dict:
     }
 
 
-def _resolve_active_labelset(det_ctx):
-    """Resolve the labelset for the active detector → (labelset, media_type)."""
-    from vtscore.datasets.labelset import LabelSet
-    from vtscore.detectors.registry import get_detector
-    from vtscore.detectors.store import _detector_path, _read_detector
-    from vtscore.state.core import _empty_detector_context
-
-    if det_ctx is _empty_detector_context or not det_ctx.detector_id:
-        return None, ""
-    if det_ctx.cached_labelset is not None:
-        return det_ctx.cached_labelset, det_ctx.cached_labelset_media_type
-    entry = get_detector(det_ctx.detector_id)
-    if not entry or not entry.get("name"):
-        return None, ""
-    det_data = _read_detector(_detector_path(entry["name"]))
-    if not det_data:
-        return None, ""
-    return LabelSet.from_dict(det_data.get("labelset") or {}), det_data.get("media_type", "") or ""
-
-
 def _validate_learned_sort_inputs(labelset, good, bad) -> None:
     if labelset is not None:
         good_count = sum(1 for el in labelset.elements if el.label == "good")
@@ -260,100 +237,6 @@ def _validate_learned_sort_inputs(labelset, good, bad) -> None:
         return
     if not good or not bad:
         abort(400, message="need at least one good and one bad vote")
-
-
-def _resolve_labelset_local_state(labelset, snap):
-    """Resolve labelset elements to local cids using the dataset snapshot.
-
-    Returns (local_good, local_bad, training_medias, has_cross_dataset).
-    All are None when ``labelset`` is None (the non-labelset path).
-    """
-    if labelset is None:
-        return None, None, None, False
-
-    from vtsearch.state import build_media_lookup, resolve_media_ids
-
-    origin_lookup, md5_lookup, name_lookup = build_media_lookup(snap)
-    local_good: set[int] = set()
-    local_bad: set[int] = set()
-    training_medias: dict[int, dict] = {}
-    has_cross_dataset = False
-    for el in labelset.elements:
-        if el.label not in ("good", "bad"):
-            continue
-        cids = resolve_media_ids(el.to_dict(), origin_lookup, md5_lookup, name_lookup)
-        if not cids:
-            has_cross_dataset = True
-            continue
-        target = local_good if el.label == "good" else local_bad
-        for cid in cids:
-            target.add(cid)
-            if cid in snap:
-                training_medias[cid] = snap[cid]
-    return local_good, local_bad, training_medias, has_cross_dataset
-
-
-def _model_matches_local_votes(labelset, has_cross_dataset, local_good, local_bad, good, bad) -> bool:
-    """Decide whether the trained model maps cleanly onto current-dataset votes.
-
-    The progress cache is keyed on local cids, so we only inject when the
-    training set is fully representable there; otherwise we'd return a
-    cross-dataset model on a local-only replay.
-    """
-    if labelset is None:
-        return True
-    return not has_cross_dataset and local_good == set(good) and local_bad == set(bad)
-
-
-def _update_det_ctx_with_trained_model(det_ctx, model, threshold, labelset, training_medias, snap, good, bad) -> None:
-    det_ctx.model = model
-    det_ctx.threshold = threshold
-    if labelset is not None:
-        det_ctx.training_medias = training_medias or {}
-    else:
-        training = {}
-        for cid in list(good) + list(bad):
-            if cid in snap:
-                training[cid] = snap[cid]
-        det_ctx.training_medias = training
-    if snap:
-        first = next(iter(snap.values()), {})
-        det_ctx.embedder = first.get("embedder", "")
-        det_ctx.media_type = first.get("media_type", "")
-
-
-def _build_learned_sort_signature(
-    *,
-    det_ctx,
-    ds_ctx,
-    snap,
-    labelset,
-    good,
-    bad,
-    region_boxes_snapshot,
-    inclusion_value,
-    safe_thresholds_value,
-    calibrate_count_value,
-    calibration_fraction_value,
-):
-    if labelset is not None:
-        labels_sig = tuple(sorted((el.label, _stable_element_id_for_sig(el)) for el in labelset.elements))
-    else:
-        labels_sig = (
-            ("good", tuple(sorted(good))),
-            ("bad", tuple(sorted(bad))),
-            ("regions", tuple(sorted(region_boxes_snapshot.items()))),
-        )
-    return (
-        det_ctx.detector_id,
-        ds_ctx.dataset_id,
-        tuple(sorted(snap.keys())),
-        labels_sig,
-        inclusion_value,
-        safe_thresholds_value,
-        calibrate_count_value,
-        calibration_fraction_value,
-    )
 
 
 @sorting_bp.route("/api/learned-sort", methods=["POST"])
@@ -377,15 +260,13 @@ def learned_sort(body: dict):
     Tests can pass ``{"wait": true}`` in the body to block until the job
     completes and receive the result inline.  The frontend leaves it false.
     """
-    from vtscore.detectors.labelset_training import labelset_train_and_score
     from vtscore.concurrency.async_jobs import learned_sort_jobs
-    from vtscore.state.core import (
-        _empty_detector_context,
-        get_active_context,
-        get_active_detector_context,
-        thread_dataset_context,
-        thread_detector_context,
+    from vtscore.detectors.learned_sort import (
+        build_learned_sort_signature,
+        resolve_active_labelset,
+        run_learned_sort,
     )
+    from vtscore.state.core import get_active_context, get_active_detector_context
 
     wait = body["wait"]
 
@@ -393,7 +274,7 @@ def learned_sort(body: dict):
 
     det_ctx = get_active_detector_context()
     ds_ctx = get_active_context()
-    labelset, det_media_type = _resolve_active_labelset(det_ctx)
+    labelset, det_media_type = resolve_active_labelset(det_ctx)
 
     _validate_learned_sort_inputs(labelset, good_votes, bad_votes)
 
@@ -403,7 +284,7 @@ def learned_sort(body: dict):
     calibration_fraction_value = get_calibration_fraction()
     region_boxes_snapshot = dict(vote_region_boxes)
 
-    signature = _build_learned_sort_signature(
+    signature = build_learned_sort_signature(
         det_ctx=det_ctx,
         ds_ctx=ds_ctx,
         snap=snap,
@@ -421,52 +302,25 @@ def learned_sort(body: dict):
     if cached is not None:
         return _learned_sort_done_payload(cached)
 
-    # _run is a closure over the resolved inputs above so we can pass it
-    # straight to the job manager without threading a 10-arg dataclass
-    # through the abstraction.  Its complexity is dominated by sequential
-    # state updates rather than nested branching; splitting it further
-    # would just smear cohesive logic across helpers.
-    def _run(job):  # noqa: C901
-        with thread_dataset_context(ds_ctx), thread_detector_context(det_ctx):
-            if labelset is not None:
-                results, threshold, model = labelset_train_and_score(
-                    det_ctx,
-                    labelset,
-                    media_type=det_media_type,
-                    clips_dict=snap,
-                    inclusion_value=inclusion_value,
-                    safe_thresholds=safe_thresholds_value,
-                    calibrate_count=calibrate_count_value,
-                    calibration_fraction=calibration_fraction_value,
-                )
-            else:
-                results, threshold, model = train_and_score(
-                    snap,
-                    dict(good_votes),
-                    dict(bad_votes),
-                    inclusion_value,
-                    safe_thresholds=safe_thresholds_value,
-                    calibrate_count=calibrate_count_value,
-                    calibration_fraction=calibration_fraction_value,
-                    vote_region_boxes=region_boxes_snapshot,
-                    det_ctx=det_ctx,
-                )
-
-            update_learned_scores({r["id"]: r["score"] for r in results})
-
-            local_good, local_bad, training_medias, has_cross_dataset = _resolve_labelset_local_state(labelset, snap)
-
-            if model is not None and _model_matches_local_votes(
-                labelset, has_cross_dataset, local_good, local_bad, good_votes, bad_votes
-            ):
-                inject_live_model(good_votes, bad_votes, model, threshold)
-
-            if det_ctx is not _empty_detector_context and model is not None:
-                _update_det_ctx_with_trained_model(
-                    det_ctx, model, threshold, labelset, training_medias, snap, good_votes, bad_votes
-                )
-
-            job.result = {"results": results, "threshold": round(threshold, 4)}
+    # _run closes over the resolved inputs and delegates the train → score →
+    # reconcile pipeline to the library; the route only owns the job-result
+    # envelope.
+    def _run(job):
+        results, threshold = run_learned_sort(
+            det_ctx=det_ctx,
+            ds_ctx=ds_ctx,
+            snap=snap,
+            labelset=labelset,
+            det_media_type=det_media_type,
+            good=good_votes,
+            bad=bad_votes,
+            region_boxes_snapshot=region_boxes_snapshot,
+            inclusion_value=inclusion_value,
+            safe_thresholds_value=safe_thresholds_value,
+            calibrate_count_value=calibrate_count_value,
+            calibration_fraction_value=calibration_fraction_value,
+        )
+        job.result = {"results": results, "threshold": round(threshold, 4)}
 
     job = learned_sort_jobs.start(
         signature,
@@ -483,13 +337,6 @@ def learned_sort(body: dict):
             return _learned_sort_done_payload(job)
 
     return {"job_id": job.job_id, "status": "running", "current": 0, "total": 1}
-
-
-def _stable_element_id_for_sig(el) -> str:
-    """Return a stable identifier for a labelset element for signature use."""
-    from vtscore.detectors.labelset_elements import stable_element_id
-
-    return stable_element_id(el)
 
 
 @sorting_bp.route("/api/learned-sort/result", methods=["GET"])
