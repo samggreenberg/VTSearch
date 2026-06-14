@@ -239,13 +239,22 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
   `sync_labels_to_loaded_detector` resolve to `det_ctx` regardless of caller,
   leaving it self-contained for routes, background threads, and tests alike.
   The only remaining `vtsearch` reference in the file is gone; full suite green.
+- **Theme A, slice 3 (A1):** the label re-embed orchestration
+  (`_maybe_start_label_reembed` plus its `_active_dataset_embedder_name` /
+  `_embedder_display_name` helpers) moved out of
+  `vtsearch/routes/detectors/registry.py` into a new Flask-free
+  `vtscore/detectors/embedder_sync.py` (`maybe_start_label_reembed`). Its one
+  app-tier dependency — the `vtsearch.threading.spawn` worker that replays the
+  request's user thread-local — is injected by the route, so the module stays
+  import-clean. The `registry.py` load route is now request↔library glue. Full
+  suite green.
 
 ## Open follow-ups
 
-- **Theme A, remaining:** extract `_maybe_start_label_reembed` from
-  `detectors/registry.py` (→ `vtscore.detectors.embedder_sync`), pull the
-  learned-sort orchestration helpers out of `routes/sorting.py`, and merge the
-  two training pipelines (A3).
+- **Theme A, remaining:** pull the learned-sort orchestration helpers out of
+  `routes/sorting.py` (`_resolve_labelset_local_state`,
+  `_model_matches_local_votes`, `_update_det_ctx_with_trained_model`,
+  `_build_learned_sort_signature`), and merge the two training pipelines (A3).
 - **Theme A, broader inverse-leak sweep (not in original A2 scope):** ~15 other
   `vtscore/` modules still import from `vtsearch` (e.g.
   `detectors/label_sync.py`, `detectors/training.py`, `state/votes.py`,
