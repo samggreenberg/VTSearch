@@ -38,10 +38,10 @@ from vtscore.detectors.store import (
     _read_detector,
     _write_detector,
 )
-from vtscore.detectors.label_restoration import (
+from vtscore.detectors.labelset_ops import (
     restore_labels_from_detector as _restore_labels_from_detector,
+    sync_labels_to_loaded_detector,
 )
-from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
 from vtscore.detectors.media_seeding import seed_good_votes_from_examples as _seed_good_votes_from_examples
 from vtsearch.schemas.detectors import (
     DetectorBrowsePositivesReleaseResponseSchema,
@@ -449,7 +449,7 @@ def load_detector_route(body: dict):  # noqa: C901
                             )
 
                             from vtscore.datasets.labelset import LabelSet
-                            from vtscore.detectors.labelset_training import train_from_labelset
+                            from vtscore.detectors.labelset_ops import train_from_labelset
                             from vtsearch.state import snapshot_medias as _snap_medias
 
                             labelset = LabelSet.from_dict(det_data.get("labelset") or {})
@@ -638,7 +638,7 @@ def cancel_detector_loading_task(task_id: str):
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
 def rename_registered_detector(body: dict, detector_id: str):
     """Rename a registered detector and its on-disk labelset file."""
-    from vtscore.detectors.labelset_rename import detect_pending_labelset_move
+    from vtscore.detectors.labelset_ops import detect_pending_labelset_move
     from vtscore.detectors.registry import get_detector, is_detector_owner, rename_detector
     from vtscore.state.core import get_detector_context
 
@@ -713,7 +713,7 @@ def move_labelset_source_file(body: dict, detector_id: str):
     labelset file?* prompt that surfaces after a rename leaves the file
     at the OLD template-resolved path on disk.
     """
-    from vtscore.detectors.labelset_rename import move_labelset_file
+    from vtscore.detectors.labelset_ops import move_labelset_file
     from vtscore.detectors.registry import get_detector
 
     if get_detector(detector_id) is None:
