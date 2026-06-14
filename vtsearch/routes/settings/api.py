@@ -202,6 +202,10 @@ def _with_effective(data: dict) -> dict:
     data["hidden_plugins"] = {
         family: sorted(names) for family, names in settings.get_effective_hidden_plugins().items()
     }
+    # Surface the CLI-overridable retention policy as the value actually in
+    # force (``--dataset-max-age-days`` wins over the persisted file), so the
+    # dashboard's Age-Off column reflects what new datasets are stamped with.
+    data["dataset_max_age_days"] = settings.get_effective_dataset_max_age_days()
     return data
 
 
@@ -332,13 +336,16 @@ _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
 #: * ``last_embedder_per_media_type`` - written by the load-pipeline
 #:   "last embedder" hook (see :mod:`vtsearch.shim`), keyed per media type,
 #:   not by the settings form.
-#: * ``dataset_max_age_days`` - a server-tier retention policy set via the
-#:   settings file / deployment config, not a user-editable preference.
+#:
+#: (``dataset_max_age_days`` is a server-tier retention policy set via the
+#: ``--dataset-max-age-days`` CLI flag / settings file, not via PUT; it is
+#: ``dump_only`` in the schema, so it is not "loadable" and needs no entry
+#: here.)
 #:
 #: They are listed here so the drift-guard test
 #: (``tests/api/test_settings_dispatch.py``) treats their absence from the
 #: dispatch tables as deliberate rather than a missed wiring.
-_NON_PUT_KEYS = frozenset({"last_embedder_per_media_type", "dataset_max_age_days"})
+_NON_PUT_KEYS = frozenset({"last_embedder_per_media_type"})
 
 
 def _build_scalar_setters() -> dict[str, Callable[[Any], Any]]:

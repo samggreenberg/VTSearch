@@ -183,6 +183,15 @@ _cli_hidden_plugins: dict[str, set[str]] = {}
 #: individual mediaTypes without losing the others.
 _cli_solo_embedders: dict[str, str] = {}
 
+#: Process-level override for the server-tier ``dataset_max_age_days``
+#: setting, set by :func:`set_cli_dataset_max_age_days` from the
+#: ``--dataset-max-age-days`` flag in :mod:`app`. ``None`` means "no CLI
+#: override" - reads fall through to the persisted server setting. When a
+#: value is set it applies to every user and wins over the persisted file
+#: for the lifetime of the process; the setting is not user-editable via
+#: the API (see :func:`get_effective_dataset_max_age_days`).
+_cli_dataset_max_age_days: int | None = None
+
 #: Filename used for the per-user settings file inside
 #: ``get_user_data_dir(user)``.
 USER_SETTINGS_FILENAME: str = "user_settings.json"
@@ -1319,6 +1328,45 @@ def apply_user_solo_media_type(value: str | None) -> None:
         value = None
     set_solo_media_type(value)  # type: ignore[name-defined]  # autogen'd accessor
     set_solo_media_type_explicit(True)  # type: ignore[name-defined]  # autogen'd accessor
+
+
+def set_cli_dataset_max_age_days(value: int | None) -> None:
+    """Set the process-level override for the ``dataset_max_age_days`` setting.
+
+    Called once from ``app.py`` startup when ``--dataset-max-age-days`` is
+    passed on the command line. The value applies server-wide (every user)
+    and is fixed for the process lifetime;
+    :func:`get_effective_dataset_max_age_days` returns it in preference to
+    the persisted server setting. Pass ``None`` to clear the override
+    (reads fall back to the persisted file value).
+    """
+    global _cli_dataset_max_age_days
+    _cli_dataset_max_age_days = value
+
+
+def get_cli_dataset_max_age_days() -> int | None:
+    """Return the process-level CLI override (``None`` if unset)."""
+    return _cli_dataset_max_age_days
+
+
+def get_effective_dataset_max_age_days() -> int | None:
+    """Return the dataset max age (in days) in force.
+
+    Resolution order:
+
+    1. The process-level CLI override set by
+       :func:`set_cli_dataset_max_age_days` (``--dataset-max-age-days``),
+       which applies to every user for the lifetime of the process.
+    2. The persisted server-tier setting (``data/settings.json``).
+
+    ``None`` means datasets never expire. This is the value the dataset
+    creation pipeline stamps ``expires_at`` from, and the value surfaced
+    at ``/api/settings`` so the dashboard's Age-Off column reflects what is
+    actually in force.
+    """
+    if _cli_dataset_max_age_days is not None:
+        return _cli_dataset_max_age_days
+    return get_dataset_max_age_days()  # type: ignore[name-defined]  # autogen'd accessor
 
 
 def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:

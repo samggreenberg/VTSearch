@@ -557,6 +557,32 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     server boot; there is no server-wide user to sync for.
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
+
+    # Deployment-level dataset retention override from the environment, for
+    # the gunicorn-launched images that never parse ``--dataset-max-age-days``
+    # (the argparse path below only runs under ``python app.py``). An explicit
+    # CLI flag, if one was passed, always wins. Like the flag, this applies to
+    # every user for the lifetime of the process and is not editable via the
+    # settings API.
+    from vtsearch.settings import get_cli_dataset_max_age_days, set_cli_dataset_max_age_days
+
+    if get_cli_dataset_max_age_days() is None:
+        _env_max_age = os.environ.get("VTSEARCH_DATASET_MAX_AGE_DAYS")
+        if _env_max_age:
+            try:
+                _days = int(_env_max_age)
+            except ValueError:
+                _days = 0
+            if _days >= 1:
+                set_cli_dataset_max_age_days(_days)
+                print(f"\U0001f5d3️  Dataset max age: {_days}d (from VTSEARCH_DATASET_MAX_AGE_DAYS)", flush=True)
+            else:
+                print(
+                    f"⚠️  Ignoring VTSEARCH_DATASET_MAX_AGE_DAYS={_env_max_age!r} "
+                    "(want a positive integer number of days)",
+                    flush=True,
+                )
+
     print("  Loading ML libraries...", end="", flush=True)
     initialize_models()
     print(" done", flush=True)
@@ -1026,6 +1052,22 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--dataset-max-age-days",
+        type=int,
+        default=None,
+        dest="dataset_max_age_days",
+        metavar="DAYS",
+        help=(
+            "Stamp every dataset created by this server process with an "
+            "expiry DAYS days after creation; expired datasets are aged off "
+            "from the registry. Applies to all users and overrides any "
+            "persisted dataset_max_age_days in the settings file for the "
+            "lifetime of the process; the value is not editable via the "
+            "settings API. Must be a positive integer. Omit to use the "
+            "persisted value (no expiry if none is set)."
+        ),
+    )
+    parser.add_argument(
         "--progress-format",
         type=str,
         default="text",
@@ -1208,6 +1250,17 @@ if __name__ == "__main__":
                     f"Valid embedders for {mt}: {sorted(valid_for_type)}"
                 )
             set_cli_solo_embedder(mt, emb)
+
+    # --dataset-max-age-days: process-level server retention override applied
+    # to every user for the lifetime of the process (not user-editable via
+    # the API). Validate before any dataset is created so a bad value fails
+    # fast rather than silently never expiring.
+    if getattr(args, "dataset_max_age_days", None) is not None:
+        if args.dataset_max_age_days < 1:
+            parser.error("--dataset-max-age-days must be a positive integer (number of days)")
+        from vtsearch.settings import set_cli_dataset_max_age_days
+
+        set_cli_dataset_max_age_days(args.dataset_max_age_days)
 
     if args.autodetect:
         # Wire the CLI progress format (text/json) before any pipeline call
