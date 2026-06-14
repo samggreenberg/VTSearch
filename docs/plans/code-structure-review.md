@@ -3,9 +3,13 @@
 **Status:** Review complete. **Theme A** (the `vtscore` ↔ `vtsearch`
 boundary) is fully shipped: A1 (fat-controller extractions), A2 (workflow
 de-coupling), A3 (training-pipeline merge), and the broader inverse-leak
-sweep all landed. The other themes are scoped below as a prioritized
-backlog for later passes. See "What shipped" + "Open follow-ups" at the
-bottom for live status.
+sweep all landed. **Theme C quick wins** are shipped: the `_ClapBase`
+mixin and the settings dispatch-table generation + drift guard (the
+per-side settings factory already existed; the `SettingSpec` registry
+turned out to be largely redundant with the Pydantic models — see "What
+shipped" for the finding). The other themes are scoped below as a
+prioritized backlog for later passes. See "What shipped" + "Open
+follow-ups" at the bottom for live status.
 
 This is a systematic, repo-wide structural review: where have design
 decisions that were right at small scale been outgrown, and what is worth
@@ -213,7 +217,10 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
    `workflow.py` from `flask.g`; merge the two training pipelines; inverse-leak
    sweep. (Shipped in full — see What shipped.)
 2. **Theme C quick wins** — settings `SettingSpec` registry; `_ClapBase`
-   mixin; per-side settings factory.
+   mixin; per-side settings factory. (Shipped — see What shipped. The
+   per-side factory already existed; the registry was reframed as
+   dispatch-table generation + a drift guard once the Pydantic models
+   turned out to already be the declarative source of truth.)
 3. **Theme E** — "shim" rename; `labelset_ops` facade.
 4. **Theme B** — split `app.py`, `load_pipeline.py`, `settings.py`,
    `importers/base.py`.
@@ -291,6 +298,40 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
   app-tier side effects (auth identity, achievement counters, the transformers
   logging bridge, the routes-layer embedder resolver). Full suite green,
   including `./run-tests.sh vtscore-clean`.
+
+- **Theme C, quick win 1 (`_ClapBase`):** the three CLAP audio embedders
+  (`clap`, `clap_general`, `clap_music`) were ~90% identical, differing only
+  by checkpoint id, display name, and progress-label text. Extracted a
+  Flask-free `_ClapBase` into `vtscore/media/audio/_clap_shared.py` (matching
+  the existing `_Dinov2Base` pattern); the three `embedder_clap*.py` modules
+  are now thin subclasses overriding `name` / `display_name` / `label` /
+  `model_id` (and `is_default` for the baseline). All three now also share the
+  baseline's resampling-JIT warmup, which `general` / `music` previously
+  lacked — a small behavior improvement (the first embed no longer stalls
+  10-30 s on those two). Class names and the `_get_model_and_processor`
+  loader bridge are unchanged. Full suite green.
+- **Theme C, quick win 2 (settings dispatch generation + drift guard):** the
+  investigation found the plan's "`SettingSpec` registry" was largely already
+  realized — the Pydantic models in `settings_models.py` are the declarative
+  source of truth (type / default / range / enum), and `settings.py` already
+  *generates* every `get_<key>` / `set_<key>` accessor from `model_fields`.
+  The per-side factory (`_make_per_side_setting`) already existed. A literal
+  parallel `SettingSpec` registry would have *re-introduced* a parallel
+  declaration, not removed one. The remaining hand-maintained parallel list
+  was the route dispatch table (`_SCALAR_SETTERS` in
+  `routes/settings/api.py`), so that is now generated from
+  `SettingsUpdateSchema`'s loadable fields (the plain `settings.set_<key>`
+  entries auto-wire; state-tier overrides + custom / read-only / non-PUT keys
+  stay explicit). The generated table is byte-for-byte identical to the prior
+  33-key hand-written one (no behavior change). Two keys
+  (`last_embedder_per_media_type`, `dataset_max_age_days`) are schema-loadable
+  with `set_` accessors but persisted via other paths, not PUT; previously
+  silently omitted from the table, they are now documented in `_NON_PUT_KEYS`.
+  A new `tests/api/test_settings_dispatch.py` asserts the parallel
+  declarations cannot silently diverge (every settable schema field is
+  dispatchable or explicitly exempt; no orphan dispatch entries; schema
+  fields stay backed by Pydantic fields + real accessors). The marshmallow ↔
+  Pydantic field overlap is left alone — that's Theme D. Full suite green.
 
 ## Open follow-ups
 
