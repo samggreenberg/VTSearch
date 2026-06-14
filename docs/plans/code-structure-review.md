@@ -1,89 +1,20 @@
 # Code-structure review
 
-**Status:** Review complete. **Theme A** (the `vtscore` ↔ `vtsearch`
-boundary) is fully shipped: A1 (fat-controller extractions), A2 (workflow
-de-coupling), A3 (training-pipeline merge), and the broader inverse-leak
-sweep all landed. **Theme C quick wins** are shipped: the `_ClapBase`
-mixin and the settings dispatch-table generation + drift guard (the
-per-side settings factory already existed; the `SettingSpec` registry
-turned out to be largely redundant with the Pydantic models — see "What
-shipped" for the finding). **Theme E quick wins** are shipped: the "shim"
-rename (the `state_proxies` proxy layer moved out of `vtsearch/shim/`,
-which now holds only the genuine Flask glue) and the `labelset_ops`
-facade (a single discoverable entry point for the detector-labelset
-operations surface — scoped to the one route file that actually reached
-into multiple label modules; see "What shipped" for why the
-single-module call sites were left on direct imports). The other themes
-are scoped below as a prioritized backlog for later passes. See "What
-shipped" + "Open follow-ups" at the bottom for live status.
+**Status:** A systematic, repo-wide structural review. Already shipped:
+**Theme A** in full (the `vtscore` ↔ `vtsearch` boundary — fat-controller
+extractions, `workflow.py` de-coupling, training-pipeline merge,
+inverse-leak sweep), **Theme C quick wins** (the `_ClapBase` mixin and the
+settings dispatch-table generation + drift guard), and **Theme E quick
+wins** (the "shim" rename and the `labelset_ops` facade). For the details of
+what landed, see the git history / merged PRs on `dev`. **Everything below
+is the remaining planned work.**
 
-This is a systematic, repo-wide structural review: where have design
-decisions that were right at small scale been outgrown, and what is worth
-streamlining, abstracting, or reorganizing? The codebase is healthy and
-unusually well-documented; the findings below are **accretion** problems
-(modules that started focused and absorbed adjacent responsibilities), not
-rot. Nothing here is urgent. Themes are ordered by leverage-to-effort.
-
----
-
-## Theme A — The `vtscore` ↔ `vtsearch` boundary has eroded (highest leverage)
-
-The architecture's central promise (`docs/ARCHITECTURE.md`) is a Flask-free
-library tier (`vtscore`) under a thin Flask app tier (`vtsearch`). The seam
-leaks in **both** directions, which undermines testability, reuse, and the
-library-extraction story the whole architecture doc is built around.
-
-### A1. Fat controllers — domain logic living in route handlers
-
-Private helper-function count per route file (proxy for misplaced domain
-logic; these are not request-parsing helpers):
-
-| Route file | Lines | Private helpers |
-|---|---|---|
-| `vtsearch/routes/sorting.py` | 1032 | 19 |
-| `vtsearch/routes/detectors/registry.py` | 1220 | 8 |
-| `vtsearch/routes/detectors/find.py` | 592 | 18 |
-| `vtsearch/routes/detectors/scoring.py` | 835 | 6 |
-| `vtsearch/routes/projection.py` | 606 | 18 |
-
-Concrete examples of business logic that belongs in `vtscore`:
-
-- `sorting.py`: `_resolve_labelset_local_state`, `_model_matches_local_votes`,
-  `_update_det_ctx_with_trained_model`, `_build_learned_sort_signature` —
-  the learned-sort / vote-reconciliation pipeline.
-- `detectors/registry.py`: `_maybe_start_label_reembed` (embedder-mismatch
-  detection + background re-embed task orchestration).
-- `detectors/scoring.py`: `_resolve_or_train_detector` (cold-path
-  train-on-demand, model selection, embedder-mismatch defense).
-
-**Fix:** extract per area into the library — `vtscore.detectors.model_loading`
-(from `scoring.py`), `vtscore.detectors.embedder_sync` (from `registry.py`),
-and a learned-sort orchestration module (from `sorting.py`). Routes become
-request↔library glue. Each extraction makes the logic unit-testable without a
-Flask client.
-
-### A2. Library importing the app (the inverse leak)
-
-`vtscore/detectors/workflow.py` imports `flask.g`-backed state from
-`vtsearch.state` (`good_votes`, `bad_votes`, `apply_label`,
-`snapshot_medias`, `override_detector_context`). A library module reaching
-back into the request tier is the inverse violation of A1.
-
-**Fix:** parameterize `apply_and_retrain()` — pass vote dicts / media
-snapshot in explicitly; move the `override_detector_context` wrapper up into
-the route handler (`vtsearch/routes/detectors/labels.py`).
-
-### A3. Two training pipelines
-
-`vtscore/detectors/training.py` and `vtscore/detectors/labelset_training.py`
-both implement resolve → build X/y → threshold → train → score.
-`labelset_train_and_score` re-implements rather than reuses `train_and_score`,
-and patch-region pooling (`_training_vec_for_vote` vs `_pool_box_from_media`)
-is ~90% duplicated.
-
-**Fix:** a shared training-data-builder seam (votes vs labelset both yield
-`(X_list, y_list)`); one scoring function parameterized by data source;
-consolidate patch pooling into one helper.
+This review asks: where have design decisions that were right at small scale
+been outgrown, and what is worth streamlining, abstracting, or reorganizing?
+The codebase is healthy and unusually well-documented; the findings below are
+**accretion** problems (modules that started focused and absorbed adjacent
+responsibilities), not rot. Nothing here is urgent. Themes are ordered by
+leverage-to-effort.
 
 ---
 
@@ -128,24 +59,14 @@ responsibilities.
 ## Theme C — Repetitive boilerplate a declarative/table-driven approach collapses
 
 Recurring smell: the **same fact declared in N parallel places**, kept in
-sync by hand.
+sync by hand. (The CLAP-embedder and settings-dispatch instances shipped; the
+remaining instances below are still open.)
 
-- **Settings keys live in 3+ places.** 48 keys are each a Pydantic field
-  (`settings_models.py`), a dynamic-accessor entry (`settings.py`), and a
-  route-dispatch entry (`routes/settings/api.py` `_SCALAR_SETTERS` /
-  `_CUSTOM_SETTERS`), plus `TYPE_CHECKING` stubs. A single declarative
-  `SettingSpec` registry (name, tier, type, default, route-handler) that
-  generates the rest is the highest-value cleanup in this theme. The
-  `_make_per_side_setting` factory (left/right variants) is a smaller
-  instance of the same fix.
-- **Embedder duplication.** The three CLAP audio embedders (`embedder_clap`,
-  `_general`, `_music`) are ~90% identical, differing by a model-ID constant
-  — a `_ClapBase` mixin (the pattern `_Dinov2Base` already uses) collapses
-  them. Image embedders have single/patch pairs that could share a
-  `_SinglePatchBase`; SigLIP/SigLIP2/CLIP have no shared base despite
-  identical cross-modal load/warm-up.
 - **State proxies.** 7 copy-paste `_ProxyDict` / `_ProxyList` declarations in
   `vtsearch/state_proxies.py` could be built from a registry table.
+- **Image embedder bases.** Image embedders have single/patch pairs that could
+  share a `_SinglePatchBase`; SigLIP/SigLIP2/CLIP have no shared base despite
+  identical cross-modal load/warm-up.
 - **Downloaders.** `downloader/{audio,image,video,text,docs}.py` each
   re-implement check → download → extract → post-process (~500 lines of
   duplicated zip/tar iteration); a `_DatasetDownloader` base with
@@ -175,27 +96,15 @@ risk warrants.
 
 ## Theme E — Naming / conceptual overlaps that mislead readers
 
-- **"shim" is misnamed.** *(Shipped.)* `vtsearch/shim/state_proxies.py` was
-  the canonical app-tier state API (the proxy layer), not a thin adapter. It
-  moved to `vtsearch/state_proxies.py`; the `vtsearch/shim/` package now holds
-  only the genuine Flask glue (context resolvers, persistence hooks,
-  `CoreConfig` builder, app-only plugin families), so its name is now accurate.
-- **`detectors/` label-module proliferation.** *(Shipped — facade scoped to
-  the genuine multi-module consumer.)* `label_sync`, `label_restoration`,
-  `labelset_elements`, `labelset_training`, `labelset_rename` (plus
-  `datasets/labelset.py` and the separate `labels/` *plugin* package) blur
-  "labels, the detector concept" vs "labels, the import/export plugin family."
-  `vtscore/detectors/labelset_ops.py` is now the single discoverable facade
-  for the detector-labelset operations surface, with a docstring that draws
-  the boundary against the `labels/` plugin family. See "What shipped" for why
-  only `registry.py` (which reached into four of the five modules) was migrated
-  and the single-module/single-function call sites were left on direct imports.
+(The "shim" rename and the `labelset_ops` facade shipped; the remaining bullet
+below is still open.)
+
 - **Three overlapping ingestion concepts:** `MediaSource`,
   `DatasetImporter`, and the bare loader functions all mean "get media in,"
   but importers sometimes use a `MediaSource` and sometimes call loaders
   directly, and `FetchedItem.embedding` is bypassed by loader override
   dicts. Draw the boundaries explicitly (or fold `MediaSource` into
-  importers).
+  importers). Larger architectural item, not a quick win.
 
 ---
 
@@ -223,200 +132,22 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
 
 ---
 
-## Prioritized backlog
+## Prioritized backlog (remaining)
 
-1. **Theme A** — extract fat-controller logic into `vtscore`; de-couple
-   `workflow.py` from `flask.g`; merge the two training pipelines; inverse-leak
-   sweep. (Shipped in full — see What shipped.)
-2. **Theme C quick wins** — settings `SettingSpec` registry; `_ClapBase`
-   mixin; per-side settings factory. (Shipped — see What shipped. The
-   per-side factory already existed; the registry was reframed as
-   dispatch-table generation + a drift guard once the Pydantic models
-   turned out to already be the declarative source of truth.)
-3. **Theme E** — "shim" rename; `labelset_ops` facade. (Shipped — see What
-   shipped. The third Theme E bullet, the `MediaSource` / `DatasetImporter`
-   ingestion-concept overlap, is a larger architectural item and was not part
-   of these quick wins; it remains open.)
-4. **Theme B** — split `app.py`, `load_pipeline.py`, `settings.py`,
+1. **Theme B** — split `app.py`, `load_pipeline.py`, `settings.py`,
    `importers/base.py`.
-5. **Theme D** — converge frontend types onto the generated client.
-6. **Theme F** — collapse `PluginField` aliases; revisit `SyncSource` if a
+2. **Theme D** — converge frontend types onto the generated client.
+3. **Theme E** — `MediaSource` / `DatasetImporter` ingestion-concept overlap.
+4. **Theme F** — collapse `PluginField` aliases; revisit `SyncSource` if a
    third consumer appears.
-7. **Theme B (deferred)** — `DetectorContext` sub-context split (~346 call
+5. **Theme C remaining** — state-proxy registry table; image single/patch
+   base; downloaders base.
+6. **Theme B (deferred)** — `DetectorContext` sub-context split (~346 call
    sites; do opportunistically).
-
----
-
-## What shipped
-
-- **Theme A, slice 1 (A1):** the cold-path detector model resolution/training
-  logic moved out of the `find-label` / `auto-detect` route handler into
-  `vtscore/detectors/model_loading.py` (`resolve_or_train_detector`). It had
-  no Flask/request-context dependency; the route is now request↔library glue.
-  Full suite green.
-- **Theme A, slice 2 (A2):** `vtscore/detectors/workflow.py` no longer imports
-  the app tier. `apply_and_retrain` now pulls its helpers (`apply_label`,
-  `snapshot_medias`, `build_media_lookup`, `resolve_media_ids`, the calibration
-  getters) from `vtscore.state` and reads the candidate votes from the passed
-  `det_ctx` directly (`det_ctx.good_votes` / `bad_votes` / `vote_region_boxes`)
-  instead of the `vtsearch.state` proxies. The function keeps setting up its own
-  `override_detector_context(det_ctx)` so `apply_label` /
-  `sync_labels_to_loaded_detector` resolve to `det_ctx` regardless of caller,
-  leaving it self-contained for routes, background threads, and tests alike.
-  The only remaining `vtsearch` reference in the file is gone; full suite green.
-- **Theme A, slice 3 (A1):** the label re-embed orchestration
-  (`_maybe_start_label_reembed` plus its `_active_dataset_embedder_name` /
-  `_embedder_display_name` helpers) moved out of
-  `vtsearch/routes/detectors/registry.py` into a new Flask-free
-  `vtscore/detectors/embedder_sync.py` (`maybe_start_label_reembed`). Its one
-  app-tier dependency — the `vtsearch.threading.spawn` worker that replays the
-  request's user thread-local — is injected by the route, so the module stays
-  import-clean. The `registry.py` load route is now request↔library glue. Full
-  suite green.
-- **Theme A, slice 4 (A1):** the learned-sort orchestration moved out of
-  `routes/sorting.py` into a new Flask-free `vtscore/detectors/learned_sort.py`.
-  `resolve_active_labelset`, `resolve_labelset_local_state`,
-  `model_matches_local_votes`, `update_det_ctx_with_trained_model`, and
-  `build_learned_sort_signature` are now library functions, and the
-  train → score → reconcile pipeline (formerly the inline `_run` closure body)
-  is `run_learned_sort`, which sets up its own dataset/detector thread contexts.
-  The `/api/learned-sort` route is now request↔library glue: it gathers
-  settings/votes, short-circuits on the signature cache, and owns only the
-  job-result envelope. `_validate_learned_sort_inputs` stays in the route
-  because it calls `abort()` (a 400 request-layer concern). Full suite green.
-- **Theme A, slice 5 (A3):** the two detector training pipelines now share a
-  single core. `vtscore/detectors/training.py` grew `_train_and_score_xy`,
-  which owns the guard → threshold → train → score → format tail; both
-  `train_and_score` (vote-driven) and
-  `labelset_training.labelset_train_and_score` (labelset-driven) now just
-  assemble their own `(X_list, y_list)` (`_build_vote_xy` /
-  `populate_label_embeddings` + `build_xy_from_labelset`) and defer to it. The
-  labelset path thereby picks up the vote path's region-aware scoring
-  (`_score_all_media`) and NaN sanitisation it previously lacked, and the
-  duplicated patch-region pooling (`_training_vec_for_vote`'s inline pooling vs
-  `labelset_training._pool_box_from_media`) collapsed into one
-  `pool_box_from_media` helper in `training.py`. Full suite green.
-- **Theme A, slice 6 (inverse-leak sweep):** every `from vtsearch.state import`
-  inside `vtscore/` now points at `vtscore.state` directly. The audit found all
-  eight sites (`detectors/{labelset_elements,training,label_sync,
-  label_restoration,media_seeding}.py`, `datasets/{ingest,load_pipeline}.py`)
-  pulled only pure `vtscore.state` re-exports — the lone proxy use, `medias` in
-  `media_seeding.py`, became `get_active_context().medias` (equivalent, and
-  Flask-free). The one remaining *module-level* app-tier import,
-  `from vtsearch.auth import get_current_user` in `load_pipeline.py`, was made
-  function-local at its three call sites to match the file's other lazy
-  `vtsearch.auth` imports, so importing the library module no longer drags in
-  the app tier at import time. The remaining `vtsearch` references in `vtscore/`
-  are all genuine app-tier reaches (`vtsearch.auth`, `vtsearch.achievements`,
-  `vtsearch.logging_config`, `vtsearch.routes._shared`) and are all
-  function-local lazy imports — the established escape hatch for optional
-  app-tier side effects (auth identity, achievement counters, the transformers
-  logging bridge, the routes-layer embedder resolver). Full suite green,
-  including `./run-tests.sh vtscore-clean`.
-
-- **Theme C, quick win 1 (`_ClapBase`):** the three CLAP audio embedders
-  (`clap`, `clap_general`, `clap_music`) were ~90% identical, differing only
-  by checkpoint id, display name, and progress-label text. Extracted a
-  Flask-free `_ClapBase` into `vtscore/media/audio/_clap_shared.py` (matching
-  the existing `_Dinov2Base` pattern); the three `embedder_clap*.py` modules
-  are now thin subclasses overriding `name` / `display_name` / `label` /
-  `model_id` (and `is_default` for the baseline). All three now also share the
-  baseline's resampling-JIT warmup, which `general` / `music` previously
-  lacked — a small behavior improvement (the first embed no longer stalls
-  10-30 s on those two). Class names and the `_get_model_and_processor`
-  loader bridge are unchanged. Full suite green.
-- **Theme C, quick win 2 (settings dispatch generation + drift guard):** the
-  investigation found the plan's "`SettingSpec` registry" was largely already
-  realized — the Pydantic models in `settings_models.py` are the declarative
-  source of truth (type / default / range / enum), and `settings.py` already
-  *generates* every `get_<key>` / `set_<key>` accessor from `model_fields`.
-  The per-side factory (`_make_per_side_setting`) already existed. A literal
-  parallel `SettingSpec` registry would have *re-introduced* a parallel
-  declaration, not removed one. The remaining hand-maintained parallel list
-  was the route dispatch table (`_SCALAR_SETTERS` in
-  `routes/settings/api.py`), so that is now generated from
-  `SettingsUpdateSchema`'s loadable fields (the plain `settings.set_<key>`
-  entries auto-wire; state-tier overrides + custom / read-only / non-PUT keys
-  stay explicit). The generated table is byte-for-byte identical to the prior
-  33-key hand-written one (no behavior change). Two keys
-  (`last_embedder_per_media_type`, `dataset_max_age_days`) are schema-loadable
-  with `set_` accessors but persisted via other paths, not PUT; previously
-  silently omitted from the table, they are now documented in `_NON_PUT_KEYS`.
-  A new `tests/api/test_settings_dispatch.py` asserts the parallel
-  declarations cannot silently diverge (every settable schema field is
-  dispatchable or explicitly exempt; no orphan dispatch entries; schema
-  fields stay backed by Pydantic fields + real accessors). The marshmallow ↔
-  Pydantic field overlap is left alone — that's Theme D. Full suite green.
-- **Theme C follow-on (`dataset_max_age_days` discrepancy resolved):** the
-  drift-guard work surfaced that `dataset_max_age_days` was advertised as
-  loadable by `SettingsUpdateSchema` but silently dropped by the PUT route
-  (no dispatch entry) — a latent inconsistency rather than a clean design.
-  Resolved per the maintainer's call: it is now an explicit *server-wide*
-  override (not a user preference), settable via a new
-  `--dataset-max-age-days` CLI flag and a `VTSEARCH_DATASET_MAX_AGE_DAYS`
-  env-var bridge (honored at server init for the gunicorn-launched Docker
-  images, which never parse `argv`; the CLI flag wins over the env var, both
-  win over the persisted file for the process lifetime).
-  `get_effective_dataset_max_age_days()` resolves override → file; the
-  dataset-creation pipeline and `GET /api/settings` read the effective value.
-  The schema contract is now honest: `dump_only` in `AppSettingsSchema` (the
-  dashboard still reads it to gate the Age-Off column), absent from
-  `SettingsUpdateSchema`. The LabBench Docker image pins the cap at 14 days
-  (`VTSEARCH_DATASET_MAX_AGE_DAYS=14`, authoritative even on redeploys onto a
-  pre-existing volume; seeded `settings.json` updated 30 → 14 for fresh
-  volumes). Full suite green.
-- **Theme E, quick win 1 ("shim" rename):** the proxy layer
-  (`_ProxyDict` / `_ProxyList` plus the `medias` / `good_votes` / … module-level
-  instances) moved from `vtsearch/shim/state_proxies.py` to
-  `vtsearch/state_proxies.py`. It is the canonical app-tier state API, not a
-  thin adapter, so it no longer lives under `shim/`. The `vtsearch/shim/`
-  package keeps only the genuine Flask glue (`register_flask_context_resolvers`,
-  `register_app_persistence_hooks`, `build_core_config` /
-  `register_app_config_builder`, `register_app_plugin_families`) — those *are*
-  shims, so the name is now accurate. Updated the two real import sites
-  (`vtsearch/state/__init__.py`, `tests/datasets/test_multi_dataset.py`), the
-  proxy-describing docstrings in `vtscore/state/core.py` and
-  `vtscore/state/__init__.py`, and the architecture docs
-  (`docs/ARCHITECTURE.md`, `docs/vtscore-api.md`, `vtscore/docs/architecture.md`,
-  `vtscore/docs/faq.md`); the glue-describing "shim" references were left
-  intact. Full suite green.
-- **Theme E, quick win 2 (`labelset_ops` facade):** added
-  `vtscore/detectors/labelset_ops.py` as the single discoverable entry point for
-  the detector-labelset operations surface (sync, restoration, element helpers,
-  training, rename), with a docstring that explicitly disambiguates "labels, the
-  detector concept" from the separate `labels/` import/export *plugin* family.
-  The facade re-exports the public functions of the five sibling modules
-  (`label_sync`, `label_restoration`, `labelset_elements`, `labelset_training`,
-  `labelset_rename`); those modules stay the implementation homes. Only
-  `vtsearch/routes/detectors/registry.py` — the one consumer that reached into
-  *four* of the five modules — was migrated to import the whole surface through
-  the facade ("four imports → one"). The single-module / single-function call
-  sites (e.g. the scattered lazy `sync_labels_to_loaded_detector` imports in
-  `media/list.py`, `vote.py`, `sorting.py`, `importers.py`, and the
-  `labelset_elements` imports in `labels.py`) were deliberately **left on direct
-  imports**: migrating them yields no module-count reduction and would defeat
-  the established test monkeypatch seams (tests stub the *source* module and
-  rely on the route's lazy import resolving there; a facade freezes that
-  binding). This keeps the facade's value (a documented, discoverable surface +
-  the genuine multi-module win) without the hollow re-export churn Theme F warns
-  against. Full suite green (4803 passed).
-
-## Open follow-ups
-
-- **Theme A — genuine app-tier reaches (deferred, optional):** the lazy
-  `vtsearch.auth` / `vtsearch.achievements` / `vtsearch.logging_config` /
-  `vtsearch.routes._shared` imports that remain in `vtscore/` are real
-  cross-tier calls, not cosmetic. They are correct as lazy imports today (the
-  library tier degrades gracefully without them), but the architecturally
-  "pure" form is dependency injection via registration hooks — the pattern the
-  codebase already uses for `register_setting_persister` /
-  `register_core_config_builder`. Converting the achievement counters and
-  auth-identity lookups to injected hooks would make `vtscore/` import-clean of
-  `vtsearch` entirely. Not urgent; do it if/when the library tier is actually
-  extracted.
-- **Theme E — remaining bullet (ingestion concepts):** the `MediaSource` /
-  `DatasetImporter` / bare-loader overlap (the third Theme E bullet) is a
-  larger architectural item, not a quick win, and was not part of this pass.
-  Still open.
-- **Themes B, D, F:** see the prioritized backlog above; none started.
-</content>
+7. **Theme A (optional)** — convert the remaining lazy `vtsearch.auth` /
+   `vtsearch.achievements` / `vtsearch.logging_config` /
+   `vtsearch.routes._shared` reaches in `vtscore/` to injected registration
+   hooks (the pattern already used for `register_setting_persister` /
+   `register_core_config_builder`), making `vtscore/` import-clean of
+   `vtsearch` entirely. They are correct as lazy imports today; do this
+   if/when the library tier is actually extracted.
