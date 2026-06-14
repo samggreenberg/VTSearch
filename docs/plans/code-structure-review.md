@@ -229,14 +229,29 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
   `vtscore/detectors/model_loading.py` (`resolve_or_train_detector`). It had
   no Flask/request-context dependency; the route is now request↔library glue.
   Full suite green.
+- **Theme A, slice 2 (A2):** `vtscore/detectors/workflow.py` no longer imports
+  the app tier. `apply_and_retrain` now pulls its helpers (`apply_label`,
+  `snapshot_medias`, `build_media_lookup`, `resolve_media_ids`, the calibration
+  getters) from `vtscore.state` and reads the candidate votes from the passed
+  `det_ctx` directly (`det_ctx.good_votes` / `bad_votes` / `vote_region_boxes`)
+  instead of the `vtsearch.state` proxies. The function keeps setting up its own
+  `override_detector_context(det_ctx)` so `apply_label` /
+  `sync_labels_to_loaded_detector` resolve to `det_ctx` regardless of caller,
+  leaving it self-contained for routes, background threads, and tests alike.
+  The only remaining `vtsearch` reference in the file is gone; full suite green.
 
 ## Open follow-ups
 
 - **Theme A, remaining:** extract `_maybe_start_label_reembed` from
   `detectors/registry.py` (→ `vtscore.detectors.embedder_sync`), pull the
-  learned-sort orchestration helpers out of `routes/sorting.py`, decouple
-  `vtscore/detectors/workflow.py` from `flask.g` (A2 — use the passed-in
-  `det_ctx` directly instead of the proxy/`override_detector_context`
-  machinery), and merge the two training pipelines (A3).
+  learned-sort orchestration helpers out of `routes/sorting.py`, and merge the
+  two training pipelines (A3).
+- **Theme A, broader inverse-leak sweep (not in original A2 scope):** ~15 other
+  `vtscore/` modules still import from `vtsearch` (e.g.
+  `detectors/label_sync.py`, `detectors/training.py`, `state/votes.py`,
+  `datasets/load_pipeline.py`). Most are cosmetic (a pure `vtscore` function
+  imported via the `vtsearch.state` re-export); some may be genuine app-tier
+  reaches. Worth a dedicated pass that audits each and points the cosmetic ones
+  back at `vtscore.state` directly.
 - **Themes B–F:** see the prioritized backlog above; none started.
 </content>
