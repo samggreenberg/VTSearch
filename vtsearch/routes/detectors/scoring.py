@@ -18,6 +18,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.memory_budget import cap_workers_by_memory
 from vtscore.concurrency.progress import find_progress, update_find_progress
+from vtscore.detectors.model_loading import resolve_or_train_detector
 from vtsearch.routes._shared import require_dataset_header, require_detector_header
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
@@ -46,160 +47,6 @@ _HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string", "thumbnail_byte
 def _media_info_for_response(media: dict) -> dict:
     """Return a copy of *media* without heavyweight fields."""
     return {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
-
-
-def _resolve_or_train_detector(  # noqa: C901
-    detector_id: str,
-    det_data: dict | None,
-    media_type: str,
-    snap: dict | None,
-    *,
-    progress_step: int = 2,
-    progress_total_steps: int = 4,
-) -> tuple[Any | None, float, dict | None]:
-    """Return (mlp, threshold, diagnostic) for *detector_id*.
-
-    Tries the loaded :class:`DetectorContext` first.  Falls back to training
-    on demand from the detector's labelset, embedding label media via its
-    origin importer.  Returns ``(None, _, diag)`` when training is not
-    possible.
-
-    Inclusion changes don't need special handling here: ``set_inclusion``
-    invalidates every loaded context's cached MLP, so after a slider move the
-    ``det_ctx.model`` short-circuit below is skipped and the cold branch
-    retrains at the new (per-detector) inclusion.
-    """
-    from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
-    from vtscore.state.core import get_detector_context
-
-    det_ctx = get_detector_context(detector_id)
-    if det_ctx is not None:
-        # Defense against H5: scoring Auto-Find detectors iterates contexts
-        # that aren't the active one, so the before_request hook can't
-        # have invalidated their stale MLPs.  Drop them here so the next
-        # branch trains fresh against *snap*'s embedder.
-        snap_embedder = next(iter(snap.values()), {}).get("embedder", "") or "" if snap else ""
-        invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
-    if det_ctx is not None and det_ctx.model is not None:
-        return det_ctx.model, det_ctx.threshold, None
-
-    if det_data is None:
-        return None, 0.5, None
-
-    label_entries = det_data.get("labelset", {}).get("labels", [])
-    if not label_entries:
-        return None, 0.5, None
-
-    update_find_progress(
-        "running",
-        "Training detector from labels…",
-        current=0,
-        total=0,
-        step=progress_step,
-        total_steps=progress_total_steps,
-    )
-
-    from vtscore.detectors.training import train_and_threshold
-    from vtscore.detectors.resolver import resolve_label_embeddings
-
-    X_list: list = []
-    y_list: list[float] = []
-    md5_to_emb = {}
-    if snap:
-        md5_to_emb = {c["md5"]: c["embedding"] for c in snap.values()}
-
-    # Match origin-resolved label vectors to the snap's embedder space so
-    # the two paths don't produce a mixed-space training set (silently
-    # garbage MLP).  Empty when the snap is empty or untyped, which falls
-    # back to the media type's default embedder.
-    dataset_embedder = ""
-    if snap:
-        dataset_embedder = next(iter(snap.values()), {}).get("embedder", "") or ""
-
-    unresolved: list[dict] = []
-    for entry in label_entries:
-        label_val = entry.get("label", "")
-        if label_val not in ("good", "bad"):
-            continue
-        md5 = entry.get("md5", "")
-        if md5 and md5 in md5_to_emb:
-            X_list.append(md5_to_emb[md5])
-            y_list.append(1.0 if label_val == "good" else 0.0)
-        else:
-            unresolved.append(entry)
-
-    md5_matched = len(X_list)
-    resolved = None
-    if unresolved:
-        n_unresolved = len(unresolved)
-        update_find_progress(
-            "running",
-            f"Resolving {n_unresolved} label origins…",
-            current=0,
-            total=n_unresolved,
-            step=progress_step,
-            total_steps=progress_total_steps,
-        )
-
-        def _origin_progress(current: int, total: int) -> None:
-            update_find_progress(
-                "running",
-                f"Resolving {n_unresolved} label origins…",
-                current=current,
-                total=total,
-                step=progress_step,
-                total_steps=progress_total_steps,
-            )
-
-        resolved = resolve_label_embeddings(
-            unresolved,
-            media_type,
-            progress_callback=_origin_progress,
-            embedder_name=dataset_embedder,
-        )
-        X_list.extend(resolved.embeddings)
-        y_list.extend(resolved.labels)
-
-    has_good = any(v == 1.0 for v in y_list)
-    has_bad = any(v == 0.0 for v in y_list)
-    if has_good and has_bad:
-        update_find_progress(
-            "running",
-            "Cross-calibrating threshold…",
-            current=0,
-            total=0,
-            step=progress_step,
-            total_steps=progress_total_steps,
-        )
-        trained_mlp, threshold = train_and_threshold(X_list, y_list, snap=snap)
-        return trained_mlp, threshold, None
-
-    diagnostic: dict = {
-        "total_labels": md5_matched + len(unresolved),
-        "md5_matched": md5_matched,
-        "needed_resolution": len(unresolved),
-        "resolved_from_origin": resolved.resolved_count if resolved else 0,
-        "failed_resolution": len(resolved.missing_entries) if resolved else len(unresolved),
-        "has_good": has_good,
-        "has_bad": has_bad,
-        "media_type": media_type,
-    }
-    if resolved and resolved.missing_entries:
-        samples = resolved.missing_entries[:3]
-        diagnostic["sample_failures"] = [
-            {
-                "origin": e.get("origin"),
-                "origin_name": e.get("origin_name", ""),
-                "filename": e.get("filename", ""),
-                "md5": e.get("md5", "")[:12],
-                "label": e.get("label", ""),
-            }
-            for e in samples
-        ]
-    elif not unresolved and (not has_good or not has_bad):
-        diagnostic["hint"] = "All labels matched by MD5 but all are the same class (need both good and bad)"
-
-    return None, 0.5, diagnostic
 
 
 @detector_scoring_bp.route("/api/find-label", methods=["POST"])
@@ -258,7 +105,7 @@ def find_label(body: dict):  # noqa: C901
     det_path = _detector_path(d["name"])
     det_data = _read_detector(det_path)
 
-    mlp, threshold, diagnostic = _resolve_or_train_detector(
+    mlp, threshold, diagnostic = resolve_or_train_detector(
         detector_id,
         det_data,
         media_type,
@@ -461,7 +308,7 @@ def _score_detector_for_auto_detect(
 
     try:
         detector_id = reg_entry["id"] if reg_entry else name
-        mlp, threshold, _diag = _resolve_or_train_detector(
+        mlp, threshold, _diag = resolve_or_train_detector(
             detector_id,
             det_data,
             media_type,
