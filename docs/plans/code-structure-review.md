@@ -248,13 +248,24 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
   request's user thread-local — is injected by the route, so the module stays
   import-clean. The `registry.py` load route is now request↔library glue. Full
   suite green.
+- **Theme A, slice 4 (A1):** the learned-sort orchestration moved out of
+  `routes/sorting.py` into a new Flask-free `vtscore/detectors/learned_sort.py`.
+  `resolve_active_labelset`, `resolve_labelset_local_state`,
+  `model_matches_local_votes`, `update_det_ctx_with_trained_model`, and
+  `build_learned_sort_signature` are now library functions, and the
+  train → score → reconcile pipeline (formerly the inline `_run` closure body)
+  is `run_learned_sort`, which sets up its own dataset/detector thread contexts.
+  The `/api/learned-sort` route is now request↔library glue: it gathers
+  settings/votes, short-circuits on the signature cache, and owns only the
+  job-result envelope. `_validate_learned_sort_inputs` stays in the route
+  because it calls `abort()` (a 400 request-layer concern). Full suite green.
 
 ## Open follow-ups
 
-- **Theme A, remaining:** pull the learned-sort orchestration helpers out of
-  `routes/sorting.py` (`_resolve_labelset_local_state`,
-  `_model_matches_local_votes`, `_update_det_ctx_with_trained_model`,
-  `_build_learned_sort_signature`), and merge the two training pipelines (A3).
+- **Theme A, remaining:** merge the two training pipelines (A3) —
+  `vtscore/detectors/training.py` and `labelset_training.py` both implement
+  resolve → build X/y → threshold → train → score; consolidate behind a shared
+  training-data-builder seam and one parameterized scoring function.
 - **Theme A, broader inverse-leak sweep (not in original A2 scope):** ~15 other
   `vtscore/` modules still import from `vtsearch` (e.g.
   `detectors/label_sync.py`, `detectors/training.py`, `state/votes.py`,
