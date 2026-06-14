@@ -6,7 +6,7 @@ import type { ContextMenuItem } from '../context-menu/context-menu.component';
  * whose viewer can produce a sub-region selection (`audio` spectrograms
  * and `image` raster regions).
  */
-export function buildContextMenuItems(mediaType: string): ContextMenuItem[] {
+export function buildMediaContextMenuItems(mediaType: string): ContextMenuItem[] {
   const cropAble = mediaType === 'audio' || mediaType === 'image';
   const items: ContextMenuItem[] = [
     {
