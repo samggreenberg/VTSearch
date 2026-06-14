@@ -7,9 +7,15 @@ sweep all landed. **Theme C quick wins** are shipped: the `_ClapBase`
 mixin and the settings dispatch-table generation + drift guard (the
 per-side settings factory already existed; the `SettingSpec` registry
 turned out to be largely redundant with the Pydantic models — see "What
-shipped" for the finding). The other themes are scoped below as a
-prioritized backlog for later passes. See "What shipped" + "Open
-follow-ups" at the bottom for live status.
+shipped" for the finding). **Theme E quick wins** are shipped: the "shim"
+rename (the `state_proxies` proxy layer moved out of `vtsearch/shim/`,
+which now holds only the genuine Flask glue) and the `labelset_ops`
+facade (a single discoverable entry point for the detector-labelset
+operations surface — scoped to the one route file that actually reached
+into multiple label modules; see "What shipped" for why the
+single-module call sites were left on direct imports). The other themes
+are scoped below as a prioritized backlog for later passes. See "What
+shipped" + "Open follow-ups" at the bottom for live status.
 
 This is a systematic, repo-wide structural review: where have design
 decisions that were right at small scale been outgrown, and what is worth
@@ -139,7 +145,7 @@ sync by hand.
   `_SinglePatchBase`; SigLIP/SigLIP2/CLIP have no shared base despite
   identical cross-modal load/warm-up.
 - **State proxies.** 7 copy-paste `_ProxyDict` / `_ProxyList` declarations in
-  `vtsearch/shim/state_proxies.py` could be built from a registry table.
+  `vtsearch/state_proxies.py` could be built from a registry table.
 - **Downloaders.** `downloader/{audio,image,video,text,docs}.py` each
   re-implement check → download → extract → post-process (~500 lines of
   duplicated zip/tar iteration); a `_DatasetDownloader` base with
@@ -169,15 +175,21 @@ risk warrants.
 
 ## Theme E — Naming / conceptual overlaps that mislead readers
 
-- **"shim" is misnamed.** `vtsearch/shim/state_proxies.py` is the canonical
-  app-tier state API (the proxy layer), not a thin adapter. Rename to
-  `vtsearch/state_proxies.py` and drop "shim" from docstrings.
-- **`detectors/` label-module proliferation.** `label_sync`,
-  `label_restoration`, `labelset_elements`, `labelset_training`,
-  `labelset_rename` (plus `datasets/labelset.py` and the separate `labels/`
-  *plugin* package) blur "labels, the detector concept" vs "labels, the
-  import/export plugin family." A `labelset_ops` facade gives callers one
-  import instead of five.
+- **"shim" is misnamed.** *(Shipped.)* `vtsearch/shim/state_proxies.py` was
+  the canonical app-tier state API (the proxy layer), not a thin adapter. It
+  moved to `vtsearch/state_proxies.py`; the `vtsearch/shim/` package now holds
+  only the genuine Flask glue (context resolvers, persistence hooks,
+  `CoreConfig` builder, app-only plugin families), so its name is now accurate.
+- **`detectors/` label-module proliferation.** *(Shipped — facade scoped to
+  the genuine multi-module consumer.)* `label_sync`, `label_restoration`,
+  `labelset_elements`, `labelset_training`, `labelset_rename` (plus
+  `datasets/labelset.py` and the separate `labels/` *plugin* package) blur
+  "labels, the detector concept" vs "labels, the import/export plugin family."
+  `vtscore/detectors/labelset_ops.py` is now the single discoverable facade
+  for the detector-labelset operations surface, with a docstring that draws
+  the boundary against the `labels/` plugin family. See "What shipped" for why
+  only `registry.py` (which reached into four of the five modules) was migrated
+  and the single-module/single-function call sites were left on direct imports.
 - **Three overlapping ingestion concepts:** `MediaSource`,
   `DatasetImporter`, and the bare loader functions all mean "get media in,"
   but importers sometimes use a `MediaSource` and sometimes call loaders
@@ -221,7 +233,10 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
    per-side factory already existed; the registry was reframed as
    dispatch-table generation + a drift guard once the Pydantic models
    turned out to already be the declarative source of truth.)
-3. **Theme E** — "shim" rename; `labelset_ops` facade.
+3. **Theme E** — "shim" rename; `labelset_ops` facade. (Shipped — see What
+   shipped. The third Theme E bullet, the `MediaSource` / `DatasetImporter`
+   ingestion-concept overlap, is a larger architectural item and was not part
+   of these quick wins; it remains open.)
 4. **Theme B** — split `app.py`, `load_pipeline.py`, `settings.py`,
    `importers/base.py`.
 5. **Theme D** — converge frontend types onto the generated client.
@@ -350,6 +365,41 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
   (`VTSEARCH_DATASET_MAX_AGE_DAYS=14`, authoritative even on redeploys onto a
   pre-existing volume; seeded `settings.json` updated 30 → 14 for fresh
   volumes). Full suite green.
+- **Theme E, quick win 1 ("shim" rename):** the proxy layer
+  (`_ProxyDict` / `_ProxyList` plus the `medias` / `good_votes` / … module-level
+  instances) moved from `vtsearch/shim/state_proxies.py` to
+  `vtsearch/state_proxies.py`. It is the canonical app-tier state API, not a
+  thin adapter, so it no longer lives under `shim/`. The `vtsearch/shim/`
+  package keeps only the genuine Flask glue (`register_flask_context_resolvers`,
+  `register_app_persistence_hooks`, `build_core_config` /
+  `register_app_config_builder`, `register_app_plugin_families`) — those *are*
+  shims, so the name is now accurate. Updated the two real import sites
+  (`vtsearch/state/__init__.py`, `tests/datasets/test_multi_dataset.py`), the
+  proxy-describing docstrings in `vtscore/state/core.py` and
+  `vtscore/state/__init__.py`, and the architecture docs
+  (`docs/ARCHITECTURE.md`, `docs/vtscore-api.md`, `vtscore/docs/architecture.md`,
+  `vtscore/docs/faq.md`); the glue-describing "shim" references were left
+  intact. Full suite green.
+- **Theme E, quick win 2 (`labelset_ops` facade):** added
+  `vtscore/detectors/labelset_ops.py` as the single discoverable entry point for
+  the detector-labelset operations surface (sync, restoration, element helpers,
+  training, rename), with a docstring that explicitly disambiguates "labels, the
+  detector concept" from the separate `labels/` import/export *plugin* family.
+  The facade re-exports the public functions of the five sibling modules
+  (`label_sync`, `label_restoration`, `labelset_elements`, `labelset_training`,
+  `labelset_rename`); those modules stay the implementation homes. Only
+  `vtsearch/routes/detectors/registry.py` — the one consumer that reached into
+  *four* of the five modules — was migrated to import the whole surface through
+  the facade ("four imports → one"). The single-module / single-function call
+  sites (e.g. the scattered lazy `sync_labels_to_loaded_detector` imports in
+  `media/list.py`, `vote.py`, `sorting.py`, `importers.py`, and the
+  `labelset_elements` imports in `labels.py`) were deliberately **left on direct
+  imports**: migrating them yields no module-count reduction and would defeat
+  the established test monkeypatch seams (tests stub the *source* module and
+  rely on the route's lazy import resolving there; a facade freezes that
+  binding). This keeps the facade's value (a documented, discoverable surface +
+  the genuine multi-module win) without the hollow re-export churn Theme F warns
+  against. Full suite green (4803 passed).
 
 ## Open follow-ups
 
@@ -364,5 +414,9 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
   auth-identity lookups to injected hooks would make `vtscore/` import-clean of
   `vtsearch` entirely. Not urgent; do it if/when the library tier is actually
   extracted.
-- **Themes B–F:** see the prioritized backlog above; none started.
+- **Theme E — remaining bullet (ingestion concepts):** the `MediaSource` /
+  `DatasetImporter` / bare-loader overlap (the third Theme E bullet) is a
+  larger architectural item, not a quick win, and was not part of this pass.
+  Still open.
+- **Themes B, D, F:** see the prioritized backlog above; none started.
 </content>
