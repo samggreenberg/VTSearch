@@ -126,49 +126,63 @@ def serialize_weights(model) -> dict[str, list]:
 # ---------------------------------------------------------------------------
 
 
+def pool_box_from_media(
+    media: dict[str, Any],
+    region_box: tuple[float, float, float, float] | None,
+) -> np.ndarray | None:
+    """Return the region-pooled training vector for *media*, or ``None``.
+
+    When *region_box* is set **and** *media* has a stored ``patch_grid``,
+    pool the box on-the-fly via
+    :func:`vtscore.media.patch_embed.box_to_vote_vector` and return it.
+    Otherwise return ``None`` so the caller can fall back to the media's
+    image-level ``embedding`` - the legacy training vector for image-level
+    votes, single-vector embedders, and patch datasets that haven't been
+    re-loaded under the v1 storage scheme.  Patch-embedder v2.
+
+    Shared by the in-dataset vote path (:func:`_training_vec_for_vote`) and
+    the cross-dataset labelset path
+    (:func:`vtscore.detectors.labelset_training._resolve_uncached_embedding`).
+    """
+    if region_box is None:
+        return None
+    grid = media.get("patch_grid")
+    if grid is None:
+        return None
+    from vtscore.media.patch_embed import box_to_vote_vector  # noqa: PLC0415
+
+    return box_to_vote_vector(np.asarray(grid), region_box)
+
+
 def _training_vec_for_vote(
     media: dict[str, Any],
     region_box: tuple[float, float, float, float] | None,
 ) -> np.ndarray:
     """Return the training vector for one vote on *media*.
 
-    When *region_box* is set **and** *media* has a stored ``patch_grid``,
-    pool the box on-the-fly via
-    :func:`vtscore.media.patch_embed.box_to_vote_vector`.  Otherwise
-    fall back to ``media["embedding"]`` - the v1/legacy image-level vector.
-    Patch-embedder v2.
+    Region-pools via :func:`pool_box_from_media` when the vote designated a
+    box and *media* carries a ``patch_grid``; otherwise falls back to
+    ``media["embedding"]`` - the v1/legacy image-level vector.
     """
-    if region_box is not None:
-        grid = media.get("patch_grid")
-        if grid is not None:
-            from vtscore.media.patch_embed import box_to_vote_vector  # noqa: PLC0415
-
-            return box_to_vote_vector(np.asarray(grid), region_box)
-    return media["embedding"]
+    pooled = pool_box_from_media(media, region_box)
+    return pooled if pooled is not None else media["embedding"]
 
 
-def _build_vote_tensors(
+def _build_vote_xy(
     clips_dict: dict[int, dict[str, Any]],
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
     region_boxes: dict[int, tuple[float, float, float, float]],
-) -> tuple[Any, Any, list, list[float], int, int] | None:
-    """Build training tensors from filtered votes.
+) -> tuple[list[np.ndarray], list[float]]:
+    """Build ``(X_list, y_list)`` from filtered votes.
 
-    Returns ``(X, y, X_list, y_list, input_dim, hidden_dim)`` when the
-    filtered labels satisfy ≥2 samples AND at least one good AND one bad;
-    returns ``None`` otherwise so the caller can early-return with an
-    empty result.
-
-    ``hidden_dim`` is sized from the *full* label count so that fold
-    models use the same architecture as the final model - making cross-
-    calibration thresholds directly comparable to final-model scores.
+    Good votes that designated a region are region-pooled via
+    :func:`_training_vec_for_vote`; bad votes always use the image-level
+    embedding.  Returns the raw lists - the caller
+    (:func:`_train_and_score_xy`) enforces the ≥2-samples / ≥1-good /
+    ≥1-bad guard.
     """
-    import torch  # noqa: PLC0415
-
-    from vtscore.training.mlp import _auto_hidden_dim  # noqa: PLC0415
-
-    X_list: list = []
+    X_list: list[np.ndarray] = []
     y_list: list[float] = []
     for cid in good_votes:
         if cid in clips_dict:
@@ -178,17 +192,7 @@ def _build_vote_tensors(
         if cid in clips_dict:
             X_list.append(clips_dict[cid]["embedding"])
             y_list.append(0.0)
-
-    num_good = sum(1 for v in y_list if v == 1.0)
-    num_bad = len(y_list) - num_good
-    if len(X_list) < 2 or num_good == 0 or num_bad == 0:
-        return None
-
-    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
-    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-    input_dim = X.shape[1]
-    hidden_dim = _auto_hidden_dim(len(X_list))
-    return X, y, X_list, y_list, input_dim, hidden_dim
+    return X_list, y_list
 
 
 def _score_all_media(
@@ -283,6 +287,80 @@ def _format_results(
     return results
 
 
+def _train_and_score_xy(
+    X_list: list[np.ndarray],
+    y_list: list[float],
+    clips_dict: dict[int, dict[str, Any]],
+    *,
+    inclusion_value: int,
+    safe_thresholds: bool,
+    calibrate_count: int,
+    calibration_fraction: float,
+    det_ctx: Any,
+) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
+    """Train an MLP on ``(X_list, y_list)`` and score every media in *clips_dict*.
+
+    Shared core of :func:`train_and_score` (vote-driven) and
+    :func:`vtscore.detectors.labelset_training.labelset_train_and_score`
+    (labelset-driven): the two pipelines differ only in how they assemble
+    ``(X_list, y_list)``, so the guard → threshold → train → score → format
+    tail lives here once.
+
+    ``hidden_dim`` is sized from the label count so the cross-calibration
+    fold models share the final model's architecture, making fold thresholds
+    directly comparable to final-model scores.  Returns ``([], 0.5, None)``
+    when the labels don't satisfy ≥2 samples AND ≥1 good AND ≥1 bad.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.training.mlp import _auto_hidden_dim, train_model  # noqa: PLC0415
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        calculate_safe_threshold,
+        cross_calibration_threshold_cached,
+    )
+
+    num_good = sum(1 for v in y_list if v == 1.0)
+    num_bad = len(y_list) - num_good
+    if len(X_list) < 2 or num_good == 0 or num_bad == 0:
+        return [], 0.5, None
+
+    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
+    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+    input_dim = X.shape[1]
+    hidden_dim = _auto_hidden_dim(len(X_list))
+
+    # Skip k-fold calibration when the label count is below the
+    # ``calculate_safe_threshold`` ramp floor: the calibration trainings
+    # would be expensive (two 200-epoch fits) and the result is either
+    # discarded (safe_thresholds=True blends with label_weight=0 → pure
+    # GMM) or unreliable.  0.5 is a sensible neutral mid-point.
+    if len(X_list) < 6:
+        threshold = 0.5
+    else:
+        threshold = cross_calibration_threshold_cached(
+            X_list,
+            y_list,
+            input_dim,
+            inclusion_value,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            hidden_dim=hidden_dim,
+            det_ctx=det_ctx,
+        )
+
+    # Training is image-level in v1 - the MLP only ever sees one vector
+    # per labelled media, mirroring the "vote on whole images" rule.
+    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
+
+    all_ids, scores, best_region = _score_all_media(model, clips_dict)
+
+    if safe_thresholds:
+        threshold = calculate_safe_threshold(threshold, scores, len(X_list))
+
+    results = _format_results(all_ids, scores, best_region, clips_dict)
+    return results, threshold, model
+
+
 def train_and_score(
     clips_dict: dict[int, dict[str, Any]],
     good_votes: dict[int, None],
@@ -334,48 +412,18 @@ def train_and_score(
         - ``model`` is the trained ``nn.Sequential`` model (``None`` when
           training was not possible).
     """
-    from vtscore.training.mlp import train_model  # noqa: PLC0415
-    from vtscore.training.thresholds import (  # noqa: PLC0415
-        calculate_safe_threshold,
-        cross_calibration_threshold_cached,
-    )
-
     region_boxes = vote_region_boxes or {}
-    built = _build_vote_tensors(clips_dict, good_votes, bad_votes, region_boxes)
-    if built is None:
-        return [], 0.5, None
-    X, y, X_list, y_list, input_dim, hidden_dim = built
-
-    # Skip k-fold calibration when the label count is below the
-    # ``calculate_safe_threshold`` ramp floor: the calibration trainings
-    # would be expensive (two 200-epoch fits) and the result is either
-    # discarded (safe_thresholds=True blends with label_weight=0 → pure
-    # GMM) or unreliable.  0.5 is a sensible neutral mid-point.
-    if len(X_list) < 6:
-        threshold = 0.5
-    else:
-        threshold = cross_calibration_threshold_cached(
-            X_list,
-            y_list,
-            input_dim,
-            inclusion_value,
-            calibrate_count=calibrate_count,
-            calibration_fraction=calibration_fraction,
-            hidden_dim=hidden_dim,
-            det_ctx=det_ctx,
-        )
-
-    # Training is image-level in v1 - the MLP only ever sees one vector
-    # per voted media, mirroring the "vote on whole images" rule.
-    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
-
-    all_ids, scores, best_region = _score_all_media(model, clips_dict)
-
-    if safe_thresholds:
-        threshold = calculate_safe_threshold(threshold, scores, len(X_list))
-
-    results = _format_results(all_ids, scores, best_region, clips_dict)
-    return results, threshold, model
+    X_list, y_list = _build_vote_xy(clips_dict, good_votes, bad_votes, region_boxes)
+    return _train_and_score_xy(
+        X_list,
+        y_list,
+        clips_dict,
+        inclusion_value=inclusion_value,
+        safe_thresholds=safe_thresholds,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        det_ctx=det_ctx,
+    )
 
 
 # ---------------------------------------------------------------------------

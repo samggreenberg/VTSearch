@@ -22,7 +22,6 @@ from typing import Any, Callable
 import numpy as np
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet
-from vtscore.utils.scores import sigmoid_to_finite_scores
 
 
 log = logging.getLogger(__name__)
@@ -151,30 +150,6 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
         return embed_file(file_path, media_type, embedder_name)
 
 
-def _pool_box_from_media(
-    media: dict[str, Any],
-    region_box: tuple[float, float, float, float] | None,
-) -> np.ndarray | None:
-    """Return the region-pooled training vector for *media*, if applicable.
-
-    When *region_box* is set **and** the media has a stored ``patch_grid``,
-    pool the box on-the-fly via
-    :func:`vtscore.media.patch_embed.box_to_vote_vector` and return that
-    vector.  Otherwise return ``None`` so the caller can fall back to
-    ``media["embedding"]`` - i.e. the legacy image-level training vector for
-    image-level votes, single-vector embedders, and patch datasets that
-    haven't been re-loaded under the v1 storage scheme.  Patch-embedder v2.
-    """
-    if region_box is None:
-        return None
-    grid = media.get("patch_grid")
-    if grid is None:
-        return None
-    from vtscore.media.patch_embed import box_to_vote_vector
-
-    return box_to_vote_vector(np.asarray(grid), region_box)
-
-
 def _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name: str) -> None:
     """Drop the label-embedding cache when the active dataset's embedder changed.
 
@@ -204,12 +179,13 @@ def _resolve_uncached_embedding(
     produces a vector.
     """
     from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
+    from vtscore.detectors.training import pool_box_from_media
 
     if snap:
         cid = resolve_current_dataset_cid(elem)
         if cid is not None and cid in snap:
             media = snap[cid]
-            pooled = _pool_box_from_media(media, elem.region_box)
+            pooled = pool_box_from_media(media, elem.region_box)
             emb = pooled if pooled is not None else media.get("embedding")
             if emb is not None:
                 return np.asarray(emb)
@@ -361,66 +337,29 @@ def labelset_train_and_score(
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
 
-    Replacement for :func:`~vtscore.detectors.training.train_and_score` that
-    trains on cross-dataset labels.  Scoring is still scoped to the active
+    Counterpart to :func:`~vtscore.detectors.training.train_and_score` that
+    trains on cross-dataset labels.  It assembles ``(X_list, y_list)`` from
+    the resolved labelset (populating the embedding cache on the way) and
+    then defers the threshold → train → score → format tail to the shared
+    :func:`~vtscore.detectors.training._train_and_score_xy` core, so the two
+    pipelines stay in lock-step (region-aware scoring, NaN sanitisation,
+    safe-threshold blending).  Scoring is still scoped to the active
     dataset's media, since that is what the user is sorting in the UI.
     """
-    import torch
-
-    from vtscore.training.mlp import _auto_hidden_dim, train_model
-    from vtscore.training.thresholds import (
-        calculate_safe_threshold,
-        cross_calibration_threshold_cached,
-    )
+    from vtscore.detectors.training import _train_and_score_xy
 
     populate_label_embeddings(det_ctx, labelset, media_type=media_type, snap=clips_dict)
     X_list, y_list = build_xy_from_labelset(det_ctx, labelset)
-
-    num_good = sum(1 for v in y_list if v == 1.0)
-    num_bad = len(y_list) - num_good
-    if len(X_list) < 2 or num_good == 0 or num_bad == 0:
-        return [], 0.5, None
-
-    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
-    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-    input_dim = X.shape[1]
-    hidden_dim = _auto_hidden_dim(len(X_list))
-
-    # Skip cross-cal trainings below the ``calculate_safe_threshold`` ramp
-    # floor - they're expensive and the result is discarded by the blend
-    # (label_weight=0 → pure GMM) or unreliable with so few labels.
-    if len(X_list) < 6:
-        threshold = 0.5
-    else:
-        threshold = cross_calibration_threshold_cached(
-            X_list,
-            y_list,
-            input_dim,
-            inclusion_value,
-            calibrate_count=calibrate_count,
-            calibration_fraction=calibration_fraction,
-            hidden_dim=hidden_dim,
-            det_ctx=det_ctx,
-        )
-
-    model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
-
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap
-
-    all_ids, all_embs = get_embedding_matrix_for_snap(clips_dict)
-    if not all_ids:
-        return [], threshold, model
-    X_all = torch.from_numpy(all_embs)
-    with torch.no_grad():
-        X_all = X_all.to(next(model.parameters()).device)
-        scores = sigmoid_to_finite_scores(model(X_all))
-
-    if safe_thresholds:
-        threshold = calculate_safe_threshold(threshold, scores, len(X_list))
-
-    results = [{"id": cid, "score": s} for cid, s in zip(all_ids, scores, strict=True)]
-    results.sort(key=lambda r: r["score"], reverse=True)
-    return results, threshold, model
+    return _train_and_score_xy(
+        X_list,
+        y_list,
+        clips_dict,
+        inclusion_value=inclusion_value,
+        safe_thresholds=safe_thresholds,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        det_ctx=det_ctx,
+    )
 
 
 def update_cache_for_cid(
