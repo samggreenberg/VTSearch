@@ -60,7 +60,7 @@ they define the library's interface boundary.
 |---|------|-------------------|-----|
 | 1 | **Flask** | `flask.g` reads in `state.core` and `detectors.workflow` | Pluggable context resolvers (`register_dataset_context_resolver`, `register_detector_context_resolver`); the Flask wiring lives in `vtsearch/shim/`. |
 | 2 | **Settings** | Library code read `vtsearch.settings.get_*` directly | `CoreConfig` dataclass carries every knob library code consumes; `CoreConfig.from_settings()` is the bridge the app installs via `register_core_config_builder()`. |
-| 3 | **Global state** | Library code imported the `medias`, `good_votes`, … proxies | `DatasetContext` / `DetectorContext` are the library primitives; the proxies stayed app-side in `vtsearch/shim/state_proxies.py`. |
+| 3 | **Global state** | Library code imported the `medias`, `good_votes`, … proxies | `DatasetContext` / `DetectorContext` are the library primitives; the proxies stayed app-side in `vtsearch/state_proxies.py`. |
 | 4 | **Filesystem** | Hardcoded `"data/"` paths scattered around | Every path routes through `vtscore.config.DATA_DIR` (honouring `$VTSEARCH_DATA_DIR`), snapshotted into `CoreConfig.data_dir`. |
 | 5 | **Plugin discovery** | Module scan over `vtsearch.<family>` package paths | Generic `PluginRegistry[T]` walks any package by name + sentinel; library families register under `vtscore.<family>` entry-point groups, app families stay `vtsearch.<family>`. |
 | 6 | **Pickle compatibility** | Risk that old pickles referenced `vtsearch.*` classes | Audit confirmed `safe_pickle_load`'s allowlist already prevents app-class references in any saved artefact. No shim needed. |

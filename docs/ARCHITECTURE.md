@@ -173,10 +173,13 @@ VTSearch/
 │   │                               get_user_data_dir()
 │   │
 │   ├── state/                      App-tier state shim; re-exports vtscore.state.* and adds
-│   │                               proxy view (medias, good_votes, bad_votes, …) from shim/
+│   │                               proxy view (medias, good_votes, bad_votes, …) from state_proxies.py
 │   │
-│   ├── shim/                       state_proxies.py; _ProxyDict / _ProxyList per-request
-│   │                               resolution (checks flask.g, falls back to thread-local)
+│   ├── state_proxies.py            _ProxyDict / _ProxyList per-request resolution
+│   │                               (checks flask.g, falls back to thread-local)
+│   │
+│   ├── shim/                       Flask glue: context resolvers, persistence hooks,
+│   │                               CoreConfig builder, app-only plugin families
 │   │
 │   ├── schemas/                    Marshmallow schemas for API serialisation
 │   │
@@ -501,7 +504,7 @@ Application state is split across two packages: **`vtscore/state/`**
 owns `DatasetContext`, `DetectorContext`, `_state_lock`, and all context
 operations; **`vtsearch/state/__init__.py`** is the app-tier shim that
 re-exports everything from `vtscore.state` and adds the proxy view.  The
-module-level names below are **proxy objects** (from `vtsearch/shim/state_proxies.py`)
+module-level names below are **proxy objects** (from `vtsearch/state_proxies.py`)
 that delegate to a per-request `DatasetContext` or `DetectorContext`;
 see [Multi-dataset support](#multi-dataset-support). All mutable access
 is protected by `_state_lock` (a `threading.RLock`):

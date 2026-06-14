@@ -290,7 +290,7 @@ pool, you do it.
 ### Are `medias`, `good_votes`, etc. importable?
 
 Not from `vtscore`. Those proxy objects are app-tier - they live in
-`vtsearch.shim.state_proxies` and are re-exported by `vtsearch.state`.
+`vtsearch.state_proxies` and are re-exported by `vtsearch.state`.
 Library code uses `DatasetContext.medias` and `DetectorContext.good_votes`
 directly via a resolved context.
 
