@@ -332,6 +332,24 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
   dispatchable or explicitly exempt; no orphan dispatch entries; schema
   fields stay backed by Pydantic fields + real accessors). The marshmallow ↔
   Pydantic field overlap is left alone — that's Theme D. Full suite green.
+- **Theme C follow-on (`dataset_max_age_days` discrepancy resolved):** the
+  drift-guard work surfaced that `dataset_max_age_days` was advertised as
+  loadable by `SettingsUpdateSchema` but silently dropped by the PUT route
+  (no dispatch entry) — a latent inconsistency rather than a clean design.
+  Resolved per the maintainer's call: it is now an explicit *server-wide*
+  override (not a user preference), settable via a new
+  `--dataset-max-age-days` CLI flag and a `VTSEARCH_DATASET_MAX_AGE_DAYS`
+  env-var bridge (honored at server init for the gunicorn-launched Docker
+  images, which never parse `argv`; the CLI flag wins over the env var, both
+  win over the persisted file for the process lifetime).
+  `get_effective_dataset_max_age_days()` resolves override → file; the
+  dataset-creation pipeline and `GET /api/settings` read the effective value.
+  The schema contract is now honest: `dump_only` in `AppSettingsSchema` (the
+  dashboard still reads it to gate the Age-Off column), absent from
+  `SettingsUpdateSchema`. The LabBench Docker image pins the cap at 14 days
+  (`VTSEARCH_DATASET_MAX_AGE_DAYS=14`, authoritative even on redeploys onto a
+  pre-existing volume; seeded `settings.json` updated 30 → 14 for fresh
+  volumes). Full suite green.
 
 ## Open follow-ups
 
