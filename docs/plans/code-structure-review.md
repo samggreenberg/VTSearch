@@ -1,11 +1,11 @@
 # Code-structure review
 
 **Status:** Review complete. **Theme A** (the `vtscore` ↔ `vtsearch`
-boundary) is shipped: A1 (fat-controller extractions), A2 (workflow
-de-coupling), and A3 (training-pipeline merge) all landed. The other themes
-are scoped below as a prioritized backlog for later passes; the broader
-inverse-leak sweep is the one remaining Theme A item. See "What shipped" +
-"Open follow-ups" at the bottom for live status.
+boundary) is fully shipped: A1 (fat-controller extractions), A2 (workflow
+de-coupling), A3 (training-pipeline merge), and the broader inverse-leak
+sweep all landed. The other themes are scoped below as a prioritized
+backlog for later passes. See "What shipped" + "Open follow-ups" at the
+bottom for live status.
 
 This is a systematic, repo-wide structural review: where have design
 decisions that were right at small scale been outgrown, and what is worth
@@ -210,8 +210,8 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
 ## Prioritized backlog
 
 1. **Theme A** — extract fat-controller logic into `vtscore`; de-couple
-   `workflow.py` from `flask.g`; merge the two training pipelines. (Shipped;
-   only the broader inverse-leak sweep remains — see Open follow-ups.)
+   `workflow.py` from `flask.g`; merge the two training pipelines; inverse-leak
+   sweep. (Shipped in full — see What shipped.)
 2. **Theme C quick wins** — settings `SettingSpec` registry; `_ClapBase`
    mixin; per-side settings factory.
 3. **Theme E** — "shim" rename; `labelset_ops` facade.
@@ -274,15 +274,36 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
   duplicated patch-region pooling (`_training_vec_for_vote`'s inline pooling vs
   `labelset_training._pool_box_from_media`) collapsed into one
   `pool_box_from_media` helper in `training.py`. Full suite green.
+- **Theme A, slice 6 (inverse-leak sweep):** every `from vtsearch.state import`
+  inside `vtscore/` now points at `vtscore.state` directly. The audit found all
+  eight sites (`detectors/{labelset_elements,training,label_sync,
+  label_restoration,media_seeding}.py`, `datasets/{ingest,load_pipeline}.py`)
+  pulled only pure `vtscore.state` re-exports — the lone proxy use, `medias` in
+  `media_seeding.py`, became `get_active_context().medias` (equivalent, and
+  Flask-free). The one remaining *module-level* app-tier import,
+  `from vtsearch.auth import get_current_user` in `load_pipeline.py`, was made
+  function-local at its three call sites to match the file's other lazy
+  `vtsearch.auth` imports, so importing the library module no longer drags in
+  the app tier at import time. The remaining `vtsearch` references in `vtscore/`
+  are all genuine app-tier reaches (`vtsearch.auth`, `vtsearch.achievements`,
+  `vtsearch.logging_config`, `vtsearch.routes._shared`) and are all
+  function-local lazy imports — the established escape hatch for optional
+  app-tier side effects (auth identity, achievement counters, the transformers
+  logging bridge, the routes-layer embedder resolver). Full suite green,
+  including `./run-tests.sh vtscore-clean`.
 
 ## Open follow-ups
 
-- **Theme A, broader inverse-leak sweep (not in original A2 scope):** ~15 other
-  `vtscore/` modules still import from `vtsearch` (e.g.
-  `detectors/label_sync.py`, `detectors/training.py`, `state/votes.py`,
-  `datasets/load_pipeline.py`). Most are cosmetic (a pure `vtscore` function
-  imported via the `vtsearch.state` re-export); some may be genuine app-tier
-  reaches. Worth a dedicated pass that audits each and points the cosmetic ones
-  back at `vtscore.state` directly.
+- **Theme A — genuine app-tier reaches (deferred, optional):** the lazy
+  `vtsearch.auth` / `vtsearch.achievements` / `vtsearch.logging_config` /
+  `vtsearch.routes._shared` imports that remain in `vtscore/` are real
+  cross-tier calls, not cosmetic. They are correct as lazy imports today (the
+  library tier degrades gracefully without them), but the architecturally
+  "pure" form is dependency injection via registration hooks — the pattern the
+  codebase already uses for `register_setting_persister` /
+  `register_core_config_builder`. Converting the achievement counters and
+  auth-identity lookups to injected hooks would make `vtscore/` import-clean of
+  `vtsearch` entirely. Not urgent; do it if/when the library tier is actually
+  extracted.
 - **Themes B–F:** see the prioritized backlog above; none started.
 </content>

@@ -58,7 +58,7 @@ def resolve_current_dataset_cid(elem: LabeledElement) -> int | None:
     media post-dedup without re-running it, this contract breaks; the
     invariant is covered by ``test_collapse_duplicates_yields_unique_md5_lookup``.
     """
-    from vtsearch.state import (
+    from vtscore.state import (
         build_media_lookup,
         resolve_media_ids,
         snapshot_medias,
@@ -134,7 +134,7 @@ def build_labels_detail(detector_data: dict[str, Any]) -> dict[str, Any]:
 
     Returns ``{"good": [...], "bad": [...], "media_type": "..."}``.
     """
-    from vtsearch.state import get_active_detector_context
+    from vtscore.state import get_active_detector_context
 
     media_type = detector_data.get("media_type", "") or ""
     labelset = LabelSet.from_dict(detector_data.get("labelset") or {})

@@ -29,7 +29,7 @@ def _get_loaded_detector_state() -> tuple[dict[str, Any], Path, dict[str, Any], 
     """
     from vtscore.detectors.registry import get_detector, is_find_mode
     from vtscore.detectors.store import _detector_path, _read_detector
-    from vtsearch.state import get_active_detector_context
+    from vtscore.state import get_active_detector_context
 
     if is_find_mode():
         return None

@@ -66,7 +66,7 @@ def train_and_threshold(
     """
     import torch
 
-    from vtsearch.state import (
+    from vtscore.state import (
         get_calibrate_count,
         get_calibration_fraction,
         get_inclusion,
