@@ -6,9 +6,9 @@ import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import {
-  MediaContextMenuComponent,
-  MediaContextMenuItem,
-} from '../left-panel/media-item/media-context-menu.component';
+  ContextMenuComponent,
+  ContextMenuItem,
+} from '../context-menu/context-menu.component';
 import {
   MediaCropModalComponent,
   MediaCropResult,
@@ -49,7 +49,7 @@ import { buildMediaContextMenuItems } from './media-context-menu-items';
     RightPanelComponent,
     ProgressModalComponent,
     ResortPromptModalComponent,
-    MediaContextMenuComponent,
+    ContextMenuComponent,
     MediaCropModalComponent,
     PanelResizeDirective,
   ],
@@ -632,7 +632,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   contextMenuX = 0;
   contextMenuY = 0;
   contextMenuMediaId: number | null = null;
-  contextMenuItems: MediaContextMenuItem[] = [];
+  contextMenuItems: ContextMenuItem[] = [];
 
   /** Pending crop modal state. When set, the user has chosen a "Crop and …"
    *  action and we have fetched the media bytes; the crop modal renders. */
