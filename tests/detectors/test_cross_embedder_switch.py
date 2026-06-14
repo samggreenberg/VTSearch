@@ -180,7 +180,7 @@ class TestLoadEndpointReembedTask:
         detector_id = entry["id"]
 
         det_ctx = DetectorContext(detector_id, name=name, media_type="audio", embedder=embedder)
-        # Pre-stamp a cached labelset so ``_maybe_start_label_reembed`` has
+        # Pre-stamp a cached labelset so ``maybe_start_label_reembed`` has
         # something to walk.
         det_ctx.cached_labelset = LabelSet.from_dict(labelset_dict)
         det_ctx.cached_labelset_media_type = "audio"
