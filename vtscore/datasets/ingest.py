@@ -20,7 +20,7 @@ import hashlib
 import json
 from typing import Any, Callable, Optional
 
-from vtsearch.state import next_media_id
+from vtscore.state import next_media_id
 from vtscore.embedding.normalize import l2_normalize
 from vtscore.state.core import _state_lock
 

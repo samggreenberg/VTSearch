@@ -103,7 +103,6 @@ def register_last_embedder_persistence_hook(fn: Callable[[str, str], None]) -> N
     _last_embedder_persistence_hook = fn
 
 
-from vtsearch.auth import get_current_user
 from vtscore.config import DATA_DIR
 from vtscore.datasets import export_dataset_to_file
 from vtscore.datasets.loader import apply_custom_metadata_md5
@@ -113,7 +112,7 @@ from vtscore.datasets.registry import (
     add_loaded_id as _reg_add_loaded,
     unregister_dataset as _reg_unregister,
 )
-from vtsearch.state import (
+from vtscore.state import (
     DatasetContext,
     build_diversity_tree_for_context,
     clear_all,
@@ -1292,6 +1291,8 @@ def _run_origin_load_in_background(
 
     # Snapshot the user that triggered the load so background per-user
     # state (settings writes, settings_source sync) resolves correctly.
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
+
     request_user = created_by or get_current_user()
 
     def task():
@@ -1464,6 +1465,8 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # the reload-from-origin path supplies a server path string that
     # needs CliUploadedFile wrapping so ``run()`` doesn't have to
     # branch on the input shape.
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
+
     field_values = wrap_cli_file_fields(importer.fields, field_values)
     created_by = get_current_user()
     origin = importer.build_origin(field_values)
@@ -1518,6 +1521,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     :data:`STAGING_DIR` and sets the ``staging_result`` field on the progress
     tracker when finished.
     """
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
     from vtscore.plugins.uploads import wrap_cli_file_fields  # noqa: PLC0415
 
     field_values = wrap_cli_file_fields(importer.fields, field_values)
