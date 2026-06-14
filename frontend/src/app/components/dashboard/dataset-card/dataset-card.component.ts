@@ -10,11 +10,13 @@ import {
   isProgressIndeterminate,
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
+import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
+import { buildDatasetCardMenuItems } from '../card-context-menu-items';
 
 @Component({
   selector: 'vt-dataset-card',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProgressBarComponent],
+  imports: [CommonModule, FormsModule, ProgressBarComponent, ContextMenuComponent],
   templateUrl: './dataset-card.component.html',
   styleUrl: './dataset-card.component.scss',
 })
@@ -39,6 +41,23 @@ export class DatasetCardComponent implements OnChanges {
   @HostListener('click', ['$event'])
   onClick(event: MouseEvent): void {
     this.rowClick.emit(event);
+  }
+
+  @HostListener('contextmenu', ['$event'])
+  onContextMenu(event: MouseEvent): void {
+    // While renaming, let the native menu serve the text input (paste, etc.).
+    if (this.editing) return;
+    // A loading/errored row shows a progress bar in place of the actions, so
+    // there is nothing to act on.
+    if (this.loadingTask) return;
+    event.preventDefault();
+    this.contextMenuItems = buildDatasetCardMenuItems(this.dataset, {
+      isDefaultLogin: this.isDefaultLogin,
+      isOwner: this.isOwner,
+    });
+    this.contextMenuX = event.clientX;
+    this.contextMenuY = event.clientY;
+    this.contextMenuOpen = true;
   }
   @Output() rename = new EventEmitter<string>();
   @Output() stats = new EventEmitter<void>();
@@ -65,12 +84,50 @@ export class DatasetCardComponent implements OnChanges {
   wasStatsOpen = false;
   wasDeleteOpen = false;
 
+  contextMenuOpen = false;
+  contextMenuX = 0;
+  contextMenuY = 0;
+  contextMenuItems: ContextMenuItem[] = [];
+
   startRename(event: MouseEvent): void {
     event.stopPropagation();
+    this.beginRename();
+  }
+
+  /** Enter inline-rename mode (shared by the pencil button and the menu). */
+  beginRename(): void {
     this.editing = true;
     this.wasEditing = true;
     this.editName = this.dataset.name;
     setTimeout(() => this.renameInput?.nativeElement.focus());
+  }
+
+  onContextMenuAction(id: string): void {
+    this.contextMenuOpen = false;
+    switch (id) {
+      case 'load':
+        this.load.emit();
+        break;
+      case 'browse':
+        this.browse.emit();
+        break;
+      case 'security':
+        this.security.emit();
+        break;
+      case 'rename':
+        this.beginRename();
+        break;
+      case 'stats':
+        this.stats.emit();
+        break;
+      case 'delete':
+        this.delete.emit();
+        break;
+    }
+  }
+
+  dismissContextMenu(): void {
+    this.contextMenuOpen = false;
   }
 
   confirmRename(): void {
