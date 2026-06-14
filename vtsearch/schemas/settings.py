@@ -110,7 +110,12 @@ class AppSettingsSchema(Schema):
     detectors_dir = fields.String(dump_only=True)
     max_concurrent_dataset_downloads = fields.Integer(dump_only=True)
     max_concurrent_dataset_embeddings = fields.Integer(dump_only=True)
-    dataset_max_age_days = fields.Integer(load_default=None, allow_none=True)
+    # Server-tier dataset retention policy. Set via the
+    # ``--dataset-max-age-days`` CLI flag (process-wide, all users) or the
+    # persisted settings file; surfaced read-only here so the dashboard can
+    # gate its Age-Off column. Not in ``SettingsUpdateSchema`` - not
+    # editable via PUT.
+    dataset_max_age_days = fields.Integer(dump_only=True, allow_none=True)
 
     # Auto-Find (per-user, editable from the Auto-Find settings tab).
     # ``autofind_detectors`` is each user's own list of detectors that auto-run
@@ -229,7 +234,9 @@ class SettingsUpdateSchema(Schema):
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()
-    dataset_max_age_days = fields.Integer(allow_none=True)
+    # NB: dataset_max_age_days is intentionally absent - it is a server-tier
+    # retention policy set via --dataset-max-age-days (or the settings file),
+    # not editable via PUT /api/settings. It is dump_only in AppSettingsSchema.
 
     last_embedder_per_media_type = fields.Raw()
     import_defaults_by_media_type = fields.Raw()

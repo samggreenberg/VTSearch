@@ -20,8 +20,10 @@
 #     See ``vtsearch.settings.get_effective_hidden_plugins`` for the
 #     merge semantics; the same effect is achievable at runtime with
 #     ``--hide-plugin converters:audio2image --hide-plugin importers:demo``
-#     in dev-mode invocations. It also sets ``dataset_max_age_days = 30``
-#     so every new dataset ages off ~1 month after creation.
+#     in dev-mode invocations. ``VTSEARCH_DATASET_MAX_AGE_DAYS=14`` (below)
+#     caps dataset retention at 14 days for every user; it overrides the
+#     persisted file for the process lifetime and is not editable via the
+#     settings API.
 #
 # Build (from repo root):
 #   docker build -f docker/Dockerfile.labbench -t vtsearch:labbench .
@@ -107,11 +109,16 @@ RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_ver
 #   Hidden plugins remain importable by name for any backend code that
 #   names them directly; this is a UI declutter, not a security gate.
 #
-# * ``dataset_max_age_days=30`` gives every dataset created on this
-#   server a ~1-month age-off: it's stamped with an ``expires_at`` 30
+# * ``dataset_max_age_days=14`` gives every dataset created on this
+#   server a two-week age-off: it's stamped with an ``expires_at`` 14
 #   days out and auto-removed from the registry once that passes. This
 #   keeps the shared LabBench volume from accumulating stale datasets
-#   indefinitely. Users can change or clear it in Settings.
+#   indefinitely. The same 14-day cap is also pinned via the
+#   ``VTSEARCH_DATASET_MAX_AGE_DAYS`` env var below, which overrides the
+#   persisted file for the process lifetime (so a redeploy onto a
+#   pre-existing volume still gets the cap, even though the seeded file
+#   above is only written into a fresh volume). The value is not editable
+#   via the settings API.
 #
 # Per-user tier (``data/default/user_settings.json``; the
 # ``DefaultLoginProvider`` resolves to the ``default`` user):
@@ -129,7 +136,7 @@ RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_ver
 RUN mkdir -p /app/data /app/data/default && \
     printf '%s\n' \
       '{' \
-      '  "dataset_max_age_days": 30,' \
+      '  "dataset_max_age_days": 14,' \
       '  "hidden_plugins": {' \
       '    "converters": ["audio2image"],' \
       '    "importers": ["demo"]' \
@@ -164,6 +171,7 @@ EXPOSE 5000
 
 ENV OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
-    VTSEARCH_SERVER_INIT=1
+    VTSEARCH_SERVER_INIT=1 \
+    VTSEARCH_DATASET_MAX_AGE_DAYS=14
 
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]

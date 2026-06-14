@@ -41,53 +41,10 @@ settings_bp = Blueprint(
 )
 
 
-# Map of update-body key → setter callable. Setters live in
-# ``vtsearch.settings`` and enforce range clamping / value validation,
-# so this module's only job is to dispatch; marshmallow already
-# validated the *types*.
-#
-# The training-relevant settings (``safe_thresholds``, ``calibrate_count``,
-# ``calibration_fraction``) route through ``vtsearch.state`` rather than
-# ``vtsearch.settings`` so the state setter's side-effect
-# (``invalidate_loaded_detector_models``) fires and the cached MLP /
-# threshold on every loaded detector context is dropped; otherwise
-# ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` would keep
-# scoring with a threshold computed under the prior setting (M7).
-_SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = {
-    "volume": settings.set_volume,
-    "theme": settings.set_theme,
-    "enrich_descriptions": settings.set_enrich_descriptions,
-    "safe_thresholds": _state_set_safe_thresholds,
-    "calibrate_count": _state_set_calibrate_count,
-    "calibration_fraction": _state_set_calibration_fraction,
-    "audio_playing": settings.set_audio_playing,
-    "show_animations": settings.set_show_animations,
-    "show_metadata": settings.set_show_metadata,
-    "label_hint_dismissed": settings.set_label_hint_dismissed,
-    "view_mode_left": settings.set_view_mode_left,
-    "view_mode_right": settings.set_view_mode_right,
-    "grid_icon_size_left": settings.set_grid_icon_size_left,
-    "grid_icon_size_right": settings.set_grid_icon_size_right,
-    "focus_mode_left": settings.set_focus_mode_left,
-    "focus_mode_right": settings.set_focus_mode_right,
-    "panel_pct_left": settings.set_panel_pct_left,
-    "panel_pct_right": settings.set_panel_pct_right,
-    "grid_icon_size_popup": settings.set_grid_icon_size_popup,
-    "autopilot_enabled": settings.set_autopilot_enabled,
-    "hide_autopilot": settings.set_hide_autopilot,
-    "autopilot_top_greens": settings.set_autopilot_top_greens,
-    "autopilot_hard_reds": settings.set_autopilot_hard_reds,
-    "autopilot_resort_interval": settings.set_autopilot_resort_interval,
-    "autopilot_goal_diversity": settings.set_autopilot_goal_diversity,
-    "autofind_detectors": settings.set_autofind_detectors,
-    "import_defaults_by_media_type": settings.set_import_defaults_by_media_type,
-    "browse_panel_width": settings.set_browse_panel_width,
-    "browse_bin_shape": settings.set_browse_bin_shape,
-    "browse_colormap": settings.set_browse_colormap,
-    "browse_icon_size": settings.set_browse_icon_size,
-    "browse_thumbnail_border": settings.set_browse_thumbnail_border,
-    "browse_compact": settings.set_browse_compact,
-}
+# The scalar-setter dispatch table (``_SCALAR_SETTERS``) is derived from
+# ``SettingsUpdateSchema`` further down, once ``_CUSTOM_SETTERS`` /
+# ``_READ_ONLY_KEYS`` / ``_NON_PUT_KEYS`` are defined. See
+# ``_build_scalar_setters``.
 
 
 def _apply_enable_achievements(value: bool) -> None:
@@ -245,6 +202,10 @@ def _with_effective(data: dict) -> dict:
     data["hidden_plugins"] = {
         family: sorted(names) for family, names in settings.get_effective_hidden_plugins().items()
     }
+    # Surface the CLI-overridable retention policy as the value actually in
+    # force (``--dataset-max-age-days`` wins over the persisted file), so the
+    # dashboard's Age-Off column reflects what new datasets are stamped with.
+    data["dataset_max_age_days"] = settings.get_effective_dataset_max_age_days()
     return data
 
 
@@ -352,6 +313,66 @@ _CUSTOM_SETTERS: dict[str, Callable[[Any], None]] = {
     "autofind_exporter": _apply_autofind_exporter,
     "autofind_exporter_field_values": _apply_autofind_exporter_field_values,
 }
+
+
+# The training-relevant settings route through ``vtsearch.state`` rather
+# than ``vtsearch.settings`` so the state setter's side-effect
+# (``invalidate_loaded_detector_models``) fires and the cached MLP /
+# threshold on every loaded detector context is dropped; otherwise
+# ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` would keep
+# scoring with a threshold computed under the prior setting (M7). These
+# override the plain ``settings.set_<key>`` accessor the table would
+# otherwise pick up.
+_STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
+    "safe_thresholds": _state_set_safe_thresholds,
+    "calibrate_count": _state_set_calibrate_count,
+    "calibration_fraction": _state_set_calibration_fraction,
+}
+
+#: Keys that ``SettingsUpdateSchema`` accepts and that have a
+#: ``settings.set_<key>`` accessor, yet are intentionally NOT settable via
+#: ``PUT /api/settings`` because they are persisted through other paths:
+#:
+#: * ``last_embedder_per_media_type`` - written by the load-pipeline
+#:   "last embedder" hook (see :mod:`vtsearch.shim`), keyed per media type,
+#:   not by the settings form.
+#:
+#: (``dataset_max_age_days`` is a server-tier retention policy set via the
+#: ``--dataset-max-age-days`` CLI flag / settings file, not via PUT; it is
+#: ``dump_only`` in the schema, so it is not "loadable" and needs no entry
+#: here.)
+#:
+#: They are listed here so the drift-guard test
+#: (``tests/api/test_settings_dispatch.py``) treats their absence from the
+#: dispatch tables as deliberate rather than a missed wiring.
+_NON_PUT_KEYS = frozenset({"last_embedder_per_media_type"})
+
+
+def _build_scalar_setters() -> dict[str, Callable[[Any], Any]]:
+    """Derive the scalar-setter dispatch table from ``SettingsUpdateSchema``.
+
+    Every loadable (non-``dump_only``) schema field whose update is a plain
+    ``settings.set_<key>`` call is wired automatically, so adding a simple
+    setting no longer means hand-editing a parallel dispatch table. The
+    curated exceptions stay explicit: :data:`_STATE_TIER_SETTERS` overrides
+    the plain accessor for the three training settings, and keys in
+    :data:`_CUSTOM_SETTERS` (bespoke validation), :data:`_READ_ONLY_KEYS`
+    (computed-on-read), and :data:`_NON_PUT_KEYS` (persisted elsewhere) are
+    skipped. ``tests/api/test_settings_dispatch.py`` asserts this table and
+    the schema cannot silently diverge.
+    """
+    table: dict[str, Callable[[Any], Any]] = dict(_STATE_TIER_SETTERS)
+    loadable = {name for name, field in SettingsUpdateSchema().fields.items() if not field.dump_only}
+    for key in sorted(loadable):
+        if key in table or key in _CUSTOM_SETTERS or key in _READ_ONLY_KEYS or key in _NON_PUT_KEYS:
+            continue
+        setter = getattr(settings, f"set_{key}", None)
+        if setter is not None:
+            table[key] = setter
+    return table
+
+
+_SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = _build_scalar_setters()
 
 
 def _apply_one_key(key: str, value) -> None:
