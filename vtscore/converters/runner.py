@@ -5,7 +5,7 @@ that any dataset importer can call to scan a directory for source media
 files, convert them via one or more :class:`MediaConverter` instances,
 and append them to an existing medias dict.  The converter outputs are
 left with ``embedding=None``; the framework
-:func:`vtscore.datasets.load_pipeline.embed_missing` stage fills them
+:func:`vtscore.datasets.stages.embedding.embed_missing` stage fills them
 in after the importer returns.
 """
 
@@ -109,7 +109,7 @@ def _build_converted_media_dict(
     """Build the media dict for one converter output.
 
     ``embedding`` is left at ``None``; the framework
-    :func:`~vtscore.datasets.load_pipeline.embed_missing` stage embeds
+    :func:`~vtscore.datasets.stages.embedding.embed_missing` stage embeds
     converter outputs via ``media_bytes`` / ``media_string`` after the
     importer returns.
     """

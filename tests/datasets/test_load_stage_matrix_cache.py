@@ -24,11 +24,8 @@ from __future__ import annotations
 import numpy as np
 
 from vtscore.concurrency.progress import LoadingTasksTracker
-from vtscore.datasets.load_pipeline import (
-    _apply_clipper_stage,
-    _collapse_duplicates_stage,
-    _drop_none_embeddings_stage,
-)
+from vtscore.datasets.stages.clipper import _apply_clipper_stage
+from vtscore.datasets.stages.finalize import _collapse_duplicates_stage, _drop_none_embeddings_stage
 from vtscore.embedding.matrix import get_embedding_matrix
 from vtscore.state.core import DatasetContext
 

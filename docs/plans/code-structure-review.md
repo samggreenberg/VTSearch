@@ -49,11 +49,22 @@ responsibilities.
   trigger is what the default-user read-through and the CLI `--settings`
   flat-file flow rely on; moving it to a script is a behavior change worth
   its own scoped task, not a free win.
-- **`vtscore/datasets/load_pipeline.py` (1588 lines).** Six concerns:
-  `ConcurrencyGate`, progress/step mapping, clipper-chain fixup, embedding,
-  dedup/diversity, registry/migration, background-task orchestration. Move
-  `ConcurrencyGate` to `vtscore/concurrency/`; split post-import stages into
-  a `stages/` package.
+- **`vtscore/datasets/load_pipeline.py`** — **DONE (stage extraction).**
+  `ConcurrencyGate` moved to `vtscore/concurrency/gate.py` (generic
+  dynamic-limit semaphore primitive). The six post-import concerns were
+  split into a `vtscore/datasets/stages/` package: `_common.py` (shared
+  `_TOTAL_LOAD_STEPS`/`_STATUS_TO_STEP` + `_origin_to_str`), `clipper.py`
+  (clipper/converter chain + per-clip MD5/embedding/thumbnail fixup),
+  `embedding.py` (embed-missing + patch regions), `finalize.py` (drop-none /
+  collapse-duplicates / diversity-tree), `projection.py` (opt-in 2-D UMAP
+  build + persist), and `registry.py` (auto-register + context-id
+  migration). `load_pipeline.py` (down from 1592 → ~640 lines) keeps the
+  background-thread orchestration (gate handoff via `_LoadGateController`,
+  importer invocation, stage sequencing, failure handling, staging flow)
+  plus the request-field parsing helpers (`_parse_bool` /
+  `_parse_chain_field` / `_normalize_media_type` / `auto_chunk_size`). The
+  dependency DAG is one-way (orchestrator → stages → `stages/_common`); no
+  stage imports `load_pipeline`, so there is no import cycle.
 - **`vtscore/datasets/importers/base.py` (1202 lines, 35 methods).** A
   trivial single-API-call importer inherits all the multi-media-spec /
   converter / ingestion machinery. Split a thin `ImporterBase` from a
@@ -148,9 +159,9 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
 
 ## Prioritized backlog (remaining)
 
-1. **Theme B** — split `app.py`, `load_pipeline.py`,
-   `importers/base.py`. (`settings.py` engine extraction shipped — see
-   the Theme B bullet above.)
+1. **Theme B** — split `app.py` and `importers/base.py`. (`settings.py`
+   engine extraction and `load_pipeline.py` stage extraction shipped — see
+   the Theme B bullets above.)
 2. **Theme D** — converge frontend types onto the generated client.
 3. **Theme E** — `MediaSource` / `DatasetImporter` ingestion-concept overlap.
 4. **Theme F** — collapse `PluginField` aliases; revisit `SyncSource` if a

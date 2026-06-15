@@ -923,7 +923,7 @@ class TestConcurrencyGate:
 
     def test_blocking_acquire_when_limit_changes(self):
         """A waiter blocked at limit=1 must wake up when limit grows to 2."""
-        from vtscore.datasets.load_pipeline import ConcurrencyGate
+        from vtscore.concurrency.gate import ConcurrencyGate
 
         limit = [1]
         gate = ConcurrencyGate(lambda: limit[0])
@@ -952,7 +952,7 @@ class TestConcurrencyGate:
         assert gate.active == 0
 
     def test_non_blocking_acquire_respects_limit(self):
-        from vtscore.datasets.load_pipeline import ConcurrencyGate
+        from vtscore.concurrency.gate import ConcurrencyGate
 
         gate = ConcurrencyGate(lambda: 2)
         assert gate.acquire(blocking=False)
@@ -965,7 +965,7 @@ class TestConcurrencyGate:
 
     def test_zero_limit_is_clamped_to_one(self):
         """A configured limit of 0 should still allow one acquisition."""
-        from vtscore.datasets.load_pipeline import ConcurrencyGate
+        from vtscore.concurrency.gate import ConcurrencyGate
 
         gate = ConcurrencyGate(lambda: 0)
         assert gate.acquire(blocking=False)

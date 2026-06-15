@@ -1555,7 +1555,7 @@ class TestLoadFailureCleanup:
         from unittest import mock
 
         from vtsearch import settings as settings_mod
-        from vtscore.datasets.load_pipeline import _auto_register_dataset
+        from vtscore.datasets.stages.registry import _auto_register_dataset
 
         ds_dir = tmp_path / "saved_for_c12"
         settings_mod.set_saved_datasets_dir(str(ds_dir))

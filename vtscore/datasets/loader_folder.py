@@ -4,7 +4,7 @@ Loads datasets from a directory tree of media files, with optional
 pre-computed embeddings/MD5s and custom metadata.  Loaders build the
 media dicts but do **not** call the embedder - items without a
 pre-computed embedding leave ``embedding=None`` for the framework
-embed stage (:func:`vtscore.datasets.load_pipeline.embed_missing`) to
+embed stage (:func:`vtscore.datasets.stages.embedding.embed_missing`) to
 fill in.
 
 Split out from :mod:`vtscore.datasets.loader` for navigability.
@@ -495,7 +495,7 @@ def load_dataset_from_folder(
     file.  Loaders do **not** call the embedder - items leave with
     ``embedding=None`` unless a pre-computed vector is supplied through
     ``content_vectors`` or ``custom_metadata_map``.  The framework
-    embed stage (:func:`vtscore.datasets.load_pipeline.embed_missing`)
+    embed stage (:func:`vtscore.datasets.stages.embedding.embed_missing`)
     fills the rest in after the importer returns.
 
     The ``medias`` dict is cleared before loading begins.

@@ -509,7 +509,7 @@ class TestPatchForwardBulkOverrides:
 
 class TestEmbedMissingRoutesToPatchForwardBulk:
     def test_embed_missing_calls_patch_forward_bulk_once(self):
-        from vtscore.datasets.load_pipeline import embed_missing
+        from vtscore.datasets.stages.embedding import embed_missing
 
         emb = mock.MagicMock()
         emb.name = "fake_patch"
