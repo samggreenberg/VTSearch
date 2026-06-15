@@ -301,9 +301,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     return Math.min(Math.max(this.rows.length, 1) * this.rowSize, this.bodyCapPx);
   }
 
-  /** Side (px) of the square preview pane: scaled up from the item's on-canvas
-   *  mouse-over break-out at the current main-canvas thumbnail size, clamped to
-   *  the room the visible region leaves. Zero when there is no preview. */
+  /** Target/minimum side (px) of the square preview pane: scaled up from the
+   *  item's on-canvas mouse-over break-out at the current main-canvas thumbnail
+   *  size, clamped to the room the visible region leaves. The rendered pane grows
+   *  to {@link previewPaneSize} (the full body height) when the member grid is
+   *  taller. Zero when there is no preview. */
   get previewSize(): number {
     if (!this.showPreview) return 0;
     const desired = this.hoverThumbRadius * HOVER_EXTENT_PER_RADIUS * PREVIEW_OVERSIZE;
@@ -324,6 +326,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
    *  full. The preview may exceed the grid's cap; both are region-bounded. */
   get bodyHeight(): number {
     return Math.max(this.gridHeight, this.previewSize);
+  }
+
+  /** Side (px) of the *rendered* square preview pane. {@link previewSize} is the
+   *  pane's target/minimum side; here we grow it to the full body height so the
+   *  pane is always square and the image scales to the largest size that fits.
+   *  Without this the pane stays {@link previewSize} wide while the body is
+   *  stretched taller by the member grid beside it, leaving the detail image
+   *  pinned to a narrow column and floating small in a tall empty space. Zero
+   *  when there is no preview. */
+  get previewPaneSize(): number {
+    return this.showPreview ? this.bodyHeight : 0;
   }
 
   // --- Dismissal -----------------------------------------------------------
@@ -531,7 +544,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     this.maxWidthPx = Math.max(0, regionRight - regionLeft - 2 * EDGE_MARGIN);
     // A singleton bin drops the grid column and shows only the preview pane.
     const gridW = this.previewOnly ? 0 : GRID_COLUMN_WIDTH;
-    const previewW = this.previewSize ? this.previewSize + (gridW ? PREVIEW_GAP : 0) : 0;
+    const paneW = this.previewPaneSize;
+    const previewW = paneW ? paneW + (gridW ? PREVIEW_GAP : 0) : 0;
     const width = Math.min(previewW + gridW, this.maxWidthPx);
     const height = headerH + this.bodyHeight;
     let l = desiredLeft;
