@@ -3,7 +3,7 @@
 These tests verify:
 - HTTP Archive importer metadata (name, icon, description)
 - Folder importer metadata (icon, description, field ordering)
-- _extract_archive helper (zip and tar)
+- extract_archive helper (zip and tar)
 - DatasetImporter base class icon field and content_vectors attribute
 - DatasetImporter base class content_md5s attribute
 - Folder importer is not in _BUILTIN_IMPORTER_NAMES
@@ -498,13 +498,13 @@ class TestBuiltinImporterNames:
 
 
 # ---------------------------------------------------------------------------
-# _extract_archive helper
+# extract_archive helper
 # ---------------------------------------------------------------------------
 
 
 class TestExtractArchive:
     def test_extract_zip(self, tmp_path):
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         wav_data = _make_wav_bytes()
         zip_path = tmp_path / "test.zip"
@@ -512,11 +512,11 @@ class TestExtractArchive:
             zf.writestr("sounds/tone.wav", wav_data)
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
-        _extract_archive(zip_path, extract_dir)
+        extract_archive(zip_path, extract_dir)
         assert (extract_dir / "sounds" / "tone.wav").exists()
 
     def test_extract_tar_uncompressed(self, tmp_path):
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         wav_data = _make_wav_bytes()
         tar_path = tmp_path / "test.tar"
@@ -526,11 +526,11 @@ class TestExtractArchive:
             tf.addfile(info, io.BytesIO(wav_data))
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
-        _extract_archive(tar_path, extract_dir)
+        extract_archive(tar_path, extract_dir)
         assert (extract_dir / "tone.wav").exists()
 
     def test_extract_tar_gz(self, tmp_path):
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         wav_data = _make_wav_bytes()
         tar_path = tmp_path / "test.tar.gz"
@@ -540,11 +540,11 @@ class TestExtractArchive:
             tf.addfile(info, io.BytesIO(wav_data))
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
-        _extract_archive(tar_path, extract_dir)
+        extract_archive(tar_path, extract_dir)
         assert (extract_dir / "sounds" / "tone.wav").exists()
 
     def test_extract_tar_bz2(self, tmp_path):
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         wav_data = _make_wav_bytes()
         tar_path = tmp_path / "test.tar.bz2"
@@ -554,11 +554,11 @@ class TestExtractArchive:
             tf.addfile(info, io.BytesIO(wav_data))
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
-        _extract_archive(tar_path, extract_dir)
+        extract_archive(tar_path, extract_dir)
         assert (extract_dir / "tone.wav").exists()
 
     def test_unsupported_extension_raises_value_error(self, tmp_path):
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         # A file that is not a zip or tar and doesn't end in .rar
         bad_archive = tmp_path / "test.7z"
@@ -566,14 +566,14 @@ class TestExtractArchive:
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
         with pytest.raises((ValueError, Exception)):
-            _extract_archive(bad_archive, extract_dir)
+            extract_archive(bad_archive, extract_dir)
 
     def test_rar_without_rarfile_raises_runtime_error(self, tmp_path):
         """Attempting RAR extraction without rarfile installed should fail gracefully."""
         import sys
         import unittest.mock as mock
 
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         rar_path = tmp_path / "test.rar"
         # Write RAR v4 magic bytes so it's identified as .rar by extension
@@ -583,10 +583,10 @@ class TestExtractArchive:
 
         with mock.patch.dict(sys.modules, {"rarfile": None}):
             with pytest.raises((RuntimeError, ImportError, Exception)):
-                _extract_archive(rar_path, extract_dir)
+                extract_archive(rar_path, extract_dir)
 
     def test_zip_preserves_multiple_files(self, tmp_path):
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         zip_path = tmp_path / "multi.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -594,12 +594,12 @@ class TestExtractArchive:
                 zf.writestr(f"file{i}.wav", _make_wav_bytes())
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
-        _extract_archive(zip_path, extract_dir)
+        extract_archive(zip_path, extract_dir)
         assert len(list(extract_dir.glob("*.wav"))) == 3
 
     def test_zip_traversal_rejected_before_extraction(self, tmp_path):
         """A zip member with ``..`` traversal must be rejected before any file lands on disk."""
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         zip_path = tmp_path / "evil.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -607,14 +607,14 @@ class TestExtractArchive:
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
         with pytest.raises(ValueError, match="traversal"):
-            _extract_archive(zip_path, extract_dir)
+            extract_archive(zip_path, extract_dir)
         # Neither the in-tree nor the escaped target should exist.
         assert not (tmp_path / "escape.wav").exists()
         assert not (extract_dir / "escape.wav").exists()
 
     def test_zip_absolute_path_rejected(self, tmp_path):
         """A zip member with an absolute path must be rejected."""
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         zip_path = tmp_path / "abs.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -622,7 +622,7 @@ class TestExtractArchive:
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
         with pytest.raises(ValueError, match="traversal"):
-            _extract_archive(zip_path, extract_dir)
+            extract_archive(zip_path, extract_dir)
 
     def test_zip_prefix_collision_rejected(self, tmp_path):
         """``extract_dir`` prefix collision must NOT pass the traversal check.
@@ -631,7 +631,7 @@ class TestExtractArchive:
         accept ``../out_evil/x`` when extracting into ``.../out`` because
         ``str.startswith`` does not respect path separators.
         """
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         zip_path = tmp_path / "prefix.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -639,12 +639,12 @@ class TestExtractArchive:
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
         with pytest.raises(ValueError, match="traversal"):
-            _extract_archive(zip_path, extract_dir)
+            extract_archive(zip_path, extract_dir)
         assert not (tmp_path / "out_evil").exists()
 
     def test_tar_traversal_rejected_before_extraction(self, tmp_path):
         """A tar member with ``..`` traversal must be rejected before extraction."""
-        from vtscore.datasets.importers.http_archive import _extract_archive
+        from vtscore.datasets.archive import extract_archive
 
         tar_path = tmp_path / "evil.tar"
         wav_data = _make_wav_bytes()
@@ -655,8 +655,262 @@ class TestExtractArchive:
         extract_dir = tmp_path / "out"
         extract_dir.mkdir()
         with pytest.raises((ValueError, Exception), match="(?i)traversal|outside"):
-            _extract_archive(tar_path, extract_dir)
+            extract_archive(tar_path, extract_dir)
         assert not (tmp_path / "escape.wav").exists()
+
+
+# ---------------------------------------------------------------------------
+# Archive helpers: is_archive_path / find_archives / extract_archive_cached /
+# append_medias
+# ---------------------------------------------------------------------------
+
+
+def _write_zip(zip_path, members):
+    """Write *members* ({rel_path: bytes}) into a zip at *zip_path*."""
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for rel, data in members.items():
+            zf.writestr(rel, data)
+    return zip_path
+
+
+def _mock_audio_mt():
+    """A mock 'audio' media type usable for both get() and get_by_folder_name()."""
+    import unittest.mock as mock
+
+    mt = mock.MagicMock()
+    mt.type_id = "audio"
+    mt.folder_import_name = "audio"
+    mt.file_extensions = ["*.wav"]
+    mt.load_media_data.return_value = {"duration": 1.0}
+    return mt
+
+
+def _patch_audio_registry(mt):
+    """Patch vtscore.media.get and get_by_folder_name to return *mt*."""
+    import unittest.mock as mock
+    from contextlib import ExitStack
+
+    stack = ExitStack()
+    stack.enter_context(mock.patch("vtscore.media.get", return_value=mt))
+    stack.enter_context(mock.patch("vtscore.media.get_by_folder_name", return_value=mt))
+    return stack
+
+
+class TestArchiveHelpers:
+    def test_is_archive_path_recognises_suffixes(self):
+        from vtscore.datasets.archive import is_archive_path
+
+        for name in ("a.zip", "a.tar", "a.tar.gz", "a.tgz", "a.tar.bz2", "a.tar.xz", "a.rar", "A.ZIP"):
+            assert is_archive_path(name), name
+        for name in ("a.wav", "a.txt", "archive", "a.zip.txt"):
+            assert not is_archive_path(name), name
+
+    def test_find_archives_recursive_and_top_level(self, tmp_path):
+        from vtscore.datasets.archive import find_archives
+
+        (tmp_path / "top.zip").write_bytes(b"x")
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "nested.tar.gz").write_bytes(b"x")
+        (tmp_path / "note.txt").write_bytes(b"x")
+
+        top_only = find_archives(tmp_path, recursive=False)
+        assert [p.name for p in top_only] == ["top.zip"]
+
+        recursive = find_archives(tmp_path, recursive=True)
+        assert {p.name for p in recursive} == {"top.zip", "nested.tar.gz"}
+
+    def test_append_medias_rekeys_sequentially(self):
+        from vtscore.datasets.archive import append_medias
+
+        dst = {1: {"id": 1}, 2: {"id": 2}}
+        src = {1: {"id": 1, "tag": "a"}, 2: {"id": 2, "tag": "b"}}
+        added = append_medias(dst, src)
+        assert added == 2
+        assert sorted(dst.keys()) == [1, 2, 3, 4]
+        assert dst[3]["id"] == 3 and dst[3]["tag"] == "a"
+        assert dst[4]["id"] == 4 and dst[4]["tag"] == "b"
+
+    def test_extract_archive_cached_reuses_and_busts(self, tmp_path, monkeypatch):
+        import time
+
+        from vtscore.datasets import archive as archive_mod
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        monkeypatch.setattr(archive_mod, "DATA_DIR", data_dir)
+
+        zip_path = _write_zip(tmp_path / "a.zip", {"sounds/tone.wav": _make_wav_bytes()})
+
+        first = archive_mod.extract_archive_cached(zip_path)
+        assert (first / "sounds" / "tone.wav").exists()
+        # Second call with the unchanged archive returns the same cached dir.
+        second = archive_mod.extract_archive_cached(zip_path)
+        assert second == first
+
+        # Rewriting the archive (new size/mtime) busts the cache.
+        time.sleep(0.01)
+        _write_zip(zip_path, {"sounds/tone.wav": _make_wav_bytes(), "sounds/two.wav": _make_wav_bytes()})
+        third = archive_mod.extract_archive_cached(zip_path)
+        assert third != first
+        assert (third / "sounds" / "two.wav").exists()
+
+    def test_extract_archive_cached_rejects_non_archive(self, tmp_path, monkeypatch):
+        from vtscore.datasets import archive as archive_mod
+
+        monkeypatch.setattr(archive_mod, "DATA_DIR", tmp_path / "data")
+        not_archive = tmp_path / "note.txt"
+        not_archive.write_bytes(b"hello")
+        with pytest.raises(ValueError, match="archive"):
+            archive_mod.extract_archive_cached(not_archive)
+
+
+class TestLocalArchiveSource:
+    def test_source_resolves_file_inside_archive(self, tmp_path, monkeypatch):
+        from vtscore.datasets import archive as archive_mod
+        from vtscore.datasets.sources.local_archive import LocalArchiveSource
+
+        monkeypatch.setattr(archive_mod, "DATA_DIR", tmp_path / "data")
+        zip_path = _write_zip(tmp_path / "a.zip", {"sounds/tone.wav": _make_wav_bytes()})
+
+        source = LocalArchiveSource(zip_path)
+        item = source.resolve_path("sounds/tone.wav")
+        assert item.path is not None and item.path.is_file()
+        # Unknown inner path resolves to nothing.
+        assert source.resolve_path("missing.wav").path is None
+
+    def test_factory_discovered_for_local_archive_origin(self):
+        from vtscore.datasets.sources import get_source_for_origin
+        from vtscore.datasets.sources.local_archive import LocalArchiveSource
+
+        origin = {"importer": "local_archive", "params": {"path": "/data/a.zip"}}
+        source = get_source_for_origin(origin)
+        assert isinstance(source, LocalArchiveSource)
+        assert get_source_for_origin({"importer": "local_archive", "params": {}}) is None
+
+
+class TestLocalArchiveImport:
+    """server_folder + http_archive loading media out of a local archive."""
+
+    def test_load_archive_into_stamps_local_archive_origin(self, tmp_path, monkeypatch):
+        from vtscore.datasets import archive as archive_mod
+        from vtscore.datasets.archive import load_archive_into
+        from vtscore.datasets.importers.base import SourceSpec
+
+        monkeypatch.setattr(archive_mod, "DATA_DIR", tmp_path / "data")
+        zip_path = _write_zip(
+            tmp_path / "a.zip",
+            {"sounds/one.wav": _make_wav_bytes(), "sounds/two.wav": _make_wav_bytes()},
+        )
+
+        medias: dict = {}
+        with _patch_audio_registry(_mock_audio_mt()):
+            added = load_archive_into(zip_path, "audio", [SourceSpec("audio")], medias)
+
+        assert added == 2 and len(medias) == 2
+        origins = {m["origin"]["importer"] for m in medias.values()}
+        assert origins == {"local_archive"}
+        first = medias[1]
+        assert first["origin"]["params"]["path"] == str(zip_path.resolve())
+        assert first["origin"]["params"]["media_type"] == "audio"
+        assert first["origin_name"] in {"sounds/one.wav", "sounds/two.wav"}
+
+    def test_server_folder_single_archive_path(self, tmp_path, monkeypatch):
+        from vtscore.datasets import archive as archive_mod
+        from vtscore.datasets.importers.server_folder import IMPORTER
+
+        monkeypatch.setattr(archive_mod, "DATA_DIR", tmp_path / "data")
+        zip_path = _write_zip(tmp_path / "clips.zip", {"a.wav": _make_wav_bytes()})
+
+        medias: dict = {}
+        with _patch_audio_registry(_mock_audio_mt()):
+            IMPORTER.run({"path": str(zip_path), "media_type": "audio"}, medias)
+
+        assert len(medias) == 1
+        assert medias[1]["origin"]["importer"] == "local_archive"
+
+    def test_server_folder_dig_archives_mixes_folder_and_archive(self, tmp_path, monkeypatch):
+        from vtscore.datasets import archive as archive_mod
+        from vtscore.datasets.importers.server_folder import IMPORTER
+
+        monkeypatch.setattr(archive_mod, "DATA_DIR", tmp_path / "data")
+        # One loose wav in the folder, plus a zip containing another wav.
+        (tmp_path / "loose.wav").write_bytes(_make_wav_bytes())
+        _write_zip(tmp_path / "more.zip", {"inner.wav": _make_wav_bytes()})
+
+        medias: dict = {}
+        with _patch_audio_registry(_mock_audio_mt()):
+            IMPORTER.run(
+                {"path": str(tmp_path), "media_type": "audio", "dig_archives": True},
+                medias,
+            )
+
+        assert len(medias) == 2
+        importers = sorted(
+            (m["origin"]["importer"] if m["origin"] else None) for m in medias.values()
+        )
+        # Loose folder file has origin=None (the dataset origin is stamped later
+        # by the load pipeline); the archived file carries a local_archive origin.
+        assert importers == [None, "local_archive"]
+
+    def test_server_folder_dig_off_ignores_archives(self, tmp_path, monkeypatch):
+        from vtscore.datasets import archive as archive_mod
+        from vtscore.datasets.importers.server_folder import IMPORTER
+
+        monkeypatch.setattr(archive_mod, "DATA_DIR", tmp_path / "data")
+        (tmp_path / "loose.wav").write_bytes(_make_wav_bytes())
+        _write_zip(tmp_path / "more.zip", {"inner.wav": _make_wav_bytes()})
+
+        medias: dict = {}
+        with _patch_audio_registry(_mock_audio_mt()):
+            IMPORTER.run({"path": str(tmp_path), "media_type": "audio"}, medias)
+
+        # Only the loose file; the archive is left untouched.
+        assert len(medias) == 1
+        assert medias[1]["origin"] is None
+
+    def test_server_folder_has_dig_archives_field(self):
+        from vtscore.datasets.importers.server_folder import IMPORTER
+
+        keys = [f.key for f in IMPORTER.fields]
+        assert "dig_archives" in keys
+        dig = next(f for f in IMPORTER.fields if f.key == "dig_archives")
+        assert dig.field_type == "checkbox"
+        assert str(dig.default).lower() == "false"
+
+    def test_server_folder_run_cli_rejects_missing_path(self):
+        from vtscore.datasets.importers.server_folder import IMPORTER
+
+        with pytest.raises(FileNotFoundError):
+            IMPORTER.run_cli({"path": "/nonexistent/zip-or-dir", "media_type": "audio"}, {})
+
+    def test_http_archive_local_path_uses_local_archive_origin(self, tmp_path, monkeypatch):
+        from vtscore.datasets import archive as archive_mod
+        from vtscore.datasets.importers.http_archive import IMPORTER
+
+        monkeypatch.setattr(archive_mod, "DATA_DIR", tmp_path / "data")
+        zip_path = _write_zip(tmp_path / "a.zip", {"a.wav": _make_wav_bytes()})
+
+        medias: dict = {}
+        with _patch_audio_registry(_mock_audio_mt()):
+            IMPORTER.run({"url": str(zip_path), "media_type": "audio"}, medias)
+
+        assert len(medias) == 1
+        assert medias[1]["origin"]["importer"] == "local_archive"
+
+    def test_http_archive_run_cli_rejects_nonexistent_local_path(self):
+        from vtscore.datasets.importers.http_archive import IMPORTER
+
+        with pytest.raises(FileNotFoundError):
+            IMPORTER.run_cli({"url": "/nope/a.zip", "media_type": "audio"}, {})
+
+    def test_http_archive_run_cli_rejects_non_archive_local_path(self, tmp_path):
+        from vtscore.datasets.importers.http_archive import IMPORTER
+
+        f = tmp_path / "note.txt"
+        f.write_bytes(b"hi")
+        with pytest.raises(ValueError, match="archive"):
+            IMPORTER.run_cli({"url": str(f), "media_type": "audio"}, {})
 
 
 # ---------------------------------------------------------------------------
