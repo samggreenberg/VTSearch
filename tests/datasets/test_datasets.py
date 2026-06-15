@@ -389,24 +389,25 @@ class TestStartupState:
     def test_init_medias_not_called_automatically(self):
         """init_medias() exists for testing but is not called in production startup.
 
-        Verify that the production startup block in app.py does NOT call
-        init_medias() – it should only load models and wait for user selection.
+        Verify that the production startup path does NOT call init_medias() –
+        it should only load models and wait for user selection. The server
+        launch path lives in ``vtsearch.cli_main._run_server`` (extracted from
+        app.py's old ``__main__`` ``else`` branch).
         """
         import inspect
 
-        source = inspect.getsource(app_module)
+        from vtsearch import cli_main
 
-        # The production path is the final else branch after the argparse
-        # if/elif/else chain.  Find the last else: in the __main__ block.
-        main_block_start = source.find('if __name__ == "__main__"')
-        assert main_block_start != -1, "Could not find __main__ block"
-        main_body = source[main_block_start:]
+        server_source = inspect.getsource(cli_main._run_server)
+        assert "init_medias()" not in server_source, (
+            "init_medias() must not be called automatically in production startup"
+        )
 
-        # Find the production else branch (the last else: in the block)
-        else_start = main_body.rfind("else:")
-        assert else_start != -1, "Could not find else branch in __main__ block"
-        else_body = main_body[else_start:]
-        assert "init_medias()" not in else_body, "init_medias() must not be called automatically in production startup"
+        # Belt-and-suspenders: the whole CLI dispatch module shouldn't call it
+        # either (init_medias is a test-only helper attached by conftest).
+        assert "init_medias(" not in inspect.getsource(cli_main), (
+            "init_medias() must not be invoked anywhere in the CLI dispatch path"
+        )
 
 
 class TestDemoDatasetReadiness:

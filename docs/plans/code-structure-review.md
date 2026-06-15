@@ -25,12 +25,29 @@ leverage-to-effort.
 The common shape: a module that started focused and absorbed adjacent
 responsibilities.
 
-- **`app.py` (1408 lines).** ~625 lines (783–1408) are the `__main__`
-  argparse block + autodetect dispatch; ~180 lines (596–776) are Linux
-  `/proc` port-preflight helpers. Neither relates to the WSGI `app` object
-  gunicorn imports. Extract `vtsearch/cli_main.py` (argparse/dispatch) and
-  `vtsearch/app/server.py` (port preflight); optionally `hooks.py` +
-  `errors.py` for the request lifecycle and error handlers.
+- **`app.py`** — **DONE (CLI + port-preflight extraction).** The `__main__`
+  argparse block + autodetect dispatch moved to `vtsearch/cli_main.py` (its
+  `main(app, initialize_server)` is called from a three-line `__main__` in
+  `app.py`; `app` and `initialize_server` are passed in rather than imported
+  to avoid re-executing `app.py` under a second module name). The Linux
+  `/proc` port-preflight helpers + single-instance lock moved to
+  `vtsearch/port_preflight.py` (named for precision rather than the plan's
+  earlier `vtsearch/app/server.py`, which would have collided with the
+  top-level `app` module). `cli_main.main` is itself decomposed into
+  `_build_parser` + per-concern helpers (`_maybe_list_plugins`,
+  `_maybe_run_pipeline`, `_resolve_plugins`, the `_apply_*` override
+  appliers, `_run_autodetect` → `_authenticate_cli_user` /
+  `_maybe_import_labels` / `_dispatch_autodetect`, and `_run_server`) so each
+  stays under the McCabe gate. `app.py` (down from 1462 → ~630 lines) keeps
+  the WSGI `app` object, the request lifecycle hooks, the JSON error
+  handlers, blueprint registration, and `initialize_server`.
+  **Open follow-up:** the request-lifecycle hooks (`before_request` /
+  `after_request` / `teardown_request`) and the global JSON error handlers
+  are still inline in `app.py`. They *are* part of the `app` object's
+  lifecycle (unlike the CLI/preflight code, which is unrelated to it), so
+  the leverage of extracting them to `hooks.py` + `errors.py` is lower and
+  the risk (decorator-registration ordering) is higher; left for a scoped
+  follow-up.
 - **`vtsearch/settings.py`** — **DONE (engine extraction).** The
   lock-ordering-sensitive engine (cross-process file locking, the two-tier
   server/per-user caches, the one-shot legacy migration, and the
@@ -159,9 +176,10 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
 
 ## Prioritized backlog (remaining)
 
-1. **Theme B** — split `app.py` and `importers/base.py`. (`settings.py`
-   engine extraction and `load_pipeline.py` stage extraction shipped — see
-   the Theme B bullets above.)
+1. **Theme B** — split `importers/base.py`. (`settings.py` engine
+   extraction, `load_pipeline.py` stage extraction, and the `app.py`
+   CLI + port-preflight extraction shipped — see the Theme B bullets
+   above. `app.py`'s hooks/errors split is an open follow-up there.)
 2. **Theme D** — converge frontend types onto the generated client.
 3. **Theme E** — `MediaSource` / `DatasetImporter` ingestion-concept overlap.
 4. **Theme F** — collapse `PluginField` aliases; revisit `SyncSource` if a
