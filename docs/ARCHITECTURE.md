@@ -54,7 +54,8 @@ settings, auth, and the app-side state shim).
 
 ```
 VTSearch/
-├── app.py                          Flask entry point, CLI arg parsing, startup
+├── app.py                          Flask app object, request lifecycle hooks, error handlers,
+│                                   blueprint registration, initialize_server() (gunicorn imports this)
 │
 ├── vtscore/                        Library tier; no Flask dependency
 │   ├── config.py                   Constants (sample rates, paths, model IDs)
@@ -171,6 +172,10 @@ VTSearch/
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
 │   ├── logging_config.py           Logging setup
 │   ├── openapi_postprocess.py      OpenAPI schema post-processing
+│   ├── cli_main.py                 `python app.py` argparse + dispatch (list-plugins,
+│   │                               pipeline, autodetect, dev-server launch)
+│   ├── port_preflight.py           Startup port-collision detection / single-instance lock
+│   │                               (CLI-only; not used by the WSGI app object)
 │   │
 │   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_current_user(),
 │   │                               get_user_data_dir()
