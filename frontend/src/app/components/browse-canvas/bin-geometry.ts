@@ -8,6 +8,7 @@
 
 import {
   SQRT3,
+  HEX_INRADIUS_RATIO,
   traceCellPath as traceHexCellPath,
   densityColor,
   resolveColormap,
@@ -43,6 +44,16 @@ export interface BinGeometry {
     radius: number,
     single: boolean,
   ): void;
+  /**
+   * The absolute corner radius (screen px) a singleton cell's outline curves
+   * with at the given bin `radius` — the inscribed disc's radius in hex mode,
+   * the rounded square's corner radius in square mode. The hovered break-out
+   * thumbnail reuses this fixed ("total", not proportional) value so an
+   * enlarged singleton keeps the *same* corner curvature it had in the grid:
+   * it still reads as a singleton when blown up, while only nibbling the image
+   * corners instead of cropping more as the tile grows.
+   */
+  singleCornerRadius(radius: number): number;
   /**
    * Whether a projection-space offset `(ox, oy)` from a cell center falls
    * inside a cell of the given `radius` — the hover hit-test predicate.
@@ -87,6 +98,7 @@ const HEX_GEOMETRY: BinGeometry = {
   dx: (radius) => radius * SQRT3,
   dy: (radius) => radius * 1.5,
   traceCell: (ctx, cx, cy, radius, single) => traceHexCellPath(ctx, cx, cy, radius, single),
+  singleCornerRadius: (radius) => radius * HEX_INRADIUS_RATIO,
   contains: (ox, oy, radius) => ox * ox + oy * oy < radius * radius,
   neighborOffsets: () => HEX_NEIGHBORS,
 };
@@ -114,6 +126,7 @@ const SQUARE_GEOMETRY: BinGeometry = {
     }
     ctx.closePath();
   },
+  singleCornerRadius: (radius) => ((radius * SQRT3) / 2) * SQUARE_SINGLE_CORNER_RATIO,
   contains: (ox, oy, radius) => {
     const half = (radius * SQRT3) / 2;
     return Math.abs(ox) < half && Math.abs(oy) < half;
