@@ -20,7 +20,7 @@ import hashlib
 import json
 from typing import Any, Callable, Optional
 
-from vtsearch.state import next_media_id
+from vtscore.state import next_media_id
 from vtscore.embedding.normalize import l2_normalize
 from vtscore.state.core import _state_lock
 
@@ -159,7 +159,7 @@ def _boundary_tag(params: dict[str, Any]) -> str:
     the embedding step couldn't produce distinct content bytes) so each
     clip still gets a unique MD5 instead of colliding on the parent's hash.
     Mirrors the encoding in
-    :func:`vtscore.datasets.load_pipeline._fixup_clip_md5_and_embeddings`.
+    :func:`vtscore.datasets.stages.clipper._fixup_clip_md5_and_embeddings`.
     """
     parts: list[str] = []
     for key in ("clipper", "clipper_chain", "clip_start", "clip_end", "clip_box", "clip_index"):

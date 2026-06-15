@@ -1198,14 +1198,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   ): void {
     // A cell with one item is drawn as a disc (slightly smaller than the cell);
     // multi-item cells keep their full shape so they tile the space. The hovered
-    // cell instead passes `trim`: a plain rectangle of the thumbnail's native
-    // aspect ratio, so the enlarged tile breaks out of the bin silhouette and
-    // shows the whole frame (no hex/square clip, no background bars).
+    // cell instead passes `trim`: a rectangle of the thumbnail's native aspect
+    // ratio, so the enlarged tile breaks out of the bin silhouette and shows the
+    // whole frame (no hex/square clip, no background bars). A singleton's
+    // break-out keeps rounded corners (see `traceTrimRect`) so it still reads as
+    // a singleton; a pile's stays sharp and is marked by its colormap band.
     const single = cell.count === 1;
     if (trim) {
-      ctx.beginPath();
-      ctx.rect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
-      ctx.closePath();
+      this.traceTrimRect(ctx, cx, cy, trim, single, radius);
     } else {
       this.geom.traceCell(ctx, cx, cy, radius, single);
     }
@@ -1287,10 +1287,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     selectionActive: boolean,
   ): void {
     // A hovered thumbnail breaks out of its bin: it's shown whole at its native
-    // aspect ratio as a plain rectangle (no silhouette), sized to grow until its
-    // edge just reaches the nearest neighbour cell's centre (`hoverThumbRect`).
-    // A non-thumbnail (flat density) cell has no such rectangle, so it keeps its
-    // silhouette and simply lifts off with a fixed size bump.
+    // aspect ratio as a rectangle (no silhouette), sized to grow until its edge
+    // just reaches the nearest neighbour cell's centre (`hoverThumbRect`). A
+    // singleton's rectangle keeps rounded corners so it stays distinguishable
+    // from a pile (`traceTrimRect`). A non-thumbnail (flat density) cell has no
+    // such rectangle, so it keeps its silhouette and simply lifts off with a
+    // fixed size bump.
     const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
     const trim = thumb ? this.hoverThumbRect(thumb, radius) : null;
     const bumped = radius * HOVER_RADIUS_SCALE;
@@ -1303,9 +1305,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.shadowBlur = Math.max(4, radius * 0.3);
     ctx.shadowOffsetY = Math.max(1, radius * 0.1);
     if (trim) {
-      ctx.beginPath();
-      ctx.rect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
-      ctx.closePath();
+      this.traceTrimRect(ctx, cx, cy, trim, cell.count === 1, radius);
     } else {
       this.geom.traceCell(ctx, cx, cy, bumped, cell.count === 1);
     }
@@ -1316,6 +1316,35 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // `radius` is unused for the shape when `trim` is set (the rectangle drives
     // it), so the un-bumped radius is fine there; flat-density cells use the bump.
     this.drawHex(ctx, cx, cy, trim ? radius : bumped, cell, cmap, selectionActive, trim);
+  }
+
+  /**
+   * Trace the hovered break-out thumbnail's rectangle as the current path,
+   * centred on `(cx, cy)` with half-extents `trim`. A singleton rounds its
+   * corners with the *same absolute* radius its grid disc / rounded square
+   * curved with (`geom.singleCornerRadius`, computed from the un-bumped bin
+   * `radius`) — a fixed "total" round, not one proportional to the enlarged
+   * rectangle, so the blown-up tile keeps the singleton's corner curvature and
+   * only nibbles the image corners. Piles stay sharp-cornered; their colormap
+   * band is what marks them. The radius is clamped so it never exceeds half a
+   * side of a narrow break-out rectangle.
+   */
+  private traceTrimRect(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    trim: { hw: number; hh: number },
+    single: boolean,
+    radius: number,
+  ): void {
+    ctx.beginPath();
+    if (single) {
+      const r = Math.min(this.geom.singleCornerRadius(radius), trim.hw, trim.hh);
+      ctx.roundRect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2, r);
+    } else {
+      ctx.rect(cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
+    }
+    ctx.closePath();
   }
 
   /** Cover-fit an image over the hex's 2*radius square (the path must be clipped). */

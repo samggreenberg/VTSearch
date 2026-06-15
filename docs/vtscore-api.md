@@ -29,7 +29,7 @@ should use `vtscore.state`, app callers may continue using either.
 | `vtscore.training.X`         |                                                             |
 | `vtscore.detectors.X`        |                                                             |
 | `vtscore.eval.X`             |                                                             |
-| `vtscore.state.X`            | Contexts + helpers; the `medias` / `good_votes` proxies are app-side in `vtsearch.shim.state_proxies` |
+| `vtscore.state.X`            | Contexts + helpers; the `medias` / `good_votes` proxies are app-side in `vtsearch.state_proxies` |
 | `vtscore.plugins.X`          |                                                             |
 | `vtscore.sync.X`             |                                                             |
 | `vtscore.concurrency.X`      |                                                             |

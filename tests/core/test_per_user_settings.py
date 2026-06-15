@@ -19,6 +19,7 @@ import json
 
 import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import settings as settings_mod
+from vtsearch import settings_store as settings_store_mod
 from vtsearch.auth import set_thread_user
 
 
@@ -144,7 +145,7 @@ class TestLegacyMigration:
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
 
-        real_atomic_write = settings_mod._atomic_write
+        real_atomic_write = settings_store_mod._atomic_write
         user_settings_path = tmp_path / "users" / "default" / "user_settings.json"
 
         def failing_atomic_write(path, data):
@@ -152,7 +153,7 @@ class TestLegacyMigration:
                 raise OSError("simulated user-file write failure")
             return real_atomic_write(path, data)
 
-        monkeypatch.setattr(settings_mod, "_atomic_write", failing_atomic_write)
+        monkeypatch.setattr(settings_store_mod, "_atomic_write", failing_atomic_write)
         try:
             # Triggers migration; user-file write raises and is swallowed.
             settings_mod.get_saved_datasets_dir()
@@ -162,9 +163,9 @@ class TestLegacyMigration:
             assert on_disk == legacy
 
             # In-memory server cache matches disk (legacy keys still there).
-            assert settings_mod._server_cache is not None
-            assert settings_mod._server_cache.get("volume") == 0.33
-            assert settings_mod._server_cache.get("theme") == "light"
+            assert settings_mod._store.server_cache is not None
+            assert settings_mod._store.server_cache.get("volume") == 0.33
+            assert settings_mod._store.server_cache.get("theme") == "light"
 
             # No phantom user file was created.
             assert not user_settings_path.exists()
@@ -189,7 +190,7 @@ class TestLegacyMigration:
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
 
-        real_atomic_write = settings_mod._atomic_write
+        real_atomic_write = settings_store_mod._atomic_write
         user_settings_path = tmp_path / "users" / "default" / "user_settings.json"
 
         def failing_atomic_write(path, data):
@@ -197,7 +198,7 @@ class TestLegacyMigration:
                 raise OSError("simulated server-file write failure")
             return real_atomic_write(path, data)
 
-        monkeypatch.setattr(settings_mod, "_atomic_write", failing_atomic_write)
+        monkeypatch.setattr(settings_store_mod, "_atomic_write", failing_atomic_write)
         try:
             # Triggers migration; user write succeeds, server rewrite raises.
             settings_mod.get_saved_datasets_dir()
@@ -213,10 +214,10 @@ class TestLegacyMigration:
             assert on_disk == legacy
 
             # Crucially, in-memory cache matches disk; legacy keys NOT popped.
-            assert settings_mod._server_cache is not None
-            assert settings_mod._server_cache.get("volume") == 0.33
-            assert settings_mod._server_cache.get("theme") == "light"
-            assert settings_mod._server_cache.get("saved_datasets_dir") == "/tmp/legacy"
+            assert settings_mod._store.server_cache is not None
+            assert settings_mod._store.server_cache.get("volume") == 0.33
+            assert settings_mod._store.server_cache.get("theme") == "light"
+            assert settings_mod._store.server_cache.get("saved_datasets_dir") == "/tmp/legacy"
         finally:
             settings_mod.set_user_data_dir_override(None)
             settings_mod.reset()

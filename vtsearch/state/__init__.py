@@ -3,7 +3,7 @@
 The library state lives in :mod:`vtscore.state` (no Flask, no settings).
 This package keeps ``from vtsearch.state import medias`` working for app
 code by re-exporting every library name and adding the app-side proxy
-view (``medias``, ``good_votes``, …) from :mod:`vtsearch.shim.state_proxies`.
+view (``medias``, ``good_votes``, …) from :mod:`vtsearch.state_proxies`.
 
 See ``../../vtscore/docs/architecture.md`` Phase 8 - this file is the
 canonical example of an "app-tier shim that re-exports the library names
@@ -89,7 +89,7 @@ from vtscore.state import (  # noqa: F401
 
 # App-tier proxy view - the convenience facade that makes
 # ``from vtsearch.state import medias`` feel like a module-level dict.
-from vtsearch.shim.state_proxies import (  # noqa: F401
+from vtsearch.state_proxies import (  # noqa: F401
     bad_votes,
     good_votes,
     label_history,

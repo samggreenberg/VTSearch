@@ -1,4 +1,4 @@
-import type { MediaContextMenuItem } from '../left-panel/media-item/media-context-menu.component';
+import type { ContextMenuItem } from '../context-menu/context-menu.component';
 
 /**
  * Build the right-click context-menu items for a media item in
@@ -6,9 +6,9 @@ import type { MediaContextMenuItem } from '../left-panel/media-item/media-contex
  * whose viewer can produce a sub-region selection (`audio` spectrograms
  * and `image` raster regions).
  */
-export function buildMediaContextMenuItems(mediaType: string): MediaContextMenuItem[] {
+export function buildMediaContextMenuItems(mediaType: string): ContextMenuItem[] {
   const cropAble = mediaType === 'audio' || mediaType === 'image';
-  const items: MediaContextMenuItem[] = [
+  const items: ContextMenuItem[] = [
     {
       id: 'sort',
       label: 'Sort by similarity to this',

@@ -17,11 +17,8 @@ from unittest.mock import patch
 import numpy as np
 
 from vtscore.concurrency.progress import LoadingTasksTracker
-from vtscore.datasets.load_pipeline import (
-    _build_projection_stage,
-    _parse_bool,
-    _persist_projection_to_container,
-)
+from vtscore.datasets.load_pipeline import _parse_bool
+from vtscore.datasets.stages.projection import _build_projection_stage, _persist_projection_to_container
 from vtscore.projection import Projection
 from vtscore.state.core import DatasetContext
 
@@ -75,7 +72,7 @@ class TestBuildProjectionStage:
         ctx = self._ctx_with_embeddings("proj_stage_ok")
         with (
             patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection),
-            patch("vtscore.datasets.load_pipeline._persist_projection_to_container") as mock_persist,
+            patch("vtscore.datasets.stages.projection._persist_projection_to_container") as mock_persist,
         ):
             _build_projection_stage(ctx, _make_tracker(), "ds-123")
 
@@ -94,7 +91,7 @@ class TestBuildProjectionStage:
         ctx = DatasetContext("proj_stage_empty")
         with (
             patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection) as mock_fit,
-            patch("vtscore.datasets.load_pipeline._persist_projection_to_container") as mock_persist,
+            patch("vtscore.datasets.stages.projection._persist_projection_to_container") as mock_persist,
         ):
             _build_projection_stage(ctx, _make_tracker(), "ds-empty")
 

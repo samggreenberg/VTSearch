@@ -7,7 +7,7 @@ import numpy as np
 
 from tests import load_detector_and_wait as _load_detector_and_wait
 
-from vtsearch.shim.state_proxies import _ProxyDict
+from vtsearch.state_proxies import _ProxyDict
 from vtscore.state.core import (
     DatasetContext,
     DetectorContext,

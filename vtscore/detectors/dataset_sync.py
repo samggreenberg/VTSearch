@@ -181,7 +181,7 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
       reset and risk surprising any caller that reads the cache directly.
     * ``det_ctx.embedder`` is the "what was the last training pass aligned
       with" marker.  Leaving it stamped as the old value lets the load
-      endpoint's :func:`~vtsearch.routes.detectors.registry._maybe_start_label_reembed`
+      endpoint's :func:`~vtscore.detectors.embedder_sync.maybe_start_label_reembed`
       still detect the mismatch and schedule its progress-tracked
       re-embed task.  The marker is restamped to *new_embedder* by the
       next training pass (via
@@ -236,7 +236,7 @@ def ensure_detector_model_matches_active_embedder() -> None:
     that the on-disk labelset doesn't carry.
 
     The scoring fast-paths
-    (:func:`vtsearch.routes.detectors.scoring._resolve_or_train_detector`
+    (:func:`vtscore.detectors.model_loading.resolve_or_train_detector`
     and the find dispatcher) defensively repeat the check per-detector,
     since Auto-Find / multi-dataset Find iterate detectors that aren't the
     active one.

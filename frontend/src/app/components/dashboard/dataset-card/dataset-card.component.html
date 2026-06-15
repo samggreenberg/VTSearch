@@ -177,3 +177,12 @@
     </div>
   </td>
 }
+@if (contextMenuOpen) {
+  <vt-context-menu
+    [x]="contextMenuX"
+    [y]="contextMenuY"
+    [items]="contextMenuItems"
+    (actionSelected)="onContextMenuAction($event)"
+    (dismissed)="dismissContextMenu()"
+  />
+}

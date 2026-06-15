@@ -25,7 +25,7 @@ def extract_input_spec_from_medias(
 ) -> dict[str, Any] | None:
     """Return the clipper config stamped onto *medias* by the loader.
 
-    The dataset-load pipeline (:func:`vtscore.datasets.load_pipeline._apply_clipper`)
+    The dataset-load pipeline (:func:`vtscore.datasets.stages.clipper._apply_clipper`)
     writes the active clipper's name and effective parameter values into
     every clip's ``origin.params`` (as ``clipper`` plus ``clipper_<key>``
     entries).  This function reads those back from the first non-empty

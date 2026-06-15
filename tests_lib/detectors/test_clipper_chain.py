@@ -439,7 +439,7 @@ class TestApplyClipperBackwardsCompat:
         captured by the existing single-clipper code path."""
         # We stub _fixup_clip_md5_and_embeddings and _regenerate_clip_thumbnails
         # so the test doesn't need real audio/embedding wiring.
-        from vtscore.datasets import load_pipeline
+        from vtscore.datasets.stages import clipper as clipper_stage
 
         calls: dict[str, int] = {"fixup": 0, "thumb": 0}
 
@@ -449,13 +449,13 @@ class TestApplyClipperBackwardsCompat:
         def fake_thumb(clips, recompute, media_type):
             calls["thumb"] += 1
 
-        monkeypatch.setattr(load_pipeline, "_fixup_clip_md5_and_embeddings", fake_fixup)
-        monkeypatch.setattr(load_pipeline, "_regenerate_clip_thumbnails", fake_thumb)
+        monkeypatch.setattr(clipper_stage, "_fixup_clip_md5_and_embeddings", fake_fixup)
+        monkeypatch.setattr(clipper_stage, "_regenerate_clip_thumbnails", fake_thumb)
 
         media = _make_text_media(1, "One. Two. Three.")
         clips = {1: media}
 
-        load_pipeline._apply_clipper(clips, "text_sentence", None)
+        clipper_stage._apply_clipper(clips, "text_sentence", None)
 
         assert len(clips) == 3
         for clip in clips.values():

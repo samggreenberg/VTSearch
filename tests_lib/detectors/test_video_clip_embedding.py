@@ -231,7 +231,7 @@ class TestSampleVideoFrames:
 
 class TestBuildClipEmbedInput:
     def test_video_includes_clip_boundaries(self):
-        from vtscore.datasets.load_pipeline import _build_clip_embed_input
+        from vtscore.datasets.stages.clipper import _build_clip_embed_input
 
         clip = {
             "origin_name": "x.mp4",
@@ -249,7 +249,7 @@ class TestBuildClipEmbedInput:
         assert out["clip_end"] == 3.0
 
     def test_video_without_path_still_carries_boundaries(self):
-        from vtscore.datasets.load_pipeline import _build_clip_embed_input
+        from vtscore.datasets.stages.clipper import _build_clip_embed_input
 
         clip = {
             "origin_name": "x.mp4",
@@ -264,7 +264,7 @@ class TestBuildClipEmbedInput:
         assert out["clip_end"] == 2.0
 
     def test_audio_unaffected(self):
-        from vtscore.datasets.load_pipeline import _build_clip_embed_input
+        from vtscore.datasets.stages.clipper import _build_clip_embed_input
 
         clip = {
             "origin_name": "a.wav",
@@ -312,7 +312,7 @@ def _make_tiled_video_clips() -> list[dict]:
 
 class TestFixupClipMd5AndEmbeddingsVideo:
     def test_tiles_get_distinct_md5(self):
-        from vtscore.datasets.load_pipeline import _fixup_clip_md5_and_embeddings
+        from vtscore.datasets.stages.clipper import _fixup_clip_md5_and_embeddings
 
         clips = _make_tiled_video_clips()
         # Stub the embedder so we don't try to decode a fake mp4.
@@ -321,7 +321,7 @@ class TestFixupClipMd5AndEmbeddingsVideo:
         fake.embed_media_bulk.return_value = [np.array([0.0], dtype=np.float32)] * len(clips)
 
         with patch(
-            "vtscore.datasets.load_pipeline._resolve_clip_embedder",
+            "vtscore.datasets.stages.clipper._resolve_clip_embedder",
             return_value=fake,
         ):
             _fixup_clip_md5_and_embeddings(clips, [True] * len(clips), "video")
@@ -332,7 +332,7 @@ class TestFixupClipMd5AndEmbeddingsVideo:
     def test_tiles_get_distinct_embeddings(self):
         """The embedder must see each tile's boundaries and produce distinct
         vectors; modelled here by returning ``clip_start`` as the embedding."""
-        from vtscore.datasets.load_pipeline import _fixup_clip_md5_and_embeddings
+        from vtscore.datasets.stages.clipper import _fixup_clip_md5_and_embeddings
 
         clips = _make_tiled_video_clips()
 
@@ -348,7 +348,7 @@ class TestFixupClipMd5AndEmbeddingsVideo:
         fake.embed_media_bulk.side_effect = fake_bulk
 
         with patch(
-            "vtscore.datasets.load_pipeline._resolve_clip_embedder",
+            "vtscore.datasets.stages.clipper._resolve_clip_embedder",
             return_value=fake,
         ):
             _fixup_clip_md5_and_embeddings(clips, [True] * len(clips), "video")

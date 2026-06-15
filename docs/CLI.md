@@ -337,6 +337,29 @@ or whatever path `--settings` points at), where a deployment can set
 every restart. Use `--list-plugins --format names` to discover the
 available `family:name` pairs.
 
+**Dataset retention** (`--dataset-max-age-days DAYS`): stamp every
+dataset created by this server process with an expiry `DAYS` days after
+creation; expired datasets are aged off from the registry. The value
+must be a positive integer:
+
+```bash
+python app.py --dataset-max-age-days 14
+```
+
+Unlike the solo flags, this is a **server-wide override**, not a
+per-user fallback: it applies to every user, overrides the persisted
+`dataset_max_age_days` in the settings file for the lifetime of the
+process, and is **not** editable via the Settings dialog or the
+settings API (it is exposed read-only so the dashboard can show the
+Age-Off column). Omit the flag to use the persisted value (no expiry if
+none is set).
+
+Because the Docker images launch under gunicorn (which never parses
+`argv`), the same override is also available as the
+`VTSEARCH_DATASET_MAX_AGE_DAYS` environment variable, honored at server
+init; an explicit `--dataset-max-age-days` flag wins over it. The
+LabBench image pins `VTSEARCH_DATASET_MAX_AGE_DAYS=14`.
+
 ## Inspecting plugins and the API schema
 
 `python app.py --list-plugins` enumerates every auto-discovered plugin;

@@ -25,7 +25,7 @@ def restore_labels_from_detector(det_data: dict) -> int:  # noqa: C901
     Returns the number of labels successfully restored.
     """
     from vtscore.datasets.labelset import LabeledElement, LabelSet
-    from vtsearch.state import (
+    from vtscore.state import (
         apply_label,
         build_media_lookup,
         resolve_media_ids,

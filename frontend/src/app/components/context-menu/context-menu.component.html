@@ -1,8 +1,9 @@
 <div
-  class="media-context-menu"
+  class="context-menu"
   role="menu"
   [style.left.px]="x"
   [style.top.px]="y"
+  (contextmenu)="onMenuContextMenu($event)"
 >
   @for (item of items; track item.id) {
     <button
@@ -14,7 +15,10 @@
       [title]="item.title || ''"
       (click)="onItemClick($event, item)"
     >
-      {{ item.label }}
+      @if (item.iconSvg) {
+        <span class="menu-item__icon" aria-hidden="true" [innerHTML]="safeIcon(item.iconSvg)"></span>
+      }
+      <span class="menu-item__label">{{ item.label }}</span>
     </button>
   }
 </div>

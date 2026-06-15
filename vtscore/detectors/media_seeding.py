@@ -26,11 +26,11 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
     import hashlib
 
     from vtscore.config import DATA_DIR
-    from vtsearch.state import (
+    from vtscore.state import (
         _state_lock,
         apply_label,
         build_media_lookup,
-        medias,
+        get_active_context,
         next_media_id,
         snapshot_medias,
     )
@@ -102,8 +102,9 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
                 continue
 
             with _state_lock:
-                new_id = next_media_id(medias)
-                medias[new_id] = {
+                active_medias = get_active_context().medias
+                new_id = next_media_id(active_medias)
+                active_medias[new_id] = {
                     "id": new_id,
                     "media_type": dataset_media_type,
                     "embedder": dataset_embedder_name,

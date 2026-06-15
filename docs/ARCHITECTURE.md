@@ -54,7 +54,8 @@ settings, auth, and the app-side state shim).
 
 ```
 VTSearch/
-├── app.py                          Flask entry point, CLI arg parsing, startup
+├── app.py                          Flask app object, request lifecycle hooks, error handlers,
+│                                   blueprint registration, initialize_server() (gunicorn imports this)
 │
 ├── vtscore/                        Library tier; no Flask dependency
 │   ├── config.py                   Constants (sample rates, paths, model IDs)
@@ -118,7 +119,9 @@ VTSearch/
 │   │   ├── loader_folder.py        load_dataset_from_folder + chunked variant
 │   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
-│   │   ├── load_pipeline.py        Background-task orchestration, ConcurrencyGate, clip fix-up
+│   │   ├── load_pipeline.py        Background-task load orchestration (gate handoff, stage sequencing)
+│   │   ├── stages/                 Post-import load stages: clipper fix-up, embed-missing,
+│   │   │                           finalize (drop-none/dedup/diversity), projection, registry save
 │   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
 │   │   ├── downloader/             Demo dataset downloaders (audio, image, video, text, docs)
 │   │   ├── sources/                MediaSource abstraction (local_folder, http_archive, pullwrest);
@@ -145,6 +148,7 @@ VTSearch/
 │   │
 │   ├── concurrency/                Async jobs, memory budgeting, progress tracking
 │   │   ├── async_jobs.py           AsyncJob, JobManager, eval_jobs, learned_sort_jobs
+│   │   ├── gate.py                 ConcurrencyGate (dynamic-limit semaphore for load phases)
 │   │   ├── memory_budget.py        cap_workers_by_memory
 │   │   └── progress.py             ProgressTracker, update_progress, cancel_dataset_progress
 │   │
@@ -168,15 +172,22 @@ VTSearch/
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
 │   ├── logging_config.py           Logging setup
 │   ├── openapi_postprocess.py      OpenAPI schema post-processing
+│   ├── cli_main.py                 `python app.py` argparse + dispatch (list-plugins,
+│   │                               pipeline, autodetect, dev-server launch)
+│   ├── port_preflight.py           Startup port-collision detection / single-instance lock
+│   │                               (CLI-only; not used by the WSGI app object)
 │   │
 │   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_current_user(),
 │   │                               get_user_data_dir()
 │   │
 │   ├── state/                      App-tier state shim; re-exports vtscore.state.* and adds
-│   │                               proxy view (medias, good_votes, bad_votes, …) from shim/
+│   │                               proxy view (medias, good_votes, bad_votes, …) from state_proxies.py
 │   │
-│   ├── shim/                       state_proxies.py; _ProxyDict / _ProxyList per-request
-│   │                               resolution (checks flask.g, falls back to thread-local)
+│   ├── state_proxies.py            _ProxyDict / _ProxyList per-request resolution
+│   │                               (checks flask.g, falls back to thread-local)
+│   │
+│   ├── shim/                       Flask glue: context resolvers, persistence hooks,
+│   │                               CoreConfig builder, app-only plugin families
 │   │
 │   ├── schemas/                    Marshmallow schemas for API serialisation
 │   │
@@ -501,7 +512,7 @@ Application state is split across two packages: **`vtscore/state/`**
 owns `DatasetContext`, `DetectorContext`, `_state_lock`, and all context
 operations; **`vtsearch/state/__init__.py`** is the app-tier shim that
 re-exports everything from `vtscore.state` and adds the proxy view.  The
-module-level names below are **proxy objects** (from `vtsearch/shim/state_proxies.py`)
+module-level names below are **proxy objects** (from `vtsearch/state_proxies.py`)
 that delegate to a per-request `DatasetContext` or `DetectorContext`;
 see [Multi-dataset support](#multi-dataset-support). All mutable access
 is protected by `_state_lock` (a `threading.RLock`):

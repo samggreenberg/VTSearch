@@ -279,7 +279,7 @@ class DatasetImporter(PluginBase):
     ------------------
     Importers do **not** call any embedder.  Emit media dicts with
     ``embedding=None`` (and ``embedder=""``); the framework
-    :func:`~vtscore.datasets.load_pipeline.embed_missing` stage runs
+    :func:`~vtscore.datasets.stages.embedding.embed_missing` stage runs
     after the importer returns and bulk-embeds every item still at
     ``None`` using the user's selected embedder (or the default for the
     media type).  Items where the embedder returns ``None`` get dropped

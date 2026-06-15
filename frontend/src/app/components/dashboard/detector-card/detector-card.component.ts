@@ -9,11 +9,13 @@ import {
   isProgressIndeterminate,
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
+import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
+import { buildDetectorCardMenuItems } from '../card-context-menu-items';
 
 @Component({
   selector: 'vt-detector-card',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProgressBarComponent],
+  imports: [CommonModule, FormsModule, ProgressBarComponent, ContextMenuComponent],
   templateUrl: './detector-card.component.html',
   styleUrl: './detector-card.component.scss',
 })
@@ -36,6 +38,23 @@ export class DetectorCardComponent implements OnChanges {
   @HostListener('click', ['$event'])
   onClick(event: MouseEvent): void {
     this.rowClick.emit(event);
+  }
+
+  @HostListener('contextmenu', ['$event'])
+  onContextMenu(event: MouseEvent): void {
+    // While renaming, let the native menu serve the text input (paste, etc.).
+    if (this.editing) return;
+    // A loading/errored row shows a progress bar in place of the actions, so
+    // there is nothing to act on.
+    if (this.loadingTask) return;
+    event.preventDefault();
+    this.contextMenuItems = buildDetectorCardMenuItems(this.detector, {
+      isDefaultLogin: this.isDefaultLogin,
+      isOwner: this.isOwner,
+    });
+    this.contextMenuX = event.clientX;
+    this.contextMenuY = event.clientY;
+    this.contextMenuOpen = true;
   }
   @Output() rename = new EventEmitter<string>();
   @Output() delete = new EventEmitter<void>();
@@ -76,12 +95,56 @@ export class DetectorCardComponent implements OnChanges {
   wasExportOpen = false;
   wasStatsOpen = false;
 
+  contextMenuOpen = false;
+  contextMenuX = 0;
+  contextMenuY = 0;
+  contextMenuItems: ContextMenuItem[] = [];
+
   startRename(event: MouseEvent): void {
     event.stopPropagation();
+    this.beginRename();
+  }
+
+  /** Enter inline-rename mode (shared by the pencil button and the menu). */
+  beginRename(): void {
     this.editing = true;
     this.wasEditing = true;
     this.editName = this.detector.name;
     setTimeout(() => this.renameInput?.nativeElement.focus());
+  }
+
+  onContextMenuAction(id: string): void {
+    this.contextMenuOpen = false;
+    switch (id) {
+      case 'load':
+        this.load.emit();
+        break;
+      case 'browse':
+        this.browse.emit();
+        break;
+      case 'security':
+        this.security.emit();
+        break;
+      case 'rename':
+        this.beginRename();
+        break;
+      case 'add-labels':
+        this.addLabels.emit();
+        break;
+      case 'export':
+        this.export.emit();
+        break;
+      case 'stats':
+        this.stats.emit();
+        break;
+      case 'delete':
+        this.delete.emit();
+        break;
+    }
+  }
+
+  dismissContextMenu(): void {
+    this.contextMenuOpen = false;
   }
 
   confirmRename(): void {

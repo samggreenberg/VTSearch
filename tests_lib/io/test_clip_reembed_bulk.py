@@ -105,7 +105,7 @@ class TestBulkClipReembed:
     def test_single_bulk_call_per_clipper_invocation(
         self, media_type, make_media, clipper_name, clipper_params, content_field
     ):
-        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.stages.clipper import _apply_clipper
 
         emb = _fake_bulk_embedder()
 
@@ -128,7 +128,7 @@ class TestBulkClipReembed:
     def test_scatters_returned_vectors_back_into_clips(
         self, media_type, make_media, clipper_name, clipper_params, content_field
     ):
-        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.stages.clipper import _apply_clipper
 
         emb = _fake_bulk_embedder()
 
@@ -155,7 +155,7 @@ class TestClipReembedLoadingProgressPassthrough:
     to the "embedding" phase."""
 
     def test_loading_messages_forwarded_verbatim(self):
-        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.stages.clipper import _apply_clipper
 
         emb = mock.MagicMock()
         emb._on_progress = lambda *a, **kw: None
@@ -205,7 +205,7 @@ class TestBulkClipReembedFailureFallback:
     contract in the pre-refactor ``_reembed_clip`` helper."""
 
     def test_none_entries_leave_parent_embedding_intact(self):
-        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.stages.clipper import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
         parent_vec = parent["embedding"].copy()
@@ -223,7 +223,7 @@ class TestBulkClipReembedFailureFallback:
             np.testing.assert_array_equal(clip["embedding"], parent_vec)
 
     def test_bulk_exception_leaves_parent_embedding_intact(self):
-        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.stages.clipper import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
         parent_vec = parent["embedding"].copy()
@@ -240,7 +240,7 @@ class TestBulkClipReembedFailureFallback:
             np.testing.assert_array_equal(clip["embedding"], parent_vec)
 
     def test_no_embedders_registered_skips_bulk_and_keeps_parent(self):
-        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.stages.clipper import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
         parent_vec = parent["embedding"].copy()
@@ -259,7 +259,7 @@ class TestBulkClipReembedMD5UnchangedByRefactor:
     actual clip bytes, not the parent."""
 
     def test_audio_md5s_match_clip_bytes(self):
-        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.stages.clipper import _apply_clipper
 
         emb = _fake_bulk_embedder()
         clips_dict = {1: _make_audio_media(1, duration=5.1)}
@@ -285,7 +285,7 @@ class TestSingleOutputClipperMD5Recompute:
     """
 
     def test_md5_recomputed_when_embedding_is_none_even_without_recompute_flag(self):
-        from vtscore.datasets.load_pipeline import _fixup_clip_md5_and_embeddings
+        from vtscore.datasets.stages.clipper import _fixup_clip_md5_and_embeddings
 
         parent_bytes = b"parent-image-bytes"
         crop_bytes = b"crop-from-parent-bytes"
@@ -316,7 +316,7 @@ class TestSingleOutputClipperMD5Recompute:
         assert clip["md5"] != parent_md5
 
     def test_md5_recomputed_for_text_string_clips(self):
-        from vtscore.datasets.load_pipeline import _fixup_clip_md5_and_embeddings
+        from vtscore.datasets.stages.clipper import _fixup_clip_md5_and_embeddings
 
         parent_text = "the full document text"
         clip_text = "first sentence only"
@@ -348,7 +348,7 @@ class TestBulkClipReembedNoTempfile:
     neither code path is invoked from clip re-embed."""
 
     def test_no_tempfile_mkstemp_calls(self):
-        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.stages.clipper import _apply_clipper
         import tempfile
 
         emb = _fake_bulk_embedder()
@@ -364,7 +364,7 @@ class TestBulkClipReembedNoTempfile:
         """``embed_file`` was the single-item embedder dispatch used by
         the old per-clip loop.  The refactor resolves embedders inline
         and never reaches into ``vtscore.detectors.resolver``."""
-        from vtscore.datasets.load_pipeline import _apply_clipper
+        from vtscore.datasets.stages.clipper import _apply_clipper
         from vtscore.detectors import resolver
 
         emb = _fake_bulk_embedder()

@@ -12,7 +12,7 @@ import gc
 from collections.abc import Callable
 from typing import Any
 
-# Re-export the lock.  The app-tier proxies live in ``vtsearch.shim``.
+# Re-export the lock.  The app-tier proxies live in ``vtsearch.state_proxies``.
 from vtscore.state.core import _state_lock  # noqa: F401
 
 # Re-export context management functions ---------------------------------

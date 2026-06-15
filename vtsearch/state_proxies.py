@@ -6,11 +6,15 @@ them as the "current" container.  The library does not depend on those
 names - its functions resolve the active context explicitly - but the app
 keeps them as a convenience facade so existing code reads naturally.
 
-These proxies live on the app side of the future ``vtscore`` / ``vtsearch``
-split (see Phase 3 of ``../../vtscore/docs/architecture.md``).  ``vtsearch.state``
+These proxies live on the app side of the ``vtscore`` / ``vtsearch`` split
+(see Phase 3 of ``../vtscore/docs/architecture.md``).  ``vtsearch.state``
 re-exports them under their original names so ``from vtsearch.state import
-medias`` keeps working; the library subpackage ``vtsearch.state`` itself
-never imports the proxy classes.
+medias`` keeps working; the library tier ``vtscore.state`` never imports the
+proxy classes.
+
+This module is the canonical app-tier state API (the proxy layer), not a
+thin adapter, which is why it lives at ``vtsearch/state_proxies.py`` rather
+than under ``vtsearch/shim/`` (which holds the genuine Flask glue).
 """
 
 from __future__ import annotations
