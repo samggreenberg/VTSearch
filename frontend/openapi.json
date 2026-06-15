@@ -5936,6 +5936,9 @@
             "default": null,
             "nullable": true
           },
+          "dig_archives": {
+            "default": null
+          },
           "embedder": {
             "default": null,
             "nullable": true
@@ -6412,6 +6415,9 @@
           "dataset_name": {
             "default": null,
             "nullable": true
+          },
+          "dig_archives": {
+            "default": null
           },
           "media_type": {
             "default": "audio",

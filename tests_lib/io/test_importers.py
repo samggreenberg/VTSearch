@@ -846,12 +846,11 @@ class TestLocalArchiveImport:
             )
 
         assert len(medias) == 2
-        importers = sorted(
-            (m["origin"]["importer"] if m["origin"] else None) for m in medias.values()
-        )
+        importers = [(m["origin"]["importer"] if m["origin"] else None) for m in medias.values()]
         # Loose folder file has origin=None (the dataset origin is stamped later
         # by the load pipeline); the archived file carries a local_archive origin.
-        assert importers == [None, "local_archive"]
+        assert importers.count(None) == 1
+        assert importers.count("local_archive") == 1
 
     def test_server_folder_dig_off_ignores_archives(self, tmp_path, monkeypatch):
         from vtscore.datasets import archive as archive_mod

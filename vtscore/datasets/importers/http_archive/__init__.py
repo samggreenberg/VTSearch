@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Iterator
 from uuid import uuid4
 
 from vtscore.config import DATA_DIR
