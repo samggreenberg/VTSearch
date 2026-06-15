@@ -124,9 +124,10 @@ VTSearch/
 │   │   │                           finalize (drop-none/dedup/diversity), projection, registry save
 │   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
 │   │   ├── downloader/             Demo dataset downloaders (audio, image, video, text, docs)
-│   │   ├── sources/                MediaSource abstraction (local_folder, http_archive, pullwrest);
-│   │   │                           all fetch/resolve ops return FetchedItem (path + optional
-│   │   │                           embedding, embedder_name, extra metadata)
+│   │   ├── archive.py              Local zip/tar/rar extraction + cached loading (local_archive origin)
+│   │   ├── sources/                MediaSource abstraction (local_folder, local_archive, http_archive,
+│   │   │                           pullwrest); all fetch/resolve ops return FetchedItem (path +
+│   │   │                           optional embedding, embedder_name, extra metadata)
 │   │   └── importers/              Plugin importers (server_folder, server_files, local_folder,
 │   │                               local_files, pickle, http_archive, combine_datasets,
 │   │                               demo, synthetic, recaller)

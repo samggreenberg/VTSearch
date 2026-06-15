@@ -125,6 +125,18 @@
       </div>
 
       <div class="form-group">
+        <label class="form-label" for="sf-dig-archives" title="When enabled, archives (.zip, .tar, .rar …) found inside the chosen folder are extracted and their media imported too. The folder path can also point directly at a single archive file.">
+          <input
+            id="sf-dig-archives"
+            type="checkbox"
+            [ngModel]="sfDigArchives"
+            (ngModelChange)="sfDigArchives = $event"
+          />
+          Dig into archives
+        </label>
+      </div>
+
+      <div class="form-group">
         <label class="form-label" for="sf-dataset-name" title="Optional name for the new dataset. Leave blank to use the picked folder name.">Dataset Name</label>
         <input
           id="sf-dataset-name"

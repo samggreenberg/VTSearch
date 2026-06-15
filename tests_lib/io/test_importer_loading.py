@@ -634,7 +634,7 @@ class TestHttpArchiveExtractDirIsolation:
                 side_effect=lambda url, path, **kw: _write_zip_to(path, tmp_path),
             ),
             mock.patch(
-                "vtscore.datasets.importers.http_archive._extract_archive",
+                "vtscore.datasets.importers.http_archive.extract_archive",
             ),
             mock.patch(
                 "vtscore.datasets.loader.load_dataset_from_folder_chunked",
@@ -653,7 +653,7 @@ class TestHttpArchiveExtractDirIsolation:
 
 
 def _write_zip_to(archive_path, tmp_path):
-    """Helper: write a minimal .zip so _extract_archive succeeds."""
+    """Helper: write a minimal .zip so extract_archive succeeds."""
     with zipfile.ZipFile(archive_path, "w") as zf:
         zf.writestr("dummy.wav", _make_wav_bytes())
 

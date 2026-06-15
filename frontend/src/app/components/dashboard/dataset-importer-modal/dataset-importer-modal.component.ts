@@ -154,6 +154,9 @@ export class DatasetImporterModalComponent implements OnInit {
   sfSubmitting = false;
   /** Whether subdirectories of the picked server folder are scanned. */
   sfRecursive = true;
+  /** Whether archives inside the picked folder are extracted and imported.
+   *  Also enables pointing the folder path directly at a single archive. */
+  sfDigArchives = false;
   /** Optional user-supplied dataset name for server-folder imports. */
   sfDatasetName = '';
   /** Whether the user has manually edited :prop:`sfDatasetName`. */
@@ -1564,6 +1567,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfDetection = null;
     this.sfSubmitting = false;
     this.sfRecursive = this.readRecursiveDefault(this.selectedImporter);
+    this.sfDigArchives = false;
     this.sfDatasetName = '';
     this.sfDatasetNameDirty = false;
     this.sfPathInputValue = '';
@@ -2002,6 +2006,7 @@ export class DatasetImporterModalComponent implements OnInit {
       path: this.sfAbsolutePath,
       media_type: this.sfMediaType,
       recursive: this.sfRecursive,
+      dig_archives: this.sfDigArchives,
     };
     const sfName = (this.sfDatasetName || '').trim();
     if (sfName) {

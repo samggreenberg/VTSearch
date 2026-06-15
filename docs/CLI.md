@@ -39,11 +39,17 @@ file) applies.
 python app.py --autodetect --dataset path/to/dataset.pkl --settings settings.json
 ```
 
-**From any supported data source** (folder, HTTP archive):
+**From any supported data source** (folder, archive file, HTTP archive):
 
 ```bash
 python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json
+# --path may point at a single archive file, which is extracted and imported:
+python app.py --autodetect --importer server_folder --path /data/sounds.zip --media-type audio --settings settings.json
+# --dig-archives also extracts any archives found inside the scanned folder:
+python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --dig-archives --settings settings.json
+# http_archive accepts a web URL or a local server path to an archive:
 python app.py --autodetect --importer http_archive --url https://example.com/data.zip --settings settings.json
+python app.py --autodetect --importer http_archive --url /data/sounds.tar.gz --media-type audio --settings settings.json
 ```
 
 Use `python app.py --list-importers` to see all available importers. The full set includes: `server_folder`, `server_files`, `local_folder`, `local_files`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them.
