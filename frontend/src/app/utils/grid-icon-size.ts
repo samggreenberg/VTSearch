@@ -16,14 +16,21 @@ const GRID_GAP = 4;
  * When the user releases the panel resize divider, snap the panel width down to
  * the minimum width that still shows the same number of grid columns.
  *
- * Finds the active grid container (.media-list.grid-layout or .vote-list.grid-layout)
- * inside panelEl, reads the current column count from the live DOM (so scrollbar width
- * and all structural offsets are automatically accounted for), and returns the snapped
- * panel width. Returns null if the panel is not in grid mode or the element is not found.
+ * Finds the active grid container (.media-list.grid-layout, .vote-list.grid-layout,
+ * .bsp-list.grid-layout, or the virtualized .media-list.grid-virtual viewport) inside
+ * panelEl, reads the current column count from the live DOM (so scrollbar width and all
+ * structural offsets are automatically accounted for), and returns the snapped panel
+ * width. Returns null if the panel is not in grid mode or the element is not found.
+ *
+ * The left panel switches to a CDK virtual-scroll viewport (.grid-virtual) once a view
+ * grows past its grid-virtualization threshold; that viewport carries the same
+ * --grid-goal-width and padding-inline as the plain grid, so the column math below is
+ * identical and snapping works in both modes.
  */
 export function snapPanelWidthToGridColumns(panelEl: HTMLElement, currentPanelWidth: number): number | null {
   const gridEl = (
     panelEl.querySelector('.media-list.grid-layout') ??
+    panelEl.querySelector('.media-list.grid-virtual') ??
     panelEl.querySelector('.vote-list.grid-layout') ??
     panelEl.querySelector('.bsp-list.grid-layout')
   ) as HTMLElement | null;
