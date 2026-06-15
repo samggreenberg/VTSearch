@@ -15,11 +15,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, ImporterField
 from vtscore.datasets.loader import load_demo_dataset
 
 
-class DemoDatasetImporter(DatasetImporter):
+class DemoDatasetImporter(ImporterBase):
     """Load a pre-configured demo dataset by name.
 
     Demo datasets are defined by media types and collected via

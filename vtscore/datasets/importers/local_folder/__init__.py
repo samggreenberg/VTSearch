@@ -22,10 +22,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, ImporterField
 
 
-class LocalFolderDatasetImporter(DatasetImporter):
+class LocalFolderDatasetImporter(ImporterBase):
     """Placeholder for the browser-side folder upload card.
 
     The card opens the modal's ``"local_folder"`` view (see
