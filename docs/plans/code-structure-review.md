@@ -5,11 +5,14 @@
 extractions, `workflow.py` de-coupling, training-pipeline merge,
 inverse-leak sweep), **Theme C quick wins** (the `_ClapBase` mixin and the
 settings dispatch-table generation + drift guard), **Theme E quick
-wins** (the "shim" rename and the `labelset_ops` facade), and the first
-**Theme B** mega-file split (the `settings.py` engine extraction into
-`UserSettingsStore` — see the Theme B section). For the details of
-what landed, see the git history / merged PRs on `dev`. **Everything below
-is the remaining planned work.**
+wins** (the "shim" rename and the `labelset_ops` facade), and several
+**Theme B** mega-file splits (the `settings.py` engine extraction into
+`UserSettingsStore`; the `load_pipeline.py` stage extraction; the `app.py`
+CLI + port-preflight extraction; and the `importers/base.py` split into a
+`base/` package with a thin `ImporterBase` and the rich `DatasetImporter` —
+see the Theme B section). For the details of what landed, see the git
+history / merged PRs on `dev`. **Everything below is the remaining planned
+work.**
 
 This review asks: where have design decisions that were right at small scale
 been outgrown, and what is worth streamlining, abstracting, or reorganizing?
@@ -82,10 +85,27 @@ responsibilities.
   `_parse_chain_field` / `_normalize_media_type` / `auto_chunk_size`). The
   dependency DAG is one-way (orchestrator → stages → `stages/_common`); no
   stage imports `load_pipeline`, so there is no import cycle.
-- **`vtscore/datasets/importers/base.py` (1202 lines, 35 methods).** A
-  trivial single-API-call importer inherits all the multi-media-spec /
-  converter / ingestion machinery. Split a thin `ImporterBase` from a
-  `MultiMediaImporter` mixin.
+- **`vtscore/datasets/importers/base.py`** — **DONE (thin/rich class
+  split).** The single 1203-line `base.py` module became a `base/` package:
+  `core.py` (`ImporterBase`, the thin base every importer shares — metadata,
+  dataset-name resolution, origin building, CLI wrapping, chunked-loading
+  scaffolding, the precomputed embedding/MD5/metadata dicts, and the origin
+  reload/display/resolve surface, plus an abstract `run()` that raises);
+  `dataset_importer.py` (`DatasetImporter(ImporterBase)`, which layers the
+  source-spec → converter → ingestion pipeline and the `list_records` /
+  `fetch_record` per-record hooks on top); `specs.py` (`SourceSpec` + the
+  spec-parsing / converter-ingestion helpers); and `origin.py`
+  (origin-serialisation policy helpers + the synthetic dataset-name field).
+  Rather than the plan's literal `MultiMediaImporter` rename, `DatasetImporter`
+  was **kept as the rich/public base** (identical name, module path, and full
+  method set) so the 3 spec-aware folder importers, `recaller`, and all ~25
+  test subclasses are unchanged, and **out-of-repo extension importers keep
+  working with zero rewrites** (the chosen constraint — see the option
+  analysis in the session that shipped this). The 6 truly-thin importers
+  (`synthetic`, `pickle`, `local_files`, `combine_datasets`, `demo`,
+  `local_folder`) moved onto `ImporterBase`, so they no longer inherit the
+  machinery they never used. Discovery is unaffected (the registry keys off
+  the `IMPORTER` sentinel + `.name`, never `isinstance`).
 - **`vtscore/state/core.py` — `DetectorContext` (31 fields).** A god-object
   spanning vote state, training artifacts, cached embeddings, and
   Find-session state. Splitting into `VoteState` / `TrainingState` /
@@ -176,10 +196,12 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
 
 ## Prioritized backlog (remaining)
 
-1. **Theme B** — split `importers/base.py`. (`settings.py` engine
-   extraction, `load_pipeline.py` stage extraction, and the `app.py`
-   CLI + port-preflight extraction shipped — see the Theme B bullets
-   above. `app.py`'s hooks/errors split is an open follow-up there.)
+1. **Theme B** — `importers/base.py` thin/rich split **shipped** (see the
+   Theme B bullet above). `settings.py` engine extraction, `load_pipeline.py`
+   stage extraction, and the `app.py` CLI + port-preflight extraction also
+   shipped. `app.py`'s hooks/errors split remains an open follow-up there.
+   Remaining Theme B mega-files: `DetectorContext` sub-context split (item 6
+   below) and the two frontend components.
 2. **Theme D** — converge frontend types onto the generated client.
 3. **Theme E** — `MediaSource` / `DatasetImporter` ingestion-concept overlap.
 4. **Theme F** — collapse `PluginField` aliases; revisit `SyncSource` if a
