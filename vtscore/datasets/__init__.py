@@ -9,7 +9,7 @@ from vtscore.datasets.downloader import (
     download_ucf101_subset,
 )
 from vtscore.datasets.importers import get_importer, list_importers
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import DatasetImporter, ImporterBase, ImporterField
 from vtscore.datasets.labelset import LabelSet, LabeledElement
 from vtscore.datasets.loader import (
     export_dataset_to_file,
@@ -36,6 +36,7 @@ __all__ = [
     "LabeledElement",
     # Importer registry
     "DatasetImporter",
+    "ImporterBase",
     "ImporterField",
     "get_importer",
     "list_importers",

@@ -177,6 +177,19 @@ Subclass `DatasetImporter` from `vtscore.datasets.importers.base`.
 Set the required class attributes and implement the `run()` method.
 Expose a module-level `IMPORTER` instance.
 
+> **`DatasetImporter` vs `ImporterBase`.** `DatasetImporter` is the
+> full-featured base most importers want: it layers the source-spec →
+> converter → ingestion pipeline and the `list_records` / `fetch_record`
+> per-record hooks (override points 1–3 below) on top of the thin
+> `ImporterBase`. If your importer drives its own ingestion entirely from
+> `run()` (override point 4) and never touches `SourceSpec`,
+> `effective_source_specs()`, or the per-record hooks, you can subclass
+> `ImporterBase` directly for a leaner surface — the six in-tree importers
+> that do this (`synthetic`, `pickle`, `demo`, `combine_datasets`,
+> `local_folder`, `local_files`) are the worked examples. Both bases share
+> the same metadata, origin, CLI, chunked-loading, and precomputed-vector
+> surface, so when in doubt reach for `DatasetImporter`.
+
 ```python
 # vtscore/datasets/importers/s3/__init__.py
 

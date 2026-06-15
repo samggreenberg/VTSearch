@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, ImporterField
 from vtscore.datasets.loader import load_dataset_from_folder
 
 _SUPPORTED_MEDIA_TYPES = ["image", "audio", "video"]
@@ -25,7 +25,7 @@ def _cache_dir(media_type: str, size: int) -> Path:
     return DATA_DIR / "synthetic" / f"{media_type}_{size}"
 
 
-class SyntheticDatasetImporter(DatasetImporter):
+class SyntheticDatasetImporter(ImporterBase):
     """Generate a fake dataset of images, audio, or video (no network needed).
 
     The user only picks a media type and a size; everything else is

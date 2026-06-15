@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, ImporterField
 from vtscore.datasets.loader import load_dataset_from_pickle, load_dataset_from_pickle_chunked
 
 
@@ -21,7 +21,7 @@ def _get_progress():
     return update_progress
 
 
-class PickleDatasetImporter(DatasetImporter):
+class PickleDatasetImporter(ImporterBase):
     """Load a dataset from a ``.pkl`` file exported by VTSearch.
 
     The user picks the file via the browser's file-upload input.  The file

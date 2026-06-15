@@ -216,7 +216,7 @@ class TestAudio2ImageMediaConverter:
         """End-to-end: the multi-media source-spec parser must reject a
         converter ``params`` dict that violates the converter's declared
         :class:`PluginField` range."""
-        from vtscore.datasets.importers.base import _parse_multi_media_specs
+        from vtscore.datasets.importers.base.specs import _parse_multi_media_specs
 
         raw = [
             {

@@ -19,10 +19,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.datasets.importers.base import DatasetImporter
+from vtscore.datasets.importers.base import ImporterBase
 
 
-class LocalFilesDatasetImporter(DatasetImporter):
+class LocalFilesDatasetImporter(ImporterBase):
     """Placeholder for the browser-side single-file paths upload card.
 
     The card opens the modal's ``"local_files"`` view (see
