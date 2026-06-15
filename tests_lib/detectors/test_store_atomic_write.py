@@ -9,7 +9,7 @@ the second chased a tmp that was already renamed away, surfacing as
     FileNotFoundError: '<name>.json.tmp' -> '<name>.json'
 
 The writer now uses a per-writer unique tmp suffix (PID + UUID), matching
-``vtsearch.settings._atomic_write`` and ``vtscore.io.atomic_write_text``.
+``vtsearch.settings_store._atomic_write`` and ``vtscore.io.atomic_write_text``.
 """
 
 from __future__ import annotations
