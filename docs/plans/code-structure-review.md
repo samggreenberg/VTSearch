@@ -4,8 +4,10 @@
 **Theme A** in full (the `vtscore` ↔ `vtsearch` boundary — fat-controller
 extractions, `workflow.py` de-coupling, training-pipeline merge,
 inverse-leak sweep), **Theme C quick wins** (the `_ClapBase` mixin and the
-settings dispatch-table generation + drift guard), and **Theme E quick
-wins** (the "shim" rename and the `labelset_ops` facade). For the details of
+settings dispatch-table generation + drift guard), **Theme E quick
+wins** (the "shim" rename and the `labelset_ops` facade), and the first
+**Theme B** mega-file split (the `settings.py` engine extraction into
+`UserSettingsStore` — see the Theme B section). For the details of
 what landed, see the git history / merged PRs on `dev`. **Everything below
 is the remaining planned work.**
 
@@ -29,12 +31,24 @@ responsibilities.
   gunicorn imports. Extract `vtsearch/cli_main.py` (argparse/dispatch) and
   `vtsearch/app/server.py` (port preflight); optionally `hooks.py` +
   `errors.py` for the request lifecycle and error handlers.
-- **`vtsearch/settings.py` (1887 lines).** Conflates cache state,
-  cross-process file locking, two-tier routing, a one-shot legacy migration,
-  bidirectional sync state-machines, and dynamic accessor generation. The
-  lock-ordering discipline (`file_lock → settings_lock`, re-entrance guards)
-  would be safer encapsulated in a `UserSettingsStore`; the legacy-migration
-  path could move to a one-shot script.
+- **`vtsearch/settings.py`** — **DONE (engine extraction).** The
+  lock-ordering-sensitive engine (cross-process file locking, the two-tier
+  server/per-user caches, the one-shot legacy migration, and the
+  bidirectional sync state-machine) now lives in
+  `vtsearch/settings_store.py` as `UserSettingsStore`; `settings.py` (down
+  from 1935 → ~1410 lines) keeps the schema/policy layer (Pydantic-driven
+  accessor generation, tier routing, CLI fallbacks, effective-value
+  resolvers) and delegates engine work to a module-level store instance.
+  The shared mutable containers (`_settings_lock`, `_user_caches`,
+  `_sync_state`, `_syncing`) stay as module globals and are passed *by
+  reference* into the store so external importers (`vtsearch.achievements`,
+  the sync-source tests) and the store mutate one set of objects.
+  **Open follow-up:** the legacy-migration path is still lazy (runs from
+  `UserSettingsStore.ensure_server_loaded` on first server load) rather than
+  a one-shot admin script — left as-is deliberately because the lazy
+  trigger is what the default-user read-through and the CLI `--settings`
+  flat-file flow rely on; moving it to a script is a behavior change worth
+  its own scoped task, not a free win.
 - **`vtscore/datasets/load_pipeline.py` (1588 lines).** Six concerns:
   `ConcurrencyGate`, progress/step mapping, clipper-chain fixup, embedding,
   dedup/diversity, registry/migration, background-task orchestration. Move
@@ -134,8 +148,9 @@ rename every plugin family's `run()`/`export()`/`load()` to a uniform
 
 ## Prioritized backlog (remaining)
 
-1. **Theme B** — split `app.py`, `load_pipeline.py`, `settings.py`,
-   `importers/base.py`.
+1. **Theme B** — split `app.py`, `load_pipeline.py`,
+   `importers/base.py`. (`settings.py` engine extraction shipped — see
+   the Theme B bullet above.)
 2. **Theme D** — converge frontend types onto the generated client.
 3. **Theme E** — `MediaSource` / `DatasetImporter` ingestion-concept overlap.
 4. **Theme F** — collapse `PluginField` aliases; revisit `SyncSource` if a
