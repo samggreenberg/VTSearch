@@ -1564,7 +1564,7 @@ class TestLoadFailureCleanup:
         self._fake_load(medias)
 
         with mock.patch(
-            "vtscore.datasets.load_pipeline._reg_register",
+            "vtscore.datasets.stages.registry._reg_register",
             side_effect=RuntimeError("simulated registry write failure"),
         ):
             entry = _auto_register_dataset(medias, name="orphan-test")
