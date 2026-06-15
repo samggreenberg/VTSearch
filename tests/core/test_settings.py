@@ -748,7 +748,7 @@ class TestConcurrentWrites:
         settings_mod.set_volume(0.5)
         # ``_atomic_write`` removes the tmp via rename, but the filename
         # shape is what we care about. Confirm by inspecting the helper.
-        from vtsearch.settings import _atomic_write
+        from vtsearch.settings_store import _atomic_write
 
         # Drive it once and check the tmp name pattern used by inspecting
         # the directory contents during a captured write.

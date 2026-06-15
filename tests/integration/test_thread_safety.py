@@ -28,6 +28,7 @@ from vtsearch.state import (
 import vtsearch.state as _state
 import vtscore.state.core as _core
 import vtsearch.settings as _settings_mod
+import vtsearch.settings_store as _settings_store_mod
 import vtscore.detectors.labeling_progress as _progress_mod
 
 
@@ -451,7 +452,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
 
         in_write_for_user_a = threading.Event()
         unblock = threading.Event()
-        real_atomic_write = _settings_mod._atomic_write
+        real_atomic_write = _settings_store_mod._atomic_write
 
         def selective_atomic_write(path, data):
             if "user_a" in str(path):
@@ -459,7 +460,7 @@ class TestSlowSettingsIODoesNotBlockOthers:
                 unblock.wait(timeout=30)
             real_atomic_write(path, data)
 
-        monkeypatch.setattr(_settings_mod, "_atomic_write", selective_atomic_write)
+        monkeypatch.setattr(_settings_store_mod, "_atomic_write", selective_atomic_write)
 
         errors: list[BaseException] = []
         user_b_done = threading.Event()
@@ -506,14 +507,14 @@ class TestSlowSettingsIODoesNotBlockOthers:
         """
         in_write = threading.Event()
         unblock = threading.Event()
-        real_atomic_write = _settings_mod._atomic_write
+        real_atomic_write = _settings_store_mod._atomic_write
 
         def slow_atomic_write(path, data):
             in_write.set()
             unblock.wait(timeout=30)
             real_atomic_write(path, data)
 
-        monkeypatch.setattr(_settings_mod, "_atomic_write", slow_atomic_write)
+        monkeypatch.setattr(_settings_store_mod, "_atomic_write", slow_atomic_write)
 
         errors: list[BaseException] = []
         reader_done = threading.Event()
