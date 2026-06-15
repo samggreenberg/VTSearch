@@ -168,7 +168,7 @@ class TestEmbedMissingRoutesToBulk:
     ``embedding=None`` to ``embed_media_bulk`` in a single call."""
 
     def test_single_bulk_call_for_unembedded_medias(self):
-        from vtscore.datasets.load_pipeline import embed_missing
+        from vtscore.datasets.stages.embedding import embed_missing
 
         mt = _make_media_type_for_audio()
         emb = _make_bulk_embedder()
@@ -187,7 +187,7 @@ class TestEmbedMissingRoutesToBulk:
         assert all(m["embedding"] is not None for m in medias.values())
 
     def test_already_embedded_medias_are_left_alone(self):
-        from vtscore.datasets.load_pipeline import embed_missing
+        from vtscore.datasets.stages.embedding import embed_missing
 
         emb = _make_bulk_embedder()
 
@@ -207,7 +207,7 @@ class TestEmbedMissingRoutesToBulk:
         assert medias[2]["embedding"] is not None
 
     def test_no_op_when_nothing_missing(self):
-        from vtscore.datasets.load_pipeline import embed_missing
+        from vtscore.datasets.stages.embedding import embed_missing
 
         emb = _make_bulk_embedder()
         pre_vec = np.array([1.0], dtype=np.float32)
@@ -225,7 +225,7 @@ class TestEmbedMissingRoutesToBulk:
         if _ingest_spec_stream forgets to stamp media_type, embed_missing
         returns early and leaves all embeddings as None.
         """
-        from vtscore.datasets.load_pipeline import embed_missing
+        from vtscore.datasets.stages.embedding import embed_missing
 
         emb = _make_bulk_embedder()
         # Mimic what a converter output looked like before the fix:
@@ -239,7 +239,7 @@ class TestEmbedMissingRoutesToBulk:
         assert all(m["embedding"] is None for m in medias.values())
 
     def test_routes_progress_to_caller(self):
-        from vtscore.datasets.load_pipeline import embed_missing
+        from vtscore.datasets.stages.embedding import embed_missing
 
         captured_cb: list = []
 
@@ -265,7 +265,7 @@ class TestEmbedMissingRoutesToBulk:
         assert ("embedding", "halfway", 1, 2) in events
 
     def test_bulk_returning_none_leaves_embedding_none(self):
-        from vtscore.datasets.load_pipeline import embed_missing
+        from vtscore.datasets.stages.embedding import embed_missing
 
         emb = _make_bulk_embedder()
 

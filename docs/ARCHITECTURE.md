@@ -118,7 +118,9 @@ VTSearch/
 │   │   ├── loader_folder.py        load_dataset_from_folder + chunked variant
 │   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
-│   │   ├── load_pipeline.py        Background-task orchestration, ConcurrencyGate, clip fix-up
+│   │   ├── load_pipeline.py        Background-task load orchestration (gate handoff, stage sequencing)
+│   │   ├── stages/                 Post-import load stages: clipper fix-up, embed-missing,
+│   │   │                           finalize (drop-none/dedup/diversity), projection, registry save
 │   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
 │   │   ├── downloader/             Demo dataset downloaders (audio, image, video, text, docs)
 │   │   ├── sources/                MediaSource abstraction (local_folder, http_archive, pullwrest);
@@ -145,6 +147,7 @@ VTSearch/
 │   │
 │   ├── concurrency/                Async jobs, memory budgeting, progress tracking
 │   │   ├── async_jobs.py           AsyncJob, JobManager, eval_jobs, learned_sort_jobs
+│   │   ├── gate.py                 ConcurrencyGate (dynamic-limit semaphore for load phases)
 │   │   ├── memory_budget.py        cap_workers_by_memory
 │   │   └── progress.py             ProgressTracker, update_progress, cancel_dataset_progress
 │   │

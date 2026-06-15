@@ -18,7 +18,7 @@ from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS
 from vtscore.datasets.demo_counts import exact_demo_count
 from vtscore.datasets.loader import read_pkl_clipper, read_pkl_embedder
-from vtscore.datasets.load_pipeline import _origin_to_str
+from vtscore.datasets.stages._common import _origin_to_str
 from vtsearch.routes._shared import format_mtime
 from vtsearch.schemas.datasets import (
     BrowseMediaFilesQuerySchema,

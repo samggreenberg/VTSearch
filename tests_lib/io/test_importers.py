@@ -1058,7 +1058,7 @@ class TestIngestSpecStreamMediaType:
         import numpy as np
 
         from vtscore.converters import get_converter
-        from vtscore.datasets.load_pipeline import embed_missing
+        from vtscore.datasets.stages.embedding import embed_missing
 
         v2i = get_converter("video2image")
         assert v2i is not None

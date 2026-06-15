@@ -1555,7 +1555,7 @@ class TestLoadFailureCleanup:
         from unittest import mock
 
         from vtsearch import settings as settings_mod
-        from vtscore.datasets.load_pipeline import _auto_register_dataset
+        from vtscore.datasets.stages.registry import _auto_register_dataset
 
         ds_dir = tmp_path / "saved_for_c12"
         settings_mod.set_saved_datasets_dir(str(ds_dir))
@@ -1564,7 +1564,7 @@ class TestLoadFailureCleanup:
         self._fake_load(medias)
 
         with mock.patch(
-            "vtscore.datasets.load_pipeline._reg_register",
+            "vtscore.datasets.stages.registry._reg_register",
             side_effect=RuntimeError("simulated registry write failure"),
         ):
             entry = _auto_register_dataset(medias, name="orphan-test")
