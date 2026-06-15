@@ -45,7 +45,7 @@
 } @else if (useGridVirtual) {
   <!-- Virtual scrolling for large galleries: cards are chunked into rows so
        only the visible rows are mounted, instead of every thumbnail at once. -->
-  <cdk-virtual-scroll-viewport [itemSize]="gridRowHeight" class="media-list virtual-scroll-viewport grid-virtual">
+  <cdk-virtual-scroll-viewport [itemSize]="gridRowHeight" class="media-list virtual-scroll-viewport grid-virtual" [style.--grid-goal-width]="gridGoalWidth + 'px'">
     <div
       class="grid-virtual-row"
       *cdkVirtualFor="let row of gridRows; trackBy: trackByGridRow"
