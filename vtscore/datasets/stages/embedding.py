@@ -10,11 +10,14 @@ that report ``supports_patch_regions``.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 
 from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
+
+if TYPE_CHECKING:
+    from vtscore.state import DatasetContext
 
 
 def embed_missing(  # noqa: C901
@@ -137,7 +140,7 @@ def _attach_patch_regions_to_media(media: dict, patch_out) -> None:
 
 
 def _embed_missing_stage(
-    ctx,
+    ctx: DatasetContext,
     tracker,
     embedder_name: str,
 ) -> None:

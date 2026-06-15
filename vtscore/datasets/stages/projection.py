@@ -10,8 +10,12 @@ already registered and usable before this runs.
 from __future__ import annotations
 
 import traceback
+from typing import TYPE_CHECKING
 
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
+
+if TYPE_CHECKING:
+    from vtscore.state import DatasetContext
 
 
 def _persist_projection_to_container(dataset_id: str, proj, pyr) -> None:
@@ -39,7 +43,7 @@ def _persist_projection_to_container(dataset_id: str, proj, pyr) -> None:
         traceback.print_exc()
 
 
-def _build_projection_stage(ctx, tracker, dataset_id: str) -> None:
+def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> None:
     """Compute + persist the 2-D UMAP projection at ingest (opt-in).
 
     Runs inline as a load stage (after the dataset is registered) so the

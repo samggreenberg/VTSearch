@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import traceback
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 
 from vtscore.concurrency.progress import loading_tasks
@@ -22,6 +22,9 @@ from vtscore.datasets.registry import (
 )
 
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS, _origin_to_str
+
+if TYPE_CHECKING:
+    from vtscore.state import DatasetContext
 
 
 def _auto_register_dataset(
@@ -140,7 +143,7 @@ def _auto_register_dataset(
 
 
 def _register_and_migrate(
-    ctx,
+    ctx: DatasetContext,
     tracker,
     task_id: str,
     origin: dict,

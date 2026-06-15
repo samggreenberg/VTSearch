@@ -9,11 +9,14 @@ embedding computed from the clipped content instead of the parent's.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
+
+if TYPE_CHECKING:
+    from vtscore.state import DatasetContext
 
 
 def _apply_clipper(  # noqa: C901
@@ -361,7 +364,7 @@ def _resolve_clip_embedder(media_type: str):
 
 
 def _apply_clipper_stage(
-    ctx, tracker, clipper: str, clipper_params: dict | None, chain_steps: list[dict] | None
+    ctx: DatasetContext, tracker, clipper: str, clipper_params: dict | None, chain_steps: list[dict] | None
 ) -> None:
     """Run the clipper / chain stage with tracker-routed progress."""
     if not (clipper or chain_steps):

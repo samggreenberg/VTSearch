@@ -7,13 +7,18 @@ exact-duplicate media are collapsed, and the diversity index is built.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.state import build_diversity_tree_for_context, collapse_duplicates
 
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
 
+if TYPE_CHECKING:
+    from vtscore.state import DatasetContext
 
-def _drop_none_embeddings_stage(ctx, tracker) -> None:
+
+def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
     """Drop any media that finished the clipper stage without an embedding.
 
     ``_fixup_clip_md5_and_embeddings`` is best-effort: when its bulk
@@ -50,7 +55,7 @@ def _drop_none_embeddings_stage(ctx, tracker) -> None:
     invalidate_embedding_matrix(ctx)
 
 
-def _collapse_duplicates_stage(ctx, tracker) -> None:
+def _collapse_duplicates_stage(ctx: DatasetContext, tracker) -> None:
     def _progress(current: int, total: int) -> None:
         tracker.check_cancelled()
         tracker.update(
@@ -67,7 +72,7 @@ def _collapse_duplicates_stage(ctx, tracker) -> None:
     invalidate_embedding_matrix(ctx)
 
 
-def _build_diversity_tree_stage(ctx, tracker) -> None:
+def _build_diversity_tree_stage(ctx: DatasetContext, tracker) -> None:
     def _progress(current: int, total: int) -> None:
         tracker.check_cancelled()
         tracker.update(
