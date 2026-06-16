@@ -16,9 +16,9 @@
   - [GPU](#gpu)
   - [Data persistence](#data-persistence)
   - [Rebuilding](#rebuilding)
-- [Running on a SLURM GPU cluster (Grid)](#running-on-a-slurm-gpu-cluster-grid)
+- [Running on a SLURM GPU cluster](#running-on-a-slurm-gpu-cluster)
   - [One-time setup on the cluster](#one-time-setup-on-the-cluster)
-  - [One-time setup on your laptop](#one-time-setup-on-your-laptop)
+  - [One-time setup on your local machine](#one-time-setup-on-your-local-machine)
   - [Daily workflow](#daily-workflow)
   - [Tuning the allocation](#tuning-the-allocation)
 - [Running the tests](#running-the-tests)
@@ -378,25 +378,34 @@ docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (
 
 Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 
-## Running on a SLURM GPU cluster (Grid)
+## Running on a SLURM GPU cluster
 
 VTSearch is happiest with a GPU (for embedding and detector training). On a
 shared SLURM cluster — like the JHU HLTCOE "Grid" — you don't run heavy work on
 the login nodes; you ask SLURM for a GPU compute node and run the app there,
-then forward its port back to your laptop so you can use the browser UI.
+then forward its port back to your local machine so you can use the browser UI.
 
-Two helper scripts in [`scripts/grid/`](../scripts/grid/) automate the loop:
+Two helper scripts in [`scripts/slurm/`](../scripts/slurm/) automate the loop:
 
-- **`vtsearch-grid.sh`** runs *on the cluster*. It allocates a GPU node with
+- **`vtsearch-slurm.sh`** runs *on the cluster*. It allocates a GPU node with
   `srun`, activates the virtualenv, and runs `app.py` on the node — printing
-  which node it landed on. It holds the allocation until you quit.
-- **`vtsearch-tunnel.sh`** runs *on your laptop*. It finds your running
-  VTSearch job, SSH-forwards `localhost:5000` to that compute node, and drops
+  which node and port it landed on. It holds the allocation until you quit.
+- **`vtsearch-tunnel.sh`** runs *on your local machine*. It finds your running
+  VTSearch job, SSH-forwards your local port to that compute node, and drops
   you into the project directory for git/edits.
 
 Both scripts are parameterized entirely by environment variables (no hard-coded
 usernames, hostnames, or paths), so they should adapt to most SLURM clusters
 with a shared filesystem.
+
+> **Why a per-user port?** GPU nodes usually hold several GPUs, so SLURM can
+> pack multiple users' single-GPU jobs onto one physical node — where a single
+> shared `:5000` would collide (the second app can't bind it, and a naive
+> tunnel would forward you into someone else's session). So the scripts derive
+> a port from your UID (`10000 + UID % 20000`); both compute the same value, so
+> the tunnel finds your app with no extra coordination. `app.py` honors this
+> via `VTSEARCH_PORT` (or `--port`). Override with `VTS_PORT` on *both* scripts
+> if you ever need to.
 
 ### One-time setup on the cluster
 
@@ -435,7 +444,7 @@ with a shared filesystem.
 
    ```bash
    mkdir -p ~/.local/bin
-   cp scripts/grid/vtsearch-grid.sh ~/.local/bin/vtsearch
+   cp scripts/slurm/vtsearch-slurm.sh ~/.local/bin/vtsearch
    chmod +x ~/.local/bin/vtsearch
    ```
 
@@ -444,19 +453,19 @@ with a shared filesystem.
    > (e.g. `export HF_HOME=/exp/$USER/.cache/huggingface`). Setting `HF_TOKEN`
    > there too avoids anonymous Hugging Face rate limits on a shared egress IP.
 
-### One-time setup on your laptop
+### One-time setup on your local machine
 
 1. **Add an SSH host entry** for the cluster login node so the tunnel script
    can reach it by a short name. In `~/.ssh/config`:
 
    ```sshconfig
-   Host grid
+   Host cluster
        HostName login.your-cluster.edu     # e.g. login1.hltcoe.jhu.edu
        User your-cluster-username
        IdentityFile ~/.ssh/id_ed25519
    ```
 
-   Verify it works: `ssh grid true` should connect without prompting. If your
+   Verify it works: `ssh cluster true` should connect without prompting. If your
    cluster is only reachable through a VPN or campus network, connect to that
    first.
 
@@ -464,20 +473,20 @@ with a shared filesystem.
 
    ```bash
    mkdir -p ~/.local/bin
-   cp scripts/grid/vtsearch-tunnel.sh ~/.local/bin/vtsearch-tunnel
+   cp scripts/slurm/vtsearch-tunnel.sh ~/.local/bin/vtsearch-tunnel
    chmod +x ~/.local/bin/vtsearch-tunnel
    ```
 
-   (Clone VTSearch on your laptop too, or just copy the one script — it only
+   (Clone VTSearch on your local machine too, or just copy the one script — it only
    needs SSH access to the cluster.) If you named your SSH host something other
-   than `grid`, point the script at it with `GRID_HOST=mycluster vtsearch-tunnel`.
+   than `cluster`, point the script at it with `CLUSTER_HOST=mycluster vtsearch-tunnel`.
 
 ### Daily workflow
 
 1. **On the cluster**, start VTSearch and leave the terminal running:
 
    ```bash
-   ssh grid
+   ssh cluster
    vtsearch
    ```
 
@@ -485,15 +494,16 @@ with a shared filesystem.
    prints the compute node it got. Keep this terminal open — closing it releases
    the node.
 
-2. **On your laptop**, in a second terminal, open the tunnel:
+2. **On your local machine**, in a second terminal, open the tunnel:
 
    ```bash
    vtsearch-tunnel
    ```
 
-   It finds the running job automatically (no need to know the node name),
-   forwards `localhost:5000`, and drops you into the project directory on the
-   login node for git pulls / edits. Browse **http://localhost:5000**.
+   It finds the running job automatically (no need to know the node name or
+   port), forwards your local port to it, and drops you into the project
+   directory on the login node for git pulls / edits. It prints the URL to
+   browse — **http://localhost:&lt;port&gt;** (the per-user port, see above).
 
 3. **To pick up code changes**: pull on the cluster, then in the `vtsearch`
    terminal press **Ctrl+C** (this stops `app.py` but *keeps* the GPU node) and
@@ -506,7 +516,7 @@ with a shared filesystem.
 
 ### Tuning the allocation
 
-`vtsearch-grid.sh` reads these environment variables (defaults shown). Set them
+`vtsearch-slurm.sh` reads these environment variables (defaults shown). Set them
 inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
 
 | Variable | Default | Meaning |
@@ -518,13 +528,15 @@ inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
 | `VTS_CPUS` | `8` | CPU cores |
 | `VTS_MEM` | `48G` | Memory (headroom for two model loads in one process) |
 | `VTS_TIME` | `8:00:00` | Walltime |
+| `VTS_PORT` | `10000 + UID % 20000` | Port the app binds (passed as `VTSEARCH_PORT`); per-user by default so co-located jobs don't collide |
 
 `vtsearch-tunnel.sh` reads:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `GRID_HOST` | `grid` | SSH host alias for the cluster login node |
+| `CLUSTER_HOST` | `cluster` | SSH host alias for the cluster login node |
 | `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Project dir to drop into on the login node |
+| `VTS_PORT` | (cluster-computed) | Forwarded port; defaults to the same per-user value the launcher binds. Set it only if you overrode `VTS_PORT` on the cluster too |
 
 Adjust `VTS_GPU`, `VTS_PART`, and the CUDA wheel in `install-gpu.sh` to match
 your cluster's hardware. Check what's available with `sinfo` and your cluster's
@@ -584,6 +596,7 @@ VTSearch reads several optional environment variables:
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (set this in production) |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `INFO`/`DEBUG` also enable the per-request access log. `python app.py -v`/`-vv` is the CLI shortcut. |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
+| `VTSEARCH_PORT` | `5000` | Port for the `python app.py` dev server (also `--port`). Lets several instances share a host, e.g. co-located SLURM jobs. Gunicorn uses `VTSEARCH_BIND` instead. |
 | `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn; triggers model init / settings sync at import time |
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
 | `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
