@@ -4,7 +4,7 @@
 # Run this in a terminal ON THE CLUSTER (a login node) and LEAVE IT RUNNING --
 # it holds the SLURM allocation and the app. When the allocation lands, it
 # prints the compute node it got and a hint for the tunnel script you run on
-# your laptop (see scripts/grid/vtsearch-tunnel.sh).
+# your local machine (see scripts/slurm/vtsearch-tunnel.sh).
 #
 # Ctrl+C stops the APP but KEEPS the node, then offers to restart it (handy
 # after a git pull / code edit). Type q at that prompt to release the node and
@@ -12,7 +12,7 @@
 #
 # Install: copy this somewhere on your PATH on the cluster and make it
 # executable, e.g.
-#     cp scripts/grid/vtsearch-grid.sh ~/.local/bin/vtsearch && chmod +x ~/.local/bin/vtsearch
+#     cp scripts/slurm/vtsearch-slurm.sh ~/.local/bin/vtsearch && chmod +x ~/.local/bin/vtsearch
 #
 # Override any default with an env var, e.g.:  VTS_MEM=64G VTS_GPU=a100 vtsearch
 set -u
@@ -28,12 +28,18 @@ GPU=${VTS_GPU:-l40s}        # GPU type for --gres=gpu:<type>:1
 CPUS=${VTS_CPUS:-8}         # CPU cores
 MEM=${VTS_MEM:-48G}         # memory (one app.py needs headroom for two model loads)
 TIME=${VTS_TIME:-8:00:00}   # walltime
+# Per-user port: GPU nodes hold several GPUs, so SLURM can pack multiple users'
+# jobs onto one physical node where a single shared :5000 would collide. Derive
+# the port from your UID so it's stable across sessions and the tunnel script
+# computes the same value. Range 10000-29999 stays below the OS ephemeral range.
+PORT=${VTS_PORT:-$((10000 + $(id -u) % 20000))}
 
 echo ">>> Requesting 1x $GPU, $CPUS cores, $MEM, ${TIME} walltime on partition '$PART'..."
 echo ">>> (this may queue; once it lands, VTSearch starts and prints its node + tunnel hint)"
 
-# Export the resolved dir/venv so they survive into the srun child shell.
-export VTS_DIR="$DIR" VTS_VENV="$VENV"
+# Export the resolved dir/venv/port so they survive into the srun child shell.
+# app.py reads VTSEARCH_PORT for the dev server's bind port.
+export VTS_DIR="$DIR" VTS_VENV="$VENV" VTSEARCH_PORT="$PORT"
 
 exec srun --job-name=vtsearch --pty \
     -p "$PART" --gres=gpu:${GPU}:1 -c "$CPUS" --mem "$MEM" -t "$TIME" \
@@ -46,9 +52,9 @@ exec srun --job-name=vtsearch --pty \
         node=$(hostname)
         echo
         echo "========================================================="
-        echo "  VTSearch node: $node   (branch: $(git branch --show-current 2>/dev/null))"
-        echo "  On your LAPTOP, in a new terminal, run:"
-        echo "      vtsearch-tunnel        (then browse http://localhost:5000)"
+        echo "  VTSearch node: $node   port: $VTSEARCH_PORT   (branch: $(git branch --show-current 2>/dev/null))"
+        echo "  On your LOCAL MACHINE, in a new terminal, run:"
+        echo "      vtsearch-tunnel        (auto-discovers this node + port)"
         echo "========================================================="
         while true; do
             echo

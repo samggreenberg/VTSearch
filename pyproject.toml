@@ -241,7 +241,7 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,
-# ans as a shell read-loop variable in scripts/grid),
+# ans as a shell read-loop variable in scripts/slurm),
 # and stylistic spellings the project uses consistently (re-use,
 # pre-select, unparseable, invokable). usera = the "userA" persona in
 # design docs; teh = Yee Whye Teh in references.
