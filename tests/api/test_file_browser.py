@@ -462,6 +462,41 @@ class TestMultiUserBrowseIsolation:
         assert "file.csv" in file_names
 
 
+class TestFilesystemRootPaths:
+    """When the browse root is the filesystem root (single-user / no-auth
+    mode), returned paths must keep their leading ``/`` so the picked path is
+    a usable absolute path. ``relative_to('/')`` would otherwise strip the
+    slash and the downstream importer would resolve it against the CWD."""
+
+    def test_paths_are_absolute_at_filesystem_root(self, client):
+        """Listing ``/`` returns entry paths with a leading slash."""
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=Path("/")):
+            resp = client.get("/api/browse")
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        entries = data["directories"] + data["files"]
+        assert entries, "expected at least one entry at filesystem root"
+        for e in entries:
+            assert e["path"].startswith("/"), e
+            assert e["path"] == "/" + e["name"]
+
+    def test_subdir_path_and_current_path_absolute(self, client):
+        """Navigating into a real subdir of ``/`` keeps absolute paths."""
+        # /usr exists on Linux CI; skip gracefully if not.
+        if not Path("/usr").is_dir():
+            pytest.skip("/usr not present")
+
+        with patch("vtsearch.routes.file_browser._get_browse_root", return_value=Path("/")):
+            resp = client.get("/api/browse?path=/usr")
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["current_path"] == "/usr"
+        for e in data["directories"] + data["files"]:
+            assert e["path"].startswith("/usr/"), e
+
+
 class TestMultiUserServerMediaFiles:
     """Verify that server media file endpoints are per-user in multi-user mode."""
 
