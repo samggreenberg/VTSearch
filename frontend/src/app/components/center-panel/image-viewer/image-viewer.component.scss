@@ -92,6 +92,12 @@
   border: 1px solid rgba(0, 0, 0, 0.6);
   box-sizing: border-box;
   pointer-events: auto;
+  // The .region-stage carries the image's scale(zoom), so without a counter-scale
+  // the handles would grow with the zoom factor. Cancel it with scale(1 / zoom) so
+  // the handles stay a constant on-screen size (~10px) at any zoom. Each handle is
+  // already centred on its anchor (corner/edge midpoint) via the -5px offsets, so
+  // scaling about its own centre (the default origin) keeps it pinned in place.
+  transform: scale(calc(1 / var(--region-zoom, 1)));
 }
 
 .region-handle-n,
