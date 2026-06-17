@@ -52,6 +52,7 @@ families use the same field type (aliased as `ImporterField`,
 | `placeholder` | `str`       | `""`     | Hint shown as placeholder text in the input widget      |
 | `dynamic_options` | `bool`  | `False`  | When `True`, options for this `"select"` field are fetched at runtime from the plugin's `get_field_options()` method (see [Dynamic field options](#dynamic-field-options)) |
 | `depends_on`  | `list[str]` | `[]`     | Other field keys whose values this field's options depend on; the frontend re-fetches whenever any depended-on field changes |
+| `clears`      | `list[str]` | `[]`     | Field keys this field is mutually exclusive with; entering a non-empty value here blanks each listed field in the UI (list each peer back for symmetry), so only one of the set is active at a time |
 
 ### PluginBase
 
