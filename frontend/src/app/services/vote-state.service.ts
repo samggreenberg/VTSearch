@@ -36,6 +36,7 @@ export class VoteStateService implements OnDestroy {
   private readonly learnedScoresSubject = new BehaviorSubject<Record<string, number>>({});
   private readonly labelsetGoodCountSubject = new BehaviorSubject<number>(0);
   private readonly labelsetBadCountSubject = new BehaviorSubject<number>(0);
+  private readonly goodRegionBoxesSubject = new BehaviorSubject<Record<string, number[]>>({});
   private readonly destroy$ = new Subject<void>();
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
@@ -67,6 +68,16 @@ export class VoteStateService implements OnDestroy {
    */
   private pendingVerified = new Map<number, boolean>();
 
+  /**
+   * Optimistic per-media region box for an in-flight good vote (the box drawn
+   * on an image), or ``null`` when an in-flight vote cleared the box (un-vote /
+   * bad / box-less good).  Merged over the server's ``good_region_boxes`` in
+   * {@link applyVotes} so the Good pile crops to the voted region immediately,
+   * without waiting for the next /api/votes poll.  Each entry is cleared once
+   * the server's response agrees.
+   */
+  private pendingRegionBoxes = new Map<number, number[] | null>();
+
   /** Past votes available to undo, most-recent last.  Capped at UNDO_STACK_MAX. */
   private past: UndoEntry[] = [];
   /** Votes that have been undone and can be redone via Cmd/Ctrl-Shift-Z. */
@@ -81,6 +92,9 @@ export class VoteStateService implements OnDestroy {
   readonly learnedScores$ = this.learnedScoresSubject.asObservable();
   readonly labelsetGoodCount$ = this.labelsetGoodCountSubject.asObservable();
   readonly labelsetBadCount$ = this.labelsetBadCountSubject.asObservable();
+  /** Normalised [x0, y0, x1, y1] region boxes for good votes, keyed by media
+   *  id (string). Drives cropped Good-pile thumbnails for region votes. */
+  readonly goodRegionBoxes$ = this.goodRegionBoxesSubject.asObservable();
   /** Emits a short message every time an undo or redo executes. */
   readonly toast$ = this.toastSubject.asObservable();
 
@@ -167,6 +181,10 @@ export class VoteStateService implements OnDestroy {
     return this.labelsetBadCountSubject.value;
   }
 
+  get goodRegionBoxes(): Record<string, number[]> {
+    return this.goodRegionBoxesSubject.value;
+  }
+
   /**
    * True when the active detector has at least one good and one bad label
    * available for training (i.e. `/api/learned-sort` would succeed).
@@ -219,7 +237,9 @@ export class VoteStateService implements OnDestroy {
   ): Observable<MediaVoteResponse> {
     const target = this.toggleTargetFor(id, clickedDirection);
     this.applyOptimisticState(id, target);
-    return this.mediasApi.vote(id, target, target === 'good' ? regionBox : null).pipe(
+    const effectiveBox = target === 'good' && regionBox && regionBox.length === 4 ? regionBox : null;
+    this.applyOptimisticRegionBox(id, effectiveBox);
+    return this.mediasApi.vote(id, target, effectiveBox).pipe(
       tap((resp) => this.reconcileVoteResponse(id, resp)),
     );
   }
@@ -298,6 +318,20 @@ export class VoteStateService implements OnDestroy {
   }
 
   /**
+   * Optimistically record the region box for an in-flight good vote (or
+   * ``null`` to clear it).  Mirrors {@link applyOptimisticState} for region
+   * crops: the Good-pile thumbnail crops to the box immediately, and the entry
+   * is reconciled against the server's ``good_region_boxes`` on the next poll.
+   */
+  private applyOptimisticRegionBox(id: number, box: number[] | null): void {
+    this.pendingRegionBoxes.set(id, box ? [...box] : null);
+    const boxes = { ...this.goodRegionBoxesSubject.value };
+    if (box) boxes[String(id)] = [...box];
+    else delete boxes[String(id)];
+    this.goodRegionBoxesSubject.next(boxes);
+  }
+
+  /**
    * Apply the absolute state the server confirmed in its vote response,
    * regardless of what the optimistic prediction was.  Pending optimism is
    * cleared deterministically here; even if our prediction was wrong, the
@@ -364,8 +398,10 @@ export class VoteStateService implements OnDestroy {
     this.learnedScoresSubject.next({});
     this.labelsetGoodCountSubject.next(0);
     this.labelsetBadCountSubject.next(0);
+    this.goodRegionBoxesSubject.next({});
     this.pendingOptimistic.clear();
     this.pendingVerified.clear();
+    this.pendingRegionBoxes.clear();
     this.past = [];
     this.future = [];
   }
@@ -442,6 +478,12 @@ export class VoteStateService implements OnDestroy {
     this.toastSubject.next({ action: 'redo', mediaName: entry.mediaName });
   }
 
+  /** True when two region boxes match coordinate-for-coordinate (both 4-tuples). */
+  private boxesEqual(a: number[] | null, b: number[] | null): boolean {
+    if (a === null || b === null) return a === b;
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+
   private applyVotes(votes: VotesResponse): void {
     const good = new Set(votes.good);
     const bad = new Set(votes.bad);
@@ -478,10 +520,28 @@ export class VoteStateService implements OnDestroy {
       }
     }
 
+    // Region boxes: start from the server map, then apply pending optimistic
+    // overrides (clearing each once the server already agrees) so an in-flight
+    // region vote isn't clobbered by a poll that raced the vote POST.
+    const regionBoxes: Record<string, number[]> = { ...(votes.good_region_boxes ?? {}) };
+    for (const [id, want] of this.pendingRegionBoxes) {
+      const key = String(id);
+      const server = regionBoxes[key] ?? null;
+      const agrees = want === null ? server === null : this.boxesEqual(server, want);
+      if (agrees) {
+        this.pendingRegionBoxes.delete(id);
+      } else if (want) {
+        regionBoxes[key] = [...want];
+      } else {
+        delete regionBoxes[key];
+      }
+    }
+
     this.goodVotesSubject.next(good);
     this.badVotesSubject.next(bad);
     this.verifiedIdsSubject.next(verified);
     this.clickTimesSubject.next(times);
+    this.goodRegionBoxesSubject.next(regionBoxes);
     this.learnedScoresSubject.next(votes.learned_scores);
     this.labelsetGoodCountSubject.next(votes.labelset_good_count ?? good.size);
     this.labelsetBadCountSubject.next(votes.labelset_bad_count ?? bad.size);

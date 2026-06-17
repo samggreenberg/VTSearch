@@ -1001,6 +1001,28 @@ class TestVoteEndpointRegionBox:
         assert 1 in good_votes
         assert vote_region_boxes[1] == (0.1, 0.2, 0.7, 0.8)
 
+    def test_votes_response_exposes_good_region_boxes(self, client):
+        # A region good-vote's box surfaces in GET /api/votes so the Good pile
+        # can request a cropped thumbnail of just the voted region.
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+        )
+        votes = client.get("/api/votes")
+        assert votes.status_code == 200
+        boxes = votes.get_json()["good_region_boxes"]
+        assert boxes["1"] == [0.1, 0.2, 0.7, 0.8]
+
+    def test_votes_response_drops_region_box_on_revote_bad(self, client):
+        # Re-voting the item bad clears its region box from the votes payload.
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+        )
+        client.post("/api/medias/1/vote", json={"target": "bad"})
+        votes = client.get("/api/votes")
+        assert "1" not in votes.get_json()["good_region_boxes"]
+
     def test_good_vote_without_region_box_omits_from_state(self, client):
         from vtsearch.state import (
             good_votes,

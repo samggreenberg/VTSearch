@@ -11,7 +11,11 @@ import io
 
 from PIL import Image
 
-from vtscore.media.image.thumbnail import DEFAULT_MAX_DIM, make_image_thumbnail
+from vtscore.media.image.thumbnail import (
+    DEFAULT_MAX_DIM,
+    make_image_thumbnail,
+    normalize_region_crop,
+)
 
 
 def _encode(img: Image.Image, fmt: str = "PNG") -> bytes:
@@ -85,3 +89,67 @@ class TestMakeImageThumbnail:
         with Image.open(io.BytesIO(thumb_bytes)) as out:
             # Width/height swapped relative to the stored 400×200.
             assert out.size[1] > out.size[0]
+
+
+class TestNormalizeRegionCrop:
+    def test_accepts_valid_box(self):
+        assert normalize_region_crop([0.1, 0.2, 0.6, 0.8]) == (0.1, 0.2, 0.6, 0.8)
+
+    def test_orders_and_clamps_coordinates(self):
+        # Reversed + out-of-range coords are canonicalised to x0<x1, y0<y1 in [0,1].
+        assert normalize_region_crop([0.6, 0.9, 0.1, -0.5]) == (0.1, 0.0, 0.6, 0.9)
+
+    def test_rejects_none_and_wrong_length(self):
+        assert normalize_region_crop(None) is None
+        assert normalize_region_crop([0.1, 0.2, 0.3]) is None
+        assert normalize_region_crop("0,0,1,1") is None
+
+    def test_rejects_non_numbers_and_nan(self):
+        assert normalize_region_crop(["a", "b", "c", "d"]) is None
+        assert normalize_region_crop([0.0, 0.0, float("nan"), 1.0]) is None
+
+    def test_rejects_degenerate_zero_area(self):
+        assert normalize_region_crop([0.5, 0.2, 0.5, 0.8]) is None  # zero width
+        assert normalize_region_crop([0.2, 0.5, 0.8, 0.5]) is None  # zero height
+
+    def test_rejects_near_full_image_box(self):
+        # A box covering essentially the whole frame is treated as "no crop".
+        assert normalize_region_crop([0.0, 0.0, 1.0, 1.0]) is None
+        assert normalize_region_crop([0.0, 0.0, 0.995, 0.995]) is None
+
+
+class TestMakeImageThumbnailCrop:
+    def test_crops_to_region_before_downscaling(self):
+        # A 1000×1000 source cropped to the left quarter-width / full height
+        # yields a portrait thumbnail (taller than wide).
+        big = Image.new("RGB", (1000, 1000), color=(10, 20, 30))
+        result = make_image_thumbnail(_encode(big, "JPEG"), crop=(0.0, 0.0, 0.25, 1.0))
+        assert result is not None
+        thumb_bytes, _ = result
+        with Image.open(io.BytesIO(thumb_bytes)) as out:
+            assert out.size[1] > out.size[0]
+            assert max(out.size) <= DEFAULT_MAX_DIM
+
+    def test_crop_differs_from_full_thumbnail(self):
+        # Two visually distinct halves: cropping each gives different bytes, and
+        # both differ from the uncropped thumbnail.
+        img = Image.new("RGB", (400, 200))
+        for x in range(400):
+            for y in range(200):
+                img.putpixel((x, y), (255, 0, 0) if x < 200 else (0, 0, 255))
+        src = _encode(img, "PNG")
+        full = make_image_thumbnail(src)
+        left = make_image_thumbnail(src, crop=(0.0, 0.0, 0.5, 1.0))
+        right = make_image_thumbnail(src, crop=(0.5, 0.0, 1.0, 1.0))
+        assert full and left and right
+        assert left[0] != right[0]
+        assert left[0] != full[0]
+
+    def test_sliver_box_widened_to_one_pixel(self):
+        # A box so thin it rounds to zero pixels is widened, not crashed.
+        big = Image.new("RGB", (500, 500), color=(0, 0, 0))
+        result = make_image_thumbnail(_encode(big, "JPEG"), crop=(0.5, 0.0, 0.5001, 1.0))
+        assert result is not None
+        thumb_bytes, _ = result
+        with Image.open(io.BytesIO(thumb_bytes)) as out:
+            assert out.size[0] >= 1 and out.size[1] >= 1

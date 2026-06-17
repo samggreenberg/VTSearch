@@ -74,6 +74,9 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   verifiedIds: Set<number> = new Set();
   clickTimes: Record<string, number> = {};
   learnedScores: Record<string, number> = {};
+  /** Normalised region boxes for good votes, keyed by media id; drives cropped
+   *  Good-pile thumbnails when an item was region-voted. */
+  goodRegionBoxes: Record<string, number[]> = {};
   goodElements: DetectorLabelView[] = [];
   badElements: DetectorLabelView[] = [];
   sortMode: LabelSortMode = 'time-desc';
@@ -289,6 +292,11 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((scores) => {
         this.learnedScores = scores;
+      });
+    this.voteState.goodRegionBoxes$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((boxes) => {
+        this.goodRegionBoxes = boxes;
       });
   }
 

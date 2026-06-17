@@ -510,6 +510,44 @@ class TestMediaThumbnail:
             else:
                 media["thumbnail_bytes"] = original
 
+    def test_region_query_crops_thumbnail(self, client):
+        # A ``region=`` query crops to a sub-region; the bytes differ from the
+        # whole-frame thumbnail (here the audio waveform stands in for an image).
+        full = client.get("/api/medias/1/thumbnail")
+        cropped = client.get("/api/medias/1/thumbnail?region=0,0,0.5,1")
+        assert full.status_code == 200
+        assert cropped.status_code == 200
+        assert cropped.data != full.data
+        assert cropped.headers.get("ETag") != full.headers.get("ETag")
+
+    def test_region_query_bounded(self, client):
+        from PIL import Image  # noqa: PLC0415
+
+        from vtscore.media.image.thumbnail import DEFAULT_MAX_DIM  # noqa: PLC0415
+
+        resp = client.get("/api/medias/1/thumbnail?region=0.1,0.1,0.4,0.9")
+        assert resp.status_code == 200
+        with Image.open(io.BytesIO(resp.data)) as img:
+            assert max(img.size) <= DEFAULT_MAX_DIM
+
+    def test_invalid_region_query_falls_back_to_full(self, client):
+        full = client.get("/api/medias/1/thumbnail")
+        bad = client.get("/api/medias/1/thumbnail?region=not,a,box")
+        assert bad.status_code == 200
+        assert bad.data == full.data
+
+    def test_full_image_region_is_not_cropped(self, client):
+        # Near-full boxes are treated as "no crop": two different near-full
+        # boxes yield identical (uncropped) bytes, and both differ from a real
+        # half-frame crop. (Compared against each other rather than the plain
+        # thumbnail, which may be served from precomputed bytes.)
+        whole = client.get("/api/medias/1/thumbnail?region=0,0,1,1")
+        almost = client.get("/api/medias/1/thumbnail?region=0,0,0.999,0.999")
+        half = client.get("/api/medias/1/thumbnail?region=0,0,0.5,1")
+        assert whole.status_code == 200
+        assert whole.data == almost.data
+        assert whole.data != half.data
+
 
 class TestMediaAudio:
     def test_returns_wav_for_valid_id(self, client):

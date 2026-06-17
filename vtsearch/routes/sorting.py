@@ -428,6 +428,13 @@ def get_votes():
         "learned_scores": {str(k): round(finite_or(v), 4) for k, v in learned_scores.items()},
         "labelset_good_count": labelset_good_count,
         "labelset_bad_count": labelset_bad_count,
+        # Region boxes live only on good votes (popped on bad/un-vote); intersect
+        # with ``good_votes`` defensively so a stale entry can't leak through.
+        "good_region_boxes": {
+            str(k): [float(c) for c in box]
+            for k, box in vote_region_boxes.items()
+            if k in good_votes and box is not None
+        },
     }
 
 

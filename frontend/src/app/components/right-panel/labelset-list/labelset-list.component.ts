@@ -117,7 +117,16 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
 
   thumbnailUrl(entry: DetectorLabelView): string {
     if (!this.modelName) return '';
-    return this.detectorsCrudApi.labelThumbnailUrl(this.modelName, entry.id);
+    let url = this.detectorsCrudApi.labelThumbnailUrl(this.modelName, entry.id);
+    // The route crops to the element's stored region box server-side; fold the
+    // box into the URL so a re-vote with a different box busts the cached tile
+    // (the box coords aren't otherwise part of the URL).
+    const box = entry.region_box;
+    if (box && box.length === 4) {
+      const sep = url.includes('?') ? '&' : '?';
+      url += `${sep}region=${box.map((v) => v.toFixed(4)).join(',')}`;
+    }
+    return url;
   }
 
   onThumbnailError(url: string): void {

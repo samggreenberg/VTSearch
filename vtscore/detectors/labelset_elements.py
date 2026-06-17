@@ -126,6 +126,10 @@ def build_element_view(
         "cid": cid,
         "time": time_,
         "score": score,
+        # Present only for region votes; lets the Good pile bust its thumbnail
+        # cache when the voted box changes (the thumbnail route crops to the
+        # element's stored box server-side).
+        "region_box": list(elem.region_box) if elem.region_box is not None else None,
     }
 
 

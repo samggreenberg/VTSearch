@@ -39,6 +39,12 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
   @Input() medias: Media[] = [];
   @Input() clickTimes: Record<string, number> = {};
   @Input() learnedScores: Record<string, number> = {};
+  /**
+   * Normalised [x0, y0, x1, y1] region boxes keyed by media id. When an id has
+   * a box (a region vote drawn on an image), its thumbnail is cropped to that
+   * region rather than showing the whole frame.
+   */
+  @Input() regionBoxes: Record<string, number[]> = {};
   @Input() sortMode: LabelSortMode = 'time-desc';
   @Input() viewMode: 'grid' | 'list' = 'grid';
   @Input() gridGoalWidth: number = 80;
@@ -170,7 +176,16 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
     // Downscaled tile, not the full-resolution ``/image``: the labeled set can
     // hold hundreds of items, and decoding every full-size bitmap at once
     // exhausts browser memory.
-    return this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
+    let url = this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
+    // A region-voted item shows a thumbnail of just the voted crop. The box
+    // coordinates ride in the query string so a re-vote with a different box
+    // is a distinct URL (and cache entry) rather than a stale tile.
+    const box = this.regionBoxes[String(id)];
+    if (box && box.length === 4) {
+      const sep = url.includes('?') ? '&' : '?';
+      url += `${sep}region=${box.map((v) => v.toFixed(4)).join(',')}`;
+    }
+    return url;
   }
 
   onThumbnailError(url: string): void {

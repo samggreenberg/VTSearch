@@ -722,6 +722,10 @@ class _DetectorLabelViewSchema(Schema):
     cid = fields.Integer(allow_none=True)
     time = fields.Float(required=True)
     score = fields.Float(required=True)
+    # Normalised [x0, y0, x1, y1] region box for a region vote, else null. The
+    # thumbnail route crops to this box; the frontend uses it only to bust the
+    # cached tile when the box changes.
+    region_box = fields.List(fields.Float(), allow_none=True)
 
 
 class DetectorLabelsDetailResponseSchema(Schema):
