@@ -9,6 +9,30 @@
  * they keep jsdom quiet, they do not assert behavior.
  */
 
+import { getTestBed } from '@angular/core/testing';
+import { beforeEach as vitestBeforeEach } from 'vitest';
+
+// --- TestBed cascade guard --------------------------------------------------
+// The Angular TestBed is a module-level singleton reset by an afterEach hook.
+// If a spec leaves the TestBed dirty in a way that makes teardown throw (e.g.
+// an HttpTestingController with an unflushed request, so its verify() throws,
+// or a component whose ngOnDestroy throws), that afterEach reset never
+// completes and every following spec in the file fails with "test module
+// already instantiated". Resetting defensively at the START of each test —
+// before the spec's own beforeEach calls configureTestingModule — keeps one
+// bad spec's fallout from cascading into the rest of the file. This runs after
+// the builder's own cleanup beforeEach (setup files run first, in order) and
+// before any spec-level beforeEach, so configureTestingModule always sees a
+// fresh TestBed.
+vitestBeforeEach(() => {
+  try {
+    getTestBed().resetTestingModule();
+  } catch {
+    // A throwing teardown from the previous spec is itself a reported failure;
+    // swallow it here so it cannot mask the upcoming test.
+  }
+});
+
 // --- EventSource (Server-Sent Events) --------------------------------------
 // ProgressEventsService opens an EventSource on '/api/events'. jsdom has none.
 class EventSourceMock {
