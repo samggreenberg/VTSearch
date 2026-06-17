@@ -442,6 +442,24 @@ Closeout, struck through:
 **Deferred (out of scope for v2):** touch support (no Shift modifier); multiple
 regions per vote; region votes on non-image media types.
 
+## Focus-pane best-match Highlight toggle - DONE
+
+Extends the v1 gallery-card `best_region` outline into the center/focus viewer.
+A **Highlight** toggle sits next to the Marquee button in the image-view controls
+(image media only) and is **hidden unless the active dataset's embedder reports
+`supports_patch_regions`**. When on, the focused image overlays a yellow **dashed**
+box (distinct from the solid yellow voting box) around the region the detector
+matched best at inference.
+
+No new bookkeeping: reuses the `best_region` the backend already returns on every
+sort/train result and which the frontend already keeps in
+`SortStateService.sortOrder[*].bestRegion` (in-memory, kept exactly as long as the
+score). `CenterPanelComponent` looks the box up by media id and passes it to
+`ImageViewerComponent` as `highlightBox`; the viewer owns the `highlightMode`
+toggle and renders the box in its own `.region-stage` so it tracks pan/zoom/rotate.
+Read-only (`pointer-events: none`), and the near-full `(0,0,1,1)` single-vector
+fallback box is suppressed (same rule as the gallery outline). Frontend-only.
+
 ## V3 - design
 
 V3 lets a dataset bind **up to one text-capable embedder + up to one

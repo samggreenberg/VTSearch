@@ -11,6 +11,7 @@
           <vt-image-viewer
             [media]="media"
             [pendingBadConfirm]="pendingBadConfirm"
+            [highlightBox]="highlightBox"
             (regionBoxChange)="onRegionBoxChange($event)"
             (armedConfirmCanceled)="onArmedConfirmCanceled()"
           ></vt-image-viewer>
@@ -42,6 +43,18 @@
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2.5" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="0.5"/></svg>
         </button>
+        @if (patchCapable) {
+          <button
+            class="ivc-btn ivc-btn-toggle"
+            [class.active]="imageViewer.highlightMode"
+            (click)="imageViewer.toggleHighlightMode()"
+            title="Highlight: outline the region the detector matched best"
+            aria-label="Highlight: outline best-matched region"
+            [attr.aria-pressed]="imageViewer.highlightMode"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="0.5" stroke-dasharray="3 2.5"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>
+          </button>
+        }
         <span class="ivc-sep" aria-hidden="true"></span>
         <button class="ivc-btn" (click)="imageViewer.rotateLeft()" title="Rotate left ([)" aria-label="Rotate image left">&#x21BA;</button>
         <button class="ivc-btn" (click)="imageViewer.rotateRight()" title="Rotate right (])" aria-label="Rotate image right">&#x21BB;</button>

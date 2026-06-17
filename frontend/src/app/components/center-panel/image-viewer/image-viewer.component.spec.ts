@@ -422,6 +422,55 @@ describe('ImageViewerComponent', () => {
     });
   });
 
+  describe('best-match highlight overlay', () => {
+    it('starts off and flips on toggle', () => {
+      expect(component.highlightMode).toBeFalse();
+      component.toggleHighlightMode();
+      expect(component.highlightMode).toBeTrue();
+      component.toggleHighlightMode();
+      expect(component.highlightMode).toBeFalse();
+    });
+
+    it('is not visible until both the toggle is on and a box is present', () => {
+      expect(component.highlightVisible).toBeFalse();
+      component.highlightMode = true;
+      expect(component.highlightVisible).toBeFalse(); // no box yet
+      component.highlightBox = [0.1, 0.2, 0.6, 0.7];
+      expect(component.highlightVisible).toBeTrue();
+    });
+
+    it('positions the box as percent-of-stage', () => {
+      component.highlightBox = [0.1, 0.2, 0.6, 0.8];
+      expect(component.highlightBoxStyle).toEqual({
+        left: '10.000%',
+        top: '20.000%',
+        width: '50.000%',
+        height: '60.000%',
+      });
+    });
+
+    it('rejects malformed, degenerate, and near-full-image boxes', () => {
+      component.highlightBox = null;
+      expect(component.highlightBoxStyle).toBeNull();
+      component.highlightBox = [0.5, 0.5, 0.4, 0.6]; // x1 < x0 -> zero/negative width
+      expect(component.highlightBoxStyle).toBeNull();
+      component.highlightBox = [0, 0, 1, 1]; // whole-image fallback
+      expect(component.highlightBoxStyle).toBeNull();
+      component.highlightBox = [0, 0, NaN, 0.5];
+      expect(component.highlightBoxStyle).toBeNull();
+    });
+
+    it('persists the toggle across media changes', () => {
+      component.highlightMode = true;
+      const next: Media = { ...mockMedia, id: 77, filename: 'c.png' };
+      component.media = next;
+      component.ngOnChanges({
+        media: { currentValue: next, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
+      });
+      expect(component.highlightMode).toBeTrue();
+    });
+  });
+
   describe('armed-confirm cancel routing', () => {
     it('emits armedConfirmCanceled instead of clearing the box when Esc is pressed while armed', () => {
       component.regionBox = [0.1, 0.2, 0.5, 0.6];
