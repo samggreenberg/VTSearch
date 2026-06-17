@@ -1,12 +1,12 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 
 @Component({
   selector: 'vt-progress-indicators',
   standalone: true,
-  imports: [CommonModule, ProgressBarComponent],
+  imports: [ProgressBarComponent],
   templateUrl: './progress-indicators.component.html',
   styleUrl: './progress-indicators.component.scss',
 })

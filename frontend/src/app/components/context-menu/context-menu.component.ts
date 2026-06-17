@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import {
   Component,
   ElementRef,
@@ -29,7 +29,7 @@ export interface ContextMenuItem {
 @Component({
   selector: 'vt-context-menu',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './context-menu.component.html',
   styleUrl: './context-menu.component.scss',
 })

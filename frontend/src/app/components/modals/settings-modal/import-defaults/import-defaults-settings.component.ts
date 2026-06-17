@@ -7,7 +7,7 @@ import {
   Output,
   SimpleChanges,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 
 import {
@@ -41,7 +41,7 @@ import {
 @Component({
   selector: 'vt-import-defaults-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, SourceSpecsPickerComponent, ClipperChooserComponent],
+  imports: [FormsModule, IconComponent, SourceSpecsPickerComponent, ClipperChooserComponent],
   templateUrl: './import-defaults-settings.component.html',
   styleUrl: './import-defaults-settings.component.scss',
 })

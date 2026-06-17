@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import {
   AfterViewInit,
   Component,
@@ -74,7 +74,7 @@ const TYPEAHEAD_RESET_MS = 800;
 @Component({
   selector: 'vt-folder-browser',
   standalone: true,
-  imports: [CommonModule, IconComponent],
+  imports: [IconComponent],
   templateUrl: './folder-browser.component.html',
   styleUrl: './folder-browser.component.scss',
 })

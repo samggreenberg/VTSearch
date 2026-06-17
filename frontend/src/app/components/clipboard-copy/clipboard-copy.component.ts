@@ -1,5 +1,5 @@
 import { Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 
 export interface ClipboardColumn {
@@ -29,7 +29,7 @@ interface DelimiterOption {
 @Component({
   selector: 'vt-clipboard-copy',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './clipboard-copy.component.html',
   styleUrl: './clipboard-copy.component.scss',
 })

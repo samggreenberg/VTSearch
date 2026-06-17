@@ -1,5 +1,5 @@
 import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
@@ -14,7 +14,7 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-settings-exporter-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
   templateUrl: './settings-exporter-modal.component.html',
   styleUrl: './settings-exporter-modal.component.scss',
 })

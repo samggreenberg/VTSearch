@@ -1,10 +1,10 @@
 import { Component, ElementRef, EventEmitter, Input, Output, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 
 @Component({
   selector: 'vt-drop-zone',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './drop-zone.component.html',
   styleUrl: './drop-zone.component.scss',
 })

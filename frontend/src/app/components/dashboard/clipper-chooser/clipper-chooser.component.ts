@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { ClipperInfo, ClipperParameter } from '../../../models/api.models';
@@ -12,7 +12,7 @@ export interface ClipperSelection {
 @Component({
   selector: 'vt-clipper-chooser',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [FormsModule, ModalComponent],
   templateUrl: './clipper-chooser.component.html',
   styleUrl: './clipper-chooser.component.scss',
 })

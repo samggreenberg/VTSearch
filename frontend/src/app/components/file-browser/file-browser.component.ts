@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { map } from 'rxjs/operators';
 
@@ -19,7 +19,7 @@ import {
 @Component({
   selector: 'vt-file-browser',
   standalone: true,
-  imports: [CommonModule, FormsModule, FolderBrowserComponent],
+  imports: [FormsModule, FolderBrowserComponent],
   templateUrl: './file-browser.component.html',
   styleUrl: './file-browser.component.scss',
 })

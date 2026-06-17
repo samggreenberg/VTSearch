@@ -8,7 +8,7 @@ import {
   Output,
   ViewChild,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 
 export interface AudioCropResult {
   start: number;
@@ -22,7 +22,7 @@ const HANDLE_HIT_PX = 12;
 @Component({
   selector: 'vt-audio-crop-overlay',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './audio-crop-overlay.component.html',
   styleUrl: './audio-crop-overlay.component.scss',
 })

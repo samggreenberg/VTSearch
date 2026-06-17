@@ -1,5 +1,5 @@
 import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { SortMode } from '../left-panel.component';
 import { LoadSortModalComponent } from '../../modals/load-sort-modal/load-sort-modal.component';
@@ -7,7 +7,7 @@ import { LoadSortModalComponent } from '../../modals/load-sort-modal/load-sort-m
 @Component({
   selector: 'vt-sort-bar',
   standalone: true,
-  imports: [CommonModule, FormsModule, LoadSortModalComponent],
+  imports: [FormsModule, LoadSortModalComponent],
   templateUrl: './sort-bar.component.html',
   styleUrl: './sort-bar.component.scss',
 })

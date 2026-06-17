@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 
 import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.models';
@@ -18,7 +18,7 @@ import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.m
 @Component({
   selector: 'vt-source-specs-picker',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './source-specs-picker.component.html',
   styleUrl: './source-specs-picker.component.scss',
 })

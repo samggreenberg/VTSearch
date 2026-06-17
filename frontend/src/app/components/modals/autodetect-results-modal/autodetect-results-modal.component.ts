@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -19,7 +19,7 @@ import type { ExporterEntry } from '../../../generated/api-client/models/exporte
 @Component({
   selector: 'vt-autodetect-results-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ClipboardCopyComponent],
+  imports: [FormsModule, ModalComponent, ClipboardCopyComponent],
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',
 })

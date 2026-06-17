@@ -1,5 +1,5 @@
 import { Component, Input, Output, EventEmitter, OnChanges, OnInit, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 import {
   AutopilotStateService,
@@ -32,7 +32,7 @@ export interface StepDisplay {
 @Component({
   selector: 'vt-autopilot-panel',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './autopilot-panel.component.html',
   styleUrl: './autopilot-panel.component.scss',
 })

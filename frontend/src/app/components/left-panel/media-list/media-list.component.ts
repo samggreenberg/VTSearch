@@ -13,7 +13,7 @@ import {
   OnInit,
   SimpleChanges,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -72,7 +72,7 @@ type GridRow = { kind: 'items'; items: OrderedItem[] } | { kind: 'threshold' };
 @Component({
   selector: 'vt-media-list',
   standalone: true,
-  imports: [CommonModule, ScrollingModule, MediaItemComponent, SkeletonComponent],
+  imports: [ScrollingModule, MediaItemComponent, SkeletonComponent],
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })

@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { Subscription } from 'rxjs';
 import { Toast, ToastService } from '../../services/toast.service';
 
@@ -12,7 +12,7 @@ import { Toast, ToastService } from '../../services/toast.service';
 @Component({
   selector: 'vt-toast-container',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './toast-container.component.html',
   styleUrl: './toast-container.component.scss',
 })

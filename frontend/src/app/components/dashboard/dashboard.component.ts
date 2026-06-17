@@ -1,5 +1,5 @@
 import { Component, HostListener, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, filter, switchMap, take, takeUntil } from 'rxjs/operators';
@@ -52,7 +52,6 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
   selector: 'vt-dashboard',
   standalone: true,
   imports: [
-    CommonModule,
     ProgressBarComponent,
     AutoDetectResultsModalComponent,
     DatasetCardComponent,
@@ -65,8 +64,8 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
     DetectorStatsModalComponent,
     IconComponent,
     UsageBarComponent,
-    SkeletonComponent,
-  ],
+    SkeletonComponent
+],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })

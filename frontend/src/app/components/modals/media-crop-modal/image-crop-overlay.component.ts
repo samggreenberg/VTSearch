@@ -7,7 +7,7 @@ import {
   Output,
   ViewChild,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 
 export interface ImageCropResult {
   /** Crop box in original-image pixel coordinates: [x1, y1, x2, y2]. */
@@ -21,7 +21,7 @@ const HANDLE_HIT_RADIUS = 12;
 @Component({
   selector: 'vt-image-crop-overlay',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './image-crop-overlay.component.html',
   styleUrl: './image-crop-overlay.component.scss',
 })

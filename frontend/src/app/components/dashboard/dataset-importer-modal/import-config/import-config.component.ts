@@ -1,5 +1,5 @@
 import { Component, ElementRef, EventEmitter, HostListener, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../icon/icon.component';
 
@@ -25,7 +25,7 @@ import { IconComponent } from '../../../icon/icon.component';
 @Component({
   selector: 'vt-import-config',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent],
   templateUrl: './import-config.component.html',
   styleUrl: './import-config.component.scss',
 })

@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
 import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
@@ -43,7 +43,6 @@ import { buildMediaContextMenuItems } from './media-context-menu-items';
   selector: 'vt-label-view',
   standalone: true,
   imports: [
-    CommonModule,
     LeftPanelComponent,
     CenterPanelComponent,
     RightPanelComponent,
@@ -51,8 +50,8 @@ import { buildMediaContextMenuItems } from './media-context-menu-items';
     ResortPromptModalComponent,
     ContextMenuComponent,
     MediaCropModalComponent,
-    PanelResizeDirective,
-  ],
+    PanelResizeDirective
+],
   providers: [LabelViewPanelStateService],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',

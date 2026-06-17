@@ -36,12 +36,12 @@
               },
               {
                 "glob": "**/*.md",
-                "input": "../docs/user",
+                "input": "docs-assets",
                 "output": "/assets/docs"
               },
               {
                 "glob": "**/*",
-                "input": "../docs/user/assets",
+                "input": "docs-assets/assets",
                 "output": "/assets/docs/assets"
               }
             ],

@@ -1,4 +1,4 @@
-import { NgIf } from '@angular/common';
+
 import { Component, ElementRef, HostListener, Input, signal } from '@angular/core';
 
 const HOVER_DELAY_MS = 500;
@@ -6,7 +6,7 @@ const HOVER_DELAY_MS = 500;
 @Component({
   selector: 'vt-field-hint-icon',
   standalone: true,
-  imports: [NgIf],
+  imports: [],
   template: `
     <span
       class="field-hint-icon"
@@ -19,7 +19,7 @@ const HOVER_DELAY_MS = 500;
       (blur)="hide()"
       (click)="onClick($event)"
       (keydown.escape)="hide()"
-    >
+      >
       <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
         <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3" />
         <text
@@ -31,9 +31,11 @@ const HOVER_DELAY_MS = 500;
           fill="currentColor"
         >?</text>
       </svg>
-      <span class="field-hint-tooltip" *ngIf="visible()" role="tooltip">{{ hint }}</span>
+      @if (visible()) {
+        <span class="field-hint-tooltip" role="tooltip">{{ hint }}</span>
+      }
     </span>
-  `,
+    `,
   styles: [
     `
       .field-hint-icon {
