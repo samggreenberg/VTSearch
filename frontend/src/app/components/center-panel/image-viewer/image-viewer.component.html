@@ -18,6 +18,21 @@
     draggable="false"
     fetchpriority="high"
   />
+  @if (highlightVisible && renderedW > 0 && renderedH > 0) {
+    <div
+      class="region-stage"
+      [style.width.px]="renderedW"
+      [style.height.px]="renderedH"
+      [style.transform]="'translate(-50%, -50%) ' + imageTransform"
+    >
+      <div
+        class="highlight-box"
+        [ngStyle]="highlightBoxStyle!"
+        aria-hidden="true"
+        title="Region the detector matched best"
+      ></div>
+    </div>
+  }
   @if (regionBox && renderedW > 0 && renderedH > 0) {
     <div
       class="region-stage"

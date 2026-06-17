@@ -1,11 +1,13 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { KeyValuePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
-import { Media } from '../../models/api.models';
+import { EmbedderInfo, Media } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
 import { KeyboardService } from '../../services/keyboard.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
+import { SortStateService } from '../../services/sort-state.service';
+import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { AudioPlayerComponent } from './audio-player/audio-player.component';
 import { ImageViewerComponent, RegionBox } from './image-viewer/image-viewer.component';
 import { VideoPlayerComponent } from './video-player/video-player.component';
@@ -65,6 +67,11 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   currentRegionBox: RegionBox | null = null;
   pendingBadConfirm = false;
 
+  /** Embedder capability listings, loaded once in init(). Used to decide
+   *  whether the active dataset's embedder is patch-region-aware, which gates
+   *  the Highlight toggle in the image-view controls. */
+  private embedderInfos: EmbedderInfo[] = [];
+
   private spinTimer: ReturnType<typeof setTimeout> | null = null;
 
   private _pausedByVisibility = false;
@@ -75,6 +82,8 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     private keyboard: KeyboardService,
     public voteState: VoteStateService,
     private settingsState: SettingsStateService,
+    private sortState: SortStateService,
+    private datasetsListingsApi: DatasetsListingsApiService,
   ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -117,6 +126,11 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   init(): void {
     this.loadSettings();
     this.keyboard.start();
+    this.subs.push(
+      this.datasetsListingsApi.getEmbedders().subscribe({
+        next: (embedders) => (this.embedderInfos = embedders),
+      }),
+    );
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     this.subs.push(
       this.keyboard.action$.subscribe((action) => {
@@ -181,6 +195,30 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   get mediaType(): string {
     return this.media?.media_type || 'audio';
+  }
+
+  /** Whether the active dataset's embedder produces patch regions. Gates the
+   *  Highlight toggle: only patch-region-aware embedders (DINOv2/v3, EUPE) emit
+   *  a best-match region, so the button is hidden entirely otherwise. Defaults
+   *  to false when the embedder is unknown (embedders not yet loaded, or the
+   *  media carries no embedder field) so a dead toggle never appears. */
+  get patchCapable(): boolean {
+    const name = this.media?.embedder;
+    if (!name || this.embedderInfos.length === 0) return false;
+    const info = this.embedderInfos.find((e) => e.name === name);
+    return info?.supports_patch_regions === true;
+  }
+
+  /** The focused media's best-match region (the argmax patch region from the
+   *  most recent sort/train), looked up by id from the in-memory sort results.
+   *  ``null`` when the media wasn't scored or carries no region. Passed to the
+   *  image viewer, which draws it only while Highlight is toggled on. */
+  get highlightBox(): RegionBox | null {
+    if (!this.media) return null;
+    const id = this.media.id;
+    const box = this.sortState.sortOrder?.find((s) => s.id === id)?.bestRegion;
+    if (!box || box.length !== 4) return null;
+    return [box[0], box[1], box[2], box[3]];
   }
 
   get isGood(): boolean {

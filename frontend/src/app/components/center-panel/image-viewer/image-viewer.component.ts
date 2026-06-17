@@ -39,6 +39,15 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
    * mouse-on-box back to the parent via `armedConfirmCanceled` instead of clearing the box.
    */
   @Input() pendingBadConfirm = false;
+  /**
+   * The region the detector/embedder matched best at inference, as a normalised
+   * ``[x0, y0, x1, y1]`` box (the argmax over patch regions that produced this
+   * media's score).  ``null`` when the active dataset isn't patch-region-aware
+   * or the focused media hasn't been scored.  Rendered as a yellow dashed
+   * overlay only while the Highlight toggle (``highlightMode``) is on; purely
+   * informational, never interactive (no drag/resize, no vote semantics).
+   */
+  @Input() highlightBox: RegionBox | null = null;
   @Output() regionBoxChange = new EventEmitter<RegionBox | null>();
   /**
    * Fired when the user does something that cancels the armed bad-vote-confirm without
@@ -72,6 +81,12 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   // new region instead of panning. Shift+drag remains a power-user shortcut even when
   // the toggle is off; toggling the button just turns the gesture on without a modifier.
   marqueeMode = false;
+  // Sticky toggle exposed by the Highlight button in .image-view-controls. While
+  // true the viewer overlays a yellow dashed box (`highlightBox`) around the
+  // region the detector matched best at inference. Independent of marqueeMode -
+  // both can be on at once (the highlight is read-only and sits behind the
+  // interactive voting box).
+  highlightMode = false;
   renderedW = 0;
   renderedH = 0;
 
@@ -185,6 +200,36 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
 
   toggleMarqueeMode(): void {
     this.marqueeMode = !this.marqueeMode;
+  }
+
+  toggleHighlightMode(): void {
+    this.highlightMode = !this.highlightMode;
+  }
+
+  /** True when the best-match highlight box should be drawn over the image. */
+  get highlightVisible(): boolean {
+    return this.highlightMode && this.highlightBoxStyle !== null;
+  }
+
+  /** Percent-position style for the best-match highlight overlay.  Returns null
+   *  when the box is missing, malformed, degenerate, or covers (effectively) the
+   *  whole image - mirrors the gallery thumbnail's `bestRegionStyle` so the
+   *  near-full single-vector fallback box never paints a frame round everything. */
+  get highlightBoxStyle(): { [k: string]: string } | null {
+    const box = this.highlightBox;
+    if (!box || box.length !== 4) return null;
+    const [x0, y0, x1, y1] = box;
+    if (![x0, y0, x1, y1].every((v) => Number.isFinite(v))) return null;
+    const w = x1 - x0;
+    const h = y1 - y0;
+    if (w <= 0 || h <= 0) return null;
+    if (w >= 0.99 && h >= 0.99) return null;
+    return {
+      left: pct(x0),
+      top: pct(y0),
+      width: pct(w),
+      height: pct(h),
+    };
   }
 
   onMouseDown(event: MouseEvent): void {

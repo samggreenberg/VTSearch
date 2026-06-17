@@ -70,6 +70,20 @@
   }
 }
 
+// Read-only overlay marking the region the detector matched best at inference.
+// Dashed (vs the voting box's solid stroke) so the two are never confused, and
+// pointer-events: none so it never intercepts a pan/draw on the image beneath.
+.highlight-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px dashed rgba(255, 224, 102, 0.95);
+  background: rgba(255, 224, 102, 0.06);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
 @keyframes region-box-shake {
   0%, 100% { transform: translateX(0); border-color: rgba(255, 224, 102, 0.95); }
   15% { transform: translateX(-3px); border-color: rgba(255, 110, 110, 0.95); }
