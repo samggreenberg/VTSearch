@@ -142,6 +142,41 @@ class TestLabelsDetail:
             assert elem["cid"] is None
             assert elem["media_type"] == "audio"
             assert elem["name"]  # display string non-empty
+            # No region boxes were seeded, so the field is present but null.
+            assert elem["region_box"] is None
+
+    def test_region_box_surfaces_in_label_view(self, client):
+        """A region-voted good label exposes its box so the Good pile can bust
+        the thumbnail cache when the voted region changes."""
+        from vtscore.detectors.registry import register_detector, reset_for_tests
+        from vtscore.detectors.store import _detector_path, _write_detector
+
+        reset_for_tests()
+        _write_detector(
+            _detector_path("region-model"),
+            {
+                "name": "region-model",
+                "text_query": "",
+                "media_type": "image",
+                "examples": [],
+                "labelset": {
+                    "labels": [
+                        {
+                            "md5": "d4" * 16,
+                            "label": "good",
+                            "origin": {"importer": "ds_a", "params": {}},
+                            "origin_name": "boxed.png",
+                            "filename": "boxed.png",
+                            "region_box": [0.1, 0.2, 0.7, 0.8],
+                        },
+                    ]
+                },
+            },
+        )
+        register_detector(name="region-model", media_type="image")
+
+        body = client.get("/api/detectors/region-model/labels-detail").get_json()
+        assert body["good"][0]["region_box"] == [0.1, 0.2, 0.7, 0.8]
 
 
 # ---------------------------------------------------------------------------

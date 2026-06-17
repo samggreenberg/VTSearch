@@ -144,6 +144,15 @@ class VotesResponseSchema(Schema):
     learned_scores = fields.Dict(keys=fields.String(), values=fields.Float(), required=True)
     labelset_good_count = fields.Integer(required=True)
     labelset_bad_count = fields.Integer(required=True)
+    # Per-media normalised region boxes ([x0, y0, x1, y1]) for good votes cast
+    # by drawing a box on an image.  Keyed by media id (string).  Lets the Good
+    # pile request a cropped thumbnail of just the voted region.  Only good
+    # votes that carry a box appear; empty otherwise.
+    good_region_boxes = fields.Dict(
+        keys=fields.String(),
+        values=fields.List(fields.Float()),
+        required=True,
+    )
 
 
 class SeedFromExamplesRequestSchema(Schema):

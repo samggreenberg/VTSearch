@@ -406,7 +406,7 @@ def preview_detector_label(name: str, element_id: str):
 # ---------------------------------------------------------------------------
 
 
-def _in_memory_thumbnail_response(media: dict, media_type: str):
+def _in_memory_thumbnail_response(media: dict, media_type: str, crop=None):
     """Build a small thumbnail send_file from an in-memory media dict.
 
     Images: serve the resolved media bytes via the media type's
@@ -417,6 +417,9 @@ def _in_memory_thumbnail_response(media: dict, media_type: str):
     item the center can display. Audio/video/document: defer to the media
     type's ``image_response`` (cached waveform / midframe PNG). Returns
     ``None`` if no thumbnail can be produced.
+
+    ``crop`` (a normalised region box) restricts an image thumbnail to the
+    voted sub-region; ignored for non-image types.
     """
     from vtscore.media import get as get_media_type  # noqa: PLC0415
 
@@ -429,7 +432,7 @@ def _in_memory_thumbnail_response(media: dict, media_type: str):
         resp = mt.media_response(media)
         if not isinstance(resp.data, (bytes, bytearray)) or not resp.data:
             return None
-        return image_thumbnail_response(bytes(resp.data), resp.mimetype, resp.download_name)
+        return image_thumbnail_response(bytes(resp.data), resp.mimetype, resp.download_name, crop=crop)
 
     image_response_fn = getattr(mt, "image_response", None)
     if image_response_fn is None:
@@ -444,8 +447,12 @@ def _in_memory_thumbnail_response(media: dict, media_type: str):
     )
 
 
-def _origin_thumbnail_response(file_path: Path, media_type: str, elem):
-    """Build a thumbnail response from an on-disk file resolved via origin."""
+def _origin_thumbnail_response(file_path: Path, media_type: str, elem, crop=None):
+    """Build a thumbnail response from an on-disk file resolved via origin.
+
+    ``crop`` (a normalised region box) restricts an image thumbnail to the
+    voted sub-region; ignored for non-image types.
+    """
     if media_type == "image":
         suffix = file_path.suffix.lower()
         mimetype = _MIMETYPE_BY_SUFFIX.get(suffix) or "image/jpeg"
@@ -454,7 +461,7 @@ def _origin_thumbnail_response(file_path: Path, media_type: str, elem):
         except OSError:
             abort(404, message="Element media file unreadable")
         download_name = elem.origin_name or elem.filename or f"label{suffix}"
-        return image_thumbnail_response(image_bytes, mimetype, download_name)
+        return image_thumbnail_response(image_bytes, mimetype, download_name, crop=crop)
 
     if media_type == "audio":
         from vtscore.media.audio.media_type import generate_waveform_thumbnail_from_file  # noqa: PLC0415
@@ -520,11 +527,16 @@ def thumbnail_detector_label(name: str, element_id: str):
     _, elem = found
     media_type = data.get("media_type", "") or ""
 
+    # Region boxes are only attached to good votes; show the voted crop rather
+    # than the whole frame.  ``normalize_region_crop`` (inside the response
+    # helper) treats a near-full or absent box as "no crop".
+    crop = elem.region_box if elem.label == "good" else None
+
     cid = resolve_current_dataset_cid(elem)
     if cid is not None:
         media = get_media(cid)
         if media:
-            resp = _in_memory_thumbnail_response(media, media_type)
+            resp = _in_memory_thumbnail_response(media, media_type, crop=crop)
             if resp is not None:
                 return resp
 
@@ -532,7 +544,7 @@ def thumbnail_detector_label(name: str, element_id: str):
         if file_path is None or not file_path.is_file():
             abort(404, message="Element media file unavailable")
 
-        return _origin_thumbnail_response(file_path, media_type, elem)
+        return _origin_thumbnail_response(file_path, media_type, elem, crop=crop)
 
 
 # ---------------------------------------------------------------------------

@@ -41,6 +41,10 @@ export interface VotesResponse {
   learned_scores: Record<string, number>;
   labelset_good_count?: number;
   labelset_bad_count?: number;
+  /** Normalised [x0, y0, x1, y1] region boxes for good votes cast by drawing
+   *  a box on an image, keyed by media id. Lets the Good pile request a
+   *  cropped thumbnail of just the voted region. Empty when no region votes. */
+  good_region_boxes?: Record<string, number[]>;
 }
 
 // --- Progress ---

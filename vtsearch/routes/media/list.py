@@ -86,6 +86,26 @@ def _parse_region_box(raw: Any) -> tuple[float, float, float, float] | None:
     return (x0, y0, x1, y1)
 
 
+def _parse_region_query(raw: str | None) -> tuple[float, float, float, float] | None:
+    """Parse a ``region=x0,y0,x1,y1`` thumbnail query argument.
+
+    Returns ``None`` when the argument is absent or malformed (the route then
+    serves the whole-image thumbnail).  Out-of-range / degenerate / near-full
+    boxes are tolerated here and canonicalised downstream by
+    :func:`vtscore.media.image.thumbnail.normalize_region_crop`.
+    """
+    if not raw:
+        return None
+    parts = raw.split(",")
+    if len(parts) != 4:
+        return None
+    try:
+        x0, y0, x1, y1 = (float(p) for p in parts)
+    except ValueError:
+        return None
+    return (x0, y0, x1, y1)
+
+
 def _transcode_to_mp4(src_bytes: bytes, filename: str) -> bytes | None:  # noqa: C901
     """Transcode video bytes to browser-playable MP4.
 
@@ -497,10 +517,20 @@ def media_thumbnail(media_id: int):
     request-time decode/resize -- the path that keeps a fresh browse-canvas
     zoom responsive.  Media without one (old pickles, thin loads, undecodable
     SVGs) fall back to generating the thumbnail from the display image.
+
+    An optional ``region=x0,y0,x1,y1`` query (normalised fractions in
+    ``[0, 1]``) crops the thumbnail to a sub-region of the image -- used so the
+    Good pile shows a region-voted item's crop rather than the whole frame.
+    A region request always regenerates from the display image (the
+    precomputed full-frame thumbnail can't be cropped after the fact).
     """
     c = get_media(media_id)
     if not c:
         abort(404, message="not found")
+    region = _parse_region_query(request.args.get("region"))
+    if region is not None:
+        data, src_mimetype, _ = _resolve_display_image(media_id)
+        return image_thumbnail_response(data, src_mimetype, f"thumb_{media_id}", crop=region)
     thumb = c.get("thumbnail_bytes")
     if thumb:
         return cached_thumbnail_response(thumb, f"thumb_{media_id}")

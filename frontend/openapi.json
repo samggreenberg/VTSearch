@@ -4827,6 +4827,15 @@
             },
             "type": "array"
           },
+          "good_region_boxes": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "object"
+          },
           "labelset_bad_count": {
             "type": "integer"
           },
@@ -4850,6 +4859,7 @@
           "bad",
           "click_times",
           "good",
+          "good_region_boxes",
           "labelset_bad_count",
           "labelset_good_count",
           "learned_scores",
@@ -5157,6 +5167,13 @@
           },
           "origin_name": {
             "type": "string"
+          },
+          "region_box": {
+            "items": {
+              "type": "number"
+            },
+            "nullable": true,
+            "type": "array"
           },
           "score": {
             "type": "number"
@@ -12586,7 +12603,7 @@
     },
     "/api/medias/{media_id}/thumbnail": {
       "get": {
-        "description": "Grid and list tiles use this instead of ``/image`` so a gallery of many\nhigh-resolution items doesn't force the browser to decode every full-size\nbitmap at once.  The thumbnail is bounded to a fixed longest-side length\n(see :data:`vtscore.media.image.thumbnail.DEFAULT_MAX_DIM`) and is the\nsame regardless of zoom level, so an ``ETag`` lets the browser reuse it\nacross scrolls and zoom changes.\n\nWhen the media carries a precomputed ``thumbnail_bytes`` (generated at\ningest for image/audio/video), the bytes are streamed directly with no\nrequest-time decode/resize -- the path that keeps a fresh browse-canvas\nzoom responsive.  Media without one (old pickles, thin loads, undecodable\nSVGs) fall back to generating the thumbnail from the display image.",
+        "description": "Grid and list tiles use this instead of ``/image`` so a gallery of many\nhigh-resolution items doesn't force the browser to decode every full-size\nbitmap at once.  The thumbnail is bounded to a fixed longest-side length\n(see :data:`vtscore.media.image.thumbnail.DEFAULT_MAX_DIM`) and is the\nsame regardless of zoom level, so an ``ETag`` lets the browser reuse it\nacross scrolls and zoom changes.\n\nWhen the media carries a precomputed ``thumbnail_bytes`` (generated at\ningest for image/audio/video), the bytes are streamed directly with no\nrequest-time decode/resize -- the path that keeps a fresh browse-canvas\nzoom responsive.  Media without one (old pickles, thin loads, undecodable\nSVGs) fall back to generating the thumbnail from the display image.\n\nAn optional ``region=x0,y0,x1,y1`` query (normalised fractions in\n``[0, 1]``) crops the thumbnail to a sub-region of the image -- used so the\nGood pile shows a region-voted item's crop rather than the whole frame.\nA region request always regenerates from the display image (the\nprecomputed full-frame thumbnail can't be cropped after the fact).",
         "operationId": "media_thumbnail",
         "responses": {
           "400": {
