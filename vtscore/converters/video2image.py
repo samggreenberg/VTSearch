@@ -11,33 +11,58 @@ from vtscore.plugins import PluginField
 
 
 class Video2ImageMediaConverter(MediaConverter):
-    """Cut a video into *n_clips* segments and extract the middle frame
+    """Cut a video into evenly-spaced segments and extract the middle frame
     from each segment as a PNG image.
 
     Uses OpenCV (``cv2``) to read the video and sample frames.
 
-    User-configurable parameters
-    ----------------------------
-    ``n_clips``
-        Number of clips to divide the video into.  One frame is extracted
-        from the temporal centre of each clip.  Defaults to 10.  Set via
-        the per-import form (or the converter's :attr:`fields`).
+    The number of frames is driven by one of two mutually-exclusive,
+    user-configurable parameters — supply one *or* the other, never both:
+
+    ``n_clips`` (Frames per video)
+        Fixed number of evenly-spaced frames to extract from each video,
+        regardless of its length.  Defaults to 10.
+
+    ``seconds_per_frame`` (Seconds per frame)
+        Sampling cadence: extract one frame per this many seconds of video,
+        so longer videos yield more frames.  When set (non-empty and
+        positive) it takes precedence over ``n_clips``.  Left blank by
+        default, meaning ``n_clips`` is used.
+
+    The two fields :attr:`clear <vtscore.plugins.PluginField.clears>` each
+    other in the UI, so only one is ever active at a time; the backend
+    likewise honours ``seconds_per_frame`` when present and falls back to
+    ``n_clips`` otherwise.
     """
 
     display_name = "Video → Images"
     description = "Extract frames from video files"
-    summary_template = "Cut each video into {n_clips} evenly-spaced frames."
+    summary_template = "Sample {n_clips} frames per video, or one frame every {seconds_per_frame}s."
     fields = [
         PluginField(
             key="n_clips",
             label="Frames per video",
             field_type="number",
-            description="Number of evenly-spaced frames to extract from each video.",
+            description="Fixed number of evenly-spaced frames to extract from each video.",
             default="10",
             required=False,
             min="1",
             max="1000",
             step="1",
+            clears=["seconds_per_frame"],
+        ),
+        PluginField(
+            key="seconds_per_frame",
+            label="Seconds per frame",
+            field_type="number",
+            description="Extract one frame per this many seconds of video (longer videos yield more frames). "
+            "Leave blank to use 'Frames per video' instead.",
+            default="",
+            required=False,
+            min="0.1",
+            max="3600",
+            step="0.5",
+            clears=["n_clips"],
         ),
     ]
 
@@ -58,6 +83,12 @@ class Video2ImageMediaConverter(MediaConverter):
             n_clips = 10
         if n_clips < 1:
             n_clips = 1
+
+        seconds_raw = self.get_param(params, "seconds_per_frame")
+        try:
+            seconds_per_frame = float(seconds_raw) if seconds_raw not in (None, "") else 0.0
+        except (TypeError, ValueError):
+            seconds_per_frame = 0.0
 
         media_bytes = media.get("media_bytes")
         media_path = media.get("media_path")
@@ -94,7 +125,19 @@ class Video2ImageMediaConverter(MediaConverter):
                 if frame_count <= 0:
                     return []
 
-                n = min(n_clips, frame_count)
+                # "Seconds per frame" wins when supplied: derive the frame
+                # count from the video's duration so longer videos yield more
+                # frames.  Otherwise fall back to the fixed "frames per video".
+                if seconds_per_frame > 0:
+                    fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+                    if fps > 0:
+                        duration = frame_count / fps
+                        n = max(1, round(duration / seconds_per_frame))
+                    else:
+                        n = n_clips
+                else:
+                    n = n_clips
+                n = min(n, frame_count)
                 # Divide video into n equal segments, pick middle frame of each
                 segment_size = frame_count / n
                 mid_indices = [int((i + 0.5) * segment_size) for i in range(n)]

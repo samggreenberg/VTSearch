@@ -38,7 +38,7 @@ something else through it. Examples that ship in the box:
 | `audio2image` | audio → image | Apply SigLIP / DINOv3 over spectrograms; visualise audio patterns |
 | `audio2text` | audio → text | ASR (Whisper) so audio is searchable by text content |
 | `image2text` | image → text | OCR so scanned text is searchable |
-| `video2image` | video → image | Sample N frames per video as separate images |
+| `video2image` | video → image | Sample frames as separate images — a fixed count per video, or one frame every N seconds |
 | `video2audio` | video → audio | Extract the audio track for CLAP embedding |
 | `document2image` | document → image | Render PDF pages as searchable images |
 | `document2text` | document → text | Extract embedded text from PDFs |

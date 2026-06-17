@@ -200,7 +200,16 @@ export class SourceSpecsPickerComponent implements OnChanges {
 
   setParam(sourceType: string, key: string, value: string | number | null): void {
     const draft = this.getDraft(sourceType);
-    const updated: SourceSpec = { ...draft, params: { ...draft.params, [key]: value } };
+    const params = { ...draft.params, [key]: value };
+    // Mutually-exclusive fields: entering a non-empty value blanks the
+    // peers it declares via ``clears`` so only one stays active.
+    if (value !== null && value !== undefined && String(value) !== '') {
+      const f = this.currentConverter(sourceType)?.fields?.find((x) => x.key === key);
+      for (const peer of f?.clears ?? []) {
+        params[peer] = '';
+      }
+    }
+    const updated: SourceSpec = { ...draft, params };
     this.drafts.set(sourceType, updated);
     if (this.isNonNativeChecked(sourceType)) {
       this.specsChange.emit(this.specs.map((s) =>

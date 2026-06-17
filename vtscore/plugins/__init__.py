@@ -149,6 +149,15 @@ class PluginField:
     #: CLI parser to use :class:`float`; an integer step uses :class:`int`.
     step: str = ""
 
+    #: Field keys this field is mutually exclusive with.  When the user
+    #: enters a non-empty value into this field, the frontend blanks every
+    #: field listed here (and they should list this field back, so the
+    #: relationship is symmetric).  Use for "supply A *or* B" inputs where
+    #: only one can be active at a time, e.g. video frame sampling by
+    #: frames-per-video *or* seconds-per-frame.  Purely a UI affordance:
+    #: the backend still reads whichever value arrives non-empty.
+    clears: list[str] = field(default_factory=list)
+
     #: Whether this field's value should be copied into the importer's
     #: persisted origin dict (see :meth:`DatasetImporter.build_origin`).
     #: ``None`` means "use the field-type default": ``False`` for
@@ -198,6 +207,7 @@ class PluginField:
             "min": self.min,
             "max": self.max,
             "step": self.step,
+            "clears": list(self.clears),
             "template_vars": list(self.template_vars),
         }
 

@@ -165,8 +165,16 @@ class MediaConverter(PluginBase, ABC):
         if params:
             scrubbed: dict[str, Any] = {}
             default_for: dict[str, str] = {f.key: f.default for f in self.fields if f.default}
+            optional_keys: set[str] = {f.key for f in self.fields if not f.required}
             for key, value in params.items():
-                if isinstance(value, str) and not value and key in default_for:
+                # Drop empty-string values for any field that has a declared
+                # default *or* is optional.  Without this an empty optional
+                # ``number`` field (e.g. a blank "seconds per frame" left
+                # unset in favour of "frames per video") would reach
+                # marshmallow's Integer/Float loader as ``""`` and be
+                # rejected as "Not a valid number"; treating "" as "unset"
+                # lets it fall back to the default (or stay absent).
+                if isinstance(value, str) and not value and (key in default_for or key in optional_keys):
                     continue
                 scrubbed[key] = value
             params = scrubbed

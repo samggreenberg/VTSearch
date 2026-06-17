@@ -412,6 +412,55 @@ class TestVideo2ImageMediaConverter:
         c = Video2ImageMediaConverter()
         assert c.convert(media) == []
 
+    def test_seconds_per_frame_field_is_mutually_exclusive_with_n_clips(self):
+        """Both sampling fields exist and clear each other so only one is
+        ever active at a time in the UI."""
+        from vtscore.converters.video2image import Video2ImageMediaConverter
+
+        c = Video2ImageMediaConverter()
+        n_clips = next(f for f in c.fields if f.key == "n_clips")
+        spf = next(f for f in c.fields if f.key == "seconds_per_frame")
+        assert n_clips.clears == ["seconds_per_frame"]
+        assert spf.clears == ["n_clips"]
+        assert spf.default == ""
+        # Surfaced to the frontend so the renderer can honour the blanking.
+        assert n_clips.to_dict()["clears"] == ["seconds_per_frame"]
+
+    def test_convert_seconds_per_frame_scales_with_duration(self):
+        """The test video is 10 fps; 30 frames == 3 seconds, so one frame
+        every 1s yields 3 frames and every 0.5s yields 6."""
+        from vtscore.converters.video2image import Video2ImageMediaConverter
+
+        video_bytes = _make_minimal_video(frames=30)
+        c = Video2ImageMediaConverter()
+
+        media = {"filename": "v.mp4", "media_bytes": video_bytes}
+        assert len(c.convert(media, {"seconds_per_frame": "1"})) == 3
+        assert len(c.convert(media, {"seconds_per_frame": "0.5"})) == 6
+
+    def test_seconds_per_frame_takes_precedence_over_n_clips(self):
+        """When both arrive non-empty (e.g. via the API/CLI), seconds wins."""
+        from vtscore.converters.video2image import Video2ImageMediaConverter
+
+        video_bytes = _make_minimal_video(frames=30)
+        c = Video2ImageMediaConverter()
+        media = {"filename": "v.mp4", "media_bytes": video_bytes}
+        # n_clips=10 would give 10 frames; 1s cadence on a 3s clip gives 3.
+        assert len(c.convert(media, {"n_clips": "10", "seconds_per_frame": "1"})) == 3
+
+    def test_blank_seconds_per_frame_falls_back_to_n_clips(self):
+        """A blank seconds field must not blow up marshmallow validation and
+        should leave the fixed frames-per-video path active."""
+        from vtscore.converters.video2image import Video2ImageMediaConverter
+
+        video_bytes = _make_minimal_video(frames=30)
+        c = Video2ImageMediaConverter()
+        media = {"filename": "v.mp4", "media_bytes": video_bytes}
+        # Mirrors what the frontend submits once the user types into n_clips:
+        # n_clips set, seconds_per_frame blanked to "".
+        results = c.convert_normalized(media, {"n_clips": "4", "seconds_per_frame": ""})
+        assert len(results) == 4
+
 
 # ===========================================================================
 # Video2AudioMediaConverter tests

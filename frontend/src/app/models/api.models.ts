@@ -191,6 +191,10 @@ export interface ImporterField {
   max?: string;
   /** For ``number`` fields: step increment (empty / ``"any"`` = unconstrained). */
   step?: string;
+  /** Field keys this field is mutually exclusive with.  Entering a
+   *  non-empty value here blanks each listed field (and they list this
+   *  one back), so only one of the set is ever active at a time. */
+  clears?: string[];
 }
 
 export interface ImporterPickerTab {
