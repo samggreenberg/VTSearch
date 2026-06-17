@@ -17,7 +17,7 @@ describe('KeyboardService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should emit vote good on ArrowRight', (done) => {
+  it('should emit vote good on ArrowRight', () => new Promise<void>((done) => {
     service.start();
     service.action$.subscribe((action: KeyboardAction) => {
       expect(action.type).toBe('vote');
@@ -25,9 +25,9 @@ describe('KeyboardService', () => {
       done();
     });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-  });
+  }));
 
-  it('should emit vote bad on ArrowLeft', (done) => {
+  it('should emit vote bad on ArrowLeft', () => new Promise<void>((done) => {
     service.start();
     service.action$.subscribe((action: KeyboardAction) => {
       expect(action.type).toBe('vote');
@@ -35,9 +35,9 @@ describe('KeyboardService', () => {
       done();
     });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
-  });
+  }));
 
-  it('should emit volume up on ArrowUp', (done) => {
+  it('should emit volume up on ArrowUp', () => new Promise<void>((done) => {
     service.start();
     service.action$.subscribe((action: KeyboardAction) => {
       expect(action.type).toBe('volume');
@@ -45,9 +45,9 @@ describe('KeyboardService', () => {
       done();
     });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
-  });
+  }));
 
-  it('should emit volume down on ArrowDown', (done) => {
+  it('should emit volume down on ArrowDown', () => new Promise<void>((done) => {
     service.start();
     service.action$.subscribe((action: KeyboardAction) => {
       expect(action.type).toBe('volume');
@@ -55,16 +55,16 @@ describe('KeyboardService', () => {
       done();
     });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
-  });
+  }));
 
-  it('should emit playback on Space', (done) => {
+  it('should emit playback on Space', () => new Promise<void>((done) => {
     service.start();
     service.action$.subscribe((action: KeyboardAction) => {
       expect(action.type).toBe('playback');
       done();
     });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
-  });
+  }));
 
   it('should not emit when modifier keys are held', () => {
     service.start();

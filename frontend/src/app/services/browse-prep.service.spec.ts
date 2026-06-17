@@ -88,18 +88,18 @@ describe('BrowsePrepService', () => {
 
     service = TestBed.inject(BrowsePrepService);
     router = TestBed.inject(Router);
-    spyOn(router, 'navigate').and.resolveTo(true);
+    vi.spyOn(router, 'navigate').mockResolvedValue(true);
   });
 
   it('navigates once the projection is already built', () => {
     metaProvider = () => of(meta({ status: 'ready', point_count: 42 }));
 
     service.prepareAndBrowse(DS);
-    expect(service.preparing).toBeTrue();
+    expect(service.preparing).toBe(true);
     applyPair$.next(); // load completes
 
     expect(router.navigate).toHaveBeenCalledWith(['/browse', DS]);
-    expect(service.preparing).toBeFalse();
+    expect(service.preparing).toBe(false);
   });
 
   it('builds the projection, polls until ready, then navigates', fakeAsync(() => {
@@ -132,10 +132,10 @@ describe('BrowsePrepService', () => {
 
     const task = service.displayTask(DS);
     expect(task?.error).toBe('no embeddings');
-    expect(service.ownsTask(task!.task_id)).toBeTrue();
+    expect(service.ownsTask(task!.task_id)).toBe(true);
     expect(router.navigate).not.toHaveBeenCalled();
     // Error is terminal-but-dismissable, so the dashboard isn't held loading.
-    expect(service.preparing).toBeFalse();
+    expect(service.preparing).toBe(false);
   });
 
   it('bails out silently when the dataset load failed (SSE shows the error)', () => {
@@ -149,7 +149,7 @@ describe('BrowsePrepService', () => {
     service.prepareAndBrowse(DS);
     applyPair$.next();
 
-    expect(metaCalled).toBeFalse();
+    expect(metaCalled).toBe(false);
     expect(service.displayTask(DS)).toBeNull();
     expect(router.navigate).not.toHaveBeenCalled();
   });

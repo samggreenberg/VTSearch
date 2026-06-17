@@ -64,7 +64,7 @@ describe('SettingsModalComponent', () => {
   it('should load settings on init', () => {
     flushInit();
     expect(component.settings.theme).toBe('dark');
-    expect(component.loading).toBeFalse();
+    expect(component.loading).toBe(false);
   });
 
   it('should load media types and set active view tab', () => {
@@ -83,7 +83,7 @@ describe('SettingsModalComponent', () => {
   it('should toggle boolean setting and save', () => {
     flushInit();
     component.onToggle('show_animations', false);
-    expect(component.settings.show_animations).toBeFalse();
+    expect(component.settings.show_animations).toBe(false);
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
@@ -110,7 +110,7 @@ describe('SettingsModalComponent', () => {
 
   it('should reset to defaults after confirmation', fakeAsync(() => {
     flushInit();
-    spyOn(component['dialog'], 'confirmDestructive').and.returnValue(Promise.resolve(true));
+    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
     component.resetDefaults();
     tick();
     httpMock.expectOne('/api/settings/defaults').flush({ ...mockSettings, theme: 'light' });
@@ -120,7 +120,7 @@ describe('SettingsModalComponent', () => {
 
   it('should not reset when confirmation is declined', fakeAsync(() => {
     flushInit();
-    spyOn(component['dialog'], 'confirmDestructive').and.returnValue(Promise.resolve(false));
+    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(false));
     component.resetDefaults();
     tick();
     httpMock.expectNone('/api/settings/defaults');
@@ -147,7 +147,7 @@ describe('SettingsModalComponent', () => {
 
   it('should emit closed on close', () => {
     flushInit();
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
@@ -160,7 +160,7 @@ describe('SettingsModalComponent', () => {
     settingsReq.flush({}, { status: 500, statusText: 'Error' });
     mediaTypesReq.flush({ media_types: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
-    expect(component.loading).toBeFalse();
+    expect(component.loading).toBe(false);
     expect(component.error).toBe('Failed to load settings');
   });
 });

@@ -43,8 +43,8 @@ describe('VideoPlayerComponent', () => {
     fixture.detectChanges();
     const video = fixture.nativeElement.querySelector('video');
     expect(video).toBeTruthy();
-    expect(video.hasAttribute('controls')).toBeTrue();
-    expect(video.hasAttribute('loop')).toBeTrue();
+    expect(video.hasAttribute('controls')).toBe(true);
+    expect(video.hasAttribute('loop')).toBe(true);
   });
 
   it('seeks into the clip window when clip extents arrive after the video loaded', () => {

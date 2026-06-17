@@ -67,7 +67,7 @@ describe('MediaStateService', () => {
     expect(service.selectedId).toBeNull();
   });
 
-  it('medias$ should emit on load', (done) => {
+  it('medias$ should emit on load', () => new Promise<void>((done) => {
     const emissions: Media[][] = [];
     service.medias$.subscribe((m) => emissions.push(m));
 
@@ -79,9 +79,9 @@ describe('MediaStateService', () => {
       expect(emissions[emissions.length - 1]).toEqual(mockMedias);
       done();
     });
-  });
+  }));
 
-  it('selectedId$ should emit on select', (done) => {
+  it('selectedId$ should emit on select', () => new Promise<void>((done) => {
     const ids: (number | null)[] = [];
     service.selectedId$.subscribe((id) => ids.push(id));
 
@@ -91,5 +91,5 @@ describe('MediaStateService', () => {
       expect(ids).toContain(5);
       done();
     });
-  });
+  }));
 });

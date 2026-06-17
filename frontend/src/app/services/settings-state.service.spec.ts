@@ -61,7 +61,7 @@ describe('SettingsStateService', () => {
     expect(service.settings).toBeNull();
   });
 
-  it('settings$ should emit on load', (done) => {
+  it('settings$ should emit on load', () => new Promise<void>((done) => {
     const emissions: any[] = [];
     service.settings$.subscribe((s) => emissions.push(s));
 
@@ -73,5 +73,5 @@ describe('SettingsStateService', () => {
       expect(emissions[emissions.length - 1]).toEqual(mockSettings);
       done();
     });
-  });
+  }));
 });

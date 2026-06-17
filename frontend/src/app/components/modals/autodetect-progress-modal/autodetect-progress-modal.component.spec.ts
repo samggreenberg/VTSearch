@@ -29,14 +29,14 @@ describe('AutoDetectProgressModalComponent', () => {
   });
 
   it('should emit cancelled on cancel click', () => {
-    spyOn(component.cancelled, 'emit');
+    vi.spyOn(component.cancelled, 'emit');
     const btn = fixture.nativeElement.querySelector('button');
     btn.click();
     expect(component.cancelled.emit).toHaveBeenCalled();
   });
 
   it('should emit closed on close', () => {
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });

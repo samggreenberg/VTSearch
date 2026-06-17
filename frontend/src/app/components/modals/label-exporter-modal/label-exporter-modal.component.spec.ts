@@ -41,7 +41,7 @@ describe('LabelExporterModalComponent', () => {
   it('should load exporters on init', () => {
     flushInit();
     expect(component.exporters.length).toBe(2);
-    expect(component.loading).toBeFalse();
+    expect(component.loading).toBe(false);
   });
 
   it('should show correct title for goods only', () => {
@@ -57,8 +57,8 @@ describe('LabelExporterModalComponent', () => {
 
   it('should export labels when exporter selected', () => {
     flushInit();
-    spyOn(component.closed, 'emit');
-    spyOn(component.exportComplete, 'emit');
+    vi.spyOn(component.closed, 'emit');
+    vi.spyOn(component.exportComplete, 'emit');
 
     component.selectExporter(mockExporters[0] as any);
 
@@ -84,7 +84,7 @@ describe('LabelExporterModalComponent', () => {
 
   it('should emit closed on close', () => {
     flushInit();
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });

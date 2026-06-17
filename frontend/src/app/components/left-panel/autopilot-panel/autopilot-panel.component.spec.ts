@@ -28,14 +28,14 @@ describe('AutopilotPanelComponent', () => {
 
   it('should auto-start on init in good phase', () => {
     expect(component.state.phase).toBe('good');
-    expect(component.running).toBeTrue();
+    expect(component.running).toBe(true);
   });
 
   it('should emit started on init', () => {
     autopilotState.clear();
     const fresh = TestBed.createComponent(AutopilotPanelComponent);
     const comp = fresh.componentInstance;
-    spyOn(comp.started, 'emit');
+    vi.spyOn(comp.started, 'emit');
     fresh.detectChanges();
     expect(comp.started.emit).toHaveBeenCalled();
   });
@@ -180,24 +180,24 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should deactivate autopilot', () => {
-    spyOn(component.stopped, 'emit');
+    vi.spyOn(component.stopped, 'emit');
     component.deactivate();
     expect(component.state.phase).toBe('idle');
-    expect(component.running).toBeFalse();
+    expect(component.running).toBe(false);
     expect(component.stopped.emit).toHaveBeenCalled();
   });
 
   it('should re-activate after deactivate', () => {
     component.deactivate();
-    spyOn(component.started, 'emit');
+    vi.spyOn(component.started, 'emit');
     component.activate();
     expect(component.state.phase).toBe('good');
-    expect(component.running).toBeTrue();
+    expect(component.running).toBe(true);
     expect(component.started.emit).toHaveBeenCalled();
   });
 
   it('should not re-activate if already running', () => {
-    spyOn(component.started, 'emit');
+    vi.spyOn(component.started, 'emit');
     component.activate();
     expect(component.started.emit).not.toHaveBeenCalled();
   });
@@ -257,7 +257,7 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should emit refocus when clicking the active step', () => {
-    spyOn(component.refocus, 'emit');
+    vi.spyOn(component.refocus, 'emit');
     fixture.detectChanges();
     const activeStep = fixture.nativeElement.querySelector('.ap-step.active');
     activeStep.click();
@@ -265,7 +265,7 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should not emit refocus when clicking a future step', () => {
-    spyOn(component.refocus, 'emit');
+    vi.spyOn(component.refocus, 'emit');
     fixture.detectChanges();
     const futureSteps = fixture.nativeElement.querySelectorAll('.ap-step.future');
     futureSteps[0].click();
@@ -278,7 +278,7 @@ describe('AutopilotPanelComponent', () => {
     fresh.componentInstance.labelsetGoodCount = 0;
     fresh.componentInstance.labelsetBadCount = 0;
     fresh.detectChanges();
-    expect(fresh.componentInstance.state.retrainMode).toBeFalse();
+    expect(fresh.componentInstance.state.retrainMode).toBe(false);
   });
 
   it('activate with detector labels from another dataset should enter retrain mode', () => {
@@ -291,7 +291,7 @@ describe('AutopilotPanelComponent', () => {
     fresh.componentInstance.goodVotes = new Set();
     fresh.componentInstance.badVotes = new Set();
     fresh.detectChanges();
-    expect(fresh.componentInstance.state.retrainMode).toBeTrue();
+    expect(fresh.componentInstance.state.retrainMode).toBe(true);
     // Still in 'good' phase since current-dataset votes are below threshold.
     expect(fresh.componentInstance.state.phase).toBe('good');
   });

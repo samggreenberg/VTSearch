@@ -104,7 +104,7 @@ describe('CenterPanelComponent', () => {
     votesReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
 
     expect(emitted).toEqual({ id: 1, vote: 'good' });
-    expect(component.voteState.goodVotes.has(1)).toBeTrue();
+    expect(component.voteState.goodVotes.has(1)).toBe(true);
   });
 
   it('should prevent double voting', () => {
@@ -120,9 +120,9 @@ describe('CenterPanelComponent', () => {
     component.voteState.loadVotes();
     const req = httpMock.expectOne('/api/votes');
     req.flush({ good: [1, 2], bad: [3], click_times: {}, learned_scores: {} });
-    expect(component.voteState.goodVotes.has(1)).toBeTrue();
-    expect(component.voteState.goodVotes.has(2)).toBeTrue();
-    expect(component.voteState.badVotes.has(3)).toBeTrue();
+    expect(component.voteState.goodVotes.has(1)).toBe(true);
+    expect(component.voteState.goodVotes.has(2)).toBe(true);
+    expect(component.voteState.badVotes.has(3)).toBe(true);
   });
 
   it('should clear swipe class when media changes', () => {
@@ -190,7 +190,7 @@ describe('CenterPanelComponent', () => {
       // First ← arms the discard-confirm; no request yet.
       component.castVote('bad');
       httpMock.expectNone('/api/medias/1/vote');
-      expect(component.pendingBadConfirm).toBeTrue();
+      expect(component.pendingBadConfirm).toBe(true);
       // Second ← throws the box away and votes no.
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
@@ -205,7 +205,7 @@ describe('CenterPanelComponent', () => {
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
       expect(req.request.body).toEqual({ vote: 'bad' });
-      expect(component.pendingBadConfirm).toBeFalse();
+      expect(component.pendingBadConfirm).toBe(false);
       req.flush({ ok: true });
       const votesReq = httpMock.expectOne('/api/votes');
       votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
@@ -232,13 +232,13 @@ describe('CenterPanelComponent', () => {
       component.onRegionBoxChange(box);
       component.castVote('bad');
       httpMock.expectNone('/api/medias/1/vote');
-      expect(component.pendingBadConfirm).toBeTrue();
+      expect(component.pendingBadConfirm).toBe(true);
       expect(component.currentRegionBox).toEqual(box);
 
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
       expect(req.request.body).toEqual({ vote: 'bad' });
-      expect(component.pendingBadConfirm).toBeFalse();
+      expect(component.pendingBadConfirm).toBe(false);
       req.flush({ ok: true });
       const votesReq = httpMock.expectOne('/api/votes');
       votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
@@ -248,12 +248,12 @@ describe('CenterPanelComponent', () => {
       setup();
       component.onRegionBoxChange(box);
       component.castVote('bad');
-      expect(component.pendingBadConfirm).toBeTrue();
+      expect(component.pendingBadConfirm).toBe(true);
 
       // Esc-while-armed (or mousedown-on-box) routes through this handler from
       // the image viewer.
       component.onArmedConfirmCanceled();
-      expect(component.pendingBadConfirm).toBeFalse();
+      expect(component.pendingBadConfirm).toBe(false);
       expect(component.currentRegionBox).toEqual(box);
       httpMock.expectNone('/api/medias/1/vote');
     });
@@ -262,10 +262,10 @@ describe('CenterPanelComponent', () => {
       setup();
       component.onRegionBoxChange(box);
       component.castVote('bad');
-      expect(component.pendingBadConfirm).toBeTrue();
+      expect(component.pendingBadConfirm).toBe(true);
 
       component.onRegionBoxChange(null);
-      expect(component.pendingBadConfirm).toBeFalse();
+      expect(component.pendingBadConfirm).toBe(false);
       expect(component.currentRegionBox).toBeNull();
     });
 
@@ -273,7 +273,7 @@ describe('CenterPanelComponent', () => {
       setup();
       component.onRegionBoxChange(box);
       component.castVote('bad');
-      expect(component.pendingBadConfirm).toBeTrue();
+      expect(component.pendingBadConfirm).toBe(true);
 
       const next: Media = { ...imageMedia, id: 2, filename: 'next.png' };
       component.media = next;
@@ -285,7 +285,7 @@ describe('CenterPanelComponent', () => {
           isFirstChange: () => false,
         },
       });
-      expect(component.pendingBadConfirm).toBeFalse();
+      expect(component.pendingBadConfirm).toBe(false);
       expect(component.currentRegionBox).toBeNull();
     });
 
@@ -294,7 +294,7 @@ describe('CenterPanelComponent', () => {
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
       expect(req.request.body).toEqual({ vote: 'bad' });
-      expect(component.pendingBadConfirm).toBeFalse();
+      expect(component.pendingBadConfirm).toBe(false);
       req.flush({ ok: true });
       const votesReq = httpMock.expectOne('/api/votes');
       votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });

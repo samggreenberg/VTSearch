@@ -62,9 +62,9 @@ describe('MediaListComponent', () => {
     fixture.detectChanges();
     const items = component.cachedOrderedItems;
     // Threshold is at 0.4, so item with score 0.2 should have showThreshold
-    expect(items[0].showThreshold).toBeFalse();
-    expect(items[1].showThreshold).toBeFalse();
-    expect(items[2].showThreshold).toBeTrue();
+    expect(items[0].showThreshold).toBe(false);
+    expect(items[1].showThreshold).toBe(false);
+    expect(items[2].showThreshold).toBe(true);
   });
 
   it('should return correct vote labels', () => {
@@ -76,7 +76,7 @@ describe('MediaListComponent', () => {
   });
 
   it('should emit mediaSelect on item select', () => {
-    spyOn(component.mediaSelect, 'emit');
+    vi.spyOn(component.mediaSelect, 'emit');
     component.onMediaSelect(2);
     expect(component.mediaSelect.emit).toHaveBeenCalledWith(2);
   });
@@ -103,13 +103,13 @@ describe('MediaListComponent', () => {
   // DOM, so every row is visible and should hydrate eagerly.
   it('eagerly prefetches metadata for every row when virtual scroll is off', () => {
     const cache = TestBed.inject(MediaMetadataCacheService);
-    const spy = spyOn(cache, 'ensureLoaded');
+    const spy = vi.spyOn(cache, 'ensureLoaded').mockImplementation(() => {});
     component.medias = mockMedias;
     component.ngOnChanges({
       medias: { currentValue: mockMedias, previousValue: [], firstChange: false, isFirstChange: () => false },
     });
     expect(spy).toHaveBeenCalled();
-    const ids = spy.calls.mostRecent().args[0] as number[];
+    const ids = spy.mock.lastCall![0] as number[];
     expect(ids).toEqual([1, 2, 3]);
   });
 });

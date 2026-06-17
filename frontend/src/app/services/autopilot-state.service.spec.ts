@@ -25,13 +25,13 @@ describe('AutopilotStateService', () => {
 
   it('should start idle', () => {
     expect(service.state.phase).toBe('idle');
-    expect(service.running).toBeFalse();
+    expect(service.running).toBe(false);
   });
 
   it('activate should move to good phase', () => {
     service.activate();
     expect(service.state.phase).toBe('good');
-    expect(service.running).toBeTrue();
+    expect(service.running).toBe(true);
   });
 
   it('activate when already running should be a no-op', () => {
@@ -44,7 +44,7 @@ describe('AutopilotStateService', () => {
     service.activate();
     service.deactivate();
     expect(service.state.phase).toBe('idle');
-    expect(service.running).toBeFalse();
+    expect(service.running).toBe(false);
   });
 
   it('should transition from good to bad when enough good votes', () => {
@@ -214,12 +214,12 @@ describe('AutopilotStateService', () => {
 
   it('activate without retrainMode should default to false', () => {
     service.activate();
-    expect(service.state.retrainMode).toBeFalse();
+    expect(service.state.retrainMode).toBe(false);
   });
 
   it('activate with retrainMode=true should set the flag on state', () => {
     service.activate(true);
-    expect(service.state.retrainMode).toBeTrue();
+    expect(service.state.retrainMode).toBe(true);
     expect(service.state.phase).toBe('good');
   });
 
@@ -227,15 +227,15 @@ describe('AutopilotStateService', () => {
     service.activate(true);
     service.checkPhaseTransition(3, 4);
     expect(service.state.phase).toBe('hard');
-    expect(service.state.retrainMode).toBeTrue();
+    expect(service.state.retrainMode).toBe(true);
 
     service.deactivate();
-    expect(service.state.retrainMode).toBeTrue(); // deactivate only flips phase
+    expect(service.state.retrainMode).toBe(true); // deactivate only flips phase
     service.clear();
-    expect(service.state.retrainMode).toBeFalse();
+    expect(service.state.retrainMode).toBe(false);
   });
 
-  it('state$ should emit on changes', (done) => {
+  it('state$ should emit on changes', () => new Promise<void>((done) => {
     const phases: string[] = [];
     service.state$.subscribe((s) => phases.push(s.phase));
 
@@ -246,5 +246,5 @@ describe('AutopilotStateService', () => {
       expect(phases).toContain('good');
       done();
     });
-  });
+  }));
 });

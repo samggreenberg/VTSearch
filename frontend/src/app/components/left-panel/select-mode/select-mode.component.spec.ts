@@ -29,7 +29,7 @@ describe('SelectModeComponent', () => {
   });
 
   it('should emit selectModeChange on radio change', () => {
-    spyOn(component.selectModeChange, 'emit');
+    vi.spyOn(component.selectModeChange, 'emit');
     component.onChange('hard');
     expect(component.selectModeChange.emit).toHaveBeenCalledWith('hard');
   });
@@ -38,6 +38,6 @@ describe('SelectModeComponent', () => {
     component.selectMode = 'hard';
     fixture.detectChanges();
     const labels = fixture.nativeElement.querySelectorAll('.sort-radio');
-    expect(labels[1].classList.contains('active')).toBeTrue();
+    expect(labels[1].classList.contains('active')).toBe(true);
   });
 });

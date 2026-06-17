@@ -24,7 +24,7 @@ describe('InclusionSliderComponent', () => {
   });
 
   it('should emit valueChange on input', () => {
-    spyOn(component.valueChange, 'emit');
+    vi.spyOn(component.valueChange, 'emit');
     const input = fixture.nativeElement.querySelector('input[type="range"]');
     input.value = '7';
     input.dispatchEvent(new Event('input'));

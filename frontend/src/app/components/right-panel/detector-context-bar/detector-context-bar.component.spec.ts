@@ -44,7 +44,7 @@ describe('DetectorContextBarComponent', () => {
     tick();
     fixture.detectChanges();
 
-    expect(component.editing).toBeTrue();
+    expect(component.editing).toBe(true);
     expect(component.editValue).toBe('Old Name');
   }));
 
@@ -54,35 +54,35 @@ describe('DetectorContextBarComponent', () => {
     fixture.detectChanges();
 
     component.startRename();
-    expect(component.editing).toBeFalse();
+    expect(component.editing).toBe(false);
   });
 
   it('should emit renamed on finishRename with new name', () => {
-    spyOn(component.renamed, 'emit');
+    vi.spyOn(component.renamed, 'emit');
     component.detectorName = 'Old Name';
     component.editing = true;
     component.editValue = 'New Name';
 
     component.finishRename();
 
-    expect(component.editing).toBeFalse();
+    expect(component.editing).toBe(false);
     expect(component.renamed.emit).toHaveBeenCalledWith('New Name');
   });
 
   it('should not emit renamed if name unchanged', () => {
-    spyOn(component.renamed, 'emit');
+    vi.spyOn(component.renamed, 'emit');
     component.detectorName = 'Same';
     component.editing = true;
     component.editValue = 'Same';
 
     component.finishRename();
 
-    expect(component.editing).toBeFalse();
+    expect(component.editing).toBe(false);
     expect(component.renamed.emit).not.toHaveBeenCalled();
   });
 
   it('should not emit renamed if name is empty', () => {
-    spyOn(component.renamed, 'emit');
+    vi.spyOn(component.renamed, 'emit');
     component.detectorName = 'Old';
     component.editing = true;
     component.editValue = '   ';
@@ -98,18 +98,18 @@ describe('DetectorContextBarComponent', () => {
 
     component.onKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
 
-    expect(component.editing).toBeFalse();
+    expect(component.editing).toBe(false);
   });
 
   it('should finish rename on Enter', () => {
-    spyOn(component.renamed, 'emit');
+    vi.spyOn(component.renamed, 'emit');
     component.detectorName = 'Old';
     component.editing = true;
     component.editValue = 'New';
 
     component.onKeydown(new KeyboardEvent('keydown', { key: 'Enter' }));
 
-    expect(component.editing).toBeFalse();
+    expect(component.editing).toBe(false);
     expect(component.renamed.emit).toHaveBeenCalledWith('New');
   });
 });

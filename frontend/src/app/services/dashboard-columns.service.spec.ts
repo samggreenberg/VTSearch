@@ -17,9 +17,9 @@ describe('DashboardColumnsService', () => {
 
   it('starts datasets and detectors sorted by name ascending', () => {
     expect(service.datasetCols.sortColumn).toBe('name');
-    expect(service.datasetCols.sortAsc).toBeTrue();
+    expect(service.datasetCols.sortAsc).toBe(true);
     expect(service.detectorCols.sortColumn).toBe('name');
-    expect(service.detectorCols.sortAsc).toBeTrue();
+    expect(service.detectorCols.sortAsc).toBe(true);
   });
 
   it('sortState$ emits the current state on subscribe and again on sortBy', () => {
@@ -29,18 +29,18 @@ describe('DashboardColumnsService', () => {
     // Replay (BehaviorSubject) gives us the initial state.
     expect(seen.length).toBe(1);
     expect(seen[0].column).toBe('name');
-    expect(seen[0].asc).toBeTrue();
+    expect(seen[0].asc).toBe(true);
 
     service.datasetCols.sortBy('num_items');
     expect(seen.length).toBe(2);
     expect(seen[1].column).toBe('num_items');
-    expect(seen[1].asc).toBeTrue();
+    expect(seen[1].asc).toBe(true);
 
     // Same-column toggle flips direction.
     service.datasetCols.sortBy('num_items');
     expect(seen.length).toBe(3);
     expect(seen[2].column).toBe('num_items');
-    expect(seen[2].asc).toBeFalse();
+    expect(seen[2].asc).toBe(false);
 
     sub.unsubscribe();
   });

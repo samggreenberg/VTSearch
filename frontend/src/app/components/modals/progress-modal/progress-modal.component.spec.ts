@@ -42,7 +42,7 @@ describe('ProgressModalComponent', () => {
   it('should start in analyzing state', fakeAsync(() => {
     component.metric = 'smart';
     fixture.detectChanges();
-    expect(component.analyzing).toBeTrue();
+    expect(component.analyzing).toBe(true);
 
     // Flush initial polling request
     const iterReq = httpMock.expectOne('/api/eval/voting-iterations');
@@ -59,7 +59,7 @@ describe('ProgressModalComponent', () => {
     });
 
     tick(50);
-    expect(component.analyzing).toBeFalse();
+    expect(component.analyzing).toBe(false);
     expect(component.chartData.length).toBe(1);
 
     // Cleanup timer
@@ -68,7 +68,7 @@ describe('ProgressModalComponent', () => {
   }));
 
   it('should emit closed on close', () => {
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });

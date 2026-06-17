@@ -42,38 +42,38 @@ describe('SortBarComponent', () => {
   });
 
   it('should emit sortModeChange on radio click', () => {
-    spyOn(component.sortModeChange, 'emit');
+    vi.spyOn(component.sortModeChange, 'emit');
     component.onSortModeChange('learned');
     expect(component.sortModeChange.emit).toHaveBeenCalledWith('learned');
   });
 
   it('should emit learnedSort when switching to learned mode', () => {
-    spyOn(component.learnedSort, 'emit');
+    vi.spyOn(component.learnedSort, 'emit');
     component.onSortModeChange('learned');
     expect(component.learnedSort.emit).toHaveBeenCalled();
   });
 
   it('should emit loadSort when switching to load mode', () => {
-    spyOn(component.loadSort, 'emit');
+    vi.spyOn(component.loadSort, 'emit');
     component.onSortModeChange('load');
     expect(component.loadSort.emit).toHaveBeenCalled();
   });
 
   it('should not emit textSort on input alone', () => {
-    spyOn(component.textSort, 'emit');
+    vi.spyOn(component.textSort, 'emit');
     component.onTextInput('hello world');
     expect(component.textSort.emit).not.toHaveBeenCalled();
   });
 
   it('should emit textSort on submitTextSort', () => {
-    spyOn(component.textSort, 'emit');
+    vi.spyOn(component.textSort, 'emit');
     component.onTextInput('hello world');
     component.submitTextSort();
     expect(component.textSort.emit).toHaveBeenCalledWith('hello world');
   });
 
   it('should not emit textSort for whitespace-only input on submit', () => {
-    spyOn(component.textSort, 'emit');
+    vi.spyOn(component.textSort, 'emit');
     component.onTextInput('   ');
     component.submitTextSort();
     expect(component.textSort.emit).not.toHaveBeenCalled();

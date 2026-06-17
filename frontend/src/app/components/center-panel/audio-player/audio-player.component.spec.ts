@@ -49,7 +49,7 @@ describe('AudioPlayerComponent', () => {
     component.audioSrc = '/api/medias/1/audio';
     fixture.detectChanges();
     const audio = fixture.nativeElement.querySelector('audio');
-    expect(audio.hasAttribute('controls')).toBeTrue();
-    expect(audio.hasAttribute('loop')).toBeTrue();
+    expect(audio.hasAttribute('controls')).toBe(true);
+    expect(audio.hasAttribute('loop')).toBe(true);
   });
 });

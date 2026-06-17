@@ -220,7 +220,7 @@ describe('DatasetImporterModalComponent', () => {
     const tabLabels = Array.from(el.querySelectorAll('.importer-tab')).map(
       (b) => (b.textContent || '').trim(),
     );
-    expect(tabLabels.some((l) => l.includes('Services'))).toBeTrue();
+    expect(tabLabels.some((l) => l.includes('Services'))).toBe(true);
     // No importer is wired to category="services" in the mocks, so the
     // tab renders but importersForActiveTab is empty when selected.
     component.selectImporterTab('services');
@@ -304,7 +304,7 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should POST uploaded folder via importLocalFolder', () => {
     flushImporters();
-    spyOn(component.importStarted, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
     const localFolder = component.importers.find((i) => i.name === 'local_folder')!;
     component.selectImporter(localFolder);
@@ -324,13 +324,13 @@ describe('DatasetImporterModalComponent', () => {
     expect(body.getAll('files').length).toBe(1);
     req.flush({ ok: true });
 
-    expect(component.lfSubmitting).toBeFalse();
+    expect(component.lfSubmitting).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
   it('should POST uploaded paths file via importLocalFiles', () => {
     flushImporters();
-    spyOn(component.importStarted, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
     const localFiles = component.importers.find((i) => i.name === 'local_files')!;
     component.selectImporter(localFiles);
@@ -351,7 +351,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(body.get('files')).toBeNull();
     req.flush({ ok: true });
 
-    expect(component.lfSubmitting).toBeFalse();
+    expect(component.lfSubmitting).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
@@ -387,7 +387,7 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should submit form values via runImporter', () => {
     flushImporters();
-    spyOn(component.importStarted, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
     component.selectImporter(genericForm());
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
@@ -400,7 +400,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(req.request.body['path']).toBe('/data/sounds');
     req.flush({});
 
-    expect(component.submitting).toBeFalse();
+    expect(component.submitting).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
@@ -416,20 +416,20 @@ describe('DatasetImporterModalComponent', () => {
       { status: 404, statusText: 'Not Found' },
     );
 
-    expect(component.submitting).toBeFalse();
+    expect(component.submitting).toBe(false);
     expect(component.error).toBe('Not found');
   });
 
   it('should emit closed on close', () => {
     flushImporters();
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
   it('should use loadFile for file type fields', () => {
     flushImporters();
-    spyOn(component.importStarted, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
     component.selectImporter(pickleImp());
     const mockFile = new File(['data'], 'test.pkl');
@@ -451,7 +451,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.activePickerView).toBe('');
     component.openDemoPicker();
     expect(component.activePickerView).toBe('demo');
-    expect(component.demoLoading).toBeTrue();
+    expect(component.demoLoading).toBe(true);
 
     // Flush media types and demo list requests
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
@@ -459,7 +459,7 @@ describe('DatasetImporterModalComponent', () => {
 
     // No media-type tab is auto-selected anymore, so no embedder/clipper
     // fetches fire automatically.
-    expect(component.demoLoading).toBeFalse();
+    expect(component.demoLoading).toBe(false);
     expect(component.demos.length).toBe(2);
     expect(component.activeTab).toBe('');
   });
@@ -517,22 +517,22 @@ describe('DatasetImporterModalComponent', () => {
 
     // Default sort is num_files ascending
     expect(component.demoCols.sortColumn).toBe('num_files');
-    expect(component.demoCols.sortAsc).toBeTrue();
+    expect(component.demoCols.sortAsc).toBe(true);
 
     // Click same column to toggle direction
     component.demoCols.sortBy('num_files');
-    expect(component.demoCols.sortAsc).toBeFalse();
+    expect(component.demoCols.sortAsc).toBe(false);
 
     // Click different column to switch
     component.demoCols.sortBy('label');
     expect(component.demoCols.sortColumn).toBe('label');
-    expect(component.demoCols.sortAsc).toBeTrue();
+    expect(component.demoCols.sortAsc).toBe(true);
   });
 
   it('should record the demo selection without submitting on row click', () => {
     flushImporters();
-    spyOn(component.demoSelected, 'emit');
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.demoSelected, 'emit');
+    vi.spyOn(component.closed, 'emit');
 
     openAndFlushDemoPicker();
 
@@ -547,8 +547,8 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should emit demoSelected and close when submitDemo is called', () => {
     flushImporters();
-    spyOn(component.demoSelected, 'emit');
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.demoSelected, 'emit');
+    vi.spyOn(component.closed, 'emit');
 
     openAndFlushDemoPicker();
 
@@ -609,7 +609,7 @@ describe('DatasetImporterModalComponent', () => {
       { status: 500, statusText: 'Internal Server Error' },
     );
 
-    expect(component.demoLoading).toBeFalse();
+    expect(component.demoLoading).toBe(false);
     expect(component.demos.length).toBe(0);
   });
 
@@ -658,7 +658,7 @@ describe('DatasetImporterModalComponent', () => {
     (component as any).updateDemoStatuses();
 
     expect(demosWithEmbedder[0].status).toBe('needs_embedding');
-    expect(demosWithEmbedder[0].ready).toBeFalse();
+    expect(demosWithEmbedder[0].ready).toBe(false);
   });
 
   it('should restore ready status when pkl_embedder matches selected embedder', () => {
@@ -686,7 +686,7 @@ describe('DatasetImporterModalComponent', () => {
     (component as any).updateDemoStatuses();
 
     expect(demosWithEmbedder[0].status).toBe('ready');
-    expect(demosWithEmbedder[0].ready).toBeTrue();
+    expect(demosWithEmbedder[0].ready).toBe(true);
   });
 
   it('should conservatively downgrade ready demos with unknown pkl_embedder', () => {
@@ -715,7 +715,7 @@ describe('DatasetImporterModalComponent', () => {
 
     // Since we don't know the pkl_embedder, we can't confirm it matches
     expect(demosUnknown[0].status).toBe('needs_embedding');
-    expect(demosUnknown[0].ready).toBeFalse();
+    expect(demosUnknown[0].ready).toBe(false);
   });
 
   it('should not modify demos from other tabs during updateDemoStatuses', () => {

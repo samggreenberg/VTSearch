@@ -46,7 +46,7 @@ describe('ProgressIndicatorsComponent', () => {
   });
 
   it('should emit indicatorClick on button click', () => {
-    spyOn(component.indicatorClick, 'emit');
+    vi.spyOn(component.indicatorClick, 'emit');
     const buttons = fixture.nativeElement.querySelectorAll('.labeling-indicator');
     buttons[0].click();
     expect(component.indicatorClick.emit).toHaveBeenCalledWith('smart');

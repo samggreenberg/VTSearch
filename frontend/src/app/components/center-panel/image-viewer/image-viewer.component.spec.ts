@@ -42,10 +42,10 @@ describe('ImageViewerComponent', () => {
     component.ngOnChanges({
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
-    expect(component.imageReady).toBeFalse();
+    expect(component.imageReady).toBe(false);
 
     component.onImageLoad();
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
   });
 
   it('should reset imageReady when media changes', () => {
@@ -54,14 +54,14 @@ describe('ImageViewerComponent', () => {
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
     component.onImageLoad();
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
 
     const nextMedia = { ...mockMedia, id: 3, filename: 'next.png' };
     component.media = nextMedia;
     component.ngOnChanges({
       media: { currentValue: nextMedia, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
     });
-    expect(component.imageReady).toBeFalse();
+    expect(component.imageReady).toBe(false);
   });
 
   // Regression: when MediaMetadataCacheService hydrates the stub into a
@@ -77,7 +77,7 @@ describe('ImageViewerComponent', () => {
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
     component.onImageLoad();
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
 
     // Same id, new object reference (typical metadata-cache enrichment).
     const enriched: Media = { ...mockMedia, filename: 'real-name.png' };
@@ -85,7 +85,7 @@ describe('ImageViewerComponent', () => {
     component.ngOnChanges({
       media: { currentValue: enriched, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
     });
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
   });
 
   it('should show image on error to avoid stuck black screen', () => {
@@ -93,10 +93,10 @@ describe('ImageViewerComponent', () => {
     component.ngOnChanges({
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
-    expect(component.imageReady).toBeFalse();
+    expect(component.imageReady).toBe(false);
 
     component.onImageError();
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
   });
 
   it('should render image element', () => {
@@ -406,20 +406,20 @@ describe('ImageViewerComponent', () => {
     }
 
     it('starts off and flips on toggle', () => {
-      expect(component.marqueeMode).toBeFalse();
+      expect(component.marqueeMode).toBe(false);
       component.toggleMarqueeMode();
-      expect(component.marqueeMode).toBeTrue();
+      expect(component.marqueeMode).toBe(true);
       component.toggleMarqueeMode();
-      expect(component.marqueeMode).toBeFalse();
+      expect(component.marqueeMode).toBe(false);
     });
 
     it('reports regionDrawActive when either Shift is held or marquee is on', () => {
-      expect(component.regionDrawActive).toBeFalse();
+      expect(component.regionDrawActive).toBe(false);
       component.shiftHeld = true;
-      expect(component.regionDrawActive).toBeTrue();
+      expect(component.regionDrawActive).toBe(true);
       component.shiftHeld = false;
       component.marqueeMode = true;
-      expect(component.regionDrawActive).toBeTrue();
+      expect(component.regionDrawActive).toBe(true);
     });
 
     it('shows a crosshair cursor when marquee mode is on', () => {
@@ -453,25 +453,25 @@ describe('ImageViewerComponent', () => {
       component.ngOnChanges({
         media: { currentValue: next, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
       });
-      expect(component.marqueeMode).toBeTrue();
+      expect(component.marqueeMode).toBe(true);
     });
   });
 
   describe('best-match highlight overlay', () => {
     it('starts off and flips on toggle', () => {
-      expect(component.highlightMode).toBeFalse();
+      expect(component.highlightMode).toBe(false);
       component.toggleHighlightMode();
-      expect(component.highlightMode).toBeTrue();
+      expect(component.highlightMode).toBe(true);
       component.toggleHighlightMode();
-      expect(component.highlightMode).toBeFalse();
+      expect(component.highlightMode).toBe(false);
     });
 
     it('is not visible until both the toggle is on and a box is present', () => {
-      expect(component.highlightVisible).toBeFalse();
+      expect(component.highlightVisible).toBe(false);
       component.highlightMode = true;
-      expect(component.highlightVisible).toBeFalse(); // no box yet
+      expect(component.highlightVisible).toBe(false); // no box yet
       component.highlightBox = [0.1, 0.2, 0.6, 0.7];
-      expect(component.highlightVisible).toBeTrue();
+      expect(component.highlightVisible).toBe(true);
     });
 
     it('positions the box as percent-of-stage', () => {
@@ -502,7 +502,7 @@ describe('ImageViewerComponent', () => {
       component.ngOnChanges({
         media: { currentValue: next, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
       });
-      expect(component.highlightMode).toBeTrue();
+      expect(component.highlightMode).toBe(true);
     });
   });
 
@@ -518,8 +518,8 @@ describe('ImageViewerComponent', () => {
       });
       const esc = new KeyboardEvent('keydown', { key: 'Escape' });
       (component as unknown as { onWindowKeyDown: (e: KeyboardEvent) => void }).onWindowKeyDown(esc);
-      expect(canceled).toBeTrue();
-      expect(cleared).toBeFalse();
+      expect(canceled).toBe(true);
+      expect(cleared).toBe(false);
       expect(component.regionBox).toEqual([0.1, 0.2, 0.5, 0.6]);
     });
 

@@ -82,7 +82,7 @@ describe('LabelViewComponent', () => {
   it('should handle text sort', () => {
     flushInitialRequests();
     component.onTextSort('cat');
-    expect(component.sortState.sortBusy).toBeTrue();
+    expect(component.sortState.sortBusy).toBe(true);
 
     const req = httpMock.expectOne('/api/sort');
     expect(req.request.body).toEqual({ text: 'cat' });
@@ -91,7 +91,7 @@ describe('LabelViewComponent', () => {
       threshold: 0.5,
     });
 
-    expect(component.sortState.sortBusy).toBeFalse();
+    expect(component.sortState.sortBusy).toBe(false);
     expect(component.sortState.sortOrder).toEqual([{ id: 2, score: 0.9 }, { id: 1, score: 0.3 }]);
     expect(component.sortState.threshold).toBe(0.5);
   });
@@ -103,7 +103,7 @@ describe('LabelViewComponent', () => {
     httpMock.expectOne('/api/votes').flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
 
     component.onLearnedSort();
-    expect(component.sortState.sortBusy).toBeTrue();
+    expect(component.sortState.sortBusy).toBe(true);
 
     const req = httpMock.expectOne('/api/learned-sort');
     req.flush({
@@ -111,7 +111,7 @@ describe('LabelViewComponent', () => {
       threshold: 0.5,
     });
 
-    expect(component.sortState.sortBusy).toBeFalse();
+    expect(component.sortState.sortBusy).toBe(false);
     expect(component.sortState.sortOrder!.length).toBe(2);
   }));
 
@@ -119,7 +119,7 @@ describe('LabelViewComponent', () => {
     flushInitialRequests();
     component.onLearnedSort();
     // No HTTP request should be made
-    expect(component.sortState.sortBusy).toBeFalse();
+    expect(component.sortState.sortBusy).toBe(false);
   });
 
   it('should handle media selection', () => {
@@ -320,7 +320,7 @@ describe('LabelViewComponent', () => {
     expect(autopilot.state.phase).toBe('hard');
     expect(sortState.selectMode).toBe('hard');
     expect(sortState.sortMode).toBe('learned');
-    expect(sortState.sortBusy).toBeTrue();
+    expect(sortState.sortBusy).toBe(true);
 
     // Flush the learned sort request
     const req = httpMock.expectOne('/api/learned-sort');
@@ -329,7 +329,7 @@ describe('LabelViewComponent', () => {
       threshold: 0.5,
     });
 
-    expect(sortState.sortBusy).toBeFalse();
+    expect(sortState.sortBusy).toBe(false);
     expect(sortState.threshold).toBe(0.5);
   }));
 
@@ -383,7 +383,7 @@ describe('LabelViewComponent', () => {
     expect(autopilot.state.phase).toBe('hard');
     expect(sortState.selectMode).toBe('hard');
     expect(sortState.sortMode).toBe('learned');
-    expect(sortState.sortBusy).toBeTrue();
+    expect(sortState.sortBusy).toBe(true);
 
     // Flush the learned sort request from bounce-back
     const req = httpMock.expectOne('/api/learned-sort');
@@ -391,7 +391,7 @@ describe('LabelViewComponent', () => {
       results: [{ id: 1, score: 0.7 }, { id: 2, score: 0.3 }],
       threshold: 0.5,
     });
-    expect(sortState.sortBusy).toBeFalse();
+    expect(sortState.sortBusy).toBe(false);
   }));
 
   it('should select hard items by index distance, not score distance', () => {
@@ -450,11 +450,11 @@ describe('LabelViewComponent', () => {
 
     const autopilot = TestBed.inject(AutopilotStateService);
     autopilot.activate();
-    expect(autopilot.running).toBeTrue();
+    expect(autopilot.running).toBe(true);
     expect(autopilot.state.phase).toBe('good');
 
     component.onAutopilotStop();
-    expect(autopilot.running).toBeFalse();
+    expect(autopilot.running).toBe(false);
     expect(autopilot.state.phase).toBe('idle');
   });
 
@@ -478,7 +478,7 @@ describe('LabelViewComponent', () => {
       );
     }
 
-    expect(component.showResortPrompt).toBeFalse();
+    expect(component.showResortPrompt).toBe(false);
   });
 
   it('should not show resort prompt after phase transitions past good', () => {
@@ -505,7 +505,7 @@ describe('LabelViewComponent', () => {
 
     // Phase should have transitioned to 'bad', so no resort prompt
     expect(autopilot.state.phase).toBe('bad');
-    expect(component.showResortPrompt).toBeFalse();
+    expect(component.showResortPrompt).toBe(false);
   });
 
   it('should re-select autopilot suggestion on refocus', () => {

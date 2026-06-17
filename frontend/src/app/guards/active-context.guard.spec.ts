@@ -81,7 +81,7 @@ describe('activeContextGuard', () => {
   it('redirects to /dashboard when either id is missing from the URL', async () => {
     setRegistry([], []);
     const result = await resolveGuard(runGuard('', ''));
-    expect(result instanceof UrlTree).toBeTrue();
+    expect(result instanceof UrlTree).toBe(true);
     expect((result as UrlTree).toString()).toBe('/dashboard');
   });
 
@@ -91,7 +91,7 @@ describe('activeContextGuard', () => {
       [{ id: 'm1', name: 'Det', media_type: 'audio' } as DetectorRegistryEntry],
     );
     const result = await resolveGuard(runGuard('missing', 'm1'));
-    expect(result instanceof UrlTree).toBeTrue();
+    expect(result instanceof UrlTree).toBe(true);
     expect(toast.toasts.length).toBe(1);
     expect(toast.toasts[0].message).toContain("'missing'");
   });
@@ -102,7 +102,7 @@ describe('activeContextGuard', () => {
       [],
     );
     const result = await resolveGuard(runGuard('d1', 'missing'));
-    expect(result instanceof UrlTree).toBeTrue();
+    expect(result instanceof UrlTree).toBe(true);
     expect(toast.toasts.length).toBe(1);
     expect(toast.toasts[0].message).toContain("'missing'");
   });
@@ -115,7 +115,7 @@ describe('activeContextGuard', () => {
     activeContext.setActivePair('d1', 'm1');
 
     const result = await resolveGuard(runGuard('d1', 'm1'));
-    expect(result).toBeTrue();
+    expect(result).toBe(true);
   });
 
   it('flips the active pair via ContextSwitchService when ids differ', async () => {
@@ -123,10 +123,10 @@ describe('activeContextGuard', () => {
       [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true } as DatasetRegistryEntry],
       [{ id: 'm1', name: 'Det', media_type: 'audio', detector_loaded: true } as DetectorRegistryEntry],
     );
-    const applySpy = spyOn(contextSwitch, 'applyActivePair').and.callFake(() => of(undefined));
+    const applySpy = vi.spyOn(contextSwitch, 'applyActivePair').mockImplementation(() => of(undefined));
 
     const result = await resolveGuard(runGuard('d1', 'm1'));
-    expect(result).toBeTrue();
+    expect(result).toBe(true);
     expect(applySpy).toHaveBeenCalledWith('d1', 'm1');
   });
 
@@ -135,10 +135,10 @@ describe('activeContextGuard', () => {
       [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true } as DatasetRegistryEntry],
       [{ id: 'm1', name: 'Det', media_type: 'image', detector_loaded: true } as DetectorRegistryEntry],
     );
-    const applySpy = spyOn(contextSwitch, 'applyActivePair').and.callFake(() => of(undefined));
+    const applySpy = vi.spyOn(contextSwitch, 'applyActivePair').mockImplementation(() => of(undefined));
 
     const result = await resolveGuard(runGuard('d1', 'm1'));
-    expect(result).toBeTrue();
+    expect(result).toBe(true);
     expect(applySpy).toHaveBeenCalled();
   });
 });

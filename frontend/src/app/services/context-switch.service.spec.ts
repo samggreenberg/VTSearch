@@ -231,7 +231,7 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
 
     switcher.applyActivePair('d1', 'm1').subscribe();
 
-    expect(loadDetectorSubjects.has('m1')).toBeTrue();
+    expect(loadDetectorSubjects.has('m1')).toBe(true);
     expect(activeContext.datasetId).toBe('old-ds');
 
     loadDetectorSubjects.get('m1')!.next({});
@@ -281,7 +281,7 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     let completed = false;
     switcher.applyActivePair('d1', 'm1').subscribe({ complete: () => (completed = true) });
 
-    expect(completed).toBeTrue();
+    expect(completed).toBe(true);
     expect(activeContext.datasetId).toBe('d1');
     expect(activeContext.modelId).toBe('m1');
   });

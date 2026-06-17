@@ -56,7 +56,7 @@ describe('NewDetectorModalComponent', () => {
   });
 
   it('should accept pending text as text example on submit', () => {
-    spyOn(component.created, 'emit');
+    vi.spyOn(component.created, 'emit');
 
     component.name = 'Dog Barks';
     component.mediaType = 'audio';
@@ -76,21 +76,21 @@ describe('NewDetectorModalComponent', () => {
   it('should disable Create button when not ready', () => {
     component.name = '';
     component.pendingText = '';
-    expect(component.canSubmitBlank).toBeFalse();
+    expect(component.canSubmitBlank).toBe(false);
 
     component.name = 'Test';
-    expect(component.canSubmitBlank).toBeFalse();
+    expect(component.canSubmitBlank).toBe(false);
 
     component.pendingText = 'query';
-    expect(component.canSubmitBlank).toBeTrue();
+    expect(component.canSubmitBlank).toBe(true);
   });
 
   it('should disable media buttons when text is entered', () => {
     component.pendingText = '';
-    expect(component.hasPendingText).toBeFalse();
+    expect(component.hasPendingText).toBe(false);
 
     component.pendingText = 'some text';
-    expect(component.hasPendingText).toBeTrue();
+    expect(component.hasPendingText).toBe(true);
   });
 
   it('should clear pending text when media example is set', () => {
@@ -100,7 +100,7 @@ describe('NewDetectorModalComponent', () => {
     component.exampleDisplay = 'file.wav';
     component.pendingText = '';
 
-    expect(component.hasMediaExample).toBeTrue();
+    expect(component.hasMediaExample).toBe(true);
     expect(component.pendingText).toBe('');
   });
 
@@ -124,33 +124,33 @@ describe('NewDetectorModalComponent', () => {
   });
 
   it('should emit closed on close', () => {
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
   it('should not lock media type when no default is provided', () => {
-    expect(component.mediaTypeLocked).toBeFalse();
+    expect(component.mediaTypeLocked).toBe(false);
   });
 
   it('should ignore toggleMediaTypeDropdown when locked', () => {
     component.mediaTypeLocked = true;
     component.mediaTypeDropdownOpen = false;
     component.toggleMediaTypeDropdown();
-    expect(component.mediaTypeDropdownOpen).toBeFalse();
+    expect(component.mediaTypeDropdownOpen).toBe(false);
   });
 
   it('should open dropdown via toggle when unlocked', () => {
     component.mediaTypeLocked = false;
     component.mediaTypeDropdownOpen = false;
     component.toggleMediaTypeDropdown();
-    expect(component.mediaTypeDropdownOpen).toBeTrue();
+    expect(component.mediaTypeDropdownOpen).toBe(true);
   });
 
   it('should unlock media type on explicit unlock', () => {
     component.mediaTypeLocked = true;
     component.unlockMediaType();
-    expect(component.mediaTypeLocked).toBeFalse();
+    expect(component.mediaTypeLocked).toBe(false);
   });
 
   it('pre-fills the name from the text seed while the name is untouched', () => {
@@ -171,7 +171,7 @@ describe('NewDetectorModalComponent', () => {
 
     component.onNameInput('Dog Barks');
     expect(component.name).toBe('Dog Barks');
-    expect(component.nameTouched).toBeTrue();
+    expect(component.nameTouched).toBe(true);
 
     component.onPendingTextInput('cat meowing');
     expect(component.pendingText).toBe('cat meowing');
@@ -211,6 +211,6 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
 
   it('should lock media type to the active dataset type', () => {
     expect(component.mediaType).toBe('image');
-    expect(component.mediaTypeLocked).toBeTrue();
+    expect(component.mediaTypeLocked).toBe(true);
   });
 });

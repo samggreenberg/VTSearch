@@ -99,7 +99,7 @@ describe('RightPanelComponent', () => {
 
   it('should emit mediaSelected', fakeAsync(() => {
     flushInit();
-    spyOn(component.mediaSelected, 'emit');
+    vi.spyOn(component.mediaSelected, 'emit');
     component.onMediaSelected(42);
     expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
     cleanup();

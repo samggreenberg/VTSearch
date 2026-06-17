@@ -55,21 +55,21 @@ describe('ModalComponent', () => {
     host.isOpen = true;
     fixture.detectChanges();
     fixture.nativeElement.querySelector('.modal-close').click();
-    expect(host.closeCalled).toBeTrue();
+    expect(host.closeCalled).toBe(true);
   });
 
   it('should emit closed on backdrop click', () => {
     host.isOpen = true;
     fixture.detectChanges();
     fixture.nativeElement.querySelector('.modal-backdrop').click();
-    expect(host.closeCalled).toBeTrue();
+    expect(host.closeCalled).toBe(true);
   });
 
   it('should not close on content click', () => {
     host.isOpen = true;
     fixture.detectChanges();
     fixture.nativeElement.querySelector('.modal-content').click();
-    expect(host.closeCalled).toBeFalse();
+    expect(host.closeCalled).toBe(false);
   });
 
   it('should hide close button when showCloseButton is false', () => {

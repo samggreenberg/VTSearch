@@ -53,13 +53,13 @@ describe('DashboardComponent', () => {
   it('should auto-select single dataset', () => {
     const datasets = [{ id: 'd1', name: 'Only One' }];
     flushInitialRequests(datasets);
-    expect(component.selectedDatasetIds.has('d1')).toBeTrue();
+    expect(component.selectedDatasetIds.has('d1')).toBe(true);
   });
 
   it('should auto-select single model', () => {
     const models = [{ id: 'm1', name: 'Only One' }];
     flushInitialRequests([], models);
-    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBe(true);
   });
 
   it('should not auto-select when multiple datasets on initial load', () => {
@@ -74,7 +74,7 @@ describe('DashboardComponent', () => {
   it('should auto-select newly added dataset', () => {
     const datasets = [{ id: 'd1', name: 'First' }];
     flushInitialRequests(datasets);
-    expect(component.selectedDatasetIds.has('d1')).toBeTrue();
+    expect(component.selectedDatasetIds.has('d1')).toBe(true);
 
     // Simulate adding a second dataset via refresh
     component.refresh();
@@ -86,14 +86,14 @@ describe('DashboardComponent', () => {
     });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
 
-    expect(component.selectedDatasetIds.has('d1')).toBeFalse();
-    expect(component.selectedDatasetIds.has('d2')).toBeTrue();
+    expect(component.selectedDatasetIds.has('d1')).toBe(false);
+    expect(component.selectedDatasetIds.has('d2')).toBe(true);
   });
 
   it('should auto-select newly added model', () => {
     const models = [{ id: 'm1', name: 'First' }];
     flushInitialRequests([], models);
-    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBe(true);
 
     // Simulate adding a second model via refresh
     component.refresh();
@@ -105,17 +105,17 @@ describe('DashboardComponent', () => {
       ],
     });
 
-    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
-    expect(component.selectedDetectorIds.has('m2')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBe(true);
+    expect(component.selectedDetectorIds.has('m2')).toBe(true);
   });
 
   it('should toggle dataset selection on click', () => {
     flushInitialRequests();
     const event = new MouseEvent('click');
     component.toggleDatasetSelection('d1', event);
-    expect(component.isDatasetSelected('d1')).toBeTrue();
+    expect(component.isDatasetSelected('d1')).toBe(true);
     component.toggleDatasetSelection('d1', event);
-    expect(component.isDatasetSelected('d1')).toBeFalse();
+    expect(component.isDatasetSelected('d1')).toBe(false);
   });
 
   it('should support multi-select with ctrl key', () => {
@@ -123,16 +123,16 @@ describe('DashboardComponent', () => {
     const ctrlEvent = new MouseEvent('click', { ctrlKey: true });
     component.toggleDatasetSelection('d1', new MouseEvent('click'));
     component.toggleDatasetSelection('d2', ctrlEvent);
-    expect(component.isDatasetSelected('d1')).toBeTrue();
-    expect(component.isDatasetSelected('d2')).toBeTrue();
+    expect(component.isDatasetSelected('d1')).toBe(true);
+    expect(component.isDatasetSelected('d2')).toBe(true);
   });
 
   it('should replace selection without ctrl key', () => {
     flushInitialRequests();
     component.toggleDatasetSelection('d1', new MouseEvent('click'));
     component.toggleDatasetSelection('d2', new MouseEvent('click'));
-    expect(component.isDatasetSelected('d1')).toBeFalse();
-    expect(component.isDatasetSelected('d2')).toBeTrue();
+    expect(component.isDatasetSelected('d1')).toBe(false);
+    expect(component.isDatasetSelected('d2')).toBe(true);
   });
 
   it('should sort datasets by column', () => {
@@ -164,10 +164,10 @@ describe('DashboardComponent', () => {
     flushInitialRequests();
     component.datasetCols.sortBy('name');
     expect(component.datasetCols.sortIndicator('name')).toContain('\u25B2');
-    expect(component.datasetCols.isSortActive('name')).toBeTrue();
+    expect(component.datasetCols.isSortActive('name')).toBe(true);
     component.datasetCols.sortBy('name');
     expect(component.datasetCols.sortIndicator('name')).toContain('\u25BC');
-    expect(component.datasetCols.isSortActive('other')).toBeFalse();
+    expect(component.datasetCols.isSortActive('other')).toBe(false);
   });
 
   describe('button state', () => {
@@ -175,7 +175,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
       component.selectedDetectorIds.clear();
-      expect(component.labelEnabled).toBeFalse();
+      expect(component.labelEnabled).toBe(false);
     });
 
     it('should enable Label with 1 dataset + 1 model', () => {
@@ -183,42 +183,42 @@ describe('DashboardComponent', () => {
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
       // Auto-selected since only 1 each
-      expect(component.labelEnabled).toBeTrue();
+      expect(component.labelEnabled).toBe(true);
     });
 
     it('should disable Label on media type mismatch', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
       flushInitialRequests(datasets, models);
-      expect(component.labelEnabled).toBeFalse();
+      expect(component.labelEnabled).toBe(false);
     });
 
     it('should disable Label when model media_type is "any" (not a valid type)', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'any' }];
       flushInitialRequests(datasets, models);
-      expect(component.labelEnabled).toBeFalse();
+      expect(component.labelEnabled).toBe(false);
     });
 
     it('should disable Find with no selections', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
       component.selectedDetectorIds.clear();
-      expect(component.findEnabled).toBeFalse();
+      expect(component.findEnabled).toBe(false);
     });
 
     it('should enable Find with matching media types', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
-      expect(component.findEnabled).toBeTrue();
+      expect(component.findEnabled).toBe(true);
     });
 
     it('should disable Find on media type mismatch', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
       flushInitialRequests(datasets, models);
-      expect(component.findEnabled).toBeFalse();
+      expect(component.findEnabled).toBe(false);
     });
 
     it('should disable Find when multiple datasets have different media types', () => {
@@ -229,7 +229,7 @@ describe('DashboardComponent', () => {
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
       component.selectedDatasetIds.add('d2');
-      expect(component.findEnabled).toBeFalse();
+      expect(component.findEnabled).toBe(false);
     });
 
     it('should enable Find when all selected items share media type', () => {
@@ -244,21 +244,21 @@ describe('DashboardComponent', () => {
       flushInitialRequests(datasets, models);
       component.selectedDatasetIds.add('d2');
       component.selectedDetectorIds.add('m2');
-      expect(component.findEnabled).toBeTrue();
+      expect(component.findEnabled).toBe(true);
     });
 
     it('should disable Find when the selected model has 0 training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0 }];
       flushInitialRequests(datasets, models);
-      expect(component.findEnabled).toBeFalse();
+      expect(component.findEnabled).toBe(false);
     });
 
     it('should enable Find for a model with training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
-      expect(component.findEnabled).toBeTrue();
+      expect(component.findEnabled).toBe(true);
     });
   });
 
@@ -371,7 +371,7 @@ describe('DashboardComponent', () => {
     component.selectedDatasetIds.add('d1');
 
     // Mock dialog confirmation
-    spyOn(component['dialog'], 'confirmDestructive').and.returnValue(Promise.resolve(true));
+    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
 
     component.deleteDataset(datasets[0]);
     tick();
@@ -380,7 +380,7 @@ describe('DashboardComponent', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush({});
 
-    expect(component.selectedDatasetIds.has('d1')).toBeFalse();
+    expect(component.selectedDatasetIds.has('d1')).toBe(false);
 
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
@@ -389,11 +389,11 @@ describe('DashboardComponent', () => {
   it('should open and close importer modal via NewThingFlowsService', () => {
     flushInitialRequests();
     const flows = TestBed.inject(NewThingFlowsService);
-    expect(component.importerModalOpen).toBeFalse();
+    expect(component.importerModalOpen).toBe(false);
     component.openImporterModal();
-    expect(component.importerModalOpen).toBeTrue();
+    expect(component.importerModalOpen).toBe(true);
     flows.closeImporter();
-    expect(component.importerModalOpen).toBeFalse();
+    expect(component.importerModalOpen).toBe(false);
   });
 
   it('should render empty state when no datasets', () => {
@@ -425,7 +425,7 @@ describe('DashboardComponent', () => {
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
 
-      const routerSpy = spyOn(component['router'], 'navigate');
+      const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
       component.onLabel();
 
       expect(routerSpy).toHaveBeenCalledWith(['/label', 'd1', 'm1']);
@@ -437,7 +437,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests(datasets, models);
 
       const session = TestBed.inject(LabelSessionService);
-      spyOn(component['router'], 'navigate');
+      vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
       component.onLabel();
 
       expect(session.textQuery).toBe('dog barking');
@@ -446,7 +446,7 @@ describe('DashboardComponent', () => {
     it('does nothing when no dataset is selected', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      const routerSpy = spyOn(component['router'], 'navigate');
+      const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
       component.onLabel();
       expect(routerSpy).not.toHaveBeenCalled();
     });
@@ -455,13 +455,13 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
       flushInitialRequests(datasets, []);
       component.selectedDetectorIds.clear();
-      const routerSpy = spyOn(component['router'], 'navigate');
+      const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
 
       component.onLabel();
 
       expect(routerSpy).not.toHaveBeenCalled();
-      expect(component.newDetectorModalOpen).toBeTrue();
-      expect(component.trainAfterModelCreation).toBeTrue();
+      expect(component.newDetectorModalOpen).toBe(true);
+      expect(component.trainAfterModelCreation).toBe(true);
     });
   });
 
@@ -478,14 +478,14 @@ describe('DashboardComponent', () => {
     failedReq.error(new ProgressEvent('error'), { status: 500, statusText: 'Internal Server Error' });
 
     // Component should still be in loading state
-    expect(component.loading).toBeTrue();
+    expect(component.loading).toBe(true);
 
     // Advance timer to trigger next poll; polling should survive the error
     tick(1000);
     const retryReq = httpMock.expectOne('/api/dataset/progress');
     retryReq.flush({ status: 'idle' });
 
-    expect(component.loading).toBeFalse();
+    expect(component.loading).toBe(false);
 
     // Refresh after completion
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
@@ -496,13 +496,13 @@ describe('DashboardComponent', () => {
     flushInitialRequests();
     const flows = TestBed.inject(NewThingFlowsService);
     flows.openImporter();
-    expect(component.importerModalOpen).toBeTrue();
+    expect(component.importerModalOpen).toBe(true);
     const demo = { name: 'gtzan', label: 'GTZAN' } as any;
     flows.emitDemoSelected(demo);
     flows.closeImporter();
 
-    expect(component.importerModalOpen).toBeFalse();
-    expect(component.loading).toBeTrue();
+    expect(component.importerModalOpen).toBe(false);
+    expect(component.loading).toBe(true);
     expect(component.progressMessage).toContain('GTZAN');
 
     const req = httpMock.expectOne('/api/dataset/load-demo');
