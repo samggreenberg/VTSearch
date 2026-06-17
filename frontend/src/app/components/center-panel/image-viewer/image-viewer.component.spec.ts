@@ -226,6 +226,41 @@ describe('ImageViewerComponent', () => {
       expect(local.y).toBeCloseTo(0, 5);
     });
 
+    it('compensates for an ancestor CSS zoom (visual getBoundingClientRect vs layout coords)', () => {
+      // Regression: the app renders <html> at `zoom: 1.1` (styles.scss). A CSS
+      // `zoom` scales an element's rendered box without changing its layout box,
+      // so getBoundingClientRect() and MouseEvent client coords report VISUAL
+      // pixels while clientWidth / renderedW / panX are LAYOUT pixels. Here the
+      // wrap is 100 layout px wide but 110 visual px (Z = 1.1). Without the
+      // visual→layout conversion, every offset from the wrap centre came out
+      // 1.1× too large, drawing the box further from the view centre than the
+      // cursor (proportional to distance from centre, sign-flipping across it).
+      component.renderedW = 100;
+      component.renderedH = 100;
+      component.wrapRef = {
+        nativeElement: {
+          clientWidth: 100,
+          clientHeight: 100,
+          getBoundingClientRect: () => ({
+            left: 0,
+            top: 0,
+            width: 110,
+            height: 110,
+            right: 110,
+            bottom: 110,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          }),
+        } as unknown as HTMLDivElement,
+      } as ElementRef<HTMLDivElement>;
+      // Visual centre is at (55, 55). A click 11 visual px right of centre is
+      // 10 layout px → 0.1 normalised, so image x = 0.6, y stays 0.5.
+      const local = component.screenToImageNormalized(makeEvent(66, 55))!;
+      expect(local.x).toBeCloseTo(0.6, 6);
+      expect(local.y).toBeCloseTo(0.5, 6);
+    });
+
     it('combines pan + zoom + rotate self-consistently', () => {
       setupWrap(component);
       component.zoom = 2;
