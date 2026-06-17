@@ -323,7 +323,7 @@ export class VoteStateService implements OnDestroy {
    * crops: the Good-pile thumbnail crops to the box immediately, and the entry
    * is reconciled against the server's ``good_region_boxes`` on the next poll.
    */
-  private applyOptimisticRegionBox(id: number, box: number[] | null): void {
+  private applyOptimisticRegionBox(id: number, box: readonly number[] | null): void {
     this.pendingRegionBoxes.set(id, box ? [...box] : null);
     const boxes = { ...this.goodRegionBoxesSubject.value };
     if (box) boxes[String(id)] = [...box];
