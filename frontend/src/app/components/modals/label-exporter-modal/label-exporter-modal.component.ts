@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
@@ -11,7 +11,7 @@ import type { ExporterEntry } from '../../../generated/api-client/models/exporte
 @Component({
   selector: 'vt-label-exporter-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, IconComponent],
+  imports: [ModalComponent, IconComponent],
   templateUrl: './label-exporter-modal.component.html',
   styleUrl: './label-exporter-modal.component.scss',
 })

@@ -1,10 +1,10 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 
 @Component({
   selector: 'vt-inclusion-slider',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './inclusion-slider.component.html',
   styleUrl: './inclusion-slider.component.scss',
 })

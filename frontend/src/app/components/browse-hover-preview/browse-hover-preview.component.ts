@@ -7,14 +7,14 @@ import {
   SimpleChanges,
   ViewChild,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ActiveContextService } from '../../services/active-context.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 
 @Component({
   selector: 'vt-browse-hover-preview',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './browse-hover-preview.component.html',
   styleUrl: './browse-hover-preview.component.scss',
 })

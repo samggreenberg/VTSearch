@@ -1,7 +1,40 @@
 # Angular 19 → 21 upgrade + Vitest spec migration
 
-Status: **Not started — design only.** No code changed yet. This plan scopes
-the work; nothing here has shipped.
+Status: **Upgrade shipped (Steps 1 & 2); Vitest migration deferred.** Angular is
+now on 21.2.17 and `npm audit --omit=dev` reports 0 vulnerabilities (was 6
+high). The Vitest spec migration phase has **not** started — see "What shipped"
+and "Open follow-ups" below.
+
+## What shipped
+
+- **Angular 19 → 20 → 21**, one major per step via `ng update`. All `@angular/*`
+  packages at `21.2.17`, `@angular-devkit/build-angular` + `@angular/cli` at
+  `21.2.16`, TypeScript at `5.9.3`. (Node floor satisfied by the container's
+  Node 22; no setup-script change needed.)
+- **`@angular/platform-browser-dynamic` removed** — it was never imported
+  (`main.ts` uses standalone `bootstrapApplication`), and as a dead dep it
+  confused `ng update`'s peer resolver. Removing it unblocked the family bump.
+- **Block control-flow migration applied** — Angular 21 makes this migration
+  mandatory (the legacy `*ngIf`/`*ngFor`/`*ngSwitch` structural directives are
+  removed in v21), so `ng update` converted 51 component templates to
+  `@if`/`@for`/`@switch`. This was listed as "optional/deferred" in the original
+  plan but is no longer optional on 21; it rode along with the bump.
+- **Out-of-root docs asset fixed.** Angular 21 forbids `assets[].input` paths
+  outside the workspace root, which broke the `../docs/user → /assets/docs`
+  mapping (in-app user guide). Replaced with a **committed symlink**
+  `frontend/docs-assets → ../docs/user`; angular.json now references
+  `docs-assets`. The builder's `isSubDirectory` check is pure path math, so the
+  symlink resolves cleanly under the workspace root while the docs stay
+  single-sourced.
+- **Overrides** (`vite`, `esbuild`, …) needed no changes — Angular 21 pulls
+  `vite@6.4.3`/`esbuild@0.28.1`, both already within the existing ranges.
+- **Gates green:** `build:prod` clean (0 warnings, initial bundle 524.30 kB <
+  525 kB budget), spec files typecheck, `npm audit --omit=dev` = 0
+  vulnerabilities, full `./run-tests.sh` passes (4841 tests).
+
+The Vitest spec migration (below) is intentionally deferred to its own effort.
+
+## Original design (for reference)
 
 ## Why
 
@@ -164,8 +197,21 @@ If any of these get picked up, give them their own plan file and link it here.
 
 ## Open follow-ups
 
-- Confirm exact Node/TS floors against the container before starting (the
-  version bullets above are from memory; `ng update` is authoritative).
+The Angular bump is done; everything below is the **deferred Vitest phase** and
+its loose ends:
+
+- **Vitest spec migration (whole phase, not started).** Wire the Vitest
+  `unit-test` builder + scripts, port the 68 Jasmine spec files / 754 `it`
+  blocks (which have only ever typechecked, never run), triage the real
+  failures that surface, and hook the run into `./run-tests.sh`. See the
+  "Vitest spec migration" section above for the step list.
 - Decide whether the Vitest run joins `run-tests.sh`'s `core` group or stands
-  alone (needs user input).
+  alone (needs user input) — defer until the migration is actually picked up.
 - Triage list for any specs quarantined during the Jasmine→Vitest port.
+- `@types/jasmine` is still in `devDependencies` and `tsconfig.spec.json` still
+  lists `"types": ["jasmine"]`; the specs typecheck against Jasmine globals for
+  now. Swap to Vitest types as part of the migration.
+- **Resolved during the upgrade:** Node/TS floors (container's Node 22 + TS
+  5.9.3 satisfy v21, no setup-script change); overrides drift (none needed);
+  budget regression (initial crept 521.97 → 524.30 kB but stays under the
+  525 kB warn budget — watch it on future bumps).

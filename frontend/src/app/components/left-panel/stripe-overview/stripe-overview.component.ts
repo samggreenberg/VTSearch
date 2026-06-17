@@ -1,11 +1,11 @@
 import { Component, Input, Output, EventEmitter, OnChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { SortedItem } from '../left-panel.component';
 
 @Component({
   selector: 'vt-stripe-overview',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './stripe-overview.component.html',
   styleUrl: './stripe-overview.component.scss',
 })

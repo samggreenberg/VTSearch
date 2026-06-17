@@ -1,5 +1,5 @@
 import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { SettingsStateService } from '../../services/settings-state.service';
@@ -13,7 +13,7 @@ type IconSize = (typeof ICON_SIZES)[number];
 @Component({
   selector: 'vt-view-controls',
   standalone: true,
-  imports: [CommonModule, IconComponent],
+  imports: [IconComponent],
   templateUrl: './view-controls.component.html',
   styleUrl: './view-controls.component.scss',
 })

@@ -1,5 +1,5 @@
 import { ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 import {
@@ -76,7 +76,7 @@ const sanitizedCache = new Map<string, SafeHtml>();
 @Component({
   selector: 'vt-icon',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   template: `
     @if (svgHtml) {
       <span class="vt-icon__svg" [style.width.px]="size" [style.height.px]="size" [innerHTML]="svgHtml"></span>

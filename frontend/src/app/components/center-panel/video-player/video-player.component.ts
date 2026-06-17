@@ -1,12 +1,12 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
-import { NgIf } from '@angular/common';
+
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
   selector: 'vt-video-player',
   standalone: true,
-  imports: [NgIf],
+  imports: [],
   templateUrl: './video-player.component.html',
   styleUrl: './video-player.component.scss',
 })

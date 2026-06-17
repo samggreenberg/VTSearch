@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 
 import { ClipperInfo, ConverterInfo, EmbedderInfo, SourceSpec } from '../../../../models/api.models';
@@ -26,7 +26,7 @@ import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-
 @Component({
   selector: 'vt-import-advanced',
   standalone: true,
-  imports: [CommonModule, FormsModule, SourceSpecsPickerComponent],
+  imports: [FormsModule, SourceSpecsPickerComponent],
   templateUrl: './import-advanced.component.html',
   styleUrl: './import-advanced.component.scss',
 })

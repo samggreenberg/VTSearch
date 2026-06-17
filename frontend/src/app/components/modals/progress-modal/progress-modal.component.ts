@@ -1,5 +1,5 @@
 import { Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
@@ -19,7 +19,7 @@ export type ProgressMetric = 'smart' | 'stable' | 'diverse';
 @Component({
   selector: 'vt-progress-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, ProgressBarComponent],
+  imports: [ModalComponent, ProgressBarComponent],
   templateUrl: './progress-modal.component.html',
   styleUrl: './progress-modal.component.scss',
 })

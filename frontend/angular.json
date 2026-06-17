@@ -36,12 +36,12 @@
               },
               {
                 "glob": "**/*.md",
-                "input": "../docs/user",
+                "input": "docs-assets",
                 "output": "/assets/docs"
               },
               {
                 "glob": "**/*",
-                "input": "../docs/user/assets",
+                "input": "docs-assets/assets",
                 "output": "/assets/docs/assets"
               }
             ],
@@ -93,6 +93,32 @@
           "builder": "@angular-devkit/build-angular:extract-i18n"
         }
       }
+    }
+  },
+  "schematics": {
+    "@schematics/angular:component": {
+      "type": "component"
+    },
+    "@schematics/angular:directive": {
+      "type": "directive"
+    },
+    "@schematics/angular:service": {
+      "type": "service"
+    },
+    "@schematics/angular:guard": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:interceptor": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:module": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:pipe": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:resolver": {
+      "typeSeparator": "."
     }
   }
 }

@@ -1,5 +1,5 @@
 import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
@@ -35,7 +35,7 @@ type TrainedSubView = 'picker' | 'form';
 @Component({
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })

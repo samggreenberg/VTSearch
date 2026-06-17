@@ -1,12 +1,12 @@
 import { Component, EventEmitter, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'vt-login',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss',
 })

@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { Router } from '@angular/router';
 import { Subject, combineLatest } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -20,7 +20,7 @@ import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.mo
 @Component({
   selector: 'vt-incompatible-pair-explainer',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './incompatible-pair-explainer.component.html',
   styleUrl: './incompatible-pair-explainer.component.scss',
 })

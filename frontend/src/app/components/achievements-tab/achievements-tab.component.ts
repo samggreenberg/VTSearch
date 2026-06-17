@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -28,7 +28,7 @@ interface AchievementRow extends AchievementEntry {
 @Component({
   selector: 'vt-achievements-tab',
   standalone: true,
-  imports: [CommonModule, FormsModule, AchievementBadgeComponent],
+  imports: [FormsModule, AchievementBadgeComponent],
   templateUrl: './achievements-tab.component.html',
   styleUrl: './achievements-tab.component.scss',
 })

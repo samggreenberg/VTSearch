@@ -1,5 +1,5 @@
 import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DatasetStateService } from '../../services/dataset-state.service';
@@ -44,7 +44,7 @@ interface PulldownRow {
 @Component({
   selector: 'vt-context-pulldown',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './context-pulldown.component.html',
   styleUrl: './context-pulldown.component.scss',
 })

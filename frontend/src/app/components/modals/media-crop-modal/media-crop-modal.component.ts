@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ModalComponent } from '../../modal/modal.component';
 import { ImageCropOverlayComponent, ImageCropResult } from './image-crop-overlay.component';
 import { AudioCropOverlayComponent, AudioCropResult } from './audio-crop-overlay.component';
@@ -16,7 +16,7 @@ type View = 'confirm' | 'cropping';
 @Component({
   selector: 'vt-media-crop-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, ImageCropOverlayComponent, AudioCropOverlayComponent],
+  imports: [ModalComponent, ImageCropOverlayComponent, AudioCropOverlayComponent],
   templateUrl: './media-crop-modal.component.html',
   styleUrl: './media-crop-modal.component.scss',
 })
