@@ -184,8 +184,9 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     const wrap = this.wrapRef?.nativeElement;
     if (wrap) {
       const rect = wrap.getBoundingClientRect();
-      const cx = event.clientX - rect.left - rect.width / 2;
-      const cy = event.clientY - rect.top - rect.height / 2;
+      const s = this.layoutScale(wrap, rect);
+      const cx = (event.clientX - rect.left - rect.width / 2) / s;
+      const cy = (event.clientY - rect.top - rect.height / 2) / s;
       const ratio = this.zoom / oldZoom;
       this.panX = cx - ratio * (cx - this.panX);
       this.panY = cy - ratio * (cy - this.panY);
@@ -381,6 +382,20 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     };
   }
 
+  /** Ratio between the wrap's on-screen (visual) size and its layout size.
+   *  The app renders ``<html>`` at ``zoom: 1.1`` (see styles.scss), and a CSS
+   *  ``zoom`` scales an element's rendered box without changing its layout box:
+   *  ``getBoundingClientRect()`` and ``MouseEvent`` client coords come back in
+   *  VISUAL pixels, while ``clientWidth`` / ``renderedW`` / ``panX`` are LAYOUT
+   *  pixels. Dividing a client-space delta by this ratio converts it back to the
+   *  layout space the region overlay is drawn in, so the box lands under the
+   *  cursor. Returns 1 when there's no zoom (ratio is exactly 1) or the wrap
+   *  isn't measurable (e.g. the test mock exposes no ``clientWidth``). */
+  private layoutScale(wrap: HTMLElement, rect: DOMRect): number {
+    const cw = wrap.clientWidth;
+    return cw && rect.width ? rect.width / cw : 1;
+  }
+
   /** Convert a screen-space mouse event to normalised image coords (pre-rotation).
    *  Returns null when the image isn't laid out yet. Public so tests can drive it
    *  with a mocked wrapRef + arbitrary pan/zoom/rotate state. */
@@ -388,8 +403,9 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     const wrap = this.wrapRef?.nativeElement;
     if (!wrap || !this.renderedW || !this.renderedH) return null;
     const rect = wrap.getBoundingClientRect();
-    const dx = event.clientX - (rect.left + rect.width / 2) - this.panX;
-    const dy = event.clientY - (rect.top + rect.height / 2) - this.panY;
+    const s = this.layoutScale(wrap, rect);
+    const dx = (event.clientX - (rect.left + rect.width / 2)) / s - this.panX;
+    const dy = (event.clientY - (rect.top + rect.height / 2)) / s - this.panY;
     const sx = dx / this.zoom;
     const sy = dy / this.zoom;
     const rad = (-this.rotation * Math.PI) / 180;
@@ -426,8 +442,12 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     if (!this.drag) return;
     const d = this.drag;
     if (d.kind === 'pan') {
-      this.panX = d.originX + (e.clientX - d.startX);
-      this.panY = d.originY + (e.clientY - d.startY);
+      // clientX deltas are VISUAL px (the app renders at zoom: 1.1) but panX is
+      // a LAYOUT-px transform value; convert so the image tracks the cursor 1:1.
+      const wrap = this.wrapRef?.nativeElement;
+      const s = wrap ? this.layoutScale(wrap, wrap.getBoundingClientRect()) : 1;
+      this.panX = d.originX + (e.clientX - d.startX) / s;
+      this.panY = d.originY + (e.clientY - d.startY) / s;
       this.applyTransform();
       return;
     }
