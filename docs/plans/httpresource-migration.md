@@ -1,9 +1,10 @@
 # `httpResource` / reactive-resource migration for the data layer
 
-Status: **Phase 1 (pilot) + Phase 2 + Phase 3 shipped.** The
+Status: **Phase 1 (pilot) + Phase 2 + Phase 3 + Phase 4 shipped.** The
 `SettingsStateService` and `MediaStateService` read paths both run on
-`rxResource`, and Phase 3 converted the left-panel's media-type / embedder reads
-too. Phase 2 also **dropped the pilot's compatibility shims**: the services now
+`rxResource`, Phase 3 converted the left-panel's media-type / embedder reads,
+and Phase 4 converted the importer/exporter **picker-modal** list reads. Phase 2
+also **dropped the pilot's compatibility shims**: the services now
 expose their signals directly and all consumers were migrated, so there are no
 Observable bridges or sync getters left to bridge old callers (per the repo's
 "no shims, just make the clean change" rule). Phase 3 also extracted the shared
@@ -13,6 +14,56 @@ see "Open follow-ups". Scoped after the Angular 21 + Vitest work landed (see
 `angular-21-upgrade.md`, which lists this as a deferred carrot). This doc
 decides *how* VTSearch should adopt Angular's resource primitives and in what
 order.
+
+## What shipped (Phase 4 — picker-modal reads)
+
+The four importer/exporter picker modals each did an eager `ngOnInit` GET to
+populate their plugin list. All four moved to `rxResource`, following the
+Phase 3 eager pattern (no request signal = load once on creation):
+
+- **`LabelExporterModalComponent`** — `getExporters()` → eager `rxResource`.
+  This one carried a pure `destroy$`/`OnDestroy` (its export *mutation* was
+  already a bare subscribe), so the conversion **dropped the lifecycle plumbing
+  entirely** (`Subject`, `takeUntil`, `OnDestroy`, `OnInit`).
+- **`SettingsImporterModalComponent` / `SettingsExporterModalComponent`** —
+  `listImporters()` / `listExporters()` → eager `rxResource`. `OnDestroy` stays
+  in both because it clears the success-message close timer, not a `destroy$`.
+- **`ExportModalComponent`** (the involved one) — all **three** init reads moved
+  to resources. Dataset status (`getStatus()`) and the exporter list
+  (`getExporters()`) are eager; the **labels** read (`exportLabels(...)`) is
+  input-derived (its `label_filter` comes from the `initialFilter` `@Input`, set
+  in `ngOnInit`), so it uses a **trigger signal** (`labelsReady`, flipped at the
+  end of `ngOnInit`) as its request — the same "monotonic counter / gate" shape
+  the settings + media phases used. `buildColumns(...)` (which depends on the
+  resolved `available_columns`) moved to a **constructor `effect()`** that fires
+  when the labels resource settles (with the no-arg fallback on error). The
+  `destroy$`/`OnDestroy` is gone; the lone export *mutation* is now a bare
+  subscribe (matching `label-exporter`'s precedent).
+
+Repeatable details worth keeping:
+
+- **Picker list + its loading/error state are signal-driven.** Each modal
+  exposes `exporters()` / `importers()` (a `computed` that filters
+  `hidden_from_picker`) and `loading()` (`= resource.isLoading()`); templates
+  read the signals. The `loading = true` initial field is gone — an eager
+  resource reports `isLoading()` true until its first settle, matching the old
+  default.
+- **Error merging.** Each modal's `error` was set by *both* a list-load failure
+  and an action (export/import) failure. The migration keeps a writable
+  `signal` for the action error and exposes `error` as a `computed` that ORs in
+  the resource's load error (`resource.error() ? '<load msg>' : ''`). Imperative
+  `this.error = '…'` sites became `…Error.set('…')`.
+- **`inject()` over constructor params.** Resource field initializers reference
+  the api services, and a field initializer can't safely read a constructor
+  parameter property, so the services are `inject()`ed (same gotcha Phase 3 hit).
+- **Specs.** Added an `export-modal` spec (the component was previously
+  untested) and updated the `label-exporter` spec for the loader timing:
+  `TestBed.tick()` after `detectChanges()` to issue the eager GET, then
+  `settleResource()` before reading resolved values. The export-modal spec also
+  has to **settle once before flushing** so the trigger-gated labels GET (which
+  fires a microtask after `ngOnInit`) is pending alongside the two eager GETs,
+  and it matches the labels request by `r.url` predicate because the GET carries
+  an `?enrich=true` query string that a plain-string `expectOne` would miss.
 
 ## What shipped (Phase 3 — left-panel reads + housekeeping)
 
@@ -239,13 +290,20 @@ app must be half-migrated.
 ## Open follow-ups
 
 - **Expand to more read services** (step 3). Done for `SettingsStateService`
-  (Phase 1, shims removed in Phase 2), `MediaStateService` (Phase 2), and the
-  left-panel media-type / embedder reads (Phase 3). Those last two were
-  component-local `ngOnInit` fetches, so the conversion was eager (no request
-  signal). A still-open refinement: if media-types / embedders ever need to
-  **re-fetch on dataset switch**, give the resource a
+  (Phase 1, shims removed in Phase 2), `MediaStateService` (Phase 2), the
+  left-panel media-type / embedder reads (Phase 3), and the importer/exporter
+  picker-modal list reads (Phase 4). The component-local `ngOnInit` fetches
+  converted eagerly (no request signal); export-modal's input-derived labels
+  read used a trigger signal instead. A still-open refinement: if media-types /
+  embedders ever need to **re-fetch on dataset switch**, give the resource a
   `toSignal(activeContext.datasetId$)` request key instead of the eager load —
   today the component is recreated on switch, so eager-once suffices.
+- **Remaining component-local read subscribes** (not yet converted). The next
+  candidates after the picker modals are heavier: `dataset-importer-modal`
+  (interdependent clipper/embedder/demo loads + dynamic field-option fetches)
+  and `label-importer-modal` (importer list is a clean read, but field-options
+  and imports are mutations). Convert the clean list reads when those modals are
+  next touched; leave the dynamic field-option fetches imperative.
 - **`DetectorStateService` deleted (Phase 3).** It had no consumers outside its
   own file + spec. Done.
 - **Pollers and `forkJoin` aggregates** (`VoteStateService`, labeling status,

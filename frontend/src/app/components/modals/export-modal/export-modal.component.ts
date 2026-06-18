@@ -1,8 +1,17 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  OnInit,
+  Output,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import {
@@ -40,7 +49,7 @@ export interface ColumnDef {
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })
-export class ExportModalComponent implements OnInit, OnDestroy {
+export class ExportModalComponent implements OnInit {
   @Input() detectorName = '';
   /**
    * The filter the modal opens on. ``unverified`` / ``verified`` are
@@ -52,14 +61,54 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   @Output() closed = new EventEmitter<void>();
   @Output() exported = new EventEmitter<void>();
 
-  exporters: ExporterEntry[] = [];
-  loading = true;
-  error = '';
-  status = '';
+  private readonly datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private readonly exportersApi = inject(ExportersApiService);
+  private readonly labelSession = inject(LabelSessionService);
+  private readonly sortingApi = inject(SortingApiService);
+  private readonly activeContext = inject(ActiveContextService);
+  private readonly datasetState = inject(DatasetStateService);
+
+  // Two eager reads (dataset status + exporter list) load on creation; the
+  // labels read is input-derived, so it waits for `ngOnInit` to set
+  // `serverFilter` and flip `labelsReady`. All three wrap the generated-client
+  // methods so the interceptor chain still applies, replacing the old
+  // `ngOnInit` subscribes + `destroy$` plumbing.
+  private readonly statusResource = rxResource({
+    stream: () => this.datasetsRegistryApi.getStatus(),
+  });
+  private readonly exportersResource = rxResource({
+    stream: () => this.exportersApi.getExporters(),
+  });
+  private readonly labelsReady = signal(false);
+  private readonly labelsResource = rxResource({
+    params: () => (this.labelsReady() ? this.serverFilter : undefined),
+    stream: () => {
+      const labelFilter = this.serverFilter === 'both' ? undefined : this.serverFilter;
+      return this.sortingApi.exportLabels(false, { enrich: true, labelFilter });
+    },
+  });
+
+  readonly exporters = computed<ExporterEntry[]>(() =>
+    (this.exportersResource.value() ?? []).filter((e) => !e.hidden_from_picker),
+  );
 
   /** Labels fetched from the server. */
-  labels: LabeledElement[] = [];
-  labelsLoaded = false;
+  private readonly labelsList = computed<LabeledElement[]>(
+    () => this.labelsResource.value()?.labels ?? [],
+  );
+  readonly labelsLoaded = computed(
+    () => this.labelsResource.hasValue() || this.labelsResource.error() !== undefined,
+  );
+
+  /** Error from a failed export action; the read failures are merged in below. */
+  private readonly actionError = signal('');
+  readonly error = computed(
+    () =>
+      this.actionError() ||
+      (this.exportersResource.error() ? 'Failed to load exporters' : '') ||
+      (this.labelsResource.error() ? 'Failed to load labels' : ''),
+  );
+  status = '';
 
   /** Column definitions with selection state, built dynamically from API response. */
   columns: ColumnDef[] = [];
@@ -83,9 +132,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   submitting = false;
 
   /** Dataset display name for default filenames. */
-  private datasetName = '';
-
-  private destroy$ = new Subject<void>();
+  private readonly datasetName = computed(() => this.statusResource.value()?.display_name || '');
 
   /** Base columns that are always present. */
   private static readonly BASE_COLUMNS: { key: string; label: string }[] = [
@@ -98,14 +145,19 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   /** Columns excluded from checkboxes/preview but always appended to exports. */
   private static readonly ALWAYS_EXPORT_KEYS = ['origin', 'origin_name'];
 
-  constructor(
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private exportersApi: ExportersApiService,
-    private labelSession: LabelSessionService,
-    private sortingApi: SortingApiService,
-    private activeContext: ActiveContextService,
-    private datasetState: DatasetStateService,
-  ) {}
+  constructor() {
+    // Rebuild the column set when the labels read settles. The checkbox
+    // `enabled` state lives on `columns`, so it stays a mutable field rather
+    // than a pure computed; the effect mirrors the old subscribe's
+    // `buildColumns(...)` call (with the no-arg fallback on error).
+    effect(() => {
+      if (this.labelsResource.hasValue()) {
+        this.buildColumns(this.labelsResource.value()?.available_columns);
+      } else if (this.labelsResource.error()) {
+        this.buildColumns();
+      }
+    });
+  }
 
   /** Detector/model name from any available source. Falls back to the
    *  registry entry for the active detector id when the
@@ -135,36 +187,10 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       this.labelFilter = this.initialFilter;
     }
 
-    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (status) => {
-        this.datasetName = status.display_name || '';
-      },
-    });
-
-    this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (list) => {
-        this.exporters = list.filter((e) => !e.hidden_from_picker);
-        this.loading = false;
-      },
-      error: () => {
-        this.loading = false;
-        this.error = 'Failed to load exporters';
-      },
-    });
-
-    const labelFilter = this.serverFilter === 'both' ? undefined : this.serverFilter;
-    this.sortingApi.exportLabels(false, { enrich: true, labelFilter }).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (data) => {
-        this.labels = data.labels || [];
-        this.labelsLoaded = true;
-        this.buildColumns(data.available_columns);
-      },
-      error: () => {
-        this.labelsLoaded = true;
-        this.error = 'Failed to load labels';
-        this.buildColumns();
-      },
-    });
+    // Now that the input-derived `serverFilter` is set, release the labels read
+    // (the dataset-status and exporter-list reads are eager and already in
+    // flight). `buildColumns` rides the constructor effect on resolution.
+    this.labelsReady.set(true);
   }
 
   /** Build column definitions from available_columns or fall back to defaults. */
@@ -197,21 +223,22 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   }
 
   get filteredLabels(): LabeledElement[] {
+    const labels = this.labelsList();
     if (this.labelFilter === 'good') {
-      return this.labels.filter((e) => e.label === 'good');
+      return labels.filter((e) => e.label === 'good');
     }
     if (this.labelFilter === 'bad') {
-      return this.labels.filter((e) => e.label === 'bad');
+      return labels.filter((e) => e.label === 'bad');
     }
     if (this.labelFilter === 'corrections') {
-      return this.labels.filter((e) => e.is_correction === true);
+      return labels.filter((e) => e.is_correction === true);
     }
-    return this.labels;
+    return labels;
   }
 
   /** Whether any labels are corrections (detector label was changed by user). */
   get hasCorrections(): boolean {
-    return this.labels.some((e) => e.is_correction === true);
+    return this.labelsList().some((e) => e.is_correction === true);
   }
 
   get previewLabels(): LabeledElement[] {
@@ -272,7 +299,8 @@ export class ExportModalComponent implements OnInit, OnDestroy {
     else if (this.labelFilter === 'corrections') parts.push('Corrections');
     const detName = this.effectiveDetectorName;
     if (detName) parts.push(detName);
-    if (this.datasetName) parts.push(this.datasetName);
+    const datasetName = this.datasetName();
+    if (datasetName) parts.push(datasetName);
     if (parts.length === 0) parts.push('labels');
     // Sanitise: replace characters unsafe for filenames with hyphens
     const stem = parts.join('-').replace(/[\\/:*?"<>|]+/g, '-');
@@ -326,7 +354,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       this.formValues[f.key] = this.defaultFor(f);
     }
     this.applyDefaultFilename(exporter);
-    this.error = '';
+    this.actionError.set('');
     this.status = '';
   }
 
@@ -339,7 +367,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
       this.formValues[f.key] = this.defaultFor(f);
     }
     this.applyDefaultFilename(exporter);
-    this.error = '';
+    this.actionError.set('');
     this.status = '';
   }
 
@@ -354,7 +382,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   /** The exporter object for the currently active tab (null if clipboard). */
   get activeTabExporter(): ExporterEntry | null {
     if (this.activeTab === 'clipboard') return null;
-    return this.exporters.find((e) => e.name === this.activeTab) || null;
+    return this.exporters().find((e) => e.name === this.activeTab) || null;
   }
 
   /** Typed view of the active tab's plugin fields for the template (the
@@ -385,7 +413,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
 
   cancelExporterForm(): void {
     this.selectedExporter = null;
-    this.error = '';
+    this.actionError.set('');
     this.status = '';
   }
 
@@ -397,7 +425,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
   exportLabelsWith(exporter: ExporterEntry, fieldValues: Record<string, string>): void {
     const exporterLabel = exporter.display_name || exporter.name;
     this.status = `Exporting ${this.filteredLabels.length.toLocaleString()} labels to ${exporterLabel}…`;
-    this.error = '';
+    this.actionError.set('');
     this.submitting = true;
 
     const labelsData = {
@@ -410,7 +438,6 @@ export class ExportModalComponent implements OnInit, OnDestroy {
         field_values: fieldValues,
         results: labelsData,
       })
-      .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
           this.status = 'Labels exported.';
@@ -420,7 +447,7 @@ export class ExportModalComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.status = '';
-          this.error = 'Label export failed';
+          this.actionError.set('Label export failed');
           this.submitting = false;
         },
       });
@@ -452,10 +479,5 @@ export class ExportModalComponent implements OnInit, OnDestroy {
 
   close(): void {
     this.closed.emit();
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 }

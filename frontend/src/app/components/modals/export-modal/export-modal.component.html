@@ -39,11 +39,11 @@
   <div class="export-section">
     <h3>
       Preview
-      @if (labelsLoaded) {
+      @if (labelsLoaded()) {
         <span class="preview-count">({{ filteredLabels.length | number }} rows)</span>
       }
     </h3>
-    @if (!labelsLoaded) {
+    @if (!labelsLoaded()) {
       <p class="empty-state">Loading labels...</p>
     } @else if (filteredLabels.length === 0) {
       <p class="empty-state">No labeled items to export.</p>
@@ -95,7 +95,7 @@
       </button>
 
       <!-- Exporter tabs -->
-      @for (exp of exporters; track exp.name) {
+      @for (exp of exporters(); track exp.name) {
         <button
           class="export-tab"
           [class.active]="activeTab === exp.name"
@@ -237,7 +237,7 @@
   @if (status) {
     <p class="status-text">{{ status }}</p>
   }
-  @if (error) {
-    <p class="error-text">{{ error }}</p>
+  @if (error()) {
+    <p class="error-text">{{ error() }}</p>
   }
 </vt-modal>
