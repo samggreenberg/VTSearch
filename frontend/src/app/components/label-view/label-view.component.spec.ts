@@ -38,6 +38,10 @@ describe('LabelViewComponent', () => {
   // by `afterEach`'s catch-all instead.
   function flushInitialRequests(): void {
     fixture.detectChanges();
+    // The medias and settings reads ride `rxResource`, whose loader runs in a
+    // root effect rather than synchronously during `detectChanges()`; tick so
+    // the GETs are actually issued before we match them.
+    TestBed.tick();
     // /api/medias/ids
     httpMock.match('/api/medias/ids').forEach(req =>
       req.flush([
@@ -283,10 +287,14 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedId()).toBe(1);
   });
 
-  it('should trigger text sort on autopilot start when session has text query', () => {
+  it('should trigger text sort on autopilot start when session has text query', async () => {
     const session = TestBed.inject(LabelSessionService);
     session.textQuery = 'dog barking';
     flushInitialRequests();
+    // The medias list rides an rxResource: its value commits on a microtask and
+    // the media-type/autopilot effect runs on the next tick, so drain before the
+    // deferred initial sort fires.
+    await settle();
 
     // The left panel's ngOnInit already emits autopilotStart when autopilot is
     // enabled; with a text query and medias now loaded, that fires one initial
@@ -313,7 +321,7 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedId()).toBe(1);
   });
 
-  it('should defer autopilot text sort until medias are loaded', () => {
+  it('should defer autopilot text sort until medias are loaded', async () => {
     const session = TestBed.inject(LabelSessionService);
     session.textQuery = 'cat meowing';
 
@@ -322,8 +330,10 @@ describe('LabelViewComponent', () => {
     // No sort request yet (no medias)
     httpMock.expectNone('/api/sort');
 
-    // Now trigger init which loads medias
+    // Now trigger init which loads medias. The medias GET rides an rxResource
+    // loader effect, so tick to issue it before flushing.
     fixture.detectChanges();
+    TestBed.tick();
     httpMock.match('/api/medias/ids').forEach(req =>
       req.flush([{ id: 1, media_type: 'audio' }]),
     );
@@ -345,6 +355,10 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/embedders').forEach(req =>
       req.flush([]),
     );
+
+    // Drain the rxResource value commit + media-type/autopilot effect so the
+    // deferred sort fires.
+    await settle();
 
     // Now the deferred sort should fire
     const req = httpMock.expectOne('/api/sort');
