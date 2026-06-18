@@ -1,9 +1,61 @@
 # `httpResource` / reactive-resource migration for the data layer
 
-Status: **Plan only — not started.** Scoped after the Angular 21 + Vitest work
-landed (see `angular-21-upgrade.md`, which lists this as a deferred carrot).
-This doc decides *how* VTSearch should adopt Angular's resource primitives and
-in what order; it does not change code yet.
+Status: **Phase 1 (pilot) shipped.** The `SettingsStateService` read path now
+runs on `rxResource`; the pattern and its test story are proven (see "What
+shipped" below). Remaining read services are deferred — see "Open follow-ups".
+Scoped after the Angular 21 + Vitest work landed (see `angular-21-upgrade.md`,
+which lists this as a deferred carrot). This doc decides *how* VTSearch should
+adopt Angular's resource primitives and in what order.
+
+## What shipped (Phase 1 pilot)
+
+`SettingsStateService` (`frontend/src/app/services/settings-state.service.ts`)
+was reimplemented on `rxResource` while keeping its public surface
+(`settings`, `settings$`, `load`, `update`, `clear`) intact, so none of its ~16
+consumers changed. The concrete, repeatable pattern:
+
+- **Wrap the existing generated-client read in `rxResource`.** The loader's
+  `stream` calls the existing typed method (`SettingsApiService.getSettings()`),
+  so the generated client and the interceptor chain are untouched.
+- **A monotonic counter signal is the request.** `params: () => count === 0 ?
+  undefined : count` keeps the resource idle until the first `load()`
+  (`undefined` request = no fetch); each `load()` bumps the counter to refetch.
+  This maps an imperative "load/refresh on demand" trigger onto a reactive
+  resource.
+- **Signals are the new canonical API** (`settingsSignal`, `isLoading`,
+  `error`), exposed from the resource. Backwards-compat shims bridge to existing
+  consumers: the sync getter reads the signal; `settings$` is
+  `toObservable(settingsSignal)` (replays latest like the old `BehaviorSubject`,
+  but emits asynchronously).
+- **Mutations stay imperative.** `update()` is still a `HttpClient` PUT; it
+  writes the server's response back into the resource via `resource.set(...)`.
+  `clear()` is `resource.set(undefined)`.
+- **Document side-effects move to an `effect()`** (here, the `animations-off`
+  class) that watches the settings signal, replacing the old manual `emit()`.
+
+### Testing `rxResource` (important — this is the real cost)
+
+The resource's loader is **effect-scheduled and promise-based**, which changes
+test timing. Concretely, for the Vitest + `HttpTestingController` suite:
+
+- The loader runs in a **root effect**, so `fixture.detectChanges()` does *not*
+  issue the GET. Call **`TestBed.tick()`** after the action that triggers
+  `load()` and before `httpMock.expectOne(...)`. (This is the bulk of the
+  consumer-spec churn: ~40 call sites across the settings consumers each needed
+  one `TestBed.tick()`.)
+- The value **commits on a microtask** (the loader is promise-based), so reading
+  `resource.value()` synchronously after `flush()` misses it. In a normal
+  (non-fakeAsync) test, drain with `await new Promise(r => setTimeout(r))` then
+  `TestBed.tick()`.
+- **`rxResource` values do not commit under `fakeAsync` at all** — the virtual
+  clock doesn't drive the resource's resolution (looping `tick()/TestBed.tick()`
+  does not help). A fakeAsync spec can still *flush* the request to satisfy
+  `verify()`, but any spec that asserts a **settings-derived value** must be
+  converted to a real-async (`async`/`await`) test. Only one right-panel test
+  needed this; the rest only flush the request.
+- At **runtime** none of this matters: zone change detection flushes the loader
+  effect immediately after `load()`, so the GET fires as before. The timing
+  change is test-only.
 
 ## Goal
 
@@ -102,13 +154,10 @@ way — verified against the current functional-interceptor setup.)
 
 ## Suggested sequencing (incremental, reversible)
 
-1. **Pilot one read** end-to-end: pick a simple, context-keyed GET with a clear
-   consumer (candidate: media-types list, or settings load) and convert it to
-   `rxResource` wrapping the existing api-service method, keyed off a
-   `toSignal` of the active context. Render via `value()` (signal / `@if`), not
-   `.subscribe()`. Establish the spec pattern. One PR.
-2. **Write the pattern down** (a short `docs/` note + a tiny shared helper if a
-   helper earns its keep) so the next conversions are mechanical.
+1. **Pilot one read** end-to-end — **done** (`SettingsStateService`, see "What
+   shipped"). The pattern and its test story are proven.
+2. **Write the pattern down** — **done** (the "What shipped" + "Testing
+   `rxResource`" sections above are the reference for the next conversions).
 3. **Expand by area**, one PR per service/feature, only where it removes real
    boilerplate. Leave pollers, `forkJoin` aggregates, and mutations alone unless
    a conversion is clearly a win.
@@ -117,6 +166,21 @@ way — verified against the current functional-interceptor setup.)
 
 Each step is independently shippable and revertible; there is no point where the
 app must be half-migrated.
+
+## Open follow-ups
+
+- **Expand to more read services** (step 3). The settings pilot kept the old
+  public API for zero consumer churn; future conversions can go further and
+  expose the resource signals directly to consumers (then drop the
+  `settings$`/getter shims) where it removes real boilerplate. Natural next
+  candidates: context-keyed list reads (media-types, embedders) where a
+  `toSignal(activeContext)` request key earns the reactivity.
+- **Pollers and `forkJoin` aggregates** (`VoteStateService`, labeling status,
+  `DatasetStateService.refresh()`) are still imperative by design; revisit only
+  if a resource clearly wins.
+- **A shared test helper** for the `TestBed.tick()` / real-async drain dance was
+  not extracted yet (the settings specs inline it). Extract one once a second
+  service is converted and the shape is confirmed to repeat.
 
 ## Decision points needing the user
 
