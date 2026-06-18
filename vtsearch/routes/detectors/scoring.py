@@ -63,8 +63,6 @@ def find_label(body: dict):  # noqa: C901
     applies Good/Bad labels for ALL elements based on the threshold.  Returns
     the sort results so the frontend can display the stripe and scroll order.
     """
-    import torch  # noqa: PLC0415
-
     from vtscore.detectors.registry import get_detector as reg_get_detector
     from vtscore.detectors.store import _detector_path, _read_detector
     from vtsearch.state import (
@@ -156,29 +154,23 @@ def find_label(body: dict):  # noqa: C901
         total_steps=_FIND_LABEL_STEPS,
     )
 
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap
+    # Region-aware scoring: for patch datasets (DINOv2/v3, EUPE) this
+    # max-pools over each media's region vectors and surfaces the winning
+    # region's box as ``best_region`` so the gallery thumbnails and focus-view
+    # Highlight overlay can outline it - matching the learned-sort path.  Plain
+    # single-vector datasets take the cached embedding-matrix path inside and
+    # gain no ``best_region`` field.
+    from vtscore.detectors.training import score_media_with_model
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
-    X_all = torch.from_numpy(all_embs).to(next(mlp.parameters()).device)
-
-    batch_size = max(1, min(500, n_total // 10))
-    scores: list[float] = []
-    with torch.no_grad():
-        for start in range(0, n_total, batch_size):
-            end = min(start + batch_size, n_total)
-            batch_logits = mlp(X_all[start:end])
-            scores.extend(sigmoid_to_finite_scores(batch_logits))
-            update_find_progress(
-                "running",
-                f"Scoring {n_total} items…",
-                current=end,
-                total=n_total,
-                step=3,
-                total_steps=_FIND_LABEL_STEPS,
-            )
-
-    results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores, strict=True)]
-    results.sort(key=lambda x: x["score"], reverse=True)
+    results = score_media_with_model(mlp, snap)
+    update_find_progress(
+        "running",
+        f"Scoring {n_total} items…",
+        current=n_total,
+        total=n_total,
+        step=3,
+        total_steps=_FIND_LABEL_STEPS,
+    )
 
     update_find_progress(
         "running",

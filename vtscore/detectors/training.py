@@ -287,6 +287,25 @@ def _format_results(
     return results
 
 
+def score_media_with_model(
+    model: nn.Sequential,
+    clips_dict: dict[int, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Score every media in *clips_dict* with an already-trained *model*.
+
+    Returns sorted (descending by score) result dicts of the same shape the
+    vote-driven training path produces: ``{"id", "score"}`` plus a
+    ``best_region`` box for patch-region-aware media (the argmax region that
+    drove the media's score).  Use this from any route that scores with a
+    pre-trained detector - e.g. the Find / detector-scoring path - so the
+    best-match highlight is populated regardless of which entry point ran the
+    scoring.  Plain single-vector datasets are scored via the cached embedding
+    matrix and gain no ``best_region`` field, exactly as before.
+    """
+    all_ids, scores, best_region = _score_all_media(model, clips_dict)
+    return _format_results(all_ids, scores, best_region, clips_dict)
+
+
 def _train_and_score_xy(
     X_list: list[np.ndarray],
     y_list: list[float],
