@@ -59,6 +59,10 @@ describe('RightPanelComponent', () => {
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: { audio: 'list', image: 'grid' } });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+    // rxResource commits its value on a microtask; drain it then flush effects
+    // so the settings$ bridge emits and viewModeRightDict is populated.
+    tick();
+    TestBed.tick();
     // Trigger ngOnChanges by setting medias via input
     component.ngOnChanges({ medias: { currentValue: component.medias, previousValue: [], firstChange: true, isFirstChange: () => true } });
     expect(component.viewMode).toBe('list');
