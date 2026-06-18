@@ -156,6 +156,7 @@ describe('DatasetImporterModalComponent', () => {
     httpMock.expectOne(req => req.url === '/api/embedders' && !req.params.get('media_type'))
       .flush({ embedders: [] });
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({});
   }
 

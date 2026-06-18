@@ -27,6 +27,7 @@ describe('NewDetectorModalComponent', () => {
       ],
     });
     // settingsState.load() in ngOnInit fetches settings.
+    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({});
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
   });
@@ -205,6 +206,7 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
       ],
     });
     // settingsState.load() in ngOnInit fetches settings.
+    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({});
     // No /api/datasets/registry call when defaultMediaType is provided.
   });

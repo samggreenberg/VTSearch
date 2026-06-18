@@ -72,16 +72,15 @@ describe('SettingsStateService', () => {
     expect(service.settings).toBeNull();
   });
 
-  it('settings$ should emit on load', () => new Promise<void>((done) => {
+  it('settings$ should replay the loaded settings to subscribers', () => {
     const emissions: unknown[] = [];
-    service.settings$.subscribe((s) => emissions.push(s));
+    const sub = service.settings$.subscribe((s) => emissions.push(s));
 
     load();
+    TestBed.tick(); // let the toObservable bridge emit the new value
 
-    setTimeout(() => {
-      expect(emissions.length).toBeGreaterThanOrEqual(2);
-      expect(emissions[emissions.length - 1]).toEqual(mockSettings);
-      done();
-    });
-  }));
+    sub.unsubscribe();
+    expect(emissions.length).toBeGreaterThanOrEqual(1);
+    expect(emissions[emissions.length - 1]).toEqual(mockSettings);
+  });
 });

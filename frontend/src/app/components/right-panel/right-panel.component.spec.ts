@@ -32,6 +32,7 @@ describe('RightPanelComponent', () => {
     fixture.detectChanges();
     tick(); // Allow timer(0, ...) to fire
     // Settings request
+    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({
       volume: 1,
       view_mode_right: { audio: 'grid', image: 'grid' },
@@ -55,6 +56,7 @@ describe('RightPanelComponent', () => {
     component.medias = [{ id: 1, media_type: 'audio', filename: 'a.wav', md5: 'x', custom_metadata: {} }];
     fixture.detectChanges();
     tick();
+    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: { audio: 'list', image: 'grid' } });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
     // Trigger ngOnChanges by setting medias via input
@@ -66,6 +68,7 @@ describe('RightPanelComponent', () => {
   it('should default viewMode to grid when not in settings', fakeAsync(() => {
     fixture.detectChanges();
     tick();
+    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
     expect(component.viewMode).toBe('grid');
@@ -75,6 +78,7 @@ describe('RightPanelComponent', () => {
   it('should poll for votes on init', fakeAsync(() => {
     fixture.detectChanges();
     tick();
+    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
     httpMock.expectOne('/api/votes').flush({
       good: [1, 2],
