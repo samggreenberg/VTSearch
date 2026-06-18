@@ -289,6 +289,31 @@ class TestEventsRoute:
         finally:
             gen.close()
 
+    def test_heartbeat_is_a_real_named_event(self):
+        """An idle stream emits a named ``heartbeat`` event (not an SSE
+        comment) so the browser's EventSource fires a listener and the client
+        can use it as a liveness signal."""
+        gen = stream_progress_events(heartbeat_seconds=0.01)
+        try:
+            # Drain the connect comment + initial snapshot, then keep pulling
+            # until the idle branch fires a heartbeat (no updates published, so
+            # the queue.get() times out almost immediately).
+            heartbeat = None
+            deadline = time.monotonic() + 2.0
+            while heartbeat is None and time.monotonic() < deadline:
+                chunk = next(gen)
+                if chunk.startswith("event: heartbeat\n"):
+                    heartbeat = chunk
+            assert heartbeat is not None, "no heartbeat frame arrived"
+            # It is a real event with a JSON data line, never a `: heartbeat`
+            # comment.
+            assert not heartbeat.startswith(": ")
+            data_line = [ln for ln in heartbeat.splitlines() if ln.startswith("data: ")][0]
+            payload = json.loads(data_line.removeprefix("data: "))
+            assert "ts" in payload
+        finally:
+            gen.close()
+
     def test_initial_dataset_snapshot_reflects_current_state(self):
         dataset_progress.update("loading", "snap", 7, 8)
         try:
