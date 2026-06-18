@@ -64,7 +64,6 @@ interface OrderedItem {
   media: Media;
   score: number | null;
   showThreshold: boolean;
-  bestRegion: number[] | null;
 }
 
 /** One virtualized grid row: a run of cards, or the full-width threshold marker. */
@@ -228,13 +227,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
           media,
           score: this.showScores ? sorted.score : null,
           showThreshold,
-          bestRegion: sorted.bestRegion ?? null,
         });
       }
     } else {
       for (const stub of this.medias) {
         const media = this.metadataCache.get(stub.id) ?? stub;
-        items.push({ media, score: null, showThreshold: false, bestRegion: null });
+        items.push({ media, score: null, showThreshold: false });
       }
     }
 

@@ -5285,6 +5285,12 @@
       "_FindLabelResult": {
         "additionalProperties": false,
         "properties": {
+          "best_region": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
           "id": {
             "type": "integer"
           },
