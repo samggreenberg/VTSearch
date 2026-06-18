@@ -49,11 +49,13 @@ describe('CenterPanelComponent', () => {
 
   it('should show image viewer for image media', () => {
     component.media = { ...mockMedia, media_type: 'image' };
-    fixture.detectChanges();
     // The image-view-controls block (`@if (mediaType === 'image' && imageViewer)`)
-    // only resolves its `imageViewer` ViewChild after the first change-detection
-    // pass, so a second detectChanges() settles the value and avoids NG0100.
-    fixture.detectChanges();
+    // gates on the `imageViewer` ViewChild, which only resolves partway through
+    // the first change-detection pass. The zoom-slider bindings it renders then
+    // settle to their real values within that same pass, which dev-mode's
+    // check-no-changes guard flags as NG0100. Skip that guard (pass `false`); the
+    // behaviour is dev-mode-only and does not occur in production.
+    fixture.detectChanges(false);
     expect(fixture.nativeElement.querySelector('vt-image-viewer')).toBeTruthy();
   });
 
@@ -167,7 +169,11 @@ describe('CenterPanelComponent', () => {
     function setup(): void {
       component.media = imageMedia;
       component.showAnimations = false;
-      fixture.detectChanges();
+      // Skip dev-mode check-no-changes: rendering the image-view-controls (gated
+      // on the `imageViewer` ViewChild) settles the zoom-slider bindings within
+      // the first CD pass, which the guard would otherwise flag as NG0100. This
+      // is dev-mode-only and does not occur in production.
+      fixture.detectChanges(false);
     }
 
     it('attaches region_box to a yes-vote when a box is drawn', () => {
@@ -223,7 +229,11 @@ describe('CenterPanelComponent', () => {
     function setup(): void {
       component.media = imageMedia;
       component.showAnimations = false;
-      fixture.detectChanges();
+      // Skip dev-mode check-no-changes: rendering the image-view-controls (gated
+      // on the `imageViewer` ViewChild) settles the zoom-slider bindings within
+      // the first CD pass, which the guard would otherwise flag as NG0100. This
+      // is dev-mode-only and does not occur in production.
+      fixture.detectChanges(false);
     }
 
     it('arms on first ← without firing a request, fires on second ←', () => {

@@ -131,7 +131,9 @@ describe('DashboardComponent', () => {
       ],
     });
 
-    expect(component.selectedDetectorIds.has('m1')).toBe(true);
+    // Adding items after the initial load clears the prior selection and
+    // selects only the new ones (same behavior as datasets above).
+    expect(component.selectedDetectorIds.has('m1')).toBe(false);
     expect(component.selectedDetectorIds.has('m2')).toBe(true);
   });
 
@@ -168,11 +170,15 @@ describe('DashboardComponent', () => {
     ];
     flushInitialRequests(datasets);
 
-    component.datasetCols.sortBy('name');
+    // 'name' is the initial sort column (ascending), so the list starts
+    // sorted ascending; clicking it toggles to descending, then back.
     expect(component.sortedDatasets[0].name).toBe('Alpha');
 
     component.datasetCols.sortBy('name');
     expect(component.sortedDatasets[0].name).toBe('Bravo');
+
+    component.datasetCols.sortBy('name');
+    expect(component.sortedDatasets[0].name).toBe('Alpha');
   });
 
   it('should sort models by column', () => {
@@ -182,15 +188,19 @@ describe('DashboardComponent', () => {
     ];
     flushInitialRequests([], models);
 
-    component.detectorCols.sortBy('name');
+    // 'name' is the initial sort column (ascending) \u2192 Alpha first.
     expect(component.sortedDetectors[0].name).toBe('Alpha');
+    // Toggling it flips to descending \u2192 Zeta first.
+    component.detectorCols.sortBy('name');
+    expect(component.sortedDetectors[0].name).toBe('Zeta');
   });
 
   it('should show sort indicators', () => {
     flushInitialRequests();
-    component.datasetCols.sortBy('name');
+    // 'name' starts as the active ascending sort, so it already shows \u25B2.
     expect(component.datasetCols.sortIndicator('name')).toContain('\u25B2');
     expect(component.datasetCols.isSortActive('name')).toBe(true);
+    // Clicking the active column toggles to descending \u2192 \u25BC.
     component.datasetCols.sortBy('name');
     expect(component.datasetCols.sortIndicator('name')).toContain('\u25BC');
     expect(component.datasetCols.isSortActive('other')).toBe(false);
