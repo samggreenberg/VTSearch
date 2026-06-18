@@ -16,6 +16,17 @@ describe('SettingsStateService', () => {
     inclusion: 0.5,
   };
 
+  // `load()` drives an `rxResource`, whose loader runs in an effect rather than
+  // synchronously. `TestBed.tick()` flushes pending effects so the resource
+  // issues its request / propagates its value; we tick after `load()` to make
+  // the HTTP request observable, and again after `flush()` to settle the value.
+  function load() {
+    service.load();
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush(mockSettings);
+    TestBed.tick();
+  }
+
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
@@ -30,43 +41,42 @@ describe('SettingsStateService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should start with null settings', () => {
+  it('should start with null settings and not fetch until load()', () => {
+    TestBed.tick();
     expect(service.settings).toBeNull();
+    httpMock.expectNone('/api/settings');
   });
 
   it('load should fetch and store settings', () => {
-    service.load();
-    const req = httpMock.expectOne('/api/settings');
-    req.flush(mockSettings);
+    load();
     expect(service.settings).toEqual(mockSettings);
   });
 
   it('update should PUT and update cached settings', () => {
-    service.load();
-    httpMock.expectOne('/api/settings').flush(mockSettings);
+    load();
 
     const updated = { ...mockSettings, volume: 0.5 };
     service.update({ volume: 0.5 }).subscribe();
     const req = httpMock.expectOne('/api/settings');
     expect(req.request.method).toBe('PUT');
     req.flush(updated);
+    TestBed.tick();
     expect(service.settings?.volume).toBe(0.5);
   });
 
   it('clear should reset settings to null', () => {
-    service.load();
-    httpMock.expectOne('/api/settings').flush(mockSettings);
+    load();
 
     service.clear();
+    TestBed.tick();
     expect(service.settings).toBeNull();
   });
 
   it('settings$ should emit on load', () => new Promise<void>((done) => {
-    const emissions: any[] = [];
+    const emissions: (typeof mockSettings | null)[] = [];
     service.settings$.subscribe((s) => emissions.push(s));
 
-    service.load();
-    httpMock.expectOne('/api/settings').flush(mockSettings);
+    load();
 
     setTimeout(() => {
       expect(emissions.length).toBeGreaterThanOrEqual(2);
