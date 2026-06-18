@@ -1,10 +1,10 @@
 <div class="layout" #layout>
   <div class="panel-left">
     <vt-left-panel
-      [medias]="mediaState.medias"
+      [medias]="mediaState.mediasSignal()"
       [sortOrder]="sortState.sortOrder"
       [threshold]="sortState.threshold"
-      [selectedId]="mediaState.selectedId"
+      [selectedId]="mediaState.selectedId()"
       [goodVotes]="voteState.goodVotes"
       [badVotes]="voteState.badVotes"
       [learnedSortAvailable]="voteState.learnedSortAvailable"
@@ -76,7 +76,7 @@
   ></div>
   <div class="panel-right">
     <vt-right-panel
-      [medias]="mediaState.medias"
+      [medias]="mediaState.mediasSignal()"
       [focusMode]="focusModeRight"
       [trainableModelName]="trainableModelName"
       (mediaSelected)="onMediaSelect($event)"

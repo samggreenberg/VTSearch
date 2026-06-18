@@ -1,4 +1,4 @@
-import { Component, HostListener } from '@angular/core';
+import { Component, HostListener, effect } from '@angular/core';
 import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { combineLatest } from 'rxjs';
@@ -105,8 +105,9 @@ export class AppComponent {
   ) {
     this.auth.checkStatus();
     this.settingsState.load();
-    this.settingsState.settings$.subscribe((s) => {
-      this.achievementsDisabled = s?.enable_achievements === false;
+    effect(() => {
+      this.achievementsDisabled =
+        this.settingsState.settingsSignal()?.enable_achievements === false;
     });
     this.achievements.refresh();
     this.achievements.openPanelRequest$.subscribe(() => {
@@ -337,7 +338,7 @@ export class AppComponent {
   private inferMediaType(): string {
     // From labeling view: use the media type of loaded medias
     if (this.isOnLabelView) {
-      const medias = this.mediaState.medias;
+      const medias = this.mediaState.mediasSignal();
       if (medias.length > 0) {
         return medias[0].media_type;
       }

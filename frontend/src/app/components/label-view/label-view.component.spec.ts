@@ -71,6 +71,14 @@ describe('LabelViewComponent', () => {
     );
   }
 
+  // The media stub list rides an `rxResource`, whose value commits on a
+  // microtask after the `/api/medias/ids` flush. Tests that read the resolved
+  // medias (`mediasSignal()` / `selectedMedia`) drain it with `settle()`.
+  async function settle(): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    TestBed.tick();
+  }
+
   afterEach(() => {
     component.ngOnDestroy();
     // Drain any outstanding polling requests from right-panel or label-view
@@ -90,9 +98,10 @@ describe('LabelViewComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should load medias on init', () => {
+  it('should load medias on init', async () => {
     flushInitialRequests();
-    expect(component.mediaState.medias.length).toBe(2);
+    await settle();
+    expect(component.mediaState.mediasSignal().length).toBe(2);
   });
 
   it('should load votes on init', () => {
@@ -157,7 +166,7 @@ describe('LabelViewComponent', () => {
   it('should handle media selection', () => {
     flushInitialRequests();
     component.onMediaSelect(2);
-    expect(component.mediaState.selectedId).toBe(2);
+    expect(component.mediaState.selectedId()).toBe(2);
   });
 
   it('should handle sort mode change', () => {
@@ -180,7 +189,7 @@ describe('LabelViewComponent', () => {
     // With a sort order present the diversity fetch POSTs the scores.
     const req = httpMock.expectOne('/api/diversity-tree/next');
     req.flush({ id: 1, diversity_level: 2.0, exhausted: false });
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should reselect media when switching select mode to top', () => {
@@ -200,7 +209,7 @@ describe('LabelViewComponent', () => {
     component.onSelectModeChange('top');
     expect(component.sortState.selectMode).toBe('top');
     // Should auto-select id 1 (first unlabeled in sort order)
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should reselect media when switching select mode to hard', () => {
@@ -216,7 +225,7 @@ describe('LabelViewComponent', () => {
     component.onSelectModeChange('hard');
     expect(component.sortState.selectMode).toBe('hard');
     // id 1 (score 0.4) is closer to threshold 0.5 than id 2 (score 0.9)
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should handle inclusion change', fakeAsync(() => {
@@ -243,8 +252,9 @@ describe('LabelViewComponent', () => {
     expect(el.querySelector('vt-right-panel')).toBeTruthy();
   });
 
-  it('should resolve selectedMedia from selectedId', () => {
+  it('should resolve selectedMedia from selectedId', async () => {
     flushInitialRequests();
+    await settle();
     component.onMediaSelect(2);
     expect(component.mediaState.selectedMedia).toBeTruthy();
     expect(component.mediaState.selectedMedia!.id).toBe(2);
@@ -270,7 +280,7 @@ describe('LabelViewComponent', () => {
     });
 
     // Should auto-select id 1 (first unlabeled)
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should trigger text sort on autopilot start when session has text query', () => {
@@ -300,7 +310,7 @@ describe('LabelViewComponent', () => {
     });
 
     expect(component.sortState.sortOrder).toBeTruthy();
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should defer autopilot text sort until medias are loaded', () => {
@@ -344,7 +354,7 @@ describe('LabelViewComponent', () => {
       threshold: 0.5,
     });
 
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should not trigger text sort on autopilot start when no text query', () => {
@@ -484,7 +494,7 @@ describe('LabelViewComponent', () => {
     httpMock.expectOne('/api/votes').flush({ good: [4], bad: [], click_times: {}, learned_scores: {} });
 
     component.onSelectModeChange('hard');
-    expect(component.mediaState.selectedId).toBe(5);
+    expect(component.mediaState.selectedId()).toBe(5);
   });
 
   it('should advance past just-voted item even when vote state is stale', () => {
@@ -506,7 +516,7 @@ describe('LabelViewComponent', () => {
 
     // Even with stale votes (id 1 not yet in badVotes), the selection should
     // have advanced to id 2 because onMediaVoted excludes the just-voted id.
-    expect(component.mediaState.selectedId).toBe(2);
+    expect(component.mediaState.selectedId()).toBe(2);
   });
 
   it('should deactivate autopilot state when switching to manual mode', () => {
@@ -584,11 +594,11 @@ describe('LabelViewComponent', () => {
 
     // Manually select a different media (simulating user clicking right panel)
     component.onMediaSelect(1);
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
 
     // Refocus should re-select the autopilot suggestion (top unlabeled = id 2)
     component.onAutopilotRefocus();
-    expect(component.mediaState.selectedId).toBe(2);
+    expect(component.mediaState.selectedId()).toBe(2);
   });
 
   it('should clear stale autopilot state from previous session on init', () => {

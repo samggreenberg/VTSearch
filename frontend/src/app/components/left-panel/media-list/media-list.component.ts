@@ -12,6 +12,7 @@ import {
   OnDestroy,
   OnInit,
   SimpleChanges,
+  effect,
 } from '@angular/core';
 
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
@@ -115,8 +116,8 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   /** True once ``gridRowHeight`` has been measured from a real rendered card. */
   private gridHeightMeasured = false;
 
-  /** Mirror of ``MediaStateService.loading``; drives the skeleton rows when the
-   *  list is empty during the initial /api/medias/ids fetch. */
+  /** Mirror of ``MediaStateService.isLoading()``; drives the skeleton rows when
+   *  the list is empty during the initial /api/medias/ids fetch. */
   loadingMedias = false;
   readonly skeletonPlaceholders = Array.from({ length: 12 });
 
@@ -125,7 +126,11 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     private mediaState: MediaStateService,
     private cdr: ChangeDetectorRef,
     private zone: NgZone,
-  ) {}
+  ) {
+    effect(() => {
+      this.loadingMedias = this.mediaState.isLoading();
+    });
+  }
 
   ngOnInit(): void {
     // When the cache hydrates new items, re-enrich the displayed rows so
@@ -133,9 +138,6 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     this.metadataCache.version$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.rebuildOrderedItems());
-    this.mediaState.loading$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((loading) => (this.loadingMedias = loading));
   }
 
   get showSkeletons(): boolean {

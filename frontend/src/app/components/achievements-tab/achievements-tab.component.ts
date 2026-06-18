@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, effect } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -56,16 +56,18 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
   constructor(
     private achievements: AchievementsService,
     private settingsState: SettingsStateService,
-  ) {}
+  ) {
+    effect(() => {
+      const s = this.settingsState.settingsSignal();
+      this.disableAchievements = s?.enable_achievements === false;
+      if (this.lastState) this.applyState(this.lastState);
+    });
+  }
 
   ngOnInit(): void {
     this.achievements.state.pipe(takeUntil(this.destroy$)).subscribe((state) => {
       this.lastState = state;
       this.applyState(state);
-    });
-    this.settingsState.settings$.pipe(takeUntil(this.destroy$)).subscribe((s) => {
-      this.disableAchievements = s?.enable_achievements === false;
-      if (this.lastState) this.applyState(this.lastState);
     });
     this.achievements.refresh();
   }

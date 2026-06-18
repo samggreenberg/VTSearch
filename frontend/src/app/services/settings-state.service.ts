@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { rxResource, toObservable } from '@angular/core/rxjs-interop';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import type { AppSettings } from '../generated/api-client/models/app-settings';
@@ -8,14 +8,14 @@ import { SettingsApiService } from './settings-api.service';
 import { ANIMATIONS_OFF_CLASS } from '../utils/reduced-motion';
 
 /**
- * App-settings store, and the first read path migrated onto Angular's reactive
- * resource primitives (see `docs/plans/httpresource-migration.md`). The GET is
- * driven by an `rxResource` wrapping the existing generated-client method
+ * App-settings store, migrated onto Angular's reactive resource primitives
+ * (see `docs/plans/httpresource-migration.md`). The GET is driven by an
+ * `rxResource` wrapping the existing generated-client method
  * (`SettingsApiService.getSettings()`), so it keeps the typed client and the
  * interceptor chain while dropping the hand-rolled subscribe/`BehaviorSubject`
- * bookkeeping. The public surface (`settings`, `settings$`, `load`, `update`,
- * `clear`) is unchanged for existing consumers; new code should prefer the
- * signal API (`settingsSignal`, `isLoading`, `error`).
+ * bookkeeping. The public surface is signal-based: read `settingsSignal()`
+ * (and `isLoading()` / `error()`); call `load()`/`update()`/`clear()` to drive
+ * it. Consumers react with `effect()` rather than subscribing to an Observable.
  */
 @Injectable({ providedIn: 'root' })
 export class SettingsStateService {
@@ -41,13 +41,6 @@ export class SettingsStateService {
   /** The error from the last failed fetch, if any. */
   readonly error = this.resource.error;
 
-  /**
-   * Backwards-compatible Observable view for existing subscribers. Backed by
-   * the settings signal, so it replays the latest value to late subscribers
-   * (like the old `BehaviorSubject`) but emits asynchronously.
-   */
-  readonly settings$: Observable<AppSettings | null> = toObservable(this.settingsSignal);
-
   constructor() {
     // Reflect document-level effects of settings whenever the resolved value
     // changes (load, update, or clear). Currently this mirrors the "Show
@@ -61,10 +54,6 @@ export class SettingsStateService {
         document.documentElement.classList.toggle(ANIMATIONS_OFF_CLASS, animationsOff);
       }
     });
-  }
-
-  get settings(): AppSettings | null {
-    return this.settingsSignal();
   }
 
   /** Fetch (or refetch) settings from the server. No-op while a fetch is in flight. */

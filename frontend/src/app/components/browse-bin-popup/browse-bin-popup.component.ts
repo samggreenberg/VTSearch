@@ -11,6 +11,7 @@ import {
   Output,
   SimpleChanges,
   ViewChild,
+  effect,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
@@ -183,7 +184,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     private activeContext: ActiveContextService,
     private settingsState: SettingsStateService,
     private cdr: ChangeDetectorRef,
-  ) {}
+  ) {
+    // Re-read the popup's thumbnail size whenever settings change (this is how
+    // the in-header size buttons take effect, and how a change on one popup
+    // becomes the default for every future popup of this media type).
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
+      this.applyViewPrefs();
+    });
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['memberIds']) {
@@ -228,14 +239,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       this.metadataCache.version$.subscribe(() => this.cdr.markForCheck()),
       // A selection change anywhere (here, the canvas, the panel) re-highlights.
       this.selection.changed$.subscribe(() => this.cdr.markForCheck()),
-      // Re-read the popup's thumbnail size whenever settings change (this is how
-      // the in-header size buttons take effect, and how a change on one popup
-      // becomes the default for every future popup of this media type).
-      this.settingsState.settings$.subscribe((settings) => {
-        if (!settings) return;
-        this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
-        this.applyViewPrefs();
-      }),
     );
     this.settingsState.load();
     this.scrollSub =

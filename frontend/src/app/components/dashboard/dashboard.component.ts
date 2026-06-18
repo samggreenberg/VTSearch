@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, OnDestroy } from '@angular/core';
+import { Component, HostListener, OnInit, OnDestroy, effect } from '@angular/core';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -184,6 +184,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ) {
     this.datasetCols = columnsService.datasetCols;
     this.detectorCols = columnsService.detectorCols;
+    // Mirror the server's age-off setting so the Age-Off column appears
+    // only when the server actually stamps datasets with an expiry.
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      this.serverSetsAgeOff = settings?.dataset_max_age_days != null;
+    });
   }
 
   ngOnInit(): void {
@@ -192,15 +198,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .subscribe((status) => {
         this.currentUser = status?.user || '';
         this.isDefaultLogin = status?.provider === 'default';
-      });
-    // Mirror the server's age-off setting so the Age-Off column appears
-    // only when the server actually stamps datasets with an expiry. The
-    // settings are loaded once at app startup (AppComponent); subscribing
-    // to the BehaviorSubject replays the latest value immediately.
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((settings) => {
-        this.serverSetsAgeOff = settings?.dataset_max_age_days != null;
       });
     // Auto-select newly added items whenever the dataset/model lists change
     this.datasetState.datasets$

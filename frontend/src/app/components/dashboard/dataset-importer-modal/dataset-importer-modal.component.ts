@@ -241,7 +241,7 @@ export class DatasetImporterModalComponent implements OnInit {
   private importDefaultsForFolderOrTypeId(folderOrTypeId: string): ImportDefaultsForMediaType | null {
     if (!folderOrTypeId) return null;
     const typeId = this.toTypeId(folderOrTypeId) || folderOrTypeId;
-    const map = ((this.settingsState.settings as Record<string, unknown> | undefined)?.[
+    const map = ((this.settingsState.settingsSignal() as Record<string, unknown> | undefined)?.[
       'import_defaults_by_media_type'
     ] || {}) as Record<string, ImportDefaultsForMediaType>;
     return map[typeId] || null;
@@ -404,7 +404,7 @@ export class DatasetImporterModalComponent implements OnInit {
    *  map and push it through ``SettingsStateService`` so the next
    *  importer open picks it up. */
   private persistImportDefaults(typeId: string, cfg: ImportDefaultsForMediaType): void {
-    const current = (this.settingsState.settings as Record<string, unknown> | undefined)?.[
+    const current = (this.settingsState.settingsSignal() as Record<string, unknown> | undefined)?.[
       'import_defaults_by_media_type'
     ] as Record<string, ImportDefaultsForMediaType> | undefined;
     const next: Record<string, ImportDefaultsForMediaType> = { ...(current || {}) };
@@ -454,7 +454,7 @@ export class DatasetImporterModalComponent implements OnInit {
    *  When non-null, the importer hides every mediaType picker and forces
    *  each flow's media_type field to this value. */
   get effectiveSoloMediaType(): string | null {
-    const v = this.settingsState.settings?.effective_solo_media_type;
+    const v = this.settingsState.settingsSignal()?.effective_solo_media_type;
     return v ? v : null;
   }
 
@@ -518,7 +518,7 @@ export class DatasetImporterModalComponent implements OnInit {
       : null;
     if (guessedMatch) return guessedMatch.name;
     const typeId = this.toTypeId(mediaTypeFolderOrTypeId) || mediaTypeFolderOrTypeId;
-    const savedMap = this.settingsState.settings?.last_embedder_per_media_type || {};
+    const savedMap = this.settingsState.settingsSignal()?.last_embedder_per_media_type || {};
     const saved = savedMap[typeId];
     if (saved) {
       const savedMatch = embedders.find((e) => e.name === saved);
@@ -537,7 +537,7 @@ export class DatasetImporterModalComponent implements OnInit {
     if (!mediaTypeFolderOrTypeId) return '';
     const typeId = this.toTypeId(mediaTypeFolderOrTypeId) || mediaTypeFolderOrTypeId;
     const effectiveMap =
-      this.settingsState.settings?.effective_solo_embedder_per_media_type || {};
+      this.settingsState.settingsSignal()?.effective_solo_embedder_per_media_type || {};
     const locked = effectiveMap[typeId];
     if (!locked) return '';
     const list = embedders ?? this.allEmbedders.filter((e) => e.media_type_id === typeId);
