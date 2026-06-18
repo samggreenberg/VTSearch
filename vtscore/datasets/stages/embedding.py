@@ -30,6 +30,23 @@ def _first_media_type(items: Iterable[tuple[int, dict[str, Any]]]) -> str:
     return ""
 
 
+def _first_stored_embedder(medias: dict[int, dict[str, Any]]) -> str:
+    """Return the first non-empty ``embedder`` recorded on a media, or ``""``.
+
+    Already-embedded media (a pickle reload or content-vector importer) carry
+    the name of the embedder that produced their vectors.  When no explicit
+    embedder was requested for this load, we resolve against that stored name
+    rather than the media-type default so a patch-embedded dataset re-binds to
+    its patch embedder - the single-vector default would otherwise report
+    ``supports_patch_regions=False`` and silently skip the region back-fill.
+    """
+    for m in medias.values():
+        name = m.get("embedder")
+        if name:
+            return name
+    return ""
+
+
 def embed_missing(  # noqa: C901
     medias: dict[int, dict[str, Any]],
     embedder_name: str = "",
@@ -69,6 +86,20 @@ def embed_missing(  # noqa: C901
             emb = get_embedder(embedder_name)
         except KeyError:
             emb = None
+    if emb is None and not embedder_name:
+        # No explicit embedder for this load: honour the one the media were
+        # already embedded with (set on a pickle reload / content-vector
+        # importer) before falling back to the media-type default.  Without
+        # this a patch-embedded dataset reloaded with no embedder pick would
+        # resolve to the single-vector default and skip the patch-region
+        # back-fill below, so the best-match highlight and region voting have
+        # no region data to work with.
+        stored = _first_stored_embedder(medias)
+        if stored:
+            try:
+                emb = get_embedder(stored)
+            except KeyError:
+                emb = None
     if emb is None:
         avail = embedders_for_type(media_type)
         emb = avail[0] if avail else None
