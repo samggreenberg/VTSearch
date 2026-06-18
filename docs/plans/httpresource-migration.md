@@ -1,11 +1,57 @@
 # `httpResource` / reactive-resource migration for the data layer
 
-Status: **Phase 1 (pilot) shipped.** The `SettingsStateService` read path now
-runs on `rxResource`; the pattern and its test story are proven (see "What
-shipped" below). Remaining read services are deferred — see "Open follow-ups".
-Scoped after the Angular 21 + Vitest work landed (see `angular-21-upgrade.md`,
-which lists this as a deferred carrot). This doc decides *how* VTSearch should
-adopt Angular's resource primitives and in what order.
+Status: **Phase 1 (pilot) + Phase 2 (first expansion) shipped.** The
+`SettingsStateService` and `MediaStateService` read paths both run on
+`rxResource`. Phase 2 also **dropped the pilot's compatibility shims**: the
+services now expose their signals directly and all consumers were migrated, so
+there are no Observable bridges or sync getters left to bridge old callers (per
+the repo's "no shims, just make the clean change" rule). Remaining read
+services (pollers, `forkJoin` aggregates) are still deferred — see "Open
+follow-ups". Scoped after the Angular 21 + Vitest work landed (see
+`angular-21-upgrade.md`, which lists this as a deferred carrot). This doc
+decides *how* VTSearch should adopt Angular's resource primitives and in what
+order.
+
+## What shipped (Phase 2 — MediaStateService + shim removal)
+
+The user's call here was that preserving the old per-service public surface is
+not worth it: VTSearch's frontend is the only caller of its own services (and
+its backend), and a migration upgrades caller and callee together, so the
+shims the pilot left behind were pure dead weight. So Phase 2 went the full
+distance instead of bridging.
+
+- **`MediaStateService` read path migrated to `rxResource`.** The dataset-wide
+  media-stub list (`GET /api/medias/ids`) is now an `rxResource` wrapping the
+  generated `MediasApiService.getMediaIds()`, using the same monotonic-counter
+  request trigger as the settings pilot (`loadMedias()` bumps the counter;
+  `clear()` is `resource.set([])`). It exposes `mediasSignal()` /
+  `isLoading()`; `selectedId` is now a plain `signal`; `selectedMedia` /
+  `getMedia()` stay synchronous accessors over the signal + metadata cache. The
+  `medias$` / `loading$` / `selectedId$` Observables, the `BehaviorSubject`s,
+  and `OnDestroy`/`destroy$` are gone.
+- **`SettingsStateService` shims removed.** `settings$` (the `toObservable`
+  bridge) and the sync `settings` getter are deleted; the canonical surface is
+  `settingsSignal()` / `isLoading()` / `error()`.
+- **Consumer migration pattern (the repeatable part).** Every
+  `settings$.subscribe(s => …)` / `medias$.subscribe(m => …)` became a
+  **constructor `effect()`** that reads the signal (`settingsState
+  .settingsSignal()` / `mediaState.mediasSignal()`). Effects auto-dispose with
+  their component, so the matching `takeUntil(destroy$)` plumbing was dropped
+  (and `destroy$`/`OnDestroy` removed where it was the last user). Synchronous
+  getter reads (`settingsState.settings?.x`, `mediaState.medias`) became signal
+  calls (`settingsSignal()?.x`, `mediasSignal()`), including in templates
+  (`[medias]="mediaState.mediasSignal()"`, `[selectedId]="mediaState
+  .selectedId()"`). ~18 consumer files across both services.
+- **Test timing (reinforces the pilot's notes).** Because the `rxResource`
+  loader runs in a **root effect**, `fixture.detectChanges()` alone does *not*
+  issue the GET — component specs that previously relied on the old synchronous
+  `loadMedias()` subscribe needed a `TestBed.tick()` after `detectChanges()` to
+  actually fire `/api/medias/ids` (e.g. `label-view`'s `flushInitialRequests`).
+  The value still commits on a microtask, so any assertion on resolved medias
+  drains with the `settle()` helper (`await macrotask` + `TestBed.tick()`).
+  Effect-driven side effects (the medias→media-type sync, the deferred
+  autopilot text/media sort) are now microtask-scheduled rather than
+  synchronous, so the specs exercising them `await settle()` before asserting.
 
 ## What shipped (Phase 1 pilot)
 
@@ -169,18 +215,24 @@ app must be half-migrated.
 
 ## Open follow-ups
 
-- **Expand to more read services** (step 3). The settings pilot kept the old
-  public API for zero consumer churn; future conversions can go further and
-  expose the resource signals directly to consumers (then drop the
-  `settings$`/getter shims) where it removes real boilerplate. Natural next
-  candidates: context-keyed list reads (media-types, embedders) where a
-  `toSignal(activeContext)` request key earns the reactivity.
+- **Expand to more read services** (step 3). Done for `SettingsStateService`
+  (Phase 1, shims removed in Phase 2) and `MediaStateService` (Phase 2).
+  Remaining single-read candidates worth a look: context-keyed list reads
+  (media-types, embedders) where a `toSignal(activeContext)` request key would
+  earn the reactivity — these currently live inside the active-context /
+  datasets-listings services rather than a dedicated read service, so there's
+  plumbing to untangle first.
+- **`DetectorStateService` looks dead.** As of Phase 2 it has **no consumers**
+  outside its own file + spec (its `extractors$`/`localizers$` are unread).
+  Confirm and delete it (or wire it up) rather than converting it; converting a
+  service nobody reads demonstrates nothing.
 - **Pollers and `forkJoin` aggregates** (`VoteStateService`, labeling status,
   `DatasetStateService.refresh()`) are still imperative by design; revisit only
   if a resource clearly wins.
-- **A shared test helper** for the `TestBed.tick()` / real-async drain dance was
-  not extracted yet (the settings specs inline it). Extract one once a second
-  service is converted and the shape is confirmed to repeat.
+- **A shared test helper** for the `TestBed.tick()` / `settle()` drain dance is
+  still not extracted — the settings, media, and label-view specs each inline
+  their own `settle()`. The shape has now repeated across three specs, so this
+  is ripe to extract (a `settleResource(fixture)` test util).
 
 ## Decision points needing the user
 
