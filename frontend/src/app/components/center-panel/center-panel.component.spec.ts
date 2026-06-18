@@ -103,12 +103,12 @@ describe('CenterPanelComponent', () => {
 
     component.castVote('good');
 
+    // The vote POST sends the absolute target state, not a "vote" click; the
+    // server's response reconciles the optimistic local view directly (no
+    // follow-up GET /api/votes).
     const voteReq = httpMock.expectOne('/api/medias/1/vote');
-    expect(voteReq.request.body).toEqual({ vote: 'good' });
-    voteReq.flush({ ok: true });
-
-    const votesReq = httpMock.expectOne('/api/votes');
-    votesReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
+    expect(voteReq.request.body).toEqual({ target: 'good' });
+    voteReq.flush({ state: 'good', click_time: 1 });
 
     expect(emitted).toEqual({ id: 1, vote: 'good' });
     expect(component.voteState.goodVotes.has(1)).toBe(true);
@@ -175,20 +175,16 @@ describe('CenterPanelComponent', () => {
       component.onRegionBoxChange(box);
       component.castVote('good');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ vote: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
-      req.flush({ ok: true });
-      const votesReq = httpMock.expectOne('/api/votes');
-      votesReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
+      expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
+      req.flush({ state: 'good', click_time: 1 });
     });
 
     it('omits region_box from a yes-vote when no box is drawn', () => {
       setup();
       component.castVote('good');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ vote: 'good' });
-      req.flush({ ok: true });
-      const votesReq = httpMock.expectOne('/api/votes');
-      votesReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
+      expect(req.request.body).toEqual({ target: 'good' });
+      req.flush({ state: 'good', click_time: 1 });
     });
 
     it('omits region_box from a no-vote even when a box is drawn (after confirm)', () => {
@@ -201,21 +197,17 @@ describe('CenterPanelComponent', () => {
       // Second ← throws the box away and votes no.
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ vote: 'bad' });
-      req.flush({ ok: true });
-      const votesReq = httpMock.expectOne('/api/votes');
-      votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
+      expect(req.request.body).toEqual({ target: 'bad' });
+      req.flush({ state: 'bad', click_time: 1 });
     });
 
     it('omits region_box from a no-vote when no box is drawn (no confirm armed)', () => {
       setup();
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ vote: 'bad' });
+      expect(req.request.body).toEqual({ target: 'bad' });
       expect(component.pendingBadConfirm).toBe(false);
-      req.flush({ ok: true });
-      const votesReq = httpMock.expectOne('/api/votes');
-      votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
+      req.flush({ state: 'bad', click_time: 1 });
     });
   });
 
@@ -244,11 +236,9 @@ describe('CenterPanelComponent', () => {
 
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ vote: 'bad' });
+      expect(req.request.body).toEqual({ target: 'bad' });
       expect(component.pendingBadConfirm).toBe(false);
-      req.flush({ ok: true });
-      const votesReq = httpMock.expectOne('/api/votes');
-      votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
+      req.flush({ state: 'bad', click_time: 1 });
     });
 
     it('cancels armed state on onArmedConfirmCanceled (Esc/mouse-on-box) and keeps the box', () => {
@@ -300,11 +290,9 @@ describe('CenterPanelComponent', () => {
       setup();
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ vote: 'bad' });
+      expect(req.request.body).toEqual({ target: 'bad' });
       expect(component.pendingBadConfirm).toBe(false);
-      req.flush({ ok: true });
-      const votesReq = httpMock.expectOne('/api/votes');
-      votesReq.flush({ good: [], bad: [1], click_times: {}, learned_scores: {} });
+      req.flush({ state: 'bad', click_time: 1 });
     });
 
     it('uses the box on a yes-vote even after a first ← would have armed (yes wins over armed-only)', () => {
@@ -313,10 +301,8 @@ describe('CenterPanelComponent', () => {
       // Without arming first: yes-vote attaches the box immediately.
       component.castVote('good');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ vote: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
-      req.flush({ ok: true });
-      const votesReq = httpMock.expectOne('/api/votes');
-      votesReq.flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
+      expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
+      req.flush({ state: 'good', click_time: 1 });
     });
   });
 });

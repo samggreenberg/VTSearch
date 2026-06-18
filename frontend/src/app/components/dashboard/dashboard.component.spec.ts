@@ -504,30 +504,36 @@ describe('DashboardComponent', () => {
     });
   });
 
-  it('should survive an HTTP error on the demo-load request and stay usable', () => {
+  it('should keep refreshing after an HTTP error on the registry fetch', () => {
     flushInitialRequests();
-    const flows = TestBed.inject(NewThingFlowsService);
-    flows.emitDemoSelected({ name: 'gtzan', label: 'GTZAN' } as any);
 
-    // Phase 2: progress is pushed over the SSE stream (no HTTP /progress
-    // polling anymore), so the only HTTP the demo flow issues is the
-    // load-demo POST. Fail it and confirm the dashboard doesn't wedge:
-    // the error surfaces via the global interceptor, the importer is
-    // already closed, and a subsequent registry refresh still works.
-    const demoReq = httpMock.expectOne('/api/dataset/load-demo');
-    demoReq.error(new ProgressEvent('error'), {
-      status: 500,
-      statusText: 'Internal Server Error',
-    });
-
-    expect(component.importerModalOpen).toBe(false);
-
-    // The dashboard can still refresh after the failed load.
+    // Phase 2: the HTTP /api/dataset/progress poller was replaced by the
+    // SSE stream, so the resilient "keep going after a transient error"
+    // guarantee now lives in the registry refresh pipeline
+    // (DatasetStateService catchError + retry). A failed registry fetch
+    // must not wedge the dashboard: a subsequent refresh still resolves.
     component.refresh();
-    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+    // forkJoin subscribes to both registry fetches at once; erroring one
+    // cancels its sibling, and DatasetStateService's catchError swallows
+    // the failure so the pipeline stays alive for the next refresh.
+    httpMock
+      .expectOne('/api/datasets/registry')
+      .error(new ProgressEvent('error'), { status: 500, statusText: 'Internal Server Error' });
+    for (const req of httpMock.match('/api/detectors/registry')) {
+      if (!req.cancelled) {
+        req.error(new ProgressEvent('error'), { status: 500, statusText: 'Internal Server Error' });
+      }
+    }
+
+    // The dashboard survives and a later refresh succeeds.
+    component.refresh();
+    httpMock
+      .expectOne('/api/datasets/registry')
+      .flush({ datasets: [{ id: 'd1', name: 'Recovered', media_type: 'audio' }] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
 
-    expect(component.datasets.length).toBe(0);
+    expect(component.datasets.length).toBe(1);
+    expect(component.datasets[0].name).toBe('Recovered');
   });
 
   it('should load demo dataset on demoSelected', () => {
