@@ -1,3 +1,5 @@
 <div class="document-wrap">
-  <object [data]="mediaSrc" class="document-embed">{{ media.filename || 'Document' }}</object>
+  @if (mediaSrc) {
+    <object [data]="mediaSrc" class="document-embed">{{ media.filename || 'Document' }}</object>
+  }
 </div>

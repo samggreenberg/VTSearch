@@ -1,4 +1,5 @@
 import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
@@ -11,17 +12,25 @@ import { ActiveContextService } from '../../../services/active-context.service';
 export class DocumentViewerComponent implements OnChanges {
   @Input() media!: Media;
 
-  mediaSrc = '';
+  // `<object [data]>` is a RESOURCE_URL sink, so Angular rejects a plain
+  // string with NG0904. The URL is our own same-origin media endpoint, so
+  // wrap it as a trusted resource URL. Null until the first media resolves.
+  mediaSrc: SafeResourceUrl | null = null;
   // See ImageViewerComponent.lastMediaId; keep the iframe stable across
   // metadata-enrichment ngOnChanges cycles for the same id.
   private lastMediaId: number | null = null;
 
-  constructor(private activeContext: ActiveContextService) {}
+  constructor(
+    private activeContext: ActiveContextService,
+    private sanitizer: DomSanitizer,
+  ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {
       this.lastMediaId = this.media.id;
-      this.mediaSrc = this.activeContext.mediaUrl(`/api/medias/${this.media.id}/media`);
+      this.mediaSrc = this.sanitizer.bypassSecurityTrustResourceUrl(
+        this.activeContext.mediaUrl(`/api/medias/${this.media.id}/media`),
+      );
     }
   }
 }
