@@ -186,7 +186,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
         this.chartsService.renderDiversityChart(
           canvas,
           this.chartData as DiversityDataPoint[],
-          this.settingsState.settings?.autopilot_goal_diversity ?? 40,
+          this.settingsState.settingsSignal()?.autopilot_goal_diversity ?? 40,
         );
         break;
     }

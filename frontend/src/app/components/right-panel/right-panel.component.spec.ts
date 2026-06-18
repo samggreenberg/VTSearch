@@ -62,7 +62,7 @@ describe('RightPanelComponent', () => {
     TestBed.tick(); // run the rxResource loader effect so the GET is issued
     httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: { audio: 'list', image: 'grid' } });
     // Drain the resource's promise-based value commit, then flush effects so the
-    // settings$ bridge emits and viewModeRightDict is populated. The votes poll
+    // settings effect runs and viewModeRightDict is populated. The votes poll
     // request that the macrotask lets fire is discarded by cleanup().
     await new Promise<void>((resolve) => setTimeout(resolve));
     TestBed.tick();

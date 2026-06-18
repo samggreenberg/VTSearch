@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, OnDestroy, NgZone, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, OnDestroy, NgZone, ViewChild, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -198,10 +198,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     private dialog: VtDialogService,
     private toast: ToastService,
     private ngZone: NgZone,
-  ) {}
-
-  ngOnInit(): void {
-    this.settingsState.settings$.pipe(takeUntil(this.destroy$)).subscribe((settings) => {
+  ) {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
       if (!settings) return;
       this.lastSettings = settings;
       if (settings.browse_panel_width != null) {
@@ -213,6 +212,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       }
       this.applyBrowsePrefsForMediaType();
     });
+  }
+
+  ngOnInit(): void {
     this.settingsState.load();
 
     // Subset mode: the Find view handed off a set of positive ids to project

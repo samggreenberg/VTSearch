@@ -38,6 +38,10 @@ describe('LabelViewComponent', () => {
   // by `afterEach`'s catch-all instead.
   function flushInitialRequests(): void {
     fixture.detectChanges();
+    // The medias and settings reads ride `rxResource`, whose loader runs in a
+    // root effect rather than synchronously during `detectChanges()`; tick so
+    // the GETs are actually issued before we match them.
+    TestBed.tick();
     // /api/medias/ids
     httpMock.match('/api/medias/ids').forEach(req =>
       req.flush([
@@ -71,6 +75,14 @@ describe('LabelViewComponent', () => {
     );
   }
 
+  // The media stub list rides an `rxResource`, whose value commits on a
+  // microtask after the `/api/medias/ids` flush. Tests that read the resolved
+  // medias (`mediasSignal()` / `selectedMedia`) drain it with `settle()`.
+  async function settle(): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    TestBed.tick();
+  }
+
   afterEach(() => {
     component.ngOnDestroy();
     // Drain any outstanding polling requests from right-panel or label-view
@@ -90,9 +102,10 @@ describe('LabelViewComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should load medias on init', () => {
+  it('should load medias on init', async () => {
     flushInitialRequests();
-    expect(component.mediaState.medias.length).toBe(2);
+    await settle();
+    expect(component.mediaState.mediasSignal().length).toBe(2);
   });
 
   it('should load votes on init', () => {
@@ -157,7 +170,7 @@ describe('LabelViewComponent', () => {
   it('should handle media selection', () => {
     flushInitialRequests();
     component.onMediaSelect(2);
-    expect(component.mediaState.selectedId).toBe(2);
+    expect(component.mediaState.selectedId()).toBe(2);
   });
 
   it('should handle sort mode change', () => {
@@ -180,7 +193,7 @@ describe('LabelViewComponent', () => {
     // With a sort order present the diversity fetch POSTs the scores.
     const req = httpMock.expectOne('/api/diversity-tree/next');
     req.flush({ id: 1, diversity_level: 2.0, exhausted: false });
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should reselect media when switching select mode to top', () => {
@@ -200,7 +213,7 @@ describe('LabelViewComponent', () => {
     component.onSelectModeChange('top');
     expect(component.sortState.selectMode).toBe('top');
     // Should auto-select id 1 (first unlabeled in sort order)
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should reselect media when switching select mode to hard', () => {
@@ -216,7 +229,7 @@ describe('LabelViewComponent', () => {
     component.onSelectModeChange('hard');
     expect(component.sortState.selectMode).toBe('hard');
     // id 1 (score 0.4) is closer to threshold 0.5 than id 2 (score 0.9)
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should handle inclusion change', fakeAsync(() => {
@@ -243,8 +256,9 @@ describe('LabelViewComponent', () => {
     expect(el.querySelector('vt-right-panel')).toBeTruthy();
   });
 
-  it('should resolve selectedMedia from selectedId', () => {
+  it('should resolve selectedMedia from selectedId', async () => {
     flushInitialRequests();
+    await settle();
     component.onMediaSelect(2);
     expect(component.mediaState.selectedMedia).toBeTruthy();
     expect(component.mediaState.selectedMedia!.id).toBe(2);
@@ -270,13 +284,17 @@ describe('LabelViewComponent', () => {
     });
 
     // Should auto-select id 1 (first unlabeled)
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
-  it('should trigger text sort on autopilot start when session has text query', () => {
+  it('should trigger text sort on autopilot start when session has text query', async () => {
     const session = TestBed.inject(LabelSessionService);
     session.textQuery = 'dog barking';
     flushInitialRequests();
+    // The medias list rides an rxResource: its value commits on a microtask and
+    // the media-type/autopilot effect runs on the next tick, so drain before the
+    // deferred initial sort fires.
+    await settle();
 
     // The left panel's ngOnInit already emits autopilotStart when autopilot is
     // enabled; with a text query and medias now loaded, that fires one initial
@@ -300,10 +318,10 @@ describe('LabelViewComponent', () => {
     });
 
     expect(component.sortState.sortOrder).toBeTruthy();
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
-  it('should defer autopilot text sort until medias are loaded', () => {
+  it('should defer autopilot text sort until medias are loaded', async () => {
     const session = TestBed.inject(LabelSessionService);
     session.textQuery = 'cat meowing';
 
@@ -312,8 +330,10 @@ describe('LabelViewComponent', () => {
     // No sort request yet (no medias)
     httpMock.expectNone('/api/sort');
 
-    // Now trigger init which loads medias
+    // Now trigger init which loads medias. The medias GET rides an rxResource
+    // loader effect, so tick to issue it before flushing.
     fixture.detectChanges();
+    TestBed.tick();
     httpMock.match('/api/medias/ids').forEach(req =>
       req.flush([{ id: 1, media_type: 'audio' }]),
     );
@@ -336,6 +356,10 @@ describe('LabelViewComponent', () => {
       req.flush([]),
     );
 
+    // Drain the rxResource value commit + media-type/autopilot effect so the
+    // deferred sort fires.
+    await settle();
+
     // Now the deferred sort should fire
     const req = httpMock.expectOne('/api/sort');
     expect(req.request.body).toEqual({ text: 'cat meowing' });
@@ -344,7 +368,7 @@ describe('LabelViewComponent', () => {
       threshold: 0.5,
     });
 
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
   });
 
   it('should not trigger text sort on autopilot start when no text query', () => {
@@ -484,7 +508,7 @@ describe('LabelViewComponent', () => {
     httpMock.expectOne('/api/votes').flush({ good: [4], bad: [], click_times: {}, learned_scores: {} });
 
     component.onSelectModeChange('hard');
-    expect(component.mediaState.selectedId).toBe(5);
+    expect(component.mediaState.selectedId()).toBe(5);
   });
 
   it('should advance past just-voted item even when vote state is stale', () => {
@@ -506,7 +530,7 @@ describe('LabelViewComponent', () => {
 
     // Even with stale votes (id 1 not yet in badVotes), the selection should
     // have advanced to id 2 because onMediaVoted excludes the just-voted id.
-    expect(component.mediaState.selectedId).toBe(2);
+    expect(component.mediaState.selectedId()).toBe(2);
   });
 
   it('should deactivate autopilot state when switching to manual mode', () => {
@@ -584,11 +608,11 @@ describe('LabelViewComponent', () => {
 
     // Manually select a different media (simulating user clicking right panel)
     component.onMediaSelect(1);
-    expect(component.mediaState.selectedId).toBe(1);
+    expect(component.mediaState.selectedId()).toBe(1);
 
     // Refocus should re-select the autopilot suggestion (top unlabeled = id 2)
     component.onAutopilotRefocus();
-    expect(component.mediaState.selectedId).toBe(2);
+    expect(component.mediaState.selectedId()).toBe(2);
   });
 
   it('should clear stale autopilot state from previous session on init', () => {

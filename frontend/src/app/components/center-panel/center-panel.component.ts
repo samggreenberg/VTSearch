@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild, effect } from '@angular/core';
 import { KeyValuePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { EmbedderInfo, Media } from '../../models/api.models';
@@ -84,7 +84,17 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     private settingsState: SettingsStateService,
     private sortState: SortStateService,
     private datasetsListingsApi: DatasetsListingsApiService,
-  ) {}
+  ) {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      this.volume = settings.volume ?? 1;
+      this.audioPlaying = settings.audio_playing !== false;
+      this.showAnimations = settings.show_animations !== false;
+      this.showMetadata = settings.show_metadata !== false;
+      this.labelHintDismissed = settings.label_hint_dismissed === true;
+    });
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media']) {
@@ -324,16 +334,6 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
 
   private loadSettings(): void {
     this.settingsState.load();
-    this.subs.push(
-      this.settingsState.settings$.subscribe((settings) => {
-        if (!settings) return;
-        this.volume = settings.volume ?? 1;
-        this.audioPlaying = settings.audio_playing !== false;
-        this.showAnimations = settings.show_animations !== false;
-        this.showMetadata = settings.show_metadata !== false;
-        this.labelHintDismissed = settings.label_hint_dismissed === true;
-      }),
-    );
   }
 
   private adjustVolume(delta: number): void {

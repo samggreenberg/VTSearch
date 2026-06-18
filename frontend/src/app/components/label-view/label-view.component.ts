@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit, effect } from '@angular/core';
 
 import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
 import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
@@ -131,7 +131,50 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private newThingFlows: NewThingFlowsService,
     private toast: ToastService,
     public panelState: LabelViewPanelStateService,
-  ) {}
+  ) {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      this.panelState.loadFromSettings(settings);
+      if (this.panelState.currentMediaType) {
+        this.applyPanelPx();
+      }
+      if (settings.autopilot_enabled != null) {
+        this.autopilotEnabled = settings.autopilot_enabled;
+      }
+      if (settings.hide_autopilot && !this.autopilotCollapsed) {
+        this.setAutopilotCollapsed(true);
+      } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {
+        this.setAutopilotCollapsed(false);
+      }
+      if (settings.autopilot_resort_interval != null) {
+        this.resortInterval = settings.autopilot_resort_interval;
+        // Initialize the threshold if not yet set
+        if (this.resortNextThreshold === 0) {
+          this.resortNextThreshold = this.resortInterval;
+        }
+      }
+    });
+
+    effect(() => {
+      const medias = this.mediaState.mediasSignal();
+      if (medias.length > 0) {
+        const newType = medias[0].media_type;
+        if (newType !== this.panelState.currentMediaType) {
+          this.panelState.setMediaType(newType);
+          this.applyPanelPx();
+        }
+      }
+      if (this.autopilotTextSortPending && medias.length > 0) {
+        this.autopilotTextSortPending = false;
+        this.triggerAutopilotTextSort();
+      }
+      if (this.autopilotMediaSortPending && medias.length > 0) {
+        this.autopilotMediaSortPending = false;
+        this.triggerAutopilotMediaSort();
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.autopilotStateService.clear();
@@ -164,26 +207,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           return;
         }
         this.reloadForNewPair();
-      });
-
-    this.mediaState.medias$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((medias) => {
-        if (medias.length > 0) {
-          const newType = medias[0].media_type;
-          if (newType !== this.panelState.currentMediaType) {
-            this.panelState.setMediaType(newType);
-            this.applyPanelPx();
-          }
-        }
-        if (this.autopilotTextSortPending && medias.length > 0) {
-          this.autopilotTextSortPending = false;
-          this.triggerAutopilotTextSort();
-        }
-        if (this.autopilotMediaSortPending && medias.length > 0) {
-          this.autopilotMediaSortPending = false;
-          this.triggerAutopilotMediaSort();
-        }
       });
 
     this.autopilotStateService.state$
@@ -321,30 +344,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private loadSettings(): void {
     this.settingsState.load();
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((settings) => {
-        if (!settings) return;
-        this.panelState.loadFromSettings(settings);
-        if (this.panelState.currentMediaType) {
-          this.applyPanelPx();
-        }
-        if (settings.autopilot_enabled != null) {
-          this.autopilotEnabled = settings.autopilot_enabled;
-        }
-        if (settings.hide_autopilot && !this.autopilotCollapsed) {
-          this.setAutopilotCollapsed(true);
-        } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {
-          this.setAutopilotCollapsed(false);
-        }
-        if (settings.autopilot_resort_interval != null) {
-          this.resortInterval = settings.autopilot_resort_interval;
-          // Initialize the threshold if not yet set
-          if (this.resortNextThreshold === 0) {
-            this.resortNextThreshold = this.resortInterval;
-          }
-        }
-      });
   }
 
   private startStatusPolling(): void {
@@ -644,7 +643,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   } | null = null;
 
   onMediaContextRequest(event: { id: number; x: number; y: number }): void {
-    const media = this.mediaState.medias.find((m) => m.id === event.id);
+    const media = this.mediaState.mediasSignal().find((m) => m.id === event.id);
     this.contextMenuItems = buildMediaContextMenuItems(media?.media_type ?? '');
     this.contextMenuMediaId = event.id;
     this.contextMenuX = event.x;
@@ -698,7 +697,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private openSeedNewDetector(mediaId: number, cropParams?: Record<string, unknown>): void {
-    const media = this.mediaState.medias.find((m) => m.id === mediaId);
+    const media = this.mediaState.mediasSignal().find((m) => m.id === mediaId);
     this.newThingFlows.openNewDetector({
       defaultMediaType: media?.media_type ?? '',
       seedMediaId: mediaId,
@@ -843,13 +842,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const textQuery = this.labelSession.textQuery;
       const mediaExample = this.labelSession.mediaExample;
       if (textQuery) {
-        if (this.mediaState.medias.length > 0) {
+        if (this.mediaState.mediasSignal().length > 0) {
           this.triggerAutopilotTextSort();
         } else {
           this.autopilotTextSortPending = true;
         }
       } else if (mediaExample) {
-        if (this.mediaState.medias.length > 0) {
+        if (this.mediaState.mediasSignal().length > 0) {
           this.triggerAutopilotMediaSort();
         } else {
           this.autopilotMediaSortPending = true;

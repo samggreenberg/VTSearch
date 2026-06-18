@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { combineLatest, Subject, Subscription } from 'rxjs';
@@ -118,7 +118,71 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     private progressEvents: ProgressEventsService,
     private browseSubset: BrowseSubsetService,
     private router: Router,
-  ) {}
+  ) {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      const dict = settings.view_mode_left;
+      if (dict && typeof dict === 'object') {
+        this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
+        if (this.currentMediaType) {
+          this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
+        }
+      }
+      const sizeDict = settings.grid_icon_size_left;
+      if (sizeDict && typeof sizeDict === 'object') {
+        this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
+        if (this.currentMediaType) {
+          this.gridGoalWidthLeft = iconSizeToGoalWidth(
+            this.gridIconSizeLeftDict[this.currentMediaType] ?? 'M',
+          );
+        }
+      }
+      const fmLeft = settings.focus_mode_left;
+      if (fmLeft && typeof fmLeft === 'object') {
+        this.focusModeLeftDict = fmLeft as Record<string, 'click' | 'hover'>;
+        if (this.currentMediaType) {
+          this.focusModeLeft = this.focusModeLeftDict[this.currentMediaType] ?? 'click';
+        }
+      }
+      const fmRight = settings.focus_mode_right;
+      if (fmRight && typeof fmRight === 'object') {
+        this.focusModeRightDict = fmRight as Record<string, 'click' | 'hover'>;
+        if (this.currentMediaType) {
+          this.focusModeRight = this.focusModeRightDict[this.currentMediaType] ?? 'click';
+        }
+      }
+      const pplDict = settings.panel_pct_left;
+      if (pplDict && typeof pplDict === 'object') {
+        this.panelPxLeftDict = pplDict as Record<string, number>;
+        if (this.currentMediaType) {
+          this.applyPanelPx(this.currentMediaType);
+        }
+      }
+      const pprDict = settings.panel_pct_right;
+      if (pprDict && typeof pprDict === 'object') {
+        this.panelPxRightDict = pprDict as Record<string, number>;
+        if (this.currentMediaType) {
+          this.applyPanelPx(this.currentMediaType);
+        }
+      }
+    });
+
+    effect(() => {
+      const medias = this.mediaState.mediasSignal();
+      if (medias.length > 0) {
+        const newType = medias[0].media_type;
+        if (newType !== this.currentMediaType) {
+          this.currentMediaType = newType;
+          this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
+          this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
+          this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
+          this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
+          this.applyPanelPx(newType);
+        }
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
@@ -143,22 +207,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       next: (status) => { this.datasetName = status.display_name || ''; },
     });
 
-    // When medias arrive, run the find-label scoring
-    this.mediaState.medias$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((medias) => {
-        if (medias.length > 0) {
-          const newType = medias[0].media_type;
-          if (newType !== this.currentMediaType) {
-            this.currentMediaType = newType;
-            this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
-            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
-            this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
-            this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
-            this.applyPanelPx(newType);
-          }
-        }
-      });
+    // When medias arrive, the media-type sync runs from a constructor effect
+    // on `mediaState.mediasSignal()`.
 
     // Run find-label to score and label all medias — unless we're returning
     // from the Browser after verifying a selection there. In that case the
@@ -390,53 +440,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private loadSettings(): void {
     this.settingsState.load();
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((settings) => {
-        if (!settings) return;
-        const dict = settings.view_mode_left;
-        if (dict && typeof dict === 'object') {
-          this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
-          if (this.currentMediaType) {
-            this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
-          }
-        }
-        const sizeDict = settings.grid_icon_size_left;
-        if (sizeDict && typeof sizeDict === 'object') {
-          this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
-          if (this.currentMediaType) {
-            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[this.currentMediaType] ?? 'M');
-          }
-        }
-        const fmLeft = settings.focus_mode_left;
-        if (fmLeft && typeof fmLeft === 'object') {
-          this.focusModeLeftDict = fmLeft as Record<string, 'click' | 'hover'>;
-          if (this.currentMediaType) {
-            this.focusModeLeft = this.focusModeLeftDict[this.currentMediaType] ?? 'click';
-          }
-        }
-        const fmRight = settings.focus_mode_right;
-        if (fmRight && typeof fmRight === 'object') {
-          this.focusModeRightDict = fmRight as Record<string, 'click' | 'hover'>;
-          if (this.currentMediaType) {
-            this.focusModeRight = this.focusModeRightDict[this.currentMediaType] ?? 'click';
-          }
-        }
-        const pplDict = settings.panel_pct_left;
-        if (pplDict && typeof pplDict === 'object') {
-          this.panelPxLeftDict = pplDict as Record<string, number>;
-          if (this.currentMediaType) {
-            this.applyPanelPx(this.currentMediaType);
-          }
-        }
-        const pprDict = settings.panel_pct_right;
-        if (pprDict && typeof pprDict === 'object') {
-          this.panelPxRightDict = pprDict as Record<string, number>;
-          if (this.currentMediaType) {
-            this.applyPanelPx(this.currentMediaType);
-          }
-        }
-      });
   }
 
   // --- Media selection ---

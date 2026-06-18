@@ -13,6 +13,20 @@ describe('MediaStateService', () => {
     { id: 2, media_type: 'image', filename: 'b.png', md5: 'def', custom_metadata: {} },
   ];
 
+  // The media stub list rides an `rxResource`: its loader runs in an effect, so
+  // `TestBed.tick()` issues the request, and the value commits on a microtask,
+  // so `settle()` drains it before reading `mediasSignal()`.
+  async function settle() {
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    TestBed.tick();
+  }
+
+  function load() {
+    service.loadMedias();
+    TestBed.tick();
+    httpMock.expectOne('/api/medias/ids').flush(mockMedias);
+  }
+
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
@@ -27,65 +41,59 @@ describe('MediaStateService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should start with empty medias', () => {
-    expect(service.medias).toEqual([]);
-    expect(service.selectedId).toBeNull();
+  it('should start with empty medias and not fetch until loadMedias()', () => {
+    TestBed.tick();
+    expect(service.mediasSignal()).toEqual([]);
+    expect(service.selectedId()).toBeNull();
     expect(service.selectedMedia).toBeNull();
+    httpMock.expectNone('/api/medias/ids');
   });
 
-  it('loadMedias should fetch and store medias', () => {
-    service.loadMedias();
-    const req = httpMock.expectOne('/api/medias/ids');
-    req.flush(mockMedias);
-    expect(service.medias).toEqual(mockMedias);
+  it('loadMedias should fetch and store medias', async () => {
+    load();
+    await settle();
+    expect(service.mediasSignal()).toEqual(mockMedias);
   });
 
-  it('selectMedia should update selectedId', () => {
-    service.loadMedias();
-    httpMock.expectOne('/api/medias/ids').flush(mockMedias);
+  it('selectMedia should update selectedId', async () => {
+    load();
+    await settle();
 
     service.selectMedia(2);
-    expect(service.selectedId).toBe(2);
+    expect(service.selectedId()).toBe(2);
     expect(service.selectedMedia?.filename).toBe('b.png');
   });
 
-  it('selectedMedia should return null for unknown id', () => {
-    service.loadMedias();
-    httpMock.expectOne('/api/medias/ids').flush(mockMedias);
+  it('selectedMedia should return null for unknown id', async () => {
+    load();
+    await settle();
 
     service.selectMedia(999);
     expect(service.selectedMedia).toBeNull();
   });
 
-  it('clear should reset all state', () => {
-    service.loadMedias();
-    httpMock.expectOne('/api/medias/ids').flush(mockMedias);
+  it('clear should reset all state', async () => {
+    load();
+    await settle();
     service.selectMedia(1);
 
     service.clear();
-    expect(service.medias).toEqual([]);
-    expect(service.selectedId).toBeNull();
+    TestBed.tick();
+    expect(service.mediasSignal()).toEqual([]);
+    expect(service.selectedId()).toBeNull();
   });
 
-  it('medias$ should emit on load', () => new Promise<void>((done) => {
-    const emissions: Media[][] = [];
-    service.medias$.subscribe((m) => emissions.push(m));
+  it('mediasSignal should reflect the loaded medias', async () => {
+    expect(service.mediasSignal()).toEqual([]);
+    load();
+    await settle();
+    expect(service.mediasSignal()).toEqual(mockMedias);
+  });
 
-    service.loadMedias();
-    httpMock.expectOne('/api/medias/ids').flush(mockMedias);
-
-    setTimeout(() => {
-      expect(emissions.length).toBeGreaterThanOrEqual(2); // initial [] + loaded
-      expect(emissions[emissions.length - 1]).toEqual(mockMedias);
-      done();
-    });
-  }));
-
-  it('selectedId$ should emit on select', () => new Promise<void>((done) => {
-    const ids: (number | null)[] = [];
-    service.selectedId$.subscribe((id) => ids.push(id));
-
+  it('selectedId signal should update on select', () => new Promise<void>((done) => {
+    expect(service.selectedId()).toBeNull();
     service.selectMedia(5);
+    expect(service.selectedId()).toBe(5);
 
     // selectMedia() also schedules a debounced metadata batch fetch
     // (POST /api/medias/batch) via the metadata cache; drain it so the
@@ -94,7 +102,6 @@ describe('MediaStateService', () => {
       for (const req of httpMock.match('/api/medias/batch')) {
         req.flush([]);
       }
-      expect(ids).toContain(5);
       done();
     });
   }));

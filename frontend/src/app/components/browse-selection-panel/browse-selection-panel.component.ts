@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -77,7 +77,21 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     private metadataCache: MediaMetadataCacheService,
     private activeContext: ActiveContextService,
     private settingsState: SettingsStateService,
-  ) {}
+  ) {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      const viewDict = settings.view_mode_right;
+      if (viewDict && typeof viewDict === 'object') {
+        this.viewModeRightDict = viewDict as Record<string, 'grid' | 'list'>;
+      }
+      const sizeDict = settings.grid_icon_size_right;
+      if (sizeDict && typeof sizeDict === 'object') {
+        this.gridIconSizeRightDict = sizeDict as Record<string, string>;
+      }
+      this.applyViewPrefs();
+    });
+  }
 
   ngOnInit(): void {
     this.refreshSelection();
@@ -85,18 +99,6 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
       this.selection.changed$.subscribe(() => this.refreshSelection()),
       this.metadataCache.version$.subscribe(() => {
         this.sortedEntries = this.buildSortedEntries();
-      }),
-      this.settingsState.settings$.subscribe((settings) => {
-        if (!settings) return;
-        const viewDict = settings.view_mode_right;
-        if (viewDict && typeof viewDict === 'object') {
-          this.viewModeRightDict = viewDict as Record<string, 'grid' | 'list'>;
-        }
-        const sizeDict = settings.grid_icon_size_right;
-        if (sizeDict && typeof sizeDict === 'object') {
-          this.gridIconSizeRightDict = sizeDict as Record<string, string>;
-        }
-        this.applyViewPrefs();
       }),
     );
     this.settingsState.load();

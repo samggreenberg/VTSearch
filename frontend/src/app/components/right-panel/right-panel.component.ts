@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -96,7 +96,28 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     public labelsetState: LabelsetStateService,
     private settingsState: SettingsStateService,
     private dialog: VtDialogService,
-  ) {}
+  ) {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      const dict = settings.view_mode_right;
+      if (dict && typeof dict === 'object') {
+        this.viewModeRightDict = dict as Record<string, 'grid' | 'list'>;
+        if (this.currentMediaType) {
+          this.viewMode = this.viewModeRightDict[this.currentMediaType] ?? 'grid';
+        }
+      }
+      const sizeDict = settings.grid_icon_size_right;
+      if (sizeDict && typeof sizeDict === 'object') {
+        this.gridIconSizeRightDict = sizeDict as Record<string, string>;
+        if (this.currentMediaType) {
+          this.gridGoalWidth = iconSizeToGoalWidth(
+            this.gridIconSizeRightDict[this.currentMediaType] ?? 'M',
+          );
+        }
+      }
+    });
+  }
 
   /** True when the right pane should be sourced from the labelset (not /api/votes). */
   get useLabelset(): boolean {
@@ -131,7 +152,6 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   ngOnInit(): void {
     this.settingsState.load();
-    this.loadSettings();
     this.voteState.startPolling();
     this.subscribeToVotes();
     if (this.useLabelset) {
@@ -241,30 +261,6 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
         );
       },
     });
-  }
-
-  private loadSettings(): void {
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: settings => {
-          if (!settings) return;
-          const dict = settings.view_mode_right;
-          if (dict && typeof dict === 'object') {
-            this.viewModeRightDict = dict as Record<string, 'grid' | 'list'>;
-            if (this.currentMediaType) {
-              this.viewMode = this.viewModeRightDict[this.currentMediaType] ?? 'grid';
-            }
-          }
-          const sizeDict = settings.grid_icon_size_right;
-          if (sizeDict && typeof sizeDict === 'object') {
-            this.gridIconSizeRightDict = sizeDict as Record<string, string>;
-            if (this.currentMediaType) {
-              this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[this.currentMediaType] ?? 'M');
-            }
-          }
-        },
-      });
   }
 
   private subscribeToVotes(): void {

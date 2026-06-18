@@ -162,7 +162,7 @@ describe('AppComponent', () => {
   it('should set settingsViewTab from labeling media type', () => {
     const fixture = TestBed.createComponent(AppComponent);
     const mediaState = TestBed.inject(MediaStateService);
-    vi.spyOn(mediaState, 'medias', 'get').mockReturnValue([
+    vi.spyOn(mediaState, 'mediasSignal').mockReturnValue([
       { id: 1, media_type: 'image' },
     ]);
     fixture.componentInstance.isOnLabelView = true;

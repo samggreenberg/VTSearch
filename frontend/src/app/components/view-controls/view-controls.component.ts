@@ -1,7 +1,5 @@
-import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, effect } from '@angular/core';
 
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import { SettingsStateService } from '../../services/settings-state.service';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -17,7 +15,7 @@ type IconSize = (typeof ICON_SIZES)[number];
   templateUrl: './view-controls.component.html',
   styleUrl: './view-controls.component.scss',
 })
-export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
+export class ViewControlsComponent implements OnInit, OnChanges {
   @Input() side: 'left' | 'right' | 'popup' = 'left';
   @Input() currentMediaType = '';
   /**
@@ -46,24 +44,18 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   gridIconSize: IconSize = 'M';
 
   private settings: AppSettings = { volume: 50 };
-  private destroy$ = new Subject<void>();
 
-  constructor(private settingsState: SettingsStateService) {}
+  constructor(private settingsState: SettingsStateService) {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      this.settings = settings;
+      this.refresh();
+    });
+  }
 
   ngOnInit(): void {
     this.settingsState.load();
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(settings => {
-        if (!settings) return;
-        this.settings = settings;
-        this.refresh();
-      });
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   ngOnChanges(changes: SimpleChanges): void {

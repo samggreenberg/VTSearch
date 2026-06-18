@@ -180,7 +180,7 @@ export class NewDetectorModalComponent implements OnInit {
    *  off. When non-null, the mediaType form-group is hidden in the
    *  template and ``mediaType`` is locked to this value on init. */
   get effectiveSoloMediaType(): string | null {
-    const v = this.settingsState.settings?.effective_solo_media_type;
+    const v = this.settingsState.settingsSignal()?.effective_solo_media_type;
     return v ? v : null;
   }
 
