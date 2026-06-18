@@ -151,7 +151,7 @@ describe('AutopilotPanelComponent', () => {
     expect(component.state.phase).toBe('hard');
   });
 
-  it('should show smart/stable status icons during new phase', () => {
+  it('should show the diversity (span) status icon during new phase', () => {
     // Advance to new phase
     autopilotState.checkPhaseTransition(3, 0);
     autopilotState.checkPhaseTransition(3, 4);
@@ -169,14 +169,14 @@ describe('AutopilotPanelComponent', () => {
     fixture.detectChanges();
     const steps = component.steps;
     const newStep = steps.find((s: any) => s.phase === 'new');
-    expect(newStep!.statusIcons.length).toBe(2);
-    expect(newStep!.statusIcons[0].color).toBe('green');
-    expect(newStep!.statusIcons[1].color).toBe('green');
-    // Tooltips explain each indicator, not just its raw colour
-    expect(newStep!.statusIcons[0].title).toContain('Smart');
-    expect(newStep!.statusIcons[0].title).toContain('detector accuracy');
-    expect(newStep!.statusIcons[1].title).toContain('Stable');
-    expect(newStep!.statusIcons[1].title).toContain('prediction stability');
+    // The diversity (new) phase runs after smart + stable are already green,
+    // so it shows a single span/diversity dot instead of repeating those two.
+    expect(newStep!.statusIcons.length).toBe(1);
+    // span was reported yellow above, so the diversity dot is yellow.
+    expect(newStep!.statusIcons[0].color).toBe('yellow');
+    // Tooltip explains the diversity indicator, not just its raw colour.
+    expect(newStep!.statusIcons[0].title).toContain('Diversity');
+    expect(newStep!.statusIcons[0].title).toContain('span');
   });
 
   it('should deactivate autopilot', () => {

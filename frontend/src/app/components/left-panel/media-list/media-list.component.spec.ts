@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { SimpleChange } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { MediaListComponent } from './media-list.component';
@@ -45,6 +46,11 @@ describe('MediaListComponent', () => {
       { id: 1, score: 0.5 },
       { id: 2, score: 0.2 },
     ];
+    // Programmatic input assignment doesn't fire ngOnChanges; trigger the
+    // rebuild explicitly the way Angular would for a [sortOrder] binding.
+    component.ngOnChanges({
+      sortOrder: new SimpleChange(null, component.sortOrder, false),
+    });
     fixture.detectChanges();
     const items = component.cachedOrderedItems;
     expect(items[0].media.id).toBe(3);
@@ -59,6 +65,10 @@ describe('MediaListComponent', () => {
       { id: 2, score: 0.2 },
     ];
     component.threshold = 0.4;
+    component.ngOnChanges({
+      sortOrder: new SimpleChange(null, component.sortOrder, false),
+      threshold: new SimpleChange(null, component.threshold, false),
+    });
     fixture.detectChanges();
     const items = component.cachedOrderedItems;
     // Threshold is at 0.4, so item with score 0.2 should have showThreshold
@@ -93,6 +103,10 @@ describe('MediaListComponent', () => {
       { id: 2, score: 0.3 },
     ];
     component.threshold = 0.5;
+    component.ngOnChanges({
+      sortOrder: new SimpleChange(null, component.sortOrder, false),
+      threshold: new SimpleChange(null, component.threshold, false),
+    });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.media-threshold-line')).toBeTruthy();
   });
