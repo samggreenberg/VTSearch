@@ -156,7 +156,9 @@
 </header>
 <div class="main-content" role="main">
   @if (showIncompatibleExplainer) {
-    <vt-incompatible-pair-explainer />
+    @defer (when showIncompatibleExplainer) {
+      <vt-incompatible-pair-explainer />
+    }
   } @else {
     <router-outlet />
   }

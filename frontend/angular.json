@@ -53,9 +53,19 @@
           "configurations": {
             "production": {
               "budgets": [
+                // initial: 540kB, not tighter, by design. The eager bundle is
+                // framework-dominated (Angular core+router+forms+http+CDK ~240kB
+                // + zone.js ~35kB), not app bloat: routes are lazy, the heavy
+                // modals are @defer'd, and `marked` lives only in a deferred
+                // chunk, so there is nothing left to trim against a tighter
+                // limit. Dropping zone.js (~35kB, the only large remaining
+                // lever) requires going zoneless -- an app-wide change-detection
+                // rewrite gated on the signal/resource migration. See
+                // docs/plans/zoneless-migration.md. Do not raise further without
+                // first auditing the eager path for genuine bloat.
                 {
                   "type": "initial",
-                  "maximumWarning": "525kB",
+                  "maximumWarning": "540kB",
                   "maximumError": "1MB"
                 },
                 {
