@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { SettingsStateService } from './settings-state.service';
+import { settleResource } from '../testing/settle-resource';
 
 describe('SettingsStateService', () => {
   let service: SettingsStateService;
@@ -16,22 +17,15 @@ describe('SettingsStateService', () => {
     inclusion: 0.5,
   };
 
-  // Drain the asynchrony rxResource introduces: its loader is promise-based, so
-  // the stream value commits on a microtask; we then flush effects so the
-  // computed settings signal updates.
-  async function settle() {
-    await new Promise<void>((resolve) => setTimeout(resolve));
-    TestBed.tick();
-  }
-
   // `load()` drives the `rxResource`, whose loader runs in an effect rather than
   // synchronously. `TestBed.tick()` runs the loader effect so the request is
-  // issued; `settle()` then lets the flushed response propagate to the value.
+  // issued; `settleResource()` then lets the flushed response propagate to the
+  // value.
   async function load() {
     service.load();
     TestBed.tick();
     httpMock.expectOne('/api/settings').flush(mockSettings);
-    await settle();
+    await settleResource();
   }
 
   beforeEach(() => {

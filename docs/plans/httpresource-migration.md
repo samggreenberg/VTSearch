@@ -1,16 +1,39 @@
 # `httpResource` / reactive-resource migration for the data layer
 
-Status: **Phase 1 (pilot) + Phase 2 (first expansion) shipped.** The
+Status: **Phase 1 (pilot) + Phase 2 + Phase 3 shipped.** The
 `SettingsStateService` and `MediaStateService` read paths both run on
-`rxResource`. Phase 2 also **dropped the pilot's compatibility shims**: the
-services now expose their signals directly and all consumers were migrated, so
-there are no Observable bridges or sync getters left to bridge old callers (per
-the repo's "no shims, just make the clean change" rule). Remaining read
-services (pollers, `forkJoin` aggregates) are still deferred — see "Open
-follow-ups". Scoped after the Angular 21 + Vitest work landed (see
+`rxResource`, and Phase 3 converted the left-panel's media-type / embedder reads
+too. Phase 2 also **dropped the pilot's compatibility shims**: the services now
+expose their signals directly and all consumers were migrated, so there are no
+Observable bridges or sync getters left to bridge old callers (per the repo's
+"no shims, just make the clean change" rule). Phase 3 also extracted the shared
+`settleResource()` test helper and deleted the dead `DetectorStateService`.
+Remaining read services (pollers, `forkJoin` aggregates) are still deferred —
+see "Open follow-ups". Scoped after the Angular 21 + Vitest work landed (see
 `angular-21-upgrade.md`, which lists this as a deferred carrot). This doc
 decides *how* VTSearch should adopt Angular's resource primitives and in what
 order.
+
+## What shipped (Phase 3 — left-panel reads + housekeeping)
+
+- **`LeftPanelComponent` media-type / embedder reads migrated to `rxResource`.**
+  The two `ngOnInit` `getMediaTypes()` / `getEmbedders()` subscribes (with
+  `takeUntil(destroy$)`) became two **eager** `rxResource`s (no request signal =
+  load once on creation, matching the old init-time fetch). The metadata is
+  exposed as `computed` signals; the derived `mediaTypeName` / `textSortAvailable`
+  fields are recomputed by two constructor `effect()`s (which read the signal so
+  late-arriving metadata still upgrades the header) plus the existing
+  `ngOnChanges(medias)` path. `destroy$` / `Subject` / `takeUntil` /
+  `OnDestroy` are gone; the service is now `inject()`ed (a field initializer can't
+  safely reference a constructor parameter property).
+- **Shared `settleResource()` test helper extracted** to
+  `frontend/src/app/testing/settle-resource.ts`. The settings, media, label-view,
+  and now left-panel specs all import it instead of each inlining a byte-identical
+  `settle()`.
+- **Dead `DetectorStateService` deleted.** It had no consumers outside its own
+  file + spec (its `extractors$` / `localizers$` were unread). Removed the
+  service and its spec; the underlying `ProcessorsApiService.getAutorunExtractors`
+  / `getAutorunLocalizers` route wrappers stay (generated-client surface).
 
 ## What shipped (Phase 2 — MediaStateService + shim removal)
 
@@ -216,23 +239,21 @@ app must be half-migrated.
 ## Open follow-ups
 
 - **Expand to more read services** (step 3). Done for `SettingsStateService`
-  (Phase 1, shims removed in Phase 2) and `MediaStateService` (Phase 2).
-  Remaining single-read candidates worth a look: context-keyed list reads
-  (media-types, embedders) where a `toSignal(activeContext)` request key would
-  earn the reactivity — these currently live inside the active-context /
-  datasets-listings services rather than a dedicated read service, so there's
-  plumbing to untangle first.
-- **`DetectorStateService` looks dead.** As of Phase 2 it has **no consumers**
-  outside its own file + spec (its `extractors$`/`localizers$` are unread).
-  Confirm and delete it (or wire it up) rather than converting it; converting a
-  service nobody reads demonstrates nothing.
+  (Phase 1, shims removed in Phase 2), `MediaStateService` (Phase 2), and the
+  left-panel media-type / embedder reads (Phase 3). Those last two were
+  component-local `ngOnInit` fetches, so the conversion was eager (no request
+  signal). A still-open refinement: if media-types / embedders ever need to
+  **re-fetch on dataset switch**, give the resource a
+  `toSignal(activeContext.datasetId$)` request key instead of the eager load —
+  today the component is recreated on switch, so eager-once suffices.
+- **`DetectorStateService` deleted (Phase 3).** It had no consumers outside its
+  own file + spec. Done.
 - **Pollers and `forkJoin` aggregates** (`VoteStateService`, labeling status,
   `DatasetStateService.refresh()`) are still imperative by design; revisit only
   if a resource clearly wins.
-- **A shared test helper** for the `TestBed.tick()` / `settle()` drain dance is
-  still not extracted — the settings, media, and label-view specs each inline
-  their own `settle()`. The shape has now repeated across three specs, so this
-  is ripe to extract (a `settleResource(fixture)` test util).
+- **Shared `settleResource()` test helper extracted (Phase 3)** to
+  `frontend/src/app/testing/settle-resource.ts`; the settings, media, label-view,
+  and left-panel specs all use it. Done.
 
 ## Decision points needing the user
 

@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideHttpClient } from '@angular/common/http';
 import { MediaStateService } from './media-state.service';
 import { Media } from '../models/api.models';
+import { settleResource } from '../testing/settle-resource';
 
 describe('MediaStateService', () => {
   let service: MediaStateService;
@@ -12,14 +13,6 @@ describe('MediaStateService', () => {
     { id: 1, media_type: 'audio', filename: 'a.wav', md5: 'abc', custom_metadata: {} },
     { id: 2, media_type: 'image', filename: 'b.png', md5: 'def', custom_metadata: {} },
   ];
-
-  // The media stub list rides an `rxResource`: its loader runs in an effect, so
-  // `TestBed.tick()` issues the request, and the value commits on a microtask,
-  // so `settle()` drains it before reading `mediasSignal()`.
-  async function settle() {
-    await new Promise<void>((resolve) => setTimeout(resolve));
-    TestBed.tick();
-  }
 
   function load() {
     service.loadMedias();
@@ -51,13 +44,13 @@ describe('MediaStateService', () => {
 
   it('loadMedias should fetch and store medias', async () => {
     load();
-    await settle();
+    await settleResource();
     expect(service.mediasSignal()).toEqual(mockMedias);
   });
 
   it('selectMedia should update selectedId', async () => {
     load();
-    await settle();
+    await settleResource();
 
     service.selectMedia(2);
     expect(service.selectedId()).toBe(2);
@@ -66,7 +59,7 @@ describe('MediaStateService', () => {
 
   it('selectedMedia should return null for unknown id', async () => {
     load();
-    await settle();
+    await settleResource();
 
     service.selectMedia(999);
     expect(service.selectedMedia).toBeNull();
@@ -74,7 +67,7 @@ describe('MediaStateService', () => {
 
   it('clear should reset all state', async () => {
     load();
-    await settle();
+    await settleResource();
     service.selectMedia(1);
 
     service.clear();
@@ -86,7 +79,7 @@ describe('MediaStateService', () => {
   it('mediasSignal should reflect the loaded medias', async () => {
     expect(service.mediasSignal()).toEqual([]);
     load();
-    await settle();
+    await settleResource();
     expect(service.mediasSignal()).toEqual(mockMedias);
   });
 
