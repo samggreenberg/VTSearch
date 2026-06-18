@@ -91,7 +91,7 @@ export const EXTENDED_ICON_SVGS: Record<string, string> = {
   flask:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v7.5a2 2 0 0 1-.3 1L4 20a1.5 1.5 0 0 0 1.3 2.2h13.4A1.5 1.5 0 0 0 20 20l-4.7-9.5a2 2 0 0 1-.3-1V2"/><line x1="8" y1="2" x2="16" y2="2"/><line x1="7" y1="15" x2="17" y2="15"/></svg>',
   cubes:
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h18v18H2z"/><path d="M2 4l2-2h18v18l-2 2"/><path d="M20 4l2-2"/><path d="M11 4v18M2 13h18"/><path d="M11 4l2-2"/><path d="M20 13l2-2"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h16v16H2z"/><path d="M2 6l4-4h16v16l-4 4"/><path d="M18 6l4-4"/><path d="M10 6v16M2 14h16"/><path d="M10 6l4-4"/><path d="M18 14l4-4"/></svg>',
   'checkbox-checked':
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" ry="3"/><polyline points="8 12 11 15 16 9"/></svg>',
   search:
