@@ -1,9 +1,9 @@
 # Angular 19 → 21 upgrade + Vitest spec migration
 
-Status: **Upgrade shipped (Steps 1 & 2); Vitest migration deferred.** Angular is
-now on 21.2.17 and `npm audit --omit=dev` reports 0 vulnerabilities (was 6
-high). The Vitest spec migration phase has **not** started — see "What shipped"
-and "Open follow-ups" below.
+Status: **All phases shipped.** Angular is on 21.2.17 (`npm audit --omit=dev` =
+0 vulnerabilities, was 6 high) and the **Vitest spec migration is complete**:
+all 68 spec files / 760 `it` blocks now run headless under Vitest and pass, and
+the run is wired into `./run-tests.sh`. See "What shipped (Vitest phase)" below.
 
 ## What shipped
 
@@ -32,7 +32,61 @@ and "Open follow-ups" below.
   525 kB budget), spec files typecheck, `npm audit --omit=dev` = 0
   vulnerabilities, full `./run-tests.sh` passes (4841 tests).
 
-The Vitest spec migration (below) is intentionally deferred to its own effort.
+## What shipped (Vitest phase)
+
+The deferred Vitest migration is now done. Highlights and the non-obvious
+gotchas that future bumps must preserve:
+
+- **Builder wiring.** Added a `test` target using `@angular/build:unit-test`
+  (`runner: vitest`, jsdom). Also migrated `build`/`serve`/`extract-i18n` off
+  the `@angular-devkit/build-angular:*` aliases to the canonical
+  `@angular/build:*` builders — **required**, because the unit-test builder
+  warns and fails to inherit polyfills (notably `zone.js/testing`) when the
+  `buildTarget` points at the devkit alias. `package.json` gained `test`
+  (watch) and `test:ci` (`ng test --no-watch`) scripts, each with a `pretest*`
+  hook that regenerates the API client. `@types/jasmine` removed;
+  `vitest`/`jsdom` added (dev-only, so prod audit stays clean).
+- **jsdom polyfills** (`src/test-setup.ts`, wired via `setupFiles`): inert
+  stubs for `EventSource`, `HTMLMediaElement.play/pause/load`, and
+  `HTMLCanvasElement.getContext` — jsdom omits these and throws "Not
+  implemented", which aborted tests mid-lifecycle.
+- **fakeAsync / ProxyZone bootstrap** (the subtle one). `zone.js/testing` only
+  auto-establishes the ProxyZone that `fakeAsync()`/`tick()` need for
+  Jasmine/Mocha/Jest runners (its jest patch bails on `typeof jest ===
+  'undefined'`), and Vitest is none of those, so every `fakeAsync` spec threw
+  "Expected to be running in 'ProxyZone'". `test-setup.ts` replicates zone.js's
+  jest patch against Vitest's global `describe`/`it`/hooks (describe → sync
+  zone, it/hooks → proxy zone). If a future zone.js/Angular release adds native
+  Vitest support, this shim can be deleted.
+- **Isolation + cascade guard.** The builder defaults to `isolate: false`
+  (Karma-style shared context); a `vitest.config.ts` flips it to `isolate:
+  true` so one spec leaving the `TestBed` singleton dirty can't poison later
+  files. Within a file, `test-setup.ts` also resets the TestBed defensively at
+  the **start** of each test, so a spec whose teardown throws (unflushed
+  `HttpTestingController`, throwing `ngOnDestroy`) doesn't cascade
+  "test module already instantiated" into the rest of the file.
+- **Jasmine → Vitest port** (mechanical, all specs): `toBeTrue()`/`toBeFalse()`
+  → `toBe(true/false)`, `spyOn`/`spyOnProperty` → `vi.spyOn`, `.and.returnValue`
+  → `.mockReturnValue` (and `callFake`→`mockImplementation`,
+  `resolveTo`→`mockResolvedValue`), `spy.calls.mostRecent().args` →
+  `spy.mock.lastCall`, and the Jasmine `done`-callback tests → `() => new
+  Promise<void>((done) => …)`. `tsconfig.spec.json` types switched
+  `jasmine` → `vitest/globals`.
+- **Real spec drift fixed.** The 754 `it` blocks had only ever typechecked, so
+  they had drifted from the components: stale `ngOnInit` HTTP expectations
+  (new `/api/embedders`, `/api/media-types`, `/api/settings`, SSE replacing
+  HTTP polling), reworded button/hint text, changed sort defaults, vote body
+  `{vote}`→`{target}`, menu items, `columnOrder`-gated cells, etc. ~186 failing
+  specs were realigned to current behavior (no tests deleted/skipped/weakened).
+- **One real bug surfaced + fixed.** `DocumentViewerComponent` bound a plain
+  string into `<object [data]>` (a RESOURCE_URL sink), which throws NG0904 in
+  prod too — document viewing was latently broken. Fixed by wrapping the
+  same-origin URL with `DomSanitizer.bypassSecurityTrustResourceUrl`.
+- **run-tests.sh wiring.** Vitest runs on the full `./run-tests.sh` (the real
+  gate — no CI) and on a new frontend-only `./run-tests.sh frontend` group
+  (Angular build + `npm audit` + Vitest, skips pytest). It is intentionally
+  **not** on the fast `core` path (which keeps only the compile-only build
+  check), since the unit run is a full app build + headless Vitest.
 
 ## Original design (for reference)
 
@@ -197,21 +251,22 @@ If any of these get picked up, give them their own plan file and link it here.
 
 ## Open follow-ups
 
-The Angular bump is done; everything below is the **deferred Vitest phase** and
-its loose ends:
+Both the Angular bump **and** the Vitest spec migration are done. Remaining
+loose ends are small:
 
-- **Vitest spec migration (whole phase, not started).** Wire the Vitest
-  `unit-test` builder + scripts, port the 68 Jasmine spec files / 754 `it`
-  blocks (which have only ever typechecked, never run), triage the real
-  failures that surface, and hook the run into `./run-tests.sh`. See the
-  "Vitest spec migration" section above for the step list.
-- Decide whether the Vitest run joins `run-tests.sh`'s `core` group or stands
-  alone (needs user input) — defer until the migration is actually picked up.
-- Triage list for any specs quarantined during the Jasmine→Vitest port.
-- `@types/jasmine` is still in `devDependencies` and `tsconfig.spec.json` still
-  lists `"types": ["jasmine"]`; the specs typecheck against Jasmine globals for
-  now. Swap to Vitest types as part of the migration.
+- **Nothing quarantined.** The Jasmine→Vitest port ended with all 760 `it`
+  blocks passing, so there is no quarantine/triage list owed.
+- **`test-setup.ts` ProxyZone shim is a workaround.** It reimplements
+  zone.js's jest patch for Vitest. If a future `zone.js`/Angular release ships
+  first-class Vitest support for `fakeAsync`, delete the shim and rely on the
+  builder. Watch the `@angular/build:unit-test` release notes (it's still
+  marked experimental in 21).
+- **Migrate fakeAsync specs to Vitest fake timers (optional).** Longer term,
+  the 11 `fakeAsync` specs could move to `vi.useFakeTimers()` and drop the
+  zone-testing dependency entirely; only worth it if/when the app goes zoneless
+  (see "Deferred / out of scope").
 - **Resolved during the upgrade:** Node/TS floors (container's Node 22 + TS
   5.9.3 satisfy v21, no setup-script change); overrides drift (none needed);
   budget regression (initial crept 521.97 → 524.30 kB but stays under the
-  525 kB warn budget — watch it on future bumps).
+  525 kB warn budget — watch it on future bumps); `@types/jasmine` removed and
+  `tsconfig.spec.json` now uses `vitest/globals`.

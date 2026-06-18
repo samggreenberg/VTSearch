@@ -277,7 +277,8 @@ if $_run_frontend_unit && [ -d "frontend/node_modules" ]; then
     echo "Running frontend unit tests (Vitest)..."
     _vt_log=$(mktemp)
     if (cd frontend && npm run test:ci 2>&1) > "$_vt_log"; then
-        echo "Frontend unit tests OK ($(grep -oE 'Tests +[0-9]+ passed' "$_vt_log" | tail -1))"
+        _vt_count=$(sed -r 's/\x1b\[[0-9;]*m//g' "$_vt_log" | grep -oE 'Tests +[0-9]+ passed' | tail -1)
+        echo "Frontend unit tests OK${_vt_count:+ ($_vt_count)}"
     else
         echo ""
         echo "============================================================"
