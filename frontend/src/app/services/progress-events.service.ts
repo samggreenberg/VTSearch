@@ -125,27 +125,24 @@ export class ProgressEventsService implements OnDestroy {
     const es = new EventSource('/api/events');
     this.source = es;
 
-    es.addEventListener('server', (e) =>
-      this.zone.run(() => this.handleServerFrame(e)),
+    this.listen(es, 'server', (e) => this.handleServerFrame(e));
+    this.listen(es, 'dataset', (e) =>
+      this.datasetSubject.next(this.parse<ProgressEvent>(e, {})),
     );
-    es.addEventListener('dataset', (e) =>
-      this.zone.run(() => this.datasetSubject.next(this.parse<ProgressEvent>(e, {}))),
+    this.listen(es, 'loading-tasks', (e) =>
+      this.loadingTasksSubject.next(this.parse<LoadingTask[]>(e, [])),
     );
-    es.addEventListener('loading-tasks', (e) =>
-      this.zone.run(() => this.loadingTasksSubject.next(this.parse<LoadingTask[]>(e, []))),
+    this.listen(es, 'detector-loading-tasks', (e) =>
+      this.detectorLoadingTasksSubject.next(this.parse<LoadingTask[]>(e, [])),
     );
-    es.addEventListener('detector-loading-tasks', (e) =>
-      this.zone.run(() => this.detectorLoadingTasksSubject.next(this.parse<LoadingTask[]>(e, []))),
-    );
-    es.addEventListener('sort', (e) =>
-      this.zone.run(() => this.sortSubject.next(this.parse<ProgressEvent>(e, {}))),
-    );
-    es.addEventListener('find', (e) =>
-      this.zone.run(() => this.findSubject.next(this.parse<ProgressEvent>(e, {}))),
-    );
-    es.addEventListener('eval', (e) =>
-      this.zone.run(() => this.evalSubject.next(this.parse<ProgressEvent>(e, {}))),
-    );
+    this.listen(es, 'sort', (e) => this.sortSubject.next(this.parse<ProgressEvent>(e, {})));
+    this.listen(es, 'find', (e) => this.findSubject.next(this.parse<ProgressEvent>(e, {})));
+    this.listen(es, 'eval', (e) => this.evalSubject.next(this.parse<ProgressEvent>(e, {})));
+    // The periodic `heartbeat` frame carries no payload we render; its sole
+    // job is to keep the circuit breaker online (handled by `listen`'s
+    // recordSuccess) during long, busy operations that aren't emitting
+    // progress frames, so the backend never looks dead while it's merely busy.
+    this.listen(es, 'heartbeat', () => {});
 
     es.onopen = () => this.zone.run(() => this.connection.recordSuccess());
 
@@ -184,6 +181,23 @@ export class ProgressEventsService implements OnDestroy {
       this.reconnectTimer = null;
       this.connect();
     }, 2000);
+  }
+
+  /**
+   * Register a named-event listener that (a) re-enters Angular's zone so
+   * bound templates update, and (b) records the frame as proof the backend
+   * is alive. Every frame that arrives over the stream — progress data or a
+   * bare `heartbeat` — resets the connection circuit breaker, so it only
+   * trips offline when the stream genuinely goes silent (a dead backend),
+   * not when a busy backend is slow to answer unrelated background pollers.
+   */
+  private listen(es: EventSource, name: string, handler: (e: Event) => void): void {
+    es.addEventListener(name, (e) =>
+      this.zone.run(() => {
+        this.connection.recordSuccess();
+        handler(e);
+      }),
+    );
   }
 
   private parse<T>(e: Event, fallback: T): T {

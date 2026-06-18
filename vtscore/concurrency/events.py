@@ -31,6 +31,14 @@ from vtscore.concurrency.progress import (
 #: channels so finished tasks vanish from clients once they pass the
 #: ``LoadingTasksTracker`` stale-prune window without us having to
 #: schedule a background timer for every finish.
+#:
+#: The heartbeat is the frontend's authoritative "backend is alive" signal
+#: (see ``ConnectionStateService``): as long as a frame — heartbeat or real
+#: progress — keeps arriving, the client's offline circuit breaker stays
+#: online even while a long, busy operation (dataset ingest, training) makes
+#: the backend slow to answer unrelated background pollers. So the cadence
+#: must stay comfortably below the breaker's tolerance for consecutive poller
+#: misses; 5s is well under that.
 HEARTBEAT_SECONDS = 5.0
 
 #: Per-process identifier emitted as the first SSE frame on every new
@@ -132,7 +140,14 @@ def stream_progress_events(  # noqa: C901
                 name, snapshot = q.get(timeout=timeout)
                 yield _format_sse(name, snapshot)
             except queue.Empty:
-                yield ": heartbeat\n\n"
+                # Emit the heartbeat as a real, named ``heartbeat`` event
+                # rather than an SSE comment (``: heartbeat``). Comments are
+                # invisible to the browser's EventSource API, so the client
+                # could not use them as a liveness signal; a named event fires
+                # a listener, letting the frontend treat every heartbeat as
+                # proof the backend is still alive (and keeping idle proxies
+                # open just as a comment would).
+                yield _format_sse("heartbeat", {"ts": time.time()})
                 # Re-emit task channels so clients see finished tasks
                 # disappear once their stale-prune window elapses.
                 for name, tasks_tracker in _TASK_CHANNELS.items():
