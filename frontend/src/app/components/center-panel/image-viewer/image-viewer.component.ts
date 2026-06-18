@@ -215,8 +215,9 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
 
   /** Percent-position style for the best-match highlight overlay.  Returns null
    *  when the box is missing, malformed, degenerate, or covers (effectively) the
-   *  whole image - mirrors the gallery thumbnail's `bestRegionStyle` so the
-   *  near-full single-vector fallback box never paints a frame round everything. */
+   *  whole image, so the near-full single-vector fallback box never paints a
+   *  frame round everything.  (This overlay is the only place a best-match region
+   *  is drawn - thumbnails never render a best-region outline.) */
   get highlightBoxStyle(): { [k: string]: string } | null {
     const box = this.highlightBox;
     if (!box || box.length !== 4) return null;
