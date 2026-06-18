@@ -58,6 +58,10 @@ describe('VideoPlayerComponent', () => {
       paused: true,
       play: () => Promise.resolve(),
       pause: () => {},
+      // ngOnDestroy tears the element down via removeAttribute('src')/load();
+      // the stub needs both so cleanup doesn't throw.
+      removeAttribute: () => {},
+      load: () => {},
     } as unknown as HTMLVideoElement;
     component.videoRef = { nativeElement: fakeVideo } as ElementRef<HTMLVideoElement>;
 

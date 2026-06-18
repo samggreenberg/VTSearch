@@ -87,7 +87,13 @@ describe('MediaStateService', () => {
 
     service.selectMedia(5);
 
+    // selectMedia() also schedules a debounced metadata batch fetch
+    // (POST /api/medias/batch) via the metadata cache; drain it so the
+    // afterEach httpMock.verify() doesn't see an open request.
     setTimeout(() => {
+      for (const req of httpMock.match('/api/medias/batch')) {
+        req.flush([]);
+      }
       expect(ids).toContain(5);
       done();
     });

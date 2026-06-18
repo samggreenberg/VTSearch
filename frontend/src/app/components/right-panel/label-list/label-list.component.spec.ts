@@ -142,6 +142,9 @@ describe('LabelListComponent', () => {
   describe('view modes and thumbnails', () => {
     beforeEach(() => {
       component.medias = sampleMedias;
+      // ngOnInit builds the media-id → media lookup map from `medias`;
+      // detectChanges() runs it so thumbnailUrl()/hasThumbnailUrl() resolve.
+      fixture.detectChanges();
     });
 
     it('should have thumbnail URL for images', () => {
