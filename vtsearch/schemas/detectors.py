@@ -503,10 +503,17 @@ class DetectorCancelResponseSchema(Schema):
 
 
 class _FindLabelResultSchema(Schema):
-    """One ``{id, score}`` entry in the ``results`` list returned by find-label."""
+    """One ``{id, score}`` entry in the ``results`` list returned by find-label.
+
+    Patch-region-aware datasets (DINOv2/v3, EUPE) additionally carry
+    ``best_region`` - the normalised ``[x0, y0, x1, y1]`` box of the region
+    that drove this media's score - so the gallery thumbnails and focus-view
+    Highlight overlay can outline it.  Omitted for single-vector datasets.
+    """
 
     id = fields.Integer(required=True)
     score = fields.Float(required=True)
+    best_region = fields.List(fields.Float(), required=False)
 
 
 class FindLabelRequestSchema(Schema):

@@ -91,16 +91,6 @@
   }
 }
 
-.best-region-outline {
-  position: absolute;
-  box-sizing: border-box;
-  border: 1px solid rgba(255, 224, 102, 0.9);
-  border-radius: var(--radius-sm);
-  pointer-events: none;
-  // Inner dark halo keeps the yellow stroke readable on light thumbnails.
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
-}
-
 .media-placeholder {
   display: none;
 
