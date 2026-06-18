@@ -24,7 +24,7 @@ describe('LabelSortComponent', () => {
   });
 
   it('should emit modeChange on sort change', () => {
-    spyOn(component.modeChange, 'emit');
+    vi.spyOn(component.modeChange, 'emit');
     component.onSortChange('name-asc');
     expect(component.mode).toBe('name-asc');
     expect(component.modeChange.emit).toHaveBeenCalledWith('name-asc');

@@ -23,6 +23,10 @@ describe('DetectorCardComponent', () => {
     fixture = TestBed.createComponent(DetectorCardComponent);
     component = fixture.componentInstance;
     component.detector = { ...mockDetector };
+    // The card only renders middle columns listed in columnOrder; the
+    // dashboard supplies this ordering. Provide a representative set so the
+    // media-type and training-count cells render.
+    component.columnOrder = ['media_type', 'num_training', 'last_trained_at'];
     fixture.detectChanges();
   });
 
@@ -51,7 +55,7 @@ describe('DetectorCardComponent', () => {
     const renameBtn = el.querySelector('.edit-btn') as HTMLElement;
     renameBtn.click();
     fixture.detectChanges();
-    expect(component.editing).toBeTrue();
+    expect(component.editing).toBe(true);
     expect(el.querySelector('.inline-edit')).toBeTruthy();
   });
 
@@ -66,7 +70,7 @@ describe('DetectorCardComponent', () => {
   }));
 
   it('should emit rename on confirm', () => {
-    spyOn(component.rename, 'emit');
+    vi.spyOn(component.rename, 'emit');
     component.editing = true;
     component.editName = 'Renamed';
     component.confirmRename();
@@ -74,15 +78,15 @@ describe('DetectorCardComponent', () => {
   });
 
   it('should cancel rename on Escape', () => {
-    spyOn(component.rename, 'emit');
+    vi.spyOn(component.rename, 'emit');
     component.editing = true;
     component.onRenameKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(component.rename.emit).not.toHaveBeenCalled();
-    expect(component.editing).toBeFalse();
+    expect(component.editing).toBe(false);
   });
 
   it('should emit delete on delete button click', () => {
-    spyOn(component.delete, 'emit');
+    vi.spyOn(component.delete, 'emit');
     const el = fixture.nativeElement as HTMLElement;
     const deleteBtn = el.querySelector('.delete-btn') as HTMLElement;
     deleteBtn.click();
@@ -97,6 +101,6 @@ describe('DetectorCardComponent', () => {
   it('should apply selected class via host binding', () => {
     component.selected = true;
     fixture.detectChanges();
-    expect(fixture.nativeElement.classList.contains('selected')).toBeTrue();
+    expect(fixture.nativeElement.classList.contains('selected')).toBe(true);
   });
 });

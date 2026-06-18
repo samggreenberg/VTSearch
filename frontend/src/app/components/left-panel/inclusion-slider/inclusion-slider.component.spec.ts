@@ -24,15 +24,15 @@ describe('InclusionSliderComponent', () => {
   });
 
   it('should emit valueChange on input', () => {
-    spyOn(component.valueChange, 'emit');
-    const input = fixture.nativeElement.querySelector('input[type="range"]');
+    vi.spyOn(component.valueChange, 'emit');
+    const input = fixture.nativeElement.querySelector('input[type="number"]');
     input.value = '7';
     input.dispatchEvent(new Event('input'));
     expect(component.valueChange.emit).toHaveBeenCalledWith(7);
   });
 
-  it('should render a range input with correct min/max', () => {
-    const input = fixture.nativeElement.querySelector('input[type="range"]');
+  it('should render a number input with correct min/max', () => {
+    const input = fixture.nativeElement.querySelector('input[type="number"]');
     expect(input.getAttribute('min')).toBe('-10');
     expect(input.getAttribute('max')).toBe('10');
   });

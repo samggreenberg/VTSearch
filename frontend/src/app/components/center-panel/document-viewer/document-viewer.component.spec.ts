@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { SecurityContext } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 import { DocumentViewerComponent } from './document-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { Media } from '../../../models/api.models';
@@ -33,6 +35,11 @@ describe('DocumentViewerComponent', () => {
     component.ngOnChanges({
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
-    expect(component.mediaSrc).toBe('/api/medias/5/media');
+    // mediaSrc is a trusted SafeResourceUrl (required by the `<object [data]>`
+    // RESOURCE_URL sink); unwrap it to assert the underlying media URL.
+    const sanitizer = TestBed.inject(DomSanitizer);
+    expect(sanitizer.sanitize(SecurityContext.RESOURCE_URL, component.mediaSrc)).toBe(
+      '/api/medias/5/media',
+    );
   });
 });

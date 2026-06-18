@@ -23,8 +23,30 @@ describe('DashboardComponent', () => {
   });
 
   afterEach(() => {
+    // Best-effort background pollers (disk/RAM usage on a timer, embedder
+    // preloads triggered by auto-selection) may have fired during the test
+    // without being asserted. Drain them so verify() only fails on
+    // genuinely-unexpected requests.
+    drainBackgroundRequests();
     httpMock.verify();
   });
+
+  /** Flush the fire-and-forget requests the dashboard issues on init and
+   *  as a side effect of selection: the disk/RAM usage pollers
+   *  (`timer(0, 10000)`) and the per-dataset embedder preload. None of
+   *  these are asserted on by the selection/hint/button tests, so we just
+   *  swallow whatever has accumulated. */
+  function drainBackgroundRequests(): void {
+    for (const req of httpMock.match('/api/dashboard/disk-usage')) {
+      if (!req.cancelled) req.flush({ total: 0, used: 0, free: 0 });
+    }
+    for (const req of httpMock.match('/api/dashboard/ram-usage')) {
+      if (!req.cancelled) req.flush({ total: 0, used: 0, free: 0 });
+    }
+    for (const req of httpMock.match((r) => /\/preload-embedder$/.test(r.url))) {
+      if (!req.cancelled) req.flush({ ok: true, embedder: '' });
+    }
+  }
 
   function flushInitialRequests(
     datasets: any[] = [],
@@ -35,6 +57,10 @@ describe('DashboardComponent', () => {
     httpMock.expectOne('/api/datasets/registry').flush({ datasets });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors });
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers, tabs: [] });
+    // Auto-selecting a single dataset synchronously kicks off an embedder
+    // preload; drain it (and any usage polls already in flight) here so
+    // tests that don't assert on them stay clean.
+    drainBackgroundRequests();
   }
 
   it('should create', () => {
@@ -53,13 +79,13 @@ describe('DashboardComponent', () => {
   it('should auto-select single dataset', () => {
     const datasets = [{ id: 'd1', name: 'Only One' }];
     flushInitialRequests(datasets);
-    expect(component.selectedDatasetIds.has('d1')).toBeTrue();
+    expect(component.selectedDatasetIds.has('d1')).toBe(true);
   });
 
   it('should auto-select single model', () => {
     const models = [{ id: 'm1', name: 'Only One' }];
     flushInitialRequests([], models);
-    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBe(true);
   });
 
   it('should not auto-select when multiple datasets on initial load', () => {
@@ -74,7 +100,7 @@ describe('DashboardComponent', () => {
   it('should auto-select newly added dataset', () => {
     const datasets = [{ id: 'd1', name: 'First' }];
     flushInitialRequests(datasets);
-    expect(component.selectedDatasetIds.has('d1')).toBeTrue();
+    expect(component.selectedDatasetIds.has('d1')).toBe(true);
 
     // Simulate adding a second dataset via refresh
     component.refresh();
@@ -86,14 +112,14 @@ describe('DashboardComponent', () => {
     });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
 
-    expect(component.selectedDatasetIds.has('d1')).toBeFalse();
-    expect(component.selectedDatasetIds.has('d2')).toBeTrue();
+    expect(component.selectedDatasetIds.has('d1')).toBe(false);
+    expect(component.selectedDatasetIds.has('d2')).toBe(true);
   });
 
   it('should auto-select newly added model', () => {
     const models = [{ id: 'm1', name: 'First' }];
     flushInitialRequests([], models);
-    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
+    expect(component.selectedDetectorIds.has('m1')).toBe(true);
 
     // Simulate adding a second model via refresh
     component.refresh();
@@ -105,17 +131,19 @@ describe('DashboardComponent', () => {
       ],
     });
 
-    expect(component.selectedDetectorIds.has('m1')).toBeTrue();
-    expect(component.selectedDetectorIds.has('m2')).toBeTrue();
+    // Adding items after the initial load clears the prior selection and
+    // selects only the new ones (same behavior as datasets above).
+    expect(component.selectedDetectorIds.has('m1')).toBe(false);
+    expect(component.selectedDetectorIds.has('m2')).toBe(true);
   });
 
   it('should toggle dataset selection on click', () => {
     flushInitialRequests();
     const event = new MouseEvent('click');
     component.toggleDatasetSelection('d1', event);
-    expect(component.isDatasetSelected('d1')).toBeTrue();
+    expect(component.isDatasetSelected('d1')).toBe(true);
     component.toggleDatasetSelection('d1', event);
-    expect(component.isDatasetSelected('d1')).toBeFalse();
+    expect(component.isDatasetSelected('d1')).toBe(false);
   });
 
   it('should support multi-select with ctrl key', () => {
@@ -123,16 +151,16 @@ describe('DashboardComponent', () => {
     const ctrlEvent = new MouseEvent('click', { ctrlKey: true });
     component.toggleDatasetSelection('d1', new MouseEvent('click'));
     component.toggleDatasetSelection('d2', ctrlEvent);
-    expect(component.isDatasetSelected('d1')).toBeTrue();
-    expect(component.isDatasetSelected('d2')).toBeTrue();
+    expect(component.isDatasetSelected('d1')).toBe(true);
+    expect(component.isDatasetSelected('d2')).toBe(true);
   });
 
   it('should replace selection without ctrl key', () => {
     flushInitialRequests();
     component.toggleDatasetSelection('d1', new MouseEvent('click'));
     component.toggleDatasetSelection('d2', new MouseEvent('click'));
-    expect(component.isDatasetSelected('d1')).toBeFalse();
-    expect(component.isDatasetSelected('d2')).toBeTrue();
+    expect(component.isDatasetSelected('d1')).toBe(false);
+    expect(component.isDatasetSelected('d2')).toBe(true);
   });
 
   it('should sort datasets by column', () => {
@@ -142,11 +170,15 @@ describe('DashboardComponent', () => {
     ];
     flushInitialRequests(datasets);
 
-    component.datasetCols.sortBy('name');
+    // 'name' is the initial sort column (ascending), so the list starts
+    // sorted ascending; clicking it toggles to descending, then back.
     expect(component.sortedDatasets[0].name).toBe('Alpha');
 
     component.datasetCols.sortBy('name');
     expect(component.sortedDatasets[0].name).toBe('Bravo');
+
+    component.datasetCols.sortBy('name');
+    expect(component.sortedDatasets[0].name).toBe('Alpha');
   });
 
   it('should sort models by column', () => {
@@ -156,18 +188,22 @@ describe('DashboardComponent', () => {
     ];
     flushInitialRequests([], models);
 
-    component.detectorCols.sortBy('name');
+    // 'name' is the initial sort column (ascending) \u2192 Alpha first.
     expect(component.sortedDetectors[0].name).toBe('Alpha');
+    // Toggling it flips to descending \u2192 Zeta first.
+    component.detectorCols.sortBy('name');
+    expect(component.sortedDetectors[0].name).toBe('Zeta');
   });
 
   it('should show sort indicators', () => {
     flushInitialRequests();
-    component.datasetCols.sortBy('name');
+    // 'name' starts as the active ascending sort, so it already shows \u25B2.
     expect(component.datasetCols.sortIndicator('name')).toContain('\u25B2');
-    expect(component.datasetCols.isSortActive('name')).toBeTrue();
+    expect(component.datasetCols.isSortActive('name')).toBe(true);
+    // Clicking the active column toggles to descending \u2192 \u25BC.
     component.datasetCols.sortBy('name');
     expect(component.datasetCols.sortIndicator('name')).toContain('\u25BC');
-    expect(component.datasetCols.isSortActive('other')).toBeFalse();
+    expect(component.datasetCols.isSortActive('other')).toBe(false);
   });
 
   describe('button state', () => {
@@ -175,7 +211,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
       component.selectedDetectorIds.clear();
-      expect(component.labelEnabled).toBeFalse();
+      expect(component.labelEnabled).toBe(false);
     });
 
     it('should enable Label with 1 dataset + 1 model', () => {
@@ -183,42 +219,43 @@ describe('DashboardComponent', () => {
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
       // Auto-selected since only 1 each
-      expect(component.labelEnabled).toBeTrue();
+      expect(component.labelEnabled).toBe(true);
     });
 
     it('should disable Label on media type mismatch', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
       flushInitialRequests(datasets, models);
-      expect(component.labelEnabled).toBeFalse();
+      expect(component.labelEnabled).toBe(false);
     });
 
     it('should disable Label when model media_type is "any" (not a valid type)', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'any' }];
       flushInitialRequests(datasets, models);
-      expect(component.labelEnabled).toBeFalse();
+      expect(component.labelEnabled).toBe(false);
     });
 
     it('should disable Find with no selections', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
       component.selectedDetectorIds.clear();
-      expect(component.findEnabled).toBeFalse();
+      expect(component.findEnabled).toBe(false);
     });
 
     it('should enable Find with matching media types', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
+      // Find requires the detector to have training labels.
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
-      expect(component.findEnabled).toBeTrue();
+      expect(component.findEnabled).toBe(true);
     });
 
     it('should disable Find on media type mismatch', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
       flushInitialRequests(datasets, models);
-      expect(component.findEnabled).toBeFalse();
+      expect(component.findEnabled).toBe(false);
     });
 
     it('should disable Find when multiple datasets have different media types', () => {
@@ -229,7 +266,7 @@ describe('DashboardComponent', () => {
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
       component.selectedDatasetIds.add('d2');
-      expect(component.findEnabled).toBeFalse();
+      expect(component.findEnabled).toBe(false);
     });
 
     it('should enable Find when all selected items share media type', () => {
@@ -238,27 +275,27 @@ describe('DashboardComponent', () => {
         { id: 'd2', name: 'DS2', media_type: 'image' },
       ];
       const models = [
-        { id: 'm1', name: 'M1', media_type: 'image' },
-        { id: 'm2', name: 'M2', media_type: 'image' },
+        { id: 'm1', name: 'M1', media_type: 'image', num_training: 5 },
+        { id: 'm2', name: 'M2', media_type: 'image', num_training: 5 },
       ];
       flushInitialRequests(datasets, models);
       component.selectedDatasetIds.add('d2');
       component.selectedDetectorIds.add('m2');
-      expect(component.findEnabled).toBeTrue();
+      expect(component.findEnabled).toBe(true);
     });
 
     it('should disable Find when the selected model has 0 training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0 }];
       flushInitialRequests(datasets, models);
-      expect(component.findEnabled).toBeFalse();
+      expect(component.findEnabled).toBe(false);
     });
 
     it('should enable Find for a model with training', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
-      expect(component.findEnabled).toBeTrue();
+      expect(component.findEnabled).toBe(true);
     });
   });
 
@@ -266,25 +303,35 @@ describe('DashboardComponent', () => {
     it('should hint about missing dataset', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      expect(component.labelHint).toBe('Select a dataset');
+      expect(component.labelHint).toBe('Select a dataset row in the table above');
     });
 
     it('should hint about missing model', () => {
-      flushInitialRequests();
-      component.selectedDatasetIds.add('d1');
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      flushInitialRequests(datasets);
+      // Single dataset is auto-selected; no detector selected.
       component.selectedDetectorIds.clear();
-      expect(component.labelHint).toBe('Select a detector');
+      expect(component.labelHint).toBe('Create a new detector and start training');
     });
 
     it('should hint about multiple datasets', () => {
-      flushInitialRequests();
+      const datasets = [
+        { id: 'd1', name: 'DS1', media_type: 'audio' },
+        { id: 'd2', name: 'DS2', media_type: 'audio' },
+      ];
+      flushInitialRequests(datasets);
       component.selectedDatasetIds.add('d1');
       component.selectedDatasetIds.add('d2');
       expect(component.labelHint).toBe('Select exactly 1 dataset');
     });
 
     it('should hint about multiple models', () => {
-      flushInitialRequests();
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [
+        { id: 'm1', name: 'M1', media_type: 'audio' },
+        { id: 'm2', name: 'M2', media_type: 'audio' },
+      ];
+      flushInitialRequests(datasets, models);
       component.selectedDatasetIds.add('d1');
       component.selectedDetectorIds.add('m1');
       component.selectedDetectorIds.add('m2');
@@ -311,21 +358,23 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
       component.selectedDetectorIds.clear();
-      expect(component.findHint).toBe('Select a dataset and a detector');
+      expect(component.findHint).toBe('Select a dataset and a detector row above');
     });
 
     it('should hint about missing dataset', () => {
-      flushInitialRequests();
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
+      flushInitialRequests([], models);
+      // Single detector is auto-selected; no dataset selected.
       component.selectedDatasetIds.clear();
-      component.selectedDetectorIds.add('m1');
-      expect(component.findHint).toBe('Select a dataset');
+      expect(component.findHint).toBe('Select a dataset row in the table above');
     });
 
     it('should hint about missing model', () => {
-      flushInitialRequests();
-      component.selectedDatasetIds.add('d1');
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      flushInitialRequests(datasets);
+      // Single dataset is auto-selected; no detector selected.
       component.selectedDetectorIds.clear();
-      expect(component.findHint).toBe('Select a detector');
+      expect(component.findHint).toBe('Select a detector row in the table above');
     });
 
     it('should hint about media type mismatch', () => {
@@ -337,7 +386,7 @@ describe('DashboardComponent', () => {
 
     it('should return score hint when find is enabled', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
-      const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
       expect(component.findHint).toBe('Score selected datasets with selected detectors');
     });
@@ -371,7 +420,7 @@ describe('DashboardComponent', () => {
     component.selectedDatasetIds.add('d1');
 
     // Mock dialog confirmation
-    spyOn(component['dialog'], 'confirmDestructive').and.returnValue(Promise.resolve(true));
+    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
 
     component.deleteDataset(datasets[0]);
     tick();
@@ -380,7 +429,7 @@ describe('DashboardComponent', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush({});
 
-    expect(component.selectedDatasetIds.has('d1')).toBeFalse();
+    expect(component.selectedDatasetIds.has('d1')).toBe(false);
 
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
@@ -389,11 +438,11 @@ describe('DashboardComponent', () => {
   it('should open and close importer modal via NewThingFlowsService', () => {
     flushInitialRequests();
     const flows = TestBed.inject(NewThingFlowsService);
-    expect(component.importerModalOpen).toBeFalse();
+    expect(component.importerModalOpen).toBe(false);
     component.openImporterModal();
-    expect(component.importerModalOpen).toBeTrue();
+    expect(component.importerModalOpen).toBe(true);
     flows.closeImporter();
-    expect(component.importerModalOpen).toBeFalse();
+    expect(component.importerModalOpen).toBe(false);
   });
 
   it('should render empty state when no datasets', () => {
@@ -425,7 +474,7 @@ describe('DashboardComponent', () => {
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
 
-      const routerSpy = spyOn(component['router'], 'navigate');
+      const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
       component.onLabel();
 
       expect(routerSpy).toHaveBeenCalledWith(['/label', 'd1', 'm1']);
@@ -437,7 +486,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests(datasets, models);
 
       const session = TestBed.inject(LabelSessionService);
-      spyOn(component['router'], 'navigate');
+      vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
       component.onLabel();
 
       expect(session.textQuery).toBe('dog barking');
@@ -446,7 +495,7 @@ describe('DashboardComponent', () => {
     it('does nothing when no dataset is selected', () => {
       flushInitialRequests();
       component.selectedDatasetIds.clear();
-      const routerSpy = spyOn(component['router'], 'navigate');
+      const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
       component.onLabel();
       expect(routerSpy).not.toHaveBeenCalled();
     });
@@ -455,67 +504,68 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
       flushInitialRequests(datasets, []);
       component.selectedDetectorIds.clear();
-      const routerSpy = spyOn(component['router'], 'navigate');
+      const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
 
       component.onLabel();
 
       expect(routerSpy).not.toHaveBeenCalled();
-      expect(component.newDetectorModalOpen).toBeTrue();
-      expect(component.trainAfterModelCreation).toBeTrue();
+      expect(component.newDetectorModalOpen).toBe(true);
+      expect(component.trainAfterModelCreation).toBe(true);
     });
   });
 
-  it('should continue polling after HTTP error on progress endpoint', fakeAsync(() => {
+  it('should keep refreshing after an HTTP error on the registry fetch', () => {
     flushInitialRequests();
-    const flows = TestBed.inject(NewThingFlowsService);
-    flows.emitDemoSelected({ name: 'gtzan', label: 'GTZAN' } as any);
 
-    const demoReq = httpMock.expectOne('/api/dataset/load-demo');
-    demoReq.flush({});
+    // Phase 2: the HTTP /api/dataset/progress poller was replaced by the
+    // SSE stream, so the resilient "keep going after a transient error"
+    // guarantee now lives in the registry refresh pipeline
+    // (DatasetStateService catchError + retry). A failed registry fetch
+    // must not wedge the dashboard: a subsequent refresh still resolves.
+    component.refresh();
+    // forkJoin subscribes to both registry fetches at once; erroring one
+    // cancels its sibling, and DatasetStateService's catchError swallows
+    // the failure so the pipeline stays alive for the next refresh.
+    httpMock
+      .expectOne('/api/datasets/registry')
+      .error(new ProgressEvent('error'), { status: 500, statusText: 'Internal Server Error' });
+    for (const req of httpMock.match('/api/detectors/registry')) {
+      if (!req.cancelled) {
+        req.error(new ProgressEvent('error'), { status: 500, statusText: 'Internal Server Error' });
+      }
+    }
 
-    // First progress poll fails with a server error
-    const failedReq = httpMock.expectOne('/api/dataset/progress');
-    failedReq.error(new ProgressEvent('error'), { status: 500, statusText: 'Internal Server Error' });
-
-    // Component should still be in loading state
-    expect(component.loading).toBeTrue();
-
-    // Advance timer to trigger next poll; polling should survive the error
-    tick(1000);
-    const retryReq = httpMock.expectOne('/api/dataset/progress');
-    retryReq.flush({ status: 'idle' });
-
-    expect(component.loading).toBeFalse();
-
-    // Refresh after completion
-    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+    // The dashboard survives and a later refresh succeeds.
+    component.refresh();
+    httpMock
+      .expectOne('/api/datasets/registry')
+      .flush({ datasets: [{ id: 'd1', name: 'Recovered', media_type: 'audio' }] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
-  }));
+
+    expect(component.datasets.length).toBe(1);
+    expect(component.datasets[0].name).toBe('Recovered');
+  });
 
   it('should load demo dataset on demoSelected', () => {
     flushInitialRequests();
     const flows = TestBed.inject(NewThingFlowsService);
     flows.openImporter();
-    expect(component.importerModalOpen).toBeTrue();
+    expect(component.importerModalOpen).toBe(true);
     const demo = { name: 'gtzan', label: 'GTZAN' } as any;
     flows.emitDemoSelected(demo);
     flows.closeImporter();
 
-    expect(component.importerModalOpen).toBeFalse();
-    expect(component.loading).toBeTrue();
-    expect(component.progressMessage).toContain('GTZAN');
-
+    expect(component.importerModalOpen).toBe(false);
+    // Phase 2: the demo flow POSTs /api/dataset/load-demo and hands the
+    // returned task_id to the SSE-driven loading-tasks poller. Loading
+    // state and progress now live on the SSE stream
+    // (DashboardLoadingTasksService), not on synchronous component fields,
+    // so we only assert the request contract here.
     const req = httpMock.expectOne('/api/dataset/load-demo');
     expect(req.request.method).toBe('POST');
     expect(req.request.body.name).toBe('gtzan');
-    req.flush({});
-
-    // Progress polling starts
-    const progressReq = httpMock.expectOne('/api/dataset/progress');
-    progressReq.flush({ status: 'idle' });
-
-    // After idle, it should refresh
-    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+    req.flush({ task_id: 't1' });
+    // startProgressPolling subscribes to the SSE channel; no further HTTP
+    // is issued until a loading-task event arrives, so nothing else to flush.
   });
 });

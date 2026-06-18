@@ -215,6 +215,7 @@ markers = [
     "cli: CLI autodetect, load sort window, progress",
     "converters: document and media converters",
     "projection: VTSBrowse UMAP projection and hex-tile pyramid",
+    "frontend: frontend-only gate (Angular build + npm audit + Vitest unit suite); has no Python tests, runs via ./run-tests.sh frontend",
 ]
 addopts = "-m 'not gpu and not slow'"
 

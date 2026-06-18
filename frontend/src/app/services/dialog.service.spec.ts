@@ -25,12 +25,12 @@ describe('VtDialogService', () => {
 
     service.resolve(false);
     const result = await promise;
-    expect(result).toBeFalse();
+    expect(result).toBe(false);
   });
 
   it('prompt should return input value', async () => {
     const promise = service.prompt('Enter name', 'default');
-    expect(service.dialogShowInput).toBeTrue();
+    expect(service.dialogShowInput).toBe(true);
     expect(service.dialogInputValue).toBe('default');
 
     service.dialogInputValue = 'typed value';

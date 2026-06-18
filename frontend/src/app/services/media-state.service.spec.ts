@@ -67,7 +67,7 @@ describe('MediaStateService', () => {
     expect(service.selectedId).toBeNull();
   });
 
-  it('medias$ should emit on load', (done) => {
+  it('medias$ should emit on load', () => new Promise<void>((done) => {
     const emissions: Media[][] = [];
     service.medias$.subscribe((m) => emissions.push(m));
 
@@ -79,17 +79,23 @@ describe('MediaStateService', () => {
       expect(emissions[emissions.length - 1]).toEqual(mockMedias);
       done();
     });
-  });
+  }));
 
-  it('selectedId$ should emit on select', (done) => {
+  it('selectedId$ should emit on select', () => new Promise<void>((done) => {
     const ids: (number | null)[] = [];
     service.selectedId$.subscribe((id) => ids.push(id));
 
     service.selectMedia(5);
 
+    // selectMedia() also schedules a debounced metadata batch fetch
+    // (POST /api/medias/batch) via the metadata cache; drain it so the
+    // afterEach httpMock.verify() doesn't see an open request.
     setTimeout(() => {
+      for (const req of httpMock.match('/api/medias/batch')) {
+        req.flush([]);
+      }
       expect(ids).toContain(5);
       done();
     });
-  });
+  }));
 });

@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { SimpleChange } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { MediaListComponent } from './media-list.component';
@@ -45,6 +46,11 @@ describe('MediaListComponent', () => {
       { id: 1, score: 0.5 },
       { id: 2, score: 0.2 },
     ];
+    // Programmatic input assignment doesn't fire ngOnChanges; trigger the
+    // rebuild explicitly the way Angular would for a [sortOrder] binding.
+    component.ngOnChanges({
+      sortOrder: new SimpleChange(null, component.sortOrder, false),
+    });
     fixture.detectChanges();
     const items = component.cachedOrderedItems;
     expect(items[0].media.id).toBe(3);
@@ -59,12 +65,16 @@ describe('MediaListComponent', () => {
       { id: 2, score: 0.2 },
     ];
     component.threshold = 0.4;
+    component.ngOnChanges({
+      sortOrder: new SimpleChange(null, component.sortOrder, false),
+      threshold: new SimpleChange(null, component.threshold, false),
+    });
     fixture.detectChanges();
     const items = component.cachedOrderedItems;
     // Threshold is at 0.4, so item with score 0.2 should have showThreshold
-    expect(items[0].showThreshold).toBeFalse();
-    expect(items[1].showThreshold).toBeFalse();
-    expect(items[2].showThreshold).toBeTrue();
+    expect(items[0].showThreshold).toBe(false);
+    expect(items[1].showThreshold).toBe(false);
+    expect(items[2].showThreshold).toBe(true);
   });
 
   it('should return correct vote labels', () => {
@@ -76,7 +86,7 @@ describe('MediaListComponent', () => {
   });
 
   it('should emit mediaSelect on item select', () => {
-    spyOn(component.mediaSelect, 'emit');
+    vi.spyOn(component.mediaSelect, 'emit');
     component.onMediaSelect(2);
     expect(component.mediaSelect.emit).toHaveBeenCalledWith(2);
   });
@@ -93,6 +103,10 @@ describe('MediaListComponent', () => {
       { id: 2, score: 0.3 },
     ];
     component.threshold = 0.5;
+    component.ngOnChanges({
+      sortOrder: new SimpleChange(null, component.sortOrder, false),
+      threshold: new SimpleChange(null, component.threshold, false),
+    });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.media-threshold-line')).toBeTruthy();
   });
@@ -103,13 +117,13 @@ describe('MediaListComponent', () => {
   // DOM, so every row is visible and should hydrate eagerly.
   it('eagerly prefetches metadata for every row when virtual scroll is off', () => {
     const cache = TestBed.inject(MediaMetadataCacheService);
-    const spy = spyOn(cache, 'ensureLoaded');
+    const spy = vi.spyOn(cache, 'ensureLoaded').mockImplementation(() => {});
     component.medias = mockMedias;
     component.ngOnChanges({
       medias: { currentValue: mockMedias, previousValue: [], firstChange: false, isFirstChange: () => false },
     });
     expect(spy).toHaveBeenCalled();
-    const ids = spy.calls.mostRecent().args[0] as number[];
+    const ids = spy.mock.lastCall![0] as number[];
     expect(ids).toEqual([1, 2, 3]);
   });
 });

@@ -86,7 +86,7 @@ describe('SortingApiService', () => {
   });
 
   it('getSafeThresholds should GET', () => {
-    service.getSafeThresholds().subscribe(data => expect(data.safe_thresholds).toBeTrue());
+    service.getSafeThresholds().subscribe(data => expect(data.safe_thresholds).toBe(true));
     const req = httpMock.expectOne('/api/safe-thresholds');
     expect(req.request.method).toBe('GET');
     req.flush({ safe_thresholds: true });

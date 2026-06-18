@@ -42,13 +42,13 @@ describe('VotingOverlayComponent', () => {
   it('should apply voted class when isGood is true', () => {
     component.isGood = true;
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.btn-good').classList.contains('voted')).toBeTrue();
+    expect(fixture.nativeElement.querySelector('.btn-good').classList.contains('voted')).toBe(true);
   });
 
   it('should apply voted class when isBad is true', () => {
     component.isBad = true;
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.btn-bad').classList.contains('voted')).toBeTrue();
+    expect(fixture.nativeElement.querySelector('.btn-bad').classList.contains('voted')).toBe(true);
   });
 
   it('should not emit when disabled', () => {
@@ -57,7 +57,7 @@ describe('VotingOverlayComponent', () => {
     let emitted = false;
     component.voted.subscribe(() => (emitted = true));
     fixture.nativeElement.querySelector('.btn-good').click();
-    expect(emitted).toBeFalse();
+    expect(emitted).toBe(false);
   });
 
   it('should hide the first-vote hint by default', () => {

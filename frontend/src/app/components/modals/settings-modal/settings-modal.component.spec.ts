@@ -47,12 +47,17 @@ describe('SettingsModalComponent', () => {
 
   function flushInit(): void {
     fixture.detectChanges();
-    // forkJoin makes all requests in parallel
+    // forkJoin makes all requests in parallel: settings, media types,
+    // embedders, and version.
     const settingsReq = httpMock.expectOne('/api/settings');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
+    const embeddersReq = httpMock.expectOne('/api/embedders');
     const versionReq = httpMock.expectOne('/api/version');
-    settingsReq.flush(mockSettings);
+    // Deep-clone so per-test component mutations (onViewModeChange, etc.)
+    // never leak back into the shared mockSettings constant.
+    settingsReq.flush(structuredClone(mockSettings));
     mediaTypesReq.flush(mockMediaTypes);
+    embeddersReq.flush({ embedders: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
   }
 
@@ -64,7 +69,7 @@ describe('SettingsModalComponent', () => {
   it('should load settings on init', () => {
     flushInit();
     expect(component.settings.theme).toBe('dark');
-    expect(component.loading).toBeFalse();
+    expect(component.loading).toBe(false);
   });
 
   it('should load media types and set active view tab', () => {
@@ -77,13 +82,17 @@ describe('SettingsModalComponent', () => {
     flushInit();
     component.onThemeChange('light');
     expect(component.settings.theme).toBe('light');
-    httpMock.expectOne('/api/settings').flush(mockSettings);
+    // onThemeChange persists twice: ThemeService.setTheme issues its own
+    // PUT /api/settings, and save() issues another.
+    const reqs = httpMock.match('/api/settings');
+    expect(reqs.length).toBe(2);
+    reqs.forEach((r) => r.flush(mockSettings));
   });
 
   it('should toggle boolean setting and save', () => {
     flushInit();
     component.onToggle('show_animations', false);
-    expect(component.settings.show_animations).toBeFalse();
+    expect(component.settings.show_animations).toBe(false);
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
@@ -110,17 +119,21 @@ describe('SettingsModalComponent', () => {
 
   it('should reset to defaults after confirmation', fakeAsync(() => {
     flushInit();
-    spyOn(component['dialog'], 'confirmDestructive').and.returnValue(Promise.resolve(true));
+    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
     component.resetDefaults();
     tick();
     httpMock.expectOne('/api/settings/defaults').flush({ ...mockSettings, theme: 'light' });
-    httpMock.expectOne('/api/settings').flush(mockSettings);
+    // Applying the defaults persists twice: ThemeService.setTheme PUTs the
+    // new theme, and save() PUTs the full settings object.
+    const reqs = httpMock.match('/api/settings');
+    expect(reqs.length).toBe(2);
+    reqs.forEach((r) => r.flush(mockSettings));
     expect(component.settings.theme).toBe('light');
   }));
 
   it('should not reset when confirmation is declined', fakeAsync(() => {
     flushInit();
-    spyOn(component['dialog'], 'confirmDestructive').and.returnValue(Promise.resolve(false));
+    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(false));
     component.resetDefaults();
     tick();
     httpMock.expectNone('/api/settings/defaults');
@@ -147,7 +160,7 @@ describe('SettingsModalComponent', () => {
 
   it('should emit closed on close', () => {
     flushInit();
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
@@ -156,11 +169,15 @@ describe('SettingsModalComponent', () => {
     fixture.detectChanges();
     const settingsReq = httpMock.expectOne('/api/settings');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
+    const embeddersReq = httpMock.expectOne('/api/embedders');
     const versionReq = httpMock.expectOne('/api/version');
-    settingsReq.flush({}, { status: 500, statusText: 'Error' });
+    // Flush the successful siblings first; erroring settings last avoids
+    // forkJoin cancelling the in-flight siblings before they're flushed.
     mediaTypesReq.flush({ media_types: [] });
+    embeddersReq.flush({ embedders: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
-    expect(component.loading).toBeFalse();
+    settingsReq.flush({}, { status: 500, statusText: 'Error' });
+    expect(component.loading).toBe(false);
     expect(component.error).toBe('Failed to load settings');
   });
 });

@@ -65,7 +65,7 @@ describe('CombineDatasetsModalComponent', () => {
     fixture.detectChanges();
     flushMediaTypes();
 
-    expect(component.canCombine).toBeTrue();
+    expect(component.canCombine).toBe(true);
     expect(component.disabledReason).toBe('');
   });
 
@@ -77,8 +77,8 @@ describe('CombineDatasetsModalComponent', () => {
     fixture.detectChanges();
     flushMediaTypes();
 
-    expect(component.canCombine).toBeFalse();
-    expect(component.disabledReason).toContain('same media type');
+    expect(component.canCombine).toBe(false);
+    expect(component.disabledReason).toContain('share a media type');
   });
 
   it('canCombine is false when fewer than two rows remain after removal', () => {
@@ -91,7 +91,7 @@ describe('CombineDatasetsModalComponent', () => {
 
     component.removeRow('b');
     expect(component.rows.length).toBe(1);
-    expect(component.canCombine).toBeFalse();
+    expect(component.canCombine).toBe(false);
     expect(component.disabledReason).toContain('at least two');
   });
 
@@ -109,11 +109,11 @@ describe('CombineDatasetsModalComponent', () => {
     component.submit();
     const req = httpMock.expectOne('/api/dataset/combine');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ datasets: ['/x/a.pkl', '/x/b.pkl'] });
+    expect(req.request.body).toEqual({ datasets: ['/x/a.pkl', '/x/b.pkl'], name: 'Alpha + Bravo' });
     req.flush({ ok: true });
 
-    expect(started).toBeTrue();
-    expect(component.submitting).toBeFalse();
+    expect(started).toBe(true);
+    expect(component.submitting).toBe(false);
   });
 
   it('submit surfaces backend errors without emitting combineStarted', () => {
@@ -131,9 +131,9 @@ describe('CombineDatasetsModalComponent', () => {
     const req = httpMock.expectOne('/api/dataset/combine');
     req.flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
 
-    expect(started).toBeFalse();
+    expect(started).toBe(false);
     expect(component.error).toBe('boom');
-    expect(component.submitting).toBeFalse();
+    expect(component.submitting).toBe(false);
   });
 
   it('submit is a no-op when canCombine is false', () => {

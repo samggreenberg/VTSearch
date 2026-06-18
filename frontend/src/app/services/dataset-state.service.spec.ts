@@ -24,25 +24,28 @@ describe('DatasetStateService', () => {
   it('should start with empty state', () => {
     expect(service.datasets).toEqual([]);
     expect(service.detectors).toEqual([]);
-    expect(service.loading).toBeFalse();
+    expect(service.loading).toBe(false);
     expect(service.progressMessage).toBe('');
-    expect(service.loaded).toBeFalse();
+    expect(service.loaded).toBe(false);
   });
 
   it('flips loaded$ once the first registry fetch returns (success)', () => {
-    expect(service.loaded).toBeFalse();
+    expect(service.loaded).toBe(false);
     service.refresh();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
-    expect(service.loaded).toBeTrue();
+    expect(service.loaded).toBe(true);
   });
 
   it('flips loaded$ once the first registry fetch returns (error)', () => {
-    expect(service.loaded).toBeFalse();
+    expect(service.loaded).toBe(false);
     service.refresh();
+    // forkJoin cancels the sibling detectors request the moment the
+    // datasets request errors, so we only error (and assert against)
+    // the one request that actually completes.
+    httpMock.expectOne('/api/detectors/registry');
     httpMock.expectOne('/api/datasets/registry').error(new ProgressEvent('Network'));
-    httpMock.expectOne('/api/detectors/registry').error(new ProgressEvent('Network'));
-    expect(service.loaded).toBeTrue();
+    expect(service.loaded).toBe(true);
   });
 
   it('refresh should fetch datasets and detectors', () => {
@@ -74,8 +77,8 @@ describe('DatasetStateService', () => {
     const freshDetectors = httpMock.expectOne('/api/detectors/registry');
 
     // The first (stale) requests were cancelled by switchMap
-    expect(staleDs.cancelled).toBeTrue();
-    expect(staleDetectors.cancelled).toBeTrue();
+    expect(staleDs.cancelled).toBe(true);
+    expect(staleDetectors.cancelled).toBe(true);
 
     // Flush the fresh responses
     freshDs.flush({ datasets: [{ id: '1', name: 'fresh' }] });
@@ -89,7 +92,7 @@ describe('DatasetStateService', () => {
     service.setLoading(true);
     service.setProgressMessage('Loading...');
 
-    expect(service.loading).toBeTrue();
+    expect(service.loading).toBe(true);
     expect(service.progressMessage).toBe('Loading...');
   });
 
@@ -100,7 +103,7 @@ describe('DatasetStateService', () => {
 
     expect(service.datasets).toEqual([]);
     expect(service.detectors).toEqual([]);
-    expect(service.loading).toBeFalse();
+    expect(service.loading).toBe(false);
     expect(service.progressMessage).toBe('');
     expect(service.error).toBeNull();
   });
@@ -110,8 +113,9 @@ describe('DatasetStateService', () => {
     service.error$.subscribe((e) => errors.push(e));
 
     service.refresh();
+    // forkJoin cancels the sibling detectors request when datasets errors.
+    httpMock.expectOne('/api/detectors/registry');
     httpMock.expectOne('/api/datasets/registry').error(new ProgressEvent('Network error'));
-    httpMock.expectOne('/api/detectors/registry').error(new ProgressEvent('Network error'));
     expect(service.error).toBe("Couldn't load datasets and detectors.");
 
     // A second refresh after the failure should still work; the

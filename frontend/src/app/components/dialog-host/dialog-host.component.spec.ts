@@ -26,12 +26,12 @@ describe('DialogHostComponent', () => {
     const promise = dialogService.confirm('Are you sure?');
     fixture.detectChanges();
 
-    expect(dialogService.dialogOpen).toBeTrue();
+    expect(dialogService.dialogOpen).toBe(true);
 
     component.onButtonClick(true);
     const result = await promise;
-    expect(result).toBeTrue();
-    expect(dialogService.dialogOpen).toBeFalse();
+    expect(result).toBe(true);
+    expect(dialogService.dialogOpen).toBe(false);
   });
 
   it('should resolve with false on close', async () => {
@@ -40,7 +40,7 @@ describe('DialogHostComponent', () => {
 
     component.onClosed();
     const result = await promise;
-    expect(result).toBeFalse();
+    expect(result).toBe(false);
   });
 
   it('should not show close button on dialog modal', async () => {

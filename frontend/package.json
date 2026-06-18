@@ -11,7 +11,10 @@
     "watch": "ng build --watch --configuration development",
     "generate-api-client": "ng-openapi-gen",
     "regenerate-openapi-snapshot": "cd .. && python scripts/dump_openapi.py > frontend/openapi.json",
-    "test": "echo 'Karma removed - no browser-based test runner configured. Run backend tests via ./run-tests.sh'"
+    "pretest": "ng-openapi-gen",
+    "test": "ng test --watch",
+    "pretest:ci": "ng-openapi-gen",
+    "test:ci": "ng test --no-watch"
   },
   "private": true,
   "dependencies": {
@@ -31,9 +34,10 @@
     "@angular-devkit/build-angular": "^21.2.16",
     "@angular/cli": "^21.2.16",
     "@angular/compiler-cli": "^21.2.17",
-    "@types/jasmine": "^6.0.0",
+    "jsdom": "^25.0.1",
     "ng-openapi-gen": "^1.0.5",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.9"
   },
   "overrides": {
     "pacote": {

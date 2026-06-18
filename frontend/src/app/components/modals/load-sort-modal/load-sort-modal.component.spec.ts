@@ -50,13 +50,13 @@ describe('LoadSortModalComponent', () => {
     expect(component.serverMediaFiles[0].filename).toBe('example.wav');
     expect(component.registryModels.length).toBe(1);
     expect(component.registryModels[0].name).toBe('My Detector');
-    expect(component.loading).toBeFalse();
+    expect(component.loading).toBe(false);
   });
 
   it('should emit modelSelected and close when a registry model is loaded', () => {
     flushInit();
-    spyOn(component.modelSelected, 'emit');
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.modelSelected, 'emit');
+    vi.spyOn(component.closed, 'emit');
 
     component.loadRegistryModel({ id: 'm1', name: 'My Detector', media_type: 'audio', num_training: 12 });
 
@@ -66,8 +66,8 @@ describe('LoadSortModalComponent', () => {
 
   it('should load server media and emit', () => {
     flushInit();
-    spyOn(component.exampleSortStarted, 'emit');
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.exampleSortStarted, 'emit');
+    vi.spyOn(component.closed, 'emit');
 
     component.loadServerMedia('example.wav');
     httpMock.expectOne('/api/example-sort-server').flush({ results: [], threshold: 0.5 });
@@ -86,7 +86,7 @@ describe('LoadSortModalComponent', () => {
 
   it('should emit closed on close', () => {
     flushInit();
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });

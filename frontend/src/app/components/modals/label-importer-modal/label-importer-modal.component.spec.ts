@@ -75,7 +75,7 @@ describe('LabelImporterModalComponent', () => {
 
   it('should submit form and emit imported', () => {
     flushInit();
-    spyOn(component.imported, 'emit');
+    vi.spyOn(component.imported, 'emit');
     component.selectImporter(mockImporters[0] as any);
     component.formValues['filepath'] = '/data/labels.json';
     component.submit();
@@ -84,7 +84,7 @@ describe('LabelImporterModalComponent', () => {
     expect(req.request.method).toBe('POST');
     req.flush({ applied: 5, message: 'Applied 5 labels' });
 
-    expect(component.submitting).toBeFalse();
+    expect(component.submitting).toBe(false);
     expect(component.imported.emit).toHaveBeenCalled();
   });
 
@@ -111,7 +111,7 @@ describe('LabelImporterModalComponent', () => {
 
   it('should emit closed on close', () => {
     flushInit();
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
