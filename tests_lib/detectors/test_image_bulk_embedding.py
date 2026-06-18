@@ -538,3 +538,55 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
         for m in medias.values():
             assert m.get("patch_regions") is not None
             assert m.get("patch_grid") is not None
+
+    def test_embed_missing_backfills_patch_regions_for_preembedded(self):
+        """Already-embedded images that lack a region tree still get the patch
+        pass.
+
+        Regression: the patch-region pass used to be gated on the image-level
+        ``missing`` set, so a dataset that arrived already-embedded (pickle /
+        content-vector importer) but without ``patch_regions`` never ran the
+        patch pass.  The best-match highlight then had no region to draw even
+        though the embedder reported ``supports_patch_regions``.
+        """
+        from vtscore.datasets.stages.embedding import embed_missing
+
+        emb = mock.MagicMock()
+        emb.name = "fake_patch"
+        emb._model = True
+        emb._on_progress = lambda *a, **kw: None
+        emb.supports_patch_regions = True
+
+        patch_outputs = [mock.MagicMock(patch_grid=np.zeros((4, 4, 768), dtype=np.float32)) for _ in range(2)]
+        emb.patch_forward_bulk.return_value = patch_outputs
+
+        # Every media already carries an embedding (nothing in the "missing"
+        # set) but no patch_regions yet.
+        medias = {
+            i: {
+                "media_type": "image",
+                "embedding": np.zeros(768, dtype=np.float32),
+                "embedder": "fake_patch",
+                "media_path": f"/tmp/img_{i}.png",
+            }
+            for i in range(1, 3)
+        }
+
+        with (
+            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
+            mock.patch(
+                "vtscore.media.patch_embed.build_region_tree", return_value=np.zeros((23, 768), dtype=np.float32)
+            ),
+            mock.patch("vtscore.media.patch_embed.to_fp16", side_effect=lambda x: x.astype(np.float16)),
+        ):
+            embed_missing(medias)
+
+        # No image-level embedding work (all were embedded already)...
+        emb.embed_media_bulk.assert_not_called()
+        # ...but the patch pass still ran over the region-less images.
+        assert emb.patch_forward_bulk.call_count == 1
+        sent = emb.patch_forward_bulk.call_args.args[0]
+        assert len(sent) == 2
+        for m in medias.values():
+            assert m.get("patch_regions") is not None
+            assert m.get("patch_grid") is not None
