@@ -1,4 +1,5 @@
-import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, OnDestroy, Output, computed, inject, signal } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -18,21 +19,37 @@ type ModalView = 'picker' | 'form';
   templateUrl: './settings-exporter-modal.component.html',
   styleUrl: './settings-exporter-modal.component.scss',
 })
-export class SettingsExporterModalComponent implements OnInit, OnDestroy {
+export class SettingsExporterModalComponent implements OnDestroy {
   @Output() closed = new EventEmitter<void>();
   @Output() exported = new EventEmitter<void>();
 
+  private readonly settingsIoApi = inject(SettingsIoApiService);
+
   view: ModalView = 'picker';
-  exporters: SettingsExporterEntry[] = [];
-  loading = true;
+
+  // Eager `rxResource`: loads the settings-exporter list once on creation,
+  // wrapping the generated-client read so the interceptor chain still applies.
+  private readonly exportersResource = rxResource({
+    stream: () => this.settingsIoApi.listExporters(),
+  });
+  readonly exporters = computed<SettingsExporterEntry[]>(() =>
+    (this.exportersResource.value() ?? []).filter((exp) => !exp.hidden_from_picker),
+  );
+  readonly loading = computed(() => this.exportersResource.isLoading());
+
   selectedExporter: SettingsExporterEntry | null = null;
   formValues: Record<string, string> = {};
   submitting = false;
-  error = '';
+
+  /** Error from a failed export action; the list-load failure is merged in. */
+  private readonly exportError = signal('');
+  readonly error = computed(
+    () =>
+      this.exportError() ||
+      (this.exportersResource.error() ? 'Failed to load settings exporters' : ''),
+  );
   successMessage = '';
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
-
-  constructor(private settingsIoApi: SettingsIoApiService) {}
 
   get modalTitle(): string {
     if (this.view === 'form' && this.selectedExporter) {
@@ -48,23 +65,10 @@ export class SettingsExporterModalComponent implements OnInit, OnDestroy {
     return (this.selectedExporter?.fields ?? []) as ImporterField[];
   }
 
-  ngOnInit(): void {
-    this.settingsIoApi.listExporters().subscribe({
-      next: (list) => {
-        this.exporters = list.filter((exp) => !exp.hidden_from_picker);
-        this.loading = false;
-      },
-      error: () => {
-        this.loading = false;
-        this.error = 'Failed to load settings exporters';
-      },
-    });
-  }
-
   selectExporter(exporter: SettingsExporterEntry): void {
     this.selectedExporter = exporter;
     this.formValues = {};
-    this.error = '';
+    this.exportError.set('');
     this.successMessage = '';
     const fields = (exporter.fields ?? []) as ImporterField[];
     for (const field of fields) {
@@ -90,14 +94,14 @@ export class SettingsExporterModalComponent implements OnInit, OnDestroy {
   back(): void {
     this.view = 'picker';
     this.selectedExporter = null;
-    this.error = '';
+    this.exportError.set('');
     this.successMessage = '';
   }
 
   submit(): void {
     if (!this.selectedExporter) return;
     this.submitting = true;
-    this.error = '';
+    this.exportError.set('');
     this.successMessage = '';
 
     this.settingsIoApi.runExport(this.selectedExporter.name, this.formValues).subscribe({
@@ -121,7 +125,7 @@ export class SettingsExporterModalComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.submitting = false;
-        this.error = err.error?.error || 'Export failed';
+        this.exportError.set(err.error?.error || 'Export failed');
       },
     });
   }

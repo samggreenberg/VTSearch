@@ -1,11 +1,11 @@
 <vt-modal [title]="title" [open]="true" (closed)="close()">
-  @if (loading) {
+  @if (loading()) {
     <p class="empty-state">Loading exporters...</p>
-  } @else if (exporters.length === 0) {
+  } @else if (exporters().length === 0) {
     <p class="empty-state">No exporters available.</p>
   } @else {
     <div class="exporter-picker">
-      @for (exp of exporters; track exp.name) {
+      @for (exp of exporters(); track exp.name) {
         <button class="exporter-card" (click)="selectExporter(exp)">
           <span class="exporter-name">@if (exp.icon) {<span class="exporter-icon"><vt-icon [icon]="exp.icon"></vt-icon></span> }{{ exp.display_name || exp.name }}</span>
           @if (exp.description) {
@@ -16,7 +16,7 @@
     </div>
   }
 
-  @if (error) {
-    <p class="error-text">{{ error }}</p>
+  @if (error()) {
+    <p class="error-text">{{ error() }}</p>
   }
 </vt-modal>

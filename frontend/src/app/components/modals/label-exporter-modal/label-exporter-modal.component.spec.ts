@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { LabelExporterModalComponent } from './label-exporter-modal.component';
+import { settleResource } from '../../../testing/settle-resource';
 
 describe('LabelExporterModalComponent', () => {
   let component: LabelExporterModalComponent;
@@ -28,35 +29,40 @@ describe('LabelExporterModalComponent', () => {
     httpMock.verify();
   });
 
-  function flushInit(): void {
+  // The exporter list now rides an eager `rxResource`, whose loader runs in a
+  // root effect rather than during `detectChanges()`; tick to issue the GET,
+  // then settle so the resolved value commits before assertions.
+  async function flushInit(): Promise<void> {
     fixture.detectChanges();
+    TestBed.tick();
     httpMock.expectOne('/api/exporters').flush(mockExporters);
+    await settleResource();
   }
 
-  it('should create', () => {
-    flushInit();
+  it('should create', async () => {
+    await flushInit();
     expect(component).toBeTruthy();
   });
 
-  it('should load exporters on init', () => {
-    flushInit();
-    expect(component.exporters.length).toBe(2);
-    expect(component.loading).toBe(false);
+  it('should load exporters on init', async () => {
+    await flushInit();
+    expect(component.exporters().length).toBe(2);
+    expect(component.loading()).toBe(false);
   });
 
-  it('should show correct title for goods only', () => {
+  it('should show correct title for goods only', async () => {
     component.goodsOnly = true;
-    flushInit();
+    await flushInit();
     expect(component.title).toContain('Goods');
   });
 
-  it('should show default title', () => {
-    flushInit();
+  it('should show default title', async () => {
+    await flushInit();
     expect(component.title).toBe('Export Labels');
   });
 
-  it('should export labels when exporter selected', () => {
-    flushInit();
+  it('should export labels when exporter selected', async () => {
+    await flushInit();
     vi.spyOn(component.closed, 'emit');
     vi.spyOn(component.exportComplete, 'emit');
 
@@ -74,16 +80,16 @@ describe('LabelExporterModalComponent', () => {
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
-  it('should render exporter cards', () => {
-    flushInit();
+  it('should render exporter cards', async () => {
+    await flushInit();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     const cards = el.querySelectorAll('.exporter-card');
     expect(cards.length).toBe(2);
   });
 
-  it('should emit closed on close', () => {
-    flushInit();
+  it('should emit closed on close', async () => {
+    await flushInit();
     vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
