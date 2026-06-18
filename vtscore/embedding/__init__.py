@@ -29,6 +29,7 @@ from vtscore.embedding.loader import (
 from vtscore.embedding.matrix import (
     get_embedding_matrix,
     get_embedding_matrix_for_snap,
+    get_region_matrix_for_snap,
     invalidate_embedding_matrix,
 )
 
@@ -52,4 +53,5 @@ __all__ = [
     "get_embedding_matrix",
     "invalidate_embedding_matrix",
     "get_embedding_matrix_for_snap",
+    "get_region_matrix_for_snap",
 ]

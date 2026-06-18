@@ -106,10 +106,116 @@ def get_embedding_submatrix(ctx: "DatasetContext", ids: list[int]) -> tuple[list
 
 
 def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
-    """Drop the cached matrix on *ctx*; next access rebuilds it."""
+    """Drop the cached matrices on *ctx*; next access rebuilds them.
+
+    Clears both the per-media embedding matrix and the flattened
+    per-region matrix (used by patch-region scoring), since both are keyed
+    on the media-id set and become stale together when the dataset's media
+    change.
+    """
     with _state_lock:
         ctx._emb_matrix_ids = None
         ctx._emb_matrix = None
+        ctx._region_matrix_ids = None
+        ctx._region_matrix = None
+        ctx._region_media_index = None
+        ctx._region_index_per_row = None
+
+
+def _build_region_arrays(
+    snap: dict,
+    sorted_ids: list[int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Flatten every media's ``patch_regions`` into one ``(R, D)`` matrix.
+
+    Returns ``(region_matrix, media_index_per_row, region_index_per_row)``:
+
+    * ``region_matrix`` - ``(R, D)`` float32, one row per (media, region) pair.
+    * ``media_index_per_row`` - ``int64 (R,)``, the index into *sorted_ids*
+      that each row belongs to.  Non-decreasing and contiguous per media.
+    * ``region_index_per_row`` - ``int64 (R,)``, the region's index within its
+      media's ``patch_regions`` list (the winning value surfaces as the UI's
+      best-match overlay).
+
+    Media that expose no ``patch_regions`` contribute a single row from their
+    image-level ``embedding`` (region index 0), so every media has at least
+    one row - keeping the downstream segmented max-pool free of empty groups.
+    """
+    flat_vecs: list[np.ndarray] = []
+    media_index_per_row: list[int] = []
+    region_index_per_row: list[int] = []
+    for mi, cid in enumerate(sorted_ids):
+        media = snap[cid]
+        regions = media.get("patch_regions")
+        if regions:
+            for ri, r in enumerate(regions):
+                flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
+                media_index_per_row.append(mi)
+                region_index_per_row.append(ri)
+        else:
+            flat_vecs.append(np.asarray(_require_embedding(cid, media), dtype=np.float32))
+            media_index_per_row.append(mi)
+            region_index_per_row.append(0)
+    region_matrix = np.stack(flat_vecs).astype(np.float32, copy=False)
+    return (
+        region_matrix,
+        np.asarray(media_index_per_row, dtype=np.int64),
+        np.asarray(region_index_per_row, dtype=np.int64),
+    )
+
+
+def get_region_matrix_for_snap(
+    snap: dict,
+) -> tuple[list[int], np.ndarray, np.ndarray, np.ndarray]:
+    """Return the cached flattened region matrix for *snap*.
+
+    Returns ``(sorted_ids, region_matrix, media_index_per_row,
+    region_index_per_row)`` - see :func:`_build_region_arrays` for the
+    array shapes.  When *snap*'s key set matches the active
+    :class:`DatasetContext`'s medias (the common per-vote case), the matrix
+    is built once and cached on the context, then reused across subsequent
+    votes; only the MLP weights change between votes, never the region
+    vectors, so the cache is valid until the media-id set changes.  A
+    cross-dataset / subset *snap* builds fresh without populating the cache.
+
+    Returns empty arrays when *snap* is empty.  Raises ``ValueError`` if a
+    region-less media has ``embedding=None``.
+    """
+    from vtscore.state.core import get_active_context
+
+    sorted_ids = sorted(snap.keys())
+    if not sorted_ids:
+        empty_vecs = np.empty((0, 0), dtype=np.float32)
+        empty_idx = np.empty((0,), dtype=np.int64)
+        return [], empty_vecs, empty_idx, empty_idx
+
+    ctx = get_active_context()
+    with _state_lock:
+        if (
+            ctx._region_matrix is not None
+            and ctx._region_matrix_ids == sorted_ids
+            and ctx._region_media_index is not None
+            and ctx._region_index_per_row is not None
+        ):
+            return (
+                list(sorted_ids),
+                ctx._region_matrix,
+                ctx._region_media_index,
+                ctx._region_index_per_row,
+            )
+
+    region_matrix, media_index, region_index = _build_region_arrays(snap, sorted_ids)
+
+    # Populate the cache only when *snap* matches the active dataset's medias
+    # (the common case: ``snap = snapshot_medias()``).  Subset / cross-dataset
+    # dicts are ephemeral and must not clobber the active cache.
+    if sorted_ids == sorted(ctx.medias.keys()):
+        with _state_lock:
+            ctx._region_matrix_ids = sorted_ids
+            ctx._region_matrix = region_matrix
+            ctx._region_media_index = media_index
+            ctx._region_index_per_row = region_index
+    return list(sorted_ids), region_matrix, media_index, region_index
 
 
 def get_embedding_matrix_for_snap(
