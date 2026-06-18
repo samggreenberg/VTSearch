@@ -61,7 +61,7 @@ src/app/
 ### Key architecture patterns
 
 - **ActiveContextService** tracks which dataset and detector the user has selected. The `activeContextInterceptor` attaches `X-Dataset-Id` and `X-Detector-Id` headers to every API request so the backend resolves the correct per-dataset state.
-- **State services** (`media-state`, `dataset-state`, `detector-state`, `vote-state`, `sort-state`, `settings-state`) hold client-side state and expose observables for reactive UI updates.
+- **State services** (`media-state`, `dataset-state`, `vote-state`, `sort-state`, `settings-state`) hold client-side state and expose signals (or, for the not-yet-migrated services, observables) for reactive UI updates.
 - **API services** (`medias-api`, `datasets-api`, `detectors-api`, etc.) wrap HTTP calls to the Flask backend. Each maps to a backend route module.
 
 ## Running unit tests

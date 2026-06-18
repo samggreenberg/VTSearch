@@ -8,6 +8,7 @@ import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { settleResource } from '../../testing/settle-resource';
 
 describe('LabelViewComponent', () => {
   let component: LabelViewComponent;
@@ -75,14 +76,6 @@ describe('LabelViewComponent', () => {
     );
   }
 
-  // The media stub list rides an `rxResource`, whose value commits on a
-  // microtask after the `/api/medias/ids` flush. Tests that read the resolved
-  // medias (`mediasSignal()` / `selectedMedia`) drain it with `settle()`.
-  async function settle(): Promise<void> {
-    await new Promise<void>((resolve) => setTimeout(resolve));
-    TestBed.tick();
-  }
-
   afterEach(() => {
     component.ngOnDestroy();
     // Drain any outstanding polling requests from right-panel or label-view
@@ -104,7 +97,7 @@ describe('LabelViewComponent', () => {
 
   it('should load medias on init', async () => {
     flushInitialRequests();
-    await settle();
+    await settleResource();
     expect(component.mediaState.mediasSignal().length).toBe(2);
   });
 
@@ -258,7 +251,7 @@ describe('LabelViewComponent', () => {
 
   it('should resolve selectedMedia from selectedId', async () => {
     flushInitialRequests();
-    await settle();
+    await settleResource();
     component.onMediaSelect(2);
     expect(component.mediaState.selectedMedia).toBeTruthy();
     expect(component.mediaState.selectedMedia!.id).toBe(2);
@@ -294,7 +287,7 @@ describe('LabelViewComponent', () => {
     // The medias list rides an rxResource: its value commits on a microtask and
     // the media-type/autopilot effect runs on the next tick, so drain before the
     // deferred initial sort fires.
-    await settle();
+    await settleResource();
 
     // The left panel's ngOnInit already emits autopilotStart when autopilot is
     // enabled; with a text query and medias now loaded, that fires one initial
@@ -358,7 +351,7 @@ describe('LabelViewComponent', () => {
 
     // Drain the rxResource value commit + media-type/autopilot effect so the
     // deferred sort fires.
-    await settle();
+    await settleResource();
 
     // Now the deferred sort should fire
     const req = httpMock.expectOne('/api/sort');

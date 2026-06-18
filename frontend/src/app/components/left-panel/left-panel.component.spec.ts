@@ -7,6 +7,7 @@ import {
 import { SimpleChange } from '@angular/core';
 import { LeftPanelComponent } from './left-panel.component';
 import type { Media } from '../../models/api.models';
+import { settleResource } from '../../testing/settle-resource';
 
 describe('LeftPanelComponent', () => {
   let component: LeftPanelComponent;
@@ -156,17 +157,23 @@ describe('LeftPanelComponent', () => {
       expect(component.mediaTypeName).toBe('Image');
     });
 
-    it('upgrades from the fallback to the display name when type metadata loads after the grid', () => {
+    it('upgrades from the fallback to the display name when type metadata loads after the grid', async () => {
       const httpMock = TestBed.inject(HttpTestingController);
-      // The grid populates before the getMediaTypes() request (fired in
-      // ngOnInit) resolves, so the header first shows the capitalized fallback.
+      // The media-types read rides `rxResource`, whose loader runs in a root
+      // effect rather than during `detectChanges()`; tick so the GET is issued.
+      TestBed.tick();
+      // The grid populates before the getMediaTypes() request resolves, so the
+      // header first shows the capitalized fallback.
       setMedias([stub('audio')]);
       expect(component.mediaTypeName).toBe('Audio');
 
       // Metadata arrives late with a custom display name: the header must
-      // upgrade instead of staying stuck on the fallback.
+      // upgrade instead of staying stuck on the fallback. The resource value
+      // commits on a microtask and the deriving effect runs on the next tick,
+      // so settle before asserting.
       const req = httpMock.expectOne((r) => r.url.includes('/api/media-types'));
       req.flush({ media_types: [{ type_id: 'audio', name: 'Sound Clips' }] });
+      await settleResource();
       expect(component.mediaTypeName).toBe('Sound Clips');
     });
   });

@@ -5,13 +5,14 @@ import {
   EventEmitter,
   OnInit,
   OnChanges,
-  OnDestroy,
   SimpleChanges,
   ViewChild,
+  computed,
+  effect,
+  inject,
 } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import { SortBarComponent } from './sort-bar/sort-bar.component';
 import { SelectModeComponent } from './select-mode/select-mode.component';
 import { InclusionSliderComponent } from './inclusion-slider/inclusion-slider.component';
@@ -46,7 +47,7 @@ export type { SortMode, SelectMode, SortedItem };
   templateUrl: './left-panel.component.html',
   styleUrl: './left-panel.component.scss',
 })
-export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
+export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() medias: Media[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
@@ -116,31 +117,41 @@ export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
   activeTab: 'manual' | 'autopilot' = 'autopilot';
   mediaTypeName = 'Media';
   textSortAvailable = true;
-  private mediaTypeInfos: MediaTypeInfo[] = [];
-  private embedderInfos: EmbedderInfo[] = [];
-  private readonly destroy$ = new Subject<void>();
 
-  constructor(private datasetsListingsApi: DatasetsListingsApiService) {}
+  private readonly datasetsListingsApi = inject(DatasetsListingsApiService);
+
+  // Media-type / embedder metadata ride `rxResource`: both load once on
+  // creation (no request signal = eager), wrapping the existing generated-client
+  // reads so the interceptor chain still applies. The derived labels live in
+  // plain fields recomputed by the effects below + `ngOnChanges(medias)`.
+  private readonly mediaTypesResource = rxResource({
+    stream: () => this.datasetsListingsApi.getMediaTypes(),
+  });
+  private readonly embeddersResource = rxResource({
+    stream: () => this.datasetsListingsApi.getEmbedders(),
+  });
+  private readonly mediaTypeInfos = computed<MediaTypeInfo[]>(
+    () => this.mediaTypesResource.value()?.media_types ?? [],
+  );
+  private readonly embedderInfos = computed<EmbedderInfo[]>(
+    () => this.embeddersResource.value() ?? [],
+  );
+
+  constructor() {
+    // Re-derive the header label / text-sort gate when the metadata arrives
+    // (it can land after the first batch of medias). Effects auto-dispose with
+    // the component, so no manual unsubscribe is needed.
+    effect(() => {
+      this.mediaTypeInfos();
+      this.updateMediaTypeName();
+    });
+    effect(() => {
+      this.embedderInfos();
+      this.updateTextSortAvailable();
+    });
+  }
 
   ngOnInit(): void {
-    this.datasetsListingsApi
-      .getMediaTypes()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (resp) => {
-          this.mediaTypeInfos = resp.media_types;
-          this.updateMediaTypeName();
-        },
-      });
-    this.datasetsListingsApi
-      .getEmbedders()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: (embedders) => {
-          this.embedderInfos = embedders;
-          this.updateTextSortAvailable();
-        },
-      });
     if (this.panelMode === 'find') {
       // Find mode doesn't use tabs; keep manual as a no-op default
       this.activeTab = 'manual';
@@ -159,11 +170,6 @@ export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
     }
   }
 
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-  }
-
   /**
    * Re-derive the media-type label shown in the grid header from the current
    * grid contents.  Always recomputes (no memo on the type id) so the header
@@ -178,7 +184,7 @@ export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
       this.mediaTypeName = 'Media';
       return;
     }
-    const info = this.mediaTypeInfos.find((mt) => mt.type_id === typeId);
+    const info = this.mediaTypeInfos().find((mt) => mt.type_id === typeId);
     this.mediaTypeName = info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1);
   }
 
@@ -190,11 +196,11 @@ export class LeftPanelComponent implements OnInit, OnChanges, OnDestroy {
    */
   private updateTextSortAvailable(): void {
     const embedderName = this.medias.length > 0 ? this.medias[0].embedder : '';
-    if (!embedderName || this.embedderInfos.length === 0) {
+    if (!embedderName || this.embedderInfos().length === 0) {
       this.textSortAvailable = true;
       return;
     }
-    const info = this.embedderInfos.find((e) => e.name === embedderName);
+    const info = this.embedderInfos().find((e) => e.name === embedderName);
     this.textSortAvailable = info ? info.supports_text !== false : true;
   }
 
