@@ -10,6 +10,7 @@ that report ``supports_patch_regions``.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Callable
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
@@ -18,6 +19,15 @@ from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
 
 if TYPE_CHECKING:
     from vtscore.state import DatasetContext
+
+
+def _first_media_type(items: Iterable[tuple[int, dict[str, Any]]]) -> str:
+    """Return the first non-empty ``media_type`` among *items*, or ``""``."""
+    for _, m in items:
+        mt = m.get("media_type")
+        if mt:
+            return mt
+    return ""
 
 
 def embed_missing(  # noqa: C901
@@ -41,15 +51,13 @@ def embed_missing(  # noqa: C901
     report ``supports_patch_regions``.
     """
     missing = [(mid, m) for mid, m in medias.items() if m.get("embedding") is None]
-    if not missing:
-        return
 
-    media_type = ""
-    for _, m in missing:
-        mt = m.get("media_type")
-        if mt:
-            media_type = mt
-            break
+    # Resolve the media type from the items that need work.  Prefer the
+    # unembedded items, but fall back to any media so the patch-region
+    # back-fill below can run even when every image already carries an
+    # embedding (e.g. a pre-embedded pickle or content-vector importer bound
+    # to a patch embedder).
+    media_type = _first_media_type(missing) or _first_media_type(medias.items())
     if not media_type:
         return
 
@@ -67,6 +75,32 @@ def embed_missing(  # noqa: C901
     if emb is None:
         return
 
+    # Patch-capable embedders attach a per-image HAC region tree + patch grid
+    # alongside the CLS ``embedding``.  That side-channel must exist for any
+    # image *this* embedder produced but that lacks ``patch_regions`` - not
+    # only the images we embed in this call.  Without it the best-match
+    # highlight, region voting, and region-aware scoring have no region data,
+    # which is exactly what happens to an already-embedded dataset (pickle /
+    # content-vector importer) that never ran the patch pass: the Highlight
+    # toggle shows (the embedder reports the capability) but draws nothing.
+    # Re-deriving from the source file at load keeps ``patch_regions`` an
+    # in-memory artifact, consistent with the no-persisted-vectors rule.
+    patch_capable = getattr(emb, "supports_patch_regions", False) is True
+
+    def _needs_patch(m: dict[str, Any]) -> bool:
+        # Match the embedder so we never re-pool regions for an image whose
+        # CLS embedding came from a different model.
+        return (
+            m.get("embedding") is not None
+            and m.get("patch_regions") is None
+            and m.get("embedder") in (None, "", emb.name)
+        )
+
+    has_patch_backfill = patch_capable and any(_needs_patch(m) for m in medias.values())
+
+    if not missing and not has_patch_backfill:
+        return
+
     if on_progress is None:
 
         def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
@@ -78,36 +112,41 @@ def embed_missing(  # noqa: C901
         on_progress("loading", "Loading embedding model…", 0, 0)
         emb.load_models()
 
-    total = len(missing)
-    on_progress("embedding", f"Embedding {total} item(s)…", 0, total)
-
-    inputs = [m for _, m in missing]
     original_cb = emb._on_progress
-    emb._on_progress = on_progress
-    try:
-        vectors = emb.embed_media_bulk(inputs)
-    except Exception:
-        logging.getLogger(__name__).exception("Bulk embed failed for media_type=%s (%d items)", media_type, total)
+
+    if missing:
+        total = len(missing)
+        on_progress("embedding", f"Embedding {total} item(s)…", 0, total)
+
+        inputs = [m for _, m in missing]
+        emb._on_progress = on_progress
+        try:
+            vectors = emb.embed_media_bulk(inputs)
+        except Exception:
+            logging.getLogger(__name__).exception("Bulk embed failed for media_type=%s (%d items)", media_type, total)
+            vectors = None
+        finally:
+            emb._on_progress = original_cb
+
+        if vectors is not None:
+            embedder_id = emb.name
+            for (mid, _), vec in zip(missing, vectors):
+                if vec is None:
+                    continue
+                media = medias.get(mid)
+                if media is None:
+                    continue
+                media["embedding"] = vec
+                if not media.get("embedder"):
+                    media["embedder"] = embedder_id
+
+    # Patch-region pass for embedders that support it (DINOv2/v3/EUPE).  Runs
+    # over every patch-capable image still lacking a region tree, including
+    # ones that arrived already-embedded - not just the items embedded above.
+    if not patch_capable:
         return
-    finally:
-        emb._on_progress = original_cb
 
-    embedder_id = emb.name
-    for (mid, _), vec in zip(missing, vectors):
-        if vec is None:
-            continue
-        media = medias.get(mid)
-        if media is None:
-            continue
-        media["embedding"] = vec
-        if not media.get("embedder"):
-            media["embedder"] = embedder_id
-
-    # Patch-region pass for embedders that support it (DINOv2/v3/EUPE).
-    if getattr(emb, "supports_patch_regions", False) is not True:
-        return
-
-    patch_inputs = [m for _, m in missing if m.get("patch_regions") is None]
+    patch_inputs = [m for m in medias.values() if _needs_patch(m)]
     if not patch_inputs:
         return
 
