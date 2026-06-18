@@ -52,22 +52,25 @@ describe('RightPanelComponent', () => {
     cleanup();
   }));
 
-  it('should load view mode from settings on init', fakeAsync(() => {
+  // Real-async (not fakeAsync): the SettingsStateService rxResource has a
+  // promise-based loader whose value does not commit under fakeAsync's virtual
+  // clock, so a test that asserts a *settings-derived* value must drain real
+  // microtasks. See docs/plans/httpresource-migration.md.
+  it('should load view mode from settings on init', async () => {
     component.medias = [{ id: 1, media_type: 'audio', filename: 'a.wav', md5: 'x', custom_metadata: {} }];
     fixture.detectChanges();
-    tick();
-    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
+    TestBed.tick(); // run the rxResource loader effect so the GET is issued
     httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: { audio: 'list', image: 'grid' } });
-    httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
-    // rxResource commits its value on a microtask; drain it then flush effects
-    // so the settings$ bridge emits and viewModeRightDict is populated.
-    tick();
+    // Drain the resource's promise-based value commit, then flush effects so the
+    // settings$ bridge emits and viewModeRightDict is populated. The votes poll
+    // request that the macrotask lets fire is discarded by cleanup().
+    await new Promise<void>((resolve) => setTimeout(resolve));
     TestBed.tick();
     // Trigger ngOnChanges by setting medias via input
     component.ngOnChanges({ medias: { currentValue: component.medias, previousValue: [], firstChange: true, isFirstChange: () => true } });
     expect(component.viewMode).toBe('list');
     cleanup();
-  }));
+  });
 
   it('should default viewMode to grid when not in settings', fakeAsync(() => {
     fixture.detectChanges();
