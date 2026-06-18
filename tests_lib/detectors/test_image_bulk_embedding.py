@@ -590,3 +590,67 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
         for m in medias.values():
             assert m.get("patch_regions") is not None
             assert m.get("patch_grid") is not None
+
+    def test_backfill_resolves_stored_embedder_over_single_vector_default(self):
+        """Reloading a patch dataset with no explicit embedder still back-fills.
+
+        Regression: ``embed_missing`` resolved the embedder from the requested
+        name or the *media-type default*, which for images is the single-vector
+        SigLIP embedder (``supports_patch_regions=False``).  A pre-embedded
+        patch dataset (cached pickle reload / content-vector importer) loaded
+        with ``embedder_name=""`` therefore resolved to SigLIP and skipped the
+        patch-region back-fill entirely - so region voting and the best-match
+        highlight had no region data, and nothing rendered.  The resolver now
+        falls back to the embedder the media were embedded with (stored on each
+        media dict) before the media-type default.
+        """
+        from vtscore.datasets.stages.embedding import embed_missing
+
+        # The patch embedder the media were originally embedded with...
+        patch_emb = mock.MagicMock()
+        patch_emb.name = "fake_patch"
+        patch_emb._model = True
+        patch_emb._on_progress = lambda *a, **kw: None
+        patch_emb.supports_patch_regions = True
+        patch_emb.patch_forward_bulk.return_value = [
+            mock.MagicMock(patch_grid=np.zeros((4, 4, 768), dtype=np.float32)) for _ in range(2)
+        ]
+
+        # ...and the single-vector embedder that is the media-type default.
+        default_single = mock.MagicMock()
+        default_single.name = "fake_single"
+        default_single.supports_patch_regions = False
+
+        medias = {
+            i: {
+                "media_type": "image",
+                "embedding": np.zeros(768, dtype=np.float32),
+                "embedder": "fake_patch",
+                "media_path": f"/tmp/img_{i}.png",
+            }
+            for i in range(1, 3)
+        }
+
+        def _get_embedder(name):
+            if name == "fake_patch":
+                return patch_emb
+            raise KeyError(name)
+
+        with (
+            mock.patch("vtscore.media.get_embedder", side_effect=_get_embedder),
+            mock.patch("vtscore.media.embedders_for_type", return_value=[default_single]),
+            mock.patch(
+                "vtscore.media.patch_embed.build_region_tree", return_value=np.zeros((23, 768), dtype=np.float32)
+            ),
+            mock.patch("vtscore.media.patch_embed.to_fp16", side_effect=lambda x: x.astype(np.float16)),
+        ):
+            # No explicit embedder: must resolve to the stored "fake_patch",
+            # not the single-vector default.
+            embed_missing(medias, embedder_name="")
+
+        # The single-vector default never got a look-in for the patch pass.
+        default_single.patch_forward_bulk.assert_not_called()
+        assert patch_emb.patch_forward_bulk.call_count == 1
+        for m in medias.values():
+            assert m.get("patch_regions") is not None
+            assert m.get("patch_grid") is not None
