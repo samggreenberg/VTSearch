@@ -278,6 +278,20 @@ class DatasetContext:
         # we don't rebuild a 10k-row matrix per call.
         "_emb_matrix_ids",
         "_emb_matrix",
+        # Cached *flattened region matrix* for patch-region (e.g. DINOv3)
+        # datasets, mirroring ``_emb_matrix`` but expanded to one row per
+        # (media, region) pair.  ``_region_matrix`` is the ``(R, D)`` float32
+        # matrix; ``_region_media_index`` / ``_region_index_per_row`` are the
+        # parallel ``int64`` arrays mapping each row back to its media index
+        # (into the sorted id list) and its region index within that media.
+        # Built lazily by ``vtscore.embedding.matrix.get_region_matrix_for_snap``
+        # and reused across votes so online retraining never rebuilds the
+        # multi-hundred-thousand-row matrix per vote.  Keyed, like
+        # ``_emb_matrix``, on the sorted media-id list in ``_region_matrix_ids``.
+        "_region_matrix_ids",
+        "_region_matrix",
+        "_region_media_index",
+        "_region_index_per_row",
         # VTSBrowse: cached projection (frozen at ingest) + per-bin-shape
         # pyramids derived from it. The projection (UMAP coords) is shared
         # across bin shapes; ``_pyramids`` maps "hex"/"square" -> Pyramid so the
@@ -305,6 +319,10 @@ class DatasetContext:
         self.dataset_display_name: str | None = None
         self._emb_matrix_ids: list[int] | None = None
         self._emb_matrix: Any = None  # np.ndarray | None
+        self._region_matrix_ids: list[int] | None = None
+        self._region_matrix: Any = None  # np.ndarray | None, shape (R, D)
+        self._region_media_index: Any = None  # np.ndarray | None, int64 (R,)
+        self._region_index_per_row: Any = None  # np.ndarray | None, int64 (R,)
         self._projection: Any = None  # Projection | None
         self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
         self._subset_projection: Any = None  # Projection | None (ephemeral subset UMAP)
@@ -508,6 +526,10 @@ class _RequestMissingDatasetContext(DatasetContext):
         object.__setattr__(self, "dataset_display_name", None)
         object.__setattr__(self, "_emb_matrix_ids", None)
         object.__setattr__(self, "_emb_matrix", None)
+        object.__setattr__(self, "_region_matrix_ids", None)
+        object.__setattr__(self, "_region_matrix", None)
+        object.__setattr__(self, "_region_media_index", None)
+        object.__setattr__(self, "_region_index_per_row", None)
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise _frozen_mutation_error("dataset")

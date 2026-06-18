@@ -211,51 +211,75 @@ def _score_all_media(
     """
     import torch  # noqa: PLC0415
 
+    from vtscore.embedding.matrix import (  # noqa: PLC0415
+        get_embedding_matrix_for_snap,
+        get_region_matrix_for_snap,
+    )
+
     has_regions = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
     if has_regions:
-        all_ids = sorted(clips_dict.keys())
-        flat_vecs: list[np.ndarray] = []
-        media_index_per_row: list[int] = []
-        region_index_per_row: list[int] = []
-        for mi, cid in enumerate(all_ids):
-            media = clips_dict[cid]
-            regions = media.get("patch_regions")
-            if regions:
-                for ri, r in enumerate(regions):
-                    flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
-                    media_index_per_row.append(mi)
-                    region_index_per_row.append(ri)
-            else:
-                flat_vecs.append(np.asarray(media["embedding"], dtype=np.float32))
-                media_index_per_row.append(mi)
-                region_index_per_row.append(0)
-        X_all = torch.from_numpy(np.stack(flat_vecs).astype(np.float32, copy=False))
+        # One row per (media, region) pair, built once and cached on the
+        # dataset context (the region vectors never change between votes -
+        # only the MLP weights do), so online retraining no longer rebuilds
+        # a multi-hundred-thousand-row matrix on every vote.
+        all_ids, X_np, media_index_per_row, region_index_per_row = get_region_matrix_for_snap(clips_dict)
     else:
-        from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
-
-        all_ids, all_embs = get_embedding_matrix_for_snap(clips_dict)
-        X_all = torch.from_numpy(all_embs)
+        all_ids, X_np = get_embedding_matrix_for_snap(clips_dict)
         n = len(all_ids)
-        media_index_per_row = list(range(n))
-        region_index_per_row = [0] * n
+        media_index_per_row = np.arange(n, dtype=np.int64)
+        region_index_per_row = np.zeros(n, dtype=np.int64)
+
+    if not all_ids:
+        return [], [], []
 
     with torch.no_grad():
-        X_all = X_all.to(next(model.parameters()).device)
+        X_all = torch.from_numpy(X_np).to(next(model.parameters()).device)
         # ``sigmoid_to_finite_scores`` replaces NaN/±Inf with the
         # ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised MLP cannot
         # leak non-finite floats into the JSON response. The downstream
-        # ``s > scores[mi]`` max-pool then incidentally drops sentinels in
-        # favour of any real score for the same media.
-        flat_scores = sigmoid_to_finite_scores(model(X_all))
+        # segmented max-pool then incidentally drops sentinels in favour of
+        # any real score (in ``[0, 1]``) for the same media.
+        flat_scores = np.asarray(sigmoid_to_finite_scores(model(X_all)), dtype=np.float64)
 
-    scores: list[float] = [-1.0] * len(all_ids)
-    best_region: list[int] = [0] * len(all_ids)
-    for s, mi, ri in zip(flat_scores, media_index_per_row, region_index_per_row, strict=True):
-        if s > scores[mi]:
-            scores[mi] = float(s)
-            best_region[mi] = ri
-
+    scores, best_region = _segmented_max_pool(flat_scores, media_index_per_row, region_index_per_row, len(all_ids))
     return all_ids, scores, best_region
+
+
+def _segmented_max_pool(
+    flat_scores: np.ndarray,
+    media_index_per_row: np.ndarray,
+    region_index_per_row: np.ndarray,
+    n_media: int,
+) -> tuple[list[float], list[int]]:
+    """Max-pool per-row scores down to one score + winning region per media.
+
+    *media_index_per_row* is non-decreasing and contiguous (every media owns
+    a single run of rows), and every media has at least one row, so each
+    media's rows form one ``reduceat`` segment.  Returns ``(scores,
+    best_region)`` as plain Python lists, where ``best_region[m]`` is the
+    region index of the *first* row achieving media ``m``'s max - matching
+    the strict-``>`` "first wins" tie-break of the original scalar loop.
+
+    Fully vectorised so the per-vote scoring tail holds the GIL for
+    microseconds rather than iterating hundreds of thousands of rows in
+    Python (which, in the background training thread, would stall the
+    ``gthread`` pool serving the next vote).
+    """
+    # Start of each media's contiguous run of rows.
+    seg_starts = np.searchsorted(media_index_per_row, np.arange(n_media))
+    seg_max = np.maximum.reduceat(flat_scores, seg_starts)
+
+    # First row per media that reaches its segment max (region 0 - the
+    # CLS/full-image node - is always row 0 of a segment, so an all-sentinel
+    # media resolves to region 0, exactly as the old -1.0-seeded loop did).
+    is_max = flat_scores >= seg_max[media_index_per_row]
+    cand_rows = np.flatnonzero(is_max)
+    cand_media = media_index_per_row[cand_rows]
+    first_cand = np.searchsorted(cand_media, np.arange(n_media))
+    winning_rows = cand_rows[first_cand]
+    best_region = region_index_per_row[winning_rows]
+
+    return seg_max.tolist(), best_region.tolist()
 
 
 def _format_results(
