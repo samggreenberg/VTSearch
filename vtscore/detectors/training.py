@@ -241,9 +241,7 @@ def _score_all_media(
         # any real score (in ``[0, 1]``) for the same media.
         flat_scores = np.asarray(sigmoid_to_finite_scores(model(X_all)), dtype=np.float64)
 
-    scores, best_region = _segmented_max_pool(
-        flat_scores, media_index_per_row, region_index_per_row, len(all_ids)
-    )
+    scores, best_region = _segmented_max_pool(flat_scores, media_index_per_row, region_index_per_row, len(all_ids))
     return all_ids, scores, best_region
 
 
