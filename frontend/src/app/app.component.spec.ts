@@ -35,7 +35,9 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('VTSearch');
+    // Branding is rendered as the logo image (alt text), not an <h1>.
+    const logo = compiled.querySelector('header .header-logo') as HTMLImageElement;
+    expect(logo.alt).toContain('VTSearch');
   });
 
   it('should render logo in header', () => {
@@ -89,12 +91,11 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
     const items = fixture.nativeElement.querySelectorAll('.burger-item');
-    expect(items.length).toBe(5);
+    expect(items.length).toBe(4);
     expect(items[0].textContent).toContain('Dashboard');
-    expect(items[1].textContent).toContain('Import Labels');
-    expect(items[2].textContent).toContain('Export Detector');
-    expect(items[3].textContent).toContain('Export Labels');
-    expect(items[4].textContent).toContain('Settings');
+    expect(items[1].textContent).toContain('Help');
+    expect(items[2].textContent).toContain('Achievements');
+    expect(items[3].textContent).toContain('Settings');
   });
 
   it('should disable dataset-dependent items when not on label view', () => {
@@ -102,12 +103,12 @@ describe('AppComponent', () => {
     fixture.componentInstance.isOnLabelView = false;
     fixture.detectChanges();
     const items = fixture.nativeElement.querySelectorAll('.burger-item');
+    // Only Dashboard is dataset-dependent and gets disabled off the label view.
     expect(items[0].classList).toContain('disabled');
-    expect(items[1].classList).toContain('disabled');
-    expect(items[2].classList).toContain('disabled');
-    expect(items[3].classList).toContain('disabled');
-    // Settings is always enabled
-    expect(items[4].classList).not.toContain('disabled');
+    // Help, Achievements, and Settings are always enabled.
+    expect(items[1].classList).not.toContain('disabled');
+    expect(items[2].classList).not.toContain('disabled');
+    expect(items[3].classList).not.toContain('disabled');
   });
 
   it('should enable dataset-dependent items when on label view', () => {

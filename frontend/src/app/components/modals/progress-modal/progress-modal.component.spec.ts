@@ -44,12 +44,10 @@ describe('ProgressModalComponent', () => {
     fixture.detectChanges();
     expect(component.analyzing).toBe(true);
 
-    // Flush initial polling request
-    const iterReq = httpMock.expectOne('/api/eval/voting-iterations');
-    iterReq.flush({ progress: 0, total: 10, done: false });
-
-    // Flush train-and-score; the endpoint now returns a job envelope
-    // and the component returns the data inline on cache hit (status=done).
+    // Progress now arrives over the `eval` SSE channel, not via HTTP polling.
+    // The only HTTP call is the train-and-score POST, which returns a job
+    // envelope; on a cache hit (status=done) the component applies the data
+    // inline without polling.
     const trainReq = httpMock.expectOne('/api/eval/train-and-score');
     trainReq.flush({
       job_id: 'abc',
@@ -61,10 +59,6 @@ describe('ProgressModalComponent', () => {
     tick(50);
     expect(component.analyzing).toBe(false);
     expect(component.chartData.length).toBe(1);
-
-    // Cleanup timer
-    component.ngOnDestroy();
-    httpMock.match('/api/eval/voting-iterations'); // flush remaining polls
   }));
 
   it('should emit closed on close', () => {

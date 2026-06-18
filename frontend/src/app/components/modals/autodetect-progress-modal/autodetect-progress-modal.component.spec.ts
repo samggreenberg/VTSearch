@@ -30,7 +30,11 @@ describe('AutoDetectProgressModalComponent', () => {
 
   it('should emit cancelled on cancel click', () => {
     vi.spyOn(component.cancelled, 'emit');
-    const btn = fixture.nativeElement.querySelector('button');
+    // The modal chrome renders its own close (X) button first, so target the
+    // Cancel button specifically by its title.
+    const btn = fixture.nativeElement.querySelector(
+      'button[title="Cancel the auto-detect process"]',
+    ) as HTMLButtonElement;
     btn.click();
     expect(component.cancelled.emit).toHaveBeenCalled();
   });

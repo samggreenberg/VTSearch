@@ -23,6 +23,10 @@ describe('DatasetCardComponent', () => {
     fixture = TestBed.createComponent(DatasetCardComponent);
     component = fixture.componentInstance;
     component.dataset = { ...mockDataset };
+    // The card only renders middle columns listed in columnOrder; the
+    // dashboard supplies this ordering. Provide a representative set so the
+    // media-type and item-count cells render.
+    component.columnOrder = ['media_type', 'num_items', 'created_at'];
     fixture.detectChanges();
   });
 
@@ -46,17 +50,16 @@ describe('DatasetCardComponent', () => {
     expect(el.textContent).toContain('100');
   });
 
-  it('should show checkmark when loaded', () => {
+  it('should hide the load button when already loaded', () => {
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.check')).toBeTruthy();
+    expect(el.querySelector('.load-btn')).toBeFalsy();
   });
 
-  it('should show dash when not loaded', () => {
+  it('should show the load button when not loaded', () => {
     component.dataset = { ...mockDataset, loaded: false };
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    const dims = el.querySelectorAll('.dim');
-    expect(dims.length).toBeGreaterThan(0);
+    expect(el.querySelector('.load-btn')).toBeTruthy();
   });
 
   it('should enter rename mode on rename button click', () => {

@@ -78,7 +78,7 @@ describe('CombineDatasetsModalComponent', () => {
     flushMediaTypes();
 
     expect(component.canCombine).toBe(false);
-    expect(component.disabledReason).toContain('same media type');
+    expect(component.disabledReason).toContain('share a media type');
   });
 
   it('canCombine is false when fewer than two rows remain after removal', () => {
@@ -109,7 +109,7 @@ describe('CombineDatasetsModalComponent', () => {
     component.submit();
     const req = httpMock.expectOne('/api/dataset/combine');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ datasets: ['/x/a.pkl', '/x/b.pkl'] });
+    expect(req.request.body).toEqual({ datasets: ['/x/a.pkl', '/x/b.pkl'], name: 'Alpha + Bravo' });
     req.flush({ ok: true });
 
     expect(started).toBe(true);

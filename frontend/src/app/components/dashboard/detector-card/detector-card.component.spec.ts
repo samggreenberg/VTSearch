@@ -23,6 +23,10 @@ describe('DetectorCardComponent', () => {
     fixture = TestBed.createComponent(DetectorCardComponent);
     component = fixture.componentInstance;
     component.detector = { ...mockDetector };
+    // The card only renders middle columns listed in columnOrder; the
+    // dashboard supplies this ordering. Provide a representative set so the
+    // media-type and training-count cells render.
+    component.columnOrder = ['media_type', 'num_training', 'last_trained_at'];
     fixture.detectChanges();
   });
 

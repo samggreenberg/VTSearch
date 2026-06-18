@@ -29,29 +29,60 @@ describe('LabelViewComponent', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
 
+  // Flush the HTTP calls that fire synchronously during the first
+  // `fixture.detectChanges()`. label-view's ngOnInit loads medias, votes,
+  // settings, dataset status, inclusion; the left panel loads media-types
+  // and embedders. The `/api/labeling-status` and polling `/api/votes`
+  // requests are driven by `timer(0, …)` and only fire after a `tick(…)`
+  // inside `fakeAsync`, so they are NOT flushed here — they are drained
+  // by `afterEach`'s catch-all instead.
   function flushInitialRequests(): void {
     fixture.detectChanges();
-    // Flush /api/medias
-    httpMock.expectOne('/api/medias/ids').flush([
-      { id: 1, media_type: 'audio' },
-      { id: 2, media_type: 'audio' },
-    ]);
-    // Flush /api/votes (label-view + right-panel both poll)
+    // /api/medias/ids
+    httpMock.match('/api/medias/ids').forEach(req =>
+      req.flush([
+        { id: 1, media_type: 'audio' },
+        { id: 2, media_type: 'audio' },
+      ]),
+    );
+    // /api/votes (label-view loadVotes)
     httpMock.match('/api/votes').forEach(req =>
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
-    // Flush /api/settings (label-view + right-panel both request)
+    // /api/settings
     httpMock.match('/api/settings').forEach(req =>
       req.flush({ volume: 80 }),
     );
-    // Flush initial labeling-status poll
-    httpMock.expectOne('/api/labeling-status').flush({});
+    // /api/dataset/status
+    httpMock.match('/api/dataset/status').forEach(req =>
+      req.flush({ display_name: 'Test dataset' }),
+    );
+    // /api/inclusion
+    httpMock.match('/api/inclusion').forEach(req =>
+      req.flush({ inclusion: 0 }),
+    );
+    // /api/media-types (left panel)
+    httpMock.match('/api/media-types').forEach(req =>
+      req.flush({ media_types: [] }),
+    );
+    // /api/embedders (left panel)
+    httpMock.match('/api/embedders').forEach(req =>
+      req.flush([]),
+    );
   }
 
   afterEach(() => {
     component.ngOnDestroy();
-    // Flush any outstanding polling requests from right-panel or label-view
-    httpMock.match(() => true);
+    // Drain any outstanding polling requests from right-panel or label-view
+    // (the timer-driven /api/votes and /api/labeling-status pollers, the
+    // metadata-batch fetch from selectMedia, plus anything a fakeAsync test
+    // left in flight). ngOnDestroy unsubscribes the component's own streams,
+    // which cancels their in-flight requests; cancelled requests can't be
+    // flushed, so skip them. Flush an empty array so the metadata-batch
+    // handler (which iterates the body) doesn't choke on a non-iterable.
+    httpMock.match(() => true).forEach(req => {
+      if (!req.cancelled) req.flush([]);
+    });
   });
 
   it('should create', () => {
@@ -107,6 +138,7 @@ describe('LabelViewComponent', () => {
 
     const req = httpMock.expectOne('/api/learned-sort');
     req.flush({
+      status: 'done',
       results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
       threshold: 0.5,
     });
@@ -136,9 +168,16 @@ describe('LabelViewComponent', () => {
 
   it('should handle select mode change to new', () => {
     flushInitialRequests();
+    // autoSelectNext (and thus the diversity-tree fetch for 'new' mode) only
+    // runs when there is a sort order to act on, so seed one first.
+    component.sortState.setSortResults(
+      [{ id: 2, score: 0.9 }, { id: 1, score: 0.3 }],
+      0.5,
+    );
     component.onSelectModeChange('new');
     expect(component.sortState.selectMode).toBe('new');
 
+    // With a sort order present the diversity fetch POSTs the scores.
     const req = httpMock.expectOne('/api/diversity-tree/next');
     req.flush({ id: 1, diversity_level: 2.0, exhausted: false });
     expect(component.mediaState.selectedId).toBe(1);
@@ -239,7 +278,18 @@ describe('LabelViewComponent', () => {
     session.textQuery = 'dog barking';
     flushInitialRequests();
 
-    // onAutopilotStart is called by left-panel ngOnInit; simulate it
+    // The left panel's ngOnInit already emits autopilotStart when autopilot is
+    // enabled; with a text query and medias now loaded, that fires one initial
+    // text sort. Drain it so the explicit onAutopilotStart() below is the
+    // request under assertion.
+    httpMock.match('/api/sort').forEach(req =>
+      req.flush({
+        results: [{ id: 1, similarity: 0.9 }, { id: 2, similarity: 0.3 }],
+        threshold: 0.5,
+      }),
+    );
+
+    // Simulate a second autopilot start (e.g. user re-entered autopilot).
     component.onAutopilotStart();
 
     const req = httpMock.expectOne('/api/sort');
@@ -264,16 +314,27 @@ describe('LabelViewComponent', () => {
 
     // Now trigger init which loads medias
     fixture.detectChanges();
-    httpMock.expectOne('/api/medias/ids').flush([
-      { id: 1, media_type: 'audio' },
-    ]);
+    httpMock.match('/api/medias/ids').forEach(req =>
+      req.flush([{ id: 1, media_type: 'audio' }]),
+    );
     httpMock.match('/api/votes').forEach(req =>
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
     httpMock.match('/api/settings').forEach(req =>
       req.flush({ volume: 80 }),
     );
-    httpMock.expectOne('/api/labeling-status').flush({});
+    httpMock.match('/api/dataset/status').forEach(req =>
+      req.flush({ display_name: 'Test dataset' }),
+    );
+    httpMock.match('/api/inclusion').forEach(req =>
+      req.flush({ inclusion: 0 }),
+    );
+    httpMock.match('/api/media-types').forEach(req =>
+      req.flush({ media_types: [] }),
+    );
+    httpMock.match('/api/embedders').forEach(req =>
+      req.flush([]),
+    );
 
     // Now the deferred sort should fire
     const req = httpMock.expectOne('/api/sort');
@@ -325,6 +386,7 @@ describe('LabelViewComponent', () => {
     // Flush the learned sort request
     const req = httpMock.expectOne('/api/learned-sort');
     req.flush({
+      status: 'done',
       results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
       threshold: 0.5,
     });
@@ -352,6 +414,7 @@ describe('LabelViewComponent', () => {
     fixture.detectChanges();
     // Flush learned sort from hard transition
     httpMock.expectOne('/api/learned-sort').flush({
+      status: 'done',
       results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
       threshold: 0.5,
     });
@@ -388,6 +451,7 @@ describe('LabelViewComponent', () => {
     // Flush the learned sort request from bounce-back
     const req = httpMock.expectOne('/api/learned-sort');
     req.flush({
+      status: 'done',
       results: [{ id: 1, score: 0.7 }, { id: 2, score: 0.3 }],
       threshold: 0.5,
     });

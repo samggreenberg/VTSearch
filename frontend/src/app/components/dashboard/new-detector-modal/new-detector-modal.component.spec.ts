@@ -26,6 +26,8 @@ describe('NewDetectorModalComponent', () => {
         { type_id: 'image', name: 'Image', icon: 'image' },
       ],
     });
+    // settingsState.load() in ngOnInit fetches settings.
+    httpMock.expectOne('/api/settings').flush({});
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
   });
 
@@ -202,6 +204,8 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
         { type_id: 'image', name: 'Image', icon: 'image' },
       ],
     });
+    // settingsState.load() in ngOnInit fetches settings.
+    httpMock.expectOne('/api/settings').flush({});
     // No /api/datasets/registry call when defaultMediaType is provided.
   });
 

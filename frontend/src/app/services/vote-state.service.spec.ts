@@ -53,7 +53,8 @@ describe('VoteStateService', () => {
   it('startPolling should periodically fetch votes', fakeAsync(() => {
     service.startPolling(1000);
 
-    // First poll at t=0
+    // First poll at t=0 (timer(0, …) emits on a macrotask; flush it).
+    tick(0);
     httpMock.expectOne('/api/votes').flush(mockVotes);
     expect(service.goodVotes.size).toBe(2);
 
@@ -68,6 +69,7 @@ describe('VoteStateService', () => {
 
   it('stopPolling should stop periodic fetches', fakeAsync(() => {
     service.startPolling(1000);
+    tick(0);
     httpMock.expectOne('/api/votes').flush(mockVotes);
 
     service.stopPolling();
@@ -86,6 +88,7 @@ describe('VoteStateService', () => {
 
     // First tick: server is unreachable. Pre-fix this would tear the
     // whole observable down.
+    tick(0);
     httpMock.expectOne('/api/votes').flush(null, { status: 502, statusText: 'Bad Gateway' });
 
     // Local state must NOT be clobbered to empty on a failed tick.

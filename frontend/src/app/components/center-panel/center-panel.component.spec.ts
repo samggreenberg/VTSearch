@@ -50,6 +50,10 @@ describe('CenterPanelComponent', () => {
   it('should show image viewer for image media', () => {
     component.media = { ...mockMedia, media_type: 'image' };
     fixture.detectChanges();
+    // The image-view-controls block (`@if (mediaType === 'image' && imageViewer)`)
+    // only resolves its `imageViewer` ViewChild after the first change-detection
+    // pass, so a second detectChanges() settles the value and avoids NG0100.
+    fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('vt-image-viewer')).toBeTruthy();
   });
 
@@ -63,6 +67,9 @@ describe('CenterPanelComponent', () => {
     component.media = { ...mockMedia, media_type: 'text' };
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('vt-text-viewer')).toBeTruthy();
+    // The rendered text-viewer fetches its paragraph on init; flush it so the
+    // afterEach httpMock.verify() sees no dangling request.
+    httpMock.expectOne('/api/medias/1/text').flush({ text: '', paragraphs: [] });
   });
 
   it('should show document viewer for document media', () => {
