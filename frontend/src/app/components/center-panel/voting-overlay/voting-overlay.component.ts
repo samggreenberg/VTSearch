@@ -25,20 +25,35 @@ export class VotingOverlayComponent implements OnDestroy {
   private goodTimer: ReturnType<typeof setTimeout> | null = null;
   private badTimer: ReturnType<typeof setTimeout> | null = null;
 
-  onVoteGood(): void {
+  onVoteGood(event?: Event): void {
     if (this.disabled) return;
+    this.dropFocus(event);
     this.goodFlash = true;
     this.voted.emit('good');
     if (this.goodTimer) clearTimeout(this.goodTimer);
     this.goodTimer = setTimeout(() => (this.goodFlash = false), 300);
   }
 
-  onVoteBad(): void {
+  onVoteBad(event?: Event): void {
     if (this.disabled) return;
+    this.dropFocus(event);
     this.badFlash = true;
     this.voted.emit('bad');
     if (this.badTimer) clearTimeout(this.badTimer);
     this.badTimer = setTimeout(() => (this.badFlash = false), 300);
+  }
+
+  /**
+   * Blur the clicked button so it doesn't keep DOM focus. Without this, the
+   * button stays focused after a mouse click; the focus ring is suppressed by
+   * `:focus:not(:focus-visible)` only until the user presses a modifier (e.g.
+   * Shift to draw a region), at which point the browser promotes the focused
+   * element to `:focus-visible` and paints a ring around the last-voted button.
+   * Dropping focus on click keeps Shift purely a cursor modifier.
+   */
+  private dropFocus(event?: Event): void {
+    const target = event?.currentTarget;
+    if (target instanceof HTMLElement) target.blur();
   }
 
   ngOnDestroy(): void {

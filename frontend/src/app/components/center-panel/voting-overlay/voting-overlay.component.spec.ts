@@ -60,6 +60,16 @@ describe('VotingOverlayComponent', () => {
     expect(emitted).toBe(false);
   });
 
+  it('should drop focus from the clicked button so Shift cannot re-ring it', () => {
+    // The button keeps DOM focus after a mouse click; pressing a modifier later
+    // would promote it to :focus-visible and paint a ring. Blurring on click
+    // prevents that, keeping Shift a pure cursor modifier during region voting.
+    const good = fixture.nativeElement.querySelector('.btn-good') as HTMLButtonElement;
+    good.focus();
+    good.click();
+    expect(document.activeElement).not.toBe(good);
+  });
+
   it('should hide the first-vote hint by default', () => {
     expect(fixture.nativeElement.querySelector('.vote-hint')).toBeNull();
   });
