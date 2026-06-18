@@ -43,9 +43,10 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
    * The region the detector/embedder matched best at inference, as a normalised
    * ``[x0, y0, x1, y1]`` box (the argmax over patch regions that produced this
    * media's score).  ``null`` when the active dataset isn't patch-region-aware
-   * or the focused media hasn't been scored.  Rendered as a yellow dashed
-   * overlay only while the Highlight toggle (``highlightMode``) is on; purely
-   * informational, never interactive (no drag/resize, no vote semantics).
+   * or the focused media hasn't been scored.  Rendered as a neutral white/black
+   * dashed overlay (distinct from the user's solid yellow voting box) only while
+   * the Highlight toggle (``highlightMode``) is on; purely informational, never
+   * interactive (no drag/resize, no vote semantics).
    */
   @Input() highlightBox: RegionBox | null = null;
   @Output() regionBoxChange = new EventEmitter<RegionBox | null>();
@@ -82,8 +83,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   // the toggle is off; toggling the button just turns the gesture on without a modifier.
   marqueeMode = false;
   // Sticky toggle exposed by the Highlight button in .image-view-controls. While
-  // true the viewer overlays a yellow dashed box (`highlightBox`) around the
-  // region the detector matched best at inference. Independent of marqueeMode -
+  // true the viewer overlays a neutral white/black dashed box (`highlightBox`)
+  // around the region the detector matched best at inference. Independent of marqueeMode -
   // both can be on at once (the highlight is read-only and sits behind the
   // interactive voting box).
   highlightMode = false;

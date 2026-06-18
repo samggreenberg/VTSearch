@@ -71,16 +71,19 @@
 }
 
 // Read-only overlay marking the region the detector matched best at inference.
-// Dashed (vs the voting box's solid stroke) so the two are never confused, and
-// pointer-events: none so it never intercepts a pan/draw on the image beneath.
+// Deliberately neutral: a white dashed stroke over a black backing (the classic
+// "marching ants" crop look) so it recedes behind the user's solid YELLOW voting
+// box and reads as a machine-generated annotation rather than a selection. The
+// monochrome stroke stays legible on any image, light or dark. pointer-events:
+// none so it never intercepts a pan/draw on the image beneath.
 .highlight-box {
   position: absolute;
   box-sizing: border-box;
-  border: 1.5px dashed rgba(255, 224, 102, 0.95);
-  background: rgba(255, 224, 102, 0.06);
+  border: 1.5px dashed rgba(255, 255, 255, 0.95);
+  background: transparent;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.45) inset,
-    0 0 0 1px rgba(0, 0, 0, 0.35);
+    0 0 0 1px rgba(0, 0, 0, 0.7) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.7);
   pointer-events: none;
 }
 
