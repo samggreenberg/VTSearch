@@ -81,6 +81,16 @@ class _Dinov3Base(MediaEmbedder):
             from transformers import AutoImageProcessor, AutoModel  # noqa: PLC0415
 
         cache_dir = embedder_load_setup(self._on_progress, "Loading DINOv3 model weights…")
+        # The patch variant slices CLS→patch attention out of the forward pass
+        # to build its saliency map, so it needs ``output_attentions=True`` to
+        # return real tensors.  transformers defaults DINOv3 to the SDPA
+        # attention backend, which silently ignores ``output_attentions`` and
+        # yields an empty ``attentions`` tuple (then ``attentions[-1]`` raises
+        # IndexError).  Force the eager backend when we depend on attentions;
+        # the single-vector variant never reads them, so it keeps faster SDPA.
+        extra_kwargs: dict[str, Any] = {}
+        if self.supports_patch_regions:
+            extra_kwargs["attn_implementation"] = "eager"
         with (
             intercept_tqdm_progress(self._on_progress),
             intercept_weight_loading_progress(self._on_progress, "Loading DINOv3 model weights…"),
@@ -92,6 +102,7 @@ class _Dinov3Base(MediaEmbedder):
                 cache_dir=cache_dir,
                 token=hf_token(),
                 on_progress=self._on_progress,
+                **extra_kwargs,
             )
         self._model = self._model.to("cpu")
         self._model.eval()
