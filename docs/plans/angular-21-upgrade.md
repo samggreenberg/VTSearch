@@ -218,7 +218,9 @@ its own effort:
   requires adopting signals broadly first — VTSearch barely uses them today.
 - **`httpResource` / `resource`.** Could trim `switchMap`/manual-subscription
   boilerplate across the ~67 RxJS API services, adoptable incrementally. Worth
-  a focused pass later if the data layer is being touched anyway.
+  a focused pass later if the data layer is being touched anyway. **Scoped in
+  its own plan: `httpresource-migration.md`** (recommends `rxResource` wrapping
+  the existing generated client; not started).
 - **Signal Forms.** Low value here — VTSearch uses no forms — and experimental
   in 21 (not stable until ~22/23).
 - **ARIA directives, CLI MCP server.** Marginal for this app.
