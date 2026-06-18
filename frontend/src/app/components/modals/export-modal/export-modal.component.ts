@@ -382,7 +382,7 @@ export class ExportModalComponent implements OnInit {
   /** The exporter object for the currently active tab (null if clipboard). */
   get activeTabExporter(): ExporterEntry | null {
     if (this.activeTab === 'clipboard') return null;
-    return this.exporters.find((e) => e.name === this.activeTab) || null;
+    return this.exporters().find((e) => e.name === this.activeTab) || null;
   }
 
   /** Typed view of the active tab's plugin fields for the template (the
