@@ -447,8 +447,9 @@ regions per vote; region votes on non-image media types.
 Extends the v1 gallery-card `best_region` outline into the center/focus viewer.
 A **Highlight** toggle sits next to the Marquee button in the image-view controls
 (image media only) and is **hidden unless the active dataset's embedder reports
-`supports_patch_regions`**. When on, the focused image overlays a yellow **dashed**
-box (distinct from the solid yellow voting box) around the region the detector
+`supports_patch_regions`**. When on, the focused image overlays a neutral
+white/black **dashed** "marching ants" box (distinct from the user's solid yellow
+voting box, which keeps the attention color) around the region the detector
 matched best at inference.
 
 No new bookkeeping: reuses the `best_region` the backend already returns on every
