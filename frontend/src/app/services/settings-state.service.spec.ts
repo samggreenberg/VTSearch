@@ -73,7 +73,7 @@ describe('SettingsStateService', () => {
   });
 
   it('settings$ should emit on load', () => new Promise<void>((done) => {
-    const emissions: (typeof mockSettings | null)[] = [];
+    const emissions: unknown[] = [];
     service.settings$.subscribe((s) => emissions.push(s));
 
     load();
