@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, inject, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
@@ -11,13 +11,13 @@ import { AuthService } from '../../services/auth.service';
   styleUrl: './login.component.scss',
 })
 export class LoginComponent {
-  @Output() loggedIn = new EventEmitter<void>();
+  private auth = inject(AuthService);
+
+  readonly loggedIn = output<void>();
 
   username = '';
   error = '';
   busy = false;
-
-  constructor(private auth: AuthService) {}
 
   submit(): void {
     const name = this.username.trim();

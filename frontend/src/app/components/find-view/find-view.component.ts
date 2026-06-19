@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit, effect } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit, effect, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { combineLatest, Subject, Subscription } from 'rxjs';
@@ -45,6 +45,24 @@ import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/gr
   styleUrl: './find-view.component.scss',
 })
 export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
+  private mediasApi = inject(MediasApiService);
+  private detectorsFindApi = inject(DetectorsFindApiService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private toast = inject(ToastService);
+  private dialog = inject(VtDialogService);
+  private ngZone = inject(NgZone);
+  private activeContext = inject(ActiveContextService);
+  private datasetState = inject(DatasetStateService);
+  mediaState = inject(MediaStateService);
+  voteState = inject(VoteStateService);
+  sortState = inject(SortStateService);
+  private sortingApi = inject(SortingApiService);
+  private settingsState = inject(SettingsStateService);
+  private progressEvents = inject(ProgressEventsService);
+  private browseSubset = inject(BrowseSubsetService);
+  private router = inject(Router);
+
   @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
@@ -100,25 +118,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private boundRightMouseMove = this.onRightMouseMove.bind(this);
   private boundRightMouseUp = this.onRightMouseUp.bind(this);
 
-  constructor(
-    private mediasApi: MediasApiService,
-    private detectorsFindApi: DetectorsFindApiService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private toast: ToastService,
-    private dialog: VtDialogService,
-    private ngZone: NgZone,
-    private activeContext: ActiveContextService,
-    private datasetState: DatasetStateService,
-    public mediaState: MediaStateService,
-    public voteState: VoteStateService,
-    public sortState: SortStateService,
-    private sortingApi: SortingApiService,
-    private settingsState: SettingsStateService,
-    private progressEvents: ProgressEventsService,
-    private browseSubset: BrowseSubsetService,
-    private router: Router,
-  ) {
+  constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, OnDestroy, OnInit, input, output } from '@angular/core';
 
 import { ModalComponent } from '../../modal/modal.component';
 import { ImageCropOverlayComponent, ImageCropResult } from './image-crop-overlay.component';
@@ -21,17 +21,18 @@ type View = 'confirm' | 'cropping';
   styleUrl: './media-crop-modal.component.scss',
 })
 export class MediaCropModalComponent implements OnInit, OnDestroy {
-  @Input() file!: File;
-  @Input() mediaType = '';
-  @Output() confirmed = new EventEmitter<MediaCropResult>();
-  @Output() cancelled = new EventEmitter<void>();
+  readonly file = input.required<File>();
+  readonly mediaType = input('');
+  readonly confirmed = output<MediaCropResult>();
+  readonly cancelled = output<void>();
 
   view: View = 'confirm';
   fileUrl = '';
 
   ngOnInit(): void {
-    if (this.file) {
-      this.fileUrl = URL.createObjectURL(this.file);
+    const file = this.file();
+    if (file) {
+      this.fileUrl = URL.createObjectURL(file);
     }
   }
 
@@ -42,11 +43,12 @@ export class MediaCropModalComponent implements OnInit, OnDestroy {
   }
 
   get cropSupported(): boolean {
-    return this.mediaType === 'image' || this.mediaType === 'audio';
+    const mediaType = this.mediaType();
+    return mediaType === 'image' || mediaType === 'audio';
   }
 
   onOk(): void {
-    this.confirmed.emit({ file: this.file });
+    this.confirmed.emit({ file: this.file() });
   }
 
   onOkButCrop(): void {
@@ -63,14 +65,14 @@ export class MediaCropModalComponent implements OnInit, OnDestroy {
 
   onImageCropApplied(result: ImageCropResult): void {
     this.confirmed.emit({
-      file: this.file,
+      file: this.file(),
       cropParams: { box: result.box },
     });
   }
 
   onAudioCropApplied(result: AudioCropResult): void {
     this.confirmed.emit({
-      file: this.file,
+      file: this.file(),
       cropParams: { start: result.start, end: result.end },
     });
   }

@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, OnDestroy, effect } from '@angular/core';
+import { Component, HostListener, OnInit, OnDestroy, effect, inject } from '@angular/core';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -70,6 +70,27 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent implements OnInit, OnDestroy {
+  private router = inject(Router);
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private datasetsUiApi = inject(DatasetsUiApiService);
+  private detectorsFindApi = inject(DetectorsFindApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private toast = inject(ToastService);
+  private dialog = inject(VtDialogService);
+  private labelSession = inject(LabelSessionService);
+  datasetState = inject(DatasetStateService);
+  private activeContext = inject(ActiveContextService);
+  private contextSwitch = inject(ContextSwitchService);
+  private authService = inject(AuthService);
+  private topBarState = inject(TopBarStateService);
+  private newThingFlows = inject(NewThingFlowsService);
+  modals = inject(DashboardModalsService);
+  loadingTasksSvc = inject(DashboardLoadingTasksService);
+  browsePrep = inject(BrowsePrepService);
+  private progressEvents = inject(ProgressEventsService);
+  private settingsState = inject(SettingsStateService);
+
   selectedDatasetIds: Set<string> = new Set();
   selectedDetectorIds: Set<string> = new Set();
 
@@ -159,29 +180,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   diskUsage: UsageBytes | null = null;
   ramUsage: UsageBytes | null = null;
 
-  constructor(
-    private router: Router,
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private datasetsUiApi: DatasetsUiApiService,
-    private detectorsFindApi: DetectorsFindApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private toast: ToastService,
-    private dialog: VtDialogService,
-    private labelSession: LabelSessionService,
-    public datasetState: DatasetStateService,
-    private activeContext: ActiveContextService,
-    private contextSwitch: ContextSwitchService,
-    private authService: AuthService,
-    private topBarState: TopBarStateService,
-    private newThingFlows: NewThingFlowsService,
-    public modals: DashboardModalsService,
-    public loadingTasksSvc: DashboardLoadingTasksService,
-    public browsePrep: BrowsePrepService,
-    private progressEvents: ProgressEventsService,
-    private settingsState: SettingsStateService,
-    columnsService: DashboardColumnsService,
-  ) {
+  constructor() {
+    const columnsService = inject(DashboardColumnsService);
+
     this.datasetCols = columnsService.datasetCols;
     this.detectorCols = columnsService.detectorCols;
     // Mirror the server's age-off setting so the Age-Off column appears

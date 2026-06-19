@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../modal/modal.component';
@@ -13,7 +13,8 @@ import { VtDialogService } from '../../services/dialog.service';
   styleUrl: './dialog-host.component.scss',
 })
 export class DialogHostComponent {
-  constructor(public dialog: VtDialogService) {}
+  dialog = inject(VtDialogService);
+
 
   onButtonClick(value: unknown): void {
     this.dialog.resolve(value);

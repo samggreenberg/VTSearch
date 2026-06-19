@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, Input, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../icon/icon.component';
@@ -57,33 +57,33 @@ export class SourcePickerComponent {
   /** Tabs to render in the top-level category bar, in display order.
    *  Parent computes this from the importer registry; see
    *  ``DatasetImporterModalComponent.visibleImporterTabs``. */
-  @Input() visibleImporterTabs: ImporterPickerTab[] = [];
+  readonly visibleImporterTabs = input<ImporterPickerTab[]>([]);
 
   /** Importers whose ``category`` matches ``activeTab`` (i.e. the
    *  sub-tabs to render). */
   @Input() importersForActiveTab: ImporterInfo[] = [];
 
-  @Input() activeTab = '';
-  @Input() selectedImporter: ImporterInfo | null = null;
-  @Input() activeImporterTabLabel = '';
+  readonly activeTab = input('');
+  readonly selectedImporter = input<ImporterInfo | null>(null);
+  readonly activeImporterTabLabel = input('');
 
   /** Fired when the user clicks a top-level category tab. */
-  @Output() activeTabChange = new EventEmitter<string>();
+  readonly activeTabChange = output<string>();
   /** Fired when the user clicks a sub-tab (importer card). */
-  @Output() importerSelected = new EventEmitter<ImporterInfo>();
+  readonly importerSelected = output<ImporterInfo>();
 
   // --- Chrome customization ---
 
   /** Hint shown above the sub-tab area when no top tab is selected. */
-  @Input() noTabHint = 'Select what type of dataset to add.';
+  readonly noTabHint = input('Select what type of dataset to add.');
   /** Hint shown when a tab with multiple importers has none picked yet.
    *  ``{label}`` is replaced with the active tab's label. */
-  @Input() noImporterHintTemplate = 'Select how to add a {label} dataset.';
+  readonly noImporterHintTemplate = input('Select how to add a {label} dataset.');
   /** ``title`` attribute on top-level tab buttons.  ``{label}`` is
    *  replaced with the tab label. */
-  @Input() tabTitleTemplate = 'Show {label} dataset importers';
+  readonly tabTitleTemplate = input('Show {label} dataset importers');
   /** Message shown when the active tab has zero importers. */
-  @Input() emptyCategoryText = 'No importers in this category.';
+  readonly emptyCategoryText = input('No importers in this category.');
 
   /** When ``false`` (default), the sub-tab row is suppressed when the
    *  active category has exactly one importer - the parent is expected
@@ -92,121 +92,121 @@ export class SourcePickerComponent {
    *  (e.g. the New Detector media picker, where every category is a
    *  distinct kind of source the user should see labelled) set this to
    *  ``true``. */
-  @Input() alwaysShowSubtabBar = false;
+  readonly alwaysShowSubtabBar = input(false);
 
   // === Demo source view ===
 
-  @Input() demos: DemoDataset[] = [];
-  @Input() filteredDemos: DemoDataset[] = [];
-  @Input() demoLoading = false;
-  @Input() demoTabs: string[] = [];
-  @Input() activeDemoTab = '';
+  readonly demos = input<DemoDataset[]>([]);
+  readonly filteredDemos = input<DemoDataset[]>([]);
+  readonly demoLoading = input(false);
+  readonly demoTabs = input<string[]>([]);
+  readonly activeDemoTab = input('');
   @Input() demoCols: ManagedColumns | null = null;
-  @Input() mediaTypes: MediaTypeInfo[] = [];
+  readonly mediaTypes = input<MediaTypeInfo[]>([]);
 
-  @Output() activeDemoTabChange = new EventEmitter<string>();
-  @Output() demoSelected = new EventEmitter<DemoDataset>();
+  readonly activeDemoTabChange = output<string>();
+  readonly demoSelected = output<DemoDataset>();
 
-  @Input() demoLoadingText = 'Loading demo datasets...';
-  @Input() demoEmptyText = 'No demo datasets available.';
-  @Input() demoNoTabHint = 'Select the media type to demonstrate.';
+  readonly demoLoadingText = input('Loading demo datasets...');
+  readonly demoEmptyText = input('No demo datasets available.');
+  readonly demoNoTabHint = input('Select the media type to demonstrate.');
 
   /** Optional predicate run on every demo row.  When provided and it
    *  returns ``true``, the row gets a ``disabled`` class for visual
    *  styling.  Source picker still emits ``demoSelected`` for clicks
    *  - the parent is responsible for treating disabled rows as
    *  no-ops. */
-  @Input() demoRowDisabledFn: ((demo: DemoDataset) => boolean) | null = null;
+  readonly demoRowDisabledFn = input<((demo: DemoDataset) => boolean) | null>(null);
   /** Optional formatter for the ``title`` attribute on each demo row. */
-  @Input() demoRowTitleFn: ((demo: DemoDataset) => string) | null = null;
+  readonly demoRowTitleFn = input<((demo: DemoDataset) => string) | null>(null);
 
   /** When ``true`` (default) the inner media-type tab bar renders above
    *  the demo table.  Callers that want to render their own media-type
    *  picker (e.g. the Add Dataset modal, which uses a dropdown to match
    *  the other importer flows) set this to ``false`` and project their
    *  widget into the ``[demoBefore]`` slot. */
-  @Input() showDemoMediaTypeTabs = true;
+  readonly showDemoMediaTypeTabs = input(true);
 
   /** Name of the currently-selected demo row.  Used to highlight the
    *  selected row when the parent treats row clicks as a selection (not
    *  an immediate submit).  Empty string disables the highlight. */
-  @Input() selectedDemoName = '';
+  readonly selectedDemoName = input('');
 
   // === Server folder source view ===
 
   @Input() sfPathInputValue = '';
-  @Output() sfPathInputValueChange = new EventEmitter<string>();
+  readonly sfPathInputValueChange = output<string>();
   /** Fired when the user finalises the typed path (Enter or blur). */
-  @Output() sfPathApplied = new EventEmitter<void>();
+  readonly sfPathApplied = output<void>();
 
-  @Input() sfPathLabel = 'Folder to import';
-  @Input() sfPathPlaceholder = '/absolute/server/path/to/folder';
-  @Input() sfPathFieldId = 'sf-path-input';
+  readonly sfPathLabel = input('Folder to import');
+  readonly sfPathPlaceholder = input('/absolute/server/path/to/folder');
+  readonly sfPathFieldId = input('sf-path-input');
   /** Whether to fire ``sfPathApplied`` on the path input's ``blur``
    *  event in addition to Enter.  The Add Dataset modal wants
    *  blur-to-detect; the New Detector modal explicitly drives loading
    *  through a Load button and disables blur to avoid double-firing. */
-  @Input() sfApplyOnBlur = true;
+  readonly sfApplyOnBlur = input(true);
 
   // === Local folder/files source view ===
 
-  @Input() lfPickerKind: 'folder' | 'files' = 'folder';
+  readonly lfPickerKind = input<'folder' | 'files'>('folder');
   @Input() lfFiles: File[] = [];
   @Input() lfFolderName = '';
-  @Output() lfFilesDropped = new EventEmitter<File[]>();
+  readonly lfFilesDropped = output<File[]>();
 
   /** ``vt-drop-zone`` label rendered when ``lfPickerKind === 'folder'``. */
-  @Input() lfFolderDropLabel = 'Drop a folder here to import';
+  readonly lfFolderDropLabel = input('Drop a folder here to import');
   /** ``vt-drop-zone`` sublabel rendered when ``lfPickerKind === 'folder'``. */
-  @Input() lfFolderDropSublabel = 'or click to browse';
+  readonly lfFolderDropSublabel = input('or click to browse');
   /** ``vt-drop-zone`` label rendered when ``lfPickerKind === 'files'``. */
-  @Input() lfFilesDropLabel = 'Drop a paths file (.txt, .list, or .npz)';
+  readonly lfFilesDropLabel = input('Drop a paths file (.txt, .list, or .npz)');
   /** ``vt-drop-zone`` sublabel rendered when ``lfPickerKind === 'files'``. */
-  @Input() lfFilesDropSublabel = 'or click to browse';
+  readonly lfFilesDropSublabel = input('or click to browse');
   /** ``accept`` attribute for the ``files`` kind dropzone (comma-separated
    *  extensions / MIME types).  Empty string accepts anything. */
-  @Input() lfFilesAcceptAttr = '.txt,.list,.npz';
+  readonly lfFilesAcceptAttr = input('.txt,.list,.npz');
 
   /** Whether to render the "Folder*" / "Paths file*" form-label above the
    *  dropzone.  Disabled by callers (e.g. the New Detector modal) that
    *  bake the affordance entirely into the dropzone's own label. */
-  @Input() lfShowFieldLabel = true;
+  readonly lfShowFieldLabel = input(true);
   /** Label for the dropzone form-label, when ``lfShowFieldLabel`` is on. */
-  @Input() lfFolderFieldLabel = 'Folder';
+  readonly lfFolderFieldLabel = input('Folder');
   /** Label for the dropzone form-label in ``files`` mode. */
-  @Input() lfFilesFieldLabel = 'Paths file';
+  readonly lfFilesFieldLabel = input('Paths file');
 
   /** Whether to render the "Selected N files" / "Using paths from …" info
    *  text below the dropzone.  Disabled by callers that only use the
    *  first picked file (e.g. the New Detector modal) and have no
    *  meaningful count to show. */
-  @Input() lfShowFileCount = true;
+  readonly lfShowFileCount = input(true);
 
   // === View dispatch ===
 
   /** ``picker_view`` of the currently selected importer.  Drives which
    *  source widget is rendered below the chrome. */
-  @Input() activePickerView = '';
+  readonly activePickerView = input('');
 
   // -------------------------------------------------------------------
 
   get noImporterHint(): string {
-    return this.noImporterHintTemplate.replace('{label}', this.activeImporterTabLabel);
+    return this.noImporterHintTemplate().replace('{label}', this.activeImporterTabLabel());
   }
 
   tabTitle(label: string): string {
-    return this.tabTitleTemplate.replace('{label}', label);
+    return this.tabTitleTemplate().replace('{label}', label);
   }
 
   // === Demo helpers ===
 
   getDemoTabIcon(mediaType: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
+    const mt = this.mediaTypes().find((m) => m.type_id === mediaType);
     return mt?.icon || '';
   }
 
   getDemoTabText(mediaType: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === mediaType);
+    const mt = this.mediaTypes().find((m) => m.type_id === mediaType);
     return mt ? mt.name : mediaType;
   }
 
@@ -215,11 +215,13 @@ export class SourcePickerComponent {
   }
 
   demoRowDisabled(demo: DemoDataset): boolean {
-    return this.demoRowDisabledFn ? this.demoRowDisabledFn(demo) : false;
+    const demoRowDisabledFn = this.demoRowDisabledFn();
+    return demoRowDisabledFn ? demoRowDisabledFn(demo) : false;
   }
 
   demoRowTitle(demo: DemoDataset): string {
-    return this.demoRowTitleFn ? this.demoRowTitleFn(demo) : '';
+    const demoRowTitleFn = this.demoRowTitleFn();
+    return demoRowTitleFn ? demoRowTitleFn(demo) : '';
   }
 
   statusBadgeClass(status: string): string {

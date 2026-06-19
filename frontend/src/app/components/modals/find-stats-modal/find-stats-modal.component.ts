@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, OnInit, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
@@ -27,7 +27,9 @@ interface ChartPoint {
   styleUrl: './find-stats-modal.component.scss',
 })
 export class FindStatsModalComponent implements OnInit {
-  @Output() closed = new EventEmitter<void>();
+  private findApi = inject(DetectorsFindApiService);
+
+  readonly closed = output<void>();
 
   loading = true;
   error = '';
@@ -40,8 +42,6 @@ export class FindStatsModalComponent implements OnInit {
   private readonly padRight = 10;
   private readonly padTop = 10;
   private readonly padBottom = 22;
-
-  constructor(private findApi: DetectorsFindApiService) {}
 
   ngOnInit(): void {
     this.findApi.getFindStats().subscribe({

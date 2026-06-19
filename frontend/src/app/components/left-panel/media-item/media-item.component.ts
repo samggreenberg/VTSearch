@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -11,21 +11,28 @@ import { ActiveContextService } from '../../../services/active-context.service';
   styleUrl: './media-item.component.scss',
 })
 export class MediaItemComponent implements OnChanges {
+  private activeContext = inject(ActiveContextService);
+
   @Input({ required: true }) media!: Media;
   @Input() active = false;
   @Input() voteLabel: 'good' | 'bad' | null = null;
   @Input() score: number | null = null;
   @Input() viewMode: 'grid' | 'list' = 'list';
-  @Input() focusMode: 'click' | 'hover' = 'click';
+  readonly focusMode = input<'click' | 'hover'>('click');
 
-  @Output() select = new EventEmitter<number>();
-  @Output() vote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
-  @Output() contextRequest = new EventEmitter<{ id: number; x: number; y: number }>();
+  readonly select = output<number>();
+  readonly vote = output<{
+    id: number;
+    vote: 'good' | 'bad';
+}>();
+  readonly contextRequest = output<{
+    id: number;
+    x: number;
+    y: number;
+}>();
 
   thumbnailFailed = false;
   private lastMediaId: number | null = null;
-
-  constructor(private activeContext: ActiveContextService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media.id !== this.lastMediaId) {
@@ -67,7 +74,7 @@ export class MediaItemComponent implements OnChanges {
   }
 
   onClick(): void {
-    if (this.focusMode === 'hover') {
+    if (this.focusMode() === 'hover') {
       this.vote.emit({ id: this.media.id, vote: 'bad' });
     } else {
       this.select.emit(this.media.id);
@@ -75,7 +82,7 @@ export class MediaItemComponent implements OnChanges {
   }
 
   onContextMenu(event: MouseEvent): void {
-    if (this.focusMode === 'hover') {
+    if (this.focusMode() === 'hover') {
       // Hover mode keeps the existing right-click = vote-good shortcut; the
       // context menu is intentionally not available so speed-labeling stays
       // fast. Users can still seed a detector via the dashboard.
@@ -88,7 +95,7 @@ export class MediaItemComponent implements OnChanges {
   }
 
   onMouseEnter(): void {
-    if (this.focusMode === 'hover') {
+    if (this.focusMode() === 'hover') {
       this.select.emit(this.media.id);
     }
   }

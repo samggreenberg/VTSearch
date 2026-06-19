@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -34,31 +34,31 @@ export class ImportAdvancedComponent {
   /** Converters available for the current native type; feeds the
    *  source-specs picker.  Computed by the parent from the importer's
    *  ``available_converters_by_media_type``. */
-  @Input() availableConverters: ConverterInfo[] = [];
+  readonly availableConverters = input<ConverterInfo[]>([]);
   /** Native (output) type id of the dataset (e.g. ``"image"``). Drives
    *  the "include directly" row inside the source-specs picker. */
-  @Input() nativeType = '';
+  readonly nativeType = input('');
   /** Map of ``type_id`` → human label for the source-specs picker. */
-  @Input() typeLabels: Record<string, string> = {};
+  readonly typeLabels = input<Record<string, string>>({});
   /** Embedders available for the current media type.  When fewer than
    *  two are available the picker stays hidden; there is nothing to
    *  choose between. */
-  @Input() embedders: EmbedderInfo[] = [];
+  readonly embedders = input<EmbedderInfo[]>([]);
   /** Clippers available for the current media type.  Same single-option
    *  hide rule as :prop:`embedders`. */
-  @Input() clippers: ClipperInfo[] = [];
+  readonly clippers = input<ClipperInfo[]>([]);
   /** Whether the Include-media (source-specs) block should be offered
    *  at all.  True for every importer that participates in the dataset
    *  modal's form / server-folder / local-folder/files flows. */
-  @Input() showSourceSpecs = false;
+  readonly showSourceSpecs = input(false);
 
   /** Two-way bound source-spec list. */
-  @Input() sourceSpecs: SourceSpec[] = [];
-  @Output() sourceSpecsChange = new EventEmitter<SourceSpec[]>();
+  readonly sourceSpecs = input<SourceSpec[]>([]);
+  readonly sourceSpecsChange = output<SourceSpec[]>();
 
   /** Two-way bound embedder selection. */
-  @Input() selectedEmbedder = '';
-  @Output() selectedEmbedderChange = new EventEmitter<string>();
+  readonly selectedEmbedder = input('');
+  readonly selectedEmbedderChange = output<string>();
 
   /** When non-empty, the embedder picker is hidden because the user has
    *  set a Solo mediaEmbedder for the current mediaType in settings (or
@@ -66,34 +66,34 @@ export class ImportAdvancedComponent {
    *  the lock against the live embedder list and only passing a value
    *  here when the locked embedder actually exists for the type; a
    *  stale or removed embedder falls back to the normal picker. */
-  @Input() lockedEmbedder = '';
+  readonly lockedEmbedder = input('');
 
   /** Current clipper selection (one-way).  Changes flow through the
    *  parent's clipper chooser modal; clicking either the native row's
    *  Details button or the standalone fallback Details button emits
    *  :prop:`clipperChooserRequested` and the parent updates this input
    *  after the chooser settles. */
-  @Input() selectedClipper = '';
+  readonly selectedClipper = input('');
 
   /** Current parameter values for the selected clipper, keyed by the
    *  clipper's parameter ``key``.  Forwarded to the source-specs
    *  picker so the native row can render a live preview of the active
    *  settings. */
-  @Input() selectedClipperParams: Record<string, string | number> = {};
+  readonly selectedClipperParams = input<Record<string, string | number>>({});
 
   /** Fired when the user clicks either the native row's Details
    *  button (inside the source-specs column) or the standalone
    *  Details fallback below the Advanced block and the parent opens its
    *  shared clipper chooser modal. */
-  @Output() clipperChooserRequested = new EventEmitter<void>();
+  readonly clipperChooserRequested = output<void>();
 
   /** Two-way bound "compute the 2-D Browse projection at ingest" toggle.
    *  Defaults off: building the UMAP layout + hex-tile pyramid up front
    *  costs compute the user may not want to spend (Browse builds it lazily
    *  on first visit otherwise).  Lives in the Advanced block because it is
    *  a cost/latency tradeoff, not a routine import setting. */
-  @Input() buildProjection = false;
-  @Output() buildProjectionChange = new EventEmitter<boolean>();
+  readonly buildProjection = input(false);
+  readonly buildProjectionChange = output<boolean>();
 
   /** Whether the Advanced section is currently expanded.  Local state
    *  per instance; opening Advanced in one flow does not carry over
@@ -107,14 +107,14 @@ export class ImportAdvancedComponent {
   /** True when the user has not overridden the embedder, or when the
    *  current selection is one the registry marks ``is_default``. */
   get isDefaultEmbedderSelected(): boolean {
-    if (!this.selectedEmbedder) return true;
-    return !!this.embedders.find((e) => e.name === this.selectedEmbedder)?.is_default;
+    if (!this.selectedEmbedder()) return true;
+    return !!this.embedders().find((e) => e.name === this.selectedEmbedder())?.is_default;
   }
 
   /** True when the first clipper (the registry's recommended default
    *  for this media type) is currently selected. */
   get isDefaultClipperSelected(): boolean {
-    return this.clippers.length > 0 && this.clippers[0].name === this.selectedClipper;
+    return this.clippers().length > 0 && this.clippers()[0].name === this.selectedClipper();
   }
 
   /** The Advanced toggle is shown either when the Include-media block
@@ -123,7 +123,7 @@ export class ImportAdvancedComponent {
    *  overridden (otherwise their pickers stay visible anyway and the
    *  toggle would be redundant). */
   get showAdvancedToggle(): boolean {
-    if (this.showSourceSpecs) return true;
+    if (this.showSourceSpecs()) return true;
     return this.isDefaultEmbedderSelected && this.isDefaultClipperSelected;
   }
 
@@ -132,7 +132,7 @@ export class ImportAdvancedComponent {
    *  mediaEmbedder is locked for the current mediaType (then the user
    *  has explicitly opted out of seeing the picker for this type). */
   get showEmbedderPicker(): boolean {
-    if (this.lockedEmbedder) return false;
+    if (this.lockedEmbedder()) return false;
     return this.advancedOpen || !this.isDefaultEmbedderSelected;
   }
 
@@ -153,21 +153,21 @@ export class ImportAdvancedComponent {
    *  fall back to this standalone button so the override stays visible
    *  and the chooser stays reachable. */
   get showStandaloneClipperButton(): boolean {
-    if (this.clippers.length <= 1) return false;
+    if (this.clippers().length <= 1) return false;
     if (!this.showClipperPicker) return false;
-    return !(this.advancedOpen && this.showSourceSpecs);
+    return !(this.advancedOpen && this.showSourceSpecs());
   }
 
   /** Embedders flagged ``is_default`` for the active media type; shown
    *  in the Recommended optgroup. */
   get recommendedEmbedders(): EmbedderInfo[] {
-    return this.embedders.filter((e) => e.is_default);
+    return this.embedders().filter((e) => e.is_default);
   }
 
   /** Non-default embedders; shown in the Advanced optgroup inside the
    *  embedder select. */
   get advancedEmbedderOptions(): EmbedderInfo[] {
-    return this.embedders.filter((e) => !e.is_default);
+    return this.embedders().filter((e) => !e.is_default);
   }
 
   /** Human label for an embedder's option element. */
@@ -178,8 +178,8 @@ export class ImportAdvancedComponent {
   /** License-warning string for the current embedder, or null when the
    *  embedder has no special licensing concerns. */
   get licenseNotice(): string | null {
-    if (!this.selectedEmbedder) return null;
-    const found = this.embedders.find((e) => e.name === this.selectedEmbedder);
+    if (!this.selectedEmbedder()) return null;
+    const found = this.embedders().find((e) => e.name === this.selectedEmbedder());
     return found?.license_notice ?? null;
   }
 
@@ -187,7 +187,7 @@ export class ImportAdvancedComponent {
    *  ``"None"`` for unset or ``*_default`` clippers (which mean "no
    *  pre-processing"). */
   get clipperDisplayName(): string {
-    const clipper = this.clippers.find((c) => c.name === this.selectedClipper);
+    const clipper = this.clippers().find((c) => c.name === this.selectedClipper());
     if (!clipper) return 'None';
     if (clipper.name.endsWith('_default')) return 'None';
     return clipper.display_name || clipper.name;

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, inject, signal, OnInit, SecurityContext } from '@angular/core';
+import { Component, inject, signal, OnInit, SecurityContext, output } from '@angular/core';
 
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -48,7 +48,7 @@ const ABSOLUTE_SRC_RE = /^([a-z]+:)?\/\//i;
   styleUrl: './keyboard-help-modal.component.scss',
 })
 export class KeyboardHelpModalComponent implements OnInit {
-  @Output() closed = new EventEmitter<void>();
+  readonly closed = output<void>();
 
   private readonly http = inject(HttpClient);
   private readonly sanitizer = inject(DomSanitizer);

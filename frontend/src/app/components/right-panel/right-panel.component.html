@@ -5,9 +5,9 @@
     (renamed)="onDetectorRenamed($event)"
   />
 
-  @if (mode !== 'find') {
+  @if (mode() !== 'find') {
     <div class="import-row">
-      <button class="panel-btn import-btn" [disabled]="disabled" (click)="onImportLabels()" title="Import good/bad labels from a file or add media directly to the good or bad pile">Import Labels</button>
+      <button class="panel-btn import-btn" [disabled]="disabled()" (click)="onImportLabels()" title="Import good/bad labels from a file or add media directly to the good or bad pile">Import Labels</button>
     </div>
   }
 
@@ -29,11 +29,11 @@
     <vt-labelset-list
       label="good"
       [elements]="goodElements"
-      [modelName]="trainableModelName ?? ''"
+      [modelName]="trainableModelName() ?? ''"
       [sortMode]="sortMode"
       [viewMode]="viewMode"
       [gridGoalWidth]="gridGoalWidth"
-      [focusMode]="focusMode"
+      [focusMode]="focusMode()"
       (elementSelected)="onLabelsetElementSelected($event)"
       (elementVote)="onLabelsetElementVote($event)"
     />
@@ -43,11 +43,11 @@
     <vt-labelset-list
       label="bad"
       [elements]="badElements"
-      [modelName]="trainableModelName ?? ''"
+      [modelName]="trainableModelName() ?? ''"
       [sortMode]="sortMode"
       [viewMode]="viewMode"
       [gridGoalWidth]="gridGoalWidth"
-      [focusMode]="focusMode"
+      [focusMode]="focusMode()"
       (elementSelected)="onLabelsetElementSelected($event)"
       (elementVote)="onLabelsetElementVote($event)"
     />
@@ -55,8 +55,8 @@
     <vt-label-list
       label="good"
       [ids]="goodDisplayIds"
-      [headingLabel]="mode === 'find' ? 'Verified Good' : null"
-      [foldedNote]="mode === 'find' ? ((unverifiedGoodCount | number) + ' Unverified Good') : null"
+      [headingLabel]="mode() === 'find' ? 'Verified Good' : null"
+      [foldedNote]="mode() === 'find' ? ((unverifiedGoodCount | number) + ' Unverified Good') : null"
       [medias]="medias"
       [clickTimes]="clickTimes"
       [learnedScores]="learnedScores"
@@ -64,29 +64,29 @@
       [sortMode]="sortMode"
       [viewMode]="viewMode"
       [gridGoalWidth]="gridGoalWidth"
-      [focusMode]="focusMode"
+      [focusMode]="focusMode()"
       (mediaSelected)="onMediaSelected($event)"
       (mediaVote)="onMediaVote($event)"
     >
-      @if (mode === 'find') {
+      @if (mode() === 'find') {
         <div list-actions class="goods-actions">
-          <button class="goods-action-btn" [disabled]="disabled || goodIds.length === 0" (click)="onBrowse()" aria-label="Browse" title="Browse positive items (verified and unverified).">
+          <button class="goods-action-btn" [disabled]="disabled() || goodIds.length === 0" (click)="onBrowse()" aria-label="Browse" title="Browse positive items (verified and unverified).">
             <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path>
               <circle cx="12" cy="12" r="3"></circle>
             </svg>
           </button>
-          <button class="goods-action-btn" [disabled]="disabled || goodIds.length === 0" (click)="onToDataset()" aria-label="To Dataset" title="Promote the full good set (verified + unverified) into their own dataset">
+          <button class="goods-action-btn" [disabled]="disabled() || goodIds.length === 0" (click)="onToDataset()" aria-label="To Dataset" title="Promote the full good set (verified + unverified) into their own dataset">
             <vt-icon type="cubes" [size]="14"></vt-icon>
           </button>
-          <button class="goods-action-btn" [disabled]="disabled || goodIds.length === 0" (click)="onExportGood()" aria-label="Export" title="Export the full good set (verified + unverified) to clipboard, file, email, or webhook">
+          <button class="goods-action-btn" [disabled]="disabled() || goodIds.length === 0" (click)="onExportGood()" aria-label="Export" title="Export the full good set (verified + unverified) to clipboard, file, email, or webhook">
             <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"></path>
               <polyline points="15 3 21 3 21 9"></polyline>
               <line x1="12" y1="12" x2="21" y2="3"></line>
             </svg>
           </button>
-          <button class="goods-action-btn" [disabled]="disabled" (click)="onStats()" aria-label="Stats" title="Detector evaluation: confusion matrix and the false-positive / false-negative tradeoff across inclusion">
+          <button class="goods-action-btn" [disabled]="disabled()" (click)="onStats()" aria-label="Stats" title="Detector evaluation: confusion matrix and the false-positive / false-negative tradeoff across inclusion">
             <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"/>
               <path d="M12 2a10 10 0 0 1 0 20"/>
@@ -104,21 +104,21 @@
     <vt-label-list
       label="bad"
       [ids]="badDisplayIds"
-      [headingLabel]="mode === 'find' ? 'Verified Bad' : null"
-      [foldedNote]="mode === 'find' ? ((unverifiedBadCount | number) + ' Unverified Bad') : null"
+      [headingLabel]="mode() === 'find' ? 'Verified Bad' : null"
+      [foldedNote]="mode() === 'find' ? ((unverifiedBadCount | number) + ' Unverified Bad') : null"
       [medias]="medias"
       [clickTimes]="clickTimes"
       [learnedScores]="learnedScores"
       [sortMode]="sortMode"
       [viewMode]="viewMode"
       [gridGoalWidth]="gridGoalWidth"
-      [focusMode]="focusMode"
+      [focusMode]="focusMode()"
       (mediaSelected)="onMediaSelected($event)"
       (mediaVote)="onMediaVote($event)"
     >
-      @if (mode === 'find') {
+      @if (mode() === 'find') {
         <div list-actions class="goods-actions">
-          <button class="goods-action-btn" [disabled]="disabled || badIds.length === 0" (click)="onExportBad()" aria-label="Export" title="Export the full bad set (verified + unverified) to clipboard, file, email, or webhook">
+          <button class="goods-action-btn" [disabled]="disabled() || badIds.length === 0" (click)="onExportBad()" aria-label="Export" title="Export the full bad set (verified + unverified) to clipboard, file, email, or webhook">
             <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"></path>
               <polyline points="15 3 21 3 21 9"></polyline>
@@ -130,11 +130,11 @@
     </vt-label-list>
   }
 
-  @if (mode === 'find') {
+  @if (mode() === 'find') {
     <div class="corrections-row">
       <button
         class="panel-btn corrections-btn"
-        [disabled]="disabled"
+        [disabled]="disabled()"
         (click)="onAddCorrections()"
         title="Add the corrections you've made (items you changed from the detector's call) into this detector's labelset and retrain it. This changes the detector, so the current evaluation no longer applies."
       >
@@ -144,9 +144,9 @@
     </div>
   }
 
-  @if (mode !== 'find') {
+  @if (mode() !== 'find') {
     <div class="export-row">
-      <button class="panel-btn export-btn" [disabled]="disabled" (click)="onExport()" aria-label="Export" title="Export labeled items to clipboard, file, email, or webhook">
+      <button class="panel-btn export-btn" [disabled]="disabled()" (click)="onExport()" aria-label="Export" title="Export labeled items to clipboard, file, email, or webhook">
         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M11 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5"></path>
           <polyline points="15 3 21 3 21 9"></polyline>

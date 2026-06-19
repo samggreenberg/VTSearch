@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy, NgZone } from '@angular/core';
+import { Injectable, OnDestroy, NgZone, inject } from '@angular/core';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { distinctUntilChanged } from 'rxjs/operators';
 import {
@@ -32,6 +32,9 @@ import { ConnectionStateService } from './connection-state.service';
  */
 @Injectable({ providedIn: 'root' })
 export class ProgressEventsService implements OnDestroy {
+  private zone = inject(NgZone);
+  private connection = inject(ConnectionStateService);
+
   private readonly datasetSubject = new BehaviorSubject<ProgressEvent>({});
   private readonly loadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
   private readonly detectorLoadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
@@ -60,10 +63,7 @@ export class ProgressEventsService implements OnDestroy {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private lastBootId: string | null = null;
 
-  constructor(
-    private zone: NgZone,
-    private connection: ConnectionStateService,
-  ) {
+  constructor() {
     // Track the circuit breaker: stay connected while online, and tear the
     // EventSource down when the breaker trips so its native auto-reconnect
     // stops hammering a dead backend. The BehaviorSubject replays the current

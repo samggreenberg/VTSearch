@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, inject, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { forkJoin, Subject } from 'rxjs';
@@ -36,8 +36,14 @@ import {
   styleUrl: './settings-modal.component.scss',
 })
 export class SettingsModalComponent implements OnInit, OnDestroy {
+  private settingsApi = inject(SettingsApiService);
+  private settingsState = inject(SettingsStateService);
+  private datasetsListingsApi = inject(DatasetsListingsApiService);
+  private themeService = inject(ThemeService);
+  private dialog = inject(VtDialogService);
+
   @Input() preselectedViewTab = '';
-  @Output() closed = new EventEmitter<void>();
+  readonly closed = output<void>();
 
   settings: AppSettings = { volume: 50 };
   mediaTypes: MediaTypeInfo[] = [];
@@ -59,14 +65,6 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   private destroy$ = new Subject<void>();
-
-  constructor(
-    private settingsApi: SettingsApiService,
-    private settingsState: SettingsStateService,
-    private datasetsListingsApi: DatasetsListingsApiService,
-    private themeService: ThemeService,
-    private dialog: VtDialogService,
-  ) {}
 
   ngOnDestroy(): void {
     if (this.savedTimer !== null) clearTimeout(this.savedTimer);

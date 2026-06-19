@@ -1,4 +1,4 @@
-<vt-modal [open]="true" [title]="'Stats: ' + datasetName" (closed)="close()">
+<vt-modal [open]="true" [title]="'Stats: ' + datasetName()" (closed)="close()">
   @if (loading) {
     <p class="loading-text">Loading stats...</p>
   } @else if (error) {

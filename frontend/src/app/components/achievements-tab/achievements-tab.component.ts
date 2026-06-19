@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, effect } from '@angular/core';
+import { Component, OnDestroy, OnInit, effect, inject } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -33,6 +33,9 @@ interface AchievementRow extends AchievementEntry {
   styleUrl: './achievements-tab.component.scss',
 })
 export class AchievementsTabComponent implements OnInit, OnDestroy {
+  private achievements = inject(AchievementsService);
+  private settingsState = inject(SettingsStateService);
+
   rows: AchievementRow[] = [];
   docs: DocEntry[] = [];
   mediaTypes: MediaTypeEntry[] = [];
@@ -53,10 +56,7 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
   private disableAchievements = false;
   private lastState: AchievementState | null = null;
 
-  constructor(
-    private achievements: AchievementsService,
-    private settingsState: SettingsStateService,
-  ) {
+  constructor() {
     effect(() => {
       const s = this.settingsState.settingsSignal();
       this.disableAchievements = s?.enable_achievements === false;

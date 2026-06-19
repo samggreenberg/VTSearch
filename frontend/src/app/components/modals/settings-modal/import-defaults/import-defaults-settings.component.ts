@@ -1,12 +1,4 @@
-import {
-  Component,
-  EventEmitter,
-  Input,
-  OnChanges,
-  OnInit,
-  Output,
-  SimpleChanges,
-} from '@angular/core';
+import { Component, OnChanges, OnInit, SimpleChanges, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -46,18 +38,20 @@ import {
   styleUrl: './import-defaults-settings.component.scss',
 })
 export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
+  private datasetsListingsApi = inject(DatasetsListingsApiService);
+
   /** All registered media types; drives the per-mediaType tab strip. */
-  @Input() mediaTypes: MediaTypeInfo[] = [];
+  readonly mediaTypes = input<MediaTypeInfo[]>([]);
   /** Current per-mediaType defaults map (the saved value). */
-  @Input() defaults: ImportDefaultsByMediaType = {};
+  readonly defaults = input<ImportDefaultsByMediaType>({});
   /** When set (solo-mediaType streamlining), the tab strip collapses to
    *  just that one mediaType so the user only configures what they'll
    *  actually use. */
-  @Input() effectiveSoloMediaType: string | null = null;
+  readonly effectiveSoloMediaType = input<string | null>(null);
   /** Emits a full updated defaults map whenever the user changes any
    *  per-mediaType setting.  The parent merges it back into its
    *  ``settings`` object and persists. */
-  @Output() defaultsChange = new EventEmitter<ImportDefaultsByMediaType>();
+  readonly defaultsChange = output<ImportDefaultsByMediaType>();
 
   activeType = '';
   clipperChooserOpen = false;
@@ -67,8 +61,6 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
   clippersByType: Record<string, ClipperInfo[]> = {};
   convertersByType: Record<string, ConverterInfo[]> = {};
   loadingByType: Record<string, boolean> = {};
-
-  constructor(private datasetsListingsApi: DatasetsListingsApiService) {}
 
   ngOnInit(): void {
     this.pickInitialTab();
@@ -87,22 +79,22 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
       this.loadForType(this.activeType);
       return;
     }
-    const soloMatch = this.effectiveSoloMediaType
-      ? visible.find((mt) => mt.type_id === this.effectiveSoloMediaType)
+    const soloMatch = this.effectiveSoloMediaType()
+      ? visible.find((mt) => mt.type_id === this.effectiveSoloMediaType())
       : null;
     this.selectTab((soloMatch || visible[0]).type_id);
   }
 
   get visibleTypes(): MediaTypeInfo[] {
-    if (this.effectiveSoloMediaType) {
-      return this.mediaTypes.filter((mt) => mt.type_id === this.effectiveSoloMediaType);
+    if (this.effectiveSoloMediaType()) {
+      return this.mediaTypes().filter((mt) => mt.type_id === this.effectiveSoloMediaType());
     }
-    return this.mediaTypes;
+    return this.mediaTypes();
   }
 
   get typeLabels(): Record<string, string> {
     const out: Record<string, string> = {};
-    for (const mt of this.mediaTypes) out[mt.type_id] = mt.name;
+    for (const mt of this.mediaTypes()) out[mt.type_id] = mt.name;
     return out;
   }
 
@@ -184,7 +176,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
   }
 
   get currentDefaults(): ImportDefaultsForMediaType {
-    return this.defaults[this.activeType] || {};
+    return this.defaults()[this.activeType] || {};
   }
 
   get currentEmbedder(): string {
@@ -249,7 +241,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
    *  mediaType, used to gate the "Reset" button so it doesn't appear
    *  when there's nothing to reset. */
   get hasOverridesForActiveType(): boolean {
-    const d = this.defaults[this.activeType];
+    const d = this.defaults()[this.activeType];
     if (!d) return false;
     if (d.embedder) return true;
     if (d.clipper) return true;
@@ -267,7 +259,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
   // -----------------------------------------------------------------
 
   private updateActive(patch: Partial<ImportDefaultsForMediaType>): void {
-    const next: ImportDefaultsByMediaType = { ...this.defaults };
+    const next: ImportDefaultsByMediaType = { ...this.defaults() };
     const merged: ImportDefaultsForMediaType = { ...this.currentDefaults, ...patch };
     // Strip empty values so the persisted dict stays compact.
     for (const k of Object.keys(merged) as (keyof ImportDefaultsForMediaType)[]) {
@@ -320,7 +312,7 @@ export class ImportDefaultsSettingsComponent implements OnInit, OnChanges {
   }
 
   resetActiveType(): void {
-    const next: ImportDefaultsByMediaType = { ...this.defaults };
+    const next: ImportDefaultsByMediaType = { ...this.defaults() };
     delete next[this.activeType];
     this.defaultsChange.emit(next);
   }

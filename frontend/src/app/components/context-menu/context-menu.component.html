@@ -1,11 +1,11 @@
 <div
   class="context-menu"
   role="menu"
-  [style.left.px]="x"
-  [style.top.px]="y"
+  [style.left.px]="x()"
+  [style.top.px]="y()"
   (contextmenu)="onMenuContextMenu($event)"
 >
-  @for (item of items; track item.id) {
+  @for (item of items(); track item.id) {
     <button
       type="button"
       class="menu-item"

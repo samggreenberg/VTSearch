@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { Injectable, OnDestroy, inject } from '@angular/core';
 import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
 import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
 import type { DetectorLabelView } from '../generated/api-client/models/detector-label-view';
@@ -7,6 +7,8 @@ import { DetectorsCrudApiService } from './detectors-crud-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class LabelsetStateService implements OnDestroy {
+  private api = inject(DetectorsCrudApiService);
+
   private readonly goodSubject = new BehaviorSubject<DetectorLabelView[]>([]);
   private readonly badSubject = new BehaviorSubject<DetectorLabelView[]>([]);
   private readonly mediaTypeSubject = new BehaviorSubject<string>('');
@@ -18,8 +20,6 @@ export class LabelsetStateService implements OnDestroy {
   readonly good$ = this.goodSubject.asObservable();
   readonly bad$ = this.badSubject.asObservable();
   readonly mediaType$ = this.mediaTypeSubject.asObservable();
-
-  constructor(private api: DetectorsCrudApiService) {}
 
   ngOnDestroy(): void {
     this.stopPolling();

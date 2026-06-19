@@ -120,7 +120,7 @@
     <vt-voting-overlay
       [isGood]="isGood"
       [isBad]="isBad"
-      [disabled]="isVoting || disabled"
+      [disabled]="isVoting || disabled()"
       [spinningVote]="spinningVote"
       [showHint]="showFirstVoteHint"
       (voted)="castVote($event)"

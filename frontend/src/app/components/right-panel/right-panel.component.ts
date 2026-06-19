@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, effect } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, effect, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -42,32 +42,41 @@ export interface TrainModeContext {
   styleUrl: './right-panel.component.scss',
 })
 export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  voteState = inject(VoteStateService);
+  labelsetState = inject(LabelsetStateService);
+  private settingsState = inject(SettingsStateService);
+  private dialog = inject(VtDialogService);
+
   @Input() medias: Media[] = [];
   @Input() trainMode: TrainModeContext | null = null;
-  @Input() focusMode: 'click' | 'hover' = 'click';
+  readonly focusMode = input<'click' | 'hover'>('click');
   /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */
-  @Input() mode: 'label' | 'find' = 'label';
+  readonly mode = input<'label' | 'find'>('label');
   /**
    * Trainable model name that owns the labels shown in the right pane.
    * When set in label mode, the pane is sourced from the on-disk labelset
    * (so detector labels survive across dataset switches).  When empty, the
    * pane falls back to cid-based vote display.
    */
-  @Input() trainableModelName: string | null = null;
+  readonly trainableModelName = input<string | null>(null);
   /** Disable interactive buttons (used during Find scoring). */
-  @Input() disabled = false;
-  @Output() mediaSelected = new EventEmitter<number>();
-  @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  readonly disabled = input(false);
+  readonly mediaSelected = output<number>();
+  readonly mediaVoted = output<{
+    id: number;
+    vote: 'good' | 'bad';
+}>();
   /** Find mode: browse the positive results as their own UMAP projection. */
-  @Output() browse = new EventEmitter<void>();
+  readonly browse = output<void>();
   /** Find mode: promote the goods into their own dataset. */
-  @Output() toDataset = new EventEmitter<void>();
+  readonly toDataset = output<void>();
   /** Find mode: export a label partition (good / bad). */
-  @Output() exportLabels = new EventEmitter<'good' | 'bad'>();
+  readonly exportLabels = output<'good' | 'bad'>();
   /** Find mode: open the detector-evaluation Stats modal. */
-  @Output() stats = new EventEmitter<void>();
+  readonly stats = output<void>();
   /** Find mode: fold the corrections into the detector's labelset and retrain. */
-  @Output() addCorrections = new EventEmitter<void>();
+  readonly addCorrections = output<void>();
 
   goodIds: number[] = [];
   badIds: number[] = [];
@@ -90,13 +99,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   protected currentMediaType = '';
   private destroy$ = new Subject<void>();
 
-  constructor(
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    public voteState: VoteStateService,
-    public labelsetState: LabelsetStateService,
-    private settingsState: SettingsStateService,
-    private dialog: VtDialogService,
-  ) {
+  constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
@@ -121,7 +124,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
 
   /** True when the right pane should be sourced from the labelset (not /api/votes). */
   get useLabelset(): boolean {
-    return this.mode === 'label' && !!this.trainableModelName;
+    return this.mode() === 'label' && !!this.trainableModelName();
   }
 
   /**
@@ -130,13 +133,13 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
    * just ``good ∩ verified``. In Label mode it shows every good vote.
    */
   get goodDisplayIds(): number[] {
-    if (this.mode !== 'find') return this.goodIds;
+    if (this.mode() !== 'find') return this.goodIds;
     return this.goodIds.filter((id) => this.verifiedIds.has(id));
   }
 
   /** Bad-bucket counterpart of {@link goodDisplayIds}. */
   get badDisplayIds(): number[] {
-    if (this.mode !== 'find') return this.badIds;
+    if (this.mode() !== 'find') return this.badIds;
     return this.badIds.filter((id) => this.verifiedIds.has(id));
   }
 
@@ -155,7 +158,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     this.voteState.startPolling();
     this.subscribeToVotes();
     if (this.useLabelset) {
-      this.labelsetState.setModel(this.trainableModelName);
+      this.labelsetState.setModel(this.trainableModelName());
       this.labelsetState.startPolling();
     }
     this.subscribeToLabelset();
@@ -172,7 +175,7 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     }
     if (changes['trainableModelName'] || changes['mode']) {
       if (this.useLabelset) {
-        this.labelsetState.setModel(this.trainableModelName);
+        this.labelsetState.setModel(this.trainableModelName());
         this.labelsetState.startPolling();
       } else {
         this.labelsetState.stopPolling();

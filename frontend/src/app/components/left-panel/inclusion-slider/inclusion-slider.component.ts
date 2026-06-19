@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 
 
 @Component({
@@ -9,9 +9,9 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
   styleUrl: './inclusion-slider.component.scss',
 })
 export class InclusionSliderComponent {
-  @Input() value = 0;
+  readonly value = input(0);
 
-  @Output() valueChange = new EventEmitter<number>();
+  readonly valueChange = output<number>();
 
   onInput(event: Event): void {
     const target = event.target as HTMLInputElement;

@@ -1,5 +1,5 @@
 
-import { Component, ElementRef, HostListener, Input, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, signal, inject, input } from '@angular/core';
 
 const HOVER_DELAY_MS = 500;
 
@@ -12,7 +12,7 @@ const HOVER_DELAY_MS = 500;
       class="field-hint-icon"
       tabindex="0"
       role="img"
-      [attr.aria-label]="ariaLabel || hint"
+      [attr.aria-label]="ariaLabel() || hint()"
       (mouseenter)="onMouseEnter()"
       (mouseleave)="onMouseLeave()"
       (focus)="onMouseEnter()"
@@ -32,7 +32,7 @@ const HOVER_DELAY_MS = 500;
         >?</text>
       </svg>
       @if (visible()) {
-        <span class="field-hint-tooltip" role="tooltip">{{ hint }}</span>
+        <span class="field-hint-tooltip" role="tooltip">{{ hint() }}</span>
       }
     </span>
     `,
@@ -80,13 +80,13 @@ const HOVER_DELAY_MS = 500;
   ],
 })
 export class FieldHintIconComponent {
-  @Input() hint = '';
-  @Input() ariaLabel = '';
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  readonly hint = input('');
+  readonly ariaLabel = input('');
 
   readonly visible = signal(false);
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
-
-  constructor(private readonly elementRef: ElementRef<HTMLElement>) {}
 
   onMouseEnter(): void {
     if (this.visible()) return;

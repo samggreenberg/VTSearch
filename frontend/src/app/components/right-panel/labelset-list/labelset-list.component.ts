@@ -1,14 +1,4 @@
-import {
-  AfterViewChecked,
-  Component,
-  ElementRef,
-  EventEmitter,
-  Input,
-  OnChanges,
-  Output,
-  SimpleChanges,
-  ViewChild,
-} from '@angular/core';
+import { AfterViewChecked, Component, ElementRef, OnChanges, SimpleChanges, ViewChild, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type { DetectorLabelView } from '../../../generated/api-client/models/detector-label-view';
 import { LabelSortMode } from '../label-sort/label-sort.component';
@@ -26,23 +16,26 @@ interface SortedElement extends DetectorLabelView {
   styleUrls: ['../label-list/label-list.component.scss'],
 })
 export class LabelsetListComponent implements OnChanges, AfterViewChecked {
-  @Input() label: 'good' | 'bad' = 'good';
-  @Input() elements: DetectorLabelView[] = [];
-  @Input() modelName: string = '';
-  @Input() sortMode: LabelSortMode = 'time-desc';
-  @Input() viewMode: 'grid' | 'list' = 'grid';
-  @Input() gridGoalWidth: number = 80;
-  @Input() focusMode: 'click' | 'hover' = 'click';
-  @Output() elementSelected = new EventEmitter<DetectorLabelView>();
-  @Output() elementVote = new EventEmitter<{ id: string; vote: 'good' | 'bad' }>();
+  private detectorsCrudApi = inject(DetectorsCrudApiService);
+
+  readonly label = input<'good' | 'bad'>('good');
+  readonly elements = input<DetectorLabelView[]>([]);
+  readonly modelName = input<string>('');
+  readonly sortMode = input<LabelSortMode>('time-desc');
+  readonly viewMode = input<'grid' | 'list'>('grid');
+  readonly gridGoalWidth = input<number>(80);
+  readonly focusMode = input<'click' | 'hover'>('click');
+  readonly elementSelected = output<DetectorLabelView>();
+  readonly elementVote = output<{
+    id: string;
+    vote: 'good' | 'bad';
+}>();
 
   @ViewChild('voteListContainer') voteListContainer?: ElementRef<HTMLDivElement>;
 
   sortedEntries: SortedElement[] = [];
   private pendingScrollPct: number | null = null;
   private thumbnailFailedUrls = new Set<string>();
-
-  constructor(private detectorsCrudApi: DetectorsCrudApiService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['viewMode'] && !changes['viewMode'].firstChange && this.voteListContainer) {
@@ -64,16 +57,16 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
   }
 
   private buildSorted(): SortedElement[] {
-    const entries: SortedElement[] = this.elements.map((e) => ({
+    const entries: SortedElement[] = this.elements().map((e) => ({
       ...e,
-      confidence: e.score >= 0 ? (this.label === 'good' ? e.score : 1 - e.score) : -1,
+      confidence: e.score >= 0 ? (this.label() === 'good' ? e.score : 1 - e.score) : -1,
     }));
     return this.sortEntries(entries);
   }
 
   private sortEntries(entries: SortedElement[]): SortedElement[] {
     const sorted = [...entries];
-    switch (this.sortMode) {
+    switch (this.sortMode()) {
       case 'time-desc':
         sorted.sort((a, b) => b.time - a.time);
         break;
@@ -101,7 +94,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
   }
 
   get isGrid(): boolean {
-    return this.viewMode === 'grid';
+    return this.viewMode() === 'grid';
   }
 
   hasThumbnailUrl(entry: DetectorLabelView): boolean {
@@ -116,8 +109,9 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
   }
 
   thumbnailUrl(entry: DetectorLabelView): string {
-    if (!this.modelName) return '';
-    let url = this.detectorsCrudApi.labelThumbnailUrl(this.modelName, entry.id);
+    const modelName = this.modelName();
+    if (!modelName) return '';
+    let url = this.detectorsCrudApi.labelThumbnailUrl(modelName, entry.id);
     // The route crops to the element's stored region box server-side; fold the
     // box into the URL so a re-vote with a different box busts the cached tile
     // (the box coords aren't otherwise part of the URL).
@@ -145,7 +139,7 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
   }
 
   onEntryClick(entry: DetectorLabelView): void {
-    if (this.focusMode === 'hover') {
+    if (this.focusMode() === 'hover') {
       this.elementVote.emit({ id: entry.id, vote: 'bad' });
     } else {
       this.elementSelected.emit(entry);
@@ -153,14 +147,14 @@ export class LabelsetListComponent implements OnChanges, AfterViewChecked {
   }
 
   onEntryContextMenu(event: MouseEvent, entry: DetectorLabelView): void {
-    if (this.focusMode === 'hover') {
+    if (this.focusMode() === 'hover') {
       event.preventDefault();
       this.elementVote.emit({ id: entry.id, vote: 'good' });
     }
   }
 
   onEntryMouseEnter(entry: DetectorLabelView): void {
-    if (this.focusMode === 'hover') {
+    if (this.focusMode() === 'hover') {
       this.elementSelected.emit(entry);
     }
   }

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, OnInit, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -20,13 +20,15 @@ interface SourceRow {
   styleUrl: './combine-detectors-modal.component.scss',
 })
 export class CombineDetectorsModalComponent implements OnInit {
-  /** Trainable models the user has selected on the dashboard. */
-  @Input() sources: DetectorRegistryEntry[] = [];
-  /** All registered model names; used for inline name-collision check. */
-  @Input() existingNames: string[] = [];
+  private detectorsCrudApi = inject(DetectorsCrudApiService);
 
-  @Output() closed = new EventEmitter<void>();
-  @Output() created = new EventEmitter<string>();
+  /** Trainable models the user has selected on the dashboard. */
+  readonly sources = input<DetectorRegistryEntry[]>([]);
+  /** All registered model names; used for inline name-collision check. */
+  readonly existingNames = input<string[]>([]);
+
+  readonly closed = output<void>();
+  readonly created = output<string>();
 
   newName = '';
   conflictPolicy: 'drop' = 'drop';
@@ -37,16 +39,14 @@ export class CombineDetectorsModalComponent implements OnInit {
   totalLabels = 0;
   mediaType = '';
 
-  constructor(private detectorsCrudApi: DetectorsCrudApiService) {}
-
   ngOnInit(): void {
-    this.rows = this.sources.map((m) => ({
+    this.rows = this.sources().map((m) => ({
       name: this.trainableNameOf(m),
       numLabels: (m.num_training as number) ?? 0,
       textQuery: (m.text_query as string) ?? '',
     }));
     this.totalLabels = this.rows.reduce((sum, r) => sum + r.numLabels, 0);
-    this.mediaType = this.sources[0]?.media_type ?? '';
+    this.mediaType = this.sources()[0]?.media_type ?? '';
   }
 
   /** The combine API operates on the registry name (= labelset filename). */
@@ -57,7 +57,7 @@ export class CombineDetectorsModalComponent implements OnInit {
   get nameCollision(): boolean {
     const trimmed = this.newName.trim();
     if (!trimmed) return false;
-    return this.existingNames.some((n) => n === trimmed);
+    return this.existingNames().some((n) => n === trimmed);
   }
 
   get nameValidationMessage(): string {

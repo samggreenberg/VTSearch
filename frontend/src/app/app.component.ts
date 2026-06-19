@@ -1,4 +1,4 @@
-import { Component, HostListener, effect } from '@angular/core';
+import { Component, HostListener, effect, inject } from '@angular/core';
 import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { combineLatest } from 'rxjs';
@@ -60,6 +60,17 @@ import { isPairCompatible } from './utils/context-compat';
   styleUrl: './app.component.scss',
 })
 export class AppComponent {
+  private router = inject(Router);
+  private mediaState = inject(MediaStateService);
+  private datasetState = inject(DatasetStateService);
+  private activeContext = inject(ActiveContextService);
+  private recent = inject(RecentSessionsService);
+  auth = inject(AuthService);
+  achievements = inject(AchievementsService);
+  private settingsState = inject(SettingsStateService);
+  private themeService = inject(ThemeService);
+  private newThingFlows = inject(NewThingFlowsService);
+
   title = 'VTSearch';
   menuOpen = false;
   showSettings = false;
@@ -89,20 +100,9 @@ export class AppComponent {
   };
   recentSessions: RecentSession[] = [];
 
-  constructor(
-    private router: Router,
-    private mediaState: MediaStateService,
-    private datasetState: DatasetStateService,
-    private activeContext: ActiveContextService,
-    private recent: RecentSessionsService,
-    public auth: AuthService,
-    public achievements: AchievementsService,
-    private settingsState: SettingsStateService,
-    private themeService: ThemeService,
-    private newThingFlows: NewThingFlowsService,
-    _toast: ToastService,
-    activeContextWatcher: ActiveContextWatcherService,
-  ) {
+  constructor() {
+    const activeContextWatcher = inject(ActiveContextWatcherService);
+
     this.auth.checkStatus();
     this.settingsState.load();
     effect(() => {

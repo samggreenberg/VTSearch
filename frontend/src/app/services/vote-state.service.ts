@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { Injectable, OnDestroy, inject } from '@angular/core';
 import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
 import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
@@ -29,6 +29,9 @@ const UNDO_STACK_MAX = 20;
 
 @Injectable({ providedIn: 'root' })
 export class VoteStateService implements OnDestroy {
+  private sortingApi = inject(SortingApiService);
+  private mediasApi = inject(MediasApiService);
+
   private readonly goodVotesSubject = new BehaviorSubject<Set<number>>(new Set());
   private readonly badVotesSubject = new BehaviorSubject<Set<number>>(new Set());
   private readonly verifiedIdsSubject = new BehaviorSubject<Set<number>>(new Set());
@@ -97,11 +100,6 @@ export class VoteStateService implements OnDestroy {
   readonly goodRegionBoxes$ = this.goodRegionBoxesSubject.asObservable();
   /** Emits a short message every time an undo or redo executes. */
   readonly toast$ = this.toastSubject.asObservable();
-
-  constructor(
-    private sortingApi: SortingApiService,
-    private mediasApi: MediasApiService,
-  ) {}
 
   ngOnDestroy(): void {
     this.destroy$.next();

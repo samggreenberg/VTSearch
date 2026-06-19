@@ -1,19 +1,4 @@
-import {
-  Component,
-  Input,
-  Output,
-  EventEmitter,
-  ElementRef,
-  ViewChild,
-  AfterViewChecked,
-  ChangeDetectorRef,
-  NgZone,
-  OnChanges,
-  OnDestroy,
-  OnInit,
-  SimpleChanges,
-  effect,
-} from '@angular/core';
+import { Component, Input, ElementRef, ViewChild, AfterViewChecked, ChangeDetectorRef, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, effect, inject, input, output } from '@angular/core';
 
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subject } from 'rxjs';
@@ -77,20 +62,32 @@ type GridRow = { kind: 'items'; items: OrderedItem[] } | { kind: 'threshold' };
   styleUrl: './media-list.component.scss',
 })
 export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, OnDestroy {
+  private metadataCache = inject(MediaMetadataCacheService);
+  private mediaState = inject(MediaStateService);
+  private cdr = inject(ChangeDetectorRef);
+  private zone = inject(NgZone);
+
   @Input() medias: Media[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
-  @Input() selectedId: number | null = null;
+  readonly selectedId = input<number | null>(null);
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
-  @Input() viewMode: 'grid' | 'list' = 'list';
-  @Input() gridGoalWidth: number = 80;
-  @Input() focusMode: 'click' | 'hover' = 'click';
-  @Input() showScores = true;
+  readonly viewMode = input<'grid' | 'list'>('list');
+  readonly gridGoalWidth = input<number>(80);
+  readonly focusMode = input<'click' | 'hover'>('click');
+  readonly showScores = input(true);
 
-  @Output() mediaSelect = new EventEmitter<number>();
-  @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
-  @Output() mediaContextRequest = new EventEmitter<{ id: number; x: number; y: number }>();
+  readonly mediaSelect = output<number>();
+  readonly mediaVote = output<{
+    id: number;
+    vote: 'good' | 'bad';
+}>();
+  readonly mediaContextRequest = output<{
+    id: number;
+    x: number;
+    y: number;
+}>();
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
   @ViewChild(CdkVirtualScrollViewport) virtualViewport?: CdkVirtualScrollViewport;
 
@@ -120,12 +117,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   loadingMedias = false;
   readonly skeletonPlaceholders = Array.from({ length: 12 });
 
-  constructor(
-    private metadataCache: MediaMetadataCacheService,
-    private mediaState: MediaStateService,
-    private cdr: ChangeDetectorRef,
-    private zone: NgZone,
-  ) {
+  constructor() {
     effect(() => {
       this.loadingMedias = this.mediaState.isLoading();
     });
@@ -151,12 +143,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   /** Whether list mode is virtualizing (many lightweight rows). */
   get useListVirtual(): boolean {
-    return this.viewMode === 'list' && this.cachedOrderedItems.length > VIRTUAL_SCROLL_THRESHOLD;
+    return this.viewMode() === 'list' && this.cachedOrderedItems.length > VIRTUAL_SCROLL_THRESHOLD;
   }
 
   /** Whether grid mode is virtualizing (many heavy thumbnail cards). */
   get useGridVirtual(): boolean {
-    return this.viewMode === 'grid' && this.cachedOrderedItems.length > GRID_VIRTUAL_THRESHOLD;
+    return this.viewMode() === 'grid' && this.cachedOrderedItems.length > GRID_VIRTUAL_THRESHOLD;
   }
 
   /**
@@ -225,7 +217,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
         items.push({
           media,
-          score: this.showScores ? sorted.score : null,
+          score: this.showScores() ? sorted.score : null,
           showThreshold,
         });
       }
@@ -250,7 +242,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
    * same stride so CDK's fixed-size strategy scrolls accurately.
    */
   private rebuildGridRows(): void {
-    if (this.viewMode !== 'grid') {
+    if (this.viewMode() !== 'grid') {
       this.gridRows = [];
       return;
     }
@@ -284,7 +276,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     if (!el) return false;
     const inner = el.clientWidth - 2 * GRID_GAP_PX;
     if (inner <= 0) return false;
-    const cols = Math.max(1, Math.floor((inner + GRID_GAP_PX) / (this.gridGoalWidth + GRID_GAP_PX)));
+    const cols = Math.max(1, Math.floor((inner + GRID_GAP_PX) / (this.gridGoalWidth() + GRID_GAP_PX)));
     if (cols === this.gridColumns) return false;
     this.gridColumns = cols;
     return true;
@@ -336,7 +328,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
       if (this.useVirtualScroll && this.virtualViewport) {
         // In virtual-scroll mode, find the index and scroll to it.  Grid items
         // are chunked into rows, so map the item index to its row first.
-        const idx = this.cachedOrderedItems.findIndex((i) => i.media.id === this.selectedId);
+        const idx = this.cachedOrderedItems.findIndex((i) => i.media.id === this.selectedId());
         if (idx >= 0) {
           const target = this.useGridVirtual ? this.itemIndexToRow(idx) : idx;
           this.virtualViewport.scrollToIndex(target, behavior);

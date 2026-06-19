@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../icon/icon.component';
 
@@ -20,10 +20,10 @@ import { IconComponent } from '../icon/icon.component';
   styleUrl: './achievement-badge.component.scss',
 })
 export class AchievementBadgeComponent {
-  @Input() iconType = 'trophy';
+  readonly iconType = input('trophy');
   @Input() tierIdx = -1;
   /** Outer badge size in pixels (the inner icon is auto-scaled). */
-  @Input() size = 56;
+  readonly size = input(56);
 
   get tierClass(): string {
     switch (this.tierIdx) {
@@ -41,7 +41,7 @@ export class AchievementBadgeComponent {
   }
 
   get innerIconSize(): number {
-    return Math.max(12, Math.round(this.size * 0.55));
+    return Math.max(12, Math.round(this.size() * 0.55));
   }
 
   get showOuterRing(): boolean {

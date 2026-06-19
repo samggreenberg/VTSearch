@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, Input, OnInit, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -23,22 +23,20 @@ interface CombineRow {
   styleUrl: './combine-datasets-modal.component.scss',
 })
 export class CombineDatasetsModalComponent implements OnInit {
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private datasetsListingsApi = inject(DatasetsListingsApiService);
+
   /** Datasets pre-selected on the dashboard when the modal was opened. */
   @Input() datasets: DatasetRegistryEntry[] = [];
 
-  @Output() closed = new EventEmitter<void>();
-  @Output() combineStarted = new EventEmitter<void>();
+  readonly closed = output<void>();
+  readonly combineStarted = output<void>();
 
   rows: CombineRow[] = [];
   mediaTypes: MediaTypeInfo[] = [];
   submitting = false;
   error = '';
   name = '';
-
-  constructor(
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private datasetsListingsApi: DatasetsListingsApiService,
-  ) {}
 
   ngOnInit(): void {
     this.rows = this.datasets

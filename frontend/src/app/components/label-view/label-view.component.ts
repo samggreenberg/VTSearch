@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit, effect } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit, effect, inject } from '@angular/core';
 
 import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
 import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
@@ -57,6 +57,23 @@ import { buildMediaContextMenuItems } from './media-context-menu-items';
   styleUrl: './label-view.component.scss',
 })
 export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
+  private sortingApi = inject(SortingApiService);
+  private detectorsFindApi = inject(DetectorsFindApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private mediasApi = inject(MediasApiService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private labelSession = inject(LabelSessionService);
+  mediaState = inject(MediaStateService);
+  voteState = inject(VoteStateService);
+  sortState = inject(SortStateService);
+  private settingsState = inject(SettingsStateService);
+  private autopilotStateService = inject(AutopilotStateService);
+  private activeContext = inject(ActiveContextService);
+  private progressEvents = inject(ProgressEventsService);
+  private newThingFlows = inject(NewThingFlowsService);
+  private toast = inject(ToastService);
+  panelState = inject(LabelViewPanelStateService);
+
   @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
@@ -114,24 +131,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
 
-  constructor(
-    private sortingApi: SortingApiService,
-    private detectorsFindApi: DetectorsFindApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private mediasApi: MediasApiService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private labelSession: LabelSessionService,
-    public mediaState: MediaStateService,
-    public voteState: VoteStateService,
-    public sortState: SortStateService,
-    private settingsState: SettingsStateService,
-    private autopilotStateService: AutopilotStateService,
-    private activeContext: ActiveContextService,
-    private progressEvents: ProgressEventsService,
-    private newThingFlows: NewThingFlowsService,
-    private toast: ToastService,
-    public panelState: LabelViewPanelStateService,
-  ) {
+  constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;

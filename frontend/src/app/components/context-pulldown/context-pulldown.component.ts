@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject, input } from '@angular/core';
 
 import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -49,7 +49,16 @@ interface PulldownRow {
   styleUrl: './context-pulldown.component.scss',
 })
 export class ContextPulldownComponent implements OnInit, OnDestroy {
-  @Input() kind: PulldownKind = 'dataset';
+  private host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private datasetState = inject(DatasetStateService);
+  private activeContext = inject(ActiveContextService);
+  private contextSwitch = inject(ContextSwitchService);
+  private newThingFlows = inject(NewThingFlowsService);
+  private pulldownControl = inject(PulldownControlService);
+  private dashboardColumns = inject(DashboardColumnsService);
+  private runningJobs = inject(RunningJobsService);
+
+  readonly kind = input<PulldownKind>('dataset');
 
   @ViewChild('menuRef') menuRef?: ElementRef<HTMLDivElement>;
 
@@ -86,17 +95,6 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
    *  needing a separate per-row subscription. */
   private busyPairs: Map<string, string[]> = new Map();
 
-  constructor(
-    private host: ElementRef<HTMLElement>,
-    private datasetState: DatasetStateService,
-    private activeContext: ActiveContextService,
-    private contextSwitch: ContextSwitchService,
-    private newThingFlows: NewThingFlowsService,
-    private pulldownControl: PulldownControlService,
-    private dashboardColumns: DashboardColumnsService,
-    private runningJobs: RunningJobsService,
-  ) {}
-
   ngOnInit(): void {
     this.datasetState.datasets$.pipe(takeUntil(this.destroy$)).subscribe(() => {
       this.rebuildRows();
@@ -114,7 +112,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     });
 
     this.newThingFlows.created$.pipe(takeUntil(this.destroy$)).subscribe(({ kind, id }) => {
-      if (kind !== this.kind || !id || !this.awaitingNew) return;
+      if (kind !== this.kind() || !id || !this.awaitingNew) return;
       this.sawSuccessSignal = true;
       this.awaitingNew = false;
       this.switchToNewItem(id);
@@ -143,7 +141,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     });
 
     this.pulldownControl
-      .openSignal$(this.kind)
+      .openSignal$(this.kind())
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.openMenu());
 
@@ -175,7 +173,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   get isDataset(): boolean {
-    return this.kind === 'dataset';
+    return this.kind() === 'dataset';
   }
 
   get placeholderLabel(): string {

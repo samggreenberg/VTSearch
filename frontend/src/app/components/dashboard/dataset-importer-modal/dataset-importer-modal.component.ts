@@ -1,4 +1,4 @@
-import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
+import { Component, HostListener, Input, OnInit, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -26,18 +26,24 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
   styleUrl: './dataset-importer-modal.component.scss',
 })
 export class DatasetImporterModalComponent implements OnInit {
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private datasetsListingsApi = inject(DatasetsListingsApiService);
+  private settingsState = inject(SettingsStateService);
+  private toastService = inject(ToastService);
+  private datasetsUiApi = inject(DatasetsUiApiService);
+
   /** Media type_id guessed from existing datasets/models (e.g. "image"). */
   @Input() guessedMediaType = '';
   /** Embedder name guessed from existing datasets/in-progress loads (e.g. "siglip"). */
-  @Input() guessedMediaEmbedder = '';
+  readonly guessedMediaEmbedder = input('');
   /** Picker tab id to pre-select when the modal opens (e.g. "server" from
    *  the dashboard's first-run welcome banner CTA).  Empty leaves the
    *  picker in the default "no tab selected" state. */
   @Input() initialTab = '';
 
-  @Output() closed = new EventEmitter<void>();
-  @Output() importStarted = new EventEmitter<void>();
-  @Output() demoSelected = new EventEmitter<DemoDataset>();
+  readonly closed = output<void>();
+  readonly importStarted = output<void>();
+  readonly demoSelected = output<DemoDataset>();
 
   importers: ImporterInfo[] = [];
   selectedImporter: ImporterInfo | null = null;
@@ -187,14 +193,6 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Which context opened the chooser: 'form' | 'demo' | 'sf' | 'lf' */
   clipperChooserContext: 'form' | 'demo' | 'sf' | 'lf' = 'form';
   clipperChooserClippers: ClipperInfo[] = [];
-
-  constructor(
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private datasetsListingsApi: DatasetsListingsApiService,
-    private settingsState: SettingsStateService,
-    private toastService: ToastService,
-    private datasetsUiApi: DatasetsUiApiService,
-  ) {}
 
   /** Whether the inline server-filesystem folder browser is expanded under
    *  the server_folder path input. */
@@ -513,8 +511,8 @@ export class DatasetImporterModalComponent implements OnInit {
     if (embedders.length === 0) return '';
     const locked = this.lockedEmbedderFor(mediaTypeFolderOrTypeId, embedders);
     if (locked) return locked;
-    const guessedMatch = this.guessedMediaEmbedder
-      ? embedders.find((e) => e.name === this.guessedMediaEmbedder)
+    const guessedMatch = this.guessedMediaEmbedder()
+      ? embedders.find((e) => e.name === this.guessedMediaEmbedder())
       : null;
     if (guessedMatch) return guessedMatch.name;
     const typeId = this.toTypeId(mediaTypeFolderOrTypeId) || mediaTypeFolderOrTypeId;

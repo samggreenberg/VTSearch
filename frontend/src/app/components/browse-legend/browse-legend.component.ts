@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, input } from '@angular/core';
 import {
   gradientStops,
   resolveColormap,
@@ -32,7 +32,7 @@ interface LegendTick {
   standalone: true,
   template: `
     <div class="browse-legend" role="img" [attr.aria-label]="ariaLabel">
-      <span class="browse-legend-title">{{ title }}</span>
+      <span class="browse-legend-title">{{ title() }}</span>
       <div class="browse-legend-row">
         <div class="browse-legend-single">
           <span class="browse-legend-dot" [style.background]="singleColor"></span>
@@ -57,11 +57,11 @@ interface LegendTick {
 })
 export class BrowseLegendComponent implements OnInit, OnDestroy {
   /** Heading above the swatch — what the color encodes. */
-  @Input() title = 'Items per cell';
+  readonly title = input('Items per cell');
   /** Item count the top of the ramp currently maps to. */
-  @Input() maxCount = 1;
+  readonly maxCount = input(1);
   /** Active density colormap preset; resolved against the live theme. */
-  @Input() colormap: BrowseColormapId = 'auto';
+  readonly colormap = input<BrowseColormapId>('auto');
 
   private readonly numberFormat = new Intl.NumberFormat();
   /** Live theme, refreshed by a ``data-theme`` observer so the key repaints. */
@@ -89,7 +89,7 @@ export class BrowseLegendComponent implements OnInit, OnDestroy {
 
   /** Colormap resolved for the current preset + theme (same as the canvas). */
   private get resolved() {
-    return resolveColormap(this.colormap, this.theme);
+    return resolveColormap(this.colormap(), this.theme);
   }
 
   /** Horizontal gradient with the dense (last ramp stop) end at the right. */
@@ -111,7 +111,7 @@ export class BrowseLegendComponent implements OnInit, OnDestroy {
    * shown by the dot instead).
    */
   get ticks(): LegendTick[] {
-    const max = Math.max(Math.round(this.maxCount), 1);
+    const max = Math.max(Math.round(this.maxCount()), 1);
     if (max < 2) return [];
     const seen = new Set<number>();
     const out: LegendTick[] = [];
@@ -125,10 +125,10 @@ export class BrowseLegendComponent implements OnInit, OnDestroy {
   }
 
   get ariaLabel(): string {
-    const max = Math.max(Math.round(this.maxCount), 1);
+    const max = Math.max(Math.round(this.maxCount()), 1);
     return max < 2
-      ? `${this.title}: every cell in view holds 1 item`
-      : `${this.title}: a dot is 1 item; the ramp runs up to ${this.numberFormat.format(
+      ? `${this.title()}: every cell in view holds 1 item`
+      : `${this.title()}: a dot is 1 item; the ramp runs up to ${this.numberFormat.format(
           max,
         )} items at its brightest`;
   }

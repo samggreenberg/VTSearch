@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, OnInit, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
@@ -13,18 +13,18 @@ import { formatTimestamp as formatTs } from '../../../utils/format-date';
   styleUrl: './dataset-stats-modal.component.scss',
 })
 export class DatasetStatsModalComponent implements OnInit {
-  @Input() datasetId = '';
-  @Input() datasetName = '';
-  @Output() closed = new EventEmitter<void>();
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+
+  readonly datasetId = input('');
+  readonly datasetName = input('');
+  readonly closed = output<void>();
 
   loading = true;
   error = '';
   stats: DatasetRegistryStatsResponse | null = null;
 
-  constructor(private datasetsRegistryApi: DatasetsRegistryApiService) {}
-
   ngOnInit(): void {
-    this.datasetsRegistryApi.getDatasetStats(this.datasetId).subscribe({
+    this.datasetsRegistryApi.getDatasetStats(this.datasetId()).subscribe({
       next: (data) => {
         this.stats = data;
         this.loading = false;

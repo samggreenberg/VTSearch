@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { filter, takeUntil } from 'rxjs/operators';
 import { LoadingTask } from '../models/api.models';
@@ -31,6 +31,12 @@ import { ProgressEventsService } from './progress-events.service';
  */
 @Injectable({ providedIn: 'root' })
 export class DashboardLoadingTasksService {
+  private progressEvents = inject(ProgressEventsService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private datasetState = inject(DatasetStateService);
+  private achievements = inject(AchievementsService);
+
   private readonly loadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
   private readonly detectorLoadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
 
@@ -46,13 +52,7 @@ export class DashboardLoadingTasksService {
   private datasetPollingActive = false;
   private detectorPollingActive = false;
 
-  constructor(
-    private progressEvents: ProgressEventsService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private datasetState: DatasetStateService,
-    private achievements: AchievementsService,
-  ) {
+  constructor() {
     // SSE pushes the initial snapshot on connect, so the first event on
     // each channel tells us whether there's anything in flight; auto-
     // resume polling without the dashboard having to coordinate it.

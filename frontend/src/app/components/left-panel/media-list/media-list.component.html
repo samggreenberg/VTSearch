@@ -1,13 +1,13 @@
 @if (showSkeletons) {
   <div
     class="media-list media-list-skeleton"
-    [class.grid-layout]="viewMode === 'grid'"
-    [style.--grid-goal-width]="gridGoalWidth + 'px'"
+    [class.grid-layout]="viewMode() === 'grid'"
+    [style.--grid-goal-width]="gridGoalWidth() + 'px'"
     aria-busy="true"
     aria-label="Loading media"
   >
     @for (_ of skeletonPlaceholders; track $index) {
-      @if (viewMode === 'grid') {
+      @if (viewMode() === 'grid') {
         <div class="media-skeleton-card">
           <vt-skeleton width="100%" height="100%" />
         </div>
@@ -30,11 +30,11 @@
       }
       <vt-media-item
         [media]="item.media"
-        [active]="selectedId === item.media.id"
+        [active]="selectedId() === item.media.id"
         [voteLabel]="getVoteLabel(item.media.id)"
         [score]="item.score"
-        [viewMode]="viewMode"
-        [focusMode]="focusMode"
+        [viewMode]="viewMode()"
+        [focusMode]="focusMode()"
         (select)="onMediaSelect($event)"
         (vote)="onMediaVote($event)"
         (contextRequest)="onMediaContextRequest($event)"
@@ -44,12 +44,12 @@
 } @else if (useGridVirtual) {
   <!-- Virtual scrolling for large galleries: cards are chunked into rows so
        only the visible rows are mounted, instead of every thumbnail at once. -->
-  <cdk-virtual-scroll-viewport [itemSize]="gridRowHeight" class="media-list virtual-scroll-viewport grid-virtual" [style.--grid-goal-width]="gridGoalWidth + 'px'">
+  <cdk-virtual-scroll-viewport [itemSize]="gridRowHeight" class="media-list virtual-scroll-viewport grid-virtual" [style.--grid-goal-width]="gridGoalWidth() + 'px'">
     <div
       class="grid-virtual-row"
       *cdkVirtualFor="let row of gridRows; trackBy: trackByGridRow"
       [style.height.px]="gridRowHeight"
-      [style.--grid-goal-width]="gridGoalWidth + 'px'"
+      [style.--grid-goal-width]="gridGoalWidth() + 'px'"
       [style.grid-template-columns]="row.kind === 'threshold' ? null : 'repeat(' + gridColumns + ', var(--grid-goal-width, 80px))'"
     >
       @if (row.kind === 'threshold') {
@@ -60,11 +60,11 @@
         @for (item of row.items; track trackByMediaId($index, item)) {
           <vt-media-item
             [media]="item.media"
-            [active]="selectedId === item.media.id"
+            [active]="selectedId() === item.media.id"
             [voteLabel]="getVoteLabel(item.media.id)"
             [score]="item.score"
-            [viewMode]="viewMode"
-            [focusMode]="focusMode"
+            [viewMode]="viewMode()"
+            [focusMode]="focusMode()"
             (select)="onMediaSelect($event)"
             (vote)="onMediaVote($event)"
             (contextRequest)="onMediaContextRequest($event)"
@@ -75,7 +75,7 @@
   </cdk-virtual-scroll-viewport>
 } @else {
   <!-- Plain DOM rendering for small datasets or grid mode -->
-  <div class="media-list" [class.grid-layout]="viewMode === 'grid'" [style.--grid-goal-width]="gridGoalWidth + 'px'" role="listbox" aria-label="Media items" #listContainer>
+  <div class="media-list" [class.grid-layout]="viewMode() === 'grid'" [style.--grid-goal-width]="gridGoalWidth() + 'px'" role="listbox" aria-label="Media items" #listContainer>
     @for (item of cachedOrderedItems; track trackByMediaId($index, item)) {
       @if (item.showThreshold) {
         <div class="media-threshold-line" title="Decision boundary between predicted good and bad items" aria-label="Good/Bad threshold">
@@ -84,11 +84,11 @@
       }
       <vt-media-item
         [media]="item.media"
-        [active]="selectedId === item.media.id"
+        [active]="selectedId() === item.media.id"
         [voteLabel]="getVoteLabel(item.media.id)"
         [score]="item.score"
-        [viewMode]="viewMode"
-        [focusMode]="focusMode"
+        [viewMode]="viewMode()"
+        [focusMode]="focusMode()"
         (select)="onMediaSelect($event)"
         (vote)="onMediaVote($event)"
         (contextRequest)="onMediaContextRequest($event)"

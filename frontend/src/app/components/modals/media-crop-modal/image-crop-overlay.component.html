@@ -8,7 +8,7 @@
   (pointermove)="onPointerMove($event)"
   (pointerup)="onPointerUp($event)"
   (pointercancel)="onPointerUp($event)">
-  <img #img [src]="imageUrl" (load)="onImageLoaded()" alt="Crop target" />
+  <img #img [src]="imageUrl()" (load)="onImageLoaded()" alt="Crop target" />
   <div
     class="crop-mask top"
     [style.height.px]="cropY">

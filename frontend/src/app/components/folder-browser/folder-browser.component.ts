@@ -3,15 +3,14 @@ import {
   AfterViewInit,
   Component,
   ElementRef,
-  EventEmitter,
   HostListener,
-  Input,
   OnChanges,
   OnDestroy,
   OnInit,
-  Output,
   SimpleChanges,
   ViewChild,
+  input,
+  output
 } from '@angular/core';
 import { Observable, Subscription } from 'rxjs';
 
@@ -80,52 +79,55 @@ const TYPEAHEAD_RESET_MS = 800;
 })
 export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, AfterViewInit {
   /** Required: returns the listing for a given relative path. */
-  @Input({ required: true }) browse!: FolderBrowserBrowseFn;
+  readonly browse = input.required<FolderBrowserBrowseFn>();
 
   /** When false, only directories are rendered (the user is picking a
    *  folder, not a file inside it). */
-  @Input() showFiles = true;
+  readonly showFiles = input(true);
 
   /** Initial relative path to load.  Changes to this re-load the list. */
-  @Input() initialPath = '';
+  readonly initialPath = input('');
 
   /** Label for the root crumb.  Defaults to "Root". */
-  @Input() rootLabel = 'Root';
+  readonly rootLabel = input('Root');
 
   /** Show the absolute-path footer (only meaningful when the browse fn
    *  returns ``rootPath``). */
-  @Input() showPathFooter = false;
+  readonly showPathFooter = input(false);
 
   /** Show the modified-at column.  Defaults to true. */
-  @Input() showDate = true;
+  readonly showDate = input(true);
 
   /** Show the size column for files.  Defaults to true. */
-  @Input() showSize = true;
+  readonly showSize = input(true);
 
   /** When true, file rows show a wait cursor and ignore clicks (e.g. the
    *  caller is processing a previous confirm). */
-  @Input() busy = false;
+  readonly busy = input(false);
 
   /** Empty-state message shown when the listing is empty. */
-  @Input() emptyMessage = '';
+  readonly emptyMessage = input('');
 
   /** Whether to auto-focus the list on init so keyboard navigation works
    *  without an extra click.  Defaults to true. */
-  @Input() autoFocus = true;
+  readonly autoFocus = input(true);
 
   /** Fired whenever the displayed directory changes.  ``path`` is
    *  relative to the browse root; ``rootPath`` is the absolute server
    *  path if the backend exposes one (empty string otherwise). */
-  @Output() pathChange = new EventEmitter<{ path: string; rootPath: string }>();
+  readonly pathChange = output<{
+    path: string;
+    rootPath: string;
+}>();
 
   /** Fired when the user confirms a file (Enter on selected file, or
    *  double-click on a file).  Folders are never emitted; they
    *  navigate. */
-  @Output() confirm = new EventEmitter<FolderBrowserFileEntry>();
+  readonly confirm = output<FolderBrowserFileEntry>();
 
   /** Fired on browse() errors so the parent can surface them in its own
    *  way.  The component also shows an inline error message. */
-  @Output() loadError = new EventEmitter<unknown>();
+  readonly loadError = output<unknown>();
 
   rows: Row[] = [];
   currentPath = '';
@@ -143,11 +145,11 @@ export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, Aft
   @ViewChild('listEl') listEl?: ElementRef<HTMLDivElement>;
 
   ngOnInit(): void {
-    this.loadDirectory(this.initialPath || '');
+    this.loadDirectory(this.initialPath() || '');
   }
 
   ngAfterViewInit(): void {
-    if (this.autoFocus) {
+    if (this.autoFocus()) {
       // Defer one tick so the list element is in the DOM.
       setTimeout(() => this.listEl?.nativeElement.focus(), 0);
     }
@@ -155,7 +157,7 @@ export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, Aft
 
   ngOnChanges(changes: SimpleChanges): void {
     if ('initialPath' in changes && !changes['initialPath'].firstChange) {
-      this.loadDirectory(this.initialPath || '');
+      this.loadDirectory(this.initialPath() || '');
     }
   }
 
@@ -172,10 +174,10 @@ export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, Aft
     this.loading = true;
     this.error = '';
     this.currentSub?.unsubscribe();
-    this.currentSub = this.browse(path).subscribe({
+    this.currentSub = this.browse()(path).subscribe({
       next: (res) => {
         const dirs = res.directories || [];
-        const files = this.showFiles ? res.files || [] : [];
+        const files = this.showFiles() ? res.files || [] : [];
         const rows: Row[] = [];
         for (const d of dirs) {
           rows.push({ kind: 'dir', name: d.name, path: d.path, modified_at: d.modified_at });
@@ -230,7 +232,7 @@ export class FolderBrowserComponent implements OnInit, OnChanges, OnDestroy, Aft
   }
 
   enter(row: Row): void {
-    if (this.busy) return;
+    if (this.busy()) return;
     if (row.kind === 'dir') {
       this.loadDirectory(row.path);
     } else if (row.kind === 'file') {

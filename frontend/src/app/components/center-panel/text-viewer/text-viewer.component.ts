@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, SimpleChanges, inject } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MediasApiService } from '../../../services/medias-api.service';
 import { Media } from '../../../models/api.models';
@@ -10,6 +10,8 @@ import { Media } from '../../../models/api.models';
   styleUrl: './text-viewer.component.scss',
 })
 export class TextViewerComponent implements OnChanges, OnDestroy {
+  private mediasApi = inject(MediasApiService);
+
   @Input() media!: Media;
 
   text = 'Loading...';
@@ -17,8 +19,6 @@ export class TextViewerComponent implements OnChanges, OnDestroy {
   // See ImageViewerComponent.lastMediaId; avoid re-fetching the text payload
   // every time the metadata cache hydrates a new reference for the same id.
   private lastMediaId: number | null = null;
-
-  constructor(private mediasApi: MediasApiService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {

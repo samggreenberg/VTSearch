@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, input, output } from '@angular/core';
 
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
@@ -14,18 +14,18 @@ export class ProgressIndicatorsComponent {
   @Input() labelingStatus: LabelingStatusResponse | null = null;
   @Input() sortBusy = false;
   @Input() sortStatus = '';
-  @Input() sortProgress = 0;
-  @Input() sortProgressTotal = 0;
+  readonly sortProgress = input(0);
+  readonly sortProgressTotal = input(0);
 
-  @Output() indicatorClick = new EventEmitter<string>();
-  @Output() cancel = new EventEmitter<void>();
+  readonly indicatorClick = output<string>();
+  readonly cancel = output<void>();
 
   onCancel(): void {
     this.cancel.emit();
   }
 
   get isIndeterminate(): boolean {
-    return this.sortProgressTotal <= 0;
+    return this.sortProgressTotal() <= 0;
   }
 
   get smartStatus(): string {

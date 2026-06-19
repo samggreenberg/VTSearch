@@ -13,7 +13,7 @@
     </button>
   </div>
 
-  @if (canVerify) {
+  @if (canVerify()) {
     <div class="bsp-actions">
       <button
         type="button"
@@ -51,7 +51,7 @@
     </select>
     <vt-view-controls
       side="right"
-      [currentMediaType]="mediaType"
+      [currentMediaType]="mediaType()"
       [showFocus]="false"
       class="bsp-view-controls" />
   </div>

@@ -1,13 +1,12 @@
 import {
   Component,
-  EventEmitter,
-  Input,
   OnInit,
-  Output,
   computed,
   effect,
   inject,
   signal,
+  input,
+  output
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -50,16 +49,16 @@ export interface ColumnDef {
   styleUrl: './export-modal.component.scss',
 })
 export class ExportModalComponent implements OnInit {
-  @Input() detectorName = '';
+  readonly detectorName = input('');
   /**
    * The filter the modal opens on. ``unverified`` / ``verified`` are
    * server-side partitions (by Find ``verified_ids``) that can't be derived
    * client-side, so the modal fetches them with that ``label_filter``; the
    * other values are client-side category filters over the full fetched set.
    */
-  @Input() initialFilter: LabelFilter = 'good';
-  @Output() closed = new EventEmitter<void>();
-  @Output() exported = new EventEmitter<void>();
+  readonly initialFilter = input<LabelFilter>('good');
+  readonly closed = output<void>();
+  readonly exported = output<void>();
 
   private readonly datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private readonly exportersApi = inject(ExportersApiService);
@@ -164,7 +163,8 @@ export class ExportModalComponent implements OnInit {
    *  parent-supplied name and `labelSession.modelName` are both
    *  empty (typical when this modal opens from the Find view). */
   private get effectiveDetectorName(): string {
-    if (this.detectorName) return this.detectorName;
+    const detectorName = this.detectorName();
+    if (detectorName) return detectorName;
     if (this.labelSession.modelName) return this.labelSession.modelName;
     const modelId = this.activeContext.modelId;
     if (!modelId) return '';
@@ -174,17 +174,18 @@ export class ExportModalComponent implements OnInit {
   ngOnInit(): void {
     // Split the requested filter into a server-side partition (unverified /
     // verified are fetched with that label_filter) and a client-side category.
-    if (this.initialFilter === 'unverified' || this.initialFilter === 'verified') {
-      this.serverFilter = this.initialFilter;
+    const initialFilter = this.initialFilter();
+    if (initialFilter === 'unverified' || initialFilter === 'verified') {
+      this.serverFilter = initialFilter;
       this.labelFilter = 'both';
-    } else if (this.initialFilter === 'unverified_good') {
+    } else if (initialFilter === 'unverified_good') {
       // The left work-queue export: the unverified partition (server-side),
       // sliced to the above-threshold good category (client-side).
       this.serverFilter = 'unverified';
       this.labelFilter = 'good';
     } else {
       this.serverFilter = 'both';
-      this.labelFilter = this.initialFilter;
+      this.labelFilter = initialFilter;
     }
 
     // Now that the input-derived `serverFilter` is set, release the labels read

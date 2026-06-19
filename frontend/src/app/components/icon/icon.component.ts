@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
+import { ChangeDetectorRef, Component, OnChanges, inject, input } from '@angular/core';
 
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
@@ -79,7 +79,7 @@ const sanitizedCache = new Map<string, SafeHtml>();
   imports: [],
   template: `
     @if (svgHtml) {
-      <span class="vt-icon__svg" [style.width.px]="size" [style.height.px]="size" [innerHTML]="svgHtml"></span>
+      <span class="vt-icon__svg" [style.width.px]="size()" [style.height.px]="size()" [innerHTML]="svgHtml"></span>
     }
   `,
   styles: [`
@@ -103,22 +103,24 @@ const sanitizedCache = new Map<string, SafeHtml>();
   `],
 })
 export class IconComponent implements OnChanges {
-  @Input() icon = '';
-  @Input() size = 16;
+  private sanitizer = inject(DomSanitizer);
+  private cdr = inject(ChangeDetectorRef);
+
+  readonly icon = input('');
+  readonly size = input(16);
   /** Directly set the icon type, bypassing emoji mapping. */
-  @Input() type = '';
+  readonly type = input('');
 
   protected svgHtml: SafeHtml | null = null;
-
-  constructor(private sanitizer: DomSanitizer, private cdr: ChangeDetectorRef) {}
 
   ngOnChanges(): void {
     this.renderIcon();
   }
 
   get iconType(): string {
-    if (this.type) return this.type;
-    return emojiToType(this.icon);
+    const type = this.type();
+    if (type) return type;
+    return emojiToType(this.icon());
   }
 
   /** Non-empty if iconType is a single capital letter (A–Z). */

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, Input, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -30,12 +30,17 @@ type ModalView = 'prompt' | 'media-picker';
   styleUrl: './resort-prompt-modal.component.scss',
 })
 export class ResortPromptModalComponent {
-  @Input() currentExampleType: 'text' | 'media' = 'text';
-  @Input() currentExampleDisplay = '';
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private datasetsListingsApi = inject(DatasetsListingsApiService);
+  private datasetsUiApi = inject(DatasetsUiApiService);
+  private sortingApi = inject(SortingApiService);
+
+  readonly currentExampleType = input<'text' | 'media'>('text');
+  readonly currentExampleDisplay = input('');
   @Input() keepLabelsCount = 0;
-  @Output() closed = new EventEmitter<void>();
-  @Output() keepExample = new EventEmitter<void>();
-  @Output() newExample = new EventEmitter<ResortResult>();
+  readonly closed = output<void>();
+  readonly keepExample = output<void>();
+  readonly newExample = output<ResortResult>();
 
   view: ModalView = 'prompt';
   pendingText = '';
@@ -52,13 +57,6 @@ export class ResortPromptModalComponent {
   fileLoading = false;
   typedPath = '';
   typedPathError = '';
-
-  constructor(
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private datasetsListingsApi: DatasetsListingsApiService,
-    private datasetsUiApi: DatasetsUiApiService,
-    private sortingApi: SortingApiService,
-  ) {}
 
   onKeep(): void {
     this.keepExample.emit();
