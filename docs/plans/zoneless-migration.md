@@ -1,6 +1,6 @@
 # Zoneless change detection — detailed migration plan
 
-Status: **Not started (planning complete; audited + red-teamed).** This document
+Status: **Phase 0 shipped (test harness); Phases 1–5 not started.** This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
 supersedes the earlier stub. Every count and file:line reference was checked
@@ -8,6 +8,36 @@ against the code; every Angular API claim was verified against angular.dev / the
 angular source (Appendix C); and the plan itself was adversarially reviewed for
 accuracy, feasibility, and completeness (which added the dialog-service,
 CDK-virtual-scroll, observer-callback, and test-autoDetect items below).
+
+**What shipped (Phase 0).** The Vitest suite can now run any spec under a
+zoneless `TestBed` and catch staleness:
+- `frontend/src/app/testing/zoneless-testbed.ts` — `provideZoneless()` /
+  `configureZoneless()` helpers (per-component opt-in; not enabled globally).
+- `settleZoneless(fixture)` added next to `settleResource()` in
+  `frontend/src/app/testing/settle-resource.ts` (macrotask drain +
+  `whenStable()`, no `detectChanges()`).
+- `frontend/src/app/testing/zoneless-testbed.spec.ts` — reference/canary spec for
+  the 0.3/0.4 pattern; verified to **fail** on a plain-field-write staleness bug
+  and pass on the signal path (the suite is a genuine oracle).
+- Test polyfills decoupled from the prod build via a dedicated
+  `frontend:build:test` configuration in `angular.json` (see the 0.1 correction
+  below). The hand-rolled ProxyZone shim in `test-setup.ts` was replaced by the
+  Angular-maintained `zone.js/plugins/vitest-patch`; all 69 spec files / 767
+  tests pass.
+
+**Correction discovered while implementing 0.1** (the plan as written assumed
+facts that the pinned toolchain did not match):
+- `zone.js/plugins/vitest-patch` ships only in **zone.js ≥ 0.16**, not the pinned
+  `~0.15.0`. Phase 0 bumped `zone.js` to `~0.16.0` (Angular 21.2 peer-depends on
+  `~0.15.0 || ~0.16.0`, so this is in-range).
+- The `@angular/build:unit-test` builder (21.2) has **no `polyfills` option**, so
+  0.1's "give the test target its own `polyfills`" is not literally possible.
+  Equivalent decoupling: a dedicated `build:test` configuration that pins the
+  test polyfills, with the unit-test `buildTarget` pointed at it.
+- `vitest-patch` needs `ProxyZoneSpec`/`SyncTestZoneSpec` (from
+  `zone.js/testing`) to exist at load time, and the builder appends
+  `zone.js/testing` *last*; so the polyfills array lists `zone.js/testing`
+  **before** `vitest-patch`. See Open follow-ups for the Phase-3 implication.
 
 No production code has changed yet; the only thing that shipped alongside the
 original stub was the 540 kB initial-bundle budget bump and the one-component
@@ -278,17 +308,29 @@ Today every component spec calls `fixture.detectChanges()` manually, which
 We fix the harness so it exercises real zoneless scheduling, **before** touching
 production.
 
-0.1 **Decouple the test target's polyfills from the prod build.** Today the
-`test` target inherits `polyfills: ["zone.js"]` from `buildTarget:
-frontend:build:development`. Give the **test target its own** `polyfills` so a
-later removal of zone.js from the build path cannot silently break fakeAsync:
+0.1 **Decouple the test target's polyfills from the prod build.** ✅ **DONE.**
+Today the `test` target inherited `polyfills: ["zone.js"]` from `buildTarget:
+frontend:build:development`. The `@angular/build:unit-test` builder has no
+`polyfills` option of its own (its schema rejects it), so the decoupling is done
+with a dedicated **`build:test` configuration** that pins its own polyfills,
+pointed at by the unit-test `buildTarget`. A later removal of zone.js from the
+base production polyfills then cannot silently break fakeAsync:
 ```jsonc
+// architect.build.configurations.test
+"test": {
+  "optimization": false,
+  "extractLicenses": false,
+  "sourceMap": true,
+  // testing BEFORE vitest-patch: the patch needs ProxyZoneSpec at load time,
+  // and the builder appends zone.js/testing last, so list it explicitly first.
+  "polyfills": ["zone.js", "zone.js/testing", "zone.js/plugins/vitest-patch"]
+},
+// architect.test.options
 "test": {
   "builder": "@angular/build:unit-test",
   "options": {
-    "polyfills": ["zone.js", "zone.js/plugins/vitest-patch"],
     "tsConfig": "tsconfig.spec.json",
-    "buildTarget": "frontend:build:development",
+    "buildTarget": "frontend:build:test",
     "runner": "vitest",
     "runnerConfig": "vitest.config.ts",
     "setupFiles": ["src/test-setup.ts"]
@@ -297,12 +339,12 @@ later removal of zone.js from the build path cannot silently break fakeAsync:
 ```
 `zone.js/plugins/vitest-patch` is the documented bridge that keeps
 `fakeAsync`/`tick`/`waitForAsync` working under the Vitest builder (Appendix C
-#7). It is explicitly a **transitional** mechanism — Angular recommends migrating
-to native `async` + Vitest fake timers long-term (deferred; Open follow-ups). If
-`vitest-patch` fully subsumes the hand-rolled ProxyZone shim in `test-setup.ts`,
-delete the shim **only after** confirming all 43 fakeAsync occurrences (11 files)
-still pass; do not delete it first (the shim's guard fails *silently* if zone.js
-is absent, throwing "Expected to be running in 'ProxyZone'" with no clear cause).
+#7), but it ships only in **zone.js ≥ 0.16**, so Phase 0 bumped `zone.js` to
+`~0.16.0` (in Angular 21.2's `~0.15.0 || ~0.16.0` peer range). It is explicitly a
+**transitional** mechanism — Angular recommends migrating to native `async` +
+Vitest fake timers long-term (deferred; Open follow-ups). The hand-rolled
+ProxyZone shim in `test-setup.ts` was fully subsumed by `vitest-patch` and
+removed **after** confirming all 43 fakeAsync occurrences (11 files) still pass.
 
 0.2 **Add a zoneless `TestBed` helper.** Create
 `frontend/src/app/testing/zoneless-testbed.ts` exporting a providers fragment
@@ -451,9 +493,11 @@ flip preserves/improves it. Still, re-verify the high-frequency drag handlers
 (`find-view`, `browse-view`, `image-viewer`, `browse-minimap`) in Phase 4, since
 they previously leaned on coalesced single-CD-per-frame.
 
-3.2 In `frontend/angular.json`, remove `"zone.js"` from the **build** target's
-`polyfills` (the production array). Leave the **test** target's polyfills
-(set in 0.1) untouched — tests still need zone.js for fakeAsync.
+3.2 In `frontend/angular.json`, remove `"zone.js"` from the **base** `build`
+options `polyfills` (the production array). Leave the **`build:test`
+configuration's** polyfills (set in 0.1) untouched — tests still need zone.js +
+`zone.js/testing` + `vitest-patch` for fakeAsync. Because `build:test` pins its
+own array, it is already decoupled and needs no change at the flip.
 
 3.3 Keep `zone.js` in `package.json` (the test run imports it). It is no longer
 bundled into prod because it is out of the build polyfills; no `npm audit`
@@ -505,6 +549,22 @@ A checklist version of the above goes in the PR description for the QA pass.
 - Adopt `ChangeDetectionStrategy.OnPush` explicitly on components for clarity
   (under zoneless they already behave OnPush-like; this is documentation/intent,
   not a functional change).
+
+### Open follow-ups
+
+- **Phases 1–5 unstarted.** Phase 0 (harness) is the only shipped phase. The
+  reactivity conversion (Phases 1–2), the prod flip (Phase 3), human browser QA
+  (Phase 4), and cleanup (Phase 5) all remain.
+- **Drop the `vitest-patch` bridge (Phase 5).** Migrate the 43 fakeAsync
+  occurrences (11 files) to native `async` + Vitest fake timers, then remove
+  `zone.js/testing` + `zone.js/plugins/vitest-patch` from the `build:test`
+  polyfills and finally `zone.js` from `package.json`. Angular's recommended
+  long-term direction; separable, no prod impact.
+- **Adopt the zoneless `TestBed` per component.** `provideZoneless()` /
+  `configureZoneless()` and `settleZoneless()` exist but are used only by the
+  reference spec. Each migrated component (Phases 1–2) must switch its spec to
+  them, delete the manual `fixture.detectChanges()` pumps, and add a canary
+  (0.4). 188 `detectChanges()` calls across 39 files still to convert.
 
 ---
 

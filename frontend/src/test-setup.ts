@@ -89,65 +89,16 @@ const canvasContextStub = new Proxy(
 HTMLCanvasElement.prototype.getContext = (() =>
   canvasContextStub) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 
-// --- fakeAsync / ProxyZone bootstrap ---------------------------------------
+// --- fakeAsync / ProxyZone bridge ------------------------------------------
 // Angular's fakeAsync()/tick() require each test to run inside a Zone forked
 // with a ProxyZoneSpec. zone.js/testing only auto-wires that for Jasmine,
-// Mocha and Jest runners — its jest patch bails with `typeof jest ===
-// 'undefined'`, and Vitest is none of those — so without help every
-// fakeAsync() spec throws "Expected to be running in 'ProxyZone'".
+// Mocha and Jest — its jest patch bails with `typeof jest === 'undefined'`,
+// and Vitest is none of those — so without help every fakeAsync() spec throws
+// "Expected to be running in 'ProxyZone'".
 //
-// zone.js/testing is already loaded (it ships in the builder's test polyfills,
-// which run before this setup file), so Zone.ProxyZoneSpec is available. We
-// replicate zone.js's jest patch against Vitest's global describe/it/hooks
-// (which share the same names): describe bodies run in a sync-only zone and
-// it/beforeEach/afterEach bodies run in the proxy zone, exactly as the jest
-// patch does. The specs use no it.only/skip/each modifiers, so wrapping the
-// bare globals is sufficient.
-{
-  type ZoneLike = {
-    current: { fork(spec: unknown): { run(fn: unknown, ctx: unknown, args: unknown): unknown } };
-    ProxyZoneSpec?: new () => unknown;
-    SyncTestZoneSpec?: new (name: string) => unknown;
-  };
-  const g = globalThis as unknown as Record<string, unknown> & { Zone?: ZoneLike };
-  const Zone = g.Zone;
-  const PATCHED = '__vtsearchProxyZonePatched__';
-  if (Zone?.ProxyZoneSpec && Zone.SyncTestZoneSpec && !g[PATCHED]) {
-    g[PATCHED] = true;
-    const rootZone = Zone.current;
-    const syncZone = rootZone.fork(new Zone.SyncTestZoneSpec('vitest.describe'));
-    const proxyZone = rootZone.fork(new Zone.ProxyZoneSpec());
-
-    const runIn =
-      (zone: { run(fn: unknown, ctx: unknown, args: unknown): unknown }, body: unknown) =>
-      function (this: unknown, ...args: unknown[]): unknown {
-        return zone.run(body, this, args);
-      };
-
-    const wrap = (name: string, bodyArgIndex: number, zone: typeof syncZone) => {
-      const original = g[name] as ((...a: unknown[]) => unknown) | undefined;
-      if (typeof original !== 'function') {
-        return;
-      }
-      const wrapped = function (this: unknown, ...args: unknown[]): unknown {
-        if (typeof args[bodyArgIndex] === 'function') {
-          args[bodyArgIndex] = runIn(zone, args[bodyArgIndex]);
-        }
-        return original.apply(this, args);
-      };
-      // Preserve modifiers/helpers (.only, .skip, .each, …) as-is.
-      Object.assign(wrapped, original);
-      g[name] = wrapped;
-    };
-
-    for (const name of ['describe', 'fdescribe', 'xdescribe']) {
-      wrap(name, 1, syncZone);
-    }
-    for (const name of ['it', 'fit', 'xit', 'test', 'xtest']) {
-      wrap(name, 1, proxyZone);
-    }
-    for (const name of ['beforeEach', 'afterEach', 'beforeAll', 'afterAll']) {
-      wrap(name, 0, proxyZone);
-    }
-  }
-}
+// `zone.js/plugins/vitest-patch` (loaded ahead of this file via the test
+// target's polyfills in angular.json) is the Angular-maintained bridge that
+// wires Vitest's describe/it/hooks into the sync/proxy zones, replacing the
+// hand-rolled replica that used to live here. It is explicitly transitional;
+// the long-term direction is native async + Vitest fake timers (zoneless
+// migration Phase 5). Nothing further is needed here.
