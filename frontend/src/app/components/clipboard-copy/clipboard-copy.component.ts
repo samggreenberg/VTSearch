@@ -1,4 +1,4 @@
-import { Component, OnChanges, OnDestroy, SimpleChanges, input } from '@angular/core';
+import { Component, OnChanges, OnDestroy, SimpleChanges, input, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -55,7 +55,10 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
   delimiter = ',';
   /** List mode: which single column to copy. */
   selectedColumnKey = '';
-  buttonText = '';
+  /** Transient copy-feedback label ("Copied!" / "Copy failed"). A signal so the
+   *  `setTimeout` reset in {@link flash} repaints back to the default label under
+   *  zoneless change detection. */
+  readonly buttonText = signal('');
 
   private feedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -118,10 +121,10 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
   }
 
   private flash(text: string): void {
-    this.buttonText = text;
+    this.buttonText.set(text);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
     this.feedbackTimer = setTimeout(() => {
-      this.buttonText = '';
+      this.buttonText.set('');
       this.feedbackTimer = null;
     }, 2000);
   }

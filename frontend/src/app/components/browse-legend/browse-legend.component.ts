@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, input } from '@angular/core';
+import { Component, OnDestroy, OnInit, input, signal } from '@angular/core';
 import {
   gradientStops,
   resolveColormap,
@@ -64,13 +64,15 @@ export class BrowseLegendComponent implements OnInit, OnDestroy {
   readonly colormap = input<BrowseColormapId>('auto');
 
   private readonly numberFormat = new Intl.NumberFormat();
-  /** Live theme, refreshed by a ``data-theme`` observer so the key repaints. */
-  private theme: CanvasTheme = 'dark';
+  /** Live theme, refreshed by a ``data-theme`` observer so the key repaints. A
+   *  signal so the observer callback (an unpatched, non-event callback) schedules
+   *  change detection under zoneless — the gradient/tick getters read it. */
+  private readonly theme = signal<CanvasTheme>('dark');
   private themeObserver: MutationObserver | null = null;
 
   ngOnInit(): void {
-    this.theme = this.readTheme();
-    this.themeObserver = new MutationObserver(() => (this.theme = this.readTheme()));
+    this.theme.set(this.readTheme());
+    this.themeObserver = new MutationObserver(() => this.theme.set(this.readTheme()));
     this.themeObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],
@@ -89,7 +91,7 @@ export class BrowseLegendComponent implements OnInit, OnDestroy {
 
   /** Colormap resolved for the current preset + theme (same as the canvas). */
   private get resolved() {
-    return resolveColormap(this.colormap(), this.theme);
+    return resolveColormap(this.colormap(), this.theme());
   }
 
   /** Horizontal gradient with the dense (last ramp stop) end at the right. */
