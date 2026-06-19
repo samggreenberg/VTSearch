@@ -8,8 +8,12 @@ to be filled in when implementation starts (the way `patch-embedder.md`'s v2/v3
 punchlists were filled in during impl).
 
 Decisions locked in design: **two-stage architecture** (global vector retrieval +
-geometric re-rank), **SIFT for v1 with a pluggable matching backend** so learned
-local features drop in later.
+geometric re-rank); **SIFT for v1 with a pluggable matching backend** so learned
+local features drop in later; **the full vote-trained detector ships in v1** (both
+the example/region similarity flow and the match-statistic verification classifier,
+just like patch); **planar-only** matching; **image-only v1 with audio as the next
+media target**; **dual-embedder coexistence deferred** to patch v3 (one structural
+embedder per dataset for now).
 
 ## Motivation — structural vs semantic search
 
@@ -271,39 +275,53 @@ Structural embedders set `supports_text = False`, `is_default = False`
   structural datasets the copy nudges "box the pattern you want to match."
 - **No new region-vote affordance** beyond what patch v2 already ships.
 
-## Relationship to patch v3 (dual-embedder)
+## Single embedder per dataset (dual-embedder deferred)
 
-`supports_text = False` means a structural-only dataset can be seeded *only* by
-example/region, never by a text query — which forecloses the "text query seeds the
-flow" entry point. The natural fix is patch-embedder.md's **v3 dual-embedder**
-design: a dataset binds *both* a text-capable embedder (SigLIP — for text-seeded
-discovery and diversity) *and* a structural embedder (for the instance-matching
-detector). The v3 schema (`media["embeddings"]` keyed by embedder name) already
-accommodates this; a structural embedder would be a third role-type alongside
-`text_embedder` and `patch_embedder` — e.g. `structural_embedder: str | None`.
-This is the right long-term home for structural search and the reason to land v3
-first (or concurrently).
+For now a structural embedder is **one embedder per dataset**, exactly like patch:
+the dataset is bound to it at creation, and both the example/region similarity
+flow and the vote-trained detector run against that single embedder. This is the
+whole v1/v2 scope — no coexistence with a text embedder.
+
+`supports_text = False` does mean a structural dataset can be seeded *only* by
+example/region, never by a text query. That's an accepted limitation for now, the
+same way a `dinov*_patch` dataset has no text sort today. The longer-term fix —
+binding a text-capable embedder (SigLIP) *and* a structural embedder on the same
+dataset so text-seeded discovery and instance matching coexist — is patch
+v3's **dual-embedder** territory (a structural embedder would slot in as a third
+role-type alongside `text_embedder` / `patch_embedder`). **Deferred; we'll take it
+up when patch v3 lands.** Nothing in v1/v2 forecloses it: the per-media `embedding`
+field collapses cleanly into the v3 dict-keyed schema, just as the patch fields do.
 
 ## Non-goals
 
 - **No new media type.** Structural-embedded images are still `image` media.
-- **No 3D / non-planar matching in v1.** Homography/affine assumes a roughly
-  planar target (logos, packaging, flat artwork, building façades). Fundamental-
-  matrix / 3D-aware matching is out of scope.
+- **No 3D / non-planar matching.** Confirmed planar-only for now: homography/affine
+  assumes a roughly planar target (logos, packaging, flat artwork, building
+  façades), which covers the motivating use cases. Fundamental-matrix / 3D-aware
+  matching is out of scope.
 - **No persisted vectors outside the dataset pickle.** Local features live in the
   pickle and RAM only (see Storage). Templates and both classifiers re-derive from
   origins on load.
-- **No audio/text/document structural matching in v1.** Audio has a real
-  structural analog (Shazam-style constellation fingerprinting) and documents have
-  layout/template matching — both are future backends under the same abstraction,
-  not v1.
+- **Image only in v1, but audio is the next media target (soon).** Audio has a
+  direct structural analog — Shazam-style constellation fingerprinting (spectrogram
+  peak pairs → hashed landmarks → geometric/temporal consistency), which is the
+  same detect-features → match → verify-by-geometry shape as SIFT+RANSAC. The
+  `StructuralMatcher` protocol and the `supports_geometric_verification` flag are
+  therefore kept **media-agnostic** from the start so an audio backend drops in
+  without reshaping the interface (the "local features" become spectrogram
+  landmarks, the geometric model becomes a time-frequency offset histogram). Text
+  and document structural matching (layout/template) are further out.
 - **No swap-backend-on-an-existing-dataset flow.** Like patch, the embedder is
   fixed at dataset creation; changing it means re-import.
 
 ## Media scope
 
-v1: **image only** (+ video frames later, reusing the image path per-frame).
-Matches the patch-embedder scope decision.
+v1: **image only** (+ video frames later, reusing the image path per-frame),
+matching the patch-embedder scope decision. **Audio is the next media target and
+expected soon** — see Non-goals for why the matcher abstraction is kept
+media-agnostic now so the audio (constellation-fingerprint) backend lands without
+an interface rewrite. The capability flag is `supports_geometric_verification`
+(deliberately not `supports_*_image_*`) for exactly this reason.
 
 ## Open questions
 
@@ -342,10 +360,15 @@ Matches the patch-embedder scope decision.
   greyed via the existing `supports_text` gate. Pre-impl spike on a demo image
   dataset to lock vocabulary source, K, and the geometric model.
 - **v2:** learned-local-feature backend (SuperPoint + LightGlue or similar) as a
-  drop-in `StructuralMatcher`, GPU-gated; no Stage-1/classifier/UI changes.
-- **v3:** structural embedder as a third role in the patch-v3 dual-embedder schema
-  (text + patch + structural slots per dataset), so a dataset can offer text-seeded
-  discovery *and* instance-matching detectors simultaneously.
+  drop-in `StructuralMatcher`, GPU-gated; no Stage-1/classifier/UI changes. **Plus
+  the audio backend** (constellation fingerprinting) under the same media-agnostic
+  `StructuralMatcher` protocol + `supports_geometric_verification` flag — the
+  next media target, sequenced here because the image work proves out the
+  abstraction it reuses.
+- **Later (deferred):** structural embedder as a third role in the patch-v3
+  dual-embedder schema (text + patch + structural slots per dataset), so a dataset
+  can offer text-seeded discovery *and* instance-matching detectors simultaneously.
+  Picked up when patch v3 lands; not scheduled here.
 
 ## Tests
 
@@ -379,5 +402,8 @@ Matches the patch-embedder scope decision.
 - VLAD-vocabulary persistence decision (Open Question 1) blocks impl start.
 - Spike (Stage-1 backbone choice, K, geometric model) precedes v1 build, like the
   caltech101_s sweep preceded patch v1.
-- Landing or coordinating with patch v3 (dual-embedder) is what makes structural +
-  text-seeded discovery coexist on one dataset.
+- Keep the `StructuralMatcher` protocol media-agnostic from day one so the audio
+  (constellation-fingerprint) backend — the next media target — lands in v2 without
+  reshaping the interface.
+- Dual-embedder coexistence (structural + text on one dataset) is deferred to patch
+  v3; not scheduled here.
