@@ -20,7 +20,7 @@ describe('InclusionSliderComponent', () => {
   });
 
   it('should default to 0', () => {
-    expect(component.value).toBe(0);
+    expect(component.value()).toBe(0);
   });
 
   it('should emit valueChange on input', () => {

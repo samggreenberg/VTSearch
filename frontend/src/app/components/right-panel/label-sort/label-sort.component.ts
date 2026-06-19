@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, Input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 export type LabelSortMode =
@@ -19,7 +19,7 @@ export type LabelSortMode =
 })
 export class LabelSortComponent {
   @Input() mode: LabelSortMode = 'time-desc';
-  @Output() modeChange = new EventEmitter<LabelSortMode>();
+  readonly modeChange = output<LabelSortMode>();
 
   onSortChange(value: LabelSortMode): void {
     this.mode = value;

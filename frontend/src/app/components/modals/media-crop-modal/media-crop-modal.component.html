@@ -4,7 +4,7 @@
   (closed)="onCancel()">
   @if (view === 'confirm') {
     <div class="preview">
-      @switch (mediaType) {
+      @switch (mediaType()) {
         @case ('image') {
           <img [src]="fileUrl" alt="Example preview" />
         }
@@ -16,12 +16,12 @@
         }
         @default {
           <div class="generic-preview">
-            {{ file.name }}
+            {{ file().name }}
           </div>
         }
       }
     </div>
-    <div class="filename">{{ file.name }}</div>
+    <div class="filename">{{ file().name }}</div>
     <div class="actions">
       <button type="button" class="primary" (click)="onOk()">OK</button>
       <button
@@ -37,17 +37,17 @@
   }
 
   @if (view === 'cropping') {
-    @if (mediaType === 'image') {
+    @if (mediaType() === 'image') {
       <vt-image-crop-overlay
         [imageUrl]="fileUrl"
         (applied)="onImageCropApplied($event)"
         (cancelled)="onCropOverlayCancelled()">
       </vt-image-crop-overlay>
     }
-    @if (mediaType === 'audio') {
+    @if (mediaType() === 'audio') {
       <vt-audio-crop-overlay
         [audioUrl]="fileUrl"
-        [audioFile]="file"
+        [audioFile]="file()"
         (applied)="onAudioCropApplied($event)"
         (cancelled)="onCropOverlayCancelled()">
       </vt-audio-crop-overlay>

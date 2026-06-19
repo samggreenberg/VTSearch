@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { Injectable, OnDestroy, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, Subject, timer } from 'rxjs';
 import { catchError, distinctUntilChanged, map, switchMap, takeUntil } from 'rxjs/operators';
@@ -40,14 +40,14 @@ export function pairKey(datasetId: string, detectorId: string): string {
  */
 @Injectable({ providedIn: 'root' })
 export class RunningJobsService implements OnDestroy {
+  private http = inject(HttpClient);
+
   private readonly intervalMs = 3000;
   private readonly busyPairsSubject = new BehaviorSubject<Map<string, string[]>>(new Map());
   private readonly stopPolling$ = new Subject<void>();
   private readonly destroy$ = new Subject<void>();
   private observerCount = 0;
   private polling = false;
-
-  constructor(private http: HttpClient) {}
 
   ngOnDestroy(): void {
     this.destroy$.next();

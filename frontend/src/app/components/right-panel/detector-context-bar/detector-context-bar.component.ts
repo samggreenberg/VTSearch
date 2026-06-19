@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, Input, Output, ViewChild } from '@angular/core';
+import { Component, ElementRef, Input, ViewChild, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -12,7 +12,7 @@ import { FormsModule } from '@angular/forms';
 export class DetectorContextBarComponent {
   @Input() detectorName = '';
   @Input() visible = false;
-  @Output() renamed = new EventEmitter<string>();
+  readonly renamed = output<string>();
 
   editing = false;
   editValue = '';

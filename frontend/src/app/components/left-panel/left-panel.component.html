@@ -1,8 +1,8 @@
-<div class="left-panel" [class.collapsed-autopilot]="panelMode === 'label' && activeTab === 'autopilot' && autopilotCollapsed" [class.disabled]="disabled">
-  @if (datasetName && !(panelMode === 'label' && activeTab === 'autopilot' && autopilotCollapsed)) {
+<div class="left-panel" [class.collapsed-autopilot]="panelMode() === 'label' && activeTab === 'autopilot' && autopilotCollapsed()" [class.disabled]="disabled()">
+  @if (datasetName && !(panelMode() === 'label' && activeTab === 'autopilot' && autopilotCollapsed())) {
     <div class="dataset-name" [title]="datasetName">{{ datasetName }}</div>
   }
-  @if (panelMode === 'find') {
+  @if (panelMode() === 'find') {
     <!-- Find mode: simplified view (inclusion control, media list header, media items, and stripe). -->
     <div class="tab-panel-manual" role="region" aria-label="Find results">
       <!-- Inclusion cutoff plus the unverified-positives work-queue actions
@@ -11,13 +11,13 @@
            acted on yet. -->
       <div class="find-inclusion-row">
         <vt-inclusion-slider
-          [value]="inclusion"
+          [value]="inclusion()"
           (valueChange)="inclusionChange.emit($event)"
         />
         <div class="goods-actions find-queue-actions">
           <button
             class="goods-action-btn"
-            [disabled]="disabled || unverifiedGoodCount === 0"
+            [disabled]="disabled() || unverifiedGoodCount === 0"
             (click)="browse.emit()"
             aria-label="Browse unverified positives"
             title="Browse the unverified positives (above-threshold items you haven't acted on) as their own 2-D UMAP projection"
@@ -29,7 +29,7 @@
           </button>
           <button
             class="goods-action-btn"
-            [disabled]="disabled || unverifiedGoodCount === 0"
+            [disabled]="disabled() || unverifiedGoodCount === 0"
             (click)="toDataset.emit()"
             aria-label="Unverified positives to dataset"
             title="Promote the unverified positives (above-threshold items you haven't acted on) into their own dataset"
@@ -38,7 +38,7 @@
           </button>
           <button
             class="goods-action-btn"
-            [disabled]="disabled || unverifiedGoodCount === 0"
+            [disabled]="disabled() || unverifiedGoodCount === 0"
             (click)="unverifiedExport.emit()"
             aria-label="Export unverified positives"
             title="Export the unverified positives (above-threshold items you haven't acted on) — e.g. to re-import as a dataset"
@@ -54,7 +54,7 @@
 
       <div class="images-header">
         <h3 class="images-header-title">
-          {{ mediaTypeName }}s ({{ (sortOrder?.length ?? medias.length) | number }})
+          {{ mediaTypeName }}s ({{ (sortOrder()?.length ?? medias.length) | number }})
         </h3>
         <vt-view-controls
           side="left"
@@ -67,9 +67,9 @@
         <vt-progress-indicators
           [labelingStatus]="null"
           [sortBusy]="sortBusy"
-          [sortStatus]="sortStatus"
-          [sortProgress]="sortProgress"
-          [sortProgressTotal]="sortProgressTotal"
+          [sortStatus]="sortStatus()"
+          [sortProgress]="sortProgress()"
+          [sortProgressTotal]="sortProgressTotal()"
           (cancel)="sortCancel.emit()"
         />
       }
@@ -77,24 +77,24 @@
       <div class="media-list-container">
         <vt-media-list
           [medias]="medias"
-          [sortOrder]="sortOrder"
-          [threshold]="threshold"
-          [selectedId]="selectedId"
-          [goodVotes]="goodVotes"
-          [badVotes]="badVotes"
-          [viewMode]="viewMode"
-          [gridGoalWidth]="gridGoalWidth"
-          [focusMode]="focusMode"
+          [sortOrder]="sortOrder()"
+          [threshold]="threshold()"
+          [selectedId]="selectedId()"
+          [goodVotes]="goodVotes()"
+          [badVotes]="badVotes()"
+          [viewMode]="viewMode()"
+          [gridGoalWidth]="gridGoalWidth()"
+          [focusMode]="focusMode()"
           [showScores]="false"
           (mediaSelect)="mediaSelect.emit($event)"
           (mediaVote)="mediaVote.emit($event)"
         />
         <vt-stripe-overview
-          [sortOrder]="sortOrder"
-          [threshold]="threshold"
-          [selectedId]="selectedId"
-          [goodVotes]="goodVotes"
-          [badVotes]="badVotes"
+          [sortOrder]="sortOrder()"
+          [threshold]="threshold()"
+          [selectedId]="selectedId()"
+          [goodVotes]="goodVotes()"
+          [badVotes]="badVotes()"
           [totalCount]="medias.length"
           (stripeClick)="onStripeClick($event)"
         />
@@ -102,7 +102,7 @@
     </div>
   } @else {
     <!-- Label mode: full labeling UI with tabs -->
-    @if (!(activeTab === 'autopilot' && autopilotCollapsed)) {
+    @if (!(activeTab === 'autopilot' && autopilotCollapsed())) {
       <div class="left-tabs" role="tablist" aria-label="Panel mode">
         <button
           class="left-tab"
@@ -126,10 +126,10 @@
     @if (activeTab === 'manual') {
       <div class="tab-panel-manual" role="tabpanel" aria-label="Manual mode">
         <vt-sort-bar
-          [sortMode]="sortMode"
-          [loadSortLabel]="loadSortLabel"
-          [initialTextQuery]="textQuery"
-          [learnedSortAvailable]="learnedSortAvailable"
+          [sortMode]="sortMode()"
+          [loadSortLabel]="loadSortLabel()"
+          [initialTextQuery]="textQuery()"
+          [learnedSortAvailable]="learnedSortAvailable()"
           [textSortAvailable]="textSortAvailable"
           (sortModeChange)="sortModeChange.emit($event)"
           (textSort)="textSort.emit($event)"
@@ -140,22 +140,22 @@
         />
 
         <vt-select-mode
-          [selectMode]="selectMode"
+          [selectMode]="selectMode()"
           (selectModeChange)="selectModeChange.emit($event)"
         />
 
         <vt-progress-indicators
-          [labelingStatus]="labelingStatus"
+          [labelingStatus]="labelingStatus()"
           [sortBusy]="sortBusy"
-          [sortStatus]="sortStatus"
-          [sortProgress]="sortProgress"
-          [sortProgressTotal]="sortProgressTotal"
+          [sortStatus]="sortStatus()"
+          [sortProgress]="sortProgress()"
+          [sortProgressTotal]="sortProgressTotal()"
           (indicatorClick)="indicatorClick.emit($event)"
           (cancel)="sortCancel.emit()"
         />
 
         <vt-inclusion-slider
-          [value]="inclusion"
+          [value]="inclusion()"
           (valueChange)="inclusionChange.emit($event)"
         />
 
@@ -174,39 +174,39 @@
         <div class="media-list-container">
           <vt-media-list
             [medias]="medias"
-            [sortOrder]="sortOrder"
-            [threshold]="threshold"
-            [selectedId]="selectedId"
-            [goodVotes]="goodVotes"
-            [badVotes]="badVotes"
-            [viewMode]="viewMode"
-            [gridGoalWidth]="gridGoalWidth"
-            [focusMode]="focusMode"
+            [sortOrder]="sortOrder()"
+            [threshold]="threshold()"
+            [selectedId]="selectedId()"
+            [goodVotes]="goodVotes()"
+            [badVotes]="badVotes()"
+            [viewMode]="viewMode()"
+            [gridGoalWidth]="gridGoalWidth()"
+            [focusMode]="focusMode()"
             [showScores]="false"
             (mediaSelect)="mediaSelect.emit($event)"
             (mediaVote)="mediaVote.emit($event)"
             (mediaContextRequest)="mediaContextRequest.emit($event)"
           />
           <vt-stripe-overview
-            [sortOrder]="sortOrder"
-            [threshold]="threshold"
-            [selectedId]="selectedId"
-            [goodVotes]="goodVotes"
-            [badVotes]="badVotes"
+            [sortOrder]="sortOrder()"
+            [threshold]="threshold()"
+            [selectedId]="selectedId()"
+            [goodVotes]="goodVotes()"
+            [badVotes]="badVotes()"
             [totalCount]="medias.length"
             (stripeClick)="onStripeClick($event)"
           />
         </div>
       </div>
     } @else {
-      <div class="tab-panel-autopilot" [class.collapsed]="autopilotCollapsed" role="tabpanel" aria-label="Autopilot mode">
+      <div class="tab-panel-autopilot" [class.collapsed]="autopilotCollapsed()" role="tabpanel" aria-label="Autopilot mode">
         <vt-autopilot-panel
-          [goodVotes]="goodVotes"
-          [badVotes]="badVotes"
-          [labelsetGoodCount]="labelsetGoodCount"
-          [labelsetBadCount]="labelsetBadCount"
-          [labelingStatus]="labelingStatus"
-          [collapsed]="autopilotCollapsed"
+          [goodVotes]="goodVotes()"
+          [badVotes]="badVotes()"
+          [labelsetGoodCount]="labelsetGoodCount()"
+          [labelsetBadCount]="labelsetBadCount()"
+          [labelingStatus]="labelingStatus()"
+          [collapsed]="autopilotCollapsed()"
           (started)="autopilotStart.emit()"
           (stopped)="autopilotStop.emit()"
           (toggleCollapse)="autopilotToggleCollapse.emit()"

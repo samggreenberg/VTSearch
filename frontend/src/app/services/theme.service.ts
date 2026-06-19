@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { Injectable, OnDestroy, inject } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { SettingsApiService } from './settings-api.service';
 
@@ -12,13 +12,13 @@ const OS_MEDIA_QUERY = '(prefers-color-scheme: light)';
 
 @Injectable({ providedIn: 'root' })
 export class ThemeService implements OnDestroy {
+  private settingsApi = inject(SettingsApiService);
+
   private themeSubject = new BehaviorSubject<Theme>('system');
   theme$: Observable<Theme> = this.themeSubject.asObservable();
 
   private osMedia: MediaQueryList | null = null;
   private osListener: ((e: MediaQueryListEvent) => void) | null = null;
-
-  constructor(private settingsApi: SettingsApiService) {}
 
   ngOnDestroy(): void {
     this.unsubscribeOs();

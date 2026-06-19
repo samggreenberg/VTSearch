@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { combineLatest } from 'rxjs';
 import { ActiveContextService } from './active-context.service';
@@ -21,16 +21,14 @@ import { ToastService } from './toast.service';
  */
 @Injectable({ providedIn: 'root' })
 export class ActiveContextWatcherService {
+  private activeContext = inject(ActiveContextService);
+  private datasetState = inject(DatasetStateService);
+  private toast = inject(ToastService);
+  private router = inject(Router);
+
   private lastSeenDatasetName: { id: string; name: string } | null = null;
   private lastSeenDetectorName: { id: string; name: string } | null = null;
   private started = false;
-
-  constructor(
-    private activeContext: ActiveContextService,
-    private datasetState: DatasetStateService,
-    private toast: ToastService,
-    private router: Router,
-  ) {}
 
   /** Navigate to /dashboard when an active half is cleared from under
    *  us. Phase 2 makes the URL the source of truth, so a half-set pair

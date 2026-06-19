@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, EMPTY, Observable, ReplaySubject, Subject } from 'rxjs';
 import { catchError, filter, take, takeUntil } from 'rxjs/operators';
 import { Router } from '@angular/router';
@@ -53,19 +53,17 @@ interface ActiveSwitch {
  */
 @Injectable({ providedIn: 'root' })
 export class ContextSwitchService {
+  private activeContext = inject(ActiveContextService);
+  private datasetState = inject(DatasetStateService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private progressEvents = inject(ProgressEventsService);
+  private router = inject(Router);
+
   private readonly switchingSubject = new BehaviorSubject<boolean>(false);
   readonly switching$ = this.switchingSubject.asObservable();
 
   private active: ActiveSwitch | null = null;
-
-  constructor(
-    private activeContext: ActiveContextService,
-    private datasetState: DatasetStateService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private progressEvents: ProgressEventsService,
-    private router: Router,
-  ) {}
 
   get switching(): boolean {
     return this.switchingSubject.value;

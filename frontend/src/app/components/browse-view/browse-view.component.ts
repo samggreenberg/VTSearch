@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, OnDestroy, NgZone, ViewChild, effect } from '@angular/core';
+import { Component, ElementRef, OnInit, OnDestroy, NgZone, ViewChild, effect, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -60,6 +60,21 @@ import type { SettingsUpdate } from '../../generated/api-client/models/settings-
   styleUrl: './browse-view.component.scss',
 })
 export class BrowseViewComponent implements OnInit, OnDestroy {
+  private projectionApi = inject(ProjectionApiService);
+  private tileCache = inject(TileCacheService);
+  private activeContext = inject(ActiveContextService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private settingsState = inject(SettingsStateService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private browseSubset = inject(BrowseSubsetService);
+  private selection = inject(BrowseSelectionService);
+  private mediasApi = inject(MediasApiService);
+  private dialog = inject(VtDialogService);
+  private toast = inject(ToastService);
+  private ngZone = inject(NgZone);
+
   @ViewChild(BrowseCanvasComponent) private canvas?: BrowseCanvasComponent;
   /** The 3-column grid (canvas | divider | side panel); the divider drag
    *  measures against its box. Only present in the ``ready`` state. */
@@ -183,22 +198,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private pollErrors = 0;
   private static readonly MAX_POLL_ERRORS = 5;
 
-  constructor(
-    private projectionApi: ProjectionApiService,
-    private tileCache: TileCacheService,
-    private activeContext: ActiveContextService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private settingsState: SettingsStateService,
-    private route: ActivatedRoute,
-    private router: Router,
-    private browseSubset: BrowseSubsetService,
-    private selection: BrowseSelectionService,
-    private mediasApi: MediasApiService,
-    private dialog: VtDialogService,
-    private toast: ToastService,
-    private ngZone: NgZone,
-  ) {
+  constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;

@@ -1,15 +1,4 @@
-import {
-  Component,
-  ElementRef,
-  EventEmitter,
-  Input,
-  OnChanges,
-  OnDestroy,
-  Output,
-  SimpleChanges,
-  ViewChild,
-  AfterViewInit,
-} from '@angular/core';
+import { Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, AfterViewInit, inject, input, output } from '@angular/core';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
@@ -20,11 +9,13 @@ import { ActiveContextService } from '../../../services/active-context.service';
   styleUrl: './audio-player.component.scss',
 })
 export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit {
+  private activeContext = inject(ActiveContextService);
+
   @Input() media!: Media;
   @Input() volume = 1;
-  @Input() audioPlaying = true;
-  @Input() swipeClass = '';
-  @Output() playingChanged = new EventEmitter<boolean>();
+  readonly audioPlaying = input(true);
+  readonly swipeClass = input('');
+  readonly playingChanged = output<boolean>();
 
   @ViewChild('waveformCanvas') canvasRef!: ElementRef<HTMLCanvasElement>;
   @ViewChild('audioEl') audioRef!: ElementRef<HTMLAudioElement>;
@@ -38,8 +29,6 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   // whenever the metadata cache hydrates; without this guard, every cache
   // refresh would re-`loadAudio()` and snap playback back to t=0.
   private lastMediaId: number | null = null;
-
-  constructor(private activeContext: ActiveContextService) {}
 
   ngAfterViewInit(): void {
     this.viewReady = true;
@@ -84,13 +73,13 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   }
 
   onPlay(): void {
-    if (!this.audioPlaying) {
+    if (!this.audioPlaying()) {
       this.playingChanged.emit(true);
     }
   }
 
   onPause(): void {
-    if (this.audioPlaying) {
+    if (this.audioPlaying()) {
       this.playingChanged.emit(false);
     }
   }
@@ -124,9 +113,10 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
   private syncPlaybackState(): void {
     const audio = this.audioRef?.nativeElement;
     if (!audio) return;
-    if (this.audioPlaying && audio.paused) {
+    const audioPlaying = this.audioPlaying();
+    if (audioPlaying && audio.paused) {
       audio.play().catch(() => {});
-    } else if (!this.audioPlaying && !audio.paused) {
+    } else if (!audioPlaying && !audio.paused) {
       audio.pause();
     }
   }

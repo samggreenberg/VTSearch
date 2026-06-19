@@ -1,7 +1,7 @@
 <vt-modal [title]="title" [open]="true" (closed)="close()">
   @if (analyzing) {
     <div class="analysis-loading">
-      @if (useCachedHistory) {
+      @if (useCachedHistory()) {
         <p aria-live="polite">Loading indicator history...</p>
       } @else {
         <p aria-live="polite">Training detectors over label history...</p>

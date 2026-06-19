@@ -1,14 +1,4 @@
-import {
-  Component,
-  ElementRef,
-  EventEmitter,
-  Input,
-  OnChanges,
-  OnDestroy,
-  Output,
-  SimpleChanges,
-  ViewChild,
-} from '@angular/core';
+import { Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, output } from '@angular/core';
 import { NgStyle } from '@angular/common';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -32,6 +22,8 @@ const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a s
   styleUrl: './image-viewer.component.scss',
 })
 export class ImageViewerComponent implements OnChanges, OnDestroy {
+  private activeContext = inject(ActiveContextService);
+
   @Input() media!: Media;
   /**
    * True while the parent is in the v2 "bad-vote-with-box discard confirm" armed state.
@@ -49,13 +41,13 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
    * interactive (no drag/resize, no vote semantics).
    */
   @Input() highlightBox: RegionBox | null = null;
-  @Output() regionBoxChange = new EventEmitter<RegionBox | null>();
+  readonly regionBoxChange = output<RegionBox | null>();
   /**
    * Fired when the user does something that cancels the armed bad-vote-confirm without
    * voting (Esc while armed, or any mousedown on the box body/handles, or starting a
    * fresh Shift-drag). The parent clears its armed state but keeps the box.
    */
-  @Output() armedConfirmCanceled = new EventEmitter<void>();
+  readonly armedConfirmCanceled = output<void>();
 
   @ViewChild('imageWrap') wrapRef!: ElementRef<HTMLDivElement>;
   @ViewChild('imageEl') imageRef!: ElementRef<HTMLImageElement>;
@@ -109,7 +101,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   readonly maxZoom = 5;
   readonly zoomStep = 0.05;
 
-  constructor(private activeContext: ActiveContextService) {
+  constructor() {
     this.setupWindowKeyListeners();
   }
 

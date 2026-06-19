@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
+import { Component, Input, computed, inject, signal, input, output } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
@@ -15,9 +15,9 @@ import type { ExporterEntry } from '../../../generated/api-client/models/exporte
 })
 export class LabelExporterModalComponent {
   @Input() goodsOnly = false;
-  @Input() customTitle = '';
-  @Output() closed = new EventEmitter<void>();
-  @Output() exportComplete = new EventEmitter<void>();
+  readonly customTitle = input('');
+  readonly closed = output<void>();
+  readonly exportComplete = output<void>();
 
   private readonly exportersApi = inject(ExportersApiService);
   private readonly sortingApi = inject(SortingApiService);
@@ -41,7 +41,8 @@ export class LabelExporterModalComponent {
   );
 
   get title(): string {
-    if (this.customTitle) return this.customTitle;
+    const customTitle = this.customTitle();
+    if (customTitle) return customTitle;
     return this.goodsOnly ? 'Export Labels (Goods)' : 'Export Labels';
   }
 

@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { Router } from '@angular/router';
@@ -50,19 +50,17 @@ const MAX_POLL_ERRORS = 5;
  */
 @Injectable({ providedIn: 'root' })
 export class BrowsePrepService {
+  private router = inject(Router);
+  private activeContext = inject(ActiveContextService);
+  private contextSwitch = inject(ContextSwitchService);
+  private progressEvents = inject(ProgressEventsService);
+  private projectionApi = inject(ProjectionApiService);
+
   private readonly stateSubject = new BehaviorSubject<BrowsePrepState | null>(null);
   readonly state$ = this.stateSubject.asObservable();
 
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private pollErrors = 0;
-
-  constructor(
-    private router: Router,
-    private activeContext: ActiveContextService,
-    private contextSwitch: ContextSwitchService,
-    private progressEvents: ProgressEventsService,
-    private projectionApi: ProjectionApiService,
-  ) {}
 
   /** True while a browse preparation is in flight (not counting the
    *  terminal error state, which waits for the user to dismiss). */

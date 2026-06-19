@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild, effect } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, effect, inject, input, output } from '@angular/core';
 import { KeyValuePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { EmbedderInfo, Media } from '../../models/api.models';
@@ -32,9 +32,19 @@ import { prefersReducedMotion } from '../../utils/reduced-motion';
   styleUrl: './center-panel.component.scss',
 })
 export class CenterPanelComponent implements OnChanges, OnDestroy {
+  private mediasApi = inject(MediasApiService);
+  private keyboard = inject(KeyboardService);
+  voteState = inject(VoteStateService);
+  private settingsState = inject(SettingsStateService);
+  private sortState = inject(SortStateService);
+  private datasetsListingsApi = inject(DatasetsListingsApiService);
+
   @Input() media: Media | null = null;
-  @Input() disabled = false;
-  @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  readonly disabled = input(false);
+  readonly mediaVoted = output<{
+    id: number;
+    vote: 'good' | 'bad';
+}>();
 
   @ViewChild(AudioPlayerComponent) audioPlayer?: AudioPlayerComponent;
   @ViewChild(ImageViewerComponent) imageViewer?: ImageViewerComponent;
@@ -77,14 +87,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   private _pausedByVisibility = false;
   private subs: Subscription[] = [];
 
-  constructor(
-    private mediasApi: MediasApiService,
-    private keyboard: KeyboardService,
-    public voteState: VoteStateService,
-    private settingsState: SettingsStateService,
-    private sortState: SortStateService,
-    private datasetsListingsApi: DatasetsListingsApiService,
-  ) {
+  constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
@@ -146,7 +149,7 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
       this.keyboard.action$.subscribe((action) => {
         switch (action.type) {
           case 'vote':
-            if (this.media && action.direction && !this.disabled) {
+            if (this.media && action.direction && !this.disabled()) {
               this.castVote(action.direction);
             }
             break;
@@ -169,10 +172,10 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
             }
             break;
           case 'undo':
-            if (!this.disabled && !this.isVoting) this.voteState.undo();
+            if (!this.disabled() && !this.isVoting) this.voteState.undo();
             break;
           case 'redo':
-            if (!this.disabled && !this.isVoting) this.voteState.redo();
+            if (!this.disabled() && !this.isVoting) this.voteState.redo();
             break;
         }
       }),

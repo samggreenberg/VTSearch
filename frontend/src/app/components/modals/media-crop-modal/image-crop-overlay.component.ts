@@ -2,10 +2,9 @@ import {
   AfterViewInit,
   Component,
   ElementRef,
-  EventEmitter,
-  Input,
-  Output,
   ViewChild,
+  input,
+  output
 } from '@angular/core';
 
 
@@ -26,9 +25,9 @@ const HANDLE_HIT_RADIUS = 12;
   styleUrl: './image-crop-overlay.component.scss',
 })
 export class ImageCropOverlayComponent implements AfterViewInit {
-  @Input() imageUrl = '';
-  @Output() applied = new EventEmitter<ImageCropResult>();
-  @Output() cancelled = new EventEmitter<void>();
+  readonly imageUrl = input('');
+  readonly applied = output<ImageCropResult>();
+  readonly cancelled = output<void>();
 
   @ViewChild('img') imgRef!: ElementRef<HTMLImageElement>;
 

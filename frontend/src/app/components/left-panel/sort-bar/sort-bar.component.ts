@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
+import { Component, Input, OnInit, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { SortMode } from '../left-panel.component';
@@ -14,7 +14,7 @@ import { LoadSortModalComponent } from '../../modals/load-sort-modal/load-sort-m
 export class SortBarComponent implements OnInit {
   @Input() sortMode: SortMode = 'text';
   @Input() loadSortLabel = '';
-  @Input() initialTextQuery = '';
+  readonly initialTextQuery = input('');
   /**
    * True when the active detector (or active votes, when no detector is
    * loaded) has at least one good and one bad label available for training.
@@ -26,21 +26,22 @@ export class SortBarComponent implements OnInit {
    * for vision-only encoders (DINOv3, Perception Encoder); disables the
    * "Text" sort radio so users can't try a search that will always fail.
    */
-  @Input() textSortAvailable = true;
+  readonly textSortAvailable = input(true);
 
-  @Output() sortModeChange = new EventEmitter<SortMode>();
-  @Output() textSort = new EventEmitter<string>();
-  @Output() learnedSort = new EventEmitter<void>();
-  @Output() loadSort = new EventEmitter<void>();
-  @Output() modelSelected = new EventEmitter<string>();
-  @Output() exampleSortStarted = new EventEmitter<unknown>();
+  readonly sortModeChange = output<SortMode>();
+  readonly textSort = output<string>();
+  readonly learnedSort = output<void>();
+  readonly loadSort = output<void>();
+  readonly modelSelected = output<string>();
+  readonly exampleSortStarted = output<unknown>();
 
   textQuery = '';
   showLoadSortModal = false;
 
   ngOnInit(): void {
-    if (this.initialTextQuery) {
-      this.textQuery = this.initialTextQuery;
+    const initialTextQuery = this.initialTextQuery();
+    if (initialTextQuery) {
+      this.textQuery = initialTextQuery;
     }
   }
 
@@ -69,7 +70,7 @@ export class SortBarComponent implements OnInit {
   }
 
   get textDisabled(): boolean {
-    return !this.textSortAvailable;
+    return !this.textSortAvailable();
   }
 
   get searchDisabled(): boolean {

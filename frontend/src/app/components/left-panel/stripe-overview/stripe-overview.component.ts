@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges } from '@angular/core';
+import { Component, Input, OnChanges, input, output } from '@angular/core';
 
 import { SortedItem } from '../left-panel.component';
 
@@ -15,8 +15,8 @@ export class StripeOverviewComponent implements OnChanges {
   @Input() selectedId: number | null = null;
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
-  @Input() totalCount = 0;
-  @Output() stripeClick = new EventEmitter<number>();
+  readonly totalCount = input(0);
+  readonly stripeClick = output<number>();
 
   /** Cached dots, rebuilt only when inputs change. */
   cachedDots: { top: number; type: 'good' | 'bad' | 'selected' }[] = [];

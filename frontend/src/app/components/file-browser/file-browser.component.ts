@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
+import { Component, OnChanges, OnInit, SimpleChanges, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { map } from 'rxjs/operators';
@@ -24,17 +24,19 @@ import {
   styleUrl: './file-browser.component.scss',
 })
 export class FileBrowserComponent implements OnInit, OnChanges {
+  private fileBrowserApi = inject(FileBrowserApiService);
+
   /** Comma-separated extensions to filter files, e.g. ".csv,.json" */
-  @Input() extensions = '';
+  readonly extensions = input('');
 
   /** Current value (path): pre-populates the filename input. */
-  @Input() value = '';
+  readonly value = input('');
 
   /** Placeholder text for the manual input. */
-  @Input() placeholder = '';
+  readonly placeholder = input('');
 
   /** Emits the selected file path (relative to root). */
-  @Output() pathSelected = new EventEmitter<string>();
+  readonly pathSelected = output<string>();
 
   browserOpen = false;
 
@@ -44,7 +46,7 @@ export class FileBrowserComponent implements OnInit, OnChanges {
   /** Bound to the inner ``<vt-folder-browser>``.  Arrow function so
    *  ``this`` resolves correctly when the child component invokes it. */
   readonly browseFn: FolderBrowserBrowseFn = (path: string) =>
-    this.fileBrowserApi.browse(path, this.extensions).pipe(
+    this.fileBrowserApi.browse(path, this.extensions()).pipe(
       map((res) => ({
         directories: res.directories,
         files: res.files,
@@ -52,15 +54,13 @@ export class FileBrowserComponent implements OnInit, OnChanges {
       })),
     );
 
-  constructor(private fileBrowserApi: FileBrowserApiService) {}
-
   ngOnInit(): void {
-    this.inputValue = this.value;
+    this.inputValue = this.value();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['value']) {
-      this.inputValue = this.value;
+      this.inputValue = this.value();
     }
   }
 

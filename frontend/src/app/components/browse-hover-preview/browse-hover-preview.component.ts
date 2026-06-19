@@ -1,12 +1,4 @@
-import {
-  Component,
-  ElementRef,
-  Input,
-  OnChanges,
-  OnDestroy,
-  SimpleChanges,
-  ViewChild,
-} from '@angular/core';
+import { Component, ElementRef, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, input } from '@angular/core';
 
 import { ActiveContextService } from '../../services/active-context.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
@@ -19,8 +11,10 @@ import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
   styleUrl: './browse-hover-preview.component.scss',
 })
 export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
-  @Input() hover: HexHoverEvent | null = null;
-  @Input() mediaType = '';
+  private activeContext = inject(ActiveContextService);
+
+  readonly hover = input<HexHoverEvent | null>(null);
+  readonly mediaType = input('');
   @ViewChild('audioEl') audioRef?: ElementRef<HTMLAudioElement>;
 
   visible = false;
@@ -31,12 +25,11 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   count = 0;
   private textLoadAbort: AbortController | null = null;
 
-  constructor(private activeContext: ActiveContextService) {}
-
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['hover']) {
-      if (this.hover) {
-        this.show(this.hover);
+      const hover = this.hover();
+      if (hover) {
+        this.show(hover);
       } else {
         this.hide();
       }
@@ -53,7 +46,8 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
 
     // Image and video paint their thumbnail directly onto the hex (see
     // browse-canvas); nothing happens on hover, so suppress the pop-up.
-    if (this.mediaType === 'image' || this.mediaType === 'video') {
+    const mediaType = this.mediaType();
+    if (mediaType === 'image' || mediaType === 'video') {
       this.hide();
       return;
     }
@@ -63,7 +57,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     this.top = event.screenY - 8;
     this.count = event.cell.count;
 
-    switch (this.mediaType) {
+    switch (mediaType) {
       case 'audio':
         this.textContent = '';
         this.playAudio(representativeId);
@@ -120,14 +114,14 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     fetch(url, { signal: abort.signal })
       .then((r) => r.json())
       .then((data) => {
-        if (this.hover?.cell.rep_id === mediaId) {
+        if (this.hover()?.cell.rep_id === mediaId) {
           const text: string = data.content || '';
           this.textContent = text.length > 300 ? text.slice(0, 300) + '...' : text;
         }
       })
       .catch((err) => {
         if (err?.name === 'AbortError') return;
-        if (this.hover?.cell.rep_id === mediaId) {
+        if (this.hover()?.cell.rep_id === mediaId) {
           this.textContent = `Item #${mediaId}`;
         }
       });

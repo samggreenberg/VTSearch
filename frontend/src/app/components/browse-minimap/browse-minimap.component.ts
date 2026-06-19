@@ -1,17 +1,4 @@
-import {
-  Component,
-  ElementRef,
-  EventEmitter,
-  HostBinding,
-  Input,
-  NgZone,
-  OnChanges,
-  OnDestroy,
-  OnInit,
-  Output,
-  SimpleChanges,
-  ViewChild,
-} from '@angular/core';
+import { Component, ElementRef, HostBinding, Input, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild, inject, input, output } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
@@ -52,12 +39,17 @@ export const MINIMAP_MAX_HEIGHT = 450;
   styleUrl: './browse-minimap.component.scss',
 })
 export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
+  private ngZone = inject(NgZone);
+  private tileCache = inject(TileCacheService);
+  private viewport = inject(BrowseViewportService);
+  private host = inject<ElementRef<HTMLElement>>(ElementRef);
+
   @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
-  @Input() meta: ProjectionMeta | null = null;
+  readonly meta = input<ProjectionMeta | null>(null);
   @Input() width = 200;
   @Input() height = 150;
   /** Density colormap preset; mirrors the main canvas so the overview matches. */
-  @Input() colormap: BrowseColormapId = 'auto';
+  readonly colormap = input<BrowseColormapId>('auto');
   /**
    * Docked mode: the minimap fills its container (the browse side panel's
    * meta-row) and sizes its canvas to fit via a {@link ResizeObserver},
@@ -67,9 +59,12 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
    */
   @Input() @HostBinding('class.dock') dock = false;
   /** Hide request from the close button (floating mode only). */
-  @Output() closed = new EventEmitter<void>();
+  readonly closed = output<void>();
   /** Final size after a resize drag, for persistence (floating mode only). */
-  @Output() resized = new EventEmitter<{ width: number; height: number }>();
+  readonly resized = output<{
+    width: number;
+    height: number;
+}>();
 
   private resizeObserver: ResizeObserver | null = null;
 
@@ -96,13 +91,6 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   private boundResizeUp = this.onResizeUp.bind(this);
   private boundNavMove = this.onNavMove.bind(this);
   private boundNavUp = this.onNavUp.bind(this);
-
-  constructor(
-    private ngZone: NgZone,
-    private tileCache: TileCacheService,
-    private viewport: BrowseViewportService,
-    private host: ElementRef<HTMLElement>,
-  ) {}
 
   ngOnInit(): void {
     this.ctx = this.canvasRef.nativeElement.getContext('2d')!;
@@ -202,15 +190,17 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
    * level 0 (so the map is finer-grained), clamped to the available levels.
    */
   private overviewLevel(f: { scale: number }): number {
-    if (!this.meta || this.meta.levels.length === 0) return 0;
-    const basePx = this.meta.base_radius * f.scale; // level-0 hex radius in px
+    const meta = this.meta();
+    if (!meta || meta.levels.length === 0) return 0;
+    const basePx = meta.base_radius * f.scale; // level-0 hex radius in px
     const ideal = Math.log2(basePx / BrowseMinimapComponent.OVERVIEW_TARGET_HEX_PX);
-    return Math.max(0, Math.min(this.meta.levels.length - 1, Math.round(ideal)));
+    return Math.max(0, Math.min(meta.levels.length - 1, Math.round(ideal)));
   }
 
   /** Fetch every tile of the overview level spanning the bounds (idempotent). */
   private requestOverviewTiles(): void {
-    if (!this.meta || this.meta.point_count === 0) return;
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return;
     const f = this.fit();
     if (!f) return;
     const level = this.overviewLevel(f);
@@ -220,12 +210,13 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private overviewTiles(level: number): { tx: number; ty: number }[] {
-    if (!this.meta) return [];
-    const radius = this.meta.base_radius / Math.pow(2, level);
-    const geom = binGeometry(this.meta.bin_shape);
-    const tileW = this.meta.tile_span * geom.dx(radius);
-    const tileH = this.meta.tile_span * geom.dy(radius);
-    const [xmin, ymin, xmax, ymax] = this.meta.bounds;
+    const meta = this.meta();
+    if (!meta) return [];
+    const radius = meta.base_radius / Math.pow(2, level);
+    const geom = binGeometry(meta.bin_shape);
+    const tileW = meta.tile_span * geom.dx(radius);
+    const tileH = meta.tile_span * geom.dy(radius);
+    const [xmin, ymin, xmax, ymax] = meta.bounds;
     const txMin = Math.floor(xmin / tileW) - 1;
     const txMax = Math.ceil(xmax / tileW) + 1;
     const tyMin = Math.floor(ymin / tileH) - 1;
@@ -263,8 +254,9 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
    * settles immediately.
    */
   private fit(): { scale: number; cx: number; cy: number; margin: number } | null {
-    if (!this.meta || this.meta.point_count === 0) return null;
-    const [xmin, ymin, xmax, ymax] = this.meta.bounds;
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return null;
+    const [xmin, ymin, xmax, ymax] = meta.bounds;
     const dataW = xmax - xmin || 1;
     const dataH = ymax - ymin || 1;
     const margin = 4;
@@ -273,7 +265,7 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
     let scale = Math.min(availW / dataW, availH / dataH);
     for (let i = 0; i < 3; i++) {
       const level = this.overviewLevel({ scale });
-      const r = this.meta.base_radius / Math.pow(2, level);
+      const r = meta.base_radius / Math.pow(2, level);
       scale = Math.min(availW / (dataW + 2 * r), availH / (dataH + 2 * r));
     }
     return { scale, cx: (xmin + xmax) / 2, cy: (ymin + ymax) / 2, margin };
@@ -300,9 +292,9 @@ export class BrowseMinimapComponent implements OnInit, OnChanges, OnDestroy {
       const cells = this.overviewCells(level);
       let maxCount = 1;
       for (const c of cells) if (c.count > maxCount) maxCount = c.count;
-      const geom = binGeometry(this.meta!.bin_shape);
-      const cellR = (this.meta!.base_radius / Math.pow(2, level)) * f.scale;
-      const cmap = resolveColormap(this.colormap, this.effectiveTheme());
+      const geom = binGeometry(this.meta()!.bin_shape);
+      const cellR = (this.meta()!.base_radius / Math.pow(2, level)) * f.scale;
+      const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
       for (const cell of cells) {
         const [sx, sy] = this.projToMap(cell.cx, cell.cy, f);
         const single = cell.count === 1;

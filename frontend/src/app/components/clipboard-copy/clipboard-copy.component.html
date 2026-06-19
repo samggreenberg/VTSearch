@@ -1,7 +1,7 @@
 <div class="clipboard-copy">
-  @if (mode === 'list') {
+  @if (mode() === 'list') {
     <select class="form-select" [(ngModel)]="selectedColumnKey" title="Column to copy to clipboard">
-      @for (col of columns; track col.key) {
+      @for (col of columns(); track col.key) {
         <option [value]="col.key">{{ col.label }}</option>
       }
     </select>
@@ -9,7 +9,7 @@
   <select
     class="form-select"
     [(ngModel)]="delimiter"
-    [title]="mode === 'list' ? 'Separator between copied values' : 'Delimiter between columns'"
+    [title]="mode() === 'list' ? 'Separator between copied values' : 'Delimiter between columns'"
   >
     @for (opt of delimiterOptions; track opt.value) {
       <option [value]="opt.value">{{ opt.label }}</option>
@@ -17,12 +17,12 @@
   </select>
   <button
     class="btn"
-    [class.btn--primary]="buttonVariant === 'primary'"
-    [class.btn--secondary]="buttonVariant === 'secondary'"
+    [class.btn--primary]="buttonVariant() === 'primary'"
+    [class.btn--secondary]="buttonVariant() === 'secondary'"
     (click)="copy()"
     [disabled]="isDisabled"
     title="Copy to clipboard"
   >
-    {{ buttonText || copyLabel }}
+    {{ buttonText || copyLabel() }}
   </button>
 </div>

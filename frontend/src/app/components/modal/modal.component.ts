@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, Input, input, output } from '@angular/core';
 
 @Component({
   selector: 'vt-modal',
@@ -7,10 +7,10 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
   styleUrl: './modal.component.scss',
 })
 export class ModalComponent {
-  @Input() title = '';
-  @Input() open = false;
+  readonly title = input('');
+  readonly open = input(false);
   @Input() showCloseButton = true;
-  @Output() closed = new EventEmitter<void>();
+  readonly closed = output<void>();
 
   onBackdropClick(event: MouseEvent): void {
     if (event.target === event.currentTarget) {

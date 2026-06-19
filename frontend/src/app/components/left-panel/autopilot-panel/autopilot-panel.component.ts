@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, OnInit, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, input, output } from '@angular/core';
 
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 import {
@@ -37,6 +37,9 @@ export interface StepDisplay {
   styleUrl: './autopilot-panel.component.scss',
 })
 export class AutopilotPanelComponent implements OnInit, OnChanges {
+  autopilotState = inject(AutopilotStateService);
+  private toastService = inject(ToastService);
+
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
   /**
@@ -48,19 +51,14 @@ export class AutopilotPanelComponent implements OnInit, OnChanges {
   @Input() labelsetGoodCount = 0;
   @Input() labelsetBadCount = 0;
   @Input() labelingStatus: LabelingStatusResponse | null = null;
-  @Input() collapsed = false;
+  readonly collapsed = input(false);
 
-  @Output() started = new EventEmitter<void>();
-  @Output() stopped = new EventEmitter<void>();
-  @Output() toggleCollapse = new EventEmitter<void>();
-  @Output() refocus = new EventEmitter<void>();
+  readonly started = output<void>();
+  readonly stopped = output<void>();
+  readonly toggleCollapse = output<void>();
+  readonly refocus = output<void>();
 
   private completionAlerted = false;
-
-  constructor(
-    public autopilotState: AutopilotStateService,
-    private toastService: ToastService,
-  ) {}
 
   get state(): AutopilotState {
     return this.autopilotState.state;

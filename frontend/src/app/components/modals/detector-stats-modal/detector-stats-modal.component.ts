@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, OnInit, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
@@ -18,18 +18,18 @@ import { formatTimestamp as formatTs } from '../../../utils/format-date';
   styleUrl: './detector-stats-modal.component.scss',
 })
 export class DetectorStatsModalComponent implements OnInit {
-  @Input() detectorId = '';
-  @Input() detectorName = '';
-  @Output() closed = new EventEmitter<void>();
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+
+  readonly detectorId = input('');
+  readonly detectorName = input('');
+  readonly closed = output<void>();
 
   loading = true;
   error = '';
   stats: DetectorRegistryStatsResponse | null = null;
 
-  constructor(private detectorsRegistryApi: DetectorsRegistryApiService) {}
-
   ngOnInit(): void {
-    this.detectorsRegistryApi.getDetectorStats(this.detectorId).subscribe({
+    this.detectorsRegistryApi.getDetectorStats(this.detectorId()).subscribe({
       next: (data) => {
         this.stats = data;
         this.loading = false;

@@ -3,7 +3,7 @@ import {
   HttpContext,
   HttpContextToken,
 } from '@angular/common/http';
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 
 /**
@@ -52,6 +52,8 @@ export type ConnectionStatus = 'online' | 'offline';
  */
 @Injectable({ providedIn: 'root' })
 export class ConnectionStateService {
+  private http = inject(HttpClient);
+
   /**
    * Consecutive network failures needed to declare the backend offline. A
    * threshold above 1 keeps a single transient blip (one dropped request
@@ -71,7 +73,7 @@ export class ConnectionStateService {
 
   private consecutiveFailures = 0;
 
-  constructor(private http: HttpClient) {
+  constructor() {
     // A browser-level `offline` event (the OS lost its network interface) is
     // an unambiguous, immediate signal — trip the breaker at once rather
     // than waiting for the failure threshold. The matching `online` event is

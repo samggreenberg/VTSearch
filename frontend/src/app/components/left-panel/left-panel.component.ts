@@ -1,8 +1,6 @@
 import {
   Component,
   Input,
-  Output,
-  EventEmitter,
   OnInit,
   OnChanges,
   SimpleChanges,
@@ -10,6 +8,8 @@ import {
   computed,
   effect,
   inject,
+  input,
+  output
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -49,68 +49,75 @@ export type { SortMode, SelectMode, SortedItem };
 })
 export class LeftPanelComponent implements OnInit, OnChanges {
   @Input() medias: Media[] = [];
-  @Input() sortOrder: SortedItem[] | null = null;
-  @Input() threshold: number | null = null;
-  @Input() selectedId: number | null = null;
-  @Input() goodVotes: Set<number> = new Set();
-  @Input() badVotes: Set<number> = new Set();
+  readonly sortOrder = input<SortedItem[] | null>(null);
+  readonly threshold = input<number | null>(null);
+  readonly selectedId = input<number | null>(null);
+  readonly goodVotes = input<Set<number>>(new Set());
+  readonly badVotes = input<Set<number>>(new Set());
   /**
    * True when the active detector (or active votes, when no detector is
    * loaded) has at least one good and one bad label.  Used to gate "Sort by
    * Learned"; distinct from ``goodVotes`` / ``badVotes`` because those Sets
    * only contain media IDs in the *currently loaded* dataset.
    */
-  @Input() learnedSortAvailable = false;
+  readonly learnedSortAvailable = input(false);
   /** Active detector's saved labelset counts (across all datasets). */
-  @Input() labelsetGoodCount = 0;
-  @Input() labelsetBadCount = 0;
-  @Input() sortMode: SortMode = 'text';
-  @Input() selectMode: SelectMode = 'top';
-  @Input() inclusion: number = 0;
+  readonly labelsetGoodCount = input(0);
+  readonly labelsetBadCount = input(0);
+  readonly sortMode = input<SortMode>('text');
+  readonly selectMode = input<SelectMode>('top');
+  readonly inclusion = input<number>(0);
   @Input() sortBusy = false;
-  @Input() sortStatus = '';
-  @Input() sortProgress = 0;
-  @Input() sortProgressTotal = 0;
-  @Input() labelingStatus: LabelingStatusResponse | null = null;
-  @Input() viewMode: 'grid' | 'list' = 'list';
-  @Input() gridGoalWidth: number = 80;
-  @Input() focusMode: 'click' | 'hover' = 'click';
-  @Input() loadSortLabel = '';
-  @Input() textQuery = '';
-  @Input() autopilotCollapsed = false;
+  readonly sortStatus = input('');
+  readonly sortProgress = input(0);
+  readonly sortProgressTotal = input(0);
+  readonly labelingStatus = input<LabelingStatusResponse | null>(null);
+  readonly viewMode = input<'grid' | 'list'>('list');
+  readonly gridGoalWidth = input<number>(80);
+  readonly focusMode = input<'click' | 'hover'>('click');
+  readonly loadSortLabel = input('');
+  readonly textQuery = input('');
+  readonly autopilotCollapsed = input(false);
   @Input() autopilotEnabled = true;
   /** 'label' = full labeling UI (default), 'find' = simplified media-only view */
-  @Input() panelMode: 'label' | 'find' = 'label';
+  readonly panelMode = input<'label' | 'find'>('label');
   /** Disable all interaction (used during Find scoring). */
-  @Input() disabled = false;
+  readonly disabled = input(false);
   /** Display name of the current dataset. */
   @Input() datasetName = '';
 
-  @Output() sortModeChange = new EventEmitter<SortMode>();
-  @Output() selectModeChange = new EventEmitter<SelectMode>();
-  @Output() inclusionChange = new EventEmitter<number>();
-  @Output() textSort = new EventEmitter<string>();
-  @Output() learnedSort = new EventEmitter<void>();
-  @Output() loadSort = new EventEmitter<void>();
-  @Output() modelSelected = new EventEmitter<string>();
-  @Output() exampleSortStarted = new EventEmitter<unknown>();
-  @Output() mediaSelect = new EventEmitter<number>();
-  @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
-  @Output() mediaContextRequest = new EventEmitter<{ id: number; x: number; y: number }>();
-  @Output() indicatorClick = new EventEmitter<string>();
+  readonly sortModeChange = output<SortMode>();
+  readonly selectModeChange = output<SelectMode>();
+  readonly inclusionChange = output<number>();
+  readonly textSort = output<string>();
+  readonly learnedSort = output<void>();
+  readonly loadSort = output<void>();
+  readonly modelSelected = output<string>();
+  readonly exampleSortStarted = output<unknown>();
+  readonly mediaSelect = output<number>();
+  readonly mediaVote = output<{
+    id: number;
+    vote: 'good' | 'bad';
+}>();
+  readonly mediaContextRequest = output<{
+    id: number;
+    x: number;
+    y: number;
+}>();
+  readonly indicatorClick = output<string>();
   /** User clicked the Cancel button on the running sort progress bar. */
-  @Output() sortCancel = new EventEmitter<void>();
+  readonly sortCancel = output<void>();
   /** Find mode: browse the unverified positives as their own UMAP projection. */
-  @Output() browse = new EventEmitter<void>();
+  readonly browse = output<void>();
   /** Find mode: promote the unverified positives into their own dataset. */
-  @Output() toDataset = new EventEmitter<void>();
+  readonly toDataset = output<void>();
   /** Find mode: export the unverified positives (above-threshold work queue). */
-  @Output() unverifiedExport = new EventEmitter<void>();
-  @Output() autopilotStart = new EventEmitter<void>();
-  @Output() autopilotStop = new EventEmitter<void>();
-  @Output() autopilotRefocus = new EventEmitter<void>();
-  @Output() autopilotToggleCollapse = new EventEmitter<void>();
-  @Output() autopilotEnabledChange = new EventEmitter<boolean>();
+  readonly unverifiedExport = output<void>();
+  readonly autopilotStart = output<void>();
+  readonly autopilotStop = output<void>();
+  readonly autopilotRefocus = output<void>();
+  readonly autopilotToggleCollapse = output<void>();
+  readonly autopilotEnabledChange = output<boolean>();
 
   @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
 
@@ -152,7 +159,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   }
 
   ngOnInit(): void {
-    if (this.panelMode === 'find') {
+    if (this.panelMode() === 'find') {
       // Find mode doesn't use tabs; keep manual as a no-op default
       this.activeTab = 'manual';
     } else {
@@ -212,9 +219,10 @@ export class LeftPanelComponent implements OnInit, OnChanges {
    * Browse / To Dataset / Export all operate on exactly this set.
    */
   get unverifiedGoodCount(): number {
-    const order = this.sortOrder;
-    if (!order || this.threshold == null) return 0;
-    const cutoff = this.threshold;
+    const order = this.sortOrder();
+    const threshold = this.threshold();
+    if (!order || threshold == null) return 0;
+    const cutoff = threshold;
     let n = 0;
     for (const item of order) {
       if (item.score >= cutoff) n++;

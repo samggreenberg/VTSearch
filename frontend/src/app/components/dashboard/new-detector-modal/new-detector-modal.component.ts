@@ -1,4 +1,4 @@
-import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
+import { Component, HostListener, Input, OnInit, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -40,6 +40,15 @@ type TrainedSubView = 'picker' | 'form';
   styleUrl: './new-detector-modal.component.scss',
 })
 export class NewDetectorModalComponent implements OnInit {
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private datasetsListingsApi = inject(DatasetsListingsApiService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private datasetsUiApi = inject(DatasetsUiApiService);
+  private sortingApi = inject(SortingApiService);
+  private labelImportersApi = inject(LabelImportersApiService);
+  private settingsState = inject(SettingsStateService);
+
   /** Media type of the currently active dataset, if any. */
   @Input() defaultMediaType = '';
 
@@ -50,10 +59,10 @@ export class NewDetectorModalComponent implements OnInit {
   @Input() seedMediaId: number | null = null;
 
   /** Optional crop bounds applied when materialising ``seedMediaId``. */
-  @Input() seedCropParams: Record<string, unknown> | null = null;
+  readonly seedCropParams = input<Record<string, unknown> | null>(null);
 
-  @Output() closed = new EventEmitter<void>();
-  @Output() created = new EventEmitter<string>();
+  readonly closed = output<void>();
+  readonly created = output<string>();
 
   view: ModalView = 'main';
   tab: ModalTab = 'blank';
@@ -165,17 +174,6 @@ export class NewDetectorModalComponent implements OnInit {
   labelImporterFile: File | null = null;
   labelImporterFileFieldKey: string | null = null;
 
-  constructor(
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private datasetsListingsApi: DatasetsListingsApiService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private datasetsUiApi: DatasetsUiApiService,
-    private sortingApi: SortingApiService,
-    private labelImportersApi: LabelImportersApiService,
-    private settingsState: SettingsStateService,
-  ) {}
-
   /** Type_id of the active solo-mediaType streamlining, or ``null`` when
    *  off. When non-null, the mediaType form-group is hidden in the
    *  template and ``mediaType`` is locked to this value on init. */
@@ -239,7 +237,7 @@ export class NewDetectorModalComponent implements OnInit {
     }
 
     if (this.seedMediaId != null) {
-      this.materializeSeedFromMediaId(this.seedMediaId, this.seedCropParams ?? undefined);
+      this.materializeSeedFromMediaId(this.seedMediaId, this.seedCropParams() ?? undefined);
     }
   }
 

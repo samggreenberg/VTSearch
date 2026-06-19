@@ -1,13 +1,4 @@
-import {
-  Component,
-  ElementRef,
-  EventEmitter,
-  Input,
-  OnDestroy,
-  OnInit,
-  Output,
-  ViewChild,
-} from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -29,12 +20,16 @@ type ModalView = 'picker' | 'form';
   styleUrl: './label-importer-modal.component.scss',
 })
 export class LabelImporterModalComponent implements OnInit, OnDestroy {
+  private labelImportersApi = inject(LabelImportersApiService);
+  private mediasApi = inject(MediasApiService);
+  private voteState = inject(VoteStateService);
+
   /** When set, labels are imported directly into this trainable model
    *  instead of into the active dataset's vote state. */
-  @Input() targetModelName: string | null = null;
+  readonly targetModelName = input<string | null>(null);
 
-  @Output() closed = new EventEmitter<void>();
-  @Output() imported = new EventEmitter<void>();
+  readonly closed = output<void>();
+  readonly imported = output<void>();
 
   @ViewChild('addGoodInput') addGoodInput!: ElementRef<HTMLInputElement>;
   @ViewChild('addBadInput') addBadInput!: ElementRef<HTMLInputElement>;
@@ -56,17 +51,12 @@ export class LabelImporterModalComponent implements OnInit, OnDestroy {
   addingBad = false;
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(
-    private labelImportersApi: LabelImportersApiService,
-    private mediasApi: MediasApiService,
-    private voteState: VoteStateService,
-  ) {}
-
   get modalTitle(): string {
     if (this.view === 'form' && this.selectedImporter) {
       return this.selectedImporter.display_name || this.selectedImporter.name;
     }
-    return this.targetModelName ? `Import Labels into ${this.targetModelName}` : 'Import Labels';
+    const targetModelName = this.targetModelName();
+    return targetModelName ? `Import Labels into ${targetModelName}` : 'Import Labels';
   }
 
   /** Typed view of the selected importer's plugin fields for the template
@@ -187,9 +177,10 @@ export class LabelImporterModalComponent implements OnInit, OnDestroy {
     this.error = '';
     this.successMessage = '';
 
-    const request$ = this.targetModelName
+    const targetModelName = this.targetModelName();
+    const request$ = targetModelName
       ? this.labelImportersApi.runModelImport(
-          this.targetModelName,
+          targetModelName,
           this.selectedImporter.name,
           this.formValues,
           this.selectedFile ?? undefined,

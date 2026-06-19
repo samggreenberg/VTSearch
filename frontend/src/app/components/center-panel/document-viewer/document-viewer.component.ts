@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, inject } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -10,6 +10,9 @@ import { ActiveContextService } from '../../../services/active-context.service';
   styleUrl: './document-viewer.component.scss',
 })
 export class DocumentViewerComponent implements OnChanges {
+  private activeContext = inject(ActiveContextService);
+  private sanitizer = inject(DomSanitizer);
+
   @Input() media!: Media;
 
   // `<object [data]>` is a RESOURCE_URL sink, so Angular rejects a plain
@@ -19,11 +22,6 @@ export class DocumentViewerComponent implements OnChanges {
   // See ImageViewerComponent.lastMediaId; keep the iframe stable across
   // metadata-enrichment ngOnChanges cycles for the same id.
   private lastMediaId: number | null = null;
-
-  constructor(
-    private activeContext: ActiveContextService,
-    private sanitizer: DomSanitizer,
-  ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media && this.media.id !== this.lastMediaId) {

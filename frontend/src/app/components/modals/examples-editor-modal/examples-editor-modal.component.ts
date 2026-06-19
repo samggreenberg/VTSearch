@@ -1,5 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, Input, OnDestroy, OnInit, inject, output } from '@angular/core';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 
@@ -13,14 +12,16 @@ interface Example {
 @Component({
   selector: 'vt-examples-editor-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent],
+  imports: [ModalComponent],
   templateUrl: './examples-editor-modal.component.html',
   styleUrl: './examples-editor-modal.component.scss',
 })
 export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
+  private detectorsCrudApi = inject(DetectorsCrudApiService);
+
   @Input() modelName = '';
-  @Output() closed = new EventEmitter<void>();
-  @Output() saved = new EventEmitter<void>();
+  readonly closed = output<void>();
+  readonly saved = output<void>();
 
   examples: Example[] = [];
   loading = true;
@@ -28,8 +29,6 @@ export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
   error = '';
   status = '';
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
-
-  constructor(private detectorsCrudApi: DetectorsCrudApiService) {}
 
   ngOnInit(): void {
     if (!this.modelName) {

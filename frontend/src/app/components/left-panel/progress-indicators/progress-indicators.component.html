@@ -6,8 +6,8 @@
       }
       <vt-progress-bar
         [indeterminate]="isIndeterminate"
-        [value]="sortProgress"
-        [max]="sortProgressTotal"
+        [value]="sortProgress()"
+        [max]="sortProgressTotal()"
       />
       <button
         class="btn btn--cancel btn--sm"

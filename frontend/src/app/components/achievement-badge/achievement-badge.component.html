@@ -1,14 +1,14 @@
 <div
   class="achievement-badge"
   [ngClass]="tierClass"
-  [style.width.px]="size"
-  [style.height.px]="size"
-  [attr.aria-label]="iconType + ' badge'">
+  [style.width.px]="size()"
+  [style.height.px]="size()"
+  [attr.aria-label]="iconType() + ' badge'">
   @if (showOuterRing || tierIdx === -1) {
     <svg
       class="achievement-decoration"
-      [attr.width]="size"
-      [attr.height]="size"
+      [attr.width]="size()"
+      [attr.height]="size()"
       viewBox="0 0 100 100"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
@@ -43,6 +43,6 @@
     </svg>
   }
   <span class="achievement-symbol">
-    <vt-icon [type]="iconType" [size]="innerIconSize"></vt-icon>
+    <vt-icon [type]="iconType()" [size]="innerIconSize"></vt-icon>
   </span>
 </div>

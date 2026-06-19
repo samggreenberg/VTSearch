@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnDestroy, Output, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, inject, signal, output } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
@@ -20,8 +20,8 @@ type ModalView = 'picker' | 'form';
   styleUrl: './settings-exporter-modal.component.scss',
 })
 export class SettingsExporterModalComponent implements OnDestroy {
-  @Output() closed = new EventEmitter<void>();
-  @Output() exported = new EventEmitter<void>();
+  readonly closed = output<void>();
+  readonly exported = output<void>();
 
   private readonly settingsIoApi = inject(SettingsIoApiService);
 

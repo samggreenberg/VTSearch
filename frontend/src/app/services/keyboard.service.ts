@@ -1,4 +1,4 @@
-import { Injectable, NgZone, OnDestroy } from '@angular/core';
+import { Injectable, NgZone, OnDestroy, inject } from '@angular/core';
 import { Subject } from 'rxjs';
 
 export type VoteDirection = 'good' | 'bad';
@@ -15,11 +15,11 @@ export interface KeyboardAction {
 
 @Injectable({ providedIn: 'root' })
 export class KeyboardService implements OnDestroy {
+  private zone = inject(NgZone);
+
   readonly action$ = new Subject<KeyboardAction>();
 
   private listener: ((e: KeyboardEvent) => void) | null = null;
-
-  constructor(private zone: NgZone) {}
 
   /** Start listening for keyboard shortcuts on the document. */
   start(): void {

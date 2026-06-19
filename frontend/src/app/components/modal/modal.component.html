@@ -1,16 +1,16 @@
-@if (open) {
+@if (open()) {
 <div
   class="modal-backdrop"
   (click)="onBackdropClick($event)"
   (keydown)="onKeydown($event)"
   role="dialog"
   aria-modal="true"
-  [attr.aria-label]="title"
+  [attr.aria-label]="title()"
   tabindex="-1"
 >
   <div class="modal-content">
     <div class="modal-header">
-      <h2>{{ title }}</h2>
+      <h2>{{ title() }}</h2>
       @if (showCloseButton) {
         <button class="modal-close" (click)="close()" title="Close" aria-label="Close">&times;</button>
       }

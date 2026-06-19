@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, output } from '@angular/core';
 import { ModalComponent } from '../../modal/modal.component';
 import { AchievementsTabComponent } from '../../achievements-tab/achievements-tab.component';
 
@@ -9,7 +9,7 @@ import { AchievementsTabComponent } from '../../achievements-tab/achievements-ta
   templateUrl: './achievements-modal.component.html',
 })
 export class AchievementsModalComponent {
-  @Output() closed = new EventEmitter<void>();
+  readonly closed = output<void>();
 
   close(): void {
     this.closed.emit();

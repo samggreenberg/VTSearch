@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, effect } from '@angular/core';
+import { Component, OnDestroy, OnInit, effect, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -42,8 +42,13 @@ interface SelectionEntry {
   styleUrl: './browse-selection-panel.component.scss',
 })
 export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
+  private selection = inject(BrowseSelectionService);
+  private metadataCache = inject(MediaMetadataCacheService);
+  private activeContext = inject(ActiveContextService);
+  private settingsState = inject(SettingsStateService);
+
   /** Active media type, used to resolve the per-type view-mode + size prefs. */
-  @Input() mediaType = '';
+  readonly mediaType = input('');
 
   /**
    * Whether to offer the verify actions. Only meaningful when browsing a Find
@@ -52,13 +57,13 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
    * leave the unverified set and drop from the browse. The browse view owns the
    * actual mutation + re-projection.
    */
-  @Input() canVerify = false;
+  readonly canVerify = input(false);
 
   /** Emitted when the user marks the selection Verified Good. */
-  @Output() verifyGood = new EventEmitter<void>();
+  readonly verifyGood = output<void>();
 
   /** Emitted when the user marks the selection Verified Bad. */
-  @Output() verifyBad = new EventEmitter<void>();
+  readonly verifyBad = output<void>();
 
   count = 0;
   sortMode: SelectionSortMode = 'time-desc';
@@ -72,12 +77,7 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   private readonly thumbnailFailedUrls = new Set<string>();
   private readonly subs: Subscription[] = [];
 
-  constructor(
-    private selection: BrowseSelectionService,
-    private metadataCache: MediaMetadataCacheService,
-    private activeContext: ActiveContextService,
-    private settingsState: SettingsStateService,
-  ) {
+  constructor() {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
@@ -116,9 +116,10 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   }
 
   private applyViewPrefs(): void {
-    if (!this.mediaType) return;
-    this.viewMode = this.viewModeRightDict[this.mediaType] ?? 'grid';
-    this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[this.mediaType] ?? 'M');
+    const mediaType = this.mediaType();
+    if (!mediaType) return;
+    this.viewMode = this.viewModeRightDict[mediaType] ?? 'grid';
+    this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[mediaType] ?? 'M');
   }
 
   private buildSortedEntries(): SelectionEntry[] {

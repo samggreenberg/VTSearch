@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AchievementsService } from '../../services/achievements.service';
@@ -11,12 +11,10 @@ import { ToastService } from '../../services/toast.service';
   template: '',
 })
 export class AchievementUnlockHostComponent implements OnInit, OnDestroy {
-  private destroy$ = new Subject<void>();
+  private achievements = inject(AchievementsService);
+  private toast = inject(ToastService);
 
-  constructor(
-    private achievements: AchievementsService,
-    private toast: ToastService,
-  ) {}
+  private destroy$ = new Subject<void>();
 
   ngOnInit(): void {
     this.achievements.unlocks.pipe(takeUntil(this.destroy$)).subscribe((p) => {

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, OnInit, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -30,9 +30,15 @@ type MediaPickerView = 'sources' | 'browse-items' | 'file-browser';
   styleUrl: './load-sort-modal.component.scss',
 })
 export class LoadSortModalComponent implements OnInit {
-  @Output() closed = new EventEmitter<void>();
-  @Output() modelSelected = new EventEmitter<string>();
-  @Output() exampleSortStarted = new EventEmitter<unknown>();
+  private sortingApi = inject(SortingApiService);
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private datasetsListingsApi = inject(DatasetsListingsApiService);
+  private datasetsUiApi = inject(DatasetsUiApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+
+  readonly closed = output<void>();
+  readonly modelSelected = output<string>();
+  readonly exampleSortStarted = output<unknown>();
 
   serverMediaFiles: ServerMediaFileEntry[] = [];
   registryModels: DetectorRegistryEntry[] = [];
@@ -62,14 +68,6 @@ export class LoadSortModalComponent implements OnInit {
   pendingFileMediaType = '';
   pendingServerFilename = '';
   pendingOrigin: { origin: Record<string, unknown>; key: string } | null = null;
-
-  constructor(
-    private sortingApi: SortingApiService,
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private datasetsListingsApi: DatasetsListingsApiService,
-    private datasetsUiApi: DatasetsUiApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-  ) {}
 
   ngOnInit(): void {
     this.sortingApi.getServerMediaFiles().subscribe({

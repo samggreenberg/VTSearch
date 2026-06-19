@@ -1,13 +1,13 @@
 <div class="form-group">
   <label
     class="form-label"
-    [for]="mediaTypeFieldId"
+    [for]="mediaTypeFieldId()"
     title="The native media type of the dataset. Other types listed below can be pulled in and converted to this type."
   >Dataset MediaType</label>
   <div class="media-type-dropdown" [class.open]="open">
     <button
       type="button"
-      [id]="mediaTypeFieldId"
+      [id]="mediaTypeFieldId()"
       class="form-select media-type-trigger"
       role="combobox"
       [attr.aria-haspopup]="'listbox'"
@@ -32,7 +32,7 @@
         [id]="listboxId"
         aria-label="Dataset MediaType"
       >
-        @for (opt of mediaTypeOptions; track opt; let i = $index) {
+        @for (opt of mediaTypeOptions(); track opt; let i = $index) {
           <li
             class="media-type-option"
             role="option"

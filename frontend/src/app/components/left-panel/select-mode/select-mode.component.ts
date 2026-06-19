@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, output } from '@angular/core';
 
 import { SelectMode } from '../left-panel.component';
 
@@ -12,7 +12,7 @@ import { SelectMode } from '../left-panel.component';
 export class SelectModeComponent {
   @Input() selectMode: SelectMode = 'top';
 
-  @Output() selectModeChange = new EventEmitter<SelectMode>();
+  readonly selectModeChange = output<SelectMode>();
 
   onChange(mode: SelectMode): void {
     this.selectModeChange.emit(mode);

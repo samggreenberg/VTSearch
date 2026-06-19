@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { Injectable, OnDestroy, inject } from '@angular/core';
 import { BehaviorSubject, Subject, forkJoin, of } from 'rxjs';
 import { catchError, switchMap, takeUntil } from 'rxjs/operators';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.models';
@@ -7,6 +7,9 @@ import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class DatasetStateService implements OnDestroy {
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+
   private readonly datasetsSubject = new BehaviorSubject<DatasetRegistryEntry[]>([]);
   private readonly detectorsSubject = new BehaviorSubject<DetectorRegistryEntry[]>([]);
   private readonly loadingSubject = new BehaviorSubject<boolean>(false);
@@ -32,10 +35,7 @@ export class DatasetStateService implements OnDestroy {
   readonly error$ = this.errorSubject.asObservable();
   readonly loaded$ = this.loadedSubject.asObservable();
 
-  constructor(
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-  ) {
+  constructor() {
     // Single subscription that uses switchMap to cancel in-flight requests
     // when a new refresh is triggered, preventing stale responses from
     // overwriting fresh data. `catchError` keeps the outer pipeline alive
