@@ -1,8 +1,10 @@
 # Zoneless change detection — detailed migration plan
 
-Status: **Phase 0 shipped (test harness); Phase 1.1 + 1.3 + 1.4 shipped
+Status: **Phase 0 shipped (test harness); Phase 1 complete — 1.1 + 1.3 + 1.4
 (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
-signalized); Phase 1.2 and Phases 2–5 not started.** This document
+signalized) and 1.2 (KeyboardService de-zoned + the coupled center-panel state
+signalized, i.e. the center-panel slice of Phase 2.3); the rest of Phase 2 and
+Phases 3–5 not started.** This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
 supersedes the earlier stub. Every count and file:line reference was checked
@@ -418,14 +420,23 @@ Phase 2 conversions. New zoneless staleness canary in
 `progress-events.service.spec.ts` drives an SSE frame through the fake EventSource
 and asserts the rendered DOM repaints with no manual `detectChanges`.
 
-1.2 **`KeyboardService`.** Keep the `runOutsideAngular` keydown listener (it is a
-harmless no-op under zoneless and still avoids per-keystroke churn under zone).
-Drop the 10 `this.zone.run(() => this.action$.next(...))` re-entries — emit
-plainly. The CD trigger moves to the **consumer** (`center-panel`): the
-shortcut-driven state (`isVoting`, `spinningVote`, `swipeClass`, `undoToastText`,
-volume) must be **signals** (this also fixes the Phase-2 center-panel timer
-resets and the Recipe-F effect in one stroke). Optionally expose the latest
-action as a signal instead of a `Subject`.
+1.2 **`KeyboardService`. ✅ DONE.** Kept the `runOutsideAngular` keydown listener
+(harmless no-op under zoneless, still avoids per-keystroke churn under zone) and
+the injected `NgZone` it needs. Dropped all 10
+`this.zone.run(() => this.action$.next(...))` re-entries — `action$` now emits
+plainly (it stays a `Subject`; the consumer composes it, so a signal would have
+bought nothing). The CD trigger moved to the **consumer** (`center-panel`),
+whose shortcut/timer/HTTP-driven template-bound state was signalized:
+`isVoting`, `volume`, `audioPlaying`, `showAnimations`, `showMetadata`,
+`swipeClass`, `spinningVote`, `undoToastText`, `pendingBadConfirm`, and the
+private `labelHintDismissed`. The Recipe-F settings-mirror `effect()` now writes
+those signals (`.set()`) instead of plain fields, fixing the latent
+plain-field-write trap in one stroke. This is the center-panel slice of Phase
+2.3; `image-viewer`/`video-player` remain for the rest of 2.3. New zoneless DOM
+canary `center-panel.zoneless.spec.ts` drives a real `keydown` through the live
+`KeyboardService` listener (an un-bound document callback) and asserts the vote
+renders + the undo toast appears with no manual `detectChanges`; the existing
+contract spec was updated to the signal accessors.
 
 1.3 **`ConnectionStateService`. ✅ DONE.** Converted `statusSubject`/
 `retryingSubject` to signals exposed read-only (`status`/`retrying`, backed by
@@ -574,15 +585,16 @@ A checklist version of the above goes in the PR description for the QA pass.
 
 ### Open follow-ups
 
-- **Phase 1.2 and Phases 2–5 remain.** Shipped so far: Phase 0 (harness) and
-  Phase 1.1 + 1.3 + 1.4 (ProgressEventsService SSE pump + ConnectionStateService
-  + BrowseSelectionService signalized, with their consumers and zoneless canary
-  specs). Still owed in Phase 1: **1.2 `KeyboardService`** (drop the 10
-  `zone.run(() => action$.next(...))` re-entries; the CD trigger moves to the
-  consumer `center-panel`, whose shortcut-driven state must be signalized — this
-  couples with the Phase 2.3 center-panel conversion). Then the component
-  conversions (Phase 2), the prod flip (Phase 3), human browser QA (Phase 4), and
-  cleanup (Phase 5).
+- **Phase 1 complete; Phases 2–5 remain.** Shipped so far: Phase 0 (harness) and
+  all of Phase 1 — 1.1 + 1.3 + 1.4 (ProgressEventsService SSE pump +
+  ConnectionStateService + BrowseSelectionService signalized) and 1.2
+  (KeyboardService de-zoned + the coupled center-panel state signalized), each
+  with its consumers and a zoneless canary spec. Remaining in **Phase 2**: the
+  rest of the component clusters in the suggested order. Note 2.3's center-panel
+  *state* shipped with 1.2, but 2.3 still owes `image-viewer` (window drag/key
+  handlers + shake + its `ResizeObserver` rendered-size writes) and a check that
+  `video-player` is DOM-only. Then the prod flip (Phase 3), human browser QA
+  (Phase 4), and cleanup (Phase 5).
 - **Full consumer specs for the browse cluster.** Phase 1.4 added a service unit
   spec + a signal-driven canary, but `browse-canvas`, `browse-bin-popup`, and
   `browse-selection-panel` still have **no** component specs (they are heavy to
