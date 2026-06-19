@@ -2,27 +2,27 @@
   <div class="panel-left">
     <vt-left-panel
       [medias]="mediaState.mediasSignal()"
-      [sortOrder]="sortState.sortOrder"
-      [threshold]="sortState.threshold"
+      [sortOrder]="sortOrderSig()"
+      [threshold]="thresholdSig()"
       [selectedId]="mediaState.selectedId()"
-      [goodVotes]="voteState.goodVotes"
-      [badVotes]="voteState.badVotes"
-      [learnedSortAvailable]="voteState.learnedSortAvailable"
-      [labelsetGoodCount]="voteState.labelsetGoodCount"
-      [labelsetBadCount]="voteState.labelsetBadCount"
-      [sortMode]="sortState.sortMode"
-      [selectMode]="sortState.selectMode"
-      [inclusion]="sortState.inclusion"
-      [sortBusy]="sortState.sortBusy"
-      [sortStatus]="sortState.sortStatus"
-      [sortProgress]="sortState.sortProgress"
-      [sortProgressTotal]="sortState.sortProgressTotal"
-      [labelingStatus]="labelingStatus"
+      [goodVotes]="goodVotesSig()"
+      [badVotes]="badVotesSig()"
+      [learnedSortAvailable]="learnedSortAvailableSig()"
+      [labelsetGoodCount]="labelsetGoodCountSig()"
+      [labelsetBadCount]="labelsetBadCountSig()"
+      [sortMode]="sortModeSig()"
+      [selectMode]="selectModeSig()"
+      [inclusion]="inclusionSig()"
+      [sortBusy]="sortBusySig()"
+      [sortStatus]="sortStatusSig()"
+      [sortProgress]="sortProgressSig()"
+      [sortProgressTotal]="sortProgressTotalSig()"
+      [labelingStatus]="labelingStatus()"
       [viewMode]="viewModeLeft"
       [gridGoalWidth]="gridGoalWidthLeft"
       [focusMode]="focusModeLeft"
-      [loadSortLabel]="sortState.loadSortLabel"
-      [textQuery]="sortState.textQuery"
+      [loadSortLabel]="loadSortLabelSig()"
+      [textQuery]="textQuerySig()"
       (sortModeChange)="onSortModeChange($event)"
       (selectModeChange)="onSelectModeChange($event)"
       (inclusionChange)="onInclusionChange($event)"
@@ -36,9 +36,9 @@
       (mediaContextRequest)="onMediaContextRequest($event)"
       (indicatorClick)="onIndicatorClick($event)"
       (sortCancel)="onSortCancel()"
-      [datasetName]="datasetName"
-      [autopilotCollapsed]="autopilotCollapsed"
-      [autopilotEnabled]="autopilotEnabled"
+      [datasetName]="datasetName()"
+      [autopilotCollapsed]="autopilotCollapsed()"
+      [autopilotEnabled]="autopilotEnabled()"
       [autopilotDisabled]="autopilotDisabled"
       (autopilotStart)="onAutopilotStart()"
       (autopilotStop)="onAutopilotStop()"
@@ -52,7 +52,7 @@
     vtPanelResize="left"
     [layoutEl]="layoutRef.nativeElement"
     [minWidth]="leftMin"
-    [opposingWidth]="rightWidth"
+    [opposingWidth]="rightWidth()"
     [centerMin]="CENTER_MIN"
     [dividerTotal]="DIVIDER_TOTAL"
     (widthChange)="onLeftWidthChange($event)"
@@ -69,7 +69,7 @@
     vtPanelResize="right"
     [layoutEl]="layoutRef.nativeElement"
     [minWidth]="RIGHT_MIN"
-    [opposingWidth]="leftWidth"
+    [opposingWidth]="leftWidth()"
     [centerMin]="CENTER_MIN"
     [dividerTotal]="DIVIDER_TOTAL"
     (widthChange)="onRightWidthChange($event)"
@@ -79,7 +79,7 @@
     <vt-right-panel
       [medias]="mediaState.mediasSignal()"
       [focusMode]="focusModeRight"
-      [trainableModelName]="trainableModelName"
+      [trainableModelName]="trainableModelName()"
       (mediaSelected)="onMediaSelect($event)"
       (mediaVoted)="onHoverVote($event)"
     />
@@ -104,16 +104,16 @@
   />
 }
 
-@if (cropPending) {
+@if (cropPending(); as crop) {
   <vt-media-crop-modal
-    [file]="cropPending.file"
-    [mediaType]="cropPending.mediaType"
+    [file]="crop.file"
+    [mediaType]="crop.mediaType"
     (confirmed)="onCropConfirmed($event)"
     (cancelled)="onCropCancelled()"
   />
 }
 
-@if (showResortPrompt) {
+@if (showResortPrompt()) {
   <vt-resort-prompt-modal
     [currentExampleType]="resortCurrentType"
     [currentExampleDisplay]="resortCurrentDisplay"

@@ -424,7 +424,7 @@ describe('LabelViewComponent', () => {
       session.mediaExample = 'example.jpg';
       // Keep the panel out of autopilot so we assert the gating getters
       // without firing an example sort that auto-start would kick off.
-      component.autopilotEnabled = false;
+      component.autopilotEnabled.set(false);
       loadNoTextDataset();
       await settleResource();
 
@@ -619,7 +619,7 @@ describe('LabelViewComponent', () => {
       );
     }
 
-    expect(component.showResortPrompt).toBe(false);
+    expect(component.showResortPrompt()).toBe(false);
   });
 
   it('should not show resort prompt after phase transitions past good', () => {
@@ -646,7 +646,7 @@ describe('LabelViewComponent', () => {
 
     // Phase should have transitioned to 'bad', so no resort prompt
     expect(autopilot.state.phase).toBe('bad');
-    expect(component.showResortPrompt).toBe(false);
+    expect(component.showResortPrompt()).toBe(false);
   });
 
   it('should re-select autopilot suggestion on refocus', () => {

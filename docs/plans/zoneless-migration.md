@@ -10,8 +10,11 @@ modals — find/detector/dataset-stats signalized; label-importer signalized +
 moved onto rxResource; settings-importer/exporter + label-exporter mutation-result
 fields signalized); Phase 2.3 shipped (center-panel viewers — image-viewer's
 window drag/key handlers + shake `setTimeout` + `ResizeObserver` rendered-size
-writes signalized; video-player verified DOM-only, no change); the rest of Phase 2
-(2.4–2.9) and Phases 3–5 not started.**
+writes signalized; video-player verified DOM-only, no change); Phase 2.4 shipped
+(label-view — its subscribe/timer/effect-written template state signalized and
+the still-Observable `SortStateService`/`VoteStateService` channels it binds
+bridged into signals via `toSignal`); the rest of Phase 2 (2.5–2.9) and Phases
+3–5 not started.**
 This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
@@ -530,8 +533,33 @@ Suggested order (lightest/most-isolated first to build confidence):
    `image-viewer.zoneless.spec.ts` canary drives a real window `keydown`/`keyup`/
    `blur` (Shift) through the live constructor listener and asserts the
    `.region-mode` crosshair affordance repaints with no manual `detectChanges`.
-4. **`label-view`** (24 subscribes; learned-sort timer): convert reads to
-   `async`/signals; the `setTimeout` learned-sort toggle → signal.
+4. **`label-view`. ✅ DONE (Phase 2.4).** Signalized every template-bound field
+   written from a non-CD-scheduling context: `datasetName`, `labelingStatus`
+   (status-polling timer), `trainableModelName`, `leftWidth`/`rightWidth` (the
+   settings-mirror `effect()` — Recipe F), `autopilotCollapsed`,
+   `autopilotEnabled`, `showResortPrompt`, and `cropPending` (set from a
+   `fetch().then()` continuation — the un-bound microtask path). The two
+   constructor `effect()`s now read only their intended tracked signals and run
+   the rest `untracked`, because `applyPanelPx`/`setAutopilotCollapsed` both read
+   *and* write the width/collapse signals (an `effect` that reads a signal it
+   also writes would loop, and would spuriously revert a manual collapse toggle
+   on stale settings). label-view also binds `SortStateService` (11 reads) and
+   `VoteStateService` (good/bad votes, label counts, derived
+   `learnedSortAvailable`) getters directly in its template; those services stay
+   `BehaviorSubject`-backed (un-signalized, per the per-cluster plan and the
+   center-panel precedent of not signalizing shared services mid-migration), so
+   label-view bridges the channels it binds into local signals via
+   `toSignal(…$, { requireSync: true })` (a `computed` for `learnedSortAvailable`)
+   — the cheapest way to make those reads repaint under zoneless without
+   touching the shared services or the not-yet-migrated find-view/right-panel
+   consumers. The learned-sort `setTimeout` needed no change beyond the bridge:
+   it writes only the private `learnedSortPending` guard and re-fires
+   `onLearnedSort`, whose sortState writes now repaint via the bridge. New
+   `label-view.zoneless.spec.ts` canary drives the `/api/dataset/status`
+   subscribe (an un-bound callback) and asserts the left panel's `.dataset-name`
+   header repaints with no manual `detectChanges`; the existing contract spec was
+   updated to the signal accessors (kept on the default TestBed, mirroring the
+   center-panel/image-viewer split).
 5. **`find-view`** (13; divider drag re-entry → signal widths; two `.then`
    confirm flows already route through HTTP, safe).
 6. **Browse cluster:** `browse-view` (panel-width re-entry → signal; build poller
@@ -629,19 +657,31 @@ A checklist version of the above goes in the PR description for the QA pass.
 
 ### Open follow-ups
 
-- **Phase 1 complete; Phases 2.1 + 2.2 + 2.3 shipped; Phases 2.4–5 remain.**
+- **Phase 1 complete; Phases 2.1 + 2.2 + 2.3 + 2.4 shipped; Phases 2.5–5 remain.**
   Shipped so far: Phase 0 (harness); all of Phase 1 — 1.1 + 1.3 + 1.4
   (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
   signalized) and 1.2 (KeyboardService de-zoned + the coupled center-panel state
   signalized); Phase 2.1 (leaf utility components — toast-container, clipboard-copy,
   voting-overlay, dialog-host + VtDialogService, browse-legend); **Phase 2.2**
-  (stats / picker modals); and **Phase 2.3** (center-panel viewers — image-viewer's
+  (stats / picker modals); **Phase 2.3** (center-panel viewers — image-viewer's
   window drag/key handlers + shake `setTimeout` + `ResizeObserver` rendered-size
-  writes signalized; video-player verified DOM-only, no change), each with its
-  consumers and a zoneless canary spec. Remaining in **Phase 2**: clusters 2.4–2.9
-  in the suggested order (next up: 2.4 `label-view` — 24 subscribes + the
-  learned-sort `setTimeout` toggle). Then the prod flip (Phase 3), human browser QA
-  (Phase 4), and cleanup (Phase 5).
+  writes signalized; video-player verified DOM-only, no change); and **Phase 2.4**
+  (`label-view` — own subscribe/timer/effect-written fields signalized; the bound
+  `SortStateService`/`VoteStateService` reads bridged via `toSignal`), each with
+  its consumers and a zoneless canary spec. Remaining in **Phase 2**: clusters
+  2.5–2.9 in the suggested order (next up: 2.5 `find-view` — 13 subscribes; divider
+  drag re-entry → signal widths; two `.then` confirm flows already route through
+  HTTP). Then the prod flip (Phase 3), human browser QA (Phase 4), and cleanup
+  (Phase 5).
+- **Shared `SortStateService`/`VoteStateService` are still `BehaviorSubject`-backed.**
+  Phase 2.4 bridged them *per-consumer* in label-view rather than signalizing the
+  services, to keep the cluster shippable (signalizing would force-update
+  find-view, right-panel, center-panel, context-pulldown, label-importer at once).
+  When the later clusters that bind these services land (2.5 find-view binds
+  sortState in its template; 2.8 right-panel binds voteState), either bridge them
+  the same way or, once all consumers are migrated, signalize the two services and
+  drop the per-consumer bridges. Track this as the natural cleanup at the end of
+  Phase 2.
 - **What Phase 2.2 covered.** `find-stats`/`detector-stats`/`dataset-stats`:
   `loading`/`error`/`stats` plain fields → signals (templates read them via
   `@else if (stats(); as stats)` so the bodies were untouched); the stat-derived
