@@ -17,7 +17,8 @@ from pathlib import Path
 import pytest
 
 # Tests below hit the Angular SPA shell or its bundle artefacts
-# (main.js / polyfills.js / styles.css / index.html), which only exist
+# (main.js / styles.css / index.html; the app is zoneless, so there is no
+# polyfills.js bundle), which only exist
 # after `npm run build:prod` has populated `static/`.  `./run-tests.sh`
 # builds the bundle as part of the core / full-suite path, so the
 # normal flow is already covered.  For plain `pytest` invocations the
@@ -88,10 +89,6 @@ class TestIndexRoute:
         resp = client.get("/")
         assert b"main.js" in resp.data
 
-    def test_index_contains_polyfills_reference(self, client):
-        resp = client.get("/")
-        assert b"polyfills.js" in resp.data
-
     def test_index_contains_doctype(self, client):
         resp = client.get("/")
         assert resp.data.strip().startswith(b"<!DOCTYPE html>") or resp.data.strip().startswith(b"<!doctype html>")
@@ -123,11 +120,6 @@ class TestStaticFiles:
         assert resp.status_code == 200
         assert "javascript" in resp.content_type
 
-    def test_polyfills_js_accessible(self, client):
-        resp = client.get("/static/polyfills.js")
-        assert resp.status_code == 200
-        assert "javascript" in resp.content_type
-
     def test_styles_css_accessible(self, client):
         resp = client.get("/static/styles.css")
         assert resp.status_code == 200
@@ -149,17 +141,13 @@ class TestStaticFiles:
 class TestRootStaticFiles:
     """Static assets should also be accessible at root paths (no /static/ prefix).
 
-    The Angular build uses <base href="/"> so the browser requests main.js,
-    polyfills.js, and styles.css at the root.
+    The Angular build uses <base href="/"> so the browser requests main.js
+    and styles.css at the root. (The app is zoneless, so there is no
+    polyfills.js bundle.)
     """
 
     def test_main_js_at_root(self, client):
         resp = client.get("/main.js")
-        assert resp.status_code == 200
-        assert "javascript" in resp.content_type
-
-    def test_polyfills_js_at_root(self, client):
-        resp = client.get("/polyfills.js")
         assert resp.status_code == 200
         assert "javascript" in resp.content_type
 
