@@ -128,7 +128,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     """
     from vtsearch.auth import get_current_user
     from vtscore.concurrency.progress import clear_thread_progress, set_thread_progress
-    from vtsearch.state import build_diversity_tree_for_context
+    from vtsearch.state import build_diversity_tree_for_context, restore_diversity_tree_from_cache
 
     entry = _reg_get(dataset_id)
     if entry is None:
@@ -193,7 +193,9 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                     )
                 )
                 try:
-                    load_dataset_from_pickle(Path(pkl_path), ctx.medias, on_progress=_pickle_progress)
+                    cached_diversity_tree = load_dataset_from_pickle(
+                        Path(pkl_path), ctx.medias, on_progress=_pickle_progress
+                    )
                 finally:
                     clear_thread_progress()
 
@@ -225,8 +227,13 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                         total_steps=_LOAD_STEPS,
                     )
 
-                _diversity_progress(0, 0)
-                build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
+                # Reuse the diversity tree cached in the pickle when its vector
+                # set still matches the (post-dedup) medias; only rebuild the
+                # hierarchical k-means from scratch when there is no usable
+                # cache (older pickles, or a media set that shifted on load).
+                if not restore_diversity_tree_from_cache(ctx, cached_diversity_tree):
+                    _diversity_progress(0, 0)
+                    build_diversity_tree_for_context(ctx, on_progress=_diversity_progress)
                 _reg_add_loaded(dataset_id)
                 # Update item count and dupe count in case they changed
                 num_dupes = sum(
