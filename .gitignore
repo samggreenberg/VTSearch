@@ -54,3 +54,6 @@ model_cache/*
 # Per-user Claude Code settings overlay; holds secrets like HF_TOKEN.
 # Must never be committed.
 .claude/settings.local.json
+
+# Spike / experiment scratch (codebook fits, ROxford caches, logs)
+scratch/

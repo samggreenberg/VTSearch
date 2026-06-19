@@ -863,6 +863,119 @@ class TestLoadDemoSourcePlaces365:
         assert len(clips) == 3
 
 
+def _make_roxford_images_tgz(tmp_path: Path) -> Path:
+    """Create a minimal Oxford Buildings tgz of flat, landmark-prefixed JPEGs."""
+    tgz_path = tmp_path / "oxbuild_images-v1.tgz"
+    staging = tmp_path / "roxford_staging"
+    staging.mkdir()
+    for stem in ("all_souls_000013", "all_souls_000026", "radcliffe_camera_000158", "oxford_002124"):
+        (staging / f"{stem}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+    # The real tarball stores files flat (no top-level directory), so add each
+    # member at the archive root.
+    with tarfile.open(tgz_path, "w:gz") as tf:
+        for p in sorted(staging.glob("*.jpg")):
+            tf.add(p, arcname=p.name)
+    return tgz_path
+
+
+class TestDownloadRoxford5k:
+    def test_returns_extract_directory_with_images_and_gnd(self, tmp_path):
+        """download_roxford5k returns roxford5k/ with a flat jpg/ dir and the gnd pkl."""
+        from vtscore.datasets import downloader as dl_module
+
+        tgz_path = _make_roxford_images_tgz(tmp_path)
+        gnd_bytes = b"\x80\x04}\x94."  # arbitrary non-empty payload; not parsed here
+
+        def fake_download(url, dest, size, cb):
+            import shutil
+
+            if url.endswith(".pkl"):
+                Path(dest).write_bytes(gnd_bytes)
+            else:
+                shutil.copy(str(tgz_path), str(dest))
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(dl_module.core, "download_file_with_progress", fake_download),
+        ):
+            result = dl_module.download_roxford5k(on_progress=lambda *a: None)
+
+        assert result.name == "roxford5k"
+        assert (result / "jpg").is_dir()
+        assert (result / "jpg" / "all_souls_000013.jpg").exists()
+        assert (result / "gnd_roxford5k.pkl").read_bytes() == gnd_bytes
+
+    def test_cached_extraction_skips_download(self, tmp_path):
+        """If jpg/ and the gnd pkl already exist, no download is triggered."""
+        from vtscore.datasets import downloader as dl_module
+
+        extract_dir = tmp_path / "roxford5k"
+        jpg_dir = extract_dir / "jpg"
+        jpg_dir.mkdir(parents=True)
+        (jpg_dir / "all_souls_000013.jpg").write_bytes(b"\xff\xd8")
+        (extract_dir / "gnd_roxford5k.pkl").write_bytes(b"gnd")
+
+        download_called = []
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "IMAGE_DIR", tmp_path / "images"),
+            patch.object(
+                dl_module,
+                "download_file_with_progress",
+                lambda *a, **kw: download_called.append(True),
+            ),
+        ):
+            result = dl_module.download_roxford5k(on_progress=lambda *a: None)
+
+        assert not download_called
+        assert result.exists()
+
+
+class TestLoadDemoSourceRoxford:
+    """ImageMediaType.load_demo_source with source='roxford5k'."""
+
+    def _make_mock_embedder(self):
+        mock_emb = MagicMock()
+        mock_emb.name = "sift_vlad"
+        mock_emb.media_type_id = "image"
+        mock_emb._model = True
+        mock_emb.embed_media = MagicMock(return_value=np.zeros(8192, dtype=np.float32))
+        return mock_emb
+
+    def test_buckets_images_by_landmark_prefix(self, tmp_path):
+        """Filenames map to their landmark category; non-landmarks fall into 'other'."""
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.media.image.media_type import ImageMediaType
+
+        roxford_dir = tmp_path / "roxford5k"
+        jpg_dir = roxford_dir / "jpg"
+        jpg_dir.mkdir(parents=True)
+        for stem in ("all_souls_000013", "radcliffe_camera_000158", "oxford_002124", "trinity_000001"):
+            (jpg_dir / f"{stem}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
+
+        mt = ImageMediaType()
+        mock_emb = self._make_mock_embedder()
+        clips: dict = {}
+
+        with patch.object(dl_module, "download_roxford5k", return_value=roxford_dir):
+            mt.load_demo_source(
+                source="roxford5k",
+                categories=["all_souls", "radcliffe_camera", "other"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+            )
+
+        categories_seen = {c["category"] for c in clips.values()}
+        # all_souls + radcliffe_camera landmarks, plus oxford/trinity → "other".
+        assert categories_seen == {"all_souls", "radcliffe_camera", "other"}
+        assert len(clips) == 4
+
+
 class TestPlaces365CategoriesList:
     """The hardcoded ``PLACES365_CATEGORIES`` matches the upstream label space."""
 

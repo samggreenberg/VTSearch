@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { CenterPanelComponent } from './center-panel.component';
-import { Media } from '../../models/api.models';
+import { EmbedderInfo, Media } from '../../models/api.models';
 import { RegionBox } from './image-viewer/image-viewer.component';
 
 describe('CenterPanelComponent', () => {
@@ -313,6 +313,66 @@ describe('CenterPanelComponent', () => {
       const req = httpMock.expectOne('/api/medias/1/vote');
       expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
       req.flush({ state: 'good', click_time: 1 });
+    });
+  });
+
+  /**
+   * Structural-embedder plan: the matched-region overlay rides patch's
+   * `best_region` machinery, so the Highlight toggle must show for *both*
+   * patch-region and structural (geometric-verification) embedders — structural
+   * embedders emit the RANSAC inlier box as `best_region` but leave
+   * `supports_patch_regions` false. The marquee copy also nudges toward boxing
+   * the pattern on structural datasets (the box defines the template).
+   */
+  describe('region-overlay capability + structural marquee copy', () => {
+    const imageMedia: Media = { ...mockMedia, media_type: 'image', filename: 'pic.png', embedder: 'enc' };
+
+    function withEmbedders(infos: EmbedderInfo[]): void {
+      (component as unknown as { embedderInfos: EmbedderInfo[] }).embedderInfos = infos;
+    }
+
+    function info(over: Partial<EmbedderInfo>): EmbedderInfo {
+      return { name: 'enc', media_type_id: 'image', ...over };
+    }
+
+    it('hides the overlay toggle when the embedder is single-vector (neither capability)', () => {
+      component.media = imageMedia;
+      withEmbedders([info({})]);
+      expect(component.regionOverlayCapable).toBe(false);
+    });
+
+    it('shows the overlay toggle for patch-region embedders', () => {
+      component.media = imageMedia;
+      withEmbedders([info({ supports_patch_regions: true })]);
+      expect(component.regionOverlayCapable).toBe(true);
+    });
+
+    it('shows the overlay toggle for structural embedders (geometric verification)', () => {
+      component.media = imageMedia;
+      withEmbedders([info({ supports_geometric_verification: true })]);
+      expect(component.regionOverlayCapable).toBe(true);
+    });
+
+    it('defaults to no overlay when the embedder is unknown / not yet loaded', () => {
+      component.media = imageMedia;
+      withEmbedders([]);
+      expect(component.regionOverlayCapable).toBe(false);
+    });
+
+    it('nudges marquee copy toward boxing the pattern on structural datasets', () => {
+      component.media = imageMedia;
+      withEmbedders([info({ supports_geometric_verification: true })]);
+      expect(component.structuralDataset).toBe(true);
+      expect(component.marqueeTitle).toContain('box the pattern you want to match');
+      expect(component.marqueeAriaLabel).toBe('Marquee: box the pattern to match');
+    });
+
+    it('keeps generic marquee copy on non-structural datasets', () => {
+      component.media = imageMedia;
+      withEmbedders([info({ supports_patch_regions: true })]);
+      expect(component.structuralDataset).toBe(false);
+      expect(component.marqueeTitle).toContain('draw a region');
+      expect(component.marqueeAriaLabel).toBe('Marquee: draw region');
     });
   });
 });

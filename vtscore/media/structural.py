@@ -450,7 +450,10 @@ class SiftMatcher:
             confidence=0.99,
             refineIters=10,
         )
-        if model is None or inlier_mask is None:
+        if model is None or inlier_mask is None or not np.isfinite(model).all():
+            # RANSAC can return a non-finite (degenerate) model; treat it as no
+            # fit rather than letting NaNs flow into the scale/determinant maths
+            # (which raises numpy "invalid value" warnings and yields garbage stats).
             return MatchStats(tentative_count=tentative)
 
         mask = inlier_mask.ravel().astype(bool)
