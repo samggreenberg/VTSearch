@@ -58,9 +58,10 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       >,
     };
     const detectorsStub: Partial<DetectorsRegistryApiService> = {
-      releasePositivesBrowse: () => of(undefined) as ReturnType<
-        DetectorsRegistryApiService['releasePositivesBrowse']
-      >,
+      releasePositivesBrowse: () =>
+        of(undefined) as unknown as ReturnType<
+          DetectorsRegistryApiService['releasePositivesBrowse']
+        >,
     };
     const settingsStub: Partial<SettingsStateService> = {
       settingsSignal: signal(null) as SettingsStateService['settingsSignal'],

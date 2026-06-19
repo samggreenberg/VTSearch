@@ -19,9 +19,16 @@ its own subscribe/effect-written state + an `unverifiedSortOrder` computed, and
 binding of those two services repaints under zoneless with no per-consumer
 bridges; this also migrated right-panel's vote piles → `computed`s,
 center-panel's `goodVotes$`/`badVotes$` subscribes → an `effect`, and dropped
-label-view's `toSignal` bridges); the rest of Phase 2 (2.6–2.9; note 2.8
-right-panel's `LabelsetStateService`/settings mirror still remains) and Phases
-3–5 not started.**
+label-view's `toSignal` bridges); Phase 2.6 shipped (browse cluster —
+browse-view signalized its 13 async/poller/effect-written template fields +
+dropped the divider-drag `ngZone.run`; browse-hover-preview signalized
+`textContent` written from the paragraph `fetch().then()`; browse-selection-panel
+signalized `count`/`viewMode`/`gridGoalWidth`/`sortedEntries` written from the
+selection + settings effects and the metadata `version$` subscribe — fixing a
+latent effect-into-plain-field staleness bug; browse-canvas/-minimap/-bin-popup
+verified safe as-is — canvas-only or already `markForCheck`/`@HostListener`
+disciplined); the rest of Phase 2 (2.7–2.9; note 2.8 right-panel's
+`LabelsetStateService`/settings mirror still remains) and Phases 3–5 not started.**
 This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
@@ -580,12 +587,30 @@ Suggested order (lightest/most-isolated first to build confidence):
    template churn. New `find-view.zoneless.spec.ts` canary drives the
    `/api/dataset/status` subscribe AND a `SortStateService` setter and asserts the
    DOM repaints with no manual `detectChanges`.
-6. **Browse cluster:** `browse-view` (panel-width re-entry → signal; build poller
-   → signal/markForCheck), `browse-canvas` (emits via Recipe D; canvas rAF
-   stays), `browse-minimap` (resize-handle listener → signal; nav rAF stays),
-   `browse-bin-popup`/`browse-selection-panel` (already markForCheck; verify
-   against signalized selection), `browse-hover-preview` (fetch `.then` →
-   signal/markForCheck).
+6. **Browse cluster. ✅ DONE (Phase 2.6).** `browse-view` signalized its 13
+   template-bound fields written from async subscribes / the build poller / the
+   settings `effect()` (`status`, `meta`, `mediaType`, build progress/total/
+   message, `errorMessage`, `panelWidth`, `colormap`, `thumbnailBorder`,
+   `hexScaleIndex`, `binShape`, `datasetName`); the divider-drag `ngZone.run`
+   was dropped (panelWidth is a signal — its `.set()` schedules CD from the
+   out-of-zone mousemove listener under both zoned and zoneless, mirroring the
+   Phase 1.1 SSE-pump precedent). `browse-hover-preview` signalized `textContent`
+   (written from the paragraph `fetch().then()` microtask). `browse-selection-panel`
+   signalized `count`/`viewMode`/`gridGoalWidth`/`sortedEntries` — these were
+   written from the selection-refresh + settings `effect()`s and the metadata
+   `version$` subscribe, and the effect-into-plain-field writes were a **latent
+   staleness bug** (Recipe F). `browse-canvas`, `browse-minimap`, and
+   `browse-bin-popup` were verified zoneless-safe **as-is** and left unchanged:
+   browse-canvas has no template-bound plain fields (its `ngZone.run`-wrapped
+   output emits / `selection.*` calls are harmless no-ops under zoneless and
+   load-bearing under the still-zoned prod, so they stay until Phase 5);
+   browse-minimap's `width`/`height` feed only the canvas (not template-bound);
+   browse-bin-popup is already `markForCheck`-disciplined and its drag is on
+   `@HostListener` (a bound host listener, on the zoneless notification path).
+   New zoneless canaries: `browse-selection-panel.zoneless.spec.ts` (selection
+   signal bump + metadata `version$` emit), `browse-hover-preview.zoneless.spec.ts`
+   (async fetch resolves), `browse-view.zoneless.spec.ts` (projection-load
+   subscribe errors → error-state repaint).
 7. **`left-panel` + `media-list`:** `media-list`'s `zone.run(() =>
    cdr.detectChanges())` (line ~401) → drop the `run`, keep `markForCheck()`
    (it's already OnPush-style); `panel-resize.directive` emits → signal/markForCheck.

@@ -22,9 +22,9 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
   let resolveFetch: (body: unknown) => void;
   let originalFetch: typeof globalThis.fetch;
 
-  function hoverEvent(repId: number): HexHoverEvent {
+  function hoverEvent(mediaId: number): HexHoverEvent {
     return {
-      cell: { q: 0, r: 0, cx: 0, cy: 0, count: 1, rep_id: repId },
+      cell: { q: 0, r: 0, cx: 0, cy: 0, count: 1, rep_id: mediaId },
       screenX: 100,
       screenY: 100,
     };
