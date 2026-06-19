@@ -1,4 +1,4 @@
-@if (showHint) {
+@if (showHint()) {
   <div class="vote-hint" role="status" aria-live="polite">
     Use &larr; / &rarr; or click. Autopilot will find the next question.
   </div>
@@ -6,8 +6,8 @@
 <div class="vote-buttons">
   <button
     class="btn-bad"
-    [class.voted]="isBad"
-    [class.vote-flash]="badFlash"
+    [class.voted]="isBad()"
+    [class.vote-flash]="badFlash()"
     (click)="onVoteBad($event)"
     title="Mark this media as a Bad example."
   >
@@ -16,8 +16,8 @@
   </button>
   <button
     class="btn-good"
-    [class.voted]="isGood"
-    [class.vote-flash]="goodFlash"
+    [class.voted]="isGood()"
+    [class.vote-flash]="goodFlash()"
     (click)="onVoteGood($event)"
     title="Mark this media as a Good example."
   >

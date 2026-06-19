@@ -1,5 +1,4 @@
-import { Injectable, ComponentRef, ApplicationRef, createComponent, EnvironmentInjector } from '@angular/core';
-import { ModalComponent } from '../components/modal/modal.component';
+import { Injectable, signal } from '@angular/core';
 
 export type DialogType = 'info' | 'warning' | 'error' | 'success';
 
@@ -18,16 +17,19 @@ interface DialogButton {
 @Injectable({ providedIn: 'root' })
 export class VtDialogService {
   private activeResolve: ((value: unknown) => void) | null = null;
-  private modalRef: ComponentRef<ModalComponent> | null = null;
 
-  // State for the current dialog, consumed by a dialog host component.
-  dialogOpen = false;
-  dialogTitle = '';
-  dialogMessage = '';
-  dialogType: DialogType = 'info';
-  dialogShowInput = false;
-  dialogInputValue = '';
-  dialogButtons: DialogButton[] = [];
+  // State for the current dialog, consumed by the dialog host component. These
+  // are signals so a `show()` invoked from a non-event callback (e.g. a `.then()`
+  // continuation, as in find-view's rename-after-prompt) still schedules change
+  // detection and the dialog actually appears under zoneless. `dialogInputValue`
+  // is written by the host's `[(ngModel)]` (via `.set()` in the template).
+  readonly dialogOpen = signal(false);
+  readonly dialogTitle = signal('');
+  readonly dialogMessage = signal('');
+  readonly dialogType = signal<DialogType>('info');
+  readonly dialogShowInput = signal(false);
+  readonly dialogInputValue = signal('');
+  readonly dialogButtons = signal<DialogButton[]>([]);
 
   private static readonly ICON_TYPES: Record<DialogType, string> = {
     warning: 'warning',
@@ -37,7 +39,7 @@ export class VtDialogService {
   };
 
   getIconType(): string {
-    return VtDialogService.ICON_TYPES[this.dialogType] || VtDialogService.ICON_TYPES.info;
+    return VtDialogService.ICON_TYPES[this.dialogType()] || VtDialogService.ICON_TYPES.info;
   }
 
   confirm(message: string, type: DialogType = 'warning'): Promise<boolean> {
@@ -89,10 +91,10 @@ export class VtDialogService {
   /** Resolve the current dialog with a value. Called by dialog host component. */
   resolve(value: unknown): void {
     if (this.activeResolve) {
-      const resolvedValue = value === '__input__' ? this.dialogInputValue : value;
+      const resolvedValue = value === '__input__' ? this.dialogInputValue() : value;
       this.activeResolve(resolvedValue);
       this.activeResolve = null;
-      this.dialogOpen = false;
+      this.dialogOpen.set(false);
     }
   }
 
@@ -105,13 +107,13 @@ export class VtDialogService {
   }): Promise<unknown> {
     return new Promise(resolve => {
       this.activeResolve = resolve;
-      this.dialogTitle = '';
-      this.dialogMessage = config.message;
-      this.dialogType = config.type;
-      this.dialogShowInput = config.showInput;
-      this.dialogInputValue = config.inputDefault || '';
-      this.dialogButtons = config.buttons;
-      this.dialogOpen = true;
+      this.dialogTitle.set('');
+      this.dialogMessage.set(config.message);
+      this.dialogType.set(config.type);
+      this.dialogShowInput.set(config.showInput);
+      this.dialogInputValue.set(config.inputDefault || '');
+      this.dialogButtons.set(config.buttons);
+      this.dialogOpen.set(true);
     });
   }
 }

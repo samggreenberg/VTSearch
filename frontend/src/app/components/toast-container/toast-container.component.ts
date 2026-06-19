@@ -1,39 +1,32 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, inject, signal } from '@angular/core';
 
-import { Subscription } from 'rxjs';
+import { AsyncPipe } from '@angular/common';
 import { Toast, ToastService } from '../../services/toast.service';
 
 /**
- * Stacked toast renderer mounted once in ``AppComponent``. Subscribes
- * to ``ToastService.toasts$`` and renders each one. Toasts with a
- * rich ``errorContext`` get the expandable Details + Copy debug info
- * actions (preserves the old global-error-banner UX).
+ * Stacked toast renderer mounted once in ``AppComponent``. Binds
+ * ``ToastService.toasts$`` through the ``async`` pipe and renders each one.
+ * Toasts with a rich ``errorContext`` get the expandable Details + Copy debug
+ * info actions (preserves the old global-error-banner UX).
  */
 @Component({
   selector: 'vt-toast-container',
   standalone: true,
-  imports: [],
+  imports: [AsyncPipe],
   templateUrl: './toast-container.component.html',
   styleUrl: './toast-container.component.scss',
 })
-export class ToastContainerComponent implements OnInit, OnDestroy {
-  private toastService = inject(ToastService);
+export class ToastContainerComponent implements OnDestroy {
+  protected toastService = inject(ToastService);
 
-  toasts: Toast[] = [];
   expandedId: number | null = null;
-  copiedId: number | null = null;
+  /** Signal so the ``setTimeout`` reset in {@link markCopied} repaints the
+   *  "Copied!" label back to its default under zoneless change detection. */
+  readonly copiedId = signal<number | null>(null);
 
-  private sub?: Subscription;
   private copiedTimer?: ReturnType<typeof setTimeout>;
 
-  ngOnInit(): void {
-    this.sub = this.toastService.toasts$.subscribe((toasts) => {
-      this.toasts = toasts;
-    });
-  }
-
   ngOnDestroy(): void {
-    this.sub?.unsubscribe();
     if (this.copiedTimer) clearTimeout(this.copiedTimer);
   }
 
@@ -92,10 +85,10 @@ export class ToastContainerComponent implements OnInit, OnDestroy {
   }
 
   private markCopied(id: number): void {
-    this.copiedId = id;
+    this.copiedId.set(id);
     if (this.copiedTimer) clearTimeout(this.copiedTimer);
     this.copiedTimer = setTimeout(() => {
-      this.copiedId = null;
+      this.copiedId.set(null);
     }, 2000);
   }
 }
