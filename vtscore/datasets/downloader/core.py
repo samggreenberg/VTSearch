@@ -78,6 +78,13 @@ PLACES365_LABELS_FILELIST_SIZE_MB = 65
 UCSF_IDL_API_URL = "https://metadata.idl.ucsf.edu/solr/ltdl3/query"
 UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 
+# Revisited Oxford Buildings (ROxford5k): the canonical instance-retrieval
+# benchmark and the structural embedder's demo dataset.  The 5063-image set is
+# the original Oxford Buildings tarball (the "revisited" protocol reuses the same
+# images with cleaned-up, ground-truth annotations shipped in a separate pickle).
+ROXFORD_IMAGES_URL = "https://thor.robots.ox.ac.uk/oxbuildings/oxbuild_images-v1.tgz"
+ROXFORD_GND_URL = "https://cmp.felk.cvut.cz/revisitop/data/datasets/roxford5k/gnd_roxford5k.pkl"
+
 # HMDB51
 HMDB51_URL = "http://serre-lab.clps.brown.edu/wp-content/uploads/2013/10/hmdb51_org.rar"
 
@@ -110,6 +117,7 @@ EUROSAT_DOWNLOAD_SIZE_MB = 90
 STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
 PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
+ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
 HMDB51_DOWNLOAD_SIZE_MB = 2000
 UCF101_FULL_DOWNLOAD_SIZE_MB = 6960
 KTH_DOWNLOAD_SIZE_MB = 1150

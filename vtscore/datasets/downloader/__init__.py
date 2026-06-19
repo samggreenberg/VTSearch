@@ -71,6 +71,9 @@ from vtscore.datasets.downloader.core import (
     PLACES365_LABELS_FILELIST_SIZE_MB,
     PLACES365_LABELS_FILELIST_URL,
     PLACES365_URL,
+    ROXFORD_GND_URL,
+    ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
+    ROXFORD_IMAGES_URL,
     SAMPLE_VIDEOS_URL,
     SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
     SPEECH_COMMANDS_V2_URL,
@@ -111,6 +114,7 @@ from vtscore.datasets.downloader.images import (
     download_food101,
     download_oxford_flowers,
     download_places365,
+    download_roxford5k,
     download_stanford_dogs,
 )
 
@@ -196,6 +200,9 @@ __all__ = [
     "PLACES365_LABELS_FILELIST_SIZE_MB",
     "PLACES365_LABELS_FILELIST_URL",
     "PLACES365_URL",
+    "ROXFORD_GND_URL",
+    "ROXFORD_IMAGES_DOWNLOAD_SIZE_MB",
+    "ROXFORD_IMAGES_URL",
     "ProgressCallback",
     "SAMPLE_VIDEOS_URL",
     "SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB",
@@ -226,6 +233,7 @@ __all__ = [
     "download_food101",
     "download_oxford_flowers",
     "download_places365",
+    "download_roxford5k",
     "download_stanford_dogs",
     # Video
     "download_hmdb51",

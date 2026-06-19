@@ -336,6 +336,55 @@ def download_stanford_dogs(on_progress: Optional[ProgressCallback] = None) -> Pa
     return images_dir
 
 
+def download_roxford5k(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the Revisited Oxford Buildings (ROxford5k) dataset.
+
+    Downloads the 5063-image Oxford Buildings tarball from the Oxford VGG mirror
+    into a flat ``jpg/`` directory, plus the small "revisited" ground-truth
+    pickle (``gnd_roxford5k.pkl``) that carries the cleaned-up query bounding
+    boxes and easy/hard/junk relevance lists.  Both are skipped if already
+    present.  The image archive is deleted after extraction to reclaim disk
+    space.
+
+    This is the structural embedder's instance-retrieval demo: the same building
+    photographed from different viewpoints is a single "instance", which a
+    structural (SIFT/VLAD) search can match but a semantic embedder cannot.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``roxford5k/`` directory containing ``jpg/`` (the flat image
+        folder) and ``gnd_roxford5k.pkl`` (the ground-truth file).
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+
+    extract_dir = _core.DATA_DIR / "roxford5k"
+    jpg_dir = extract_dir / "jpg"
+    _core._download_and_extract(
+        url=_core.ROXFORD_IMAGES_URL,
+        archive_name="oxbuild_images-v1.tgz",
+        extract_to=jpg_dir,
+        check_path=jpg_dir,
+        download_size_mb=_core.ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
+        dataset_name="ROxford5k",
+        on_progress=on_progress,
+    )
+
+    # Pull the (small) revisited ground-truth pickle alongside the images.
+    gnd_path = extract_dir / "gnd_roxford5k.pkl"
+    if not gnd_path.exists():
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        on_progress("downloading", "Downloading ROxford5k ground truth...", 0, 0)
+        _core.download_file_with_progress(_core.ROXFORD_GND_URL, gnd_path, 1024 * 1024, on_progress)
+
+    return extract_dir
+
+
 def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
     """Download and extract the Places365 validation set.
 
