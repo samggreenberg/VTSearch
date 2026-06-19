@@ -31,13 +31,22 @@ from vtscore.media.structural import (
 
 
 def _textured_image(seed: int = 0, size: int = 200) -> np.ndarray:
-    """A deterministic, SIFT-friendly grayscale image (noise + drawn shapes)."""
+    """A deterministic, SIFT-friendly grayscale image (noise + drawn shapes).
+
+    The drawn shapes are placed at *seed-dependent* positions so two different
+    seeds are genuinely unrelated images (no shared structure to spuriously
+    geometrically verify), while a given seed always reproduces the same image.
+    """
     rng = np.random.default_rng(seed)
     img = (rng.random((size, size)) * 255).astype(np.uint8)
     img = cv2.GaussianBlur(img, (3, 3), 0)
-    cv2.rectangle(img, (50, 50), (120, 140), 255, 3)
-    cv2.circle(img, (90, 90), 30, 0, 2)
-    cv2.line(img, (20, 160), (180, 40), 200, 2)
+    lo, hi = size // 6, size - size // 6
+    x0, y0, x1, y1 = sorted(rng.integers(lo, hi, size=2)) + sorted(rng.integers(lo, hi, size=2))
+    cv2.rectangle(img, (int(x0), int(x1)), (int(y0), int(y1)), 255, 3)
+    cx, cy = rng.integers(lo, hi, size=2)
+    cv2.circle(img, (int(cx), int(cy)), int(rng.integers(15, 35)), 0, 2)
+    p = rng.integers(10, size - 10, size=4)
+    cv2.line(img, (int(p[0]), int(p[1])), (int(p[2]), int(p[3])), 200, 2)
     return img
 
 

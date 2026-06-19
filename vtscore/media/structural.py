@@ -342,6 +342,11 @@ _RANSAC_REPROJ_THRESHOLD = 0.02
 # Plausible-scale window for the fitted similarity model.
 _MIN_SANE_SCALE = 0.1
 _MAX_SANE_SCALE = 10.0
+# Minimum inlier support for a model to count as plausible.  A similarity
+# transform is fit from a 2-point minimal sample, so a 2-inlier fit has *zero*
+# redundancy and is trivially consistent; requiring more guards against random
+# descriptor coincidences between unrelated images declaring a spurious match.
+_MIN_MODEL_INLIERS = 4
 
 
 class SiftMatcher:
@@ -454,7 +459,7 @@ class SiftMatcher:
         # but keep the determinant-sign check so a future full-affine backend that
         # reuses this code path is covered.
         reflection = bool(np.linalg.det(model[:, :2]) < 0)
-        model_ok = inlier_count >= 2 and _MIN_SANE_SCALE <= scale <= _MAX_SANE_SCALE and not reflection
+        model_ok = inlier_count >= _MIN_MODEL_INLIERS and _MIN_SANE_SCALE <= scale <= _MAX_SANE_SCALE and not reflection
 
         # Reprojection error + spatial spread over the inlier set.
         mean_err = median_err = 0.0
