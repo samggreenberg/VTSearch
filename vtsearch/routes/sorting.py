@@ -591,12 +591,27 @@ def _example_sort_from_path(file_path: Path) -> tuple:
         raise ValueError("No embedder available for loaded dataset")
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
-    example_embedding = emb.embed_media(media_from_path(file_path))
+    media = media_from_path(file_path)
+    example_embedding = emb.embed_media(media)
 
     if example_embedding is None:
         raise ValueError("Failed to embed media file")
 
-    return _cosine_sort(example_embedding)
+    results, threshold = _cosine_sort(example_embedding)
+
+    # Stage-2 structural re-rank (a no-op for non-structural datasets): for a
+    # SIFT/VLAD dataset, geometrically verify the VLAD shortlist against the
+    # uploaded example's own local features.  The example is the template; any
+    # crop was already applied to the file above, so it restricts the template.
+    if getattr(emb, "supports_geometric_verification", False):
+        from vtscore.training.structural_similarity import maybe_structural_rerank_example  # noqa: PLC0415
+
+        example_features = emb.local_features_forward(media)
+        results, threshold = maybe_structural_rerank_example(
+            results, threshold, snap, example_features, score_key="similarity"
+        )
+
+    return results, threshold
 
 
 def _parse_crop_params(raw: str | None) -> dict | None:

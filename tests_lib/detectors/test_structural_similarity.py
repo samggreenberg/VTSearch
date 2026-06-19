@@ -31,6 +31,7 @@ from vtscore.training.structural_similarity import (
     build_templates,
     filter_features_to_box,
     maybe_structural_rerank,
+    maybe_structural_rerank_example,
     snapshot_is_structural,
     structural_rerank,
     train_verification_classifier,
@@ -338,3 +339,81 @@ class TestMaybeStructuralRerank:
         # id 2 (warp of the template) is geometrically verified and leads.
         assert out[0]["id"] == 2
         assert out[0]["score"] >= STRUCTURAL_DECISION_THRESHOLD
+
+    def test_feature_snap_sources_templates_from_a_separate_snapshot(self, monkeypatch):
+        """The labelset path supplies templates/classifier features from a
+        synthetic ``feature_snap`` (re-derived cross-dataset features) while the
+        re-rank runs over the active dataset's own ``snap``."""
+        m = SiftMatcher()
+        base = _textured_image(71)
+        # Active dataset: an unrelated high-VLAD item and a warp of the template.
+        snap = {
+            10: {"local_features": _feats(_textured_image(72), matcher=m), "embedder": "sift_vlad"},
+            20: {"local_features": _feats(_warp(base, 8.0, 1.05, 5.0, -3.0), matcher=m), "embedder": "sift_vlad"},
+        }
+        # The good vote lives only in the (cross-dataset) feature snapshot, NOT
+        # in the active ``snap``: its id doesn't index into ``snap`` at all.
+        feature_snap = {"good-elem": {"local_features": _feats(base, matcher=m)}}
+        monkeypatch.setattr(
+            "vtscore.training.structural_similarity._resolve_matcher",
+            lambda _snap: m,
+        )
+        results = [
+            {"id": 10, "score": 0.93},  # high VLAD, unrelated
+            {"id": 20, "score": 0.31},  # warp of the cross-dataset template
+        ]
+        out, thresh = maybe_structural_rerank(
+            results, 0.5, snap, {"good-elem": None}, {}, {}, feature_snap=feature_snap
+        )
+        assert thresh == STRUCTURAL_DECISION_THRESHOLD
+        assert out[0]["id"] == 20, "the item matching the cross-dataset template must lead"
+        assert out[0]["score"] >= STRUCTURAL_DECISION_THRESHOLD
+
+
+class TestMaybeStructuralRerankExample:
+    def test_noop_for_non_structural_snapshot(self):
+        m = SiftMatcher()
+        snap = {1: {"embedding": np.zeros(8, dtype=np.float32)}}  # no local_features
+        results = [{"id": 1, "similarity": 0.7}]
+        example = _feats(_textured_image(1), matcher=m)
+        out, thresh = maybe_structural_rerank_example(results, 0.33, snap, example, score_key="similarity")
+        assert out == results
+        assert thresh == 0.33
+
+    def test_noop_when_example_has_no_features(self):
+        m = SiftMatcher()
+        snap = {1: {"local_features": _feats(_textured_image(1), matcher=m), "embedder": "sift_vlad"}}
+        results = [{"id": 1, "similarity": 0.7}]
+        empty = StructuralFeatures(
+            keypoints=np.zeros((0, 4), dtype=np.float32),
+            descriptors=np.zeros((0, SIFT_DESCRIPTOR_DIM), dtype=np.float32),
+        )
+        out, thresh = maybe_structural_rerank_example(results, 0.33, snap, empty, score_key="similarity")
+        assert out == results
+        assert thresh == 0.33
+
+    def test_example_template_promotes_geometric_match(self, monkeypatch):
+        """The uploaded example is the template; an item that geometrically
+        verifies against it is promoted above a high-cosine non-match, scored by
+        the cold-start gate (example-sort has no votes)."""
+        m = SiftMatcher()
+        base = _textured_image(81)
+        snap = {
+            10: {"local_features": _feats(_textured_image(82), matcher=m), "embedder": "sift_vlad"},
+            20: {"local_features": _feats(_warp(base, -9.0, 0.95, -6.0, 4.0), matcher=m), "embedder": "sift_vlad"},
+        }
+        monkeypatch.setattr(
+            "vtscore.training.structural_similarity._resolve_matcher",
+            lambda _snap: m,
+        )
+        example = _feats(base, matcher=m)
+        results = [
+            {"id": 10, "similarity": 0.95},  # high cosine, unrelated
+            {"id": 20, "similarity": 0.40},  # warp of the example
+        ]
+        out, thresh = maybe_structural_rerank_example(results, 0.9, snap, example, score_key="similarity")
+        assert thresh == STRUCTURAL_DECISION_THRESHOLD
+        assert out[0]["id"] == 20
+        assert out[0]["similarity"] >= STRUCTURAL_DECISION_THRESHOLD
+        assert "best_region" in out[0]
+        assert len(out[0]["best_region"]) == 4

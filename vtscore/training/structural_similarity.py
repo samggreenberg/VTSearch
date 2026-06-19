@@ -389,6 +389,7 @@ def maybe_structural_rerank(
     *,
     top_k: int = DEFAULT_RERANK_TOP_K,
     score_key: str = "score",
+    feature_snap: Optional[dict[Any, dict]] = None,
 ) -> tuple[list[dict], float]:
     """Apply the Stage-2 re-rank when the active dataset is structural.
 
@@ -400,17 +401,27 @@ def maybe_structural_rerank(
     re-ranks the shortlist, and returns the classifier's decision boundary as
     the threshold.  The trained classifier is carried on *det_ctx* (in-memory,
     re-derived every retrain) alongside the retrieval MLP.
+
+    *feature_snap* is the source of the template / classifier-candidate
+    ``local_features`` (keyed the same way as *good_votes* / *bad_votes*),
+    defaulting to *snap*.  The vote-driven path leaves it ``None`` because the
+    voted media live in the active dataset; the **labelset** path passes a
+    synthetic snapshot of re-derived cross-dataset features so a saved
+    structural detector can verify against templates from datasets that aren't
+    currently loaded.  The re-rank itself always runs over *snap* (the media the
+    user is actually sorting).
     """
     if not snapshot_is_structural(snap):
         return results, threshold
     matcher = _resolve_matcher(snap)
     if matcher is None:
         return results, threshold
-    templates = build_templates(good_votes, snap, region_boxes)
+    feat_snap = feature_snap if feature_snap is not None else snap
+    templates = build_templates(good_votes, feat_snap, region_boxes)
     if not templates:
         return results, threshold
 
-    classifier = train_verification_classifier(templates, good_votes, bad_votes, snap, matcher)
+    classifier = train_verification_classifier(templates, good_votes, bad_votes, feat_snap, matcher)
     if det_ctx is not None:
         try:
             det_ctx.verification_classifier = classifier
@@ -422,6 +433,49 @@ def maybe_structural_rerank(
         results,
         snap,
         [tpl for _, tpl in templates],
+        scorer,
+        matcher,
+        top_k=top_k,
+        score_key=score_key,
+    )
+    return reranked, STRUCTURAL_DECISION_THRESHOLD
+
+
+def maybe_structural_rerank_example(
+    results: list[dict],
+    threshold: float,
+    snap: dict[Any, dict],
+    example_features: Optional[StructuralFeatures],
+    *,
+    top_k: int = DEFAULT_RERANK_TOP_K,
+    score_key: str = "score",
+) -> tuple[list[dict], float]:
+    """Stage-2 re-rank for the example-sort (seed-by-example) path.
+
+    The template is the **uploaded example's own** local features rather than a
+    vote-derived one: the user can crop the upload to the pattern they want to
+    match before it is embedded, so the crop already restricts the template (no
+    ``region_box`` filtering needed here).  There are no votes, so there is no
+    match-statistic classifier to train - the cold-start inlier gate
+    (:class:`VerificationScorer` with no model) scores the fits, with its
+    boundary at :data:`STRUCTURAL_DECISION_THRESHOLD` like every other regime.
+
+    A no-op for non-structural datasets and when the example yielded no
+    features (an empty template can never verify anything, so the Stage-1
+    cosine order is left intact).
+    """
+    if not snapshot_is_structural(snap):
+        return results, threshold
+    if example_features is None or example_features.count == 0:
+        return results, threshold
+    matcher = _resolve_matcher(snap)
+    if matcher is None:
+        return results, threshold
+    scorer = VerificationScorer()  # cold-start: example-sort carries no votes
+    reranked = structural_rerank(
+        results,
+        snap,
+        [example_features],
         scorer,
         matcher,
         top_k=top_k,
