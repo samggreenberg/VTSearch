@@ -5,8 +5,11 @@ Status: **Phase 0 shipped (test harness); Phase 1 complete — 1.1 + 1.3 + 1.4
 signalized) and 1.2 (KeyboardService de-zoned + the coupled center-panel state
 signalized, i.e. the center-panel slice of Phase 2.3); Phase 2.1 shipped (leaf
 utility components — toast-container, clipboard-copy, voting-overlay,
-dialog-host + VtDialogService, browse-legend); the rest of Phase 2 (2.2–2.9) and
-Phases 3–5 not started.** This document
+dialog-host + VtDialogService, browse-legend); Phase 2.2 shipped (stats + picker
+modals — find/detector/dataset-stats signalized; label-importer signalized +
+moved onto rxResource; settings-importer/exporter + label-exporter mutation-result
+fields signalized); the rest of Phase 2 (2.3–2.9) and Phases 3–5 not started.**
+This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
 supersedes the earlier stub. Every count and file:line reference was checked
@@ -491,10 +494,17 @@ Suggested order (lightest/most-isolated first to build confidence):
    `TestBed` (`configureZoneless` + `settleZoneless`, no manual `detectChanges`)
    with a staleness canary; new specs added for `toast-container`,
    `clipboard-copy`, and `browse-legend`.
-2. **Stats / picker modals:** `find-stats`, `detector-stats`, `dataset-stats`
-   (A), the `*-importer`/`*-exporter` mutation-result fields (signalize
-   `submitting`/`successMessage`/`status`; the four `setTimeout(close)` →
-   signal/`markForCheck`).
+2. **Stats / picker modals. ✅ DONE (Phase 2.2).** `find-stats`/`detector-stats`/
+   `dataset-stats` signalized `loading`/`error`/`stats` (Recipe B; templates use
+   `@else if (stats(); as stats)`). `label-importer` moved its list read onto an
+   eager `rxResource` and signalized all its subscribe-written fields (mutation
+   results + the dynamic-field-option dicts). `settings-importer`/
+   `settings-exporter`/`label-exporter` were already on `rxResource`+signals;
+   their `submitting`/`successMessage` mutation-result fields were signalized to
+   finish them. The four `setTimeout(close)` paths needed no change — a
+   template-bound `(closed)` output emit schedules the parent's CD under zoneless
+   (proven by `testing/output-emit-zoneless.spec.ts`; see Open follow-ups). Each
+   has a zoneless DOM-canary spec.
 3. **`center-panel` + viewers** (couples with Phase 1.2): signalize voting state;
    `image-viewer` window drag/key handlers + shake + its `ResizeObserver`
    rendered-size writes (signals); `video-player` clip-loop is DOM-only (safe;
@@ -598,18 +608,49 @@ A checklist version of the above goes in the PR description for the QA pass.
 
 ### Open follow-ups
 
-- **Phase 1 complete; Phase 2.1 shipped; Phases 2.2–5 remain.** Shipped so far:
-  Phase 0 (harness); all of Phase 1 — 1.1 + 1.3 + 1.4 (ProgressEventsService SSE
-  pump + ConnectionStateService + BrowseSelectionService signalized) and 1.2
-  (KeyboardService de-zoned + the coupled center-panel state signalized); and
-  Phase 2.1 (leaf utility components — toast-container, clipboard-copy,
-  voting-overlay, dialog-host + VtDialogService, browse-legend), each with its
-  consumers and a zoneless canary spec. Remaining in **Phase 2**: clusters
-  2.2–2.9 in the suggested order (next up: 2.2 stats / picker modals). Note 2.3's
-  center-panel *state* shipped with 1.2, but 2.3 still owes `image-viewer` (window
-  drag/key handlers + shake + its `ResizeObserver` rendered-size writes) and a
-  check that `video-player` is DOM-only. Then the prod flip (Phase 3), human
-  browser QA (Phase 4), and cleanup (Phase 5).
+- **Phase 1 complete; Phases 2.1 + 2.2 shipped; Phases 2.3–5 remain.** Shipped so
+  far: Phase 0 (harness); all of Phase 1 — 1.1 + 1.3 + 1.4 (ProgressEventsService
+  SSE pump + ConnectionStateService + BrowseSelectionService signalized) and 1.2
+  (KeyboardService de-zoned + the coupled center-panel state signalized); Phase
+  2.1 (leaf utility components — toast-container, clipboard-copy, voting-overlay,
+  dialog-host + VtDialogService, browse-legend); and **Phase 2.2** (stats / picker
+  modals), each with its consumers and a zoneless canary spec. Remaining in
+  **Phase 2**: clusters 2.3–2.9 in the suggested order (next up: 2.3 center-panel
+  *viewers* — note the center-panel *state* shipped with 1.2, but 2.3 still owes
+  `image-viewer` (window drag/key handlers + shake + its `ResizeObserver`
+  rendered-size writes) and a check that `video-player` is DOM-only). Then the
+  prod flip (Phase 3), human browser QA (Phase 4), and cleanup (Phase 5).
+- **What Phase 2.2 covered.** `find-stats`/`detector-stats`/`dataset-stats`:
+  `loading`/`error`/`stats` plain fields → signals (templates read them via
+  `@else if (stats(); as stats)` so the bodies were untouched); the stat-derived
+  getters now read `stats()`. `label-importer-modal`: moved the list read onto an
+  eager `rxResource` (mirroring `settings-importer`), and signalized every
+  subscribe-written template field (`submitting`, `error` via an `importError`
+  signal merged with the resource error, `successMessage`, `addingGood`,
+  `addingBad`, and the three `dynamicFieldOptions`/`Loading`/`Error` dicts via
+  `signal<Record<…>>` + `.update`). `settings-importer`/`settings-exporter`/
+  `label-exporter` were already on `rxResource`+signals from the httpresource work;
+  Phase 2.2 finished them by signalizing `submitting`/`successMessage`. New
+  zoneless DOM-canary specs added for all three stats modals + the two settings
+  modals; the existing `label-importer`/`label-exporter` specs migrated to the
+  zoneless `TestBed` (no manual `detectChanges`). **rxResource test gotcha:** a
+  loading `rxResource` holds the app *unstable*, so `await fixture.whenStable()`
+  before flushing the GET deadlocks — the rxResource specs issue the GET with
+  `TestBed.tick()` then `settleResource()` instead (a plain `ngOnInit` HTTP
+  subscribe does *not* block `whenStable`, so the stats specs use it freely).
+- **`setTimeout(close)` finding — Recipe D caveat corrected for template-bound
+  outputs.** The four `setTimeout(() => this.close())` auto-close paths
+  (`settings-importer`, `label-importer`, `settings-exporter`, …) needed **no**
+  rework: `close()` emits a bound `output()`, and a parent's `(closed)="…"` is a
+  *bound template listener*, which is on the zoneless notification path — so the
+  emit schedules the parent's CD and its `@if` gate drops the modal even though
+  the emit fired from an unpatched timer. Proven by a new framework canary,
+  `frontend/src/app/testing/output-emit-zoneless.spec.ts`. Recipe D's warning that
+  "a bare `output()` emit from an unpatched callback will not schedule the
+  parent's CD" holds only for an output the parent subscribes to **imperatively**
+  in TS (a raw callback), *not* for a template `(event)` binding. So only the
+  components' own template-bound state (`submitting`/`successMessage`/…) was
+  signalized; the timer-driven close was left as-is.
 - **Full consumer specs for the browse cluster.** Phase 1.4 added a service unit
   spec + a signal-driven canary, but `browse-canvas`, `browse-bin-popup`, and
   `browse-selection-panel` still have **no** component specs (they are heavy to

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, output } from '@angular/core';
+import { Component, OnInit, inject, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
@@ -31,9 +31,11 @@ export class FindStatsModalComponent implements OnInit {
 
   readonly closed = output<void>();
 
-  loading = true;
-  error = '';
-  stats: FindStatsResponse | null = null;
+  // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
+  // schedules CD when the stats land. See docs/plans/zoneless-migration.md.
+  readonly loading = signal(true);
+  readonly error = signal('');
+  readonly stats = signal<FindStatsResponse | null>(null);
 
   // Chart geometry (SVG user units; the viewBox scales to the container width).
   readonly chartWidth = 320;
@@ -46,12 +48,12 @@ export class FindStatsModalComponent implements OnInit {
   ngOnInit(): void {
     this.findApi.getFindStats().subscribe({
       next: (data) => {
-        this.stats = data;
-        this.loading = false;
+        this.stats.set(data);
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.error || err?.error?.message || 'Failed to load stats';
-        this.loading = false;
+        this.error.set(err?.error?.error || err?.error?.message || 'Failed to load stats');
+        this.loading.set(false);
       },
     });
   }
@@ -61,11 +63,13 @@ export class FindStatsModalComponent implements OnInit {
   }
 
   get agreementPct(): string {
-    return this.stats ? `${Math.round(this.stats.agreement_rate * 100)}%` : '-';
+    const s = this.stats();
+    return s ? `${Math.round(s.agreement_rate * 100)}%` : '-';
   }
 
   get precisionPct(): string {
-    return this.stats ? `${Math.round(this.stats.precision * 100)}%` : '-';
+    const s = this.stats();
+    return s ? `${Math.round(s.precision * 100)}%` : '-';
   }
 
   // --- FP/FN-vs-inclusion chart -------------------------------------------
@@ -80,9 +84,10 @@ export class FindStatsModalComponent implements OnInit {
 
   /** Largest FP/FN count in the sweep; the chart's y-axis top (min 1). */
   get maxCount(): number {
-    if (!this.stats) return 1;
+    const s = this.stats();
+    if (!s) return 1;
     let m = 1;
-    for (const p of this.stats.sweep) {
+    for (const p of s.sweep) {
       m = Math.max(m, p.false_pos, p.false_neg);
     }
     return m;
@@ -97,8 +102,9 @@ export class FindStatsModalComponent implements OnInit {
   }
 
   get points(): ChartPoint[] {
-    if (!this.stats) return [];
-    return this.stats.sweep.map((p) => ({
+    const s = this.stats();
+    if (!s) return [];
+    return s.sweep.map((p) => ({
       inclusion: p.inclusion,
       x: this.xFor(p.inclusion),
       yFp: this.yFor(p.false_pos),
@@ -116,7 +122,8 @@ export class FindStatsModalComponent implements OnInit {
 
   /** X position of the current-inclusion marker line. */
   get currentX(): number {
-    return this.stats ? this.xFor(this.stats.inclusion) : 0;
+    const s = this.stats();
+    return s ? this.xFor(s.inclusion) : 0;
   }
 
   get axisTop(): number {

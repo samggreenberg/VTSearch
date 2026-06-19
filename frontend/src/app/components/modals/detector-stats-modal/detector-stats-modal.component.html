@@ -1,9 +1,9 @@
 <vt-modal [open]="true" [title]="'Stats: ' + detectorName()" (closed)="close()">
-  @if (loading) {
+  @if (loading()) {
     <p class="loading-text">Loading stats...</p>
-  } @else if (error) {
-    <p class="error-text">{{ error }}</p>
-  } @else if (stats) {
+  } @else if (error()) {
+    <p class="error-text">{{ error() }}</p>
+  } @else if (stats(); as stats) {
     <table class="stats-table">
       <tbody>
         <tr>
