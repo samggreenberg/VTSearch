@@ -240,6 +240,8 @@ def export_dataset_to_file(
     pickle.dump(data, pkl_buf, protocol=_PICKLE_PROTOCOL)
     medias_pkl_bytes = pkl_buf.getvalue()
 
+    from vtscore.datasets.embedder_slots import EmbedderSlots  # noqa: PLC0415
+
     meta = {
         "format_version": 1,
         "embedder": embedder,
@@ -249,6 +251,12 @@ def export_dataset_to_file(
         "created_at": created_at or time.time(),
         "expires_at": expires_at,
     }
+    # Persist the role-typed embedder slots alongside the legacy ``embedder``
+    # field.  A capability-matching embedder writes its slot key (e.g.
+    # ``text_embedder``); a plain single-vector embedder adds no slot keys and
+    # is driven by ``embedder`` alone.  Old containers without slot keys are
+    # migrated on read by ``EmbedderSlots.from_meta``.
+    meta.update(EmbedderSlots.from_legacy(embedder).to_meta())
 
     if on_stage:
         on_stage("Packaging dataset…")

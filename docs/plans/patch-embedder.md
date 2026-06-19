@@ -463,19 +463,38 @@ fallback box is suppressed (same rule as the gallery outline). Frontend-only.
 
 ## V3 - design
 
-V3 lets a dataset bind **up to one text-capable embedder + up to one
-patch-capable embedder** instead of exactly one embedder.  Text sort
-runs against the text embedder; region similarity, region voting, and
-the detector MLP run against the patch embedder; both live side-by-
-side in the pickle.  No dataset is forced to take two embedders - a
-single-embedder dataset still works, and a dataset that doesn't
-benefit from one of the two roles simply leaves that slot empty.
+**Status: implementation started (three-slot model).** This section was
+originally scoped for **two** slots (text + patch). It is now the
+**three-slot** spec: a dataset binds **any non-empty subset** of three
+role-typed slots - one text-capable embedder, one patch-capable
+embedder, and one structural (geometric-verification) embedder. The
+structural slot is the "third role" the structural-embedder plan
+explicitly deferred to "patch v3"; it lands here.
+
+V3 lets a dataset bind **up to one embedder per role** instead of
+exactly one embedder total.  Text sort runs against the text embedder;
+region similarity, region voting, and patch region-voting run against
+the patch embedder; two-stage instance retrieval + geometric
+verification run against the structural embedder; the detector MLP runs
+against whichever visual slot is bound.  All bound embedders live
+side-by-side in the pickle.  No dataset is forced to take more than one
+- a single-embedder dataset still works, and a dataset that doesn't
+benefit from a role simply leaves that slot empty.
+
+**The binding invariant is "any non-empty subset of {text, patch,
+structural}."** All seven combinations are legal (text-only,
+patch-only, structural-only, text+patch, text+structural,
+patch+structural, all three); the only illegal state is all-empty. The
+three slots are **independent** - in particular patch and structural
+may both be bound (they are different visual capabilities, not
+mutually exclusive), and a power user who wants to keep every detector
+type open can bind all three at ingest.
 
 The point is to **stop forcing the user to choose** between "good
-text queries" (SigLIP/CLIP) and "good region voting + visual quality"
-(DINOv3 patch).  Today those are mutually exclusive because the
-dataset has exactly one embedder; in v3 they coexist on the same
-pickle.
+text queries" (SigLIP/CLIP), "good region voting + visual quality"
+(DINOv3 patch), and "exact-instance matching" (SIFT/VLAD structural).
+Today those are mutually exclusive because the dataset has exactly one
+embedder; in v3 they coexist on the same pickle.
 
 ### Schema change
 
@@ -503,36 +522,72 @@ After the first save under v3, the legacy fields are gone.  Per
 CLAUDE.md ("Backwards Compatibility"), we don't keep a parallel
 `media["embedding"]` mirror.
 
-### Dataset binding
+### Dataset binding (three slots, capability-matching only)
 
-Two new fields on the dataset header (the part of the pickle that
-describes the dataset, not the per-media list):
+Three new optional role-typed fields on the dataset header (the part
+of the pickle that describes the dataset, not the per-media list),
+**additive** to the existing single `embedder` field:
 
 ```python
-dataset.text_embedder:  str | None   # e.g. "siglip" or "e5" or None
-dataset.patch_embedder: str | None   # e.g. "dinov3_patch" or None
+dataset.embedder:            str        # legacy primary/content embedder (kept)
+dataset.text_embedder:       str | None # a supports_text embedder, or None
+dataset.patch_embedder:      str | None # a supports_patch_regions embedder, or None
+dataset.structural_embedder: str | None # a supports_geometric_verification embedder, or None
 ```
+
+The `embedder` field stays as the **always-present primary/content
+embedder** (used for the dataset card display, demo-cache reuse, the
+plain-single-vector legacy path, and back-compat). The three slot
+fields record which capability-matching embedder is bound to which
+role; they are populated *only* by an embedder whose capability flag
+matches the slot.
 
 Constraints:
 
-- At least one of the two must be set (otherwise no sort/search/vote
-  works).
 - `text_embedder` must point at an embedder with
   `supports_text == True`.
 - `patch_embedder` must point at an embedder with
-  `supports_patch_regions == True`.  Slots are role-typed; a
-  single-vector embedder (e.g. `dinov3_single`) is not eligible for
-  the patch slot.
-- Both slots may be filled - that's the new capability v3 unlocks.
-  The two embedders run independently at load time; their outputs
-  share nothing.
+  `supports_patch_regions == True`.  A single-vector embedder (e.g.
+  `dinov3_single`) is **not** eligible for the patch slot.
+- `structural_embedder` must point at an embedder with
+  `supports_geometric_verification == True`.
+- Slots are **independent** - any non-empty subset of the three is
+  legal (all seven combinations), and in particular `patch_embedder`
+  and `structural_embedder` may both be set (different visual
+  capabilities, not mutually exclusive).
+- **Capability-matching only (decided).** Plain single-vector
+  embedders that match *none* of the three capability flags
+  (`dinov2_single`, `dinov3_single`, `eupe_single`, `face`,
+  `whisper`, `ast`, `paraspeechclap`, `videomae`, …) are **not
+  eligible for any slot** and cannot participate in a multi-slot
+  dataset. They remain single-embedder datasets bound through the
+  legacy `embedder` field, exactly as today - the new feature simply
+  does not extend to them. A multi-slot dataset therefore always has
+  ≥1 of the three slots set; a plain-single dataset has zero slots
+  set and is driven entirely by `embedder`.
 
 `dataset.supports_text` becomes `text_embedder is not None`;
-`dataset.supports_patch_regions` becomes `patch_embedder is not None`.
-The existing `MediaEmbedder.supports_text` /
-`supports_patch_regions` flags stay - they describe an embedder's
+`dataset.supports_patch_regions` becomes `patch_embedder is not None`;
+`dataset.supports_geometric_verification` becomes
+`structural_embedder is not None`.  (A plain-single legacy dataset
+reports all three as `False`, matching today - its content vector
+still drives cosine/example sort and the MLP via `media["embedding"]`,
+which is a *content* vector, not a capability.)  The existing
+`MediaEmbedder.supports_*` flags stay - they describe an embedder's
 *capabilities*; the dataset slots record which embedder is *bound* to
 which role.
+
+**Migration of a legacy single `embedder` X into slots** (read-time,
+by capability):
+
+- `X.supports_text` → `text_embedder = X`
+- elif `X.supports_patch_regions` → `patch_embedder = X`
+- elif `X.supports_geometric_verification` → `structural_embedder = X`
+- else (plain single-vector) → **no slot set**; `embedder = X` stands
+  alone.
+
+The structural slot is the "third role" the structural-embedder plan
+explicitly deferred to "patch v3"; it lands here as a co-equal slot.
 
 ### Routing rules
 

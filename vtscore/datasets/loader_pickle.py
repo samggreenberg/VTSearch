@@ -11,12 +11,15 @@ import gc
 import hashlib
 import logging
 from pathlib import Path
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
 
 from vtscore.datasets.loader import (
     ProgressCallback,
 )
 from vtscore.embedding.normalize import l2_normalize
+
+if TYPE_CHECKING:
+    from vtscore.datasets.embedder_slots import EmbedderSlots
 
 logger = logging.getLogger(__name__)
 
@@ -401,3 +404,16 @@ def read_pkl_clipper(pkl_path: Path) -> str | None:
 def read_pkl_embedder(pkl_path: Path) -> str | None:
     """Return the embedder name from the container's ``meta.json``, or ``None`` if unreadable."""
     return _read_pkl_meta_safe(pkl_path).get("embedder") or None
+
+
+def read_pkl_slots(pkl_path: Path) -> EmbedderSlots:
+    """Return the role-typed embedder slots from the container's ``meta.json``.
+
+    Slot keys (``text_embedder`` / ``patch_embedder`` / ``structural_embedder``)
+    are used verbatim when present; an older container without them is migrated
+    on the fly from its legacy ``embedder`` field by capability.  An unreadable
+    container yields empty slots.
+    """
+    from vtscore.datasets.embedder_slots import EmbedderSlots
+
+    return EmbedderSlots.from_meta(_read_pkl_meta_safe(pkl_path))
