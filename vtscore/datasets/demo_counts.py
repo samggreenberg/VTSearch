@@ -76,6 +76,8 @@ DEMO_MEDIA_COUNTS: dict[str, int] = {
     "reuters21578_l": 5463,
     "reuters21578_m": 2731,
     "reuters21578_s": 1361,
+    "roxford5k_a": 5063,
+    "roxford5k_s": 501,
     "ucf101_a": 405,
     "ucf101_l": 236,
     "ucf101_m": 114,
