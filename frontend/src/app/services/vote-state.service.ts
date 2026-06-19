@@ -15,6 +15,20 @@ export interface UndoEntry {
   mediaId: number;
   clickedDirection: 'good' | 'bad';
   previousPolarity: 'good' | 'bad' | null;
+  /**
+   * Region box the media's good vote carried *before* the click, or ``null``
+   * when it had none (was un-voted / bad / a box-less good).  Replayed on
+   * undo so restoring back to a good vote also restores its crop instead of
+   * silently dropping it (a box-less good POST).
+   */
+  previousRegionBox: number[] | null;
+  /**
+   * Region box the click itself applied (the box drawn for the good vote that
+   * produced this entry), or ``null`` when the click set bad / un-voted / a
+   * box-less good.  Replayed on redo so re-applying a good vote restores its
+   * crop.
+   */
+  clickedRegionBox: number[] | null;
   mediaName: string;
 }
 
@@ -270,9 +284,24 @@ export class VoteStateService implements OnDestroy {
       : this.badVotesSubject.value.has(id)
         ? 'bad'
         : null;
+    // Snapshot the crop the good vote carried before the click (for undo) and
+    // the crop this click applies (for redo).  Both captured synchronously,
+    // before the optimistic flip clears/overwrites the region-box map.
+    const prevBox = this.goodRegionBoxesSubject.value[String(id)];
+    const previousRegionBox = previousPolarity === 'good' && prevBox ? [...prevBox] : null;
+    const target = this.toggleTargetFor(id, clickedDirection);
+    const clickedRegionBox =
+      target === 'good' && regionBox && regionBox.length === 4 ? [...regionBox] : null;
     return this.submitToggleVote(id, clickedDirection, regionBox).pipe(
       tap(() => {
-        this.past.push({ mediaId: id, clickedDirection, previousPolarity, mediaName });
+        this.past.push({
+          mediaId: id,
+          clickedDirection,
+          previousPolarity,
+          previousRegionBox,
+          clickedRegionBox,
+          mediaName,
+        });
         if (this.past.length > UNDO_STACK_MAX) this.past.shift();
         this.future = [];
       }),
@@ -423,7 +452,19 @@ export class VoteStateService implements OnDestroy {
       : this.badVotesSubject.value.has(mediaId)
         ? 'bad'
         : null;
-    this.past.push({ mediaId, clickedDirection, previousPolarity, mediaName });
+    const prevBox = this.goodRegionBoxesSubject.value[String(mediaId)];
+    const previousRegionBox = previousPolarity === 'good' && prevBox ? [...prevBox] : null;
+    this.past.push({
+      mediaId,
+      clickedDirection,
+      previousPolarity,
+      previousRegionBox,
+      // This low-level primitive isn't told the click's region box; redo of a
+      // good vote recorded this way restores no crop.  Production callers use
+      // submitToggleVoteAndRecord, which captures it.
+      clickedRegionBox: null,
+      mediaName,
+    });
     if (this.past.length > UNDO_STACK_MAX) this.past.shift();
     this.future = [];
   }
@@ -451,8 +492,10 @@ export class VoteStateService implements OnDestroy {
     if (!entry) return;
     this.future.push(entry);
     const target: VoteState = entry.previousPolarity ?? 'none';
+    const box = target === 'good' ? entry.previousRegionBox : null;
     this.applyOptimisticState(entry.mediaId, target);
-    this.mediasApi.vote(entry.mediaId, target).subscribe({
+    this.applyOptimisticRegionBox(entry.mediaId, box);
+    this.mediasApi.vote(entry.mediaId, target, box).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       error: () => this.loadVotes(),
     });
@@ -470,8 +513,10 @@ export class VoteStateService implements OnDestroy {
     // click was an un-vote).
     const target: VoteState =
       entry.previousPolarity === entry.clickedDirection ? 'none' : entry.clickedDirection;
+    const box = target === 'good' ? entry.clickedRegionBox : null;
     this.applyOptimisticState(entry.mediaId, target);
-    this.mediasApi.vote(entry.mediaId, target).subscribe({
+    this.applyOptimisticRegionBox(entry.mediaId, box);
+    this.mediasApi.vote(entry.mediaId, target, box).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       error: () => this.loadVotes(),
     });

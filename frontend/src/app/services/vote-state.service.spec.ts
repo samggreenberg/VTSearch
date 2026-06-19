@@ -527,6 +527,48 @@ describe('VoteStateService', () => {
       expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
       req.flush({ ok: true, state: 'good', click_time: 1 });
     });
+
+    it('redo of a region good vote re-applies the click crop', () => {
+      service
+        .submitToggleVoteAndRecord(5, 'good', 'foo.wav', [0.1, 0.2, 0.3, 0.4])
+        .subscribe();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'good', click_time: 1 });
+
+      service.undo();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'none', click_time: null });
+
+      // Redo must restore the original crop, not POST a box-less good vote.
+      service.redo();
+      const redoReq = httpMock.expectOne('/api/medias/5/vote');
+      expect(redoReq.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
+      redoReq.flush({ ok: true, state: 'good', click_time: 2 });
+      expect(service.goodRegionBoxes['5']).toEqual([0.1, 0.2, 0.3, 0.4]);
+    });
+
+    it('undo restores the crop of the previous good vote', () => {
+      // Media 5 already has a region good vote with a known crop.
+      service.applyOptimisticState(5, 'good');
+      service['goodRegionBoxesSubject'].next({ '5': [0.5, 0.6, 0.7, 0.8] });
+
+      // User re-crops the same good vote with a new box.
+      service
+        .submitToggleVoteAndRecord(5, 'good', 'foo.wav', [0.1, 0.2, 0.3, 0.4])
+        .subscribe();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'good', click_time: 1 });
+
+      // Undo must restore the prior crop, not drop it.
+      service.undo();
+      const undoReq = httpMock.expectOne('/api/medias/5/vote');
+      expect(undoReq.request.body).toEqual({ target: 'good', region_box: [0.5, 0.6, 0.7, 0.8] });
+      undoReq.flush({ ok: true, state: 'good', click_time: 2 });
+      expect(service.goodRegionBoxes['5']).toEqual([0.5, 0.6, 0.7, 0.8]);
+    });
   });
 
   it('goodVotes$ should emit on load', () => new Promise<void>((done) => {
