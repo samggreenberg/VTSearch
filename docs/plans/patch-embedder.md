@@ -747,6 +747,32 @@ plumbing, not modelling.
   slot embedder; the routing table (text→text slot, region→patch slot,
   instance→structural slot, diversity/MLP→preferred visual slot) wires
   reads to the right slot.  Detector MLP keying gains `embedder_name`.
+  - **Phase 2a - dict accessor substrate. SHIPPED (PR #2001, branch
+    `claude/three-slot-embedder-2`, separate from the Phase 1 PR #1999).**
+    `vtscore/embedding/media_vectors.py` introduces `media["embeddings"]`
+    (dict keyed by embedder name) with `media_embedding` /
+    `ensure_embeddings_dict` / `set_media_embedding` /
+    `primary_embedder_name`.  Fresh embeds write through
+    `set_media_embedding` (`stages/embedding.py`); a load-time pass
+    materializes the dict for pre-embedded / reloaded media; the
+    `_require_embedding` chokepoint in `embedding/matrix.py` reads via the
+    accessor.  The legacy singular `media["embedding"]` is kept as the
+    **primary mirror / fallback** so the ~50 read sites not yet converted
+    stay valid while only one embedder is bound (unambiguous for its whole
+    lifetime; removed in 2c).  Pickle format unchanged — the dict is an
+    in-RAM representation rebuilt on load.  Tests in
+    `tests_lib/core/test_media_vectors.py`.
+  - **Phase 2b - convert remaining read sites + loader multi-embed +
+    routing.**  Point the ~50 remaining `media["embedding"]` / patch /
+    structural read sites at the accessor; loader runs every bound slot
+    embedder and persists multiple vectors (pickle format change); routing
+    table wires each operation to its slot; MLP keying gains
+    `embedder_name`.  Needs a backend create-path for multi-slot datasets
+    so multi-embed + routing are testable before the Phase 3 frontend.
+  - **Phase 2c - drop the singular mirror.**  Once every read goes through
+    the accessor and all media carry the dict, remove the legacy
+    `media["embedding"]` primary mirror (and update the ~50 test sites that
+    construct it directly).
 - **Phase 3 - frontend.** N-slot progressive-disclosure picker on
   dataset-create (primary content embedder + collapsible "add text /
   add structural" rows, each filtered to its capability), and the
