@@ -1,4 +1,4 @@
-import { Component, Input, ElementRef, ViewChild, AfterViewChecked, ChangeDetectorRef, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, effect, inject, input, output } from '@angular/core';
+import { Component, Input, ElementRef, ViewChild, AfterViewChecked, ChangeDetectorRef, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, computed, inject, input, output } from '@angular/core';
 
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subject } from 'rxjs';
@@ -114,14 +114,11 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   /** Mirror of ``MediaStateService.isLoading()``; drives the skeleton rows when
    *  the list is empty during the initial /api/medias/ids fetch. */
-  loadingMedias = false;
+  // A `computed` over the signal-backed loading flag: read in the template via
+  // `showSkeletons`, so reading the signal there marks the view dirty under
+  // zoneless (the old plain-field-written-from-an-effect path went stale).
+  readonly loadingMedias = computed(() => this.mediaState.isLoading());
   readonly skeletonPlaceholders = Array.from({ length: 12 });
-
-  constructor() {
-    effect(() => {
-      this.loadingMedias = this.mediaState.isLoading();
-    });
-  }
 
   ngOnInit(): void {
     // When the cache hydrates new items, re-enrich the displayed rows so
@@ -132,7 +129,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   }
 
   get showSkeletons(): boolean {
-    return this.loadingMedias && this.cachedOrderedItems.length === 0;
+    return this.loadingMedias() && this.cachedOrderedItems.length === 0;
   }
 
   ngOnDestroy(): void {
@@ -233,6 +230,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
     // Prefetch metadata for the initial visible window.
     this.prefetchVisibleMetadata();
+
+    // `cachedOrderedItems`/`gridRows` are plain template-bound arrays; this
+    // method runs from the async `metadataCache.version$` subscribe (an
+    // unpatched callback) as well as the sync `ngOnChanges` path, so notify the
+    // scheduler explicitly to repaint the list under zoneless.
+    this.cdr.markForCheck();
   }
 
   /**
@@ -398,7 +401,11 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     }
 
     if (changed) {
-      this.zone.run(() => this.cdr.detectChanges());
+      // `detectChanges()` runs CD on this view synchronously and is
+      // zone-independent, so the former `zone.run(...)` re-entry is dropped.
+      // (This relayout flush fires from the `ResizeObserver` callback and from
+      // `ngAfterViewChecked`.)
+      this.cdr.detectChanges();
     }
   }
 

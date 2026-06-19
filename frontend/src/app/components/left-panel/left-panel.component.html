@@ -54,7 +54,7 @@
 
       <div class="images-header">
         <h3 class="images-header-title">
-          {{ mediaTypeName }}s ({{ (sortOrder()?.length ?? medias.length) | number }})
+          {{ mediaTypeName() }}s ({{ (sortOrder()?.length ?? medias.length) | number }})
         </h3>
         <vt-view-controls
           side="left"
@@ -133,7 +133,7 @@
           [loadSortLabel]="loadSortLabel()"
           [initialTextQuery]="textQuery()"
           [learnedSortAvailable]="learnedSortAvailable()"
-          [textSortAvailable]="textSortAvailable"
+          [textSortAvailable]="textSortAvailable()"
           (sortModeChange)="sortModeChange.emit($event)"
           (textSort)="textSort.emit($event)"
           (learnedSort)="learnedSort.emit()"
@@ -166,7 +166,7 @@
 
         <div class="images-header">
           <h3 class="images-header-title">
-            {{ mediaTypeName }}s ({{ medias.length | number }})
+            {{ mediaTypeName() }}s ({{ medias.length | number }})
           </h3>
           <vt-view-controls
             side="left"
