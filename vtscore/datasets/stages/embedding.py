@@ -14,6 +14,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Callable
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
+from vtscore.embedding.media_vectors import ensure_embeddings_dict, set_media_embedding
 
 from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
 
@@ -182,9 +183,7 @@ def embed_missing(  # noqa: C901
                 media = medias.get(mid)
                 if media is None:
                     continue
-                media["embedding"] = vec
-                if not media.get("embedder"):
-                    media["embedder"] = embedder_id
+                set_media_embedding(media, embedder_id, vec)
 
     # Patch-region pass for embedders that support it (DINOv2/v3/EUPE).  Runs
     # over every patch-capable image still lacking a region tree, including
@@ -231,6 +230,13 @@ def embed_missing(  # noqa: C901
                 if feats is None:
                     continue
                 media["local_features"] = feats.compact()
+
+    # Materialize the dict-keyed representation (Phase 2 substrate): every
+    # media with a known embedder gets media["embeddings"][name] = vec.  The
+    # singular media["embedding"] stays as the primary mirror / legacy fallback
+    # for read sites not yet converted to the media_vectors accessor.
+    for media in medias.values():
+        ensure_embeddings_dict(media)
 
 
 def _attach_patch_regions_to_media(media: dict, patch_out) -> None:
