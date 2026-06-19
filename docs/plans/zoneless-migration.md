@@ -27,8 +27,12 @@ signalized `count`/`viewMode`/`gridGoalWidth`/`sortedEntries` written from the
 selection + settings effects and the metadata `version$` subscribe — fixing a
 latent effect-into-plain-field staleness bug; browse-canvas/-minimap/-bin-popup
 verified safe as-is — canvas-only or already `markForCheck`/`@HostListener`
-disciplined); the rest of Phase 2 (2.7–2.9; note 2.8 right-panel's
-`LabelsetStateService`/settings mirror still remains) and Phases 3–5 not started.**
+disciplined); Phase 2.7 shipped (left-panel + media-list — signalized
+left-panel's effect-written `mediaTypeName`/`textSortAvailable`; media-list's
+`loadingMedias` → `computed`, `markForCheck` for the metadata-hydration
+subscribe, dropped the relayout `zone.run`); the rest of Phase 2 (2.8–2.9; note
+2.8 right-panel's `LabelsetStateService`/settings mirror still remains) and
+Phases 3–5 not started.**
 This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
@@ -611,9 +615,24 @@ Suggested order (lightest/most-isolated first to build confidence):
    signal bump + metadata `version$` emit), `browse-hover-preview.zoneless.spec.ts`
    (async fetch resolves), `browse-view.zoneless.spec.ts` (projection-load
    subscribe errors → error-state repaint).
-7. **`left-panel` + `media-list`:** `media-list`'s `zone.run(() =>
-   cdr.detectChanges())` (line ~401) → drop the `run`, keep `markForCheck()`
-   (it's already OnPush-style); `panel-resize.directive` emits → signal/markForCheck.
+7. **`left-panel` + `media-list`. ✅ DONE (Phase 2.7).** `media-list`:
+   `loadingMedias` (a plain field written from a constructor `effect()` — Recipe F)
+   → a `computed` over `mediaState.isLoading()`; added `cdr.markForCheck()` at the
+   end of `rebuildOrderedItems()` so the list repaints from the async
+   `metadataCache.version$` subscribe (the `cachedOrderedItems`/`gridRows` arrays
+   stay plain — hot virtual-scroll state, repainted via the markForCheck); dropped
+   the `zone.run(...)` wrapper around the relayout `cdr.detectChanges()`
+   (`detectChanges` is zone-independent). `left-panel`: signalized `mediaTypeName`
+   + `textSortAvailable`, plain template-bound fields written from constructor
+   `effect()`s reacting to late-arriving media-type/embedder metadata (Recipe F).
+   `panel-resize.directive` was left as-is: its `ngZone.run`-wrapped
+   `widthChange`/`resizeEnd` emits are no-ops under zoneless, and the emit → the
+   parent label-view's `(widthChange)`/`(resizeEnd)` handler writes the
+   signalized `leftWidth`/`rightWidth` (Phase 2.4), which schedules CD and
+   rechecks the directive's `[class.dragging]` host binding. (No new canary: the
+   effect→signal fix is proven by the identical browse-selection-panel canary and
+   the `left-panel` container deadlocks `whenStable()` via its media-grid
+   rxResources; the existing specs cover behavior.)
 8. **`right-panel`** (vote piles ✅ DONE in Phase 2.5 — six `subscribe` mirrors →
    `computed`s over the signalized `VoteStateService`; **remaining**: its
    `LabelsetStateService` mirror `goodElements`/`badElements`/`currentMediaType`
