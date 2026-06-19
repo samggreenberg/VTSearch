@@ -3,10 +3,10 @@
 **Status:** v1 in progress — **foundation + Stage-2 backend core + re-rank
 across all sort paths shipped** (two-stage re-rank, RegionYes-as-template,
 match-statistic verification classifier, wired into the vote-driven learned-sort
-path **plus** the example-sort and labelset/saved-detector paths); **find-path
-classifier reuse + K/threshold spike-tuning deferred** (the matched-region
-overlay already rides patch's `best_region` machinery; see "What shipped" /
-"Open follow-ups" below). This is the living spec for a third embedder *type*
+path **plus** the example-sort, labelset/saved-detector, **and Find
+(`find-label`) paths** — so every scoring entry point now verifies); **K/threshold
+spike-tuning deferred** (the matched-region overlay already rides patch's
+`best_region` machinery; see "What shipped" / "Open follow-ups" below). This is the living spec for a third embedder *type*
 (alongside single-vector and patch) that searches for **specific instances**
 ("the Coca-Cola logo") rather than **semantic categories** ("a cola can"). The
 architecture below is the agreed direction; the work plan is a sketch to be
@@ -518,6 +518,31 @@ vote-driven sort (CPU-tested in
   (`vtscore/detectors/labelset_training.py`). A no-op for non-structural
   datasets (gated on the active snapshot carrying `local_features`).
 
+## What shipped (v1 Find-path re-rank)
+
+The Stage-2 re-rank now also reaches the **Find** scoring path, the last scoring
+entry point that stopped at coarse VLAD retrieval (CPU-tested in
+`tests/detectors/test_find_label.py` +
+`tests_lib/detectors/test_structural_labelset.py`):
+
+- **`find-label` wiring.** `find_label` (`vtsearch/routes/detectors/scoring.py`)
+  scores every media with the retrieval MLP (`score_media_with_model`) and then
+  hands the result list to `maybe_labelset_structural_rerank` — the same
+  chokepoint the learned-sort labelset path uses — before applying the
+  threshold labels and freezing `find_scores`. The detector's stored labelset is
+  parsed once (`LabelSet.from_dict(det_data["labelset"])`) and the re-rank builds
+  the RegionYes templates + verification classifier from the cross-dataset
+  `label_local_features` cache (re-derived from origins, then reused), so a
+  pre-trained structural detector verifies in Find without re-detecting features
+  on every pass. The classifier lands on `DetectorContext.verification_classifier`
+  exactly as on the vote/labelset paths.
+- **No-op for non-structural detectors.** Gated on the active snapshot carrying
+  `local_features` (via `snapshot_is_structural`), so the audio/image
+  single-vector and patch detectors are untouched and pay only one O(N) snapshot
+  scan. The frozen `find_scores` then hold the verification probabilities and the
+  cutoff is the classifier's `STRUCTURAL_DECISION_THRESHOLD` (0.5), so the
+  Inclusion slider re-thresholds over verification scores like any other Find run.
+
 ## Open follow-ups
 
 - **Frontend overlay — basics done, debug view deferred.** The backend emits the
@@ -532,10 +557,18 @@ vote-driven sort (CPU-tested in
   "tail scores 0 / threshold = 0.5" policy are reasonable defaults but unspiked.
   Sweep K on a demo image dataset and confirm the live-on-every-sort latency is
   acceptable (vs an on-demand "verify" action) before pinning.
-- **Find-path classifier reuse.** The verification classifier is carried on
-  `DetectorContext` but only the retrieval MLP is consumed by the Find scoring
-  path today; have Find re-rank with the stored classifier so a pre-trained
-  structural detector verifies without re-deriving.
+- **Find-path classifier reuse — SHIPPED.** The Find scoring path
+  (`POST /api/find-label`) now routes a saved structural detector's Stage-1 VLAD
+  scores through the same Stage-2 re-rank as the learned-sort/labelset path
+  (`maybe_labelset_structural_rerank`, wired in
+  `vtsearch/routes/detectors/scoring.py`). The detector's on-disk labelset is
+  re-derived into templates + verification classifier (reusing the
+  `DetectorContext.label_local_features` cache so features aren't re-detected
+  across calls) and the active dataset's shortlist is geometrically re-ranked;
+  the classifier is stored on `DetectorContext.verification_classifier` as on
+  every other path. A no-op for non-structural detectors. So every scoring entry
+  point — vote-driven sort, example-sort, labelset sort, **and Find** — now
+  verifies. See "What shipped (v1 Find-path re-rank)".
 - **Double SIFT detection.** The embed pass (VLAD) and the local-features pass
   each run SIFT once per image. Acceptable for v1; a combined single-detect pass
   is a cheap later optimisation.

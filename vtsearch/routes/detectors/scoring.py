@@ -172,6 +172,24 @@ def find_label(body: dict):  # noqa: C901
         total_steps=_FIND_LABEL_STEPS,
     )
 
+    # Stage-2 structural re-rank for a saved structural (SIFT/VLAD) detector:
+    # geometrically verify the VLAD shortlist against the detector's RegionYes
+    # templates and re-rank by the match-statistic verification classifier.
+    # This is the Find counterpart to the re-rank already wired into the
+    # vote-driven (``train_and_score``) and learned-sort (``labelset_train_and_score``)
+    # paths, so a pre-trained structural detector verifies in Find too instead of
+    # stopping at the coarse VLAD retrieval.  A no-op for every non-structural
+    # detector (gated on the active snapshot carrying ``local_features``).  See
+    # docs/plans/structural-embedder.md.
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.labelset_training import maybe_labelset_structural_rerank
+    from vtscore.state.core import get_active_detector_context
+
+    labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
+    results, threshold = maybe_labelset_structural_rerank(
+        get_active_detector_context(), labelset, results, threshold, snap
+    )
+
     update_find_progress(
         "running",
         f"Applying labels to {n_total} items…",

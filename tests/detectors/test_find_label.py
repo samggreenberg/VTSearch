@@ -112,6 +112,55 @@ class TestFindLabel:
         assert "dataset_id" in resp.get_json()["errors"]["json"]
 
 
+class TestFindLabelStructuralRerank:
+    """find-label routes a saved detector's scores through the Stage-2
+    geometric re-rank, the Find counterpart to the learned-sort/labelset path.
+
+    A no-op for the audio (non-structural) test fixtures, so the hook is
+    exercised here by capturing what the route hands it: the detector's parsed
+    labelset and the active-dataset snapshot.  The re-rank itself is covered at
+    the library tier (``tests_lib/detectors/test_structural_labelset.py``).
+    """
+
+    def test_find_label_routes_scores_through_structural_rerank(self, client, monkeypatch):
+        from vtscore.detectors import labelset_training
+
+        detector_id = setup_trainable_model_in_registry(
+            "struct-rerank-find",
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+
+        captured: dict = {}
+
+        def fake_rerank(det_ctx, labelset, results, threshold, snap):
+            # The detector's six on-disk labels must reach the re-rank as a
+            # parsed LabelSet, and the active dataset as the score snapshot.
+            captured["good_bad_labels"] = sum(1 for el in labelset.elements if el.label in ("good", "bad"))
+            captured["snap_len"] = len(snap)
+            captured["n_results"] = len(results)
+            # Mimic a structural outcome: collapse to a single verified hit at
+            # the classifier's 0.5 decision boundary.
+            top = max(results, key=lambda r: r["score"])
+            return [{"id": top["id"], "score": 1.0}], 0.5
+
+        monkeypatch.setattr(labelset_training, "maybe_labelset_structural_rerank", fake_rerank)
+
+        resp = client.post("/api/find-label", json={"detector_id": detector_id})
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+
+        assert captured["good_bad_labels"] == 6
+        assert captured["snap_len"] == app_module.NUM_MEDIAS
+        assert captured["n_results"] == app_module.NUM_MEDIAS
+        # The re-rank's threshold and re-ranked result set drive the labels.
+        assert data["threshold"] == 0.5
+        assert data["good_count"] == 1
+        assert data["bad_count"] == 0
+        assert len(data["results"]) == 1
+
+
 class TestFindModeIsPerDetector:
     """Find mode is per-detector state, not a process-wide global.
 
