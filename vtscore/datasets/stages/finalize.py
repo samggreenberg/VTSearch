@@ -73,6 +73,11 @@ def _collapse_duplicates_stage(ctx: DatasetContext, tracker) -> None:
 
 
 def _build_diversity_tree_stage(ctx: DatasetContext, tracker) -> None:
+    # An upstream step (e.g. a pickle restore) may have already populated the
+    # tree; skip the expensive hierarchical k-means rebuild when so.
+    if ctx.diversity_tree is not None:
+        return
+
     def _progress(current: int, total: int) -> None:
         tracker.check_cancelled()
         tracker.update(

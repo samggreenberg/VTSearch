@@ -38,6 +38,7 @@ def _auto_register_dataset(
     display_name: str | None = None,
     ingest_started_at: float | None = None,
     on_stage: Callable[[str], None] | None = None,
+    extra_pickle_keys: dict | None = None,
 ) -> dict | None:
     """Save *media_dict* as a pkl and register in the dataset registry.
 
@@ -107,6 +108,7 @@ def _auto_register_dataset(
             created_at=now,
             expires_at=expires_at,
             on_stage=on_stage,
+            extra_pickle_keys=extra_pickle_keys,
         )
         _stage("Writing to disk…")
         Path(pkl_path).write_bytes(data_bytes)
@@ -171,6 +173,15 @@ def _register_and_migrate(
         # serialize → write → register window (the old "frozen bar" gap).
         tracker.update("loading", message, step=_TOTAL_LOAD_STEPS, total_steps=_TOTAL_LOAD_STEPS)
 
+    # Cache the freshly-built diversity tree into the pickle so reloads skip
+    # the expensive hierarchical k-means rebuild (it is re-derived only when
+    # absent or stale).  Embeddings/MLPs are still never persisted - this is
+    # cluster *topology* keyed by media id, re-resolved against the medias on
+    # load and discarded if they no longer match.
+    extra_pickle_keys: dict | None = None
+    if ctx.diversity_tree is not None:
+        extra_pickle_keys = {"diversity_tree": ctx.diversity_tree.to_serializable()}
+
     _on_stage("Saving to registry…")
     entry = _auto_register_dataset(
         ctx.medias,
@@ -183,6 +194,7 @@ def _register_and_migrate(
         display_name=name,
         ingest_started_at=ingest_started_at,
         on_stage=_on_stage,
+        extra_pickle_keys=extra_pickle_keys,
     )
     if entry is None:
         return task_id, None

@@ -85,6 +85,7 @@ from vtscore.state.diversity import (  # noqa: F401
     diversity_tree_next_sample,
     diversity_tree_unlabel,
     get_diversity_tree,
+    restore_diversity_tree_from_cache,
     resync_diversity_tree_to_detector,
 )
 

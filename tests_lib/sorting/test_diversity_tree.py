@@ -672,3 +672,86 @@ class TestKmeansProgress:
         vecs = _make_vectors(100)
         tree = DiversityTree(vecs, k=2, min_node_size=10)
         assert tree.depth() >= 1
+
+
+class TestSerialization:
+    """Round-trip the cached tree structure used by dataset pickles."""
+
+    def test_to_serializable_is_plain_types(self):
+        """Snapshot must contain only plain containers (no ndarray / classes).
+
+        The dataset pickle is read back through the restricted unpickler,
+        which rejects anything beyond plain Python types + numpy arrays, so
+        the snapshot must not embed the tree object or any embedding arrays.
+        """
+        tree = DiversityTree(_make_vectors(120), k=3, min_node_size=10)
+        snap = tree.to_serializable()
+
+        def _assert_plain(obj):
+            assert isinstance(obj, (int, str, type(None))), type(obj)
+
+        assert set(snap) == {"format", "k", "max_depth", "min_node_size", "nodes", "vector_to_leaf", "nodes_by_depth"}
+        for node in snap["nodes"].values():
+            for vid in node["ids"]:
+                _assert_plain(vid)
+            for child in node["children"]:
+                _assert_plain(child)
+            _assert_plain(node["depth"])
+            _assert_plain(node["parent"])
+        for vid, leaf in snap["vector_to_leaf"].items():
+            _assert_plain(vid)
+            _assert_plain(leaf)
+
+    def test_survives_restricted_unpickler(self):
+        """A snapshot nested in a pickle must load via safe_pickle_load."""
+        import io
+        import pickle
+
+        from vtscore.security.pickle import safe_pickle_load
+
+        tree = DiversityTree(_make_vectors(120), k=3, min_node_size=10)
+        buf = io.BytesIO()
+        pickle.dump({"diversity_tree": tree.to_serializable()}, buf, protocol=5)
+        buf.seek(0)
+        restored = safe_pickle_load(buf)["diversity_tree"]
+        assert restored["format"] == 1
+
+    def test_round_trip_preserves_structure(self):
+        """from_serializable rebuilds an equivalent tree without k-means."""
+        vecs = _make_vectors(150)
+        tree = DiversityTree(vecs, k=3, min_node_size=10)
+        clone = DiversityTree.from_serializable(tree.to_serializable())
+
+        assert clone.k == tree.k
+        assert clone.max_depth == tree.max_depth
+        assert clone.min_node_size == tree.min_node_size
+        assert clone.nodes == tree.nodes
+        assert clone.vector_to_leaf == tree.vector_to_leaf
+        assert clone.nodes_by_depth == tree.nodes_by_depth
+        assert clone.total_nodes == tree.total_nodes
+        assert clone.next_sample() == tree.next_sample()
+
+    def test_restored_tree_is_label_clean(self):
+        """seen / _labeled are session state and must start empty after restore."""
+        vecs = _make_vectors(120)
+        tree = DiversityTree(vecs, k=3, min_node_size=10)
+        first = next(iter(vecs))
+        tree.label(first)
+        assert tree.seen  # original now has seen state
+
+        clone = DiversityTree.from_serializable(tree.to_serializable())
+        assert clone.seen == set()
+        assert clone.labeled_ids == set()
+        # Labeling still works against the restored topology.
+        clone.label(first)
+        assert clone.diversity_level() >= 1
+
+    def test_from_serializable_rejects_bad_format(self):
+        with pytest.raises(ValueError, match="format"):
+            DiversityTree.from_serializable({"format": 999})
+        with pytest.raises(ValueError):
+            DiversityTree.from_serializable("not a dict")
+
+    def test_from_serializable_rejects_incomplete(self):
+        with pytest.raises(ValueError, match="missing"):
+            DiversityTree.from_serializable({"format": 1, "k": 3})
