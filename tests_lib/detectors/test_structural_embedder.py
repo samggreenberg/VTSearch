@@ -116,6 +116,30 @@ class TestSiftMatcher:
         assert stats.model_ok is False
         assert stats.inlier_count == 0
 
+    def test_verify_handles_non_finite_model(self, monkeypatch):
+        """A non-finite RANSAC model is treated as no fit (no NaN stats / warnings).
+
+        ``estimateAffinePartial2D`` can return a degenerate model with NaN/inf
+        entries; feeding that into the scale/determinant maths raises numpy
+        "invalid value" warnings and yields garbage stats.  The matcher must
+        detect it and fall back to a clean no-match result.
+        """
+        m = SiftMatcher()
+        # Same image both sides → plenty of tentative matches, so the code path
+        # actually reaches estimateAffinePartial2D (and thus the NaN guard).
+        template = m.detect_and_describe(_textured_image(seed=1), max_features=400)
+        candidate = m.detect_and_describe(_textured_image(seed=1), max_features=400)
+
+        nan_model = np.full((2, 3), np.nan, dtype=np.float64)
+        mask = np.ones((template.count, 1), dtype=np.uint8)
+        monkeypatch.setattr(cv2, "estimateAffinePartial2D", lambda *a, **k: (nan_model, mask))
+
+        with np.errstate(invalid="raise"):
+            stats = m.verify(template, candidate)
+        assert stats.model_ok is False
+        assert stats.inlier_count == 0
+        assert stats.inlier_box is None
+
     def test_sift_matcher_satisfies_protocol(self):
         assert isinstance(SiftMatcher(), StructuralMatcher)
 
