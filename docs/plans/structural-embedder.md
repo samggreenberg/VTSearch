@@ -1,10 +1,12 @@
 # Structural Embedders — Design
 
-**Status:** Design only — not started. This is the living spec for a third
-embedder *type* (alongside single-vector and patch) that searches for **specific
-instances** ("the Coca-Cola logo") rather than **semantic categories** ("a cola
-can"). The architecture below is the agreed direction; the work plan is a sketch
-to be filled in when implementation starts (the way `patch-embedder.md`'s v2/v3
+**Status:** v1 in progress — **foundation shipped**, Stage-2 sort wiring +
+verification classifier + frontend overlay deferred (see "What shipped" /
+"Open follow-ups" below). This is the living spec for a third embedder *type*
+(alongside single-vector and patch) that searches for **specific instances**
+("the Coca-Cola logo") rather than **semantic categories** ("a cola can"). The
+architecture below is the agreed direction; the work plan is a sketch to be
+filled in as implementation proceeds (the way `patch-embedder.md`'s v2/v3
 punchlists were filled in during impl).
 
 Decisions locked in design: **two-stage architecture** (global vector retrieval +
@@ -422,8 +424,54 @@ an interface rewrite. The capability flag is `supports_geometric_verification`
 - **GPU (v2):** a real learned-feature backend integration, marked
   `@pytest.mark.gpu`.
 
+## What shipped (v1 foundation)
+
+The backend foundation of the two-stage pipeline, fully tested on CPU (no model
+download):
+
+- **Capability flag.** `MediaEmbedder.supports_geometric_verification` (default
+  `False`), surfaced in `to_dict()` and the `/api/embedders` response, mirrored
+  in the frontend `EmbedderInfo` model. Plus the symmetric
+  `local_features_forward` / `local_features_forward_bulk` hooks on the base
+  embedder (analogous to `patch_forward`).
+- **Matcher core** — `vtscore/media/structural.py` (library-tier, media-agnostic,
+  `cv2` imported lazily): the `StructuralMatcher` protocol; `StructuralFeatures`
+  (keypoints + descriptors, with a compact fp16/uint8 storage form);
+  `MatchStats` + `match_stats_to_features` (the fixed-D verification feature
+  vector); VLAD aggregation (`rootsift` + `aggregate_vlad`) against a fixed
+  shipped codebook; and the `SiftMatcher` backend (SIFT detect/describe +
+  `estimateAffinePartial2D` similarity-transform RANSAC, 4-DoF).
+- **Embedder** — `sift_vlad` (`vtscore/media/image/embedder_sift_vlad.py`) on a
+  reusable `_structural_shared.py` base, so a future
+  `embedder_superpoint_lightglue` swaps only the matcher. `supports_text=False`,
+  `is_default=False`, `supports_geometric_verification=True`. Stage-1 VLAD vector
+  → `media["embedding"]`; Stage-2 features → `media["local_features"]`.
+- **Loader pass** — `vtscore/datasets/stages/embedding.py` gains a structural
+  sibling pass (gated on the flag) that stores `media["local_features"]` in the
+  compact pickle form, with the same fresh-and-back-fill shape as the patch pass.
+- **Codebook asset** — `vtscore/media/assets/vlad_codebook_v1.npy` (shipped via
+  `package-data`), rebuilt by `scripts/build_vlad_codebook.py` (seeded
+  placeholder now; `--images DIR` does the real corpus k-means fit).
+
 ## Open follow-ups
 
+- **Stage-2 sort wiring (next).** The geometric re-rank is not yet wired into the
+  similarity/sort path — `SiftMatcher.verify` works and is tested, but nothing
+  calls it during a sort yet. Add the Stage-1→Stage-2 chokepoint (shortlist by
+  VLAD cosine, RANSAC-rerank the top-K) in `region_similarity.py` / a sibling
+  `structural_similarity.py`. Pin K with the spike.
+- **Verification classifier.** Train the match-statistic classifier
+  (`match_stats_to_features` → `train_model`) from RegionYes/No votes; its
+  decision boundary is the calibrated threshold. Carry it on `DetectorContext`
+  alongside the retrieval MLP. Cold-start (<3 votes) falls back to
+  `MatchStats.is_match(DEFAULT_MIN_INLIERS)`.
+- **RegionYes-as-template.** Restrict the template keypoints to those inside the
+  vote's `region_box`; multiple RegionYes votes → max-over-templates.
+- **Frontend overlay.** Draw the `MatchStats.inlier_box` matched region on result
+  cards / focus pane, reusing patch's best-region machinery.
+- **Double SIFT detection.** The embed pass (VLAD) and the local-features pass
+  each run SIFT once per image. Acceptable for v1; a combined single-detect pass
+  is a cheap later optimisation.
 - VLAD vocabulary is settled for v1 (fixed shipped codebook); the spike only pins
   its size + training corpus, so impl is no longer blocked on a design decision.
 - Spike (codebook size/corpus, Stage-1 backbone choice, K, geometric model)

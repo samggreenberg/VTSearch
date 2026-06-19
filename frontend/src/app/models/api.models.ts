@@ -415,6 +415,14 @@ export interface EmbedderInfo {
    */
   supports_patch_regions?: boolean;
   /**
+   * Whether this embedder produces local features (keypoints + descriptors)
+   * for instance matching. ``true`` for structural embedders (SIFT/VLAD and
+   * learned-local-feature variants later); the loader then stores per-image
+   * local features and the geometric re-rank + match-stat verification paths
+   * activate. ``false`` (the default) for every semantic embedder.
+   */
+  supports_geometric_verification?: boolean;
+  /**
    * User-facing licence warning to show before the user picks this embedder.
    * ``null`` for embedders with no special licensing constraints; a short
    * human-readable string for embedders with restrictive licences (e.g.

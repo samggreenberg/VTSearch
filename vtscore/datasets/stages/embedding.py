@@ -127,9 +127,24 @@ def embed_missing(  # noqa: C901
             and m.get("embedder") in (None, "", emb.name)
         )
 
-    has_patch_backfill = patch_capable and any(_needs_patch(m) for m in medias.values())
+    # Structural embedders (SIFT/VLAD) attach a per-image keypoint+descriptor set
+    # alongside the VLAD ``embedding``, on the same back-fill terms as patch
+    # regions: any image this embedder produced that lacks ``local_features``
+    # (e.g. a pre-embedded pickle reload) is re-derived from its source file at
+    # load, keeping local features an in-memory artifact.
+    structural_capable = getattr(emb, "supports_geometric_verification", False) is True
 
-    if not missing and not has_patch_backfill:
+    def _needs_local_features(m: dict[str, Any]) -> bool:
+        return (
+            m.get("embedding") is not None
+            and m.get("local_features") is None
+            and m.get("embedder") in (None, "", emb.name)
+        )
+
+    has_patch_backfill = patch_capable and any(_needs_patch(m) for m in medias.values())
+    has_structural_backfill = structural_capable and any(_needs_local_features(m) for m in medias.values())
+
+    if not missing and not has_patch_backfill and not has_structural_backfill:
         return
 
     if on_progress is None:
@@ -174,28 +189,48 @@ def embed_missing(  # noqa: C901
     # Patch-region pass for embedders that support it (DINOv2/v3/EUPE).  Runs
     # over every patch-capable image still lacking a region tree, including
     # ones that arrived already-embedded - not just the items embedded above.
-    if not patch_capable:
-        return
+    if patch_capable:
+        patch_inputs = [m for m in medias.values() if _needs_patch(m)]
+        if patch_inputs:
+            emb._on_progress = on_progress
+            try:
+                outputs = emb.patch_forward_bulk(patch_inputs)
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "Bulk patch-forward failed for media_type=%s (%d items)", media_type, len(patch_inputs)
+                )
+                outputs = [None] * len(patch_inputs)
+            finally:
+                emb._on_progress = original_cb
 
-    patch_inputs = [m for m in medias.values() if _needs_patch(m)]
-    if not patch_inputs:
-        return
+            for media, patch_out in zip(patch_inputs, outputs):
+                if patch_out is None:
+                    continue
+                _attach_patch_regions_to_media(media, patch_out)
 
-    emb._on_progress = on_progress
-    try:
-        outputs = emb.patch_forward_bulk(patch_inputs)
-    except Exception:
-        logging.getLogger(__name__).exception(
-            "Bulk patch-forward failed for media_type=%s (%d items)", media_type, len(patch_inputs)
-        )
-        outputs = [None] * len(patch_inputs)
-    finally:
-        emb._on_progress = original_cb
+    # Local-features pass for structural embedders (SIFT/VLAD).  Same back-fill
+    # shape as the patch pass: detect+describe every structural image still
+    # missing ``local_features`` and store the compact (fp16/uint8) form.
+    if structural_capable:
+        structural_inputs = [m for m in medias.values() if _needs_local_features(m)]
+        if structural_inputs:
+            emb._on_progress = on_progress
+            try:
+                features = emb.local_features_forward_bulk(structural_inputs)
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "Bulk local-feature detection failed for media_type=%s (%d items)",
+                    media_type,
+                    len(structural_inputs),
+                )
+                features = [None] * len(structural_inputs)
+            finally:
+                emb._on_progress = original_cb
 
-    for media, patch_out in zip(patch_inputs, outputs):
-        if patch_out is None:
-            continue
-        _attach_patch_regions_to_media(media, patch_out)
+            for media, feats in zip(structural_inputs, features):
+                if feats is None:
+                    continue
+                media["local_features"] = feats.compact()
 
 
 def _attach_patch_regions_to_media(media: dict, patch_out) -> None:
