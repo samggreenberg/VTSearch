@@ -1,4 +1,4 @@
-import { Component, HostListener, Input, OnInit, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, Input, OnInit, inject, input, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -27,6 +27,7 @@ import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 })
 export class DatasetImporterModalComponent implements OnInit {
   private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private cdr = inject(ChangeDetectorRef);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private settingsState = inject(SettingsStateService);
   private toastService = inject(ToastService);
@@ -475,6 +476,13 @@ export class DatasetImporterModalComponent implements OnInit {
         if (this.initialTab && this.visibleImporterTabs.some((t) => t.id === this.initialTab)) {
           this.selectImporterTab(this.initialTab);
         }
+        // Auto-selecting a lone importer here runs the whole `selectImporter` →
+        // `openLocalFolderUploader`/`openServerFolderBrowser`/`openDemoPicker`
+        // chain synchronously, which writes the ngModel-bound form-state fields
+        // (`formValues`, `lf*`, `sf*`, `demo*` — kept plain so two-way binding
+        // works). Those writes come from this async subscribe, so notify the
+        // scheduler to paint the auto-opened picker under zoneless.
+        this.cdr.markForCheck();
       },
     });
     this.datasetsListingsApi.getEmbedders().subscribe({
