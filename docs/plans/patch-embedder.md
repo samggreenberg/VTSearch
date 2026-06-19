@@ -720,13 +720,40 @@ inconsistency window.
    sanity check on a mixed dataset before we lock the preference
    in.
 
-### V3 work plan (sketch)
+### V3 work plan (phased)
 
-Filled in when we start, just like the v2 plan was a punchlist
-during impl.  Rough size estimate: backend ~2× v2 (schema +
-loader + per-embedder MLP keying), frontend ~0.5× v2 (just the
-dual-picker on dataset-create).  No new ML algorithms - v3 is
+Phased during impl, like the v2 punchlist.  Rough size: backend ~2× v2
+(schema + loader + per-embedder MLP keying), frontend ~0.5× v2 (the
+N-slot picker on dataset-create).  No new ML algorithms - v3 is
 plumbing, not modelling.
+
+- **Phase 1 - slot-binding foundation. SHIPPED.** `EmbedderSlots`
+  value object (`vtscore/datasets/embedder_slots.py`): the three
+  role-typed slots (text / patch / structural), capability-matching
+  migration from a legacy single embedder, capability getters, and
+  validation.  Slot keys persist in `meta.json` additively next to the
+  legacy `embedder` field (`export_dataset_to_file`), and
+  `read_pkl_slots` reads/migrates them back.  Capability-matching only:
+  plain single-vector embedders stay on the legacy field with empty
+  slots.  Create-flow still binds one embedder (frontend untouched);
+  runtime capability resolution still reads the per-media `embedder`,
+  so single-embedder datasets round-trip identically.  Tests in
+  `tests_lib/datasets/test_embedder_slots.py`.
+- **Phase 2 - per-media dict schema + loader multi-embed + routing.**
+  Flip `media["embedding"]` (singular) → `media["embeddings"]` (dict
+  keyed by embedder name) and the patch/structural per-media fields to
+  dict-keyed, with read-time migration of old pickles (the ~100-site
+  change the foundation was built to absorb).  Loader runs every bound
+  slot embedder; the routing table (text→text slot, region→patch slot,
+  instance→structural slot, diversity/MLP→preferred visual slot) wires
+  reads to the right slot.  Detector MLP keying gains `embedder_name`.
+- **Phase 3 - frontend.** N-slot progressive-disclosure picker on
+  dataset-create (primary content embedder + collapsible "add text /
+  add structural" rows, each filtered to its capability), and the
+  importer payloads carry `text_embedder` / `patch_embedder` /
+  `structural_embedder`.
+- **Phase 4 - import-path polish.** NPZ per-embedder `vectors_<name>`
+  layout; Combine-Datasets requires identical slot triples.
 
 ## Phasing
 
