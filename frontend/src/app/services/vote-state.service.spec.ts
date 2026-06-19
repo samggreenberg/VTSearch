@@ -571,18 +571,11 @@ describe('VoteStateService', () => {
     });
   });
 
-  it('goodVotes$ should emit on load', () => new Promise<void>((done) => {
-    const emissions: Set<number>[] = [];
-    service.goodVotes$.subscribe((v) => emissions.push(v));
-
+  it('goodVotes getter reflects a loaded /api/votes response', () => {
     service.loadVotes();
     httpMock.expectOne('/api/votes').flush(mockVotes);
 
-    setTimeout(() => {
-      const last = emissions[emissions.length - 1];
-      expect(last.has(1)).toBe(true);
-      expect(last.has(2)).toBe(true);
-      done();
-    });
-  }));
+    expect(service.goodVotes.has(1)).toBe(true);
+    expect(service.goodVotes.has(2)).toBe(true);
+  });
 });

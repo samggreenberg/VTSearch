@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, effect, inject, input, output } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, computed, effect, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -78,14 +78,19 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   /** Find mode: fold the corrections into the detector's labelset and retrain. */
   readonly addCorrections = output<void>();
 
-  goodIds: number[] = [];
-  badIds: number[] = [];
-  verifiedIds: Set<number> = new Set();
-  clickTimes: Record<string, number> = {};
-  learnedScores: Record<string, number> = {};
+  // Vote piles mirror VoteStateService, which is signal-backed. `computed`
+  // wrappers track the service getters and recompute (with stable, memoised
+  // identity between changes) only when the underlying votes change, so under
+  // zoneless the bound label-lists repaint on a vote/poll without the former
+  // `subscribe`-into-plain-field plumbing (zoneless-migration.md, Phase 2.5/2.8).
+  readonly goodIds = computed(() => Array.from(this.voteState.goodVotes));
+  readonly badIds = computed(() => Array.from(this.voteState.badVotes));
+  readonly verifiedIds = computed(() => this.voteState.verifiedIds);
+  readonly clickTimes = computed(() => this.voteState.clickTimes);
+  readonly learnedScores = computed(() => this.voteState.learnedScores);
   /** Normalised region boxes for good votes, keyed by media id; drives cropped
    *  Good-pile thumbnails when an item was region-voted. */
-  goodRegionBoxes: Record<string, number[]> = {};
+  readonly goodRegionBoxes = computed(() => this.voteState.goodRegionBoxes);
   goodElements: DetectorLabelView[] = [];
   badElements: DetectorLabelView[] = [];
   sortMode: LabelSortMode = 'time-desc';
@@ -133,30 +138,31 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
    * just ``good ∩ verified``. In Label mode it shows every good vote.
    */
   get goodDisplayIds(): number[] {
-    if (this.mode() !== 'find') return this.goodIds;
-    return this.goodIds.filter((id) => this.verifiedIds.has(id));
+    if (this.mode() !== 'find') return this.goodIds();
+    const verified = this.verifiedIds();
+    return this.goodIds().filter((id) => verified.has(id));
   }
 
   /** Bad-bucket counterpart of {@link goodDisplayIds}. */
   get badDisplayIds(): number[] {
-    if (this.mode() !== 'find') return this.badIds;
-    return this.badIds.filter((id) => this.verifiedIds.has(id));
+    if (this.mode() !== 'find') return this.badIds();
+    const verified = this.verifiedIds();
+    return this.badIds().filter((id) => verified.has(id));
   }
 
   /** Find mode: count of unverified goods (the left work queue above the cutoff). */
   get unverifiedGoodCount(): number {
-    return this.goodIds.length - this.goodDisplayIds.length;
+    return this.goodIds().length - this.goodDisplayIds.length;
   }
 
   /** Find mode: count of unverified bads (the left work queue below the cutoff). */
   get unverifiedBadCount(): number {
-    return this.badIds.length - this.badDisplayIds.length;
+    return this.badIds().length - this.badDisplayIds.length;
   }
 
   ngOnInit(): void {
     this.settingsState.load();
     this.voteState.startPolling();
-    this.subscribeToVotes();
     if (this.useLabelset) {
       this.labelsetState.setModel(this.trainableModelName());
       this.labelsetState.startPolling();
@@ -264,39 +270,6 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
         );
       },
     });
-  }
-
-  private subscribeToVotes(): void {
-    this.voteState.goodVotes$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((votes) => {
-        this.goodIds = Array.from(votes);
-      });
-    this.voteState.badVotes$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((votes) => {
-        this.badIds = Array.from(votes);
-      });
-    this.voteState.verifiedIds$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((ids) => {
-        this.verifiedIds = ids;
-      });
-    this.voteState.clickTimes$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((times) => {
-        this.clickTimes = times;
-      });
-    this.voteState.learnedScores$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((scores) => {
-        this.learnedScores = scores;
-      });
-    this.voteState.goodRegionBoxes$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((boxes) => {
-        this.goodRegionBoxes = boxes;
-      });
   }
 
   private subscribeToLabelset(): void {

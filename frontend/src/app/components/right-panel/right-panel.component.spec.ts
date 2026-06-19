@@ -94,10 +94,10 @@ describe('RightPanelComponent', () => {
       learned_scores: { '1': 0.9, '2': 0.8, '3': 0.1 },
     });
 
-    expect(component.goodIds).toEqual([1, 2]);
-    expect(component.badIds).toEqual([3]);
-    expect(component.clickTimes).toEqual({ '1': 1, '2': 2, '3': 3 });
-    expect(component.learnedScores).toEqual({ '1': 0.9, '2': 0.8, '3': 0.1 });
+    expect(component.goodIds()).toEqual([1, 2]);
+    expect(component.badIds()).toEqual([3]);
+    expect(component.clickTimes()).toEqual({ '1': 1, '2': 2, '3': 3 });
+    expect(component.learnedScores()).toEqual({ '1': 0.9, '2': 0.8, '3': 0.1 });
     cleanup();
   }));
 

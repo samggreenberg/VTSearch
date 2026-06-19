@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, effect, inject, input, output, signal } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { KeyValuePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { EmbedderInfo, Media } from '../../models/api.models';
@@ -102,6 +102,18 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
       this.showMetadata.set(settings.show_metadata !== false);
       this.labelHintDismissed.set(settings.label_hint_dismissed === true);
     });
+
+    // Any vote in any pane (center buttons, keyboard, hover-vote) retires the
+    // first-vote hint for this user. VoteStateService is signal-backed, so an
+    // effect tracking the vote sets covers every channel without each call site
+    // knowing about the hint. The dismiss logic runs `untracked` because it both
+    // reads and writes `labelHintDismissed` — tracking that read would loop the
+    // effect (zoneless-migration.md, Phase 2.5).
+    effect(() => {
+      this.voteState.goodVotes;
+      this.voteState.badVotes;
+      untracked(() => this.maybeDismissLabelHint());
+    });
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -185,11 +197,6 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
         }
       }),
       this.voteState.toast$.subscribe((t) => this.showUndoToast(t.action, t.mediaName)),
-      // Any vote in any pane (center buttons, keyboard, hover-vote) retires
-      // the first-vote hint for this user. Watching the vote sets covers
-      // every channel without each call site needing to know about the hint.
-      this.voteState.goodVotes$.subscribe(() => this.maybeDismissLabelHint()),
-      this.voteState.badVotes$.subscribe(() => this.maybeDismissLabelHint()),
     );
   }
 
