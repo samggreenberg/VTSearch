@@ -29,12 +29,15 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
   let component: CenterPanelComponent;
   let httpMock: HttpTestingController;
 
-  // Audio media keeps the swipe wrapper class empty (so the DOM stays simple) and
-  // avoids the image-viewer ViewChild's NG0100 settling quirk.
+  // Document media keeps the viewer fully inert in jsdom: it only sets a
+  // sanitized iframe URL — no HTTP, no Loading placeholder (text viewer's
+  // NG0100), no native `fetch()` of a relative URL (audio/video) and no
+  // ViewChild settling quirk (image). The viewer is incidental here — the
+  // assertions are on the always-rendered voting overlay / undo toast.
   const mockMedia: Media = {
     id: 1,
-    media_type: 'audio',
-    filename: 'test.wav',
+    media_type: 'document',
+    filename: 'test.pdf',
     md5: 'abc123',
     custom_metadata: {},
   };
@@ -54,13 +57,19 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
     await settleZoneless(fixture);
 
     // init() wires the keyboard subscription + starts the document listener and
-    // kicks the settings/embedders loads. Flush those so afterEach's verify()
-    // is clean. show_animations:false takes the non-animated vote branch (no
-    // dangling timers) and is the production path for "reduce motion".
+    // kicks the settings/embedders loads. The settings GET is driven by an
+    // `rxResource`; while it is loading the zoneless app stays unstable, so we
+    // must NOT `whenStable()` until it is flushed. Drain a macrotask + tick to
+    // let the GETs be issued, flush them, THEN settle. show_animations:false
+    // takes the non-animated vote branch (no dangling timers) and is the
+    // production path for "reduce motion".
     component.init();
-    await settleZoneless(fixture);
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    TestBed.tick();
+    // label_hint_dismissed:true so the first vote's hint-dismissal does not fire
+    // a settings PUT we'd have to flush.
     for (const req of httpMock.match((r) => r.url.includes('settings'))) {
-      req.flush({ show_animations: false });
+      req.flush({ show_animations: false, label_hint_dismissed: true });
     }
     for (const req of httpMock.match((r) => r.url.includes('embedders'))) {
       req.flush({ embedders: [] });
@@ -118,6 +127,6 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
 
     const toast = fixture.nativeElement.querySelector('.undo-toast');
     expect(toast).not.toBeNull();
-    expect(toast!.textContent).toContain('Undid vote on test.wav');
+    expect(toast!.textContent).toContain('Undid vote on test.pdf');
   });
 });
