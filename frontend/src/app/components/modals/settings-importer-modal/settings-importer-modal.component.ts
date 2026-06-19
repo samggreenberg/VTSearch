@@ -40,7 +40,8 @@ export class SettingsImporterModalComponent implements OnDestroy {
   formValues: Record<string, string> = {};
   selectedFile: File | null = null;
   selectedFileFieldKey: string | null = null;
-  submitting = false;
+  // Signalized: the submit subscribe writes these from an unpatched callback.
+  readonly submitting = signal(false);
 
   /** Error from a failed import action; the list-load failure is merged in. */
   private readonly importError = signal('');
@@ -49,7 +50,7 @@ export class SettingsImporterModalComponent implements OnDestroy {
       this.importError() ||
       (this.importersResource.error() ? 'Failed to load settings importers' : ''),
   );
-  successMessage = '';
+  readonly successMessage = signal('');
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   get modalTitle(): string {
@@ -72,7 +73,7 @@ export class SettingsImporterModalComponent implements OnDestroy {
     this.selectedFile = null;
     this.selectedFileFieldKey = null;
     this.importError.set('');
-    this.successMessage = '';
+    this.successMessage.set('');
     const fields = (importer.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -92,7 +93,7 @@ export class SettingsImporterModalComponent implements OnDestroy {
     this.view = 'picker';
     this.selectedImporter = null;
     this.importError.set('');
-    this.successMessage = '';
+    this.successMessage.set('');
   }
 
   onFileSelected(event: Event, fieldName: string): void {
@@ -106,9 +107,9 @@ export class SettingsImporterModalComponent implements OnDestroy {
 
   submit(): void {
     if (!this.selectedImporter) return;
-    this.submitting = true;
+    this.submitting.set(true);
     this.importError.set('');
-    this.successMessage = '';
+    this.successMessage.set('');
 
     this.settingsIoApi
       .runImport(
@@ -119,13 +120,13 @@ export class SettingsImporterModalComponent implements OnDestroy {
       )
       .subscribe({
         next: (res) => {
-          this.submitting = false;
-          this.successMessage = res.message || 'Settings imported successfully';
+          this.submitting.set(false);
+          this.successMessage.set(res.message || 'Settings imported successfully');
           this.imported.emit();
           this.closeTimer = setTimeout(() => this.close(), 1500);
         },
         error: (err) => {
-          this.submitting = false;
+          this.submitting.set(false);
           this.importError.set(err.error?.error || 'Import failed');
         },
       });

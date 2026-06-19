@@ -39,7 +39,8 @@ export class SettingsExporterModalComponent implements OnDestroy {
 
   selectedExporter: SettingsExporterEntry | null = null;
   formValues: Record<string, string> = {};
-  submitting = false;
+  // Signalized: the submit subscribe writes these from an unpatched callback.
+  readonly submitting = signal(false);
 
   /** Error from a failed export action; the list-load failure is merged in. */
   private readonly exportError = signal('');
@@ -48,7 +49,7 @@ export class SettingsExporterModalComponent implements OnDestroy {
       this.exportError() ||
       (this.exportersResource.error() ? 'Failed to load settings exporters' : ''),
   );
-  successMessage = '';
+  readonly successMessage = signal('');
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   get modalTitle(): string {
@@ -69,7 +70,7 @@ export class SettingsExporterModalComponent implements OnDestroy {
     this.selectedExporter = exporter;
     this.formValues = {};
     this.exportError.set('');
-    this.successMessage = '';
+    this.successMessage.set('');
     const fields = (exporter.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -95,18 +96,18 @@ export class SettingsExporterModalComponent implements OnDestroy {
     this.view = 'picker';
     this.selectedExporter = null;
     this.exportError.set('');
-    this.successMessage = '';
+    this.successMessage.set('');
   }
 
   submit(): void {
     if (!this.selectedExporter) return;
-    this.submitting = true;
+    this.submitting.set(true);
     this.exportError.set('');
-    this.successMessage = '';
+    this.successMessage.set('');
 
     this.settingsIoApi.runExport(this.selectedExporter.name, this.formValues).subscribe({
       next: (res: RunSettingsExportResponse) => {
-        this.submitting = false;
+        this.submitting.set(false);
 
         // Handle browser download response
         if (res.download && res.data) {
@@ -119,12 +120,12 @@ export class SettingsExporterModalComponent implements OnDestroy {
           URL.revokeObjectURL(url);
         }
 
-        this.successMessage = res.message || 'Settings exported successfully';
+        this.successMessage.set(res.message || 'Settings exported successfully');
         this.exported.emit();
         this.closeTimer = setTimeout(() => this.close(), 1500);
       },
       error: (err) => {
-        this.submitting = false;
+        this.submitting.set(false);
         this.exportError.set(err.error?.error || 'Export failed');
       },
     });

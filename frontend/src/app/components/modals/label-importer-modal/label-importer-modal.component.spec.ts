@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { LabelImporterModalComponent } from './label-importer-modal.component';
+import { configureZoneless } from '../../../testing/zoneless-testbed';
+import { settleResource, settleZoneless } from '../../../testing/settle-resource';
 
 describe('LabelImporterModalComponent', () => {
   let component: LabelImporterModalComponent;
@@ -24,7 +26,7 @@ describe('LabelImporterModalComponent', () => {
   ];
 
   beforeEach(async () => {
-    await TestBed.configureTestingModule({
+    await configureZoneless({
       imports: [LabelImporterModalComponent],
       providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
@@ -38,43 +40,48 @@ describe('LabelImporterModalComponent', () => {
     httpMock.verify();
   });
 
-  function flushInit(): void {
-    fixture.detectChanges();
+  // The importer list rides an eager `rxResource` whose loader runs in a root
+  // effect. Let the initial scheduled CD run the loader (no manual
+  // `detectChanges`), flush the GET, then settle so the resolved value commits.
+  async function flushInit(): Promise<void> {
+    await fixture.whenStable();
     httpMock.expectOne('/api/label-importers').flush(mockImporters);
+    await settleResource();
+    await fixture.whenStable();
   }
 
-  it('should create', () => {
-    flushInit();
+  it('should create', async () => {
+    await flushInit();
     expect(component).toBeTruthy();
   });
 
-  it('should fetch importers on init', () => {
-    flushInit();
-    expect(component.importers.length).toBe(2);
+  it('should fetch importers on init', async () => {
+    await flushInit();
+    expect(component.importers().length).toBe(2);
   });
 
-  it('should start in picker view', () => {
-    flushInit();
+  it('should start in picker view', async () => {
+    await flushInit();
     expect(component.view).toBe('picker');
   });
 
-  it('should switch to form view on selection', () => {
-    flushInit();
+  it('should switch to form view on selection', async () => {
+    await flushInit();
     component.selectImporter(mockImporters[0] as any);
     expect(component.view).toBe('form');
     expect(component.selectedImporter!.name).toBe('server_json_file');
   });
 
-  it('should go back to picker', () => {
-    flushInit();
+  it('should go back to picker', async () => {
+    await flushInit();
     component.selectImporter(mockImporters[0] as any);
     component.back();
     expect(component.view).toBe('picker');
     expect(component.selectedImporter).toBeNull();
   });
 
-  it('should submit form and emit imported', () => {
-    flushInit();
+  it('should submit form and emit imported', async () => {
+    await flushInit();
     vi.spyOn(component.imported, 'emit');
     component.selectImporter(mockImporters[0] as any);
     component.formValues['filepath'] = '/data/labels.json';
@@ -84,12 +91,14 @@ describe('LabelImporterModalComponent', () => {
     expect(req.request.method).toBe('POST');
     req.flush({ applied: 5, message: 'Applied 5 labels' });
 
-    expect(component.submitting).toBe(false);
+    expect(component.submitting()).toBe(false);
     expect(component.imported.emit).toHaveBeenCalled();
+    // The post-success auto-close timer must not leak past the test.
+    component.close();
   });
 
-  it('should show error on import failure', () => {
-    flushInit();
+  it('should show error on import failure', async () => {
+    await flushInit();
     component.selectImporter(mockImporters[0] as any);
     component.submit();
 
@@ -98,27 +107,25 @@ describe('LabelImporterModalComponent', () => {
       { status: 404, statusText: 'Not Found' },
     );
 
-    expect(component.error).toBe('File not found');
+    expect(component.error()).toBe('File not found');
   });
 
-  it('should render importer cards', () => {
-    flushInit();
-    fixture.detectChanges();
+  it('should render importer cards', async () => {
+    await flushInit();
     const el = fixture.nativeElement as HTMLElement;
     const cards = el.querySelectorAll('.importer-card');
     expect(cards.length).toBe(2);
   });
 
-  it('should emit closed on close', () => {
-    flushInit();
+  it('should emit closed on close', async () => {
+    await flushInit();
     vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
-  it('should render Add media to Good and Add media to Bad buttons in picker view', () => {
-    flushInit();
-    fixture.detectChanges();
+  it('should render Add media to Good and Add media to Bad buttons in picker view', async () => {
+    await flushInit();
     const el = fixture.nativeElement as HTMLElement;
     const addGoodBtn = el.querySelector('.btn-add-good');
     const addBadBtn = el.querySelector('.btn-add-bad');
@@ -128,10 +135,31 @@ describe('LabelImporterModalComponent', () => {
     expect(addBadBtn!.textContent!.trim()).toBe('Add media to Bad');
   });
 
-  it('should have hidden file inputs for add-to-pile', () => {
-    flushInit();
-    fixture.detectChanges();
+  it('should have hidden file inputs for add-to-pile', async () => {
+    await flushInit();
     const hiddenInputs = fixture.nativeElement.querySelectorAll('.hidden-file-input');
     expect(hiddenInputs.length).toBe(2);
+  });
+
+  // Zoneless staleness canary: the submit error lands in an HTTP subscribe — an
+  // unpatched callback under zoneless. It repaints only because `importError`
+  // (merged into the `error` computed) is a signal read in the template. Drive a
+  // failed import and assert the error text renders with no manual
+  // `detectChanges`.
+  it('repaints the error text after a failed import (zoneless canary)', async () => {
+    await flushInit();
+    component.selectImporter(mockImporters[0] as any);
+    await settleZoneless(fixture);
+
+    component.submit();
+    httpMock.expectOne('/api/label-importers/import/server_json_file').flush(
+      { error: 'Import blew up' },
+      { status: 500, statusText: 'Server Error' },
+    );
+    await settleZoneless(fixture);
+
+    const err = fixture.nativeElement.querySelector('.error-text') as HTMLElement;
+    expect(err).toBeTruthy();
+    expect(err.textContent).toContain('Import blew up');
   });
 });

@@ -1,0 +1,91 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { SettingsExporterModalComponent } from './settings-exporter-modal.component';
+import { configureZoneless } from '../../../testing/zoneless-testbed';
+import { settleResource, settleZoneless } from '../../../testing/settle-resource';
+
+describe('SettingsExporterModalComponent', () => {
+  let component: SettingsExporterModalComponent;
+  let fixture: ComponentFixture<SettingsExporterModalComponent>;
+  let httpMock: HttpTestingController;
+
+  // A fields-bearing exporter so selecting it does NOT immediately submit (the
+  // field-less branch auto-submits); keeps the picker→form transition explicit.
+  const mockExporters = [
+    {
+      name: 'server_json_file',
+      display_name: 'JSON File',
+      description: 'Export settings to JSON',
+      fields: [{ key: 'filepath', field_type: 'text', label: 'File Path', required: true }],
+    },
+  ];
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [SettingsExporterModalComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(SettingsExporterModalComponent);
+    component = fixture.componentInstance;
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  async function flushInit(): Promise<void> {
+    await fixture.whenStable();
+    httpMock.expectOne('/api/settings-exporters').flush(mockExporters);
+    await settleResource();
+    await fixture.whenStable();
+  }
+
+  it('should create and render exporter cards', async () => {
+    await flushInit();
+    expect(component).toBeTruthy();
+    expect(fixture.nativeElement.querySelectorAll('.exporter-card').length).toBe(1);
+  });
+
+  // Zoneless staleness canary: the success message lands in an HTTP subscribe (an
+  // unpatched callback) and repaints only because `successMessage` is a signal
+  // read in the template. Drive a successful export and assert it renders with no
+  // manual `detectChanges`.
+  it('repaints the success message after a successful export (zoneless canary)', async () => {
+    await flushInit();
+    component.selectExporter(mockExporters[0] as any);
+    await settleZoneless(fixture);
+
+    component.submit();
+    httpMock
+      .expectOne('/api/settings-exporters/export')
+      .flush({ message: 'Exported settings' });
+    await settleZoneless(fixture);
+
+    const ok = fixture.nativeElement.querySelector('.success-text') as HTMLElement;
+    expect(ok).toBeTruthy();
+    expect(ok.textContent).toContain('Exported settings');
+
+    // Cancel the queued auto-close timer so it cannot leak past the test.
+    component.close();
+  });
+
+  it('repaints the error text after a failed export (zoneless canary)', async () => {
+    await flushInit();
+    component.selectExporter(mockExporters[0] as any);
+    await settleZoneless(fixture);
+
+    component.submit();
+    httpMock.expectOne('/api/settings-exporters/export').flush(
+      { error: 'cannot write' },
+      { status: 500, statusText: 'Server Error' },
+    );
+    await settleZoneless(fixture);
+
+    const err = fixture.nativeElement.querySelector('.error-text') as HTMLElement;
+    expect(err).toBeTruthy();
+    expect(err.textContent).toContain('cannot write');
+  });
+});
