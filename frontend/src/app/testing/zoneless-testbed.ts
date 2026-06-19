@@ -49,7 +49,7 @@ export function provideZoneless(): unknown[] {
  */
 export function configureZoneless(
   moduleDef: Parameters<typeof TestBed.configureTestingModule>[0] = {},
-): typeof TestBed {
+) {
   return TestBed.configureTestingModule({
     ...moduleDef,
     providers: [...provideZoneless(), ...(moduleDef.providers ?? [])],
