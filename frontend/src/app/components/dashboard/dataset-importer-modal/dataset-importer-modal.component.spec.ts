@@ -406,12 +406,12 @@ describe('DatasetImporterModalComponent', () => {
     component.selectImporter(genericForm());
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
-    expect(component.selectedImporter).not.toBeNull();
+    expect(component.selectedImporter()).not.toBeNull();
     // Switch to a multi-importer tab so the tab change clears the prior
     // selection without auto-selecting a lone importer (the 'demo' tab has
     // a single importer, which selectImporterTab would auto-open).
     component.selectImporterTab('server');
-    expect(component.selectedImporter).toBeNull();
+    expect(component.selectedImporter()).toBeNull();
     expect(component.activePickerView).toBe('');
   });
 
@@ -430,7 +430,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(req.request.body['path']).toBe('/data/sounds');
     req.flush({});
 
-    expect(component.submitting).toBe(false);
+    expect(component.submitting()).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
@@ -446,8 +446,8 @@ describe('DatasetImporterModalComponent', () => {
       { status: 404, statusText: 'Not Found' },
     );
 
-    expect(component.submitting).toBe(false);
-    expect(component.error).toBe('Not found');
+    expect(component.submitting()).toBe(false);
+    expect(component.error()).toBe('Not found');
   });
 
   it('should emit closed on close', () => {
@@ -481,7 +481,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.activePickerView).toBe('');
     component.openDemoPicker();
     expect(component.activePickerView).toBe('demo');
-    expect(component.demoLoading).toBe(true);
+    expect(component.demoLoading()).toBe(true);
 
     // Flush media types and demo list requests
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
@@ -492,19 +492,19 @@ describe('DatasetImporterModalComponent', () => {
     // embedder/clipper/refetch.
     flushDemoTabRequests('audio', mockEmbedders);
 
-    expect(component.demoLoading).toBe(false);
-    expect(component.demos.length).toBe(2);
-    expect(component.activeTab).toBe('audio');
+    expect(component.demoLoading()).toBe(false);
+    expect(component.demos().length).toBe(2);
+    expect(component.activeTab()).toBe('audio');
   });
 
   it('should build tabs from media types in demo data and auto-select the first', () => {
     flushImporters();
     openAndFlushDemoPicker();
 
-    expect(component.demoTabs).toEqual(['audio', 'image']);
+    expect(component.demoTabs()).toEqual(['audio', 'image']);
     // buildDemoTabs auto-selects the 'audio' tab so the demo table shows
     // results immediately instead of sitting blank.
-    expect(component.activeTab).toBe('audio');
+    expect(component.activeTab()).toBe('audio');
     expect(component.filteredDemos.length).toBe(1);
   });
 
@@ -523,7 +523,7 @@ describe('DatasetImporterModalComponent', () => {
     // audio, so the image embedder/clipper fetches fire for that tab.
     flushDemoTabRequests('image', mockImageEmbedders);
 
-    expect(component.activeTab).toBe('image');
+    expect(component.activeTab()).toBe('image');
   });
 
   it('should filter demos by the explicitly selected media-type tab', () => {
@@ -623,7 +623,7 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should get correct tab label from media types', () => {
     flushImporters();
-    component.mediaTypes = mockMediaTypes as any;
+    component.mediaTypes.set(mockMediaTypes as any);
 
     expect(component.getTabLabel('audio')).toContain('Audio');
     expect(component.getTabLabel('unknown')).toBe('unknown');
@@ -639,8 +639,8 @@ describe('DatasetImporterModalComponent', () => {
       { status: 500, statusText: 'Internal Server Error' },
     );
 
-    expect(component.demoLoading).toBe(false);
-    expect(component.demos.length).toBe(0);
+    expect(component.demoLoading()).toBe(false);
+    expect(component.demos().length).toBe(0);
   });
 
   // --- Embedder-aware status tests ---
@@ -679,9 +679,9 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = demosWithEmbedder;
-    component.activeTab = 'image';
-    component.selectedDemoEmbedder = 'siglip';
+    component.demos.set(demosWithEmbedder);
+    component.activeTab.set('image');
+    component.selectedDemoEmbedder.set('siglip');
 
     // Call updateDemoStatuses via the public embedder change handler
     // (we set up state directly to test the client-side logic)
@@ -709,9 +709,9 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = demosWithEmbedder;
-    component.activeTab = 'image';
-    component.selectedDemoEmbedder = 'clip';
+    component.demos.set(demosWithEmbedder);
+    component.activeTab.set('image');
+    component.selectedDemoEmbedder.set('clip');
 
     (component as any).updateDemoStatuses();
 
@@ -737,9 +737,9 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = demosUnknown;
-    component.activeTab = 'image';
-    component.selectedDemoEmbedder = 'clip';
+    component.demos.set(demosUnknown);
+    component.activeTab.set('image');
+    component.selectedDemoEmbedder.set('clip');
 
     (component as any).updateDemoStatuses();
 
@@ -778,9 +778,9 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = crossTabDemos;
-    component.activeTab = 'image';
-    component.selectedDemoEmbedder = 'siglip';  // Doesn't match 'clip'
+    component.demos.set(crossTabDemos);
+    component.activeTab.set('image');
+    component.selectedDemoEmbedder.set('siglip');  // Doesn't match 'clip'
 
     (component as any).updateDemoStatuses();
 
@@ -808,9 +808,9 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = downloadDemos;
-    component.activeTab = 'audio';
-    component.selectedDemoEmbedder = 'clap';
+    component.demos.set(downloadDemos);
+    component.activeTab.set('audio');
+    component.selectedDemoEmbedder.set('clap');
 
     (component as any).updateDemoStatuses();
 
