@@ -700,7 +700,7 @@ def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin) -> 
         clip_id += 1
 
 
-def load_demo_source(
+def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per demo source
     source,
     categories,
     slice_start,

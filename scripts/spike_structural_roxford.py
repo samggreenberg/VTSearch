@@ -96,7 +96,8 @@ def main() -> None:  # noqa: C901, PLR0915
     _SCRATCH.mkdir(exist_ok=True)
     roxford_dir = download_roxford5k(on_progress=lambda *a: None)
     jpg_dir = roxford_dir / "jpg"
-    gnd = pickle.load(open(roxford_dir / "gnd_roxford5k.pkl", "rb"))  # noqa: S301 - trusted local asset
+    with open(roxford_dir / "gnd_roxford5k.pkl", "rb") as f:
+        gnd = pickle.load(f)  # noqa: S301 - trusted local asset
     imlist: list[str] = gnd["imlist"]
     qimlist: list[str] = gnd["qimlist"]
     if args.max_db:
@@ -109,21 +110,23 @@ def main() -> None:  # noqa: C901, PLR0915
     print(f"Codebook: {codebook.shape}  VLAD dim={codebook.shape[0] * codebook.shape[1]}")
 
     # --- embed db (cached) --------------------------------------------------
+    blob = None
     cache_ok = _CACHE.exists() and not args.no_cache
     if cache_ok:
-        blob = pickle.load(open(_CACHE, "rb"))  # noqa: S301
+        with open(_CACHE, "rb") as f:
+            blob = pickle.load(f)  # noqa: S301
         cache_ok = blob.get("imlist") == imlist and blob.get("max_features") == args.max_features
-    if cache_ok:
+    if cache_ok and blob is not None:
         print("Loading cached db features...")
         db_vlad = blob["db_vlad"]
         db_feats = blob["db_feats"]
     else:
         print("Embedding db (one SIFT pass per image)...")
         db_vlad, db_feats = _embed_corpus(jpg_dir, imlist, embedder, args.max_features)
-        pickle.dump(
-            {"imlist": imlist, "max_features": args.max_features, "db_vlad": db_vlad, "db_feats": db_feats},
-            open(_CACHE, "wb"),
-        )
+        with open(_CACHE, "wb") as f:
+            pickle.dump(
+                {"imlist": imlist, "max_features": args.max_features, "db_vlad": db_vlad, "db_feats": db_feats}, f
+            )
     # L2-normalise db VLAD for cosine (aggregate_vlad already L2-norms, but be safe).
     db_norm = db_vlad / (np.linalg.norm(db_vlad, axis=1, keepdims=True) + 1e-12)
 

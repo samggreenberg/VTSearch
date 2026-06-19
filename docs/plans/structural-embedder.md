@@ -1,12 +1,14 @@
 # Structural Embedders — Design
 
-**Status:** v1 in progress — **foundation + Stage-2 backend core + re-rank
-across all sort paths shipped** (two-stage re-rank, RegionYes-as-template,
-match-statistic verification classifier, wired into the vote-driven learned-sort
-path **plus** the example-sort, labelset/saved-detector, **and Find
-(`find-label`) paths** — so every scoring entry point now verifies); **K/threshold
-spike-tuning deferred** (the matched-region overlay already rides patch's
-`best_region` machinery; see "What shipped" / "Open follow-ups" below). This is the living spec for a third embedder *type*
+**Status:** v1 shipped — **foundation + Stage-2 backend core + re-rank across all
+sort paths** (two-stage re-rank, RegionYes-as-template, match-statistic
+verification classifier, wired into the vote-driven learned-sort path **plus** the
+example-sort, labelset/saved-detector, **and Find (`find-label`) paths** — so every
+scoring entry point verifies); **matched-region overlay reachable in the focus
+pane**; **ROxford5k wired as the instance-retrieval demo dataset**; **real VLAD
+codebook fit** (Caltech-101, replacing the placeholder); **K/threshold spike DONE**
+on ROxford5k (defaults `K=50` / `threshold=0.5` confirmed; Stage-1 VLAD recall
+identified as the quality ceiling — grow the codebook next). See "Open follow-ups". This is the living spec for a third embedder *type*
 (alongside single-vector and patch) that searches for **specific instances**
 ("the Coca-Cola logo") rather than **semantic categories** ("a cola can"). The
 architecture below is the agreed direction; the work plan is a sketch to be
@@ -559,10 +561,41 @@ entry point that stopped at coarse VLAD retrieval (CPU-tested in
   datasets (the box is constitutive — it defines the template). Still optional: a
   debug view that draws the inlier *correspondences* (the matched keypoint lines),
   which would need the backend to emit per-match point pairs.
-- **K / threshold / live-vs-on-demand spike.** `DEFAULT_RERANK_TOP_K = 50` and the
-  "tail scores 0 / threshold = 0.5" policy are reasonable defaults but unspiked.
-  Sweep K on a demo image dataset and confirm the live-on-every-sort latency is
-  acceptable (vs an on-demand "verify" action) before pinning.
+- **K / threshold / live-vs-on-demand spike — DONE; defaults confirmed.** Run on
+  the full Revisited Oxford (ROxford5k) benchmark (4993 db images + 70 queries,
+  `max_features=1024`, the shipped 64-centroid codebook) via
+  `scripts/spike_structural_roxford.py`. mAP follows the revisitop protocol
+  (Medium = easy+hard positives; Hard = hard only). Numbers:
+
+  | Stage | mAP-medium | mAP-hard | re-rank ms/query |
+  |-------|-----------:|---------:|-----------------:|
+  | Stage-1 (VLAD cosine) | 0.091 | 0.031 | — |
+  | + Stage-2 K=25  | 0.107 | 0.045 | 123 |
+  | + Stage-2 K=50  | 0.121 | 0.056 | 246 |
+  | + Stage-2 K=100 | 0.133 | 0.059 | 477 |
+  | + Stage-2 K=200 | 0.148 | 0.057 | 936 |
+
+  **K:** the geometric re-rank lifts mAP at every K (Stage-1 is the floor).
+  Latency is ~4.8 ms/candidate, so cost grows linearly while the *quality*
+  return tapers — Hard mAP **peaks at K=100 and regresses by K=200**. So
+  `DEFAULT_RERANK_TOP_K = 50` is a sound default (good lift at ~250 ms/query),
+  with K=100 the quality-sensitive ceiling. **Kept at 50; no change.**
+
+  **Threshold** (verification-score sweep at K=100, Medium GT): precision climbs
+  steeply to the knee then flattens — 0.30→0.59, 0.40→0.89, **0.50→0.93**,
+  0.60→0.97, 0.70→0.99 — while recall declines monotonically. 0.5 is the
+  precision/recall knee (when the verifier says "match" it is right ~93% of the
+  time), so `STRUCTURAL_DECISION_THRESHOLD = 0.5` is confirmed. **Kept at 0.5.**
+
+  **Live vs on-demand:** ~250 ms/query at K=50 (CPU) is fine for the current
+  on-every-sort re-rank; no separate on-demand "verify" action is needed at v1
+  scale. Revisit if K is raised or datasets grow well past ROxford's 5k.
+
+  **Headline finding — Stage-1 recall is the ceiling.** Absolute mAP is low
+  (0.09–0.15) because the 64-centroid codebook fit on a generic object corpus
+  (Caltech-101) gives weak VLAD retrieval: true matches the coarse vocabulary
+  under-ranks never enter the top-K, so Stage-2 cannot recover them. This is the
+  concrete answer to the codebook-size/corpus question below: **64 is too small.**
 - **Find-path classifier reuse — SHIPPED.** The Find scoring path
   (`POST /api/find-label`) now routes a saved structural detector's Stage-1 VLAD
   scores through the same Stage-2 re-rank as the learned-sort/labelset path
@@ -578,8 +611,16 @@ entry point that stopped at coarse VLAD retrieval (CPU-tested in
 - **Double SIFT detection.** The embed pass (VLAD) and the local-features pass
   each run SIFT once per image. Acceptable for v1; a combined single-detect pass
   is a cheap later optimisation.
-- VLAD vocabulary is settled for v1 (fixed shipped codebook); the spike only pins
-  its size + training corpus, so impl is no longer blocked on a design decision.
+- **VLAD codebook — real fit shipped; grow it next.** The shipped
+  `vlad_codebook_v1.npy` is now a genuine k-means vocabulary fit on 1M Caltech-101
+  rootSIFT descriptors (64 centroids), replacing the seeded placeholder — built
+  with `scripts/build_vlad_codebook.py --images data/caltech-101/101_ObjectCategories`.
+  The ROxford spike shows 64 centroids is the recall bottleneck; the clear
+  follow-up is a **larger vocabulary (256–1024 centroids) fit on a building/scene
+  corpus** (e.g. Paris6k or a Places365 slice — kept disjoint from any eval set)
+  to raise Stage-1 recall, which is what caps end-to-end mAP. Bigger K also grows
+  the VLAD vector (`K × 128`); confirm the diversity-tree / sort costs stay
+  acceptable when bumping it.
 - Spike (codebook size/corpus, Stage-1 backbone choice, K, geometric model)
   precedes v1 build, like the caltech101_s sweep preceded patch v1.
 - Keep the `StructuralMatcher` protocol media-agnostic from day one so the audio
