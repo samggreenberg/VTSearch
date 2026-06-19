@@ -681,10 +681,20 @@ Suggested order (lightest/most-isolated first to build confidence):
 pass. After the *whole* of Phase 2, **every interactive component spec asserts
 DOM under a zoneless `TestBed`** — that is the readiness bar for Phase 3.
 
-### Phase 3 — Flip production to zoneless
+### Phase 3 — Flip production to zoneless ✅ DONE
 
-Only after Phases 0–2 are complete and the interactive surfaces are green under
-the zoneless `TestBed`:
+Shipped: `app.config.ts` now uses `provideZonelessChangeDetection()`;
+`angular.json`'s base `build` polyfills array is empty (`[]`) — the `build:test`
+configuration keeps its own `zone.js`/`zone.js/testing`/`vitest-patch`, so
+fakeAsync specs are unaffected; the initial budget was tightened 540kB → 500kB
+(the measured eager bundle fell 527kB → **488kB** once zone.js left the polyfills,
+a ~39kB raw / ~12kB transfer drop). Three obsolete Python tests asserting a
+`polyfills.js` bundle (which a zoneless build no longer emits) were removed and
+the `catch_all` static-route docstring updated (OpenAPI snapshot regenerated).
+`./run-tests.sh` full suite green (4919 passed). **This is the only production
+behavior change; it is gated on the Phase 4 human browser QA below before merge.**
+
+Original step list, for the record:
 
 3.1 In `frontend/src/app/app.config.ts`, replace
 `provideZoneChangeDetection({ eventCoalescing: true })` with
@@ -754,7 +764,33 @@ A checklist version of the above goes in the PR description for the QA pass.
 
 ### Open follow-ups
 
-- **Phase 1 complete; Phases 2.1 + 2.2 + 2.3 + 2.4 + 2.5 shipped; Phases 2.6–5 remain.**
+- **Phases 0–3 COMPLETE. Remaining: Phase 4 (mandatory human browser QA) and
+  Phase 5 (optional cleanup).** Production is now zoneless. The whole reactivity
+  surface (2.1–2.9) was converted to be correct under both zone and zoneless,
+  the provider was flipped (Phase 3), and `./run-tests.sh` is green (4919 passed).
+  The headless suite cannot 100% prove real rendering, so a human MUST run the
+  Phase 4 browser QA before this merges — see the checklist in §Phase 4 / the PR
+  body. **Phase 5 cleanup (separable, no behavior change):**
+  - **Drop the now-no-op `ngZone.run(...)` wrappers** left in `browse-canvas`
+    (~8 output-emit / `selection.*` wrappers) and `panel-resize.directive` (the
+    `widthChange`/`resizeEnd` emits). They were deliberately kept through Phase 2
+    because they are load-bearing under the still-zoned prod but harmless no-ops
+    under zoneless; now that prod is zoneless they are pure no-ops and can go
+    (drop the `NgZone` injection where it then becomes unused — keep
+    `runOutsideAngular` perf wrappers).
+  - **Migrate the remaining specs to the zoneless `TestBed`** + DOM-after-
+    `whenStable()` assertions and delete the manual `fixture.detectChanges()`
+    pumps (still ~188 across ~39 files). The conversions are compile-verified and
+    a handful of canaries exist, but most specs still run on the default (zoned)
+    TestBed with `detectChanges`, so they are not yet staleness oracles. (Heavy
+    containers — left-panel, dashboard, right-panel, app — deadlock `whenStable()`
+    via their child rxResources; those need stubbed/lightweight harnesses.)
+  - **Drop the `vitest-patch` bridge** (convert the 43 fakeAsync occurrences to
+    native `async` + Vitest fake timers, then remove `zone.js` from the
+    `build:test` polyfills and `package.json`).
+  - **Adopt explicit `ChangeDetectionStrategy.OnPush`** on components for intent
+    (redundant under zoneless; documentation only).
+- **Phase 1 complete; Phases 2.1 + 2.2 + 2.3 + 2.4 + 2.5 shipped; Phases 2.6–9 shipped; Phase 3 shipped.**
   Shipped so far: Phase 0 (harness); all of Phase 1 — 1.1 + 1.3 + 1.4
   (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
   signalized) and 1.2 (KeyboardService de-zoned + the coupled center-panel state
