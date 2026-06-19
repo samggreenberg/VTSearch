@@ -1,8 +1,8 @@
 # Zoneless change detection — detailed migration plan
 
-Status: **Phase 0 shipped (test harness); Phase 1.3 + 1.4 shipped
-(ConnectionStateService + BrowseSelectionService signalized); Phase 1.1–1.2 and
-Phases 2–5 not started.** This document
+Status: **Phase 0 shipped (test harness); Phase 1.1 + 1.3 + 1.4 shipped
+(ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
+signalized); Phase 1.2 and Phases 2–5 not started.** This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
 supersedes the earlier stub. Every count and file:line reference was checked
@@ -399,16 +399,24 @@ These three services are read across the whole app and contain the NgZone CD
 re-entries; converting them neutralizes the largest blast radius. Each lands with
 its consumers and specs updated, under zone-based prod (behavior-neutral).
 
-1.1 **`ProgressEventsService` (SSE pump) — the single most important rewrite.**
-Drop the `this.zone.run(...)` wrappers in `listen()` and `onopen`. Replace the
-six `BehaviorSubject` channels (`dataset`, `loadingTasks`,
-`detectorLoadingTasks`, `sort`, `find`, `eval`) with `signal`s exposed
-read-only; keep the synchronous getters as signal reads; keep `serverReset$` as a
-`Subject` only if all its consumers are imperative (otherwise a signal). A signal
-write inside the EventSource callback schedules CD with no zone. Migrate
-consumers: prefer `| async`→signal reads in templates (progress bars, modals);
-the `votingIterations$` derived Observable can become a `computed`. `NgZone` can
-then be removed from the service.
+1.1 **`ProgressEventsService` (SSE pump) — the single most important rewrite.
+✅ DONE.** Dropped the `this.zone.run(...)` wrappers in `listen()` and `onopen`
+and removed `NgZone` from the service. The six `BehaviorSubject` channels
+(`dataset`, `loadingTasks`, `detectorLoadingTasks`, `sort`, `find`, `eval`) are
+now `signal`s exposed read-only; a signal write inside the EventSource callback
+notifies the scheduler with no zone. The synchronous latest-value getters became
+signal reads (callable — `loadingTasks()`/`detectorLoadingTasks()`; the unused
+`find` getter was dropped). `votingIterations` is now a `computed`. `serverReset$`
+stays a `Subject` (its only consumer, `dashboard-loading-tasks`, is imperative).
+The many consumers that compose channels with RxJS operators
+(takeUntil/filter/take — `dashboard-loading-tasks`, `toast`, `context-switch`,
+`find-view`, `label-view`, `dashboard`, `progress-modal`) keep their `$`
+observables, now `toObservable` bridges over the backing signals, so a signal
+write still drives them; this is behavior-neutral under the still-zoned prod app.
+Per-component `| async`→signal template reads are deferred to those components'
+Phase 2 conversions. New zoneless staleness canary in
+`progress-events.service.spec.ts` drives an SSE frame through the fake EventSource
+and asserts the rendered DOM repaints with no manual `detectChanges`.
 
 1.2 **`KeyboardService`.** Keep the `runOutsideAngular` keydown listener (it is a
 harmless no-op under zoneless and still avoids per-keystroke churn under zone).
@@ -566,13 +574,15 @@ A checklist version of the above goes in the PR description for the QA pass.
 
 ### Open follow-ups
 
-- **Phase 1.1–1.2 and Phases 2–5 remain.** Shipped so far: Phase 0 (harness) and
-  Phase 1.3 + 1.4 (ConnectionStateService + BrowseSelectionService signalized,
-  with their consumers and zoneless canary specs). Still owed in Phase 1:
-  **1.1 `ProgressEventsService`** (the SSE pump — six channels + the `NgZone`
-  re-entries) and **1.2 `KeyboardService`** (couples with `center-panel`). Then
-  the component conversions (Phase 2), the prod flip (Phase 3), human browser QA
-  (Phase 4), and cleanup (Phase 5).
+- **Phase 1.2 and Phases 2–5 remain.** Shipped so far: Phase 0 (harness) and
+  Phase 1.1 + 1.3 + 1.4 (ProgressEventsService SSE pump + ConnectionStateService
+  + BrowseSelectionService signalized, with their consumers and zoneless canary
+  specs). Still owed in Phase 1: **1.2 `KeyboardService`** (drop the 10
+  `zone.run(() => action$.next(...))` re-entries; the CD trigger moves to the
+  consumer `center-panel`, whose shortcut-driven state must be signalized — this
+  couples with the Phase 2.3 center-panel conversion). Then the component
+  conversions (Phase 2), the prod flip (Phase 3), human browser QA (Phase 4), and
+  cleanup (Phase 5).
 - **Full consumer specs for the browse cluster.** Phase 1.4 added a service unit
   spec + a signal-driven canary, but `browse-canvas`, `browse-bin-popup`, and
   `browse-selection-panel` still have **no** component specs (they are heavy to
