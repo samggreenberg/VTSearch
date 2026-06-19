@@ -8,7 +8,10 @@ utility components — toast-container, clipboard-copy, voting-overlay,
 dialog-host + VtDialogService, browse-legend); Phase 2.2 shipped (stats + picker
 modals — find/detector/dataset-stats signalized; label-importer signalized +
 moved onto rxResource; settings-importer/exporter + label-exporter mutation-result
-fields signalized); the rest of Phase 2 (2.3–2.9) and Phases 3–5 not started.**
+fields signalized); Phase 2.3 shipped (center-panel viewers — image-viewer's
+window drag/key handlers + shake `setTimeout` + `ResizeObserver` rendered-size
+writes signalized; video-player verified DOM-only, no change); the rest of Phase 2
+(2.4–2.9) and Phases 3–5 not started.**
 This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
@@ -505,10 +508,28 @@ Suggested order (lightest/most-isolated first to build confidence):
    template-bound `(closed)` output emit schedules the parent's CD under zoneless
    (proven by `testing/output-emit-zoneless.spec.ts`; see Open follow-ups). Each
    has a zoneless DOM-canary spec.
-3. **`center-panel` + viewers** (couples with Phase 1.2): signalize voting state;
-   `image-viewer` window drag/key handlers + shake + its `ResizeObserver`
-   rendered-size writes (signals); `video-player` clip-loop is DOM-only (safe;
-   its `(timeupdate)`/`(play)` are bound listeners, safe).
+3. **`center-panel` + viewers. ✅ DONE (Phase 2.3).** The center-panel voting
+   state shipped with Phase 1.2. Phase 2.3 finished the viewers: `image-viewer`
+   signalized the seven fields written from un-patched callbacks — `regionBox`,
+   `shiftHeld`, `panX`/`panY` (window `mousemove`/`mouseup` drag + `keydown`/
+   `keyup`/`blur` listeners), `renderedW`/`renderedH` (the `ResizeObserver`
+   rendered-size writes), and `regionBoxShake` (the shake `setTimeout`); its
+   getters (`imageTransform`/`regionBoxStyle`/`regionDrawActive`/`wrapCursor`)
+   now read those signals and stay plain getters (so the contract spec keeps
+   reading them without `()`). `zoom`/`rotation`/`zoomLabel`/`marqueeMode`/
+   `highlightMode`/`imageReady`/`imageSrc` stayed plain — they are written only
+   from bound handlers / `ngOnChanges`, which already schedule CD, and the parent
+   `center-panel` reads `marqueeMode`/`highlightMode`/`zoom`/`zoomLabel` only via
+   bound-event-driven re-checks. `video-player` was verified DOM-only and left
+   unchanged: its `videoSrc`/`videoError` are written only in `ngOnChanges` and
+   the bound `(error)` handler, and the `setInterval` clip-loop only writes
+   `video.currentTime` (a DOM property, not template state); `(loadedmetadata)`/
+   `(play)`/`(pause)`/`(error)` are bound listeners. The existing image-viewer
+   contract spec was updated to the signal accessors (kept on the default
+   TestBed, mirroring the center-panel split); a new
+   `image-viewer.zoneless.spec.ts` canary drives a real window `keydown`/`keyup`/
+   `blur` (Shift) through the live constructor listener and asserts the
+   `.region-mode` crosshair affordance repaints with no manual `detectChanges`.
 4. **`label-view`** (24 subscribes; learned-sort timer): convert reads to
    `async`/signals; the `setTimeout` learned-sort toggle → signal.
 5. **`find-view`** (13; divider drag re-entry → signal widths; two `.then`
@@ -608,18 +629,19 @@ A checklist version of the above goes in the PR description for the QA pass.
 
 ### Open follow-ups
 
-- **Phase 1 complete; Phases 2.1 + 2.2 shipped; Phases 2.3–5 remain.** Shipped so
-  far: Phase 0 (harness); all of Phase 1 — 1.1 + 1.3 + 1.4 (ProgressEventsService
-  SSE pump + ConnectionStateService + BrowseSelectionService signalized) and 1.2
-  (KeyboardService de-zoned + the coupled center-panel state signalized); Phase
-  2.1 (leaf utility components — toast-container, clipboard-copy, voting-overlay,
-  dialog-host + VtDialogService, browse-legend); and **Phase 2.2** (stats / picker
-  modals), each with its consumers and a zoneless canary spec. Remaining in
-  **Phase 2**: clusters 2.3–2.9 in the suggested order (next up: 2.3 center-panel
-  *viewers* — note the center-panel *state* shipped with 1.2, but 2.3 still owes
-  `image-viewer` (window drag/key handlers + shake + its `ResizeObserver`
-  rendered-size writes) and a check that `video-player` is DOM-only). Then the
-  prod flip (Phase 3), human browser QA (Phase 4), and cleanup (Phase 5).
+- **Phase 1 complete; Phases 2.1 + 2.2 + 2.3 shipped; Phases 2.4–5 remain.**
+  Shipped so far: Phase 0 (harness); all of Phase 1 — 1.1 + 1.3 + 1.4
+  (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
+  signalized) and 1.2 (KeyboardService de-zoned + the coupled center-panel state
+  signalized); Phase 2.1 (leaf utility components — toast-container, clipboard-copy,
+  voting-overlay, dialog-host + VtDialogService, browse-legend); **Phase 2.2**
+  (stats / picker modals); and **Phase 2.3** (center-panel viewers — image-viewer's
+  window drag/key handlers + shake `setTimeout` + `ResizeObserver` rendered-size
+  writes signalized; video-player verified DOM-only, no change), each with its
+  consumers and a zoneless canary spec. Remaining in **Phase 2**: clusters 2.4–2.9
+  in the suggested order (next up: 2.4 `label-view` — 24 subscribes + the
+  learned-sort `setTimeout` toggle). Then the prod flip (Phase 3), human browser QA
+  (Phase 4), and cleanup (Phase 5).
 - **What Phase 2.2 covered.** `find-stats`/`detector-stats`/`dataset-stats`:
   `loading`/`error`/`stats` plain fields → signals (templates read them via
   `@else if (stats(); as stats)` so the bodies were untouched); the stat-derived

@@ -18,11 +18,11 @@
     draggable="false"
     fetchpriority="high"
   />
-  @if (highlightVisible && renderedW > 0 && renderedH > 0) {
+  @if (highlightVisible && renderedW() > 0 && renderedH() > 0) {
     <div
       class="region-stage"
-      [style.width.px]="renderedW"
-      [style.height.px]="renderedH"
+      [style.width.px]="renderedW()"
+      [style.height.px]="renderedH()"
       [style.transform]="'translate(-50%, -50%) ' + imageTransform"
     >
       <div
@@ -33,17 +33,17 @@
       ></div>
     </div>
   }
-  @if (regionBox && renderedW > 0 && renderedH > 0) {
+  @if (regionBox() && renderedW() > 0 && renderedH() > 0) {
     <div
       class="region-stage"
-      [style.width.px]="renderedW"
-      [style.height.px]="renderedH"
+      [style.width.px]="renderedW()"
+      [style.height.px]="renderedH()"
       [style.transform]="'translate(-50%, -50%) ' + imageTransform"
       [style.--region-zoom]="zoom"
     >
       <div
         class="region-box"
-        [class.shake]="regionBoxShake"
+        [class.shake]="regionBoxShake()"
         [class.armed]="pendingBadConfirm"
         [ngStyle]="regionBoxStyle!"
         (mousedown)="onRegionBodyMouseDown($event)"
