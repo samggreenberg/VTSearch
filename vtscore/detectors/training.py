@@ -457,7 +457,7 @@ def train_and_score(
     """
     region_boxes = vote_region_boxes or {}
     X_list, y_list = _build_vote_xy(clips_dict, good_votes, bad_votes, region_boxes)
-    return _train_and_score_xy(
+    results, threshold, model = _train_and_score_xy(
         X_list,
         y_list,
         clips_dict,
@@ -467,6 +467,19 @@ def train_and_score(
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,
     )
+
+    # Stage-2 structural re-rank: a no-op for every non-structural dataset
+    # (gated on media carrying ``local_features``), so existing datasets are
+    # untouched.  For a structural (SIFT/VLAD) dataset it geometrically
+    # verifies the VLAD shortlist against the RegionYes templates and re-ranks
+    # by the match-statistic classifier (or the cold-start inlier gate).  See
+    # docs/plans/structural-embedder.md.
+    from vtscore.training.structural_similarity import maybe_structural_rerank  # noqa: PLC0415
+
+    results, threshold = maybe_structural_rerank(
+        results, threshold, clips_dict, good_votes, bad_votes, region_boxes, det_ctx
+    )
+    return results, threshold, model
 
 
 # ---------------------------------------------------------------------------

@@ -397,6 +397,12 @@ class DetectorContext:
         # region.  See ``logical-bug-audit.md`` finding M4.
         "label_embedding_regions",
         "model",  # nn.Sequential | None (current trained MLP)
+        # Structural (SIFT/VLAD) detectors carry a *second* learned object next
+        # to the retrieval MLP: the match-statistic verification classifier
+        # (None until trained / for non-structural detectors).  In-memory only,
+        # re-derived from votes on every retrain, never persisted.  See
+        # docs/plans/structural-embedder.md.
+        "verification_classifier",  # nn.Sequential | None
         "threshold",  # decision threshold
         # Cross-dataset training-corpus counts (from on-disk labelset).  These
         # are independent of ``good_votes``/``bad_votes``, which only count
@@ -472,6 +478,9 @@ class DetectorContext:
         self.label_embeddings: dict[str, Any] = {}
         self.label_embedding_regions: dict[str, tuple[float, float, float, float] | None] = {}
         self.model: Any = None  # nn.Sequential | None
+        # Match-statistic verification classifier for structural detectors;
+        # None for non-structural detectors and until first trained.
+        self.verification_classifier: Any = None  # nn.Sequential | None
         self.threshold: float = 0.5
         self.labelset_good_count: int = 0
         self.labelset_bad_count: int = 0
@@ -696,6 +705,7 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "label_embeddings", _FrozenDict("detector"))
         object.__setattr__(self, "label_embedding_regions", _FrozenDict("detector"))
         object.__setattr__(self, "model", None)
+        object.__setattr__(self, "verification_classifier", None)
         object.__setattr__(self, "threshold", 0.5)
         object.__setattr__(self, "labelset_good_count", 0)
         object.__setattr__(self, "labelset_bad_count", 0)

@@ -83,6 +83,18 @@ class _StructuralImageBase(MediaEmbedder):
     def max_features(self) -> int:
         return DEFAULT_MAX_FEATURES
 
+    @property
+    def structural_matcher(self) -> Optional[StructuralMatcher]:
+        """The geometric-verification backend, loading it on first access.
+
+        The Stage-2 re-rank (``vtscore.training.structural_similarity``) asks
+        the embedder for its matcher rather than hard-coding SIFT, so a future
+        learned-feature backend slots in unchanged.
+        """
+        if self._matcher is None:
+            self.load_models()
+        return self._matcher
+
     # --- backend hook ------------------------------------------------------
 
     def _make_matcher(self) -> StructuralMatcher:
