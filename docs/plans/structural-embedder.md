@@ -1,8 +1,11 @@
 # Structural Embedders — Design
 
-**Status:** v1 in progress — **foundation shipped**, Stage-2 sort wiring +
-verification classifier + frontend overlay deferred (see "What shipped" /
-"Open follow-ups" below). This is the living spec for a third embedder *type*
+**Status:** v1 in progress — **foundation + Stage-2 backend core shipped**
+(two-stage re-rank, RegionYes-as-template, match-statistic verification
+classifier, all wired into the vote-driven learned-sort path); **frontend
+overlay + example-sort/labelset-path re-rank + K/threshold spike-tuning
+deferred** (see "What shipped" / "Open follow-ups" below). This is the living
+spec for a third embedder *type*
 (alongside single-vector and patch) that searches for **specific instances**
 ("the Coca-Cola logo") rather than **semantic categories** ("a cola can"). The
 architecture below is the agreed direction; the work plan is a sketch to be
@@ -453,22 +456,58 @@ download):
   `package-data`), rebuilt by `scripts/build_vlad_codebook.py` (seeded
   placeholder now; `--images DIR` does the real corpus k-means fit).
 
+## What shipped (v1 Stage-2 backend core)
+
+The Stage-1→Stage-2 chokepoint and the verification learnable, wired into the
+vote-driven sort and fully CPU-tested
+(`tests_lib/detectors/test_structural_similarity.py`):
+
+- **Chokepoint** — `vtscore/training/structural_similarity.py` (library-tier,
+  import-clean): the one place that knows the two-stage rule. `structural_rerank`
+  takes the Stage-1-sorted list, geometrically verifies the top-`K`
+  (`DEFAULT_RERANK_TOP_K`) against the templates, and re-ranks by a verification
+  score in `[0, 1]`; candidates beyond the shortlist are kept in Stage-1 order
+  and scored 0 (the accepted K trade-off). The matched-region `inlier_box` rides
+  out on each verified result as `best_region` (the data side of the overlay).
+- **RegionYes-as-template** — `filter_features_to_box` keeps only the keypoints
+  inside a yes-vote's `region_box`; `build_templates` makes one template per Good
+  vote (whole-image yes keeps all keypoints) and `best_match_stats` scores
+  **max-over-templates**.
+- **Verification classifier** — `train_verification_classifier` stacks each
+  labelled item's `MatchStats` (verified against the templates, leave-one-out for
+  a Good vote's own template) into the `match_stats_to_features` vector and trains
+  a tiny MLP via `train_model`; its decision boundary is the calibrated threshold
+  (`STRUCTURAL_DECISION_THRESHOLD = 0.5`). `VerificationScorer` wraps it, falling
+  back below `MIN_VERIFICATION_VOTES` (3) to a cold-start inlier gate that crosses
+  0.5 exactly at `DEFAULT_MIN_INLIERS`, so the same threshold separates
+  match/non-match in both regimes. Carried on `DetectorContext.verification_classifier`
+  (in-memory, re-derived every retrain, never persisted) next to the retrieval MLP.
+- **Wiring** — `maybe_structural_rerank` is invoked from `train_and_score`
+  (`vtscore/detectors/training.py`), gated on media carrying `local_features`
+  (mirrors the patch path's `patch_regions` gate) so every non-structural dataset
+  is untouched and pays zero cost. The matcher is resolved backend-agnostically
+  via the embedder's new `structural_matcher` property.
+
 ## Open follow-ups
 
-- **Stage-2 sort wiring (next).** The geometric re-rank is not yet wired into the
-  similarity/sort path — `SiftMatcher.verify` works and is tested, but nothing
-  calls it during a sort yet. Add the Stage-1→Stage-2 chokepoint (shortlist by
-  VLAD cosine, RANSAC-rerank the top-K) in `region_similarity.py` / a sibling
-  `structural_similarity.py`. Pin K with the spike.
-- **Verification classifier.** Train the match-statistic classifier
-  (`match_stats_to_features` → `train_model`) from RegionYes/No votes; its
-  decision boundary is the calibrated threshold. Carry it on `DetectorContext`
-  alongside the retrieval MLP. Cold-start (<3 votes) falls back to
-  `MatchStats.is_match(DEFAULT_MIN_INLIERS)`.
-- **RegionYes-as-template.** Restrict the template keypoints to those inside the
-  vote's `region_box`; multiple RegionYes votes → max-over-templates.
-- **Frontend overlay.** Draw the `MatchStats.inlier_box` matched region on result
-  cards / focus pane, reusing patch's best-region machinery.
+- **Frontend overlay (next).** The backend already emits the matched-region
+  `best_region` box on verified results; draw it on result cards / focus pane,
+  reusing patch's best-region machinery. Optionally render the inlier
+  correspondences as a debug view.
+- **Re-rank in the other sort paths.** `maybe_structural_rerank` is wired into the
+  vote-driven `train_and_score` only. The **labelset** path
+  (`labelset_train_and_score`, used when a saved structural detector reloads
+  cross-dataset) and the **example-sort** path (seed-by-example, which would need
+  the uploaded example's local features) don't re-rank yet. Wire both, reusing the
+  same chokepoint.
+- **K / threshold / live-vs-on-demand spike.** `DEFAULT_RERANK_TOP_K = 50` and the
+  "tail scores 0 / threshold = 0.5" policy are reasonable defaults but unspiked.
+  Sweep K on a demo image dataset and confirm the live-on-every-sort latency is
+  acceptable (vs an on-demand "verify" action) before pinning.
+- **Find-path classifier reuse.** The verification classifier is carried on
+  `DetectorContext` but only the retrieval MLP is consumed by the Find scoring
+  path today; have Find re-rank with the stored classifier so a pre-trained
+  structural detector verifies without re-deriving.
 - **Double SIFT detection.** The embed pass (VLAD) and the local-features pass
   each run SIFT once per image. Acceptable for v1; a combined single-detect pass
   is a cheap later optimisation.
