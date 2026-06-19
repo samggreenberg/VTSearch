@@ -886,9 +886,7 @@ class MediaEmbedder(ABC):
             return []
         return self._local_features_forward_bulk_impl(medias)
 
-    def _local_features_forward_bulk_impl(
-        self, medias: list[dict]
-    ) -> list[Optional["StructuralFeatures"]]:  # noqa: F821
+    def _local_features_forward_bulk_impl(self, medias: list[dict]) -> list[Optional["StructuralFeatures"]]:  # noqa: F821
         """Subclass hook: bulk local-feature detection.
 
         Default: loop over :meth:`local_features_forward`, emitting per-item

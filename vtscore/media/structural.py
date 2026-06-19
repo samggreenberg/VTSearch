@@ -367,7 +367,9 @@ class SiftMatcher:
         # SIFT's nfeatures cap is baked into the detector instance, so make a
         # fresh one whenever the cap changes (cheap; just a config object).
         if self._sift is None or getattr(self, "_sift_nfeatures", None) != max_features:
-            self._sift = cv2.SIFT_create(nfeatures=int(max_features))
+            # SIFT_create is missing from the cv2 type stubs (present at runtime
+            # since OpenCV 4.4, when SIFT moved into the mainline module).
+            self._sift = cv2.SIFT_create(nfeatures=int(max_features))  # pyright: ignore[reportAttributeAccessIssue]
             self._sift_nfeatures = int(max_features)
         return self._sift
 
