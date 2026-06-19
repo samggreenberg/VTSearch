@@ -4,6 +4,10 @@
 gallery now virtualizes both grid and list and no longer freezes the UI at a
 few hundred items (added §3.4/S17 as the deferred backend cancel/progress
 follow-up surfaced by that work).  **§1.2 (S9) GMM subsampling has shipped.**
+**§2.1 is partially shipped** — the diversity tree is now cached in the dataset
+pickle and restored on reload (skipping the rebuild), but the first build at
+dataset creation still pays full cost; the cap/defer/on-demand-endpoint scope
+remains open.
 Separately, the CLI-specific streaming work (lazy folder enumeration, per-chunk
 embed, and streaming export — partial fixes for S20/S15/S13 on the
 `--autodetect` target side) **has** shipped; see
@@ -263,14 +267,27 @@ medias) cannot happen because the epoch is only bumped on structural change.
 
 ## Phase 2: Medium effort, high leverage
 
-### 2.1  Cap and defer diversity tree construction (S2, S8)
+### 2.1  Cap and defer diversity tree construction (S2, S8) — ⏳ PARTIALLY SHIPPED
+
+> **Reload caching shipped 2026-06-19** (commit 64cccd5e, PR #1987). The
+> diversity tree is now serialized into the dataset pickle at creation and
+> restored on reload via `restore_diversity_tree_from_cache`, which adopts the
+> cache only when its vector set exactly matches the loaded medias (any
+> remap/dedup/drop falls back to a rebuild). `_build_diversity_tree_stage`
+> skips when a tree is already present; cache-less (pre-change) pickles keep
+> rebuilding eagerly and age off. This removes the rebuild cost on every
+> *reload*, but the **first** build at dataset creation still pays full cost.
+> **Still open below:** Part A (smarter k-means defaults / auto-capped depth)
+> and Part B (skip auto-build above a threshold + on-demand build endpoint),
+> which together address that first-build cost at scale.
 
 **Files:** `vtscore/state/diversity_tree.py`,
 `vtscore/datasets/load_pipeline.py:968–981`
 
 **Problem:** The diversity tree is always built at load time.  At 100 k
 items it already takes several seconds; at 1 M it takes minutes and
-allocates GBs.
+allocates GBs.  (The reload path is now cached — see the shipped note above —
+so what remains is the cost of the *initial* build at creation time.)
 
 **Fix (two parts):**
 
