@@ -1,106 +1,792 @@
-# Zoneless change detection (and the initial-bundle budget)
+# Zoneless change detection — detailed migration plan
 
-Status: **Not started — gated on the signal/resource migration.** This doc
-records (a) why the production initial-bundle budget sits at 540 kB rather than
-something tighter, and (b) what it would take to go zoneless and reclaim the
-~35 kB zone.js polyfill. No code change has been made toward zoneless itself;
-the only thing that shipped alongside this doc is the budget bump and a
-one-component `@defer` (the incompatible-pair explainer), described below.
+Status: **Not started (planning complete; audited + red-teamed).** This document
+is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
+21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
+supersedes the earlier stub. Every count and file:line reference was checked
+against the code; every Angular API claim was verified against angular.dev / the
+angular source (Appendix C); and the plan itself was adversarially reviewed for
+accuracy, feasibility, and completeness (which added the dialog-service,
+CDK-virtual-scroll, observer-callback, and test-autoDetect items below).
 
-## Why the initial bundle is "always" over budget
+No production code has changed yet; the only thing that shipped alongside the
+original stub was the 540 kB initial-bundle budget bump and the one-component
+`@defer` (the incompatible-pair explainer). The budget is unwound in Phase 3.5.
 
-The recurring `bundle initial exceeded maximum budget` warning is **not** a
-symptom of UI/dev bloat. An audit of the eager path found the architecture is
-already well split:
+**Why this plan is unusually careful.** The frontend cannot be run in a browser
+in the Claude-Code-on-the-web container (no Chrome/Chromium), and the failure
+mode zoneless introduces — "a value changed but the view silently went stale" —
+is exactly the kind of bug that does *not* show up in a normal headless unit run
+(every component spec today drives `fixture.detectChanges()` by hand, which
+force-renders and therefore *masks* staleness). So the plan front-loads a
+**test-harness phase that makes the Vitest suite able to catch staleness**, and
+treats the production flip as the *last* step, gated behind a human browser-QA
+pass. Every technical assertion below was verified against angular.dev and the
+angular/angular source; the citations live in "Appendix C: verified facts".
 
-- **All routes are lazy** (dashboard, label, find, browse are each their own
-  chunk).
-- **The five heavy modals are `@defer`-loaded** (settings ~80 kB, importer
-  ~89 kB, new-detector ~44 kB, keyboard-help ~46 kB, achievements ~18 kB) — they
-  download only when opened.
-- **`marked` (the one heavy third-party dep) is confined to the deferred
-  keyboard-help modal** and never touches the eager path.
-- The eager shell components are all tiny (offline-banner, dialog-host,
-  toast-container, the achievement-unlock logic host with an empty template).
+---
 
-So the ~530 kB initial bundle is essentially **irreducible framework cost**:
-~240 kB Angular (core + router + forms + http + CDK + platform-browser),
-~35 kB zone.js, ~20 kB styles, and the necessary app shell. A 525 kB budget
-sits right against that floor, so practically *any* shell change — one more
-injected service, a few more framework symbols pulled in transitively — tips it
-over by a few kB. History bears this out: the budget was bumped to 540 kB once,
-pulled back to 525 kB, and then started tripping again.
+## 0. TL;DR / decision
 
-The budget now sits at **540 kB by design** (see the `"//"` note in
-`frontend/angular.json`). This is the documented, user-approved interim state,
-not a reflex bump: it acknowledges the framework floor and stops the warning
-from being a tripwire on every unrelated shell tweak. The real lever for going
-lower is dropping zone.js, which means going zoneless — see below.
+- **Going zoneless is the right end state** (drops the ~35 kB zone.js polyfill,
+  lets the initial-bundle budget fall back toward the framework floor, modern
+  default, cleaner stack traces). But it is an **app-wide change-detection
+  posture change**, not a provider flip: 0 of 86 components are `OnPush` today
+  and ~278 imperative `.subscribe()` sites (≈221 in components) assign to plain
+  fields that zone.js currently repaints "for free".
+- **The migration is incremental and reversible.** Production stays zone-based
+  until a single flip in Phase 3. Phases 1–2 convert the reactivity surface to
+  patterns that are correct under *both* zone and zoneless, so each can ship on
+  its own with zero behavior change while prod is still zoned.
+- **The safety net is built first (Phase 0).** We make the unit suite run its
+  `TestBed` under `provideZonelessChangeDetection()` and assert on the **rendered
+  DOM** after `await fixture.whenStable()` (not on component fields after manual
+  `detectChanges()`). This turns the headless suite into a real zoneless-staleness
+  detector, component by component, *before* prod flips.
+- **The flip + human QA is last (Phases 3–4).** Only after the suite is green
+  under a zoneless `TestBed` across the interactive surfaces do we flip the
+  production provider, and a human must browser-QA the interactive flows before
+  merge.
 
-### Incidental trim shipped with the bump
+---
 
-`AppComponent`'s template now wraps `<vt-incompatible-pair-explainer />` in
-`@defer (when showIncompatibleExplainer)`. The explainer is a rare
-error-recovery view (shown only when the active dataset/detector pair is
-incompatible), never present at first paint, so deferring it moves it out of the
-eager bundle at zero functional cost. This matches the existing `@defer` pattern
-already used for the shell's modals.
+## 1. How zoneless changes the rules (the mental model)
 
-## What going zoneless would require (and why it's gated)
+Under zone.js, *any* async callback (timer, XHR, DOM event, promise) triggers a
+global change-detection (CD) pass, so a component can mutate a plain field in any
+callback and the view repaints. Under `provideZonelessChangeDetection()`, **CD
+runs only when something explicitly notifies Angular's scheduler.** The canonical
+list of notifications (verbatim from the official zoneless guide — see Appendix C
+#3) is:
 
-Dropping zone.js (`provideZonelessChangeDetection()` + removing `"zone.js"` from
-`polyfills` in `angular.json`) reclaims ~35 kB raw / ~11 kB transfer from the
-eager bundle and is the modern Angular default. But an audit shows VTSearch is
-**not** ready for it:
+- `ChangeDetectorRef.markForCheck` — **called automatically by `AsyncPipe`**
+- `ComponentRef.setInput`
+- **Updating a signal that is read in a template**
+- **Bound** host or template listener callbacks (`(click)="…"`, `@HostListener`)
+- Attaching a view that was marked dirty by one of the above
 
-| Pattern | Count | Zoneless-safe? |
+Everything else that used to "just work" no longer schedules CD. The practical
+consequences, each verified (Appendix C):
+
+| Pattern | Zoneless behavior | Action |
 |---|---|---|
-| `\| async` pipe | 4 usages (2 files) | yes |
-| `signal()` / `computed()` / `toSignal()` | 3 (pre-migration baseline) | yes |
-| imperative `.subscribe(x => this.field = x)` in components | ~237 | **no** |
-| `setTimeout` / `setInterval` / `requestAnimationFrame` | ~78 | **risk** |
-| components using `ChangeDetectionStrategy.OnPush` | 0 of 87 | — |
+| Signal read in template, signal written anywhere | **Schedules CD** | ✅ preferred target |
+| `obs \| async` in template | `AsyncPipe` calls `markForCheck` → **schedules CD** | ✅ safe, even from raw callbacks |
+| `cdr.markForCheck()` in a callback | **Schedules CD** (notifies scheduler directly) | ✅ escape hatch |
+| `(click)` / `@HostListener` handler | **Schedules CD** | ✅ safe |
+| `.subscribe(v => this.field = v)`, `field` read in template | field updates, **view does NOT repaint** | ❌ must convert |
+| `setTimeout`/`setInterval`/`Promise.then` writing a template field | writes, **no repaint** | ❌ must convert |
+| raw `element.addEventListener(...)` / `ResizeObserver` / `MutationObserver` writing a template field | writes, **no repaint** | ❌ must convert |
+| `effect()` writing a **plain** (non-signal) template-bound field | runs, but **does not mark host dirty** | ❌ latent bug — make the field a signal |
+| `effect()` whose template reads the **signal** it updates | template's signal read marks dirty | ✅ safe |
+| `requestAnimationFrame` loop drawing to `<canvas>` | canvas draws imperatively, no Angular view involved | ✅ safe, no change |
+| `ngZone.run(() => …)` purely to re-enter Angular for CD | `NgZone` is a `NoopNgZone`; `.run()` **does not** drive CD | ❌ must replace the CD trigger |
+| `ngZone.runOutsideAngular(...)` perf wrapper | harmless no-op; **callable, safe to keep** | ✅ leave as-is |
 
-The app relies almost entirely on Zone's "any async tick → re-check everything"
-model. The SSE progress service (`progress-events.service.ts`) and keyboard
-service (`keyboard.service.ts`) both call `NgZone.run()` purely to trigger CD
-after pushing into RxJS subjects, and ~237 component subscriptions assign into
-plain fields that Zone then repaints. Under zoneless, every one of those sites
-needs to become a signal, an `async` pipe, or an explicit
-`ChangeDetectorRef.markForCheck()`, across all 87 components. That is an
-**app-wide change-detection rewrite**, not a provider flip.
+Two corrections to be explicit about, because earlier informal audits got them
+backwards or over-flagged:
 
-**Critically, there is no safety net for it in this repo's tooling.** The Vitest
-specs drive `fixture.detectChanges()` manually, so they stay green even when the
-real app's UI silently stops updating — the exact failure mode zoneless
-introduces ("screen goes stale until you click something") is invisible to the
-unit suite. There is also no Chrome/Chromium in the Claude-Code-on-the-web
-container to QA by hand. So a zoneless flip can only be verified by a human
-running the app in a real browser.
+- **`AsyncPipe` and `markForCheck()` are zoneless-safe.** A `BehaviorSubject.next()`
+  fired from inside a raw `addEventListener`/`setTimeout` *does* update an
+  `obs | async` binding, because the pipe calls `markForCheck`, which notifies
+  the scheduler independent of zones. So a service that pushes through a Subject
+  is fine **as long as its consumer reads it via `| async` (or a signal), not via
+  `.subscribe()`-into-a-plain-field.** This is the cheapest conversion lever.
+- **`NgZone.run`/`runOutsideAngular` do not have to be deleted** to be
+  zoneless-compatible (the methods stay callable). What breaks is relying on
+  `.run()` to *cause* a CD pass; that specific purpose must be replaced.
 
-### The path to zoneless
+---
 
-Zoneless is the natural *end state* of the signal/resource migration already in
-flight — see **`httpresource-migration.md`** (Phases 1–3 shipped: settings,
-media, and left-panel reads now run on `rxResource`/signals). The remaining
-read services (pollers, `forkJoin` aggregates) and the bulk of the ~237
-imperative component subscriptions still need converting. Sequencing:
+## 2. Current state (audited)
 
-1. Continue the `httpResource`/signal migration until the imperative
-   subscribe-and-assign count is near zero and components are `OnPush`-clean.
-2. Convert the `NgZone.run()` re-entry sites (SSE, keyboard) to signal writes /
-   `markForCheck`; keep `runOutsideAngular` blocks (those are zoneless-friendly
-   already — they intentionally avoid CD).
-3. Only then flip `provideZonelessChangeDetection()`, drop `zone.js` from
-   `polyfills` and from `package.json`, and update `test-setup.ts` (the
-   `fakeAsync`/`ProxyZone` bootstrap assumes zone.js is loaded).
-4. After the flip, a human must browser-QA every interactive surface (voting,
-   sorting, progress bars, browse canvas, modals) before merge.
+Counts are from a full sweep of non-spec `.ts`/`.html` under
+`frontend/src/app` (86 components, ~52 services). See Appendix A for the
+file-level catalog.
 
-## Open follow-ups
+**Already zoneless-safe (the head start):**
 
-- Drive the imperative-subscribe count down via `httpresource-migration.md` so
-  step 1 above becomes tractable.
-- Once zoneless lands and zone.js is gone, drop the 540 kB budget back toward
-  the framework floor (~495 kB) and delete the `"//"` rationale in
-  `angular.json` that points here.
+- **Inputs/outputs are largely modernized.** `output()` is 100% signal-based
+  (62 files, 164 calls; **zero** `@Output()` decorators). Signal `input()` is
+  229 calls across 57 files; 39 files still carry decorator `@Input()` (these
+  work under zoneless — only input *setters* that mutate template state need a
+  look).
+- **Two state services are signal/`rxResource`-driven** (`SettingsStateService`,
+  `MediaStateService`) from the `httpresource-migration.md` work, plus the
+  `left-panel` reads and the importer/exporter picker modals. These are the
+  **reference pattern** for everything else.
+- **Reactive primitives in use:** `signal(` ×8, `computed(` ×9, `effect(` ×20,
+  `rxResource(` ×10. `toSignal`/`toObservable`/`linkedSignal`/`model`/
+  `httpResource` are **not** used yet.
+- **`AsyncPipe` consumers (already safe):** 4 bindings total — `offline-banner`
+  (`connection.status$`, `connection.retrying$`) and `app.component`
+  (`achievements.hasPending$`). These keep working unchanged.
+- **Two components already discipline CD with `markForCheck()`:** `browse-bin-popup`
+  (5 sites) and `icon` (1).
+
+**The risk surface (what must change):**
+
+- **`OnPush` adoption: 0 / 86.** Nothing is written to OnPush discipline today,
+  so every component transitions from "checked on every zone tick" to "checked
+  only when notified".
+- **≈221 `.subscribe()` callbacks in 43 component files** (228 raw component
+  matches; 278 across all non-spec `.ts`) assign to plain template-bound fields
+  with no `markForCheck`/`async` — the bulk of the work.
+  Concentrations: `dashboard` (32), `label-view` (24), `dataset-importer-modal`
+  (22), `find-view` (13), `browse-view` (13), `new-detector-modal` (12),
+  `context-pulldown` (11), `center-panel` (11), `right-panel` (10),
+  `load-sort-modal` (8), the stats/importer/exporter modals (see Appendix A).
+- **NgZone re-entry purely for CD** in 7 files — the hard blockers:
+  `progress-events.service` (the SSE pump), `keyboard.service`, `media-list`,
+  `panel-resize.directive`, `find-view`, `browse-view`, `browse-canvas`. These
+  *will* silently stop triggering CD the moment zone.js is gone.
+- **Timer/promise/raw-listener callbacks mutating template state** (≈ the
+  `setTimeout` reset/flash idioms): `voting-overlay` flashes, `image-viewer`
+  shake + the window drag/key handlers, `center-panel` vote-spin/undo-toast,
+  `settings-modal` "Saved" badge, `toast-container` copied state,
+  `clipboard-copy` button text, `browse-view` build poller, `browse-minimap`
+  resize handle, `browse-hover-preview` fetch, the four "setTimeout(() =>
+  this.close())" modal closers. (Counts: 38 `setTimeout`, 1 `setInterval`, 16
+  `requestAnimationFrame` — most rAF is canvas and safe.) Full list: Appendix A §C.
+- **One `effect()` latent bug pattern** already in the tree: `center-panel`'s
+  constructor effect reads `settingsState.settingsSignal()` and writes **plain**
+  fields (`this.volume`, `this.audioPlaying`, …) bound in the template. Correct
+  under zone today; under zoneless those fields must become signals.
+- **`VtDialogService` holds dialog state in plain fields** (`dialogOpen`,
+  `dialogMessage`, `dialogType`, `dialogShowInput`, `dialogInputValue`,
+  `dialogButtons`) that `dialog-host.component` binds directly, with **no**
+  signal / `markForCheck` / `async` anywhere in the path. `show()` runs
+  synchronously inside `confirm()`/`prompt()`/`confirmDestructive()`. Most call
+  sites invoke these as the first statement of a bound `(click)` handler, so
+  `show()` runs in the click's CD-scheduling stack and is fine — **but** any call
+  made from a `.then()` / post-`await` continuation (e.g.
+  `find-view.component.ts:674` `this.dialog.prompt(...).then(...)`) runs `show()`
+  in a microtask outside any notification, so under zoneless **the dialog would
+  not appear**. This is fragile-by-construction (correctness depends on the
+  caller's stack). Fix defensively: signalize the dialog state (Recipe B) so it
+  is correct from any call context. (Note: `dialog.service.ts` also imports
+  `ApplicationRef`/`createComponent`/`EnvironmentInjector`/`ComponentRef` and
+  declares `modalRef` but **uses none of them** — dead code; drop it while here.)
+- **Raw `ResizeObserver` / `MutationObserver` callbacks** are the same un-patched
+  callback class as raw `addEventListener` (zone.js never patched them either, so
+  this is also latent today on default CD). Three write template-bound state:
+  `browse-legend.component.ts:73` (`MutationObserver` → `this.theme`, read in the
+  colormap key at L92), `image-viewer.component.ts` (`ResizeObserver` →
+  `recomputeRenderedSize` writes `renderedW`/`renderedH` ~L332/341/348, read in
+  region/overlay math), `media-list.component.ts:367` (column-count relayout).
+  The observers feeding
+  only canvas redraws (`browse-canvas`, `browse-minimap`) are Recipe E (safe).
+
+---
+
+## 3. The conversion recipes (canonical patterns)
+
+Every site falls into one of these. The recipes are written so the result is
+correct under **both** zone and zoneless, so they can land while prod is still
+zoned.
+
+### Recipe A — `subscribe`-into-plain-field → `| async` pipe (cheapest)
+
+When a component subscribes to a service Observable in `ngOnInit` only to mirror
+it into a field the template reads, delete the subscription and bind the
+Observable through `async`. The `AsyncPipe` handles subscribe/unsubscribe and
+calls `markForCheck` on emit.
+
+```ts
+// before
+toasts: Toast[] = [];
+ngOnInit() { this.sub = this.toastService.toasts$.subscribe(t => this.toasts = t); }
+ngOnDestroy() { this.sub?.unsubscribe(); }
+```
+```html
+<!-- before -->  @for (t of toasts; track …) { … }
+<!-- after  -->  @for (t of (toastService.toasts$ | async) ?? []; track …) { … }
+```
+Drop the field, the `sub`, and the `ngOnDestroy` if it was its only user. Use
+this for clean single-source reads (`toast-container`, the stats modals' simple
+cases, list reads not already on `rxResource`).
+
+### Recipe B — `subscribe`/`BehaviorSubject` → signal (preferred for hot/shared state)
+
+For service state read in many places, or where you also need synchronous
+"latest value" access, convert the `BehaviorSubject` to a `signal` (mirror the
+`SettingsStateService`/`MediaStateService` pattern). Consumers read the signal in
+the template (or via `computed`); imperative consumers read `sig()`.
+
+```ts
+// service: before
+private readonly statusSubject = new BehaviorSubject<ConnectionStatus>('online');
+readonly status$ = this.statusSubject.asObservable();
+goOffline() { this.statusSubject.next('offline'); }
+// service: after
+readonly status = signal<ConnectionStatus>('online');
+goOffline() { this.status.set('offline'); }
+```
+Template reads `connection.status()`. A `.set()` from a raw `addEventListener`
+schedules CD because it is a signal write read in a template. For consumers that
+still want an Observable (rare), bridge with `toObservable(sig)`; for the reverse
+(an Observable you must keep, exposed as a signal) use `toSignal(obs$)`.
+
+### Recipe C — imperative callback → `markForCheck()` (escape hatch)
+
+When a value genuinely must be mutated from a timer/raw-listener and converting
+to a signal is disproportionate, inject `ChangeDetectorRef` and call
+`markForCheck()` after the mutation. Works regardless of `OnPush` and schedules
+CD under zoneless. Prefer A/B; reserve C for local, leaf, animation-ish state
+(e.g. a `setTimeout` that clears a flash class) where a signal is overkill — but
+note a signal is usually *also* clean here, so default to signals and use C only
+where it clearly reads better.
+
+### Recipe D — `ngZone.run()` re-entry → drop the run, trigger CD properly
+
+Remove the `ngZone.run(...)` wrapper (keep any surrounding `runOutsideAngular`,
+which stays harmless). Replace the CD purpose with a **signal write** (best) or
+`markForCheck()`. Outputs emitted from a non-Angular callback (`emit()` inside a
+former `ngZone.run`) need the *parent* to be notified — model the value as a
+signal the parent reads, or `markForCheck` the parent; a bare `output()` emit
+from an unpatched callback will not, by itself, schedule the parent's CD.
+
+### Recipe E — leave canvas rAF / `runOutsideAngular` alone
+
+`requestAnimationFrame` loops that only draw to `<canvas>` (`browse-canvas`,
+`browse-minimap`, `audio-crop-overlay`, the progress-modal chart) need no CD and
+must **not** be "fixed" into triggering it — that would regress performance.
+Likewise `runOutsideAngular` perf wrappers stay; only their inner `.run()`
+re-entries (Recipe D) change.
+
+### Recipe F — `effect()` writing template-bound state → signalize the field
+
+An `effect()` that writes a plain template-bound field (e.g. `center-panel`'s
+settings mirror) must write a **signal** instead, and the template must read that
+signal. Either make the destination a `signal()` the template calls, or — if the
+source is already a signal — replace the effect+field with a `computed()` and
+read the computed in the template (no effect needed).
+
+---
+
+## 4. Phasing
+
+Each phase is independently shippable and gated on `./run-tests.sh` (the only CI;
+there is none in GitHub). Phases 1–2 are behavior-neutral under the still-zoned
+production app. Phase 0 must come first; Phase 3 (the flip) must come last.
+
+### Phase 0 — Make the test suite catch zoneless staleness (no production change)
+
+This is the linchpin and the part the original stub correctly flagged as missing.
+Today every component spec calls `fixture.detectChanges()` manually, which
+*force-renders* and therefore stays green even if the real app would go stale.
+We fix the harness so it exercises real zoneless scheduling, **before** touching
+production.
+
+0.1 **Decouple the test target's polyfills from the prod build.** Today the
+`test` target inherits `polyfills: ["zone.js"]` from `buildTarget:
+frontend:build:development`. Give the **test target its own** `polyfills` so a
+later removal of zone.js from the build path cannot silently break fakeAsync:
+```jsonc
+"test": {
+  "builder": "@angular/build:unit-test",
+  "options": {
+    "polyfills": ["zone.js", "zone.js/plugins/vitest-patch"],
+    "tsConfig": "tsconfig.spec.json",
+    "buildTarget": "frontend:build:development",
+    "runner": "vitest",
+    "runnerConfig": "vitest.config.ts",
+    "setupFiles": ["src/test-setup.ts"]
+  }
+}
+```
+`zone.js/plugins/vitest-patch` is the documented bridge that keeps
+`fakeAsync`/`tick`/`waitForAsync` working under the Vitest builder (Appendix C
+#7). It is explicitly a **transitional** mechanism — Angular recommends migrating
+to native `async` + Vitest fake timers long-term (deferred; Open follow-ups). If
+`vitest-patch` fully subsumes the hand-rolled ProxyZone shim in `test-setup.ts`,
+delete the shim **only after** confirming all 43 fakeAsync occurrences (11 files)
+still pass; do not delete it first (the shim's guard fails *silently* if zone.js
+is absent, throwing "Expected to be running in 'ProxyZone'" with no clear cause).
+
+0.2 **Add a zoneless `TestBed` helper.** Create
+`frontend/src/app/testing/zoneless-testbed.ts` exporting a providers fragment
+`[provideZonelessChangeDetection()]` (and a small `configureZoneless()` helper).
+Specs opt in as their component migrates (see per-component recipe). Enabling it
+**globally** in Phase 0 would turn the suite red en masse (none of the 221 sites
+are ready yet), so it is adopted **per component, in lockstep with Phases 1–2**.
+
+0.3 **Establish the staleness-catching spec pattern.** For a migrated interactive
+component, its spec must (a) use the zoneless `TestBed`, (b) drive updates through
+the *same channel the app uses* (push to the service subject/signal, dispatch a
+bound event), (c) `await fixture.whenStable()` — **not** `fixture.detectChanges()`
+— and (d) assert on `fixture.nativeElement.querySelector(...)` (rendered DOM),
+**not** on `component.someField`. Rationale (Appendix C #9): `detectChanges()`
+force-runs CD even when Angular would not have scheduled it, masking the exact
+staleness bug; `whenStable()` flushes only *scheduled* CD, so a missing
+notification surfaces as a failing DOM assertion. Add a `settleZoneless()` helper
+next to the existing `settleResource()` if a shared drain is useful.
+
+**Important harness nuance:** adding `provideZonelessChangeDetection()` to a
+`TestBed` flips `ComponentFixtureAutoDetect` **on by default** (it defaults off
+under zone-based TestBeds). That is what makes the canary work — the fixture
+refreshes only what CD actually schedules. The corollary is that the **188
+existing `fixture.detectChanges()` calls (39 files) must be *removed*, not
+supplemented**, as each spec migrates: a leftover manual `detectChanges()` both
+re-masks staleness *and* can throw `ExpressionChangedAfterItHasBeenChecked`
+(NG0100) when it races auto-detect. So the per-component spec migration is
+"add the zoneless provider, delete the manual `detectChanges()` pumps, assert DOM
+after `whenStable()`", not "add provider on top of the existing pumps".
+
+0.4 **Add one "staleness canary" spec per migrated interactive component:** mutate
+the backing value through the production channel **without** any manual CD pump,
+`await whenStable()`, assert the DOM reflects it. This directly exercises the
+scheduling path and fails loudly if a component forgets the signal write /
+`markForCheck`.
+
+0.5 **Keep `isolate: true` and the TestBed cascade guard.** Both are load-bearing
+and become *more* important as specs adopt `whenStable()`/auto-detect (which
+raise the chance of teardown-time `ExpressionChangedAfterItHasBeenChecked` or
+unflushed-resource throws). Do not relax either.
+
+**Phase 0 gate:** `./run-tests.sh frontend` green with the new test polyfills and
+the helper in place (no component migrated yet, so behavior is unchanged); the
+ProxyZone shim either retained or cleanly replaced with all fakeAsync specs
+passing.
+
+### Phase 1 — Signalize the hot shared services (highest leverage)
+
+These three services are read across the whole app and contain the NgZone CD
+re-entries; converting them neutralizes the largest blast radius. Each lands with
+its consumers and specs updated, under zone-based prod (behavior-neutral).
+
+1.1 **`ProgressEventsService` (SSE pump) — the single most important rewrite.**
+Drop the `this.zone.run(...)` wrappers in `listen()` and `onopen`. Replace the
+six `BehaviorSubject` channels (`dataset`, `loadingTasks`,
+`detectorLoadingTasks`, `sort`, `find`, `eval`) with `signal`s exposed
+read-only; keep the synchronous getters as signal reads; keep `serverReset$` as a
+`Subject` only if all its consumers are imperative (otherwise a signal). A signal
+write inside the EventSource callback schedules CD with no zone. Migrate
+consumers: prefer `| async`→signal reads in templates (progress bars, modals);
+the `votingIterations$` derived Observable can become a `computed`. `NgZone` can
+then be removed from the service.
+
+1.2 **`KeyboardService`.** Keep the `runOutsideAngular` keydown listener (it is a
+harmless no-op under zoneless and still avoids per-keystroke churn under zone).
+Drop the 10 `this.zone.run(() => this.action$.next(...))` re-entries — emit
+plainly. The CD trigger moves to the **consumer** (`center-panel`): the
+shortcut-driven state (`isVoting`, `spinningVote`, `swipeClass`, `undoToastText`,
+volume) must be **signals** (this also fixes the Phase-2 center-panel timer
+resets and the Recipe-F effect in one stroke). Optionally expose the latest
+action as a signal instead of a `Subject`.
+
+1.3 **`ConnectionStateService`.** Convert `statusSubject`/`retryingSubject` to
+signals (`status`, `retrying`). The `offline`-event raw listener's `goOffline()`
+then schedules CD via the signal write. The `offline-banner` template can keep
+`| async` (still safe) or switch to `status()`/`retrying()` signal reads — pick
+signal reads for consistency. Note this service feeds the `errorInterceptor`
+circuit breaker; verify the interceptor side effects (toasts, suppression) still
+fire — they do, the request still traverses the chain.
+
+1.4 **`BrowseSelectionService` (`changed$`).** Convert to a signal so the
+`browse-canvas` selection emits (Recipe D) and `browse-bin-popup` /
+`browse-selection-panel` update without `markForCheck` plumbing.
+
+**Phase 1 gate:** each service's spec + its consumers' specs migrated to the
+zoneless `TestBed` (Recipe in 0.3) and green; `./run-tests.sh` full pass.
+
+### Phase 2 — Convert components, cluster by cluster
+
+Order by route so each cluster is shippable and QA-able as a unit. For every
+component: apply Recipe A/B/C/D/F as appropriate, switch its spec to the zoneless
+`TestBed` with DOM assertions (0.3) + a canary (0.4), and confirm red→green.
+
+Suggested order (lightest/most-isolated first to build confidence):
+
+1. **Leaf utility components:** `toast-container` (A), `clipboard-copy` (C/signal),
+   `voting-overlay` (signal flashes), `field-hint-icon` (already signal),
+   `dialog-host` + **`VtDialogService`** (signalize dialog state, Recipe B/F —
+   see §2; canary: open a dialog from a non-event callback), `browse-legend`
+   (`MutationObserver` theme → signal).
+2. **Stats / picker modals:** `find-stats`, `detector-stats`, `dataset-stats`
+   (A), the `*-importer`/`*-exporter` mutation-result fields (signalize
+   `submitting`/`successMessage`/`status`; the four `setTimeout(close)` →
+   signal/`markForCheck`).
+3. **`center-panel` + viewers** (couples with Phase 1.2): signalize voting state;
+   `image-viewer` window drag/key handlers + shake + its `ResizeObserver`
+   rendered-size writes (signals); `video-player` clip-loop is DOM-only (safe;
+   its `(timeupdate)`/`(play)` are bound listeners, safe).
+4. **`label-view`** (24 subscribes; learned-sort timer): convert reads to
+   `async`/signals; the `setTimeout` learned-sort toggle → signal.
+5. **`find-view`** (13; divider drag re-entry → signal widths; two `.then`
+   confirm flows already route through HTTP, safe).
+6. **Browse cluster:** `browse-view` (panel-width re-entry → signal; build poller
+   → signal/markForCheck), `browse-canvas` (emits via Recipe D; canvas rAF
+   stays), `browse-minimap` (resize-handle listener → signal; nav rAF stays),
+   `browse-bin-popup`/`browse-selection-panel` (already markForCheck; verify
+   against signalized selection), `browse-hover-preview` (fetch `.then` →
+   signal/markForCheck).
+7. **`left-panel` + `media-list`:** `media-list`'s `zone.run(() =>
+   cdr.detectChanges())` (line ~401) → drop the `run`, keep `markForCheck()`
+   (it's already OnPush-style); `panel-resize.directive` emits → signal/markForCheck.
+8. **`right-panel`**, **`context-pulldown`**, **`dashboard`** (32 — mostly
+   `ngOnInit` list reads, good `async`/signal candidates),
+   **`new-detector-modal`** / **`dataset-importer-modal`** (heaviest; convert the
+   clean list reads, leave dynamic field-option fetches imperative with Recipe C
+   where a signal is awkward), **`settings-modal`** (forkJoin init → signals;
+   "Saved" badge timer → signal), **`load-sort-modal`** / **`resort-prompt-modal`**.
+9. **`app.component`** and remaining shell pieces.
+
+**Phase 2 gate (per cluster):** the cluster's specs run under the zoneless
+`TestBed`, assert on the DOM, include canaries, and pass; `./run-tests.sh` full
+pass. After the *whole* of Phase 2, **every interactive component spec asserts
+DOM under a zoneless `TestBed`** — that is the readiness bar for Phase 3.
+
+### Phase 3 — Flip production to zoneless
+
+Only after Phases 0–2 are complete and the interactive surfaces are green under
+the zoneless `TestBed`:
+
+3.1 In `frontend/src/app/app.config.ts`, replace
+`provideZoneChangeDetection({ eventCoalescing: true })` with
+`provideZonelessChangeDetection()`. Note the current provider's
+`eventCoalescing: true` is **not** silently lost: zoneless schedules CD (it does
+not run per-event), so event coalescing is the default behavior — if anything the
+flip preserves/improves it. Still, re-verify the high-frequency drag handlers
+(`find-view`, `browse-view`, `image-viewer`, `browse-minimap`) in Phase 4, since
+they previously leaned on coalesced single-CD-per-frame.
+
+3.2 In `frontend/angular.json`, remove `"zone.js"` from the **build** target's
+`polyfills` (the production array). Leave the **test** target's polyfills
+(set in 0.1) untouched — tests still need zone.js for fakeAsync.
+
+3.3 Keep `zone.js` in `package.json` (the test run imports it). It is no longer
+bundled into prod because it is out of the build polyfills; no `npm audit`
+concern (zone.js has no advisories).
+
+3.4 Re-run `./run-tests.sh` (full). Expect possibly a handful of
+`ExpressionChangedAfterItHasBeenChecked` surfacing now that CD timing is stricter;
+fix them (CLAUDE.md "Fix All Errors" — no waving off).
+
+3.5 **Budget:** with zone.js gone (~35 kB raw / ~11 kB transfer), drop the
+initial budget from 540 kB back toward the framework floor (~495 kB), tightening
+to the real measured size with a small headroom, and delete the `"//"` rationale
+block in `angular.json` that points here. Do not pre-commit a number — measure
+the post-flip `build:prod` initial size and set warn just above it.
+
+**Phase 3 gate:** `./run-tests.sh` full pass; `build:prod` clean (0 `▲ [WARNING]`)
+under the new budget.
+
+### Phase 4 — Human browser QA (mandatory, cannot be skipped)
+
+The container has no browser; the unit suite (even hardened) cannot 100% prove
+real rendering. A human runs `python app.py --local`, builds the frontend, and
+exercises every interactive surface, watching specifically for "stale until I
+click" symptoms:
+
+- Voting (good/bad, keyboard shortcuts, undo/redo, vote spinner, swipe anim).
+- Sorting / autopilot (sort bar, progress bars driven by SSE).
+- Train-and-score / find (eval progress modal, find progress).
+- Dataset load progress (loading-tasks bars), offline banner + Retry.
+- Browse canvas (pan/zoom, hover preview, bin popup, selection panel, minimap).
+- All modals (open/close, the four `setTimeout(close)` paths, "Saved" badge,
+  copied-to-clipboard text, importer/exporter flows).
+- Left/right panel resizers (drag widths), context pulldown, dashboard lists,
+  new-detector + importer modals.
+- **Confirm/prompt dialogs** triggered from non-click paths (e.g. find-view's
+  rename-after-`.then`), to prove the signalized `VtDialogService` opens reliably.
+- **CDK virtual-scroll viewports** (`left-panel/media-list`, `browse-bin-popup`):
+  scroll fast and check for item flicker / blank rows / stale viewport — a known
+  zoneless interaction the jsdom suite cannot see (see Framework-surface notes).
+
+A checklist version of the above goes in the PR description for the QA pass.
+
+### Phase 5 — Cleanup / follow-ups
+
+- Migrate the residual fakeAsync/timer specs to native `async` + Vitest fake
+  timers and drop `zone.js/plugins/vitest-patch` (and finally `zone.js` from
+  `package.json`) — Angular's recommended long-term direction (Appendix C #7).
+  Optional, separable, no prod impact.
+- Adopt `ChangeDetectionStrategy.OnPush` explicitly on components for clarity
+  (under zoneless they already behave OnPush-like; this is documentation/intent,
+  not a functional change).
+
+---
+
+## 4.5 Framework-surface notes (verified non-gaps + watch-items)
+
+Each Angular/CDK/3rd-party surface was checked against this codebase; recording
+the verdicts so a reviewer doesn't have to re-derive them.
+
+**Watch-items (do require attention):**
+
+- **CDK virtual scroll.** `@angular/cdk` is used only via `@angular/cdk/scrolling`
+  (`CdkVirtualScrollViewport`) in `left-panel/media-list` and `browse-bin-popup`
+  (no overlay / portal / drag-drop / a11y / `LiveAnnouncer` usage). CDK virtual
+  scroll has historically had zoneless repaint/flicker interactions (it leans on
+  `NgZone`/`onStable` internally). The `media-list` `zone.run(() =>
+  cdr.detectChanges())` relayout (Appendix A §A) sits right next to the viewport.
+  Action: confirm the pinned CDK 21.x carries the virtual-scroll zoneless fix,
+  and **browser-QA both viewports for scroll staleness/flicker** (Phase 4) — the
+  jsdom suite cannot exercise real scroll geometry.
+- **`ngModel` programmatic writes.** 58 files use `FormsModule`/`ngModel`.
+  Two-way binding is safe because `(ngModelChange)` is a *bound* listener that
+  schedules CD. The one caveat: writing an `ngModel`-bound **plain field** from a
+  non-event callback won't refresh the input — the same rule as everywhere, but
+  worth calling out given the breadth. Covered by the general subscribe/observer
+  conversions; no separate phase.
+
+**Verified non-gaps (no action needed):**
+
+- **Router / lazy routes / `@defer`.** `app.routes.ts` uses `loadComponent` lazy
+  routes; `app.component.html` has 5 `@defer (when …)` modals. Router events and
+  `@defer` triggers are framework-driven and on the zoneless notification path.
+  The `@defer (when <plainField>)` gates (`showSettings`, importer-flow flags…)
+  flip inside bound `(click)` handlers, which schedule CD. Safe.
+- **`HttpClient` / interceptors.** `HttpClient` is not itself a CD trigger;
+  HTTP-result repaint flows through the *consumer* (signal/`async`/`markForCheck`)
+  — which is exactly what the subscribe-assign conversion handles. The three
+  interceptors (active-context, achievements-refresh, error/circuit-breaker) run
+  in the request chain and don't touch template state. Safe (Phase 1.3 already
+  notes the circuit breaker keeps working).
+- **Angular animations.** Not used — no `@angular/animations`, no
+  `provideAnimations`, no `trigger()`/`[@…]` bindings. Transitions are CSS-only.
+- **`marked`.** Called with `{ async: false }` in `keyboard-help-modal` — fully
+  synchronous, no CD interaction.
+- **`onStable` / `onMicrotaskEmpty` / `afterRender`.** Zero usages in app code,
+  so nothing to migrate to `afterNextRender`. (CDK may use `onStable` internally
+  — folded into the CDK watch-item above.)
+- **SSR / hydration.** None (no `provideClientHydration`, no server rendering).
+- **`PendingTasks`.** Not needed: there's no SSR/test-stability requirement, and
+  the SSE pump / pollers don't need to hold the app "unstable". `whenStable()` in
+  tests resolves correctly.
+- **Bootstrap.** No special handling beyond the Phase 3.1 provider swap.
+- **video/audio `(timeupdate)`/`(play)`/`(loadedmetadata)`.** Bound template
+  listeners → schedule CD. Safe.
+
+## 5. Verification strategy (how we know it works without a browser)
+
+The crux of "be very careful, we can't check the frontend here": we do **not**
+rely on eyeballing. The plan makes the headless suite a genuine zoneless oracle:
+
+1. **Per-component proof.** Each migrated component's spec runs its `TestBed`
+   under `provideZonelessChangeDetection()`, drives state through the production
+   channel, `await`s `whenStable()`, and asserts the **rendered DOM**. A missing
+   notification ⇒ stale DOM ⇒ failing assertion. (Appendix C #9.)
+2. **Canary specs** (0.4) explicitly test the scheduling path with zero manual
+   CD pumping, so a forgotten signal write / `markForCheck` cannot pass.
+3. **Lockstep migration.** Because the zoneless `TestBed` is adopted per component
+   in Phases 1–2, the suite is fully green under zoneless semantics *before* the
+   prod flip — the flip itself (Phase 3) is then a near-no-op for behavior.
+4. **Human QA (Phase 4)** is the final backstop for anything the DOM-level unit
+   assertions can't capture (real paint timing, focus, canvas interaction).
+
+This is why the order matters: harness first, components second (validated under
+zoneless tests), flip third, human QA last.
+
+---
+
+## 6. Rollback plan
+
+- Phases 1–2 are individually revertible commits and are behavior-neutral under
+  zone, so a regression found in QA reverts just the offending cluster.
+- Phase 3 is a 3-line revert (`app.config.ts` provider + the `angular.json`
+  build-polyfills line + budget). Because Phases 1–2 are correct under zone too,
+  reverting only Phase 3 returns to a fully working zone-based app with the
+  modernized reactivity intact.
+- The test-target polyfills (Phase 0) are independent of the prod flip and need
+  not be reverted.
+
+---
+
+## 7. Risks & gotchas (carry these into every PR)
+
+- **Silent fakeAsync breakage.** If the test target loses zone.js (e.g. someone
+  "cleans up" polyfills), the ProxyZone shim no-ops *silently* and all 43
+  fakeAsync occurrences throw. Phase 0.1 decouples test polyfills precisely to
+  prevent this; never let the test target depend on the build target for zone.js.
+- **`rxResource` is invisible to `fakeAsync`** (already documented in
+  `httpresource-migration.md`): the virtual clock doesn't drive promise-based
+  resource resolution. As more reads become resources/signals, *more* specs must
+  leave fakeAsync for real-async + `settleResource()`. The fakeAsync count should
+  **shrink** over the migration, not grow.
+- **`effect()` plain-field trap** (Recipe F): the existing `center-panel` effect
+  is the canonical example. Audit every `effect()` (20 of them) for plain
+  template-bound writes during migration.
+- **Output emits from non-Angular callbacks** (Recipe D): a bare `output()` emit
+  from a former `ngZone.run` won't schedule the parent's CD — model as a signal
+  or `markForCheck` the parent.
+- **Do not "fix" canvas rAF loops** into triggering CD (Recipe E) — performance
+  regression.
+- **`ExpressionChangedAfterItHasBeenChecked`** may surface post-flip and in
+  `whenStable()` specs; contained by `isolate:true` + the cascade guard but still
+  real failures to fix (no waving off, per CLAUDE.md).
+- **`@Input()` setters** (39 files still on decorator inputs): any setter that
+  mutates template state needs the same treatment as a subscribe-assign.
+- **`ResizeObserver`/`MutationObserver`** are as un-patched as raw
+  `addEventListener` — audit them as a first-class class, not as effects.
+- **`VtDialogService` fragility:** dialog visibility currently depends on the
+  caller's stack; signalize it so confirm/prompt are correct from any context.
+- **CDK virtual scroll** can flicker/stale under zoneless — browser-QA only.
+- **`ngModel` two-way bindings** (58 files): safe via `(ngModelChange)`, but a
+  programmatic plain-field write from a non-event callback won't refresh.
+
+---
+
+## 8. Open questions for the user
+
+These are choices the plan can proceed without (defaults noted) but that change
+scope at the margins:
+
+- **Conversion bias:** default is "`| async` where the source stays an Observable
+  and is read in one place (Recipe A); signalize hot/shared service state (Recipe
+  B); `markForCheck` only as a leaf escape hatch (Recipe C)." If you'd rather go
+  *all-signals* (convert every Observable service to signals) for uniformity, the
+  scope grows but the end state is cleaner.
+- **Phase 5 timing:** drop the vitest-patch bridge and convert timer specs to
+  Vitest fake timers as part of this effort, or defer to its own follow-up
+  (default: defer).
+- **Explicit `OnPush`:** annotate components with `ChangeDetectionStrategy.OnPush`
+  for intent (default: skip — redundant under zoneless).
+
+---
+
+## Appendix A: file-level work catalog
+
+### §A — NgZone `.run()` re-entry purely for CD (Recipe D) — hard blockers
+
+| File | Sites | What it protects | Zoneless fix |
+|---|---|---|---|
+| `services/progress-events.service.ts` | `listen()` per-frame (~6 channels) + `onopen` | SSE frames fire outside zone; `.run()` repaints progress UI | Signalize 6 channels; drop `zone.run`; remove `NgZone` |
+| `services/keyboard.service.ts` | 10 (`action$.next`) | shortcut dispatch repaints center-panel | Drop `zone.run`; signalize consumer state |
+| `components/left-panel/media-list/media-list.component.ts` | 1 (`zone.run(() => cdr.detectChanges())`) | grid relayout flush (OnPush) | Drop `zone.run`, keep `markForCheck()` |
+| `components/label-view/panel-resize.directive.ts` | 2 (`widthChange`/`resizeEnd` emit) | parent panel width | Signal width / `markForCheck` parent |
+| `components/find-view/find-view.component.ts` | 4 (`leftWidth`/`rightWidth`) | divider drag widths | Signal widths |
+| `components/browse-view/browse-view.component.ts` | 1 (`panelWidth`) | divider drag width | Signal width |
+| `components/browse-canvas/browse-canvas.component.ts` | ~8 (`densityMaxChanged`/`contextMenu`/`hexHover`/`selection.*`) | cross-boundary emits to parent/bin-popup | Recipe D; canvas rAF unchanged |
+
+### §B — `runOutsideAngular` / canvas rAF (Recipe E) — leave as-is
+
+`keyboard.service:28`, `panel-resize:55`, `find-view:359/401`, `media-list:366`,
+`browse-view:421`, `browse-canvas:350/360/885/997`, `browse-minimap:151/367`
+(perf wrappers — keep). Canvas rAF draw loops: `browse-canvas` (multiple),
+`browse-minimap:238`, `media-crop-modal/audio-crop-overlay`, `progress-modal`
+chart — keep; do not make them trigger CD.
+
+### §C — Timer / promise / raw-listener mutating template state (Recipe B/C)
+
+`voting-overlay:34,43` (flash classes); `image-viewer:296` (shake) and
+`:420–512` (window drag/key → `panX/panY/regionBox/zoomLabel/shiftHeld` — the
+largest single offender); `center-panel:203` (undo toast), `:310` (spinningVote),
+`:311` (isVoting + emit), `:147` (visibilitychange playback);
+`settings-modal:537` ("Saved" badge); `toast-container:97` (copiedId);
+`clipboard-copy:123` (buttonText); `browse-view:830,843,847` (build poller →
+status/progress/meta); `browse-minimap:408–409` (resize-handle listener, NOT in
+`runOutsideAngular`, mutates bound width/height); `browse-hover-preview:115–116`
+(`fetch().then` → textContent); `label-view:615` (learned-sort toggle);
+`settings-importer:125`/`label-importer:213`/`settings-exporter:124`/
+`examples-editor:82` (`setTimeout(() => this.close())` emit). Service-level
+subjects pushed from timers/raw-listeners that are consumed via **plain-field
+subscribe** (so the *consumer* needs A/B): `toast.service:160`,
+`browse-prep.service:220`, `connection-state.service:83` (the last is safe for
+`offline-banner` because that consumer uses `| async`, but signalize anyway per
+Phase 1.3). Raw `ResizeObserver`/`MutationObserver` writing template state (same class as
+raw `addEventListener`): `browse-legend:73` (`MutationObserver` → `theme`),
+`image-viewer` (`ResizeObserver` → `recomputeRenderedSize` ~L332 →
+`renderedW`/`renderedH`), `media-list:367` (column-count relayout). Observer callbacks feeding only canvas
+redraws (`browse-canvas`, `browse-minimap`) are Recipe E (safe). Plain-field
+dialog state in `VtDialogService` (consumed by `dialog-host`) → signalize
+(Recipe B). DOM-only `setTimeout`s (focus/scroll/select: `context-pulldown:216`,
+`detector-context-bar:26`, `dataset-card:102`, `detector-card:113`,
+`folder-browser:154,386`, `import-config:142` queueMicrotask) are **safe** — no
+template field.
+
+### §D — `subscribe`-into-plain-field reads (Recipe A/B), by component
+
+High-count `ngOnInit`/event list reads (good `async`/signal candidates):
+`dashboard` (32), `label-view` (24), `dataset-importer-modal` (22), `find-view`
+(13), `browse-view` (13), `new-detector-modal` (12), `context-pulldown` (11),
+`center-panel` (11), `right-panel` (10), `load-sort-modal` (8), plus the modal
+catalog: `find-stats`/`detector-stats`/`dataset-stats` (stats reads, Recipe A);
+`label-importer` (list + dynamic field options), `examples-editor`,
+`autodetect-results`, `resort-prompt`, `auto-find-settings`,
+`import-defaults-settings`, `settings-modal` (forkJoin init), `progress-modal`
+(timer poller + SSE iterations). Mutation-result subscribes (POST/PUT) keep their
+imperative `HttpClient` call but their *template-bound result fields*
+(`submitting`/`successMessage`/`status`/`error`) become signals or `markForCheck`.
+
+### §E — `effect()` audit (Recipe F)
+
+20 `effect()` calls across 16 files. Known plain-field-write trap:
+`center-panel:91` (settings mirror → `volume`/`audioPlaying`/`showAnimations`/
+`showMetadata`/`labelHintDismissed`). Audit the other 19 (`settings-state` ×2,
+`left-panel` ×2, `label-view` ×2, `find-view` ×2, and one each in
+`achievements.service`, `view-controls`, `right-panel`, `export-modal`,
+`media-list`, `dashboard`, `browse-view`, `browse-selection-panel`,
+`browse-bin-popup`, `achievements-tab`, `app.component`) for plain template-bound
+writes vs. signal-read-in-template (the latter are fine). Audit the
+`ResizeObserver`/`MutationObserver` callbacks (Appendix C §C) **separately** —
+they are a raw-callback class, not effects, even though both can write
+template-bound fields.
+
+## Appendix B: test-infra catalog
+
+- 69 spec files. `fakeAsync` 43 occurrences / 11 files; `tick(` (zone) subset of
+  those; `TestBed.tick(` 21 / 9 files; `discardPeriodicTasks` 5 / 2 files;
+  `fixture.detectChanges(` 188 / 39 files; `fixture.whenStable` 0;
+  `fixture.autoDetectChanges` 0; zone `flush()` 0 (all `flush(` matches are
+  `HttpTestingController.flush`).
+- The 11 fakeAsync files (preserve via vitest-patch in Phase 0):
+  `vote-state.service`, `browse-prep.service`, `dataset-state.service`,
+  `right-panel` (heaviest, 15), `detector-context-bar`, `label-view`,
+  `settings-modal`, `progress-modal`, `dashboard`, `detector-card`,
+  `dataset-card`.
+- Today zone.js enters tests via the **static strategy**: `"zone.js"` in the
+  build target's `polyfills` makes `@angular/build:unit-test` inject
+  `zone.js/testing` before `setupFiles`. The `test-setup.ts` ProxyZone shim then
+  hand-wires `fakeAsync` for Vitest (zone.js's jest patch bails on
+  `typeof jest === 'undefined'`). Phase 0.1 replaces this coupling with explicit
+  test-target polyfills.
+
+## Appendix C: verified facts (with sources)
+
+All confirmed against angular.dev and angular/angular(-cli) source. Verbatim
+quotes abbreviated; URLs are authoritative.
+
+1. **`markForCheck` schedules CD under zoneless — TRUE.** It marks the view dirty
+   *and* notifies the scheduler (`NotificationSource.MarkForCheck`), independent
+   of zones, so it fires from unpatched callbacks. `zoneless_scheduling_impl.ts`;
+   https://angular.dev/guide/zoneless
+2. **`AsyncPipe` is zoneless-safe — TRUE.** It calls `markForCheck` on emit; the
+   guide lists "`ChangeDetectorRef.markForCheck` (called automatically by
+   `AsyncPipe`)". https://angular.dev/guide/zoneless
+3. **Canonical scheduling-trigger list — confirmed verbatim:** `markForCheck`
+   (via `AsyncPipe`), `ComponentRef.setInput`, updating a signal read in a
+   template, bound host/template listener callbacks, attaching a dirty view.
+   `afterRender`/`afterNextRender` run *during* a CD pass, not as triggers.
+   https://angular.dev/guide/zoneless
+4. **Bound `(event)`/`@HostListener` trigger CD; raw `addEventListener` does not
+   — TRUE.** The word "Bound" in the trigger list is load-bearing.
+   https://angular.dev/guide/zoneless
+5. **Effects do not auto-mark host dirty — TRUE.** Only `markForCheck` *within*
+   an effect body, or a signal read in the template, reaches the component; an
+   `effect → plain field → template` binding has no notification path.
+   `render3/reactivity/effect.ts`; https://angular.dev/guide/zoneless
+6. **`provideZonelessChangeDetection()` is STABLE — TRUE.** Stable since v20.2;
+   zoneless is the default in v21+. Use this name (not the old
+   `provideExperimentalZonelessChangeDetection`).
+   https://angular.dev/api/core/provideZonelessChangeDetection
+7. **`zone.js/plugins/vitest-patch` exists & is documented — NUANCED.** It is the
+   documented way to keep `fakeAsync`/`flush`/`waitForAsync` working under the
+   Vitest builder, *but* Angular "strongly recommend[s] you start planning to
+   convert … to native `async` and Vitest fake timers". Treat as a bridge, not
+   the long-term path. https://angular.dev/guide/testing/migrating-to-vitest
+8. **Keeping zone.js in TEST polyfills while prod is zoneless — TRUE.** Test
+   polyfills and prod bootstrap are independent; loading the patch in the test
+   target keeps fakeAsync working. https://angular.dev/guide/testing/migrating-to-vitest
+9. **`whenStable()` catches staleness that `detectChanges()` masks — TRUE.** The
+   guide says to "avoid using `fixture.detectChanges()` when possible … This
+   forces change detection to run when Angular might otherwise have not scheduled
+   change detection," and shows `provideZonelessChangeDetection()` +
+   `await fixture.whenStable()`. https://angular.dev/guide/zoneless
+10. **`NgZone` becomes `NoopNgZone`; `ngZone.run()` alone doesn't drive CD —
+    TRUE.** `provideZonelessChangeDetection()` provides
+    `{provide: NgZone, useClass: NoopNgZone}`. The methods stay *callable* (the
+    guide notes `run`/`runOutsideAngular` "do not need to be removed"), but no
+    longer cause a CD pass. `zoneless_scheduling_impl.ts`;
+    https://angular.dev/guide/zoneless
