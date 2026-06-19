@@ -1,5 +1,5 @@
+import { WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { BehaviorSubject } from 'rxjs';
 import { ProgressEventsService } from './progress-events.service';
 import { ConnectionStateService, ConnectionStatus } from './connection-state.service';
 
@@ -40,7 +40,7 @@ class FakeEventSource {
 
 describe('ProgressEventsService liveness wiring', () => {
   let recordSuccess: ReturnType<typeof vi.fn>;
-  let status$: BehaviorSubject<ConnectionStatus>;
+  let status: WritableSignal<ConnectionStatus>;
   let originalEventSource: typeof EventSource;
 
   beforeEach(() => {
@@ -49,13 +49,13 @@ describe('ProgressEventsService liveness wiring', () => {
     globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
 
     recordSuccess = vi.fn();
-    status$ = new BehaviorSubject<ConnectionStatus>('online');
+    status = signal<ConnectionStatus>('online');
     const connectionStub = {
-      status$,
+      status,
       recordSuccess,
       recordNetworkFailure: vi.fn(),
       get isOffline() {
-        return status$.value === 'offline';
+        return status() === 'offline';
       },
     };
 
@@ -72,6 +72,9 @@ describe('ProgressEventsService liveness wiring', () => {
 
   function connectedSource(): FakeEventSource {
     TestBed.inject(ProgressEventsService);
+    // The connect() side effect now runs inside an effect on the status signal,
+    // so flush it before reading the EventSource the service opened.
+    TestBed.tick();
     return FakeEventSource.instances[0];
   }
 

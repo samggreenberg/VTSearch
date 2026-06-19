@@ -1,4 +1,4 @@
-@if ((connection.status$ | async) === 'offline') {
+@if (connection.status() === 'offline') {
   <div class="offline-banner" role="alert" aria-live="assertive">
     <svg
       class="offline-banner__icon"
@@ -25,9 +25,9 @@
       type="button"
       class="offline-banner__retry"
       (click)="connection.retry()"
-      [disabled]="connection.retrying$ | async"
+      [disabled]="connection.retrying()"
     >
-      {{ (connection.retrying$ | async) ? 'Retrying…' : 'Retry' }}
+      {{ connection.retrying() ? 'Retrying…' : 'Retry' }}
     </button>
   </div>
 }

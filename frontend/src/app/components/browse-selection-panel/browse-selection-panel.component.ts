@@ -91,12 +91,18 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
       }
       this.applyViewPrefs();
     });
+    // Rebuild the list whenever the selection changes. An effect on the signal
+    // (rather than a `changed$` subscription) covers both the initial fill and
+    // every later mutation, and schedules the refresh under zoneless from any
+    // context. The first run (post-construction) does the initial refresh.
+    effect(() => {
+      this.selection.version();
+      this.refreshSelection();
+    });
   }
 
   ngOnInit(): void {
-    this.refreshSelection();
     this.subs.push(
-      this.selection.changed$.subscribe(() => this.refreshSelection()),
       this.metadataCache.version$.subscribe(() => {
         this.sortedEntries = this.buildSortedEntries();
       }),

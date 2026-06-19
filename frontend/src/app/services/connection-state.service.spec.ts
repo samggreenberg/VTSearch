@@ -58,18 +58,15 @@ describe('ConnectionStateService', () => {
     service.recordNetworkFailure();
     expect(service.isOffline).toBe(true);
 
-    let retrying = false;
-    service.retrying$.subscribe((v) => (retrying = v));
-
     service.retry();
-    expect(retrying).toBe(true);
+    expect(service.retrying()).toBe(true);
 
     const req = httpMock.expectOne('/healthz');
     expect(req.request.method).toBe('GET');
     req.flush('ok');
 
     expect(service.isOffline).toBe(false);
-    expect(retrying).toBe(false);
+    expect(service.retrying()).toBe(false);
   });
 
   it('retry() is a no-op while a probe is already in flight', () => {

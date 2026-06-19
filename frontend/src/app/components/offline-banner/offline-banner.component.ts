@@ -1,4 +1,3 @@
-import { CommonModule } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { ConnectionStateService } from '../../services/connection-state.service';
 
@@ -13,7 +12,7 @@ import { ConnectionStateService } from '../../services/connection-state.service'
 @Component({
   selector: 'vt-offline-banner',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './offline-banner.component.html',
   styleUrl: './offline-banner.component.scss',
 })
