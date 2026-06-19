@@ -1,11 +1,12 @@
 # Structural Embedders — Design
 
-**Status:** v1 in progress — **foundation + Stage-2 backend core shipped**
-(two-stage re-rank, RegionYes-as-template, match-statistic verification
-classifier, all wired into the vote-driven learned-sort path); **frontend
-overlay + example-sort/labelset-path re-rank + K/threshold spike-tuning
-deferred** (see "What shipped" / "Open follow-ups" below). This is the living
-spec for a third embedder *type*
+**Status:** v1 in progress — **foundation + Stage-2 backend core + re-rank
+across all sort paths shipped** (two-stage re-rank, RegionYes-as-template,
+match-statistic verification classifier, wired into the vote-driven learned-sort
+path **plus** the example-sort and labelset/saved-detector paths); **find-path
+classifier reuse + K/threshold spike-tuning deferred** (the matched-region
+overlay already rides patch's `best_region` machinery; see "What shipped" /
+"Open follow-ups" below). This is the living spec for a third embedder *type*
 (alongside single-vector and patch) that searches for **specific instances**
 ("the Coca-Cola logo") rather than **semantic categories** ("a cola can"). The
 architecture below is the agreed direction; the work plan is a sketch to be
@@ -488,18 +489,45 @@ vote-driven sort and fully CPU-tested
   is untouched and pays zero cost. The matcher is resolved backend-agnostically
   via the embedder's new `structural_matcher` property.
 
+## What shipped (v1 Stage-2 re-rank across all sort paths)
+
+The Stage-2 re-rank now reaches every scoring entry point, not just the
+vote-driven sort (CPU-tested in
+`tests_lib/detectors/test_structural_similarity.py` +
+`test_structural_labelset.py`):
+
+- **`feature_snap` decoupling.** `maybe_structural_rerank` takes an optional
+  `feature_snap` so the templates + verification classifier can be sourced from a
+  snapshot distinct from the re-rank target. The vote path leaves it `None`
+  (voted media are in the active dataset); the labelset path passes a synthetic
+  snapshot of re-derived cross-dataset features. The re-rank itself always runs
+  over the active dataset's `snap`.
+- **Example-sort (seed-by-example).** `maybe_structural_rerank_example` uses the
+  uploaded example's own local features as the single template (any crop is
+  applied to the file before feature detection, so it already restricts the
+  template) and the cold-start inlier gate to score (example-sort carries no
+  votes). Wired into `_example_sort_from_path` (`vtsearch/routes/sorting.py`);
+  the matched-region `best_region` rides out on `similarity`-keyed results, which
+  the frontend already renders.
+- **Labelset (saved-detector reload).** New
+  `DetectorContext.label_local_features` cache (in-memory, re-derived from each
+  element's origin via `populate_label_local_features`, invalidated on embedder
+  switch alongside `label_embeddings`). `maybe_labelset_structural_rerank`
+  projects the cache into the chokepoint's vote/snap shape and re-ranks the
+  active dataset; wired into `labelset_train_and_score`
+  (`vtscore/detectors/labelset_training.py`). A no-op for non-structural
+  datasets (gated on the active snapshot carrying `local_features`).
+
 ## Open follow-ups
 
-- **Frontend overlay (next).** The backend already emits the matched-region
-  `best_region` box on verified results; draw it on result cards / focus pane,
-  reusing patch's best-region machinery. Optionally render the inlier
-  correspondences as a debug view.
-- **Re-rank in the other sort paths.** `maybe_structural_rerank` is wired into the
-  vote-driven `train_and_score` only. The **labelset** path
-  (`labelset_train_and_score`, used when a saved structural detector reloads
-  cross-dataset) and the **example-sort** path (seed-by-example, which would need
-  the uploaded example's local features) don't re-rank yet. Wire both, reusing the
-  same chokepoint.
+- **Frontend overlay — basics done, debug view deferred.** The backend emits the
+  matched-region `best_region` box on verified results across all three sort
+  paths, and the frontend already renders `best_region` (the focus-pane
+  highlight box in `center-panel` / `image-viewer`, fed via `bestRegion` from the
+  learned-sort / example-sort responses) — so the structural overlay rides
+  patch's existing machinery with no new component. Still optional: a debug view
+  that draws the inlier *correspondences* (the matched keypoint lines), which
+  would need the backend to emit per-match point pairs.
 - **K / threshold / live-vs-on-demand spike.** `DEFAULT_RERANK_TOP_K = 50` and the
   "tail scores 0 / threshold = 0.5" policy are reasonable defaults but unspiked.
   Sweep K on a demo image dataset and confirm the live-on-every-sort latency is
