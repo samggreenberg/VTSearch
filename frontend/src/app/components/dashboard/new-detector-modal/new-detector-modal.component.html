@@ -95,6 +95,13 @@
                   (keydown.enter)="$event.preventDefault(); submit()"
                 />
               </div>
+              @if (showNoTextWarning) {
+                <p class="warn-text">
+                  This dataset's embedder can't search by text. You can still create this
+                  detector, but you won't be able to start in Autopilot or use Text sort —
+                  label a few good and bad examples first to train it.
+                </p>
+              }
             </div>
             <div class="example-col">
               <label class="col-label">{{ exampleColumnLabel }}</label>

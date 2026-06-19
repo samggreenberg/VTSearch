@@ -1015,9 +1015,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return loadingTypes.size === 1 ? [...loadingTypes][0] : '';
   }
 
+  /** Embedder of the single active/selected dataset (mirrors
+   *  ``activeDatasetMediaType``). Empty when ambiguous or unrecorded; lets the
+   *  new-detector modal warn about text-only detectors on no-text datasets. */
+  get activeDatasetEmbedder(): string {
+    if (this.selectedDatasetIds.size === 1) {
+      const selId = [...this.selectedDatasetIds][0];
+      const sel = this.datasets.find((d) => d.id === selId);
+      if (sel?.embedder) return sel.embedder;
+    }
+    const loaded = this.datasets.find((d) => d.loaded);
+    return loaded?.embedder ?? '';
+  }
+
   openNewDetectorModal(): void {
     this.newDetectorClosing = false;
-    this.newThingFlows.openNewDetector({ defaultMediaType: this.activeDatasetMediaType });
+    this.newThingFlows.openNewDetector({
+      defaultMediaType: this.activeDatasetMediaType,
+      datasetEmbedder: this.activeDatasetEmbedder,
+    });
   }
 
   onNewDetectorAnimationEnd(): void {

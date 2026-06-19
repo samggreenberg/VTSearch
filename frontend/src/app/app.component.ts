@@ -97,6 +97,7 @@ export class AppComponent {
   newDetectorFlow: NewDetectorFlowState = {
     open: false,
     defaultMediaType: '',
+    datasetEmbedder: '',
   };
   recentSessions: RecentSession[] = [];
 

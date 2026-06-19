@@ -68,6 +68,14 @@
 // `.form-group`, `.info-text`, `.error-text` come from `_components.scss`.
 .required { color: var(--color-bad); }
 
+// Inline caution copy (no shared `--text-warning` utility class yet; mirrors
+// the local `.warn-text` in the combine-datasets modal).
+.warn-text {
+  margin: 0;
+  font-size: var(--font-md);
+  color: var(--text-warning);
+}
+
 // Two-column layout for text vs media example input
 .example-columns {
   display: grid;

@@ -26,6 +26,7 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { DetectorRegistryEntry, ProgressEvent } from '../../models/api.models';
@@ -68,6 +69,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   sortState = inject(SortStateService);
   private settingsState = inject(SettingsStateService);
   private autopilotStateService = inject(AutopilotStateService);
+  private embedderCaps = inject(EmbedderCapabilityService);
   private activeContext = inject(ActiveContextService);
   private progressEvents = inject(ProgressEventsService);
   private newThingFlows = inject(NewThingFlowsService);
@@ -165,7 +167,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.applyPanelPx();
         }
       }
-      if (this.autopilotTextSortPending && medias.length > 0) {
+      // Wait for the embedder registry too, so the text-support check inside
+      // `triggerAutopilotTextSort` is reliable (and we never fire a doomed
+      // text sort on a no-text dataset). `infos()` is tracked so this effect
+      // re-runs once the registry resolves.
+      if (this.autopilotTextSortPending && medias.length > 0 && this.embedderCaps.infos() !== null) {
         this.autopilotTextSortPending = false;
         this.triggerAutopilotTextSort();
       }
@@ -178,6 +184,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     this.autopilotStateService.clear();
+    this.embedderCaps.ensureLoaded();
     this.voteState.clear();
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
@@ -700,6 +707,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const media = this.mediaState.mediasSignal().find((m) => m.id === mediaId);
     this.newThingFlows.openNewDetector({
       defaultMediaType: media?.media_type ?? '',
+      datasetEmbedder: media?.embedder ?? '',
       seedMediaId: mediaId,
       seedCropParams: cropParams,
     });
@@ -814,6 +822,31 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Autopilot ---
 
+  /**
+   * Whether the active dataset's embedder can embed text queries. Drives the
+   * Text-sort gate and the Autopilot availability check. Defaults to ``true``
+   * until medias / the embedder registry have loaded so we never hide a
+   * working feature on missing metadata.
+   */
+  get textSupported(): boolean {
+    const medias = this.mediaState.mediasSignal();
+    if (medias.length === 0) return true;
+    return this.embedderCaps.supportsText(medias[0].embedder ?? '');
+  }
+
+  /**
+   * True when Autopilot has no way to seed its first sort: the dataset's
+   * embedder can't search by text, the detector carries no media-example seed,
+   * and there aren't yet enough labels for Learn sort. Bound into the
+   * left-panel to disable the Autopilot tab; it re-enables automatically once
+   * the user labels a good and a bad (Learn sort becomes available).
+   */
+  get autopilotDisabled(): boolean {
+    if (this.textSupported) return false;
+    if (this.labelSession.mediaExample) return false;
+    return !this.voteState.learnedSortAvailable;
+  }
+
   onAutopilotStart(): void {
     // Initialize re-sort tracking
     this.resortVoteCount = 0;
@@ -842,7 +875,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const textQuery = this.labelSession.textQuery;
       const mediaExample = this.labelSession.mediaExample;
       if (textQuery) {
-        if (this.mediaState.mediasSignal().length > 0) {
+        // Defer until both medias and the embedder registry are loaded so the
+        // no-text check in `triggerAutopilotTextSort` is reliable.
+        if (this.mediaState.mediasSignal().length > 0 && this.embedderCaps.infos() !== null) {
           this.triggerAutopilotTextSort();
         } else {
           this.autopilotTextSortPending = true;
@@ -862,9 +897,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private triggerAutopilotTextSort(): void {
     const textQuery = this.labelSession.textQuery;
-    if (textQuery) {
-      this.onTextSort(textQuery);
-    }
+    if (!textQuery) return;
+    // No-text dataset, text-hint-only detector: the dataset's embedder can't
+    // embed the query, so don't fire a sort that's guaranteed to fail. The
+    // left-panel disables the Autopilot tab (see `autopilotDisabled`) and the
+    // user labels manually until Learn sort re-enables Autopilot.
+    if (!this.textSupported) return;
+    this.onTextSort(textQuery);
   }
 
   private triggerAutopilotMediaSort(): void {
@@ -1008,6 +1047,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Deactivate autopilot state so resort prompt and phase logic stop firing.
     this.autopilotStateService.deactivate();
     this.showResortPrompt = false;
+    // Drop any deferred seed sort that hasn't fired yet (e.g. we stopped before
+    // medias finished loading) so it can't fire after autopilot is gone.
+    this.autopilotTextSortPending = false;
+    this.autopilotMediaSortPending = false;
   }
 
   // --- Panel width helpers ---
