@@ -13,7 +13,8 @@ local features drop in later; **the full vote-trained detector ships in v1** (bo
 the example/region similarity flow and the match-statistic verification classifier,
 just like patch); **planar-only** matching; **image-only v1 with audio as the next
 media target**; **dual-embedder coexistence deferred** to patch v3 (one structural
-embedder per dataset for now).
+embedder per dataset for now); **a fixed, shipped VLAD vocabulary** for v1 (no
+per-dataset codebook fit).
 
 ## Motivation — structural vs semantic search
 
@@ -206,8 +207,11 @@ read. Capped per image (keep the top-M by response) to bound worst-case size.
 pickle (the sanctioned snapshot store) and in RAM. They are never written to
 detector JSON or `settings.json`. The detector persists `origin + region_box` per
 labelled example and re-derives templates + the match-stat classifier on load —
-fully consistent with the rule. The VLAD **visual vocabulary** (see Open
-Questions) is the one new artifact whose persistence needs a decision.
+fully consistent with the rule. The VLAD **visual vocabulary** is a **fixed,
+pre-trained codebook shipped with the code** (like the embedder's model weights),
+not a per-dataset artifact — so it introduces no new persisted state and no
+per-dataset fit pass. (A data-tuned per-dataset codebook is a possible v2
+optimisation; see Open Questions.)
 
 ## Capability flag & embedder surface
 
@@ -243,8 +247,10 @@ Structural embedders set `supports_text = False`, `is_default = False`
   protocol + SIFT implementation: `detect_and_describe`, `aggregate_vlad`,
   `verify(template, candidate) -> MatchStats`, `match_stats_to_features(stats) ->
   np.ndarray`. No Flask, library-tier (lives under `vtscore`, import-clean).
-- **VLAD vocabulary:** k-means codebook fit (see Open Questions for where it comes
-  from). A pure-numpy/`faiss`-optional helper.
+- **VLAD vocabulary:** a **fixed pre-trained codebook** trained offline on a
+  generic descriptor corpus and shipped as a small asset (downloaded/cached like
+  model weights, not fit per dataset). The aggregation is a pure-numpy helper that
+  loads the shipped centroids and assigns descriptors to them. No ingest-time fit.
 - **Loader hook:** `vtscore/datasets/loader_pickle.py` / `loader_folder.py`
   already call `embed_media` / `embed_media_bulk`. Add a sibling pass, gated on
   `embedder.supports_geometric_verification`, that runs `detect_and_describe`,
@@ -325,13 +331,15 @@ an interface rewrite. The capability flag is `supports_geometric_verification`
 
 ## Open questions
 
-1. **VLAD visual vocabulary — where does the codebook come from?** Options:
-   (a) fit a k-means codebook per-dataset at ingest (adds a fit pass, vocabulary
-   tuned to the data, but the codebook becomes a per-dataset artifact that must
-   live in the pickle); (b) ship a fixed pre-trained vocabulary (no fit step,
-   smaller pickle, but generic). Leaning (a) stored in the pickle header, since
-   instance retrieval benefits from a data-specific vocabulary and the pickle is
-   already the sanctioned store. **Needs a decision before impl.**
+1. **VLAD visual vocabulary — DECIDED for v1: fixed, shipped codebook.** v1 uses a
+   single pre-trained k-means codebook trained offline on a generic descriptor
+   corpus and shipped as a small asset (cached like model weights). No per-dataset
+   fit, no codebook in the pickle, no new persisted state. The remaining sub-
+   decisions are just the codebook *size* (e.g. 128/256 centroids — bigger = more
+   discriminative VLAD, larger vectors) and the *training corpus*, both pinned by
+   the pre-impl spike. A data-tuned per-dataset codebook (better instance recall on
+   a narrow domain, at the cost of an ingest fit pass and a per-dataset artifact)
+   is a possible **v2** optimisation, not v1.
 2. **Stage-1 shortlist size K.** How many candidates feed the RANSAC re-rank?
    Too small misses true matches the VLAD coarse stage under-ranks; too large
    blows the re-rank latency budget. Sweep on a demo dataset.
@@ -358,7 +366,7 @@ an interface rewrite. The capability flag is `supports_geometric_verification`
   RegionYes-as-template voting (reusing the v2 `region_box` schema and Shift-drag
   UX); matched-region overlay (reusing patch's best-region machinery). Text sort
   greyed via the existing `supports_text` gate. Pre-impl spike on a demo image
-  dataset to lock vocabulary source, K, and the geometric model.
+  dataset to lock the codebook size + training corpus, K, and the geometric model.
 - **v2:** learned-local-feature backend (SuperPoint + LightGlue or similar) as a
   drop-in `StructuralMatcher`, GPU-gated; no Stage-1/classifier/UI changes. **Plus
   the audio backend** (constellation fingerprinting) under the same media-agnostic
@@ -399,9 +407,10 @@ an interface rewrite. The capability flag is `supports_geometric_verification`
 
 ## Open follow-ups
 
-- VLAD-vocabulary persistence decision (Open Question 1) blocks impl start.
-- Spike (Stage-1 backbone choice, K, geometric model) precedes v1 build, like the
-  caltech101_s sweep preceded patch v1.
+- VLAD vocabulary is settled for v1 (fixed shipped codebook); the spike only pins
+  its size + training corpus, so impl is no longer blocked on a design decision.
+- Spike (codebook size/corpus, Stage-1 backbone choice, K, geometric model)
+  precedes v1 build, like the caltech101_s sweep preceded patch v1.
 - Keep the `StructuralMatcher` protocol media-agnostic from day one so the audio
   (constellation-fingerprint) backend — the next media target — lands in v2 without
   reshaping the interface.
