@@ -552,7 +552,7 @@ describe('VoteStateService', () => {
     it('undo restores the crop of the previous good vote', () => {
       // Media 5 already has a region good vote with a known crop.
       service.applyOptimisticState(5, 'good');
-      service['goodRegionBoxesSubject'].next({ '5': [0.5, 0.6, 0.7, 0.8] });
+      service['_goodRegionBoxes'].set({ '5': [0.5, 0.6, 0.7, 0.8] });
 
       // User re-crops the same good vote with a new box.
       service
