@@ -309,7 +309,7 @@ export class ContextSwitchService {
     // Best-effort: cancel any active dataset/detector loading tasks so
     // we don't waste CPU on a load whose result will be discarded. The
     // request-id check is the actual correctness guarantee.
-    const datasetTasks = this.progressEvents.loadingTasks.filter((t) => t.status !== 'idle');
+    const datasetTasks = this.progressEvents.loadingTasks().filter((t) => t.status !== 'idle');
     for (const t of datasetTasks) {
       this.datasetsRegistryApi.cancelTask(t.task_id).subscribe({
         error: () => {
@@ -317,7 +317,7 @@ export class ContextSwitchService {
         },
       });
     }
-    const detectorTasks = this.progressEvents.detectorLoadingTasks.filter((t) => t.status !== 'idle');
+    const detectorTasks = this.progressEvents.detectorLoadingTasks().filter((t) => t.status !== 'idle');
     for (const t of detectorTasks) {
       this.detectorsRegistryApi.cancelDetectorLoadingTask(t.task_id).subscribe({
         error: () => {

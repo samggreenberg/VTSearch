@@ -97,7 +97,7 @@ export class BrowsePrepService {
           // A failed load leaves an errored task on the SSE row, which the
           // dashboard already shows; bail out silently rather than stacking a
           // second (projection) error on top of it.
-          const loadFailed = this.progressEvents.loadingTasks.some(
+          const loadFailed = this.progressEvents.loadingTasks().some(
             (t) => t.dataset_id === datasetId && !!t.error,
           );
           if (loadFailed) {
@@ -152,7 +152,7 @@ export class BrowsePrepService {
     if (s.phase === 'loading') {
       // Defer to the real SSE task once it shows; until then, a placeholder
       // so the row gives immediate feedback instead of flashing blank.
-      const hasReal = this.progressEvents.loadingTasks.some(
+      const hasReal = this.progressEvents.loadingTasks().some(
         (t) => t.dataset_id === datasetId && t.status !== 'idle',
       );
       if (hasReal) return null;

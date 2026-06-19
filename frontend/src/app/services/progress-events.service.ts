@@ -1,5 +1,6 @@
-import { Injectable, OnDestroy, NgZone, effect, inject } from '@angular/core';
-import { BehaviorSubject, Observable, Subject } from 'rxjs';
+import { Injectable, OnDestroy, computed, effect, inject, signal } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
+import { Subject } from 'rxjs';
 import {
   LoadingTask,
   ProgressEvent,
@@ -31,22 +32,36 @@ import { ConnectionStateService } from './connection-state.service';
  */
 @Injectable({ providedIn: 'root' })
 export class ProgressEventsService implements OnDestroy {
-  private zone = inject(NgZone);
   private connection = inject(ConnectionStateService);
 
-  private readonly datasetSubject = new BehaviorSubject<ProgressEvent>({});
-  private readonly loadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
-  private readonly detectorLoadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
-  private readonly sortSubject = new BehaviorSubject<ProgressEvent>({});
-  private readonly findSubject = new BehaviorSubject<ProgressEvent>({});
-  private readonly evalSubject = new BehaviorSubject<ProgressEvent>({});
+  // Canonical channel state as signals. A signal write inside the EventSource
+  // callback notifies Angular's scheduler directly, so the SSE pump triggers
+  // change detection on bound templates with no NgZone re-entry — correct under
+  // both zone-based and zoneless change detection.
+  private readonly _dataset = signal<ProgressEvent>({});
+  private readonly _loadingTasks = signal<LoadingTask[]>([]);
+  private readonly _detectorLoadingTasks = signal<LoadingTask[]>([]);
+  private readonly _sort = signal<ProgressEvent>({});
+  private readonly _find = signal<ProgressEvent>({});
+  private readonly _eval = signal<ProgressEvent>({});
 
-  readonly dataset$ = this.datasetSubject.asObservable();
-  readonly loadingTasks$ = this.loadingTasksSubject.asObservable();
-  readonly detectorLoadingTasks$ = this.detectorLoadingTasksSubject.asObservable();
-  readonly sort$ = this.sortSubject.asObservable();
-  readonly find$ = this.findSubject.asObservable();
-  readonly eval$ = this.evalSubject.asObservable();
+  // Read-only signal views: the canonical reads (also the synchronous
+  // latest-value accessors — call them, e.g. `loadingTasks()`).
+  readonly dataset = this._dataset.asReadonly();
+  readonly loadingTasks = this._loadingTasks.asReadonly();
+  readonly detectorLoadingTasks = this._detectorLoadingTasks.asReadonly();
+  readonly sort = this._sort.asReadonly();
+  readonly find = this._find.asReadonly();
+
+  // Observable bridges for the consumers that compose channel updates with
+  // RxJS operators (takeUntil/filter/take/…). Each is a `toObservable` view of
+  // the backing signal, so a signal write still drives them.
+  readonly dataset$ = toObservable(this._dataset);
+  readonly loadingTasks$ = toObservable(this._loadingTasks);
+  readonly detectorLoadingTasks$ = toObservable(this._detectorLoadingTasks);
+  readonly sort$ = toObservable(this._sort);
+  readonly find$ = toObservable(this._find);
+  readonly eval$ = toObservable(this._eval);
 
   /**
    * Fires whenever the backend's `boot_id` changes between successive
@@ -80,37 +95,21 @@ export class ProgressEventsService implements OnDestroy {
   }
 
   // -------------------------------------------------------------------------
-  // Latest-value accessors. Components that briefly need a value outside an
-  // RxJS pipeline (e.g. inside an imperative callback after a POST) use
-  // these instead of re-subscribing.
+  // Derived eval progress. Components that briefly need a value outside an
+  // RxJS pipeline read the signals/computeds directly (e.g. `loadingTasks()`).
   // -------------------------------------------------------------------------
 
-  get loadingTasks(): LoadingTask[] {
-    return this.loadingTasksSubject.value;
-  }
-
-  get detectorLoadingTasks(): LoadingTask[] {
-    return this.detectorLoadingTasksSubject.value;
-  }
-
-  get find(): ProgressEvent {
-    return this.findSubject.value;
-  }
-
   /** Derive the {progress,total,done} shape the eval modal cares about. */
-  get votingIterations(): VotingIterationsResponse {
-    const prog = this.evalSubject.value;
+  readonly votingIterations = computed<VotingIterationsResponse>(() => {
+    const prog = this._eval();
     const current = Number(prog.current ?? 0);
     const total = Number(prog.total ?? 0);
     const status = String(prog.status ?? 'idle');
     const done = status === 'idle' && total > 0 && current >= total;
     return { progress: current, total, done };
-  }
-
-  readonly votingIterations$ = new Observable<VotingIterationsResponse>((sub) => {
-    const inner = this.eval$.subscribe(() => sub.next(this.votingIterations));
-    return () => inner.unsubscribe();
   });
+
+  readonly votingIterations$ = toObservable(this.votingIterations);
 
   // -------------------------------------------------------------------------
   // EventSource lifecycle.
@@ -118,32 +117,32 @@ export class ProgressEventsService implements OnDestroy {
 
   private connect(): void {
     if (this.source) return;
-    // EventSource fires events outside Angular's NgZone, so manually
-    // re-enter the zone for every subject.next() to trigger change
-    // detection on bound templates.
+    // EventSource fires events outside Angular's NgZone, but each handler
+    // writes a signal (or calls a signalized service), which notifies the
+    // change-detection scheduler directly — no zone re-entry needed.
     const es = new EventSource('/api/events');
     this.source = es;
 
     this.listen(es, 'server', (e) => this.handleServerFrame(e));
     this.listen(es, 'dataset', (e) =>
-      this.datasetSubject.next(this.parse<ProgressEvent>(e, {})),
+      this._dataset.set(this.parse<ProgressEvent>(e, {})),
     );
     this.listen(es, 'loading-tasks', (e) =>
-      this.loadingTasksSubject.next(this.parse<LoadingTask[]>(e, [])),
+      this._loadingTasks.set(this.parse<LoadingTask[]>(e, [])),
     );
     this.listen(es, 'detector-loading-tasks', (e) =>
-      this.detectorLoadingTasksSubject.next(this.parse<LoadingTask[]>(e, [])),
+      this._detectorLoadingTasks.set(this.parse<LoadingTask[]>(e, [])),
     );
-    this.listen(es, 'sort', (e) => this.sortSubject.next(this.parse<ProgressEvent>(e, {})));
-    this.listen(es, 'find', (e) => this.findSubject.next(this.parse<ProgressEvent>(e, {})));
-    this.listen(es, 'eval', (e) => this.evalSubject.next(this.parse<ProgressEvent>(e, {})));
+    this.listen(es, 'sort', (e) => this._sort.set(this.parse<ProgressEvent>(e, {})));
+    this.listen(es, 'find', (e) => this._find.set(this.parse<ProgressEvent>(e, {})));
+    this.listen(es, 'eval', (e) => this._eval.set(this.parse<ProgressEvent>(e, {})));
     // The periodic `heartbeat` frame carries no payload we render; its sole
     // job is to keep the circuit breaker online (handled by `listen`'s
     // recordSuccess) during long, busy operations that aren't emitting
     // progress frames, so the backend never looks dead while it's merely busy.
     this.listen(es, 'heartbeat', () => {});
 
-    es.onopen = () => this.zone.run(() => this.connection.recordSuccess());
+    es.onopen = () => this.connection.recordSuccess();
 
     es.onerror = () => {
       // Feed the circuit breaker: an SSE error is a connectivity signal too,
@@ -183,20 +182,18 @@ export class ProgressEventsService implements OnDestroy {
   }
 
   /**
-   * Register a named-event listener that (a) re-enters Angular's zone so
-   * bound templates update, and (b) records the frame as proof the backend
-   * is alive. Every frame that arrives over the stream — progress data or a
-   * bare `heartbeat` — resets the connection circuit breaker, so it only
-   * trips offline when the stream genuinely goes silent (a dead backend),
-   * not when a busy backend is slow to answer unrelated background pollers.
+   * Register a named-event listener that records the frame as proof the
+   * backend is alive and then dispatches it. Every frame that arrives over the
+   * stream — progress data or a bare `heartbeat` — resets the connection
+   * circuit breaker (a signal write), so it only trips offline when the stream
+   * genuinely goes silent (a dead backend), not when a busy backend is slow to
+   * answer unrelated background pollers.
    */
   private listen(es: EventSource, name: string, handler: (e: Event) => void): void {
-    es.addEventListener(name, (e) =>
-      this.zone.run(() => {
-        this.connection.recordSuccess();
-        handler(e);
-      }),
-    );
+    es.addEventListener(name, (e) => {
+      this.connection.recordSuccess();
+      handler(e);
+    });
   }
 
   private parse<T>(e: Event, fallback: T): T {

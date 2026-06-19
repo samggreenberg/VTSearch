@@ -67,9 +67,7 @@ describe('BrowsePrepService', () => {
     };
     const activeContextStub = { modelId: '' };
     const progressEventsStub = {
-      get loadingTasks(): LoadingTask[] {
-        return loadingTasks;
-      },
+      loadingTasks: (): LoadingTask[] => loadingTasks,
     };
     const projectionApiStub = {
       getMeta: (): Observable<ProjectionMeta> => metaProvider(),

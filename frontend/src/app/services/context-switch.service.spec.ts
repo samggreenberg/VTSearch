@@ -121,12 +121,8 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     const progressEventsStub = {
       loadingTasks$: loadingTasks$.asObservable(),
       detectorLoadingTasks$: detectorLoadingTasks$.asObservable(),
-      get loadingTasks(): LoadingTask[] {
-        return loadingTasks$.value;
-      },
-      get detectorLoadingTasks(): LoadingTask[] {
-        return detectorLoadingTasks$.value;
-      },
+      loadingTasks: (): LoadingTask[] => loadingTasks$.value,
+      detectorLoadingTasks: (): LoadingTask[] => detectorLoadingTasks$.value,
     };
 
     TestBed.configureTestingModule({
