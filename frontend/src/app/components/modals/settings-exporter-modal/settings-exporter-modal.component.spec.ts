@@ -36,11 +36,15 @@ describe('SettingsExporterModalComponent', () => {
     httpMock.verify();
   });
 
+  // The exporter list rides an eager `rxResource` whose loader runs in a root
+  // effect. `TestBed.tick()` runs that effect to issue the GET — `whenStable()`
+  // can't be used here: a loading `rxResource` holds the app unstable, so it
+  // would deadlock waiting for the flush. After flushing, `settleResource()`
+  // commits the resolved value (microtask + tick) with no manual `detectChanges`.
   async function flushInit(): Promise<void> {
-    await fixture.whenStable();
+    TestBed.tick();
     httpMock.expectOne('/api/settings-exporters').flush(mockExporters);
     await settleResource();
-    await fixture.whenStable();
   }
 
   it('should create and render exporter cards', async () => {

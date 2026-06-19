@@ -41,13 +41,14 @@ describe('LabelImporterModalComponent', () => {
   });
 
   // The importer list rides an eager `rxResource` whose loader runs in a root
-  // effect. Let the initial scheduled CD run the loader (no manual
-  // `detectChanges`), flush the GET, then settle so the resolved value commits.
+  // effect. `TestBed.tick()` runs that effect to issue the GET — `whenStable()`
+  // can't be used here: a loading `rxResource` holds the app unstable, so it
+  // would deadlock waiting for the flush. After flushing, `settleResource()`
+  // commits the resolved value (microtask + tick) with no manual `detectChanges`.
   async function flushInit(): Promise<void> {
-    await fixture.whenStable();
+    TestBed.tick();
     httpMock.expectOne('/api/label-importers').flush(mockImporters);
     await settleResource();
-    await fixture.whenStable();
   }
 
   it('should create', async () => {
