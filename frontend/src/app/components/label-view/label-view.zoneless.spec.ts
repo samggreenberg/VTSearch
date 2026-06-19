@@ -5,7 +5,7 @@ import { provideRouter } from '@angular/router';
 
 import { LabelViewComponent } from './label-view.component';
 import { configureZoneless } from '../../testing/zoneless-testbed';
-import { settleZoneless } from '../../testing/settle-resource';
+import { settleResource, settleZoneless } from '../../testing/settle-resource';
 
 /**
  * Zoneless staleness canary for the label view (docs/plans/zoneless-migration.md,
@@ -47,24 +47,43 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
     fixture.destroy();
   });
 
-  it('renders the dataset name pushed from the /api/dataset/status subscribe, with no manual detectChanges', async () => {
-    // `TestBed.tick()` runs the initial CD (ngOnInit) and the rxResource loader
-    // effect so the init GETs are issued. We must NOT `whenStable()` while the
-    // medias/settings resources are loading (a loading rxResource holds the app
-    // unstable and would deadlock), so flush them first, holding back only the
-    // dataset-status response that is under assertion.
+  // Drain label-view's init loads, holding back only the dataset-status
+  // response that is under assertion. The medias/settings reads ride
+  // promise-based `rxResource` loaders that issue their GET on a microtask, so
+  // we drain with `settleResource()` (macrotask + tick — NOT `whenStable()`,
+  // which would deadlock on a loading resource) across a few cycles before any
+  // `whenStable()` so every resource is resolved (not loading) by then.
+  async function flushInit(): Promise<void> {
     TestBed.tick();
-    httpMock.match('/api/medias/ids').forEach((req) =>
-      req.flush([{ id: 1, media_type: 'audio' }]),
-    );
-    httpMock.match('/api/votes').forEach((req) =>
-      req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
-    );
-    httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
-    httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
-    httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
-    httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([{ id: 1, media_type: 'audio' }]),
+      );
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
+      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+      // Include smart/stable/span: the autopilot panel's ngOnChanges feeds this
+      // into AutopilotStateService.updateFromLabelingStatus, which reads them.
+      httpMock.match('/api/labeling-status').forEach((req) =>
+        req.flush({
+          good_count: 0,
+          bad_count: 0,
+          total_count: 0,
+          smart: { status: 'green' },
+          stable: { status: 'green' },
+          span: { status: 'green' },
+        }),
+      );
+    }
+  }
 
+  it('renders the dataset name pushed from the /api/dataset/status subscribe, with no manual detectChanges', async () => {
+    await flushInit();
     await settleZoneless(fixture);
 
     // datasetName starts '' → the left panel's `.dataset-name` node is absent.
