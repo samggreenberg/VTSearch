@@ -1,4 +1,4 @@
-import { Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, output } from '@angular/core';
+import { Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, output, signal } from '@angular/core';
 import { NgStyle } from '@angular/common';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -66,9 +66,12 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   private lastMediaId: number | null = null;
 
   // Region voting state (v2 of the patch-embedder plan, UI only; see docs/plans/patch-embedder.md).
-  regionBox: RegionBox | null = null;
-  regionBoxShake = false;
-  shiftHeld = false;
+  // These are signals because they are written from un-patched callbacks (window
+  // mouse/key listeners, the shake `setTimeout`) that schedule no change detection
+  // under zoneless; a signal write read in the template is on the notification path.
+  readonly regionBox = signal<RegionBox | null>(null);
+  readonly regionBoxShake = signal(false);
+  readonly shiftHeld = signal(false);
   // Sticky toggle exposed by the Marquee button in .image-view-controls. While true the
   // viewer behaves as if Shift were held: cursor is a crosshair and a left-drag draws a
   // new region instead of panning. Shift+drag remains a power-user shortcut even when
@@ -80,13 +83,18 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   // both can be on at once (the highlight is read-only and sits behind the
   // interactive voting box).
   highlightMode = false;
-  renderedW = 0;
-  renderedH = 0;
+  // renderedW/H are written from a raw ResizeObserver callback (un-patched, no CD
+  // under zoneless), so they are signals; reading them in the template keeps the
+  // overlay geometry fresh when the wrap resizes.
+  readonly renderedW = signal(0);
+  readonly renderedH = signal(0);
 
-  // panX/panY are not `private` so tests can drive screenToImageNormalized()
-  // with non-zero pan without simulating a full wheel + drag sequence.
-  panX = 0;
-  panY = 0;
+  // panX/panY are signals (written from the window-level mousemove drag handler,
+  // an un-patched callback). They are not `private` so tests can drive
+  // screenToImageNormalized() with non-zero pan without simulating a full wheel +
+  // drag sequence.
+  readonly panX = signal(0);
+  readonly panY = signal(0);
   private drag: DragMode | null = null;
 
   private mouseMoveHandler: ((e: MouseEvent) => void) | null = null;
@@ -163,8 +171,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   resetView(): void {
     this.zoom = 1;
     this.rotation = 0;
-    this.panX = 0;
-    this.panY = 0;
+    this.panX.set(0);
+    this.panY.set(0);
     this.applyTransform();
   }
 
@@ -181,15 +189,15 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       const cx = (event.clientX - rect.left - rect.width / 2) / s;
       const cy = (event.clientY - rect.top - rect.height / 2) / s;
       const ratio = this.zoom / oldZoom;
-      this.panX = cx - ratio * (cx - this.panX);
-      this.panY = cy - ratio * (cy - this.panY);
+      this.panX.set(cx - ratio * (cx - this.panX()));
+      this.panY.set(cy - ratio * (cy - this.panY()));
     }
     this.applyTransform();
   }
 
   /** True when a drag should draw a region (either Shift-held or Marquee toggle on). */
   get regionDrawActive(): boolean {
-    return this.shiftHeld || this.marqueeMode;
+    return this.shiftHeld() || this.marqueeMode;
   }
 
   toggleMarqueeMode(): void {
@@ -230,7 +238,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
 
-    if (this.regionDrawActive && this.renderedW > 0 && this.renderedH > 0) {
+    if (this.regionDrawActive && this.renderedW() > 0 && this.renderedH() > 0) {
       // Drag from anywhere on the canvas (Shift-held or marquee mode) starts a fresh
       // box. If an older box existed, discard it before recording the new anchor.
       const local = this.screenToImageNormalized(event);
@@ -240,8 +248,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
       // Remember the prior box so we can restore it on a zero-area release;
       // a stray Shift-click on empty space must not throw away real work.
-      this.drag = { kind: 'draw', anchor: { x, y }, previousBox: this.regionBox };
-      this.regionBox = [x, y, x, y];
+      this.drag = { kind: 'draw', anchor: { x, y }, previousBox: this.regionBox() };
+      this.regionBox.set([x, y, x, y]);
       event.preventDefault();
       this.setupWindowMouseListeners();
       return;
@@ -254,50 +262,52 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       kind: 'pan',
       startX: event.clientX,
       startY: event.clientY,
-      originX: this.panX,
-      originY: this.panY,
+      originX: this.panX(),
+      originY: this.panY(),
     };
     event.preventDefault();
     this.setupWindowMouseListeners();
   }
 
   onRegionBodyMouseDown(event: MouseEvent): void {
-    if (event.button !== 0 || !this.regionBox) return;
+    const box = this.regionBox();
+    if (event.button !== 0 || !box) return;
     event.stopPropagation();
     event.preventDefault();
     const local = this.screenToImageNormalized(event);
     if (!local) return;
     if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
-    this.drag = { kind: 'move', startLocal: local, startBox: this.regionBox };
+    this.drag = { kind: 'move', startLocal: local, startBox: box };
     this.setupWindowMouseListeners();
   }
 
   onResizeHandleMouseDown(handle: ResizeHandle, event: MouseEvent): void {
-    if (event.button !== 0 || !this.regionBox) return;
+    const box = this.regionBox();
+    if (event.button !== 0 || !box) return;
     event.stopPropagation();
     event.preventDefault();
     if (this.pendingBadConfirm) this.armedConfirmCanceled.emit();
-    this.drag = { kind: 'resize', handle, startBox: this.regionBox };
+    this.drag = { kind: 'resize', handle, startBox: box };
     this.setupWindowMouseListeners();
   }
 
   /** Clear the current region box and notify the parent. */
   clearRegionBox(opts: { emit: boolean } = { emit: true }): void {
-    if (this.regionBox === null) return;
-    this.regionBox = null;
+    if (this.regionBox() === null) return;
+    this.regionBox.set(null);
     if (opts.emit) this.regionBoxChange.emit(null);
   }
 
   /** Visually flash the region box (used by bad-vote-confirm flow). */
   pulseRegionBox(): void {
-    if (!this.regionBox) return;
-    this.regionBoxShake = true;
+    if (!this.regionBox()) return;
+    this.regionBoxShake.set(true);
     if (this.shakeTimer) clearTimeout(this.shakeTimer);
-    this.shakeTimer = setTimeout(() => (this.regionBoxShake = false), 500);
+    this.shakeTimer = setTimeout(() => this.regionBoxShake.set(false), 500);
   }
 
   get imageTransform(): string {
-    return `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom}) rotate(${this.rotation}deg)`;
+    return `translate(${this.panX()}px, ${this.panY()}px) scale(${this.zoom}) rotate(${this.rotation}deg)`;
   }
 
   get wrapCursor(): string {
@@ -307,8 +317,9 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
   }
 
   get regionBoxStyle(): { [k: string]: string } | null {
-    if (!this.regionBox) return null;
-    const [x0, y0, x1, y1] = this.regionBox;
+    const box = this.regionBox();
+    if (!box) return null;
+    const [x0, y0, x1, y1] = box;
     return {
       left: pct(x0),
       top: pct(y0),
@@ -319,8 +330,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
 
   private applyTransform(): void {
     const max = this.getMaxPan();
-    this.panX = Math.max(-max.x, Math.min(max.x, this.panX));
-    this.panY = Math.max(-max.y, Math.min(max.y, this.panY));
+    this.panX.set(Math.max(-max.x, Math.min(max.x, this.panX())));
+    this.panY.set(Math.max(-max.y, Math.min(max.y, this.panY())));
     const zoomVal = this.zoom;
     this.zoomLabel = (zoomVal === Math.floor(zoomVal) ? zoomVal.toFixed(0) : zoomVal.toFixed(1)) + '×';
   }
@@ -338,18 +349,18 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     const wrapW = wrap.clientWidth;
     const wrapH = wrap.clientHeight;
     if (!natW || !natH || !wrapW || !wrapH) {
-      this.renderedW = 0;
-      this.renderedH = 0;
+      this.renderedW.set(0);
+      this.renderedH.set(0);
       return;
     }
     const imgAspect = natW / natH;
     const wrapAspect = wrapW / wrapH;
     if (imgAspect > wrapAspect) {
-      this.renderedW = wrapW;
-      this.renderedH = wrapW / imgAspect;
+      this.renderedW.set(wrapW);
+      this.renderedH.set(wrapW / imgAspect);
     } else {
-      this.renderedH = wrapH;
-      this.renderedW = wrapH * imgAspect;
+      this.renderedH.set(wrapH);
+      this.renderedW.set(wrapH * imgAspect);
     }
   }
 
@@ -363,13 +374,15 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
 
   private getMaxPan(): { x: number; y: number } {
     const wrap = this.wrapRef?.nativeElement;
-    if (!wrap || !this.renderedW || !this.renderedH) return { x: 0, y: 0 };
+    const renderedW = this.renderedW();
+    const renderedH = this.renderedH();
+    if (!wrap || !renderedW || !renderedH) return { x: 0, y: 0 };
     const wrapW = wrap.clientWidth;
     const wrapH = wrap.clientHeight;
     const rot = ((this.rotation % 360) + 360) % 360;
     const swapped = rot === 90 || rot === 270;
-    const effW = swapped ? this.renderedH : this.renderedW;
-    const effH = swapped ? this.renderedW : this.renderedH;
+    const effW = swapped ? renderedH : renderedW;
+    const effH = swapped ? renderedW : renderedH;
     return {
       x: Math.max(0, (effW * this.zoom - wrapW) / 2),
       y: Math.max(0, (effH * this.zoom - wrapH) / 2),
@@ -395,11 +408,13 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
    *  with a mocked wrapRef + arbitrary pan/zoom/rotate state. */
   screenToImageNormalized(event: MouseEvent): { x: number; y: number } | null {
     const wrap = this.wrapRef?.nativeElement;
-    if (!wrap || !this.renderedW || !this.renderedH) return null;
+    const renderedW = this.renderedW();
+    const renderedH = this.renderedH();
+    if (!wrap || !renderedW || !renderedH) return null;
     const rect = wrap.getBoundingClientRect();
     const s = this.layoutScale(wrap, rect);
-    const dx = (event.clientX - (rect.left + rect.width / 2)) / s - this.panX;
-    const dy = (event.clientY - (rect.top + rect.height / 2)) / s - this.panY;
+    const dx = (event.clientX - (rect.left + rect.width / 2)) / s - this.panX();
+    const dy = (event.clientY - (rect.top + rect.height / 2)) / s - this.panY();
     const sx = dx / this.zoom;
     const sy = dy / this.zoom;
     const rad = (-this.rotation * Math.PI) / 180;
@@ -408,8 +423,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     const rx = sx * cos - sy * sin;
     const ry = sx * sin + sy * cos;
     return {
-      x: (rx + this.renderedW / 2) / this.renderedW,
-      y: (ry + this.renderedH / 2) / this.renderedH,
+      x: (rx + renderedW / 2) / renderedW,
+      y: (ry + renderedH / 2) / renderedH,
     };
   }
 
@@ -440,8 +455,8 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       // a LAYOUT-px transform value; convert so the image tracks the cursor 1:1.
       const wrap = this.wrapRef?.nativeElement;
       const s = wrap ? this.layoutScale(wrap, wrap.getBoundingClientRect()) : 1;
-      this.panX = d.originX + (e.clientX - d.startX) / s;
-      this.panY = d.originY + (e.clientY - d.startY) / s;
+      this.panX.set(d.originX + (e.clientX - d.startX) / s);
+      this.panY.set(d.originY + (e.clientY - d.startY) / s);
       this.applyTransform();
       return;
     }
@@ -452,7 +467,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       const ay = d.anchor.y;
       const bx = clamp01(local.x);
       const by = clamp01(local.y);
-      this.regionBox = [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
+      this.regionBox.set([Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)]);
       return;
     }
     if (d.kind === 'move') {
@@ -463,7 +478,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       const h = sy1 - sy0;
       const x0 = clamp(sx0 + dx, 0, 1 - w);
       const y0 = clamp(sy0 + dy, 0, 1 - h);
-      this.regionBox = [x0, y0, x0 + w, y0 + h];
+      this.regionBox.set([x0, y0, x0 + w, y0 + h]);
       return;
     }
     // resize
@@ -474,7 +489,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     if (d.handle.includes('s')) y1 = Math.max(ly, y0 + MIN_BOX_SIZE);
     if (d.handle.includes('w')) x0 = Math.min(lx, x1 - MIN_BOX_SIZE);
     if (d.handle.includes('e')) x1 = Math.max(lx, x0 + MIN_BOX_SIZE);
-    this.regionBox = [x0, y0, x1, y1];
+    this.regionBox.set([x0, y0, x1, y1]);
   }
 
   private onWindowMouseUp(): void {
@@ -485,18 +500,19 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     const drag = this.drag;
     this.drag = null;
     this.removeWindowMouseListeners();
-    if (!this.regionBox) return;
-    const [x0, y0, x1, y1] = this.regionBox;
+    const box = this.regionBox();
+    if (!box) return;
+    const [x0, y0, x1, y1] = box;
     const tooSmall = x1 - x0 < MIN_BOX_SIZE || y1 - y0 < MIN_BOX_SIZE;
     if (drag.kind === 'draw' && tooSmall) {
       // Zero-area Shift-drag (a stray click without motion). Restore the
       // prior box rather than discarding it; drawing a box is real work.
       // Don't emit: the parent's last-known state was already previousBox
       // (the transient zero-area draw was never emitted).
-      this.regionBox = drag.previousBox;
+      this.regionBox.set(drag.previousBox);
       return;
     }
-    this.regionBoxChange.emit(this.regionBox);
+    this.regionBoxChange.emit(box);
   }
 
   private setupWindowKeyListeners(): void {
@@ -505,7 +521,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
     this.blurHandler = () => {
       // Releasing focus (alt-tab, etc.) drops the Shift state; don't leave the
       // user stuck in region mode invisibly.
-      this.shiftHeld = false;
+      this.shiftHeld.set(false);
     };
     window.addEventListener('keydown', this.keyDownHandler);
     window.addEventListener('keyup', this.keyUpHandler);
@@ -529,7 +545,7 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
 
   private onWindowKeyDown(e: KeyboardEvent): void {
     if (e.key === 'Shift') {
-      this.shiftHeld = true;
+      this.shiftHeld.set(true);
       return;
     }
     if (e.key !== 'Escape' || this.isTyping()) return;
@@ -542,14 +558,14 @@ export class ImageViewerComponent implements OnChanges, OnDestroy {
       this.armedConfirmCanceled.emit();
       return;
     }
-    if (this.regionBox) {
+    if (this.regionBox()) {
       e.preventDefault();
       this.clearRegionBox({ emit: true });
     }
   }
 
   private onWindowKeyUp(e: KeyboardEvent): void {
-    if (e.key === 'Shift') this.shiftHeld = false;
+    if (e.key === 'Shift') this.shiftHeld.set(false);
   }
 
   private isTyping(): boolean {
