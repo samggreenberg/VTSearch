@@ -97,7 +97,7 @@ describe('CenterPanelComponent', () => {
 
   it('should send vote request on castVote', () => {
     component.media = mockMedia;
-    component.showAnimations = false;
+    component.showAnimations.set(false);
     fixture.detectChanges();
 
     let emitted: { id: number; vote: string } | undefined;
@@ -118,9 +118,9 @@ describe('CenterPanelComponent', () => {
 
   it('should prevent double voting', () => {
     component.media = mockMedia;
-    component.showAnimations = false;
+    component.showAnimations.set(false);
     fixture.detectChanges();
-    component.isVoting = true;
+    component.isVoting.set(true);
     component.castVote('good');
     httpMock.expectNone('/api/medias/1/vote');
   });
@@ -138,7 +138,7 @@ describe('CenterPanelComponent', () => {
     component.media = mockMedia;
     fixture.detectChanges();
     // Simulate swipe ending
-    component.swipeClass = 'swipe-right';
+    component.swipeClass.set('swipe-right');
 
     // Change to new media (triggers ngOnChanges)
     component.media = { ...mockMedia, id: 2, filename: 'next.wav' };
@@ -146,7 +146,7 @@ describe('CenterPanelComponent', () => {
       media: { currentValue: component.media, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
     });
 
-    expect(component.swipeClass).toBe('');
+    expect(component.swipeClass()).toBe('');
   });
 
   it('should format metadata values', () => {
@@ -168,7 +168,7 @@ describe('CenterPanelComponent', () => {
 
     function setup(): void {
       component.media = imageMedia;
-      component.showAnimations = false;
+      component.showAnimations.set(false);
       // Skip dev-mode check-no-changes: rendering the image-view-controls (gated
       // on the `imageViewer` ViewChild) settles the zoom-slider bindings within
       // the first CD pass, which the guard would otherwise flag as NG0100. This
@@ -199,7 +199,7 @@ describe('CenterPanelComponent', () => {
       // First ← arms the discard-confirm; no request yet.
       component.castVote('bad');
       httpMock.expectNone('/api/medias/1/vote');
-      expect(component.pendingBadConfirm).toBe(true);
+      expect(component.pendingBadConfirm()).toBe(true);
       // Second ← throws the box away and votes no.
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
@@ -212,7 +212,7 @@ describe('CenterPanelComponent', () => {
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
       expect(req.request.body).toEqual({ target: 'bad' });
-      expect(component.pendingBadConfirm).toBe(false);
+      expect(component.pendingBadConfirm()).toBe(false);
       req.flush({ state: 'bad', click_time: 1 });
     });
   });
@@ -228,7 +228,7 @@ describe('CenterPanelComponent', () => {
 
     function setup(): void {
       component.media = imageMedia;
-      component.showAnimations = false;
+      component.showAnimations.set(false);
       // Skip dev-mode check-no-changes: rendering the image-view-controls (gated
       // on the `imageViewer` ViewChild) settles the zoom-slider bindings within
       // the first CD pass, which the guard would otherwise flag as NG0100. This
@@ -241,13 +241,13 @@ describe('CenterPanelComponent', () => {
       component.onRegionBoxChange(box);
       component.castVote('bad');
       httpMock.expectNone('/api/medias/1/vote');
-      expect(component.pendingBadConfirm).toBe(true);
+      expect(component.pendingBadConfirm()).toBe(true);
       expect(component.currentRegionBox).toEqual(box);
 
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
       expect(req.request.body).toEqual({ target: 'bad' });
-      expect(component.pendingBadConfirm).toBe(false);
+      expect(component.pendingBadConfirm()).toBe(false);
       req.flush({ state: 'bad', click_time: 1 });
     });
 
@@ -255,12 +255,12 @@ describe('CenterPanelComponent', () => {
       setup();
       component.onRegionBoxChange(box);
       component.castVote('bad');
-      expect(component.pendingBadConfirm).toBe(true);
+      expect(component.pendingBadConfirm()).toBe(true);
 
       // Esc-while-armed (or mousedown-on-box) routes through this handler from
       // the image viewer.
       component.onArmedConfirmCanceled();
-      expect(component.pendingBadConfirm).toBe(false);
+      expect(component.pendingBadConfirm()).toBe(false);
       expect(component.currentRegionBox).toEqual(box);
       httpMock.expectNone('/api/medias/1/vote');
     });
@@ -269,10 +269,10 @@ describe('CenterPanelComponent', () => {
       setup();
       component.onRegionBoxChange(box);
       component.castVote('bad');
-      expect(component.pendingBadConfirm).toBe(true);
+      expect(component.pendingBadConfirm()).toBe(true);
 
       component.onRegionBoxChange(null);
-      expect(component.pendingBadConfirm).toBe(false);
+      expect(component.pendingBadConfirm()).toBe(false);
       expect(component.currentRegionBox).toBeNull();
     });
 
@@ -280,7 +280,7 @@ describe('CenterPanelComponent', () => {
       setup();
       component.onRegionBoxChange(box);
       component.castVote('bad');
-      expect(component.pendingBadConfirm).toBe(true);
+      expect(component.pendingBadConfirm()).toBe(true);
 
       const next: Media = { ...imageMedia, id: 2, filename: 'next.png' };
       component.media = next;
@@ -292,7 +292,7 @@ describe('CenterPanelComponent', () => {
           isFirstChange: () => false,
         },
       });
-      expect(component.pendingBadConfirm).toBe(false);
+      expect(component.pendingBadConfirm()).toBe(false);
       expect(component.currentRegionBox).toBeNull();
     });
 
@@ -301,7 +301,7 @@ describe('CenterPanelComponent', () => {
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
       expect(req.request.body).toEqual({ target: 'bad' });
-      expect(component.pendingBadConfirm).toBe(false);
+      expect(component.pendingBadConfirm()).toBe(false);
       req.flush({ state: 'bad', click_time: 1 });
     });
 
