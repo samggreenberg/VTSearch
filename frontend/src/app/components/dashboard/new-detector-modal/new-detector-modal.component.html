@@ -1,5 +1,5 @@
 <vt-modal [open]="true" [title]="modalTitle" [showCloseButton]="false" (closed)="close()">
-  @if (view === 'main') {
+  @if (view() === 'main') {
     <div class="tab-bar" role="tablist">
       <button type="button" class="tab-btn" role="tab"
         [class.active]="tab === 'blank'"
@@ -29,10 +29,10 @@
                 (click)="toggleMediaTypeDropdown()"
                 [title]="mediaTypeLocked ? 'Locked to the active dataset\'s media type' : 'Select the media type for this detector'">
                 <span class="select-option-content">
-                  @if (getMediaTypeIcon(mediaType)) {
-                    <vt-icon [type]="getMediaTypeIcon(mediaType)" [size]="14"></vt-icon>
+                  @if (getMediaTypeIcon(mediaType())) {
+                    <vt-icon [type]="getMediaTypeIcon(mediaType())" [size]="14"></vt-icon>
                   }
-                  <span>{{ getMediaTypeLabel(mediaType) }}</span>
+                  <span>{{ getMediaTypeLabel(mediaType()) }}</span>
                 </span>
                 @if (!mediaTypeLocked) {
                   <svg class="select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="currentColor" aria-hidden="true"><path d="M0 0l5 6 5-6z"/></svg>
@@ -40,8 +40,8 @@
               </button>
               @if (mediaTypeDropdownOpen && !mediaTypeLocked) {
                 <div class="custom-select-options">
-                  @for (mt of mediaTypes; track mt) {
-                    <button type="button" class="custom-select-option" [class.selected]="mt === mediaType" (click)="mediaType = mt; mediaTypeDropdownOpen = false">
+                  @for (mt of mediaTypes(); track mt) {
+                    <button type="button" class="custom-select-option" [class.selected]="mt === mediaType()" (click)="mediaType.set(mt); mediaTypeDropdownOpen = false">
                       @if (getMediaTypeIcon(mt)) {
                         <vt-icon [type]="getMediaTypeIcon(mt)" [size]="14"></vt-icon>
                       }
@@ -72,11 +72,11 @@
             <label class="col-label">Example</label>
             <div class="example-row">
               @if (exampleThumbnailUrl) {
-                <img class="example-thumbnail" [src]="exampleThumbnailUrl" [alt]="exampleDisplay" (error)="onExampleThumbError()" />
+                <img class="example-thumbnail" [src]="exampleThumbnailUrl" [alt]="exampleDisplay()" (error)="onExampleThumbError()" />
               } @else {
                 <svg class="example-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm2 7.5 2.5-3 1.75 2L10.5 6.5 13 11H4v-.5zM5.5 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
               }
-              <span class="example-label" [title]="exampleDisplay">{{ exampleDisplay }}</span>
+              <span class="example-label" [title]="exampleDisplay()">{{ exampleDisplay() }}</span>
               <button type="button" class="btn btn--secondary btn--sm" (click)="clearExample()" title="Remove this example and choose a different one">Change</button>
             </div>
           </div>
@@ -87,7 +87,7 @@
               <div class="text-input-row">
                 <input
                   class="form-input"
-                  [ngModel]="pendingText"
+                  [ngModel]="pendingText()"
                   (ngModelChange)="onPendingTextInput($event)"
                   name="pendingText"
                   placeholder="e.g. dog barking sounds"
@@ -122,13 +122,13 @@
           <div class="form-group">
             <label class="col-label">Import Labels From <span class="required">*</span></label>
             <p class="info-text">Choose where to import labels from. The resulting detector's training data will be the imported labels.</p>
-            @if (labelImportersLoading) {
+            @if (labelImportersLoading()) {
               <p class="empty-state">Loading importers...</p>
-            } @else if (labelImporters.length === 0) {
+            } @else if (labelImporters().length === 0) {
               <p class="empty-state">No label importers available.</p>
             } @else {
               <div class="source-list">
-                @for (imp of labelImporters; track imp.name) {
+                @for (imp of labelImporters(); track imp.name) {
                   <button type="button" class="importer-card" (click)="selectLabelImporter(imp)">
                     <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
                     @if (imp.description) {
@@ -259,7 +259,7 @@
         <input
           id="detector-name"
           class="form-input"
-          [ngModel]="name"
+          [ngModel]="name()"
           (ngModelChange)="onNameInput($event)"
           name="name"
           placeholder="e.g. Dog Barks"
@@ -267,30 +267,30 @@
         />
       </div>
 
-      @if (error) {
-        <p class="error-text">{{ error }}</p>
+      @if (error()) {
+        <p class="error-text">{{ error() }}</p>
       }
     </form>
   }
 
-  @if (view === 'main') {
+  @if (view() === 'main') {
     <div modal-footer>
       <button class="btn btn--secondary" (click)="close()" title="Discard this detector and close the dialog">Cancel</button>
       @if (tab === 'blank') {
         <button class="btn btn--primary" [disabled]="!canSubmitBlank" (click)="submit()"
           title="Create the detector with the example you provided">
-          {{ submitting ? 'Creating...' : 'Create' }}
+          {{ submitting() ? 'Creating...' : 'Create' }}
         </button>
       } @else {
         <button class="btn btn--primary" [disabled]="!canSubmitTrained" (click)="submit()"
           title="Create the detector and import labels from the selected source">
-          {{ submitting ? 'Importing...' : 'Create & Import' }}
+          {{ submitting() ? 'Importing...' : 'Create & Import' }}
         </button>
       }
     </div>
   }
 
-  @if (view === 'media-picker') {
+  @if (view() === 'media-picker') {
     <div class="media-picker">
       <button class="btn btn--secondary btn--sm back-btn" (click)="backToMain()" title="Return to the detector creation form">&larr; Back</button>
 
@@ -303,16 +303,16 @@
         [selectedImporter]="selectedImporter"
         (importerSelected)="selectImporter($event)"
         [activePickerView]="demoFileBrowsing ? '' : activePickerView"
-        [mediaTypes]="mediaTypeInfos"
+        [mediaTypes]="mediaTypeInfos()"
         [noTabHint]="'Select where to pick a media example from.'"
         [noImporterHintTemplate]="'Select a {label} source to browse.'"
         [tabTitleTemplate]="'Show {label} media sources'"
         [emptyCategoryText]="'No sources in this category.'"
         [alwaysShowSubtabBar]="true"
-        [demos]="demos"
+        [demos]="demos()"
         [filteredDemos]="filteredDemos"
-        [demoLoading]="demoLoading"
-        [demoTabs]="demoTabs"
+        [demoLoading]="demoLoading()"
+        [demoTabs]="demoTabs()"
         [activeDemoTab]="activeDemoTab"
         (activeDemoTabChange)="selectDemoTab($event)"
         [demoCols]="demoCols"
@@ -340,13 +340,13 @@
           <button
             type="button"
             class="btn btn--primary"
-            [disabled]="sfFileSelecting || !sfTypedPath.trim()"
+            [disabled]="sfFileSelecting() || !sfTypedPath.trim()"
             (click)="submitSfTypedPath()"
           >
-            @if (sfFileSelecting) { Loading… } @else { Load }
+            @if (sfFileSelecting()) { Loading… } @else { Load }
           </button>
-          @if (sfBrowseError) {
-            <p class="error-text">{{ sfBrowseError }}</p>
+          @if (sfBrowseError()) {
+            <p class="error-text">{{ sfBrowseError() }}</p>
           }
         </ng-container>
 
@@ -385,13 +385,13 @@
           <button
             type="button"
             class="btn btn--primary"
-            [disabled]="demoFileLoading || !demoTypedPath.trim()"
+            [disabled]="demoFileLoading() || !demoTypedPath.trim()"
             (click)="submitDemoTypedPath()"
           >
-            @if (demoFileLoading) { Loading… } @else { Load }
+            @if (demoFileLoading()) { Loading… } @else { Load }
           </button>
-          @if (demoTypedPathError) {
-            <p class="error-text">{{ demoTypedPathError }}</p>
+          @if (demoTypedPathError()) {
+            <p class="error-text">{{ demoTypedPathError() }}</p>
           }
         </div>
       }

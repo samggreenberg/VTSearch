@@ -68,20 +68,20 @@ describe('SettingsModalComponent', () => {
 
   it('should load settings on init', () => {
     flushInit();
-    expect(component.settings.theme).toBe('dark');
-    expect(component.loading).toBe(false);
+    expect(component.settings().theme).toBe('dark');
+    expect(component.loading()).toBe(false);
   });
 
   it('should load media types and set active view tab', () => {
     flushInit();
-    expect(component.mediaTypes.length).toBe(2);
-    expect(component.activeViewTab).toBe('audio');
+    expect(component.mediaTypes().length).toBe(2);
+    expect(component.activeViewTab()).toBe('audio');
   });
 
   it('should update theme and save', () => {
     flushInit();
     component.onThemeChange('light');
-    expect(component.settings.theme).toBe('light');
+    expect(component.settings().theme).toBe('light');
     // onThemeChange persists twice: ThemeService.setTheme issues its own
     // PUT /api/settings, and save() issues another.
     const reqs = httpMock.match('/api/settings');
@@ -92,21 +92,21 @@ describe('SettingsModalComponent', () => {
   it('should toggle boolean setting and save', () => {
     flushInit();
     component.onToggle('show_animations', false);
-    expect(component.settings.show_animations).toBe(false);
+    expect(component.settings().show_animations).toBe(false);
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
   it('should update number setting and save', () => {
     flushInit();
     component.onNumberChange('calibrate_count', 100);
-    expect(component.settings.calibrate_count).toBe(100);
+    expect(component.settings().calibrate_count).toBe(100);
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
   it('should update per-media-type view mode and save', () => {
     flushInit();
     component.onViewModeChange('view_mode_left', 'audio', 'grid');
-    const dict = component.settings.view_mode_left as Record<string, string>;
+    const dict = component.settings().view_mode_left as Record<string, string>;
     expect(dict['audio']).toBe('grid');
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
@@ -128,7 +128,7 @@ describe('SettingsModalComponent', () => {
     const reqs = httpMock.match('/api/settings');
     expect(reqs.length).toBe(2);
     reqs.forEach((r) => r.flush(mockSettings));
-    expect(component.settings.theme).toBe('light');
+    expect(component.settings().theme).toBe('light');
   }));
 
   it('should not reset when confirmation is declined', fakeAsync(() => {
@@ -142,20 +142,20 @@ describe('SettingsModalComponent', () => {
   it('should use preselectedViewTab when valid', () => {
     component.preselectedViewTab = 'image';
     flushInit();
-    expect(component.activeViewTab).toBe('image');
-    expect(component.activeSettingsTab).toBe('appearance');
+    expect(component.activeViewTab()).toBe('image');
+    expect(component.activeSettingsTab()).toBe('appearance');
   });
 
   it('should ignore preselectedViewTab when not in mediaTypes', () => {
     component.preselectedViewTab = 'video';
     flushInit();
-    expect(component.activeViewTab).toBe('audio');
+    expect(component.activeViewTab()).toBe('audio');
   });
 
   it('should ignore empty preselectedViewTab', () => {
     component.preselectedViewTab = '';
     flushInit();
-    expect(component.activeViewTab).toBe('audio');
+    expect(component.activeViewTab()).toBe('audio');
   });
 
   it('should emit closed on close', () => {
@@ -177,7 +177,7 @@ describe('SettingsModalComponent', () => {
     embeddersReq.flush({ embedders: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
     settingsReq.flush({}, { status: 500, statusText: 'Error' });
-    expect(component.loading).toBe(false);
-    expect(component.error).toBe('Failed to load settings');
+    expect(component.loading()).toBe(false);
+    expect(component.error()).toBe('Failed to load settings');
   });
 });

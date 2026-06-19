@@ -1,4 +1,4 @@
-import { Component, HostListener, effect, inject } from '@angular/core';
+import { Component, HostListener, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { combineLatest } from 'rxjs';
@@ -74,32 +74,40 @@ export class AppComponent {
   title = 'VTSearch';
   menuOpen = false;
   showSettings = false;
-  showAchievements = false;
-  achievementsDisabled = false;
+  // Written from the `achievements.openPanelRequest$` subscribe (async) as well
+  // as bound click handlers, so a signal so the panel opens under zoneless.
+  readonly showAchievements = signal(false);
+  // Written from a settings `effect()` (Recipe F).
+  readonly achievementsDisabled = signal(false);
   showKeyboardHelp = false;
   gearClosing = false;
   achievementsClosing = false;
   helpClosing = false;
-  isOnLabelView = false;
+  // Written from the router-events subscribe (async); template-bound.
+  readonly isOnLabelView = signal(false);
   private isOnBrowseView = false;
   settingsViewTab = '';
   /** True when the current route consumes the active pair (label / find)
    *  and the pair is not compatible, so the explainer takes over the
-   *  router-outlet area in that state. */
-  showIncompatibleExplainer = false;
+   *  router-outlet area in that state. Written from `recomputeExplainer()`,
+   *  which runs from the router-events and pair/registry `combineLatest`
+   *  subscribes (async), so a signal so the explainer toggles under zoneless. */
+  readonly showIncompatibleExplainer = signal(false);
 
-  importerFlow: ImporterFlowState = {
+  // Written from the `newThingFlows.importer$`/`newDetector$` subscribes (async).
+  readonly importerFlow = signal<ImporterFlowState>({
     open: false,
     initialTab: '',
     guessedMediaType: '',
     guessedMediaEmbedder: '',
-  };
-  newDetectorFlow: NewDetectorFlowState = {
+  });
+  readonly newDetectorFlow = signal<NewDetectorFlowState>({
     open: false,
     defaultMediaType: '',
     datasetEmbedder: '',
-  };
-  recentSessions: RecentSession[] = [];
+  });
+  // Written from the `recent.sessions$` subscribe (async).
+  readonly recentSessions = signal<RecentSession[]>([]);
 
   constructor() {
     const activeContextWatcher = inject(ActiveContextWatcherService);
@@ -107,28 +115,30 @@ export class AppComponent {
     this.auth.checkStatus();
     this.settingsState.load();
     effect(() => {
-      this.achievementsDisabled =
-        this.settingsState.settingsSignal()?.enable_achievements === false;
+      this.achievementsDisabled.set(
+        this.settingsState.settingsSignal()?.enable_achievements === false,
+      );
     });
     this.achievements.refresh();
     this.achievements.openPanelRequest$.subscribe(() => {
-      this.showAchievements = true;
+      this.showAchievements.set(true);
       this.achievements.acknowledgeAll();
     });
     this.themeService.loadFromSettings();
     activeContextWatcher.start();
     this.recent.refresh().subscribe();
     this.recent.sessions$.subscribe((sessions) => {
-      this.recentSessions = sessions;
+      this.recentSessions.set(sessions);
     });
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
         this.isOnBrowseView = e.urlAfterRedirects.startsWith('/browse');
-        this.isOnLabelView =
+        this.isOnLabelView.set(
           e.urlAfterRedirects.startsWith('/label') ||
-          e.urlAfterRedirects.startsWith('/find') ||
-          this.isOnBrowseView;
+            e.urlAfterRedirects.startsWith('/find') ||
+            this.isOnBrowseView,
+        );
         this.recomputeExplainer();
       });
 
@@ -139,16 +149,16 @@ export class AppComponent {
     ]).subscribe(() => this.recomputeExplainer());
 
     this.newThingFlows.importer$.subscribe((state) => {
-      this.importerFlow = state;
+      this.importerFlow.set(state);
     });
     this.newThingFlows.newDetector$.subscribe((state) => {
-      this.newDetectorFlow = state;
+      this.newDetectorFlow.set(state);
     });
   }
 
   private recomputeExplainer(): void {
-    if (!this.isOnLabelView || this.isOnBrowseView) {
-      this.showIncompatibleExplainer = false;
+    if (!this.isOnLabelView() || this.isOnBrowseView) {
+      this.showIncompatibleExplainer.set(false);
       return;
     }
     const ds = this.activeContext.datasetId
@@ -157,7 +167,7 @@ export class AppComponent {
     const det = this.activeContext.modelId
       ? this.datasetState.detectors.find((d) => d.id === this.activeContext.modelId) ?? null
       : null;
-    this.showIncompatibleExplainer = !isPairCompatible(ds, det);
+    this.showIncompatibleExplainer.set(!isPairCompatible(ds, det));
   }
 
   toggleMenu(event: Event): void {
@@ -251,7 +261,7 @@ export class AppComponent {
   }
 
   onDashboard(): void {
-    if (!this.isOnLabelView) return;
+    if (!this.isOnLabelView()) return;
     this.menuOpen = false;
     this.router.navigate(['/dashboard']);
   }
@@ -287,12 +297,12 @@ export class AppComponent {
   onAchievements(): void {
     this.menuOpen = false;
     this.achievementsClosing = false;
-    this.showAchievements = true;
+    this.showAchievements.set(true);
     this.achievements.acknowledgeAll();
   }
 
   onAchievementsClosed(): void {
-    this.showAchievements = false;
+    this.showAchievements.set(false);
     this.achievementsClosing = true;
   }
 
@@ -338,7 +348,7 @@ export class AppComponent {
 
   private inferMediaType(): string {
     // From labeling view: use the media type of loaded medias
-    if (this.isOnLabelView) {
+    if (this.isOnLabelView()) {
       const medias = this.mediaState.mediasSignal();
       if (medias.length > 0) {
         return medias[0].media_type;

@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit, inject, output } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, inject, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { forkJoin, Subject } from 'rxjs';
@@ -45,23 +45,23 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   @Input() preselectedViewTab = '';
   readonly closed = output<void>();
 
-  settings: AppSettings = { volume: 50 };
-  mediaTypes: MediaTypeInfo[] = [];
+  readonly settings = signal<AppSettings>({ volume: 50 });
+  readonly mediaTypes = signal<MediaTypeInfo[]>([]);
   /** All registered embedders, keyed by media-type id, used to populate
    *  the per-mediaType "Solo embedder" dropdowns under Appearance. */
-  embeddersByType: Record<string, EmbedderInfo[]> = {};
-  activeSettingsTab = 'appearance';
-  activeViewTab = '';
+  readonly embeddersByType = signal<Record<string, EmbedderInfo[]>>({});
+  readonly activeSettingsTab = signal('appearance');
+  readonly activeViewTab = signal('');
   /** Active media-type tab within the Browser settings tab. */
-  activeBrowseTab = '';
+  readonly activeBrowseTab = signal('');
   /** Upper bound for the pile-thumbnail border number input (template-bound). */
   readonly maxThumbnailBorder = MAX_THUMBNAIL_BORDER;
-  loading = true;
-  error = '';
+  readonly loading = signal(true);
+  readonly error = signal('');
   showImporterModal = false;
   showExporterModal = false;
-  version = '';
-  savedVisible = false;
+  readonly version = signal('');
+  readonly savedVisible = signal(false);
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   private destroy$ = new Subject<void>();
@@ -82,9 +82,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
       next: (res) => {
-        this.settings = res.settings;
-        this.version = formatVersion(res.version.version);
-        this.mediaTypes = res.mediaTypes.media_types || [];
+        this.settings.set(res.settings);
+        this.version.set(formatVersion(res.version.version));
+        this.mediaTypes.set(res.mediaTypes.media_types || []);
         const allEmbedders = res.embedders || [];
         // Group embedders by media_type_id with defaults first, matching
         // the order ``embedders_for_type`` returns from the API.
@@ -97,29 +97,30 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
         for (const list of Object.values(byType)) {
           list.sort((a, b) => Number(!!b.is_default) - Number(!!a.is_default));
         }
-        this.embeddersByType = byType;
-        if (this.mediaTypes.length > 0) {
+        this.embeddersByType.set(byType);
+        const mediaTypes = this.mediaTypes();
+        if (mediaTypes.length > 0) {
           const preselected = this.preselectedViewTab;
-          if (preselected && this.mediaTypes.some((mt) => mt.type_id === preselected)) {
-            this.activeViewTab = preselected;
-            this.activeSettingsTab = 'appearance';
+          if (preselected && mediaTypes.some((mt) => mt.type_id === preselected)) {
+            this.activeViewTab.set(preselected);
+            this.activeSettingsTab.set('appearance');
           } else {
-            this.activeViewTab = this.mediaTypes[0].type_id;
+            this.activeViewTab.set(mediaTypes[0].type_id);
           }
-          this.activeBrowseTab = this.mediaTypes[0].type_id;
+          this.activeBrowseTab.set(mediaTypes[0].type_id);
         }
-        this.loading = false;
+        this.loading.set(false);
       },
       error: () => {
-        this.loading = false;
-        this.error = 'Failed to load settings';
+        this.loading.set(false);
+        this.error.set('Failed to load settings');
       },
     });
   }
 
   onThemeChange(theme: string): void {
     const t = theme as Theme;
-    this.settings.theme = t;
+    this.settings.update((s) => ({ ...s, theme: t }));
     this.themeService.setTheme(t);
     this.save();
   }
@@ -130,11 +131,12 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
    *  effective value so a fresh user sees what the streamlined mode is
    *  currently locking them to (rather than a misleading empty state). */
   get soloMediaTypeSelectValue(): string {
-    const explicit = this.settings.solo_media_type_explicit;
+    const settings = this.settings();
+    const explicit = settings.solo_media_type_explicit;
     if (explicit) {
-      return this.settings.solo_media_type || '';
+      return settings.solo_media_type || '';
     }
-    return this.settings.effective_solo_media_type || '';
+    return settings.effective_solo_media_type || '';
   }
 
   /** Hint text under the solo-mediaType select. Surfaces "from
@@ -142,8 +144,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
    *  so the user understands why the picker is non-empty without ever
    *  having touched it. */
   get soloMediaTypeNote(): string {
-    const explicit = this.settings.solo_media_type_explicit;
-    const effective = this.settings.effective_solo_media_type || '';
+    const settings = this.settings();
+    const explicit = settings.solo_media_type_explicit;
+    const effective = settings.effective_solo_media_type || '';
     if (!explicit && effective) {
       return `Currently set to ${effective} by the --solo-media-type CLI flag. ` +
         'Choose any value here to override it.';
@@ -156,9 +159,12 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     // and still flips the explicit flag so the choice survives a CLI
     // fallback on the next launch.
     const next = value || null;
-    (this.settings as Record<string, unknown>)['solo_media_type'] = next;
-    (this.settings as Record<string, unknown>)['solo_media_type_explicit'] = true;
-    (this.settings as Record<string, unknown>)['effective_solo_media_type'] = next;
+    this.settings.update((s) => ({
+      ...(s as Record<string, unknown>),
+      solo_media_type: next,
+      solo_media_type_explicit: true,
+      effective_solo_media_type: next,
+    }) as AppSettings);
     this.save();
   }
 
@@ -166,7 +172,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
    *  "Solo embedder" dropdowns. Returns an empty list when the registry
    *  hasn't loaded yet or the type has no embedders. */
   embeddersForType(typeId: string): EmbedderInfo[] {
-    return this.embeddersByType[typeId] || [];
+    return this.embeddersByType()[typeId] || [];
   }
 
   /** Currently selected solo embedder name for *typeId*. Reads from the
@@ -174,12 +180,12 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
    *  picker shows what the user will actually get when they open the
    *  importer (including a CLI-only lock that has not been overridden). */
   soloEmbedderSelectValue(typeId: string): string {
-    const map = this.settings.effective_solo_embedder_per_media_type || {};
+    const map = this.settings().effective_solo_embedder_per_media_type || {};
     const value = map[typeId];
     if (!value) return '';
     // If the stored embedder no longer exists for this type, surface
     // "Ask each time" rather than a broken-looking option.
-    const valid = this.embeddersByType[typeId] || [];
+    const valid = this.embeddersByType()[typeId] || [];
     return valid.find((e) => e.name === value) ? value : '';
   }
 
@@ -188,12 +194,13 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
    *  understands why the dropdown shows what it does. Returns ``''`` for
    *  the normal case (no lock, or a user-explicit pick). */
   soloEmbedderNote(typeId: string): string {
-    const userMap = this.settings.solo_embedder_per_media_type || {};
-    const effectiveMap = this.settings.effective_solo_embedder_per_media_type || {};
+    const settings = this.settings();
+    const userMap = settings.solo_embedder_per_media_type || {};
+    const effectiveMap = settings.effective_solo_embedder_per_media_type || {};
     const userVal = userMap[typeId];
     const effective = effectiveMap[typeId];
     if (!effective && !userVal) return '';
-    const valid = this.embeddersByType[typeId] || [];
+    const valid = this.embeddersByType()[typeId] || [];
     if (effective && !valid.find((e) => e.name === effective)) {
       return `Locked embedder "${effective}" is no longer registered for this type. ` +
         'Pick a different embedder to update the lock.';
@@ -205,28 +212,32 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   }
 
   onSoloEmbedderChange(typeId: string, value: string): void {
-    const userMap = { ...(this.settings.solo_embedder_per_media_type || {}) };
+    const settings = this.settings();
+    const userMap = { ...(settings.solo_embedder_per_media_type || {}) };
     // Empty value = "Ask each time". Persist it as the opt-out sentinel
     // (an empty-string entry) so it overrides any ``--solo-embedder``
     // CLI fallback for this type; same pattern as solo_media_type's
     // explicit-null override of --solo-media-type.
     userMap[typeId] = value || '';
-    (this.settings as Record<string, unknown>)['solo_embedder_per_media_type'] = userMap;
     // Optimistically update the effective map so the dropdown reflects
     // the new choice immediately; the PUT response will replace it with
     // the authoritative server view including any CLI fallback.
-    const effective = { ...(this.settings.effective_solo_embedder_per_media_type || {}) };
+    const effective = { ...(settings.effective_solo_embedder_per_media_type || {}) };
     if (value) {
       effective[typeId] = value;
     } else {
       delete effective[typeId];
     }
-    (this.settings as Record<string, unknown>)['effective_solo_embedder_per_media_type'] = effective;
+    this.settings.update((s) => ({
+      ...(s as Record<string, unknown>),
+      solo_embedder_per_media_type: userMap,
+      effective_solo_embedder_per_media_type: effective,
+    }) as AppSettings);
     this.save();
   }
 
   onToggle(key: string, value: boolean): void {
-    (this.settings as Record<string, unknown>)[key] = value;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [key]: value }) as AppSettings);
     this.save();
   }
 
@@ -239,49 +250,49 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       );
       if (!ok) {
         // Force-rebind to the previous value so the checkbox snaps back.
-        this.settings = { ...this.settings, enable_achievements: true };
+        this.settings.update((s) => ({ ...s, enable_achievements: true }));
         return;
       }
     }
-    (this.settings as Record<string, unknown>)['enable_achievements'] = value;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), enable_achievements: value }) as AppSettings);
     this.save();
   }
 
   onViewModeChange(side: 'view_mode_left' | 'view_mode_right', typeId: string, value: string): void {
-    const dict = (this.settings[side] as Record<string, string>) || {};
+    const dict = { ...((this.settings()[side] as Record<string, string>) || {}) };
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)[side] = { ...dict };
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [side]: dict }) as AppSettings);
     this.save();
   }
 
   getViewMode(side: 'view_mode_left' | 'view_mode_right', typeId: string): string {
-    const dict = this.settings[side];
+    const dict = this.settings()[side];
     if (!dict) return side === 'view_mode_left' ? 'list' : 'grid';
     return dict[typeId] ?? (side === 'view_mode_left' ? 'list' : 'grid');
   }
 
   onGridIconSizeChange(side: 'grid_icon_size_left' | 'grid_icon_size_right', typeId: string, value: string): void {
-    const dict = (this.settings[side] as Record<string, string>) || {};
+    const dict = { ...((this.settings()[side] as Record<string, string>) || {}) };
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)[side] = { ...dict };
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [side]: dict }) as AppSettings);
     this.save();
   }
 
   getGridIconSize(side: 'grid_icon_size_left' | 'grid_icon_size_right', typeId: string): string {
-    const dict = this.settings[side];
+    const dict = this.settings()[side];
     if (!dict) return 'M';
     return dict[typeId] ?? 'M';
   }
 
   onFocusModeChange(side: 'focus_mode_left' | 'focus_mode_right', typeId: string, value: string): void {
-    const dict = (this.settings[side] as Record<string, string>) || {};
+    const dict = { ...((this.settings()[side] as Record<string, string>) || {}) };
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)[side] = { ...dict };
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [side]: dict }) as AppSettings);
     this.save();
   }
 
   getFocusMode(side: 'focus_mode_left' | 'focus_mode_right', typeId: string): string {
-    const dict = this.settings[side];
+    const dict = this.settings()[side];
     if (!dict) return 'click';
     return dict[typeId] ?? 'click';
   }
@@ -294,7 +305,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     typeId: string,
     fallback: string,
   ): string {
-    const dict = this.settings[key] as Record<string, string> | undefined;
+    const dict = this.settings()[key] as Record<string, string> | undefined;
     return (dict && dict[typeId]) || fallback;
   }
 
@@ -304,9 +315,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     typeId: string,
     value: string,
   ): void {
-    const dict = { ...((this.settings[key] as Record<string, string> | undefined) || {}) };
+    const dict = { ...((this.settings()[key] as Record<string, string> | undefined) || {}) };
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)[key] = dict;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [key]: dict }) as AppSettings);
     this.save();
   }
 
@@ -346,7 +357,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   /** Pile-thumbnail border width (CSS px) for *typeId*, defaulting to the
    *  feature default when the user hasn't set one for this media type. */
   getBrowseThumbnailBorder(typeId: string): number {
-    const dict = this.settings.browse_thumbnail_border as Record<string, number> | undefined;
+    const dict = this.settings().browse_thumbnail_border as Record<string, number> | undefined;
     const value = dict?.[typeId];
     return value == null ? DEFAULT_THUMBNAIL_BORDER : value;
   }
@@ -358,17 +369,17 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     if (!Number.isFinite(n)) n = 0;
     n = Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, Math.round(n)));
     const dict = {
-      ...((this.settings.browse_thumbnail_border as Record<string, number> | undefined) || {}),
+      ...((this.settings().browse_thumbnail_border as Record<string, number> | undefined) || {}),
     };
     dict[typeId] = n;
-    (this.settings as Record<string, unknown>)['browse_thumbnail_border'] = dict;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), browse_thumbnail_border: dict }) as AppSettings);
     this.save();
   }
 
   /** Whether the projection is compacted for *typeId* (oceans closed),
    *  defaulting to on when the user hasn't set one for this media type. */
   getBrowseCompact(typeId: string): boolean {
-    const dict = this.settings.browse_compact as Record<string, boolean> | undefined;
+    const dict = this.settings().browse_compact as Record<string, boolean> | undefined;
     const value = dict?.[typeId];
     return value == null ? true : value;
   }
@@ -377,9 +388,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
    *  the next projection build or the Browser's Re-project action, since the
    *  layout coordinates are computed once and frozen. */
   onBrowseCompactChange(typeId: string, value: boolean): void {
-    const dict = { ...((this.settings.browse_compact as Record<string, boolean> | undefined) || {}) };
+    const dict = { ...((this.settings().browse_compact as Record<string, boolean> | undefined) || {}) };
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)['browse_compact'] = dict;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), browse_compact: dict }) as AppSettings);
     this.save();
   }
 
@@ -390,36 +401,36 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   // live popup stay in step. (The popup is grid-only — it has no list mode.)
 
   getPopupGridIconSize(typeId: string): string {
-    const dict = this.settings.grid_icon_size_popup as Record<string, string> | undefined;
+    const dict = this.settings().grid_icon_size_popup as Record<string, string> | undefined;
     return (dict && dict[typeId]) || 'M';
   }
 
   onPopupGridIconSizeChange(typeId: string, value: string): void {
-    const dict = { ...((this.settings.grid_icon_size_popup as Record<string, string> | undefined) || {}) };
+    const dict = { ...((this.settings().grid_icon_size_popup as Record<string, string> | undefined) || {}) };
     dict[typeId] = value;
-    (this.settings as Record<string, unknown>)['grid_icon_size_popup'] = dict;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), grid_icon_size_popup: dict }) as AppSettings);
     this.save();
   }
 
   onNumberChange(key: string, value: number): void {
-    (this.settings as Record<string, unknown>)[key] = value;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [key]: value }) as AppSettings);
     this.save();
   }
 
   onStringChange(key: string, value: string): void {
-    (this.settings as Record<string, unknown>)[key] = value;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), [key]: value }) as AppSettings);
     this.save();
   }
 
   /** Current per-mediaType import-defaults map, normalised to a plain
    *  object so the child component never has to defend against ``null``. */
   get importDefaults(): ImportDefaultsByMediaType {
-    const raw = (this.settings as Record<string, unknown>)['import_defaults_by_media_type'];
+    const raw = (this.settings() as Record<string, unknown>)['import_defaults_by_media_type'];
     return (raw as ImportDefaultsByMediaType | undefined) || {};
   }
 
   onImportDefaultsChange(value: ImportDefaultsByMediaType): void {
-    (this.settings as Record<string, unknown>)['import_defaults_by_media_type'] = value;
+    this.settings.update((s) => ({ ...(s as Record<string, unknown>), import_defaults_by_media_type: value }) as AppSettings);
     this.save();
   }
 
@@ -427,23 +438,24 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
    *  the per-mediaType picker to a single tab when the user is in solo
    *  mode (so they only configure what they'll actually import). */
   get effectiveSoloMediaType(): string | null {
-    const explicit = this.settings.solo_media_type_explicit;
+    const settings = this.settings();
+    const explicit = settings.solo_media_type_explicit;
     if (explicit) {
-      return this.settings.solo_media_type || null;
+      return settings.solo_media_type || null;
     }
-    return this.settings.effective_solo_media_type || null;
+    return settings.effective_solo_media_type || null;
   }
 
   /** Configured Auto-Find results-exporter name (''=none), read from the
    *  settings object for the Auto-Find tab's child component. */
   get autofindExporter(): string {
-    return ((this.settings as Record<string, unknown>)['autofind_exporter'] as string) || '';
+    return ((this.settings() as Record<string, unknown>)['autofind_exporter'] as string) || '';
   }
 
   /** Per-exporter saved field values for the Auto-Find tab's child component. */
   get autofindExporterFieldValues(): Record<string, Record<string, string>> {
     return (
-      ((this.settings as Record<string, unknown>)['autofind_exporter_field_values'] as Record<
+      ((this.settings() as Record<string, unknown>)['autofind_exporter_field_values'] as Record<
         string,
         Record<string, string>
       >) || {}
@@ -452,8 +464,11 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   /** Persist the user's Auto-Find results-exporter choice + field values. */
   onAutofindExporterChange(change: AutoFindExporterChange): void {
-    (this.settings as Record<string, unknown>)['autofind_exporter'] = change.exporter;
-    (this.settings as Record<string, unknown>)['autofind_exporter_field_values'] = change.fieldValues;
+    this.settings.update((s) => ({
+      ...(s as Record<string, unknown>),
+      autofind_exporter: change.exporter,
+      autofind_exporter_field_values: change.fieldValues,
+    }) as AppSettings);
     this.save();
   }
 
@@ -461,7 +476,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
    *  (sorted by family, empty families dropped) for the read-only Server
    *  tab. ``names`` is the comma-joined plugin names within the family. */
   get hiddenPluginsDisplay(): { family: string; names: string }[] {
-    const raw = (this.settings as Record<string, unknown>)['hidden_plugins'] as
+    const raw = (this.settings() as Record<string, unknown>)['hidden_plugins'] as
       | Record<string, string[]>
       | undefined;
     if (!raw) return [];
@@ -483,7 +498,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (defaults) => {
-          this.settings = defaults;
+          this.settings.set(defaults);
           if (defaults.theme) {
             this.themeService.setTheme(defaults.theme as Theme);
           }
@@ -504,7 +519,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (s) => {
-          this.settings = s;
+          this.settings.set(s);
           if (s.theme) {
             this.themeService.setTheme(s.theme as Theme);
           }
@@ -518,24 +533,24 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
 
   private save(): void {
     this.settingsState
-      .update(this.settings)
+      .update(this.settings())
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.error = '';
+          this.error.set('');
           this.flashSaved();
         },
         error: () => {
-          this.error = 'Failed to save settings';
+          this.error.set('Failed to save settings');
         },
       });
   }
 
   private flashSaved(): void {
     if (this.savedTimer !== null) clearTimeout(this.savedTimer);
-    this.savedVisible = true;
+    this.savedVisible.set(true);
     this.savedTimer = setTimeout(() => {
-      this.savedVisible = false;
+      this.savedVisible.set(false);
       this.savedTimer = null;
     }, 1800);
   }

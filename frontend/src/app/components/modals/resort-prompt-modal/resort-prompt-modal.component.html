@@ -34,8 +34,8 @@
         </div>
       </div>
 
-      @if (error) {
-        <p class="error-text">{{ error }}</p>
+      @if (error()) {
+        <p class="error-text">{{ error() }}</p>
       }
     </div>
   }
@@ -53,7 +53,7 @@
       @if (!selectedSource) {
         <p class="picker-instructions">Choose a source to browse media from:</p>
         <div class="source-list">
-          @for (src of mediaSources; track src.name) {
+          @for (src of mediaSources(); track src.name) {
             <button class="importer-card" (click)="selectSource(src)">
               <span class="importer-name">@if (src.icon) {<span class="importer-icon"><vt-icon [icon]="src.icon"></vt-icon></span> }{{ src.display_name || src.name }}</span>
               @if (src.description) {
@@ -64,10 +64,10 @@
         </div>
       }
 
-      @if (selectedSource && !fileBrowsing && !browseLoading && browseItems.length > 0) {
+      @if (selectedSource && !fileBrowsing && !browseLoading() && browseItems().length > 0) {
         <p class="picker-instructions">Select an item from <strong>{{ selectedSource.display_name || selectedSource.name }}</strong>:</p>
         <div class="browse-list">
-          @for (item of browseItems; track item.key) {
+          @for (item of browseItems(); track item.key) {
             <button class="browse-item" (click)="selectBrowseItem(item)" [title]="item.key">
               {{ item.display || item.key }}
             </button>
@@ -89,21 +89,21 @@
         <button
           type="button"
           class="btn btn--primary"
-          [disabled]="fileLoading || !typedPath.trim()"
+          [disabled]="fileLoading() || !typedPath.trim()"
           (click)="submitTypedPath()"
         >
-          @if (fileLoading) { Loading… } @else { Load }
+          @if (fileLoading()) { Loading… } @else { Load }
         </button>
-        @if (typedPathError) {
-          <p class="error-text">{{ typedPathError }}</p>
+        @if (typedPathError()) {
+          <p class="error-text">{{ typedPathError() }}</p>
         }
       }
 
-      @if (browseLoading) {
+      @if (browseLoading()) {
         <p class="empty-state">Loading items...</p>
       }
 
-      @if (selectedSource && !fileBrowsing && !browseLoading && browseItems.length === 0) {
+      @if (selectedSource && !fileBrowsing && !browseLoading() && browseItems().length === 0) {
         <p class="empty-state">No items found in this source.</p>
       }
     </div>

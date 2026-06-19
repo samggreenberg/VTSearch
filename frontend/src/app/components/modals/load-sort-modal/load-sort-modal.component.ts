@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, output } from '@angular/core';
+import { Component, OnInit, inject, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -40,28 +40,28 @@ export class LoadSortModalComponent implements OnInit {
   readonly modelSelected = output<string>();
   readonly exampleSortStarted = output<unknown>();
 
-  serverMediaFiles: ServerMediaFileEntry[] = [];
-  registryModels: DetectorRegistryEntry[] = [];
-  loading = true;
-  status = '';
-  error = '';
+  readonly serverMediaFiles = signal<ServerMediaFileEntry[]>([]);
+  readonly registryModels = signal<DetectorRegistryEntry[]>([]);
+  readonly loading = signal(true);
+  readonly status = signal('');
+  readonly error = signal('');
 
   // Media source browser state
-  showMediaPicker = false;
-  mediaSources: ImporterInfo[] = [];
+  readonly showMediaPicker = signal(false);
+  readonly mediaSources = signal<ImporterInfo[]>([]);
   selectedSource: ImporterInfo | null = null;
-  mediaPickerView: MediaPickerView = 'sources';
-  browseItems: BrowseItem[] = [];
-  browseLoading = false;
+  readonly mediaPickerView = signal<MediaPickerView>('sources');
+  readonly browseItems = signal<BrowseItem[]>([]);
+  readonly browseLoading = signal(false);
 
   // Typed-path state for the example-media picker (demo & folder drill-down).
   // The user types a path relative to the picked source; the server validates
   // it when the form is submitted.
   browseSource = '';
   browseSourceLabel = '';
-  fileLoading = false;
+  readonly fileLoading = signal(false);
   typedPath = '';
-  typedPathError = '';
+  readonly typedPathError = signal('');
 
   // Pending crop confirmation state.
   pendingFile: File | null = null;
@@ -72,19 +72,19 @@ export class LoadSortModalComponent implements OnInit {
   ngOnInit(): void {
     this.sortingApi.getServerMediaFiles().subscribe({
       next: (res) => {
-        this.serverMediaFiles = res.files || [];
+        this.serverMediaFiles.set(res.files || []);
       },
     });
     this.detectorsRegistryApi.getRegistry().subscribe({
       next: (res) => {
         // Show detectors that have at least one training label.
-        this.registryModels = (res.detectors || []).filter(
-          (m) => (m.num_training ?? 0) > 0,
+        this.registryModels.set(
+          (res.detectors || []).filter((m) => (m.num_training ?? 0) > 0),
         );
-        this.loading = false;
+        this.loading.set(false);
       },
       error: () => {
-        this.loading = false;
+        this.loading.set(false);
       },
     });
   }
@@ -92,7 +92,7 @@ export class LoadSortModalComponent implements OnInit {
   // --- Model loading ---
 
   loadRegistryModel(model: DetectorRegistryEntry): void {
-    this.status = 'Loading detector…';
+    this.status.set('Loading detector…');
     this.modelSelected.emit(model.id);
     this.closed.emit();
   }
@@ -110,16 +110,16 @@ export class LoadSortModalComponent implements OnInit {
 
   onCropConfirmed(result: MediaCropResult): void {
     this.pendingFile = null;
-    this.status = 'Scoring with example media...';
+    this.status.set('Scoring with example media...');
     this.sortingApi.exampleSort(result.file, result.cropParams).subscribe({
       next: (data) => {
-        this.status = '';
+        this.status.set('');
         this.exampleSortStarted.emit(data);
         this.closed.emit();
       },
       error: () => {
-        this.status = '';
-        this.error = 'Example sort failed';
+        this.status.set('');
+        this.error.set('Example sort failed');
       },
     });
   }
@@ -139,16 +139,16 @@ export class LoadSortModalComponent implements OnInit {
   }
 
   loadServerMedia(filename: string): void {
-    this.status = 'Scoring with example media...';
+    this.status.set('Scoring with example media...');
     this.sortingApi.exampleSortServer({ filename }).subscribe({
       next: (data) => {
-        this.status = '';
+        this.status.set('');
         this.exampleSortStarted.emit(data);
         this.closed.emit();
       },
       error: () => {
-        this.status = '';
-        this.error = 'Example sort failed';
+        this.status.set('');
+        this.error.set('Example sort failed');
       },
     });
   }
@@ -156,71 +156,77 @@ export class LoadSortModalComponent implements OnInit {
   // --- Media source browser ---
 
   openMediaPicker(): void {
-    this.showMediaPicker = true;
+    this.showMediaPicker.set(true);
     this.selectedSource = null;
-    this.mediaPickerView = 'sources';
-    this.browseItems = [];
+    this.mediaPickerView.set('sources');
+    this.browseItems.set([]);
     this.browseSource = '';
     this.browseSourceLabel = '';
     this.loadMediaSources();
   }
 
   closeMediaPicker(): void {
-    this.showMediaPicker = false;
+    this.showMediaPicker.set(false);
   }
 
   private loadMediaSources(): void {
-    this.browseLoading = true;
+    this.browseLoading.set(true);
     this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
-        this.mediaSources = (res.importers || []).filter(
-          (imp) =>
-            imp.name === 'demo' ||
-            imp.name === 'server_folder' ||
-            (!imp['hidden_from_picker'] && imp.name !== 'combine_datasets'),
+        this.mediaSources.set(
+          (res.importers || []).filter(
+            (imp) =>
+              imp.name === 'demo' ||
+              imp.name === 'server_folder' ||
+              (!imp['hidden_from_picker'] && imp.name !== 'combine_datasets'),
+          ),
         );
-        this.browseLoading = false;
+        this.browseLoading.set(false);
       },
       error: () => {
-        this.browseLoading = false;
+        this.browseLoading.set(false);
       },
     });
   }
 
   selectSource(source: ImporterInfo): void {
     this.selectedSource = source;
-    this.browseLoading = true;
-    this.browseItems = [];
+    this.browseLoading.set(true);
+    this.browseItems.set([]);
 
     if (source.name === 'demo') {
       this.datasetsListingsApi.getDemoList().subscribe({
         next: (res) => {
-          this.browseItems = (res.datasets || []).map((d) => ({
-            key: d.name,
-            display: `${d.label} (${d.media_type}, ${d.num_files} items)`,
-          }));
-          this.mediaPickerView = 'browse-items';
-          this.browseLoading = false;
+          this.browseItems.set(
+            (res.datasets || []).map((d) => ({
+              key: d.name,
+              display: `${d.label} (${d.media_type}, ${d.num_files} items)`,
+            })),
+          );
+          this.mediaPickerView.set('browse-items');
+          this.browseLoading.set(false);
         },
         error: () => {
-          this.browseLoading = false;
+          this.browseLoading.set(false);
         },
       });
     } else if (source.name === 'server_folder') {
-      this.browseLoading = false;
+      this.browseLoading.set(false);
       this.startFileBrowsing('folder', 'Saved Datasets');
     } else {
       this.sortingApi.getServerMediaFiles().subscribe({
         next: (res) => {
-          this.browseItems = (res.files || []).map((f) => ({
-            key: f.filename || f.name,
-            display: f.name,
-          }));
-          this.mediaPickerView = 'browse-items';
-          this.browseLoading = false;
+          this.browseItems.set(
+            (res.files || []).map((f) => ({
+              key: f.filename || f.name,
+              display: f.name,
+            })),
+          );
+          this.mediaPickerView.set('browse-items');
+          this.browseLoading.set(false);
         },
         error: () => {
-          this.browseLoading = false;
+          this.browseLoading.set(false);
         },
       });
     }
@@ -232,27 +238,27 @@ export class LoadSortModalComponent implements OnInit {
       return;
     }
     // For server media files, sort directly
-    this.showMediaPicker = false;
+    this.showMediaPicker.set(false);
     this.loadServerMedia(item.key);
   }
 
   private startFileBrowsing(source: string, label: string): void {
-    this.mediaPickerView = 'file-browser';
+    this.mediaPickerView.set('file-browser');
     this.browseSource = source;
     this.browseSourceLabel = label;
     this.typedPath = '';
-    this.typedPathError = '';
+    this.typedPathError.set('');
   }
 
   /** Back-arrow handler for the typed-path view: returns to the
    *  source-listing step that opened it (demo list / saved-datasets
    *  list). */
   backFromFileBrowser(): void {
-    this.mediaPickerView = this.selectedSource?.name === 'demo' ? 'browse-items' : 'sources';
+    this.mediaPickerView.set(this.selectedSource?.name === 'demo' ? 'browse-items' : 'sources');
     this.browseSource = '';
     this.browseSourceLabel = '';
     this.typedPath = '';
-    this.typedPathError = '';
+    this.typedPathError.set('');
   }
 
   /** Submit the typed path to ``/api/browse-media-files/select`` and
@@ -260,17 +266,17 @@ export class LoadSortModalComponent implements OnInit {
   submitTypedPath(): void {
     const raw = (this.typedPath || '').trim();
     if (!raw) return;
-    this.typedPathError = '';
-    this.fileLoading = true;
+    this.typedPathError.set('');
+    this.fileLoading.set(true);
     this.datasetsUiApi.selectBrowsedFile(this.browseSource, raw).subscribe({
       next: (res) => {
-        this.fileLoading = false;
-        this.showMediaPicker = false;
+        this.fileLoading.set(false);
+        this.showMediaPicker.set(false);
         this.loadServerMedia(res.filename);
       },
       error: (err) => {
-        this.fileLoading = false;
-        this.typedPathError = err?.error?.message || 'Path not found on the server.';
+        this.fileLoading.set(false);
+        this.typedPathError.set(err?.error?.message || 'Path not found on the server.');
       },
     });
   }

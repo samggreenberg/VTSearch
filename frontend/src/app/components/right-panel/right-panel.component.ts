@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, computed, effect, inject, input, output } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, computed, effect, inject, input, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -91,17 +91,22 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   /** Normalised region boxes for good votes, keyed by media id; drives cropped
    *  Good-pile thumbnails when an item was region-voted. */
   readonly goodRegionBoxes = computed(() => this.voteState.goodRegionBoxes);
-  goodElements: DetectorLabelView[] = [];
-  badElements: DetectorLabelView[] = [];
+  // Template-bound and written from the LabelsetStateService `good$`/`bad$`/
+  // `mediaType$` subscribes and the settings `effect()` (Recipe F for
+  // viewMode/gridGoalWidth) — none of which schedule CD for a plain field under
+  // zoneless — so they are signals. (`sortMode` stays plain: only written from
+  // the bound `(sortModeChange)` handler.)
+  readonly goodElements = signal<DetectorLabelView[]>([]);
+  readonly badElements = signal<DetectorLabelView[]>([]);
   sortMode: LabelSortMode = 'time-desc';
-  viewMode: 'grid' | 'list' = 'grid';
-  gridGoalWidth: number = 80;
+  readonly viewMode = signal<'grid' | 'list'>('grid');
+  readonly gridGoalWidth = signal(80);
   showLabelImport = false;
   showExport = false;
 
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
   private gridIconSizeRightDict: Record<string, string> = {};
-  protected currentMediaType = '';
+  protected readonly currentMediaType = signal('');
   private destroy$ = new Subject<void>();
 
   constructor() {
@@ -111,16 +116,16 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
       const dict = settings.view_mode_right;
       if (dict && typeof dict === 'object') {
         this.viewModeRightDict = dict as Record<string, 'grid' | 'list'>;
-        if (this.currentMediaType) {
-          this.viewMode = this.viewModeRightDict[this.currentMediaType] ?? 'grid';
+        if (this.currentMediaType()) {
+          this.viewMode.set(this.viewModeRightDict[this.currentMediaType()] ?? 'grid');
         }
       }
       const sizeDict = settings.grid_icon_size_right;
       if (sizeDict && typeof sizeDict === 'object') {
         this.gridIconSizeRightDict = sizeDict as Record<string, string>;
-        if (this.currentMediaType) {
-          this.gridGoalWidth = iconSizeToGoalWidth(
-            this.gridIconSizeRightDict[this.currentMediaType] ?? 'M',
+        if (this.currentMediaType()) {
+          this.gridGoalWidth.set(
+            iconSizeToGoalWidth(this.gridIconSizeRightDict[this.currentMediaType()] ?? 'M'),
           );
         }
       }
@@ -173,10 +178,10 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['medias'] && this.medias.length > 0) {
       const newType = this.medias[0].media_type;
-      if (newType !== this.currentMediaType) {
-        this.currentMediaType = newType;
-        this.viewMode = this.viewModeRightDict[newType] ?? 'grid';
-        this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M');
+      if (newType !== this.currentMediaType()) {
+        this.currentMediaType.set(newType);
+        this.viewMode.set(this.viewModeRightDict[newType] ?? 'grid');
+        this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M'));
       }
     }
     if (changes['trainableModelName'] || changes['mode']) {
@@ -276,20 +281,20 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     this.labelsetState.good$
       .pipe(takeUntil(this.destroy$))
       .subscribe((elements) => {
-        this.goodElements = elements;
+        this.goodElements.set(elements);
       });
     this.labelsetState.bad$
       .pipe(takeUntil(this.destroy$))
       .subscribe((elements) => {
-        this.badElements = elements;
+        this.badElements.set(elements);
       });
     this.labelsetState.mediaType$
       .pipe(takeUntil(this.destroy$))
       .subscribe((mt) => {
-        if (this.useLabelset && mt && mt !== this.currentMediaType) {
-          this.currentMediaType = mt;
-          this.viewMode = this.viewModeRightDict[mt] ?? 'grid';
-          this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[mt] ?? 'M');
+        if (this.useLabelset && mt && mt !== this.currentMediaType()) {
+          this.currentMediaType.set(mt);
+          this.viewMode.set(this.viewModeRightDict[mt] ?? 'grid');
+          this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[mt] ?? 'M'));
         }
       });
   }

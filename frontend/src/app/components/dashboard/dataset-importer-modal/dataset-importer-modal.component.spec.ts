@@ -212,14 +212,14 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should fetch importers on init', () => {
     flushImporters();
-    expect(component.importers.length).toBe(7);
+    expect(component.importers().length).toBe(7);
   });
 
   it('should start with no top-level tab selected and a blank content area', () => {
     flushImporters();
     fixture.detectChanges();
-    expect(component.activeImporterTab).toBe('');
-    expect(component.selectedImporter).toBeNull();
+    expect(component.activeImporterTab()).toBe('');
+    expect(component.selectedImporter()).toBeNull();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelectorAll('.importer-subtab').length).toBe(0);
   });
@@ -227,13 +227,13 @@ describe('DatasetImporterModalComponent', () => {
   it('should pre-select the initialTab once importers and tabs arrive', () => {
     component.initialTab = 'server';
     flushImporters();
-    expect(component.activeImporterTab).toBe('server');
+    expect(component.activeImporterTab()).toBe('server');
   });
 
   it('should ignore an initialTab id that no declared/used tab matches', () => {
     component.initialTab = 'no-such-tab';
     flushImporters();
-    expect(component.activeImporterTab).toBe('');
+    expect(component.activeImporterTab()).toBe('');
   });
 
   it('should always render the Services tab even when no importers populate it', () => {
@@ -263,7 +263,7 @@ describe('DatasetImporterModalComponent', () => {
     // Switching to the Server tab swaps in the server importers and
     // clears the prior importer selection so the user must click again.
     component.selectImporterTab('server');
-    expect(component.selectedImporter).toBeNull();
+    expect(component.selectedImporter()).toBeNull();
     fixture.detectChanges();
     const serverSubtabs = el.querySelectorAll('.importer-subtab');
     expect(serverSubtabs.length).toBe(2);
@@ -279,25 +279,25 @@ describe('DatasetImporterModalComponent', () => {
     ];
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers: importersWithHidden, tabs: mockTabs });
     flushInitRequests();
-    expect(component.importers.find((i) => i.name === 'recaller')).toBeUndefined();
+    expect(component.importers().find((i) => i.name === 'recaller')).toBeUndefined();
   });
 
   it('should set activePickerView=local_folder when the Local Folder sub-tab is clicked', () => {
     flushImporters();
-    const localFolder = component.importers.find((i) => i.name === 'local_folder')!;
+    const localFolder = component.importers().find((i) => i.name === 'local_folder')!;
     component.selectImporter(localFolder);
     expect(component.activePickerView).toBe('local_folder');
-    expect(component.selectedImporter?.name).toBe('local_folder');
+    expect(component.selectedImporter()?.name).toBe('local_folder');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });
 
   it('should set activePickerView=server_folder when the Server Folder sub-tab is clicked', () => {
     flushImporters();
-    const folder = component.importers.find((i) => i.name === 'server_folder')!;
+    const folder = component.importers().find((i) => i.name === 'server_folder')!;
     component.selectImporter(folder);
     expect(component.activePickerView).toBe('server_folder');
-    expect(component.selectedImporter?.name).toBe('server_folder');
+    expect(component.selectedImporter()?.name).toBe('server_folder');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
     // The server-filesystem folder browser is now opened lazily by the
@@ -306,21 +306,21 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should set activePickerView=local_files (paths-file picker) when the Local Files sub-tab is clicked', () => {
     flushImporters();
-    const localFiles = component.importers.find((i) => i.name === 'local_files')!;
+    const localFiles = component.importers().find((i) => i.name === 'local_files')!;
     component.selectImporter(localFiles);
     expect(component.activePickerView).toBe('local_files');
     expect(component.lfPickerKind).toBe('files');
-    expect(component.selectedImporter?.name).toBe('local_files');
+    expect(component.selectedImporter()?.name).toBe('local_files');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });
 
   it('should set activePickerView=demo when the Demo sub-tab is clicked', () => {
     flushImporters();
-    const demo = component.importers.find((i) => i.name === 'demo')!;
+    const demo = component.importers().find((i) => i.name === 'demo')!;
     component.selectImporter(demo);
     expect(component.activePickerView).toBe('demo');
-    expect(component.selectedImporter?.name).toBe('demo');
+    expect(component.selectedImporter()?.name).toBe('demo');
     // Opening the demo picker fetches media-types + demo-list, then
     // auto-selects the 'audio' tab (which fires its embedder/clipper/refetch).
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
@@ -333,7 +333,7 @@ describe('DatasetImporterModalComponent', () => {
     flushImporters();
     vi.spyOn(component.importStarted, 'emit');
 
-    const localFolder = component.importers.find((i) => i.name === 'local_folder')!;
+    const localFolder = component.importers().find((i) => i.name === 'local_folder')!;
     component.selectImporter(localFolder);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
@@ -351,7 +351,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(body.getAll('files').length).toBe(1);
     req.flush({ ok: true });
 
-    expect(component.lfSubmitting).toBe(false);
+    expect(component.lfSubmitting()).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
@@ -359,7 +359,7 @@ describe('DatasetImporterModalComponent', () => {
     flushImporters();
     vi.spyOn(component.importStarted, 'emit');
 
-    const localFiles = component.importers.find((i) => i.name === 'local_files')!;
+    const localFiles = component.importers().find((i) => i.name === 'local_files')!;
     component.selectImporter(localFiles);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
@@ -378,7 +378,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(body.get('files')).toBeNull();
     req.flush({ ok: true });
 
-    expect(component.lfSubmitting).toBe(false);
+    expect(component.lfSubmitting()).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
@@ -387,7 +387,7 @@ describe('DatasetImporterModalComponent', () => {
     const imp = genericForm();
     component.selectImporter(imp);
     expect(component.activePickerView).toBe('form');
-    expect(component.selectedImporter).toBe(imp);
+    expect(component.selectedImporter()).toBe(imp);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });

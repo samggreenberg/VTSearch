@@ -26,11 +26,11 @@
         >
         <div
           class="burger-item"
-          [class.disabled]="!isOnLabelView"
+          [class.disabled]="!isOnLabelView()"
           role="menuitem"
           tabindex="-1"
           (click)="onDashboard()"
-          [title]="isOnLabelView ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
+          [title]="isOnLabelView() ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
           ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <rect x="1" y="1" width="14" height="11" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
           <rect x="3.5" y="3" width="9" height="3" rx="0.5" stroke="currentColor" stroke-width="1.0"/>
@@ -49,7 +49,7 @@
           <path d="M5.8 6.2a2.2 2.2 0 014.4 0c0 1.1-.8 1.5-1.5 2-.5.3-.7.7-.7 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
           <circle cx="8" cy="12" r="0.7" fill="currentColor"/>
         </svg> Help</div>
-        @if (!achievementsDisabled) {
+        @if (!achievementsDisabled()) {
           <div
             class="burger-item"
             role="menuitem"
@@ -76,9 +76,9 @@
           <path d="M6.7 2.2h2.6l.3 1.8a5.2 5.2 0 011.2.7l1.7-.7 1.3 2.2-1.4 1.1a5.3 5.3 0 010 1.4l1.4 1.1-1.3 2.2-1.7-.7a5.2 5.2 0 01-1.2.7l-.3 1.8H6.7l-.3-1.8a5.2 5.2 0 01-1.2-.7l-1.7.7-1.3-2.2 1.4-1.1a5.3 5.3 0 010-1.4L2.2 6.2l1.3-2.2 1.7.7a5.2 5.2 0 011.2-.7l.3-1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
           <circle cx="8" cy="8" r="1.6" fill="currentColor"/>
         </svg> Settings</div>
-        @if (recentSessions.length > 0) {
+        @if (recentSessions().length > 0) {
           <div class="burger-section-header">Recent sessions</div>
-          @for (s of recentSessions; track s.dataset_id + '::' + s.detector_id) {
+          @for (s of recentSessions(); track s.dataset_id + '::' + s.detector_id) {
             <div
               class="burger-item burger-subitem"
               role="menuitem"
@@ -100,21 +100,21 @@
     </a>
     <button
       class="top-bar-btn"
-      [class.disabled]="!isOnLabelView"
-      [disabled]="!isOnLabelView"
+      [class.disabled]="!isOnLabelView()"
+      [disabled]="!isOnLabelView()"
       (click)="onDashboard()"
-      [title]="isOnLabelView ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
+      [title]="isOnLabelView() ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
     >Dashboard</button>
     <vt-context-pulldown kind="dataset" />
     <vt-context-pulldown kind="detector" />
     <span class="top-bar-spacer"></span>
-    @if (!achievementsDisabled) {
+    @if (!achievementsDisabled()) {
       <button
         class="achievements-btn"
         aria-label="Achievements"
         title="Achievements: usage milestones and tier progress"
         (click)="onAchievements()"
-        ><svg aria-hidden="true" [class.trophy-open]="showAchievements" [class.trophy-close]="achievementsClosing"
+        ><svg aria-hidden="true" [class.trophy-open]="showAchievements()" [class.trophy-close]="achievementsClosing"
         (animationend)="onTrophyAnimationEnd()"
         viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -155,33 +155,33 @@
   </svg></button>
 </header>
 <div class="main-content" role="main">
-  @if (showIncompatibleExplainer) {
-    @defer (when showIncompatibleExplainer) {
+  @if (showIncompatibleExplainer()) {
+    @defer (when showIncompatibleExplainer()) {
       <vt-incompatible-pair-explainer />
     }
   } @else {
     <router-outlet />
   }
 </div>
-@defer (when importerFlow.open) {
-@if (importerFlow.open) {
+@defer (when importerFlow().open) {
+@if (importerFlow().open) {
   <vt-dataset-importer-modal
-    [guessedMediaType]="importerFlow.guessedMediaType"
-    [guessedMediaEmbedder]="importerFlow.guessedMediaEmbedder"
-    [initialTab]="importerFlow.initialTab"
+    [guessedMediaType]="importerFlow().guessedMediaType"
+    [guessedMediaEmbedder]="importerFlow().guessedMediaEmbedder"
+    [initialTab]="importerFlow().initialTab"
     (closed)="onImporterClosed()"
     (importStarted)="onImportStarted()"
     (demoSelected)="onDemoSelected($event)"
     />
 }
 }
-@defer (when newDetectorFlow.open) {
-@if (newDetectorFlow.open) {
+@defer (when newDetectorFlow().open) {
+@if (newDetectorFlow().open) {
   <vt-new-detector-modal
-    [defaultMediaType]="newDetectorFlow.defaultMediaType"
-    [datasetEmbedder]="newDetectorFlow.datasetEmbedder"
-    [seedMediaId]="newDetectorFlow.seedMediaId ?? null"
-    [seedCropParams]="newDetectorFlow.seedCropParams ?? null"
+    [defaultMediaType]="newDetectorFlow().defaultMediaType"
+    [datasetEmbedder]="newDetectorFlow().datasetEmbedder"
+    [seedMediaId]="newDetectorFlow().seedMediaId ?? null"
+    [seedCropParams]="newDetectorFlow().seedCropParams ?? null"
     (closed)="onNewDetectorClosed()"
     (created)="onDetectorCreated($event)"
     />
@@ -192,8 +192,8 @@
   <vt-settings-modal [preselectedViewTab]="settingsViewTab" (closed)="onSettingsClosed()" />
 }
 }
-@defer (when showAchievements) {
-@if (showAchievements) {
+@defer (when showAchievements()) {
+@if (showAchievements()) {
   <vt-achievements-modal (closed)="onAchievementsClosed()" />
 }
 }
