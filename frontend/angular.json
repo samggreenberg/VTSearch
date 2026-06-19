@@ -24,9 +24,7 @@
             "baseHref": "/",
             "index": "src/index.html",
             "browser": "src/main.ts",
-            "polyfills": [
-              "zone.js"
-            ],
+            "polyfills": [],
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
             "assets": [
@@ -53,19 +51,17 @@
           "configurations": {
             "production": {
               "budgets": [
-                // initial: 540kB, not tighter, by design. The eager bundle is
-                // framework-dominated (Angular core+router+forms+http+CDK ~240kB
-                // + zone.js ~35kB), not app bloat: routes are lazy, the heavy
-                // modals are @defer'd, and `marked` lives only in a deferred
-                // chunk, so there is nothing left to trim against a tighter
-                // limit. Dropping zone.js (~35kB, the only large remaining
-                // lever) requires going zoneless -- an app-wide change-detection
-                // rewrite gated on the signal/resource migration. See
-                // docs/plans/zoneless-migration.md. Do not raise further without
-                // first auditing the eager path for genuine bloat.
+                // initial: 500kB. The app is zoneless (zone.js dropped from the
+                // production polyfills), which took the measured eager bundle to
+                // ~488kB. The eager path is framework-dominated (Angular
+                // core+router+forms+http+CDK), not app bloat: routes are lazy,
+                // the heavy modals are @defer'd, and `marked` lives only in a
+                // deferred chunk. The warn limit sits just above the real size
+                // with a small headroom. Do not raise without first auditing the
+                // eager path for genuine bloat.
                 {
                   "type": "initial",
-                  "maximumWarning": "540kB",
+                  "maximumWarning": "500kB",
                   "maximumError": "1MB"
                 },
                 {
