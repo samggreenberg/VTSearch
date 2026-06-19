@@ -887,7 +887,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             takeUntil(this.destroy$),
           )
           .subscribe(() => {
-            const failed = this.progressEvents.detectorLoadingTasks.some(
+            const failed = this.progressEvents.detectorLoadingTasks().some(
               (t) => t.task_id === resp.task_id && !!t.error,
             );
             if (failed) return; // ToastService surfaces the build error from the SSE task
