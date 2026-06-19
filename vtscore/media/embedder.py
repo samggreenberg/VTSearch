@@ -17,6 +17,7 @@ from vtscore.media.base import ProgressCallback, _noop_progress
 
 if TYPE_CHECKING:
     from vtscore.media.patch_embed import PatchEmbedOutput
+    from vtscore.media.structural import StructuralFeatures
 
 __all__ = [
     "DEFAULT_EMBED_BATCH_SIZE",
@@ -572,6 +573,24 @@ class MediaEmbedder(ABC):
         return False
 
     @property
+    def supports_geometric_verification(self) -> bool:
+        """Whether this embedder produces local features for instance matching.
+
+        Structural embedders (SIFT/VLAD, and learned-local-feature variants
+        later) return ``True``; the dataset loader then asks them for a
+        :class:`~vtscore.media.structural.StructuralFeatures` per image and
+        stores it as ``media["local_features"]`` alongside the VLAD
+        ``media["embedding"]``, enabling the geometric re-rank + match-stat
+        verification paths.  All other embedders return ``False`` and the
+        structural pipeline is skipped entirely.
+
+        The flag is deliberately media-agnostic (not ``supports_*_image_*``)
+        so an audio constellation-fingerprint backend can reuse it without an
+        interface change.
+        """
+        return False
+
+    @property
     def embed_batch_size(self) -> int:
         """How many items to forward through the model in one GPU call.
 
@@ -821,6 +840,67 @@ class MediaEmbedder(ABC):
             results.append(self.patch_forward(m))
         return results
 
+    def local_features_forward(self, media: dict) -> Optional["StructuralFeatures"]:  # noqa: F821
+        """Return local instance-matching features for one image.
+
+        Structural embedders (SIFT/VLAD, and learned-local-feature variants
+        later) override this to return a
+        :class:`~vtscore.media.structural.StructuralFeatures` carrying the
+        per-image keypoints and descriptors used by the geometric re-rank and
+        the match-statistic verification classifier.  All other embedders
+        leave the default in place and the loader skips the structural pass.
+
+        The dataset loader gates calls on
+        :attr:`supports_geometric_verification`: if you set that flag
+        ``True``, you must override this method.
+
+        Acquires :attr:`_embed_lock` so the feature-detection pass interleaves
+        with other embedders' forward passes on the same lock.  Subclasses
+        override :meth:`_local_features_forward_impl` (not this method).
+
+        Returns ``None`` if the media can't be loaded.
+        """
+        with self._embed_lock:
+            return self._local_features_forward_impl(media)
+
+    def _local_features_forward_impl(self, media: dict) -> Optional["StructuralFeatures"]:  # noqa: F821
+        """Subclass hook for :meth:`local_features_forward`.
+
+        Default returns ``None``.  Structural embedders override this.
+        """
+        return None
+
+    def local_features_forward_bulk(self, medias: list[dict]) -> list[Optional["StructuralFeatures"]]:  # noqa: F821
+        """Return local features for every image in *medias*.
+
+        Structural embedders override :meth:`_local_features_forward_bulk_impl`
+        to batch the feature-detection pass.  The default loops
+        :meth:`local_features_forward` per item and emits per-item progress
+        via :attr:`_on_progress`, matching the contract of
+        :meth:`patch_forward_bulk`.
+
+        Positions where feature detection returned ``None`` (failed decode,
+        unsupported, etc.) contain ``None``.
+        """
+        if not medias:
+            return []
+        return self._local_features_forward_bulk_impl(medias)
+
+    def _local_features_forward_bulk_impl(
+        self, medias: list[dict]
+    ) -> list[Optional["StructuralFeatures"]]:  # noqa: F821
+        """Subclass hook: bulk local-feature detection.
+
+        Default: loop over :meth:`local_features_forward`, emitting per-item
+        progress.  Override to fuse the per-image detection into a batched call.
+        """
+        total = len(medias)
+        results: list[Optional["StructuralFeatures"]] = []  # noqa: F821
+        for i, m in enumerate(medias):
+            self._on_progress("embedding", "Detecting features...", i + 1, total)
+            results.append(self.local_features_forward(m))
+        return results
+
     @property
     def description_wrappers(self) -> list[str]:
         """Wrapper templates for enriching sort descriptions.
@@ -868,5 +948,6 @@ class MediaEmbedder(ABC):
             "is_default": self.is_default,
             "supports_text": self.supports_text,
             "supports_patch_regions": self.supports_patch_regions,
+            "supports_geometric_verification": self.supports_geometric_verification,
             "license_notice": self.license_notice,
         }

@@ -41,6 +41,7 @@ class TestImageClipEmbedder:
             "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -113,6 +114,7 @@ class TestImageSiglip2Embedder:
             "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -181,6 +183,7 @@ class TestImageDinov2SingleEmbedder:
             "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -246,6 +249,7 @@ class TestImageDinov2PatchEmbedder:
             "is_default": False,
             "supports_text": False,
             "supports_patch_regions": True,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -293,6 +297,7 @@ class TestImageDinov3SingleEmbedder:
             "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -356,6 +361,7 @@ class TestImageDinov3PatchEmbedder:
             "is_default": False,
             "supports_text": False,
             "supports_patch_regions": True,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -494,9 +500,9 @@ class TestApiEmbeddersResponseShape:
         assert resp.status_code == 200
         body = resp.get_json()
         entries = {e["name"]: e for e in body["embedders"]}
-        # All ten image embedders must be present; three CLIP-family
-        # bimodal models, single/patch pairs for DINOv2/DINOv3/EUPE, and
-        # the FaceNet face-identity embedder.
+        # All image embedders must be present; three CLIP-family bimodal
+        # models, single/patch pairs for DINOv2/DINOv3/EUPE, the FaceNet
+        # face-identity embedder, and the SIFT/VLAD structural embedder.
         assert set(entries) == {
             "siglip",
             "siglip2",
@@ -507,6 +513,7 @@ class TestApiEmbeddersResponseShape:
             "dinov3_patch",
             "eupe_single",
             "eupe_patch",
+            "sift_vlad",
             "face",
         }
         # Shape: every entry has the three capability fields, with bool /
@@ -514,6 +521,7 @@ class TestApiEmbeddersResponseShape:
         for entry in entries.values():
             assert isinstance(entry["supports_text"], bool)
             assert isinstance(entry["supports_patch_regions"], bool)
+            assert isinstance(entry["supports_geometric_verification"], bool)
             assert entry["license_notice"] is None or isinstance(entry["license_notice"], str)
         # Specific expectations.
         assert entries["siglip"]["supports_text"] is True
@@ -555,6 +563,12 @@ class TestApiEmbeddersResponseShape:
             notice = entries[name]["license_notice"]
             assert isinstance(notice, str)
             assert "noncommercial" in notice.lower()
+        # Only the structural SIFT/VLAD embedder advertises geometric
+        # verification; every semantic embedder reports False.
+        assert entries["sift_vlad"]["supports_geometric_verification"] is True
+        assert entries["sift_vlad"]["supports_text"] is False
+        for name in ("siglip", "clip", "dinov2_patch", "face"):
+            assert entries[name]["supports_geometric_verification"] is False
 
 
 class TestSortRouteRejectsTextWhenUnsupported:
@@ -631,6 +645,7 @@ class TestImageFaceEmbedder:
             "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 

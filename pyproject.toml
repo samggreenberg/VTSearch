@@ -73,6 +73,11 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["vtsearch*", "vtscore*"]
 
+[tool.setuptools.package-data]
+# Ship the fixed VLAD visual vocabulary (a code asset, like model weights) used
+# by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/build_vlad_codebook.py.
+"vtscore.media" = ["assets/*.npy"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
