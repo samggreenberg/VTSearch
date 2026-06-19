@@ -14,7 +14,8 @@ the example/region similarity flow and the match-statistic verification classifi
 just like patch); **planar-only** matching; **image-only v1 with audio as the next
 media target**; **dual-embedder coexistence deferred** to patch v3 (one structural
 embedder per dataset for now); **a fixed, shipped VLAD vocabulary** for v1 (no
-per-dataset codebook fit); **affine-only** geometric matching (no homography).
+per-dataset codebook fit); **similarity-transform** geometric matching (4 DoF:
+translation, rotation, uniform scale — no shear, no perspective).
 
 ## Motivation — structural vs semantic search
 
@@ -26,7 +27,7 @@ Coke can, because they mean almost the same thing.
 
 A **structural** search asks a different question: *does this specific visual
 pattern appear in the haystack item, allowing for translation, rotation, scale,
-and mild perspective?* This is **instance retrieval** / object-instance matching,
+and uniform scale?* This is **instance retrieval** / object-instance matching,
 the classic local-feature + geometric-verification problem (SIFT/SURF/ORB
 keypoints, descriptor matching, RANSAC geometric verification). The canonical
 pipeline is
@@ -49,7 +50,7 @@ two assumptions at once:
    128-D SIFT descriptors), not a single fixed-D vector. There is no canonical
    "image vector."
 2. **Comparison operator.** Two images are compared by **geometric verification**
-   — match descriptors, then RANSAC-fit an affine transform and count inliers —
+   — match descriptors, then RANSAC-fit a similarity transform and count inliers —
    not by a dot product.
 
 Meanwhile *every* downstream consumer in VTSearch wants exactly the thing
@@ -93,9 +94,12 @@ product, same as today) and is what makes Stage 2 tractable.
 ### Stage 2 — geometric verification (the new structural part)
 
 For the top-K candidates from Stage 1, match the query/template keypoints against
-each candidate's keypoints and RANSAC-fit an **affine** transform (a 6-DoF model:
-translation, rotation, scale, shear — chosen over homography because it's more
-stable with few inliers and sufficient for planar targets). This yields an
+each candidate's keypoints and RANSAC-fit a **similarity** transform (a 4-DoF
+model: translation, rotation, uniform scale — *no* shear or perspective). This is
+the exact transform a digitally-overlaid logo undergoes; dropping the affine
+shear/anisotropic-scale DoF and the homography perspective DoF means RANSAC needs
+only 2 correspondences to fit, constrains the fit harder, and yields fewer false
+positives than a looser model. This yields an
 inlier set and a geometric model per candidate, and **re-ranks** the shortlist by
 geometric consistency.
 
@@ -131,8 +135,9 @@ spaces that are both fixed-D and metric, so both reuse `train_model` verbatim:
    - inlier count and inlier ratio (inliers / tentative matches),
    - number of tentative (pre-RANSAC) descriptor matches,
    - mean / median reprojection error of inliers,
-   - geometric plausibility of the fitted affine model: determinant sign, condition
-     number, scale and shear within sane bounds (rejects degenerate fits),
+   - geometric plausibility of the fitted similarity model: scale within sane
+     bounds and reflection check (shear and anisotropic scale are zero by
+     construction, so there are no degenerate-affine fits to reject),
    - spatial extent / spread of the inliers in the candidate image.
 
    Stack those into a fixed-D feature vector **per (template, candidate) pair** and
@@ -304,11 +309,14 @@ field collapses cleanly into the v3 dict-keyed schema, just as the patch fields 
 ## Non-goals
 
 - **No new media type.** Structural-embedded images are still `image` media.
-- **No 3D / non-planar matching, and affine-only (no homography).** Confirmed
-  planar-only for now: the affine model assumes a roughly planar target (logos,
-  packaging, flat artwork, building façades), which covers the motivating use
-  cases. Full perspective homography and fundamental-matrix / 3D-aware matching are
-  out of scope.
+- **Similarity transform only — no shear, no perspective.** v1 models the
+  template→appearance transform as a 4-DoF similarity (translation, rotation,
+  uniform scale), which is exactly what a digitally-composited logo undergoes.
+  Affine shear / anisotropic scale (the affine approximation to oblique viewing)
+  and full perspective homography are both out of scope: if we ever needed to model
+  a logo seen on a tilted real-world surface, the right move is to jump straight to
+  homography, not to stop at affine's middle ground. Fundamental-matrix / 3D-aware
+  matching is also out of scope.
 - **No persisted vectors outside the dataset pickle.** Local features live in the
   pickle and RAM only (see Storage). Templates and both classifiers re-derive from
   origins on load.
@@ -354,10 +362,13 @@ an interface rewrite. The capability flag is `supports_geometric_verification`
 4. **Live re-rank vs on-demand.** Does Stage 2 run on every sort, or only when the
    user asks (a "verify" action)? Latency vs immediacy. Probably live on the
    shortlist (K small) but measure.
-5. **Geometric model — DECIDED: affine only.** A 6-DoF affine (translation,
-   rotation, scale, shear) for both the RANSAC inlier gate and the matched-region
-   overlay. More stable than homography with few inliers and sufficient for planar
-   targets. Perspective homography is not used in v1.
+5. **Geometric model — DECIDED: similarity transform only.** A 4-DoF similarity
+   (translation, rotation, uniform scale) for both the RANSAC inlier gate and the
+   matched-region overlay. Matches the digital-overlay use case exactly; needs only
+   2 correspondences to fit, so it constrains harder and false-positives less than
+   affine or homography. Neither affine shear nor perspective homography is used in
+   v1 — the conscious call is "no shear at all, and if shear is ever needed, go all
+   the way to homography rather than stop at affine."
 6. **VLAD vs alternatives for Stage 1.** VLAD is the recommended default, but a
    learned global descriptor (e.g. reusing a DINOv2 CLS vector purely for the
    coarse shortlist) could outperform VLAD while the local features do the
@@ -386,8 +397,8 @@ an interface rewrite. The capability flag is `supports_geometric_verification`
 ## Tests
 
 - **Matcher unit tests** with synthetic correspondences (no model weights): a
-  known affine transform applied to a planted keypoint set → `verify` recovers it
-  with
+  known similarity transform applied to a planted keypoint set → `verify` recovers
+  it with
   the expected inlier count; degenerate/no-match inputs return low/zero inliers and
   a rejected geometric model.
 - **VLAD aggregation:** descriptor set → fixed-D L2-normalised vector of the right
