@@ -545,14 +545,20 @@ entry point that stopped at coarse VLAD retrieval (CPU-tested in
 
 ## Open follow-ups
 
-- **Frontend overlay — basics done, debug view deferred.** The backend emits the
-  matched-region `best_region` box on verified results across all three sort
-  paths, and the frontend already renders `best_region` (the focus-pane
-  highlight box in `center-panel` / `image-viewer`, fed via `bestRegion` from the
-  learned-sort / example-sort responses) — so the structural overlay rides
-  patch's existing machinery with no new component. Still optional: a debug view
-  that draws the inlier *correspondences* (the matched keypoint lines), which
-  would need the backend to emit per-match point pairs.
+- **Frontend overlay — reachable now, debug view deferred.** The backend emits the
+  matched-region `best_region` box on verified results across all sort paths, and
+  the frontend renders it as the focus-pane highlight box in `center-panel` /
+  `image-viewer` (fed via `bestRegion`), so the structural overlay rides patch's
+  existing machinery with no new component. **Reachability fix shipped:** the
+  Highlight toggle that surfaces that overlay was gated on `supports_patch_regions`
+  alone, which structural embedders leave `false` — so on a structural dataset the
+  toggle (and thus the overlay) was hidden. The gate is now
+  `center-panel`'s `regionOverlayCapable` getter (true when the embedder reports
+  *either* `supports_patch_regions` *or* `supports_geometric_verification`), and
+  the marquee copy nudges "box the pattern you want to match" on structural
+  datasets (the box is constitutive — it defines the template). Still optional: a
+  debug view that draws the inlier *correspondences* (the matched keypoint lines),
+  which would need the backend to emit per-match point pairs.
 - **K / threshold / live-vs-on-demand spike.** `DEFAULT_RERANK_TOP_K = 50` and the
   "tail scores 0 / threshold = 0.5" policy are reasonable defaults but unspiked.
   Sweep K on a demo image dataset and confirm the live-on-every-sort latency is

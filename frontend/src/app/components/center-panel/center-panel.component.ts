@@ -83,8 +83,9 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
   readonly pendingBadConfirm = signal(false);
 
   /** Embedder capability listings, loaded once in init(). Used to decide
-   *  whether the active dataset's embedder is patch-region-aware, which gates
-   *  the Highlight toggle in the image-view controls. */
+   *  whether the active dataset's embedder emits a best-match region overlay
+   *  (patch-region or structural), which gates the Highlight toggle, and
+   *  whether it is structural, which tunes the marquee copy. */
   private embedderInfos: EmbedderInfo[] = [];
 
   private spinTimer: ReturnType<typeof setTimeout> | null = null;
@@ -215,16 +216,47 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     return this.media?.media_type || 'audio';
   }
 
-  /** Whether the active dataset's embedder produces patch regions. Gates the
-   *  Highlight toggle: only patch-region-aware embedders (DINOv2/v3, EUPE) emit
-   *  a best-match region, so the button is hidden entirely otherwise. Defaults
-   *  to false when the embedder is unknown (embedders not yet loaded, or the
-   *  media carries no embedder field) so a dead toggle never appears. */
-  get patchCapable(): boolean {
+  /** The capability listing for the focused media's embedder, or ``undefined``
+   *  when the embedders haven't loaded yet or the media carries no embedder. */
+  private activeEmbedderInfo(): EmbedderInfo | undefined {
     const name = this.media?.embedder;
-    if (!name || this.embedderInfos.length === 0) return false;
-    const info = this.embedderInfos.find((e) => e.name === name);
-    return info?.supports_patch_regions === true;
+    if (!name || this.embedderInfos.length === 0) return undefined;
+    return this.embedderInfos.find((e) => e.name === name);
+  }
+
+  /** Whether the active dataset's embedder emits a best-match region overlay.
+   *  Gates the Highlight toggle: patch-region embedders (DINOv2/v3, EUPE) emit
+   *  the argmax-patch region and structural embedders (SIFT/VLAD) emit the
+   *  RANSAC inlier box — both ride the same ``best_region`` overlay machinery,
+   *  so either capability shows the toggle. Defaults to false when the embedder
+   *  is unknown (embedders not yet loaded, or the media carries no embedder
+   *  field) so a dead toggle never appears. */
+  get regionOverlayCapable(): boolean {
+    const info = this.activeEmbedderInfo();
+    return info?.supports_patch_regions === true || info?.supports_geometric_verification === true;
+  }
+
+  /** Whether the active dataset's embedder is structural (instance matching).
+   *  Drives the marquee copy: for structural datasets the region box is
+   *  constitutive — it *defines* the template to match — so the affordance
+   *  nudges "box the pattern you want to match" rather than the generic
+   *  salient-area region hint. */
+  get structuralDataset(): boolean {
+    return this.activeEmbedderInfo()?.supports_geometric_verification === true;
+  }
+
+  /** Marquee button tooltip. Structural datasets nudge toward boxing the
+   *  pattern to match (the box defines the template); other datasets get the
+   *  generic region-draw copy. */
+  get marqueeTitle(): string {
+    return this.structuralDataset
+      ? 'Marquee: drag to box the pattern you want to match (Shift+drag also works)'
+      : 'Marquee: drag to draw a region (Shift+drag also works)';
+  }
+
+  /** Accessible label for the marquee toggle, mirroring `marqueeTitle`. */
+  get marqueeAriaLabel(): string {
+    return this.structuralDataset ? 'Marquee: box the pattern to match' : 'Marquee: draw region';
   }
 
   /** The focused media's best-match region (the argmax patch region from the
