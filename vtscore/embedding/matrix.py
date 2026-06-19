@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.state.core import _state_lock
 
 if TYPE_CHECKING:
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
 
 
 def _require_embedding(cid: int, media: dict[str, Any]) -> Any:
-    emb = media.get("embedding")
+    emb = media_embedding(media)
     if emb is None:
         raise ValueError(
             f"media {cid!r} has no embedding (embedding=None); "
