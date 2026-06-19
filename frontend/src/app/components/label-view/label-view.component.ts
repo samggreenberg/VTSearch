@@ -1,5 +1,4 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit, computed, effect, inject, signal, untracked } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit, effect, inject, signal, untracked } from '@angular/core';
 
 import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
 import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
@@ -92,31 +91,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly autopilotEnabled = signal(true);
   progressModalMetric: ProgressMetric | null = null;
 
-  // Shared sort/vote state is still Observable-backed (un-signalized hot
-  // services). Bridge the channels label-view binds in its template into
-  // signals so those bindings repaint under zoneless when the state changes
-  // from async callbacks (HTTP subscribes, the status / learned-sort timers).
-  // requireSync is safe: every source is a BehaviorSubject that emits its
-  // current value on subscribe. Imperative consumers keep reading the service
-  // getters directly.
-  readonly sortOrderSig = toSignal(this.sortState.sortOrder$, { requireSync: true });
-  readonly thresholdSig = toSignal(this.sortState.threshold$, { requireSync: true });
-  readonly sortModeSig = toSignal(this.sortState.sortMode$, { requireSync: true });
-  readonly selectModeSig = toSignal(this.sortState.selectMode$, { requireSync: true });
-  readonly inclusionSig = toSignal(this.sortState.inclusion$, { requireSync: true });
-  readonly sortBusySig = toSignal(this.sortState.sortBusy$, { requireSync: true });
-  readonly sortStatusSig = toSignal(this.sortState.sortStatus$, { requireSync: true });
-  readonly sortProgressSig = toSignal(this.sortState.sortProgress$, { requireSync: true });
-  readonly sortProgressTotalSig = toSignal(this.sortState.sortProgressTotal$, { requireSync: true });
-  readonly loadSortLabelSig = toSignal(this.sortState.loadSortLabel$, { requireSync: true });
-  readonly textQuerySig = toSignal(this.sortState.textQuery$, { requireSync: true });
-  readonly goodVotesSig = toSignal(this.voteState.goodVotes$, { requireSync: true });
-  readonly badVotesSig = toSignal(this.voteState.badVotes$, { requireSync: true });
-  readonly labelsetGoodCountSig = toSignal(this.voteState.labelsetGoodCount$, { requireSync: true });
-  readonly labelsetBadCountSig = toSignal(this.voteState.labelsetBadCount$, { requireSync: true });
-  readonly learnedSortAvailableSig = computed(
-    () => this.labelsetGoodCountSig() > 0 && this.labelsetBadCountSig() > 0,
-  );
+  // SortStateService / VoteStateService are now signal-backed (their value
+  // getters read private signals), so the template binds those getters directly
+  // — `sortState.sortBusy`, `voteState.goodVotes`, … — and they repaint under
+  // zoneless when the state changes from async callbacks. The per-consumer
+  // `toSignal` bridges this component used to carry are gone (Phase 2.5).
 
   // Per-media-type panel preferences (view mode, grid size, focus mode, saved
   // widths) live on `panelState`; the template reads getters on it directly.
@@ -152,11 +131,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  ``applyLearnedSortResult`` / the error/cancel paths. Used by the
    *  Cancel button on the sort progress bar to target the right job. */
   private currentLearnedSortJobId: string | null = null;
-  /** Held subscription to the one-shot `labelsetGoodCount$` watcher that
-   *  re-fires `onLearnedSort` after a pair switch, when sortMode was
-   *  already `learned`. Cleared on each switch so back-to-back switches
-   *  don't leak handlers from earlier pairs. */
-  private rehydrateLearnedSub?: Subscription;
+  /** Set by `reloadForNewPair` when the user was in `learned` sort mode at the
+   *  time of a pair switch: a constructor effect watches the labelset counts and
+   *  re-fires `onLearnedSort` once, after the reloaded votes make both classes
+   *  available. Replaces the old one-shot `labelsetGoodCount$` subscription now
+   *  that VoteStateService is signal-backed. */
+  private pendingRehydrateLearned = false;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
 
@@ -216,6 +196,24 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (this.autopilotMediaSortPending && medias.length > 0) {
           this.autopilotMediaSortPending = false;
           this.triggerAutopilotMediaSort();
+        }
+      });
+    });
+
+    // Phase-3 learned-sort rehydration after a pair switch. `reloadForNewPair`
+    // clears votes (counts → 0) then reloads them; when the reloaded counts make
+    // both classes available again and the user was in `learned` mode, fire one
+    // `onLearnedSort`. Tracking both labelset counts re-runs this effect when
+    // `loadVotes` lands; the body runs `untracked` so reading
+    // `learnedSortAvailable` (which also reads the counts) can't loop it.
+    effect(() => {
+      this.voteState.labelsetGoodCount;
+      this.voteState.labelsetBadCount;
+      untracked(() => {
+        if (!this.pendingRehydrateLearned) return;
+        if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
+          this.pendingRehydrateLearned = false;
+          this.onLearnedSort(false);
         }
       });
     });
@@ -298,8 +296,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  and starts a fresh job otherwise; either way the user lands on
    *  learned-sorted content without a manual mode toggle. */
   private reloadForNewPair(): void {
-    this.rehydrateLearnedSub?.unsubscribe();
-    this.rehydrateLearnedSub = undefined;
+    this.pendingRehydrateLearned = false;
     this.sortState.setSortResults([], 0);
     this.sortState.setSortStatus('');
     this.sortState.setSortProgress(0, 0);
@@ -312,18 +309,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Re-seed the slider for the detector we just switched to.
     this.seedInclusion();
 
-    if (this.sortState.sortMode === 'learned') {
-      this.rehydrateLearnedSub = this.voteState.labelsetGoodCount$
-        .pipe(
-          takeUntil(this.destroy$),
-          filter(
-            () =>
-              this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable,
-          ),
-          take(1),
-        )
-        .subscribe(() => this.onLearnedSort(false));
-    }
+    // Arm the rehydrate effect: it fires `onLearnedSort` once the reloaded
+    // votes land (counts go 0 → available) if the user is still in learned mode.
+    this.pendingRehydrateLearned = this.sortState.sortMode === 'learned';
   }
 
   ngOnDestroy(): void {

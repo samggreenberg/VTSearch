@@ -1,5 +1,5 @@
-import { Injectable, OnDestroy, inject } from '@angular/core';
-import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
+import { Injectable, OnDestroy, inject, signal } from '@angular/core';
+import { EMPTY, Observable, Subject, timer } from 'rxjs';
 import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import { VotesResponse } from '../models/api.models';
@@ -41,19 +41,32 @@ type VoteState = 'good' | 'bad' | 'none';
 
 const UNDO_STACK_MAX = 20;
 
+/**
+ * Shared vote state. The per-pile sets/maps are backed by signals so a write
+ * from any context — a vote POST continuation, the 2s poll timer, an undo/redo
+ * — notifies Angular's scheduler and repaints the views that bind these getters
+ * with no zone.js (docs/plans/zoneless-migration.md, Phase 2.5 / Recipe B).
+ * Each value is exposed via a value-returning getter over a private signal, so
+ * existing `voteState.goodVotes` reads stay the same yet become reactive under
+ * zoneless (see `SortStateService` for the getter-signal rationale).
+ *
+ * `toast$` stays a `Subject`: it is a fire-once *event* (an undo/redo fired),
+ * not retained state, so a signal would be the wrong shape. Its consumer
+ * reacts imperatively and writes its own signals, which schedule CD.
+ */
 @Injectable({ providedIn: 'root' })
 export class VoteStateService implements OnDestroy {
   private sortingApi = inject(SortingApiService);
   private mediasApi = inject(MediasApiService);
 
-  private readonly goodVotesSubject = new BehaviorSubject<Set<number>>(new Set());
-  private readonly badVotesSubject = new BehaviorSubject<Set<number>>(new Set());
-  private readonly verifiedIdsSubject = new BehaviorSubject<Set<number>>(new Set());
-  private readonly clickTimesSubject = new BehaviorSubject<Record<string, number>>({});
-  private readonly learnedScoresSubject = new BehaviorSubject<Record<string, number>>({});
-  private readonly labelsetGoodCountSubject = new BehaviorSubject<number>(0);
-  private readonly labelsetBadCountSubject = new BehaviorSubject<number>(0);
-  private readonly goodRegionBoxesSubject = new BehaviorSubject<Record<string, number[]>>({});
+  private readonly _goodVotes = signal<Set<number>>(new Set());
+  private readonly _badVotes = signal<Set<number>>(new Set());
+  private readonly _verifiedIds = signal<Set<number>>(new Set());
+  private readonly _clickTimes = signal<Record<string, number>>({});
+  private readonly _learnedScores = signal<Record<string, number>>({});
+  private readonly _labelsetGoodCount = signal(0);
+  private readonly _labelsetBadCount = signal(0);
+  private readonly _goodRegionBoxes = signal<Record<string, number[]>>({});
   private readonly destroy$ = new Subject<void>();
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
@@ -101,17 +114,6 @@ export class VoteStateService implements OnDestroy {
   private future: UndoEntry[] = [];
   private readonly toastSubject = new Subject<UndoToast>();
 
-  readonly goodVotes$ = this.goodVotesSubject.asObservable();
-  readonly badVotes$ = this.badVotesSubject.asObservable();
-  /** Find mode: ids the human has explicitly verified (acted on). */
-  readonly verifiedIds$ = this.verifiedIdsSubject.asObservable();
-  readonly clickTimes$ = this.clickTimesSubject.asObservable();
-  readonly learnedScores$ = this.learnedScoresSubject.asObservable();
-  readonly labelsetGoodCount$ = this.labelsetGoodCountSubject.asObservable();
-  readonly labelsetBadCount$ = this.labelsetBadCountSubject.asObservable();
-  /** Normalised [x0, y0, x1, y1] region boxes for good votes, keyed by media
-   *  id (string). Drives cropped Good-pile thumbnails for region votes. */
-  readonly goodRegionBoxes$ = this.goodRegionBoxesSubject.asObservable();
   /** Emits a short message every time an undo or redo executes. */
   readonly toast$ = this.toastSubject.asObservable();
 
@@ -123,15 +125,16 @@ export class VoteStateService implements OnDestroy {
   }
 
   get goodVotes(): Set<number> {
-    return this.goodVotesSubject.value;
+    return this._goodVotes();
   }
 
   get badVotes(): Set<number> {
-    return this.badVotesSubject.value;
+    return this._badVotes();
   }
 
+  /** Find mode: ids the human has explicitly verified (acted on). */
   get verifiedIds(): Set<number> {
-    return this.verifiedIdsSubject.value;
+    return this._verifiedIds();
   }
 
   /**
@@ -165,18 +168,18 @@ export class VoteStateService implements OnDestroy {
    */
   setOptimisticVerified(id: number, verified: boolean): void {
     this.pendingVerified.set(id, verified);
-    const next = new Set(this.verifiedIdsSubject.value);
+    const next = new Set(this._verifiedIds());
     if (verified) next.add(id);
     else next.delete(id);
-    this.verifiedIdsSubject.next(next);
+    this._verifiedIds.set(next);
   }
 
   get clickTimes(): Record<string, number> {
-    return this.clickTimesSubject.value;
+    return this._clickTimes();
   }
 
   get learnedScores(): Record<string, number> {
-    return this.learnedScoresSubject.value;
+    return this._learnedScores();
   }
 
   /**
@@ -185,16 +188,16 @@ export class VoteStateService implements OnDestroy {
    * dataset's good vote count when no detector is loaded.
    */
   get labelsetGoodCount(): number {
-    return this.labelsetGoodCountSubject.value;
+    return this._labelsetGoodCount();
   }
 
   /** Bad-label counterpart of {@link labelsetGoodCount}. */
   get labelsetBadCount(): number {
-    return this.labelsetBadCountSubject.value;
+    return this._labelsetBadCount();
   }
 
   get goodRegionBoxes(): Record<string, number[]> {
-    return this.goodRegionBoxesSubject.value;
+    return this._goodRegionBoxes();
   }
 
   /**
@@ -215,9 +218,9 @@ export class VoteStateService implements OnDestroy {
    * unverified item rather than toggle the presumption off.
    */
   private currentState(id: number): VoteState {
-    if (this.findMode && !this.verifiedIdsSubject.value.has(id)) return 'none';
-    if (this.goodVotesSubject.value.has(id)) return 'good';
-    if (this.badVotesSubject.value.has(id)) return 'bad';
+    if (this.findMode && !this._verifiedIds().has(id)) return 'none';
+    if (this._goodVotes().has(id)) return 'good';
+    if (this._badVotes().has(id)) return 'bad';
     return 'none';
   }
 
@@ -277,15 +280,15 @@ export class VoteStateService implements OnDestroy {
     mediaName: string,
     regionBox?: readonly number[] | null,
   ): Observable<MediaVoteResponse> {
-    const previousPolarity: 'good' | 'bad' | null = this.goodVotesSubject.value.has(id)
+    const previousPolarity: 'good' | 'bad' | null = this._goodVotes().has(id)
       ? 'good'
-      : this.badVotesSubject.value.has(id)
+      : this._badVotes().has(id)
         ? 'bad'
         : null;
     // Snapshot the crop the good vote carried before the click (for undo) and
     // the crop this click applies (for redo).  Both captured synchronously,
     // before the optimistic flip clears/overwrites the region-box map.
-    const prevBox = this.goodRegionBoxesSubject.value[String(id)];
+    const prevBox = this._goodRegionBoxes()[String(id)];
     const previousRegionBox = previousPolarity === 'good' && prevBox ? [...prevBox] : null;
     const target = this.toggleTargetFor(id, clickedDirection);
     const clickedRegionBox =
@@ -313,9 +316,9 @@ export class VoteStateService implements OnDestroy {
    * directly (a polarity to restore, or ``'none'`` to wipe the vote).
    */
   applyOptimisticState(id: number, target: VoteState): void {
-    const good = new Set(this.goodVotesSubject.value);
-    const bad = new Set(this.badVotesSubject.value);
-    const times = { ...this.clickTimesSubject.value };
+    const good = new Set(this._goodVotes());
+    const bad = new Set(this._badVotes());
+    const times = { ...this._clickTimes() };
 
     good.delete(id);
     bad.delete(id);
@@ -339,9 +342,9 @@ export class VoteStateService implements OnDestroy {
     this.pendingOptimistic.set(id, { state: target, clickTime: optimisticClickTime });
 
     // Emit all changes together so Angular sees a single consistent state.
-    this.goodVotesSubject.next(good);
-    this.badVotesSubject.next(bad);
-    this.clickTimesSubject.next(times);
+    this._goodVotes.set(good);
+    this._badVotes.set(bad);
+    this._clickTimes.set(times);
   }
 
   /**
@@ -352,10 +355,10 @@ export class VoteStateService implements OnDestroy {
    */
   private applyOptimisticRegionBox(id: number, box: readonly number[] | null): void {
     this.pendingRegionBoxes.set(id, box ? [...box] : null);
-    const boxes = { ...this.goodRegionBoxesSubject.value };
+    const boxes = { ...this._goodRegionBoxes() };
     if (box) boxes[String(id)] = [...box];
     else delete boxes[String(id)];
-    this.goodRegionBoxesSubject.next(boxes);
+    this._goodRegionBoxes.set(boxes);
   }
 
   /**
@@ -366,9 +369,9 @@ export class VoteStateService implements OnDestroy {
    */
   reconcileVoteResponse(id: number, resp: MediaVoteResponse): void {
     this.pendingOptimistic.delete(id);
-    const good = new Set(this.goodVotesSubject.value);
-    const bad = new Set(this.badVotesSubject.value);
-    const times = { ...this.clickTimesSubject.value };
+    const good = new Set(this._goodVotes());
+    const bad = new Set(this._badVotes());
+    const times = { ...this._clickTimes() };
 
     good.delete(id);
     bad.delete(id);
@@ -381,9 +384,9 @@ export class VoteStateService implements OnDestroy {
       delete times[String(id)];
     }
 
-    this.goodVotesSubject.next(good);
-    this.badVotesSubject.next(bad);
-    this.clickTimesSubject.next(times);
+    this._goodVotes.set(good);
+    this._badVotes.set(bad);
+    this._clickTimes.set(times);
   }
 
   loadVotes(): void {
@@ -418,14 +421,14 @@ export class VoteStateService implements OnDestroy {
   }
 
   clear(): void {
-    this.goodVotesSubject.next(new Set());
-    this.badVotesSubject.next(new Set());
-    this.verifiedIdsSubject.next(new Set());
-    this.clickTimesSubject.next({});
-    this.learnedScoresSubject.next({});
-    this.labelsetGoodCountSubject.next(0);
-    this.labelsetBadCountSubject.next(0);
-    this.goodRegionBoxesSubject.next({});
+    this._goodVotes.set(new Set());
+    this._badVotes.set(new Set());
+    this._verifiedIds.set(new Set());
+    this._clickTimes.set({});
+    this._learnedScores.set({});
+    this._labelsetGoodCount.set(0);
+    this._labelsetBadCount.set(0);
+    this._goodRegionBoxes.set({});
     this.pendingOptimistic.clear();
     this.pendingVerified.clear();
     this.pendingRegionBoxes.clear();
@@ -445,12 +448,12 @@ export class VoteStateService implements OnDestroy {
    * are dropped, matching standard editor undo semantics.
    */
   recordVote(mediaId: number, clickedDirection: 'good' | 'bad', mediaName: string): void {
-    const previousPolarity: 'good' | 'bad' | null = this.goodVotesSubject.value.has(mediaId)
+    const previousPolarity: 'good' | 'bad' | null = this._goodVotes().has(mediaId)
       ? 'good'
-      : this.badVotesSubject.value.has(mediaId)
+      : this._badVotes().has(mediaId)
         ? 'bad'
         : null;
-    const prevBox = this.goodRegionBoxesSubject.value[String(mediaId)];
+    const prevBox = this._goodRegionBoxes()[String(mediaId)];
     const previousRegionBox = previousPolarity === 'good' && prevBox ? [...prevBox] : null;
     this.past.push({
       mediaId,
@@ -580,13 +583,13 @@ export class VoteStateService implements OnDestroy {
       }
     }
 
-    this.goodVotesSubject.next(good);
-    this.badVotesSubject.next(bad);
-    this.verifiedIdsSubject.next(verified);
-    this.clickTimesSubject.next(times);
-    this.goodRegionBoxesSubject.next(regionBoxes);
-    this.learnedScoresSubject.next(votes.learned_scores);
-    this.labelsetGoodCountSubject.next(votes.labelset_good_count ?? good.size);
-    this.labelsetBadCountSubject.next(votes.labelset_bad_count ?? bad.size);
+    this._goodVotes.set(good);
+    this._badVotes.set(bad);
+    this._verifiedIds.set(verified);
+    this._clickTimes.set(times);
+    this._goodRegionBoxes.set(regionBoxes);
+    this._learnedScores.set(votes.learned_scores);
+    this._labelsetGoodCount.set(votes.labelset_good_count ?? good.size);
+    this._labelsetBadCount.set(votes.labelset_bad_count ?? bad.size);
   }
 }

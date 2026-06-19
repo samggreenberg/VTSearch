@@ -13,7 +13,14 @@ window drag/key handlers + shake `setTimeout` + `ResizeObserver` rendered-size
 writes signalized; video-player verified DOM-only, no change); Phase 2.4 shipped
 (label-view — its subscribe/timer/effect-written template state signalized and
 the still-Observable `SortStateService`/`VoteStateService` channels it binds
-bridged into signals via `toSignal`); the rest of Phase 2 (2.5–2.9) and Phases
+bridged into signals via `toSignal`); Phase 2.5 shipped (find-view — signalized
+its own subscribe/effect-written state + an `unverifiedSortOrder` computed, and
+**signalized the shared `SortStateService` and `VoteStateService`** so every
+binding of those two services repaints under zoneless with no per-consumer
+bridges; this also migrated right-panel's vote piles → `computed`s,
+center-panel's `goodVotes$`/`badVotes$` subscribes → an `effect`, and dropped
+label-view's `toSignal` bridges); the rest of Phase 2 (2.6–2.9; note 2.8
+right-panel's `LabelsetStateService`/settings mirror still remains) and Phases
 3–5 not started.**
 This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
@@ -560,8 +567,19 @@ Suggested order (lightest/most-isolated first to build confidence):
    header repaints with no manual `detectChanges`; the existing contract spec was
    updated to the signal accessors (kept on the default TestBed, mirroring the
    center-panel/image-viewer split).
-5. **`find-view`** (13; divider drag re-entry → signal widths; two `.then`
-   confirm flows already route through HTTP, safe).
+5. **`find-view`. ✅ DONE (Phase 2.5).** Signalized its own subscribe/effect-written
+   template state (`datasetName`, `viewModeLeft`/`gridGoalWidthLeft`/`focusModeLeft`/
+   `focusModeRight`) and replaced the `combineLatest(sortOrder$, verifiedIds$)`
+   subscribe with an `unverifiedSortOrder` `computed`. The four divider-drag
+   `ngZone.run` re-entries were dropped outright (the widths only drive `--left-width`/
+   `--right-width` CSS custom properties imperatively — not template-bound — so no
+   CD is needed); `runOutsideAngular` on the listeners stays. The two `.then`
+   confirm flows route through HTTP and were already safe. As the centerpiece of
+   2.5, `SortStateService`/`VoteStateService` were signalized (see Open follow-ups),
+   so find-view's `sortState.*` getter bindings became reactive with **zero**
+   template churn. New `find-view.zoneless.spec.ts` canary drives the
+   `/api/dataset/status` subscribe AND a `SortStateService` setter and asserts the
+   DOM repaints with no manual `detectChanges`.
 6. **Browse cluster:** `browse-view` (panel-width re-entry → signal; build poller
    → signal/markForCheck), `browse-canvas` (emits via Recipe D; canvas rAF
    stays), `browse-minimap` (resize-handle listener → signal; nav rAF stays),
@@ -571,8 +589,12 @@ Suggested order (lightest/most-isolated first to build confidence):
 7. **`left-panel` + `media-list`:** `media-list`'s `zone.run(() =>
    cdr.detectChanges())` (line ~401) → drop the `run`, keep `markForCheck()`
    (it's already OnPush-style); `panel-resize.directive` emits → signal/markForCheck.
-8. **`right-panel`**, **`context-pulldown`**, **`dashboard`** (32 — mostly
-   `ngOnInit` list reads, good `async`/signal candidates),
+8. **`right-panel`** (vote piles ✅ DONE in Phase 2.5 — six `subscribe` mirrors →
+   `computed`s over the signalized `VoteStateService`; **remaining**: its
+   `LabelsetStateService` mirror `goodElements`/`badElements`/`currentMediaType`
+   and the settings-derived `viewMode`/`gridGoalWidth`, all still
+   subscribe/effect-written plain fields), **`context-pulldown`**, **`dashboard`**
+   (32 — mostly `ngOnInit` list reads, good `async`/signal candidates),
    **`new-detector-modal`** / **`dataset-importer-modal`** (heaviest; convert the
    clean list reads, leave dynamic field-option fetches imperative with Recipe C
    where a signal is awkward), **`settings-modal`** (forkJoin init → signals;
@@ -657,7 +679,7 @@ A checklist version of the above goes in the PR description for the QA pass.
 
 ### Open follow-ups
 
-- **Phase 1 complete; Phases 2.1 + 2.2 + 2.3 + 2.4 shipped; Phases 2.5–5 remain.**
+- **Phase 1 complete; Phases 2.1 + 2.2 + 2.3 + 2.4 + 2.5 shipped; Phases 2.6–5 remain.**
   Shipped so far: Phase 0 (harness); all of Phase 1 — 1.1 + 1.3 + 1.4
   (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
   signalized) and 1.2 (KeyboardService de-zoned + the coupled center-panel state
@@ -665,23 +687,36 @@ A checklist version of the above goes in the PR description for the QA pass.
   voting-overlay, dialog-host + VtDialogService, browse-legend); **Phase 2.2**
   (stats / picker modals); **Phase 2.3** (center-panel viewers — image-viewer's
   window drag/key handlers + shake `setTimeout` + `ResizeObserver` rendered-size
-  writes signalized; video-player verified DOM-only, no change); and **Phase 2.4**
+  writes signalized; video-player verified DOM-only, no change); **Phase 2.4**
   (`label-view` — own subscribe/timer/effect-written fields signalized; the bound
-  `SortStateService`/`VoteStateService` reads bridged via `toSignal`), each with
-  its consumers and a zoneless canary spec. Remaining in **Phase 2**: clusters
-  2.5–2.9 in the suggested order (next up: 2.5 `find-view` — 13 subscribes; divider
-  drag re-entry → signal widths; two `.then` confirm flows already route through
-  HTTP). Then the prod flip (Phase 3), human browser QA (Phase 4), and cleanup
-  (Phase 5).
-- **Shared `SortStateService`/`VoteStateService` are still `BehaviorSubject`-backed.**
-  Phase 2.4 bridged them *per-consumer* in label-view rather than signalizing the
-  services, to keep the cluster shippable (signalizing would force-update
-  find-view, right-panel, center-panel, context-pulldown, label-importer at once).
-  When the later clusters that bind these services land (2.5 find-view binds
-  sortState in its template; 2.8 right-panel binds voteState), either bridge them
-  the same way or, once all consumers are migrated, signalize the two services and
-  drop the per-consumer bridges. Track this as the natural cleanup at the end of
-  Phase 2.
+  `SortStateService`/`VoteStateService` reads bridged via `toSignal`); and
+  **Phase 2.5** (`find-view` + the shared-service signalization — see next bullet),
+  each with its consumers and a zoneless canary spec. Remaining in **Phase 2**:
+  clusters 2.6–2.9 in the suggested order (next up: 2.6 browse cluster). Note 2.8
+  shrank to right-panel's **`LabelsetStateService`/settings mirror** only
+  (`goodElements`/`badElements`/`mediaType`/`viewMode`/`gridGoalWidth`), since its
+  vote piles landed with 2.5. Then the prod flip (Phase 3), human browser QA
+  (Phase 4), and cleanup (Phase 5).
+- **`SortStateService`/`VoteStateService` are now signal-backed (Phase 2.5).**
+  Rather than continue the per-consumer `toSignal` bridge from 2.4, Phase 2.5
+  signalized both services: each value is a private `signal` exposed via a
+  *value-returning getter*, with the `set*` methods writing the signal. The `$`
+  observables were dropped entirely (clean break — no shims). Because a signal
+  read **through a getter** during template evaluation is tracked (pinned by
+  `frontend/src/app/testing/getter-signal-zoneless.spec.ts`), existing
+  `sortState.sortBusy` / `voteState.goodVotes` template bindings stayed
+  byte-for-byte the same yet became reactive under zoneless. All consumers were
+  migrated in the same change: find-view (template getters now reactive; its own
+  `datasetName`/`viewModeLeft`/… signalized; `unverifiedSortOrder` is a
+  `computed`; the divider `ngZone.run` re-entries dropped — widths are CSS-var
+  only), label-view (its 15 `toSignal` bridges removed; binds the getters
+  directly; the one-shot `labelsetGoodCount$` rehydrate sub → a counts-tracking
+  `effect`), right-panel (six `subscribe`-into-field vote mirrors → `computed`s
+  over the getters), and center-panel (`goodVotes$`/`badVotes$` subscribes → an
+  `effect`; `toast$` stays a `Subject` — it is a fire-once event, not state).
+  `toast$` is the only remaining observable on either service. **Done** — this
+  was the "natural cleanup" the 2.4 follow-up anticipated; no per-consumer
+  bridges remain for these two services.
 - **What Phase 2.2 covered.** `find-stats`/`detector-stats`/`dataset-stats`:
   `loading`/`error`/`stats` plain fields → signals (templates read them via
   `@else if (stats(); as stats)` so the bodies were untouched); the stat-derived

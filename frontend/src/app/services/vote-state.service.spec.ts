@@ -552,7 +552,7 @@ describe('VoteStateService', () => {
     it('undo restores the crop of the previous good vote', () => {
       // Media 5 already has a region good vote with a known crop.
       service.applyOptimisticState(5, 'good');
-      service['goodRegionBoxesSubject'].next({ '5': [0.5, 0.6, 0.7, 0.8] });
+      service['_goodRegionBoxes'].set({ '5': [0.5, 0.6, 0.7, 0.8] });
 
       // User re-crops the same good vote with a new box.
       service
@@ -571,18 +571,11 @@ describe('VoteStateService', () => {
     });
   });
 
-  it('goodVotes$ should emit on load', () => new Promise<void>((done) => {
-    const emissions: Set<number>[] = [];
-    service.goodVotes$.subscribe((v) => emissions.push(v));
-
+  it('goodVotes getter reflects a loaded /api/votes response', () => {
     service.loadVotes();
     httpMock.expectOne('/api/votes').flush(mockVotes);
 
-    setTimeout(() => {
-      const last = emissions[emissions.length - 1];
-      expect(last.has(1)).toBe(true);
-      expect(last.has(2)).toBe(true);
-      done();
-    });
-  }));
+    expect(service.goodVotes.has(1)).toBe(true);
+    expect(service.goodVotes.has(2)).toBe(true);
+  });
 });
