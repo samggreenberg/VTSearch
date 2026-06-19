@@ -3,7 +3,9 @@
 Status: **Phase 0 shipped (test harness); Phase 1 complete — 1.1 + 1.3 + 1.4
 (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
 signalized) and 1.2 (KeyboardService de-zoned + the coupled center-panel state
-signalized, i.e. the center-panel slice of Phase 2.3); the rest of Phase 2 and
+signalized, i.e. the center-panel slice of Phase 2.3); Phase 2.1 shipped (leaf
+utility components — toast-container, clipboard-copy, voting-overlay,
+dialog-host + VtDialogService, browse-legend); the rest of Phase 2 (2.2–2.9) and
 Phases 3–5 not started.** This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
@@ -473,11 +475,22 @@ component: apply Recipe A/B/C/D/F as appropriate, switch its spec to the zoneles
 
 Suggested order (lightest/most-isolated first to build confidence):
 
-1. **Leaf utility components:** `toast-container` (A), `clipboard-copy` (C/signal),
-   `voting-overlay` (signal flashes), `field-hint-icon` (already signal),
-   `dialog-host` + **`VtDialogService`** (signalize dialog state, Recipe B/F —
-   see §2; canary: open a dialog from a non-event callback), `browse-legend`
-   (`MutationObserver` theme → signal).
+1. **Leaf utility components. ✅ DONE (Phase 2.1).** `toast-container` binds
+   `toasts$` via `| async` (Recipe A) and `copiedId` became a signal;
+   `clipboard-copy`'s `buttonText` flash became a signal (it is set from a
+   post-`await` continuation *and* a timer — the exact zoneless-sensitive path);
+   `voting-overlay`'s `goodFlash`/`badFlash` became signals and its `@Input()`
+   decorators were modernized to `input()`; `field-hint-icon` was already
+   signal-based (no change); `dialog-host` + **`VtDialogService`** had all dialog
+   state (`dialogOpen`/`dialogTitle`/`dialogMessage`/`dialogType`/
+   `dialogShowInput`/`dialogInputValue`/`dialogButtons`) signalized so a
+   `confirm`/`prompt` opened from a non-event callback still schedules CD, and the
+   dead `ApplicationRef`/`createComponent`/`EnvironmentInjector`/`modalRef` code
+   was dropped; `browse-legend`'s `theme` became a signal driven by the
+   `data-theme` `MutationObserver`. Each spec now runs under the zoneless
+   `TestBed` (`configureZoneless` + `settleZoneless`, no manual `detectChanges`)
+   with a staleness canary; new specs added for `toast-container`,
+   `clipboard-copy`, and `browse-legend`.
 2. **Stats / picker modals:** `find-stats`, `detector-stats`, `dataset-stats`
    (A), the `*-importer`/`*-exporter` mutation-result fields (signalize
    `submitting`/`successMessage`/`status`; the four `setTimeout(close)` →
@@ -585,16 +598,18 @@ A checklist version of the above goes in the PR description for the QA pass.
 
 ### Open follow-ups
 
-- **Phase 1 complete; Phases 2–5 remain.** Shipped so far: Phase 0 (harness) and
-  all of Phase 1 — 1.1 + 1.3 + 1.4 (ProgressEventsService SSE pump +
-  ConnectionStateService + BrowseSelectionService signalized) and 1.2
-  (KeyboardService de-zoned + the coupled center-panel state signalized), each
-  with its consumers and a zoneless canary spec. Remaining in **Phase 2**: the
-  rest of the component clusters in the suggested order. Note 2.3's center-panel
-  *state* shipped with 1.2, but 2.3 still owes `image-viewer` (window drag/key
-  handlers + shake + its `ResizeObserver` rendered-size writes) and a check that
-  `video-player` is DOM-only. Then the prod flip (Phase 3), human browser QA
-  (Phase 4), and cleanup (Phase 5).
+- **Phase 1 complete; Phase 2.1 shipped; Phases 2.2–5 remain.** Shipped so far:
+  Phase 0 (harness); all of Phase 1 — 1.1 + 1.3 + 1.4 (ProgressEventsService SSE
+  pump + ConnectionStateService + BrowseSelectionService signalized) and 1.2
+  (KeyboardService de-zoned + the coupled center-panel state signalized); and
+  Phase 2.1 (leaf utility components — toast-container, clipboard-copy,
+  voting-overlay, dialog-host + VtDialogService, browse-legend), each with its
+  consumers and a zoneless canary spec. Remaining in **Phase 2**: clusters
+  2.2–2.9 in the suggested order (next up: 2.2 stats / picker modals). Note 2.3's
+  center-panel *state* shipped with 1.2, but 2.3 still owes `image-viewer` (window
+  drag/key handlers + shake + its `ResizeObserver` rendered-size writes) and a
+  check that `video-player` is DOM-only. Then the prod flip (Phase 3), human
+  browser QA (Phase 4), and cleanup (Phase 5).
 - **Full consumer specs for the browse cluster.** Phase 1.4 added a service unit
   spec + a signal-driven canary, but `browse-canvas`, `browse-bin-popup`, and
   `browse-selection-panel` still have **no** component specs (they are heavy to
