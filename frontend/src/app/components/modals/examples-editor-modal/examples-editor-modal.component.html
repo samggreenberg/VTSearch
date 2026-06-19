@@ -40,11 +40,11 @@
       </div>
     </div>
 
-    @if (error) {
-      <p class="error-text">{{ error }}</p>
+    @if (error()) {
+      <p class="error-text">{{ error() }}</p>
     }
-    @if (status) {
-      <p class="success-text">{{ status }}</p>
+    @if (status()) {
+      <p class="success-text">{{ status() }}</p>
     }
   }
 

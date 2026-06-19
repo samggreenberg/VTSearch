@@ -107,7 +107,8 @@ export class ExportModalComponent implements OnInit {
       (this.exportersResource.error() ? 'Failed to load exporters' : '') ||
       (this.labelsResource.error() ? 'Failed to load labels' : ''),
   );
-  status = '';
+  // Written from the export-run subscribe (async); template-bound.
+  readonly status = signal('');
 
   /** Column definitions with selection state, built dynamically from API response. */
   columns: ColumnDef[] = [];
@@ -128,7 +129,7 @@ export class ExportModalComponent implements OnInit {
   /** Exporter form state. */
   selectedExporter: ExporterEntry | null = null;
   formValues: Record<string, string> = {};
-  submitting = false;
+  readonly submitting = signal(false);
 
   /** Dataset display name for default filenames. */
   private readonly datasetName = computed(() => this.statusResource.value()?.display_name || '');
@@ -356,7 +357,7 @@ export class ExportModalComponent implements OnInit {
     }
     this.applyDefaultFilename(exporter);
     this.actionError.set('');
-    this.status = '';
+    this.status.set('');
   }
 
   /** Select an exporter tab and initialise its form values. */
@@ -369,7 +370,7 @@ export class ExportModalComponent implements OnInit {
     }
     this.applyDefaultFilename(exporter);
     this.actionError.set('');
-    this.status = '';
+    this.status.set('');
   }
 
   /** Re-generate the default filename when the label filter changes. */
@@ -415,7 +416,7 @@ export class ExportModalComponent implements OnInit {
   cancelExporterForm(): void {
     this.selectedExporter = null;
     this.actionError.set('');
-    this.status = '';
+    this.status.set('');
   }
 
   submitForm(): void {
@@ -425,9 +426,9 @@ export class ExportModalComponent implements OnInit {
 
   exportLabelsWith(exporter: ExporterEntry, fieldValues: Record<string, string>): void {
     const exporterLabel = exporter.display_name || exporter.name;
-    this.status = `Exporting ${this.filteredLabels.length.toLocaleString()} labels to ${exporterLabel}…`;
+    this.status.set(`Exporting ${this.filteredLabels.length.toLocaleString()} labels to ${exporterLabel}…`);
     this.actionError.set('');
-    this.submitting = true;
+    this.submitting.set(true);
 
     const labelsData = {
       labels: this.filteredLabels,
@@ -441,15 +442,15 @@ export class ExportModalComponent implements OnInit {
       })
       .subscribe({
         next: () => {
-          this.status = 'Labels exported.';
-          this.submitting = false;
+          this.status.set('Labels exported.');
+          this.submitting.set(false);
           this.selectedExporter = null;
           this.exported.emit();
         },
         error: () => {
-          this.status = '';
+          this.status.set('');
           this.actionError.set('Label export failed');
-          this.submitting = false;
+          this.submitting.set(false);
         },
       });
   }

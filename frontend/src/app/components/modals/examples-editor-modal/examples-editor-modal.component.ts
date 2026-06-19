@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit, inject, output } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, inject, output, signal } from '@angular/core';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 
@@ -26,8 +26,9 @@ export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
   examples: Example[] = [];
   loading = true;
   saving = false;
-  error = '';
-  status = '';
+  // Written from the load/save subscribes (async); template-bound.
+  readonly error = signal('');
+  readonly status = signal('');
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
@@ -42,7 +43,7 @@ export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
       },
       error: () => {
         this.loading = false;
-        this.error = 'Failed to load examples';
+        this.error.set('Failed to load examples');
       },
     });
   }
@@ -72,18 +73,18 @@ export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
 
   save(): void {
     this.saving = true;
-    this.error = '';
-    this.status = '';
+    this.error.set('');
+    this.status.set('');
     this.detectorsCrudApi.setExamples(this.modelName, this.examples).subscribe({
       next: () => {
         this.saving = false;
-        this.status = 'Saved.';
+        this.status.set('Saved.');
         this.saved.emit();
         this.closeTimer = setTimeout(() => this.close(), 600);
       },
       error: (err) => {
         this.saving = false;
-        this.error = err.error?.error || 'Failed to save';
+        this.error.set(err.error?.error || 'Failed to save');
       },
     });
   }
