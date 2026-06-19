@@ -392,7 +392,7 @@ describe('LabelViewComponent', () => {
       httpMock.match('/api/inclusion').forEach(req => req.flush({ inclusion: 0 }));
       httpMock.match('/api/media-types').forEach(req => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach(req =>
-        req.flush([{ name: 'dinov3', supports_text: false }]),
+        req.flush({ embedders: [{ name: 'dinov3', supports_text: false }] }),
       );
     }
 

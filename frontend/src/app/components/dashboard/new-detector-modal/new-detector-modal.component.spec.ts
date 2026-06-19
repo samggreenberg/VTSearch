@@ -28,10 +28,12 @@ describe('NewDetectorModalComponent', () => {
     });
     // EmbedderCapabilityService.ensureLoaded() in ngOnInit fetches the
     // embedder registry (drives the no-text warning).
-    httpMock.expectOne('/api/embedders').flush([
-      { name: 'clap', supports_text: true },
-      { name: 'dinov3', supports_text: false },
-    ]);
+    httpMock.expectOne('/api/embedders').flush({
+      embedders: [
+        { name: 'clap', supports_text: true },
+        { name: 'dinov3', supports_text: false },
+      ],
+    });
     // settingsState.load() in ngOnInit fetches settings.
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({});
@@ -240,7 +242,7 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
         { type_id: 'image', name: 'Image', icon: 'image' },
       ],
     });
-    httpMock.expectOne('/api/embedders').flush([]);
+    httpMock.expectOne('/api/embedders').flush({ embedders: [] });
     // settingsState.load() in ngOnInit fetches settings.
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({});
