@@ -1,6 +1,8 @@
 # Zoneless change detection — detailed migration plan
 
-Status: **Phase 0 shipped (test harness); Phases 1–5 not started.** This document
+Status: **Phase 0 shipped (test harness); Phase 1.3 + 1.4 shipped
+(ConnectionStateService + BrowseSelectionService signalized); Phase 1.1–1.2 and
+Phases 2–5 not started.** This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
 supersedes the earlier stub. Every count and file:line reference was checked
@@ -417,17 +419,29 @@ volume) must be **signals** (this also fixes the Phase-2 center-panel timer
 resets and the Recipe-F effect in one stroke). Optionally expose the latest
 action as a signal instead of a `Subject`.
 
-1.3 **`ConnectionStateService`.** Convert `statusSubject`/`retryingSubject` to
-signals (`status`, `retrying`). The `offline`-event raw listener's `goOffline()`
-then schedules CD via the signal write. The `offline-banner` template can keep
-`| async` (still safe) or switch to `status()`/`retrying()` signal reads — pick
-signal reads for consistency. Note this service feeds the `errorInterceptor`
-circuit breaker; verify the interceptor side effects (toasts, suppression) still
-fire — they do, the request still traverses the chain.
+1.3 **`ConnectionStateService`. ✅ DONE.** Converted `statusSubject`/
+`retryingSubject` to signals exposed read-only (`status`/`retrying`, backed by
+private `_status`/`_retrying` writables, so only the service flips them). The
+`offline`-event raw listener's `goOffline()` and the interceptor's
+`recordSuccess`/`recordNetworkFailure` now schedule CD via the signal write. The
+`offline-banner` template dropped `| async` for `status()`/`retrying()` signal
+reads (and lost its now-unused `CommonModule` import). The sole observable
+consumer, `ProgressEventsService`, replaced its `status$.pipe(distinctUntilChanged())`
+constructor subscription with an `effect(() => …connection.status()…)` (signals
+are distinct by default). The `errorInterceptor` is untouched — it only uses the
+imperative methods (`isOffline`/`recordSuccess`/`recordNetworkFailure`), which
+keep working. New `offline-banner.component.spec.ts` is a zoneless DOM canary
+driving the breaker through `recordNetworkFailure`/`recordSuccess`/`retry()`.
 
-1.4 **`BrowseSelectionService` (`changed$`).** Convert to a signal so the
-`browse-canvas` selection emits (Recipe D) and `browse-bin-popup` /
-`browse-selection-panel` update without `markForCheck` plumbing.
+1.4 **`BrowseSelectionService` (`changed$`). ✅ DONE.** Replaced the `changed$`
+`Subject` with a signal: the existing `_version` counter became
+`signal(0)`/`bump()` and is exposed as a read-only `version` signal. The three
+consumers were converted off `.changed$.subscribe(…)`: `browse-canvas` repaints
+via an `effect(() => { selection.version(); requestRedraw(); })` (its `selStateFor`
+memo now reads `version()`), and `browse-bin-popup` / `browse-selection-panel`
+react via an `effect` on `version()` (popup keeps its `markForCheck` discipline;
+panel re-runs `refreshSelection`). New `browse-selection.service.spec.ts` adds a
+unit spec for the selection logic plus a zoneless signal-driven view canary.
 
 **Phase 1 gate:** each service's spec + its consumers' specs migrated to the
 zoneless `TestBed` (Recipe in 0.3) and green; `./run-tests.sh` full pass.
@@ -552,9 +566,18 @@ A checklist version of the above goes in the PR description for the QA pass.
 
 ### Open follow-ups
 
-- **Phases 1–5 unstarted.** Phase 0 (harness) is the only shipped phase. The
-  reactivity conversion (Phases 1–2), the prod flip (Phase 3), human browser QA
-  (Phase 4), and cleanup (Phase 5) all remain.
+- **Phase 1.1–1.2 and Phases 2–5 remain.** Shipped so far: Phase 0 (harness) and
+  Phase 1.3 + 1.4 (ConnectionStateService + BrowseSelectionService signalized,
+  with their consumers and zoneless canary specs). Still owed in Phase 1:
+  **1.1 `ProgressEventsService`** (the SSE pump — six channels + the `NgZone`
+  re-entries) and **1.2 `KeyboardService`** (couples with `center-panel`). Then
+  the component conversions (Phase 2), the prod flip (Phase 3), human browser QA
+  (Phase 4), and cleanup (Phase 5).
+- **Full consumer specs for the browse cluster.** Phase 1.4 added a service unit
+  spec + a signal-driven canary, but `browse-canvas`, `browse-bin-popup`, and
+  `browse-selection-panel` still have **no** component specs (they are heavy to
+  mock: CDK virtual scroll, metadata cache, canvas 2D context). Real per-component
+  zoneless DOM specs for them are deferred to their Phase 2.6 conversion.
 - **Drop the `vitest-patch` bridge (Phase 5).** Migrate the 43 fakeAsync
   occurrences (11 files) to native `async` + Vitest fake timers, then remove
   `zone.js/testing` + `zone.js/plugins/vitest-patch` from the `build:test`

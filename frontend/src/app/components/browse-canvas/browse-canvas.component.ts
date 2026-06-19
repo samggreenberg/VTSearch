@@ -1,4 +1,4 @@
-import { Component, ElementRef, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild, inject, input, output } from '@angular/core';
+import { Component, ElementRef, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild, effect, inject, input, output } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -280,7 +280,17 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private boundContextMenu = this.onContextMenu.bind(this);
 
   private recenterSub: Subscription | null = null;
-  private selectionSub: Subscription | null = null;
+
+  // Repaint when the selection changes so the per-cell selection rings track
+  // the live set. An effect (not a subscription) so a signal write — including
+  // one from a raw canvas event handler — schedules the redraw under zoneless
+  // without an NgZone.run re-entry. The first run (post-ngOnInit) just queues a
+  // harmless redraw. Unselected cells are left untouched: a selection elsewhere
+  // never dims or otherwise alters them.
+  private readonly selectionRedraw = effect(() => {
+    this.selection.version();
+    this.requestRedraw();
+  });
 
   /** True when cells should be painted with the central item's thumbnail. */
   private get thumbnailMode(): boolean {
@@ -340,11 +350,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.clampView();
       this.requestRedraw();
     });
-
-    // Repaint when the selection changes so the per-cell selection rings track
-    // the live set. Unselected cells are left untouched — a selection elsewhere
-    // never dims or otherwise alters them.
-    this.selectionSub = this.selection.changed$.subscribe(() => this.requestRedraw());
 
     this.resizeObserver = new ResizeObserver(() => {
       this.ngZone.runOutsideAngular(() => this.resize());
@@ -423,7 +428,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   ngOnDestroy(): void {
     this.tileLoadSub?.unsubscribe();
     this.recenterSub?.unsubscribe();
-    this.selectionSub?.unsubscribe();
     this.viewport.setViewport(null);
     this.resizeObserver?.disconnect();
     this.themeObserver?.disconnect();
@@ -1153,13 +1157,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    *  re-scan every bin's members each frame. */
   private selStateFor(cell: HexCellPayload): 0 | 1 | 2 {
     const memo = cell as HexCellPayload & { _selVer?: number; _selState?: 0 | 1 | 2 };
-    if (memo._selVer === this.selection.version && memo._selState !== undefined) {
+    if (memo._selVer === this.selection.version() && memo._selState !== undefined) {
       return memo._selState;
     }
     const members = this.cellMembers(cell);
     const sel = this.selection.selectedCountIn(members);
     const state: 0 | 1 | 2 = sel === 0 ? 0 : sel === members.length ? 2 : 1;
-    memo._selVer = this.selection.version;
+    memo._selVer = this.selection.version();
     memo._selState = state;
     return state;
   }

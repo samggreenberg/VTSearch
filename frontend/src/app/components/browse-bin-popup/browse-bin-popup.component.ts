@@ -180,6 +180,13 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
       this.applyViewPrefs();
     });
+    // A selection change anywhere (here, the canvas, the panel) re-highlights.
+    // An effect on the signal (rather than a `changed$` subscription) schedules
+    // the repaint under zoneless from any mutation context.
+    effect(() => {
+      this.selection.version();
+      this.cdr.markForCheck();
+    });
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -223,8 +230,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     this.subs.push(
       // Names/thumbnails arrive asynchronously; repaint the visible rows.
       this.metadataCache.version$.subscribe(() => this.cdr.markForCheck()),
-      // A selection change anywhere (here, the canvas, the panel) re-highlights.
-      this.selection.changed$.subscribe(() => this.cdr.markForCheck()),
     );
     this.settingsState.load();
     this.scrollSub =

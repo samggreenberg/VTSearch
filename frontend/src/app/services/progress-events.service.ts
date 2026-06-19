@@ -1,6 +1,5 @@
-import { Injectable, OnDestroy, NgZone, inject } from '@angular/core';
+import { Injectable, OnDestroy, NgZone, effect, inject } from '@angular/core';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
-import { distinctUntilChanged } from 'rxjs/operators';
 import {
   LoadingTask,
   ProgressEvent,
@@ -66,14 +65,14 @@ export class ProgressEventsService implements OnDestroy {
   constructor() {
     // Track the circuit breaker: stay connected while online, and tear the
     // EventSource down when the breaker trips so its native auto-reconnect
-    // stops hammering a dead backend. The BehaviorSubject replays the current
-    // status, so this also performs the initial connect.
-    this.connection.status$
-      .pipe(distinctUntilChanged())
-      .subscribe((status) => {
-        if (status === 'offline') this.disconnect();
-        else this.connect();
-      });
+    // stops hammering a dead backend. An effect on the status signal performs
+    // the initial connect (status starts `online`) and reacts to every later
+    // flip; signals are distinct by default, so no `distinctUntilChanged` is
+    // needed.
+    effect(() => {
+      if (this.connection.status() === 'offline') this.disconnect();
+      else this.connect();
+    });
   }
 
   ngOnDestroy(): void {
@@ -174,8 +173,8 @@ export class ProgressEventsService implements OnDestroy {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer != null) return;
-    // Don't queue a reconnect while the breaker is tripped — the status$
-    // subscription owns reconnection once we're back online.
+    // Don't queue a reconnect while the breaker is tripped — the status-signal
+    // effect owns reconnection once we're back online.
     if (this.connection.isOffline) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
