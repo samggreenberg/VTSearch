@@ -29,6 +29,7 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 ## Detectors / embedders / clippers
 
 - [patch-embedder.md](patch-embedder.md): patch-based image embedder (V1+V2 shipped; V3 design)
+- [structural-embedder.md](structural-embedder.md): structural (instance-matching) embedder — SIFT/VLAD + RANSAC re-rank (design only — not started)
 - [clipper-chain.md](clipper-chain.md): ordered converter/clipper chains (Phase 1 shipped)
 - [cli-detector-converter.md](cli-detector-converter.md): CLI autodetect with converters + clippers (Phase 1 shipped)
 
