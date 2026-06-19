@@ -373,6 +373,66 @@ describe('LabelViewComponent', () => {
     httpMock.expectNone('/api/sort');
   });
 
+  describe('no-text dataset gating', () => {
+    // Load a dataset whose media were embedded by a vision-only encoder
+    // (DINOv3, supports_text=false) so the text-support checks resolve false.
+    function loadNoTextDataset(): void {
+      fixture.detectChanges();
+      TestBed.tick();
+      httpMock.match('/api/medias/ids').forEach(req =>
+        req.flush([{ id: 1, media_type: 'image', embedder: 'dinov3' }]),
+      );
+      httpMock.match('/api/votes').forEach(req =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach(req => req.flush({ volume: 80 }));
+      httpMock.match('/api/dataset/status').forEach(req =>
+        req.flush({ display_name: 'DINOv3 dataset' }),
+      );
+      httpMock.match('/api/inclusion').forEach(req => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/media-types').forEach(req => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach(req =>
+        req.flush({ embedders: [{ name: 'dinov3', supports_text: false }] }),
+      );
+    }
+
+    it('reports text unsupported and disables autopilot for a text-hint-only detector', async () => {
+      const session = TestBed.inject(LabelSessionService);
+      session.textQuery = 'a red car';
+      session.mediaExample = '';
+      loadNoTextDataset();
+      await settleResource();
+
+      expect(component.textSupported).toBe(false);
+      expect(component.autopilotDisabled).toBe(true);
+    });
+
+    it('skips the doomed autopilot text sort on a no-text dataset', async () => {
+      const session = TestBed.inject(LabelSessionService);
+      session.textQuery = 'a red car';
+      session.mediaExample = '';
+      loadNoTextDataset();
+      await settleResource();
+
+      // The deferred autopilot text sort must be dropped, never sent.
+      httpMock.expectNone('/api/sort');
+    });
+
+    it('keeps autopilot available when the detector carries a media-example seed', async () => {
+      const session = TestBed.inject(LabelSessionService);
+      session.textQuery = '';
+      session.mediaExample = 'example.jpg';
+      // Keep the panel out of autopilot so we assert the gating getters
+      // without firing an example sort that auto-start would kick off.
+      component.autopilotEnabled = false;
+      loadNoTextDataset();
+      await settleResource();
+
+      expect(component.textSupported).toBe(false);
+      expect(component.autopilotDisabled).toBe(false);
+    });
+  });
+
   it('should trigger learned sort when autopilot transitions from bad to hard', fakeAsync(() => {
     flushInitialRequests();
 

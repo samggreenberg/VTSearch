@@ -245,7 +245,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       const other = this.activeContext.intentDatasetId
         ? this.datasetState.datasets.find((d) => d.id === this.activeContext.intentDatasetId)
         : null;
-      this.newThingFlows.openNewDetector({ defaultMediaType: other?.media_type || '' });
+      this.newThingFlows.openNewDetector({
+        defaultMediaType: other?.media_type || '',
+        datasetEmbedder: other?.embedder || '',
+      });
     }
   }
 

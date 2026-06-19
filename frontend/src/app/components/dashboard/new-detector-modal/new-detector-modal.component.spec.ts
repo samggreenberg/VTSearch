@@ -26,6 +26,14 @@ describe('NewDetectorModalComponent', () => {
         { type_id: 'image', name: 'Image', icon: 'image' },
       ],
     });
+    // EmbedderCapabilityService.ensureLoaded() in ngOnInit fetches the
+    // embedder registry (drives the no-text warning).
+    httpMock.expectOne('/api/embedders').flush({
+      embedders: [
+        { name: 'clap', supports_text: true },
+        { name: 'dinov3', supports_text: false },
+      ],
+    });
     // settingsState.load() in ngOnInit fetches settings.
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({});
@@ -168,6 +176,35 @@ describe('NewDetectorModalComponent', () => {
     expect(component.name).toBe('dog barking sounds');
   });
 
+  it('warns about no-text datasets only for a text-hint-only detector', () => {
+    // No warning before any text is entered.
+    component.datasetEmbedder = 'dinov3';
+    component.pendingText = '';
+    expect(component.showNoTextWarning).toBe(false);
+
+    // Text entered against a no-text embedder → warn.
+    component.pendingText = 'a red car';
+    expect(component.showNoTextWarning).toBe(true);
+
+    // A media example seed (not text-only) → no warning even on a no-text dataset.
+    component.exampleType = 'media';
+    component.exampleValue = 'file.jpg';
+    component.exampleDisplay = 'file.jpg';
+    expect(component.showNoTextWarning).toBe(false);
+  });
+
+  it('does not warn when the dataset embedder can search by text', () => {
+    component.datasetEmbedder = 'clap';
+    component.pendingText = 'dog barking';
+    expect(component.showNoTextWarning).toBe(false);
+  });
+
+  it('does not warn when the active dataset embedder is unknown', () => {
+    component.datasetEmbedder = '';
+    component.pendingText = 'dog barking';
+    expect(component.showNoTextWarning).toBe(false);
+  });
+
   it('stops mirroring once the user edits the name', () => {
     component.onPendingTextInput('dog');
     expect(component.name).toBe('dog');
@@ -205,6 +242,7 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
         { type_id: 'image', name: 'Image', icon: 'image' },
       ],
     });
+    httpMock.expectOne('/api/embedders').flush({ embedders: [] });
     // settingsState.load() in ngOnInit fetches settings.
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({});

@@ -22,9 +22,10 @@ import { StripeOverviewComponent } from './stripe-overview/stripe-overview.compo
 import { AutopilotPanelComponent } from './autopilot-panel/autopilot-panel.component';
 import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { IconComponent } from '../icon/icon.component';
-import { Media, MediaTypeInfo, EmbedderInfo } from '../../models/api.models';
+import { Media, MediaTypeInfo } from '../../models/api.models';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
+import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 
 export type { SortMode, SelectMode, SortedItem };
@@ -79,6 +80,15 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   readonly textQuery = input('');
   readonly autopilotCollapsed = input(false);
   @Input() autopilotEnabled = true;
+  /**
+   * True when Autopilot cannot run on the active (dataset, detector) pair: the
+   * dataset's embedder can't search by text, the detector has no media-example
+   * seed, and there aren't yet enough labels for Learn sort. In that state
+   * Autopilot has no way to seed its first sort, so the tab is disabled and the
+   * panel falls back to Manual. It re-enables once Learn sort becomes available
+   * (the parent flips this back to ``false`` once both label classes exist).
+   */
+  @Input() autopilotDisabled = false;
   /** 'label' = full labeling UI (default), 'find' = simplified media-only view */
   readonly panelMode = input<'label' | 'find'>('label');
   /** Disable all interaction (used during Find scoring). */
@@ -126,22 +136,18 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   textSortAvailable = true;
 
   private readonly datasetsListingsApi = inject(DatasetsListingsApiService);
+  private readonly embedderCaps = inject(EmbedderCapabilityService);
 
-  // Media-type / embedder metadata ride `rxResource`: both load once on
-  // creation (no request signal = eager), wrapping the existing generated-client
-  // reads so the interceptor chain still applies. The derived labels live in
-  // plain fields recomputed by the effects below + `ngOnChanges(medias)`.
+  // Media-type metadata rides `rxResource`: loads once on creation (no request
+  // signal = eager), wrapping the existing generated-client read so the
+  // interceptor chain still applies. Embedder capability metadata comes from
+  // the shared `EmbedderCapabilityService` cache instead. The derived labels
+  // live in plain fields recomputed by the effects below + `ngOnChanges`.
   private readonly mediaTypesResource = rxResource({
     stream: () => this.datasetsListingsApi.getMediaTypes(),
   });
-  private readonly embeddersResource = rxResource({
-    stream: () => this.datasetsListingsApi.getEmbedders(),
-  });
   private readonly mediaTypeInfos = computed<MediaTypeInfo[]>(
     () => this.mediaTypesResource.value()?.media_types ?? [],
-  );
-  private readonly embedderInfos = computed<EmbedderInfo[]>(
-    () => this.embeddersResource.value() ?? [],
   );
 
   constructor() {
@@ -153,18 +159,20 @@ export class LeftPanelComponent implements OnInit, OnChanges {
       this.updateMediaTypeName();
     });
     effect(() => {
-      this.embedderInfos();
+      this.embedderCaps.infos();
       this.updateTextSortAvailable();
     });
   }
 
   ngOnInit(): void {
+    this.embedderCaps.ensureLoaded();
     if (this.panelMode() === 'find') {
       // Find mode doesn't use tabs; keep manual as a no-op default
       this.activeTab = 'manual';
     } else {
-      this.activeTab = this.autopilotEnabled ? 'autopilot' : 'manual';
-      if (this.autopilotEnabled) {
+      const startAutopilot = this.autopilotEnabled && !this.autopilotDisabled;
+      this.activeTab = startAutopilot ? 'autopilot' : 'manual';
+      if (startAutopilot) {
         this.autopilotStart.emit();
       }
     }
@@ -174,6 +182,17 @@ export class LeftPanelComponent implements OnInit, OnChanges {
     if (changes['medias']) {
       this.updateMediaTypeName();
       this.updateTextSortAvailable();
+    }
+    if (changes['autopilotDisabled'] && !changes['autopilotDisabled'].firstChange) {
+      // Autopilot just became impossible (e.g. medias loaded and revealed a
+      // no-text embedder, after we optimistically started on entry). Fall back
+      // to Manual so the user can label by hand; the doomed text sort is also
+      // skipped upstream. When it flips back to available we leave the user
+      // where they are and just re-enable the tab.
+      if (this.autopilotDisabled && this.activeTab === 'autopilot') {
+        this.activeTab = 'manual';
+        this.autopilotStop.emit();
+      }
     }
   }
 
@@ -202,13 +221,8 @@ export class LeftPanelComponent implements OnInit, OnChanges {
    * hide a working feature.
    */
   private updateTextSortAvailable(): void {
-    const embedderName = this.medias.length > 0 ? this.medias[0].embedder : '';
-    if (!embedderName || this.embedderInfos().length === 0) {
-      this.textSortAvailable = true;
-      return;
-    }
-    const info = this.embedderInfos().find((e) => e.name === embedderName);
-    this.textSortAvailable = info ? info.supports_text !== false : true;
+    const embedderName = this.medias.length > 0 ? this.medias[0].embedder ?? '' : '';
+    this.textSortAvailable = this.embedderCaps.supportsText(embedderName);
   }
 
   /**
@@ -237,6 +251,8 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   }
 
   setTab(tab: 'manual' | 'autopilot'): void {
+    // Autopilot can't be entered while it has no way to seed a first sort.
+    if (tab === 'autopilot' && this.autopilotDisabled) return;
     if (tab === this.activeTab) {
       if (tab === 'autopilot') {
         this.autopilotRefocus.emit();

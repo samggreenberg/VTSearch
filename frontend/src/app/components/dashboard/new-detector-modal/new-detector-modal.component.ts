@@ -12,6 +12,7 @@ import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service'
 import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
+import { EmbedderCapabilityService } from '../../../services/embedder-capability.service';
 import {
   DemoDataset,
   ImporterField,
@@ -48,9 +49,16 @@ export class NewDetectorModalComponent implements OnInit {
   private sortingApi = inject(SortingApiService);
   private labelImportersApi = inject(LabelImportersApiService);
   private settingsState = inject(SettingsStateService);
+  private embedderCaps = inject(EmbedderCapabilityService);
 
   /** Media type of the currently active dataset, if any. */
   @Input() defaultMediaType = '';
+
+  /** Embedder of the active dataset, if one is in context. When it can't
+   *  search by text, a text-only detector won't be able to start in Autopilot
+   *  or use Text sort on that dataset; the form surfaces a warning. Empty when
+   *  unknown, which suppresses the warning. */
+  @Input() datasetEmbedder = '';
 
   /** When set, the modal opens with this loaded-media id materialised into
    *  example_media/ as the seed example. The picker is bypassed and the
@@ -201,6 +209,7 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.embedderCaps.ensureLoaded();
     this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypeInfos = res.media_types || [];
@@ -323,6 +332,20 @@ export class NewDetectorModalComponent implements OnInit {
 
   get hasExample(): boolean {
     return this.exampleType === 'media' || !!this.pendingText.trim();
+  }
+
+  /**
+   * True when the active dataset's embedder can't search by text and the user
+   * is creating a text-hint-only detector (text entered, no media example).
+   * Such a detector still works — but only after labeling enough to train it —
+   * so we warn that Autopilot and Text sort won't be available up front.
+   */
+  get showNoTextWarning(): boolean {
+    return (
+      !this.embedderCaps.supportsText(this.datasetEmbedder) &&
+      this.hasPendingText &&
+      !this.hasMediaExample
+    );
   }
 
   get hasMediaExample(): boolean {

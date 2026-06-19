@@ -55,6 +55,46 @@ describe('LeftPanelComponent', () => {
     expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
   });
 
+  it('should default to manual and not start autopilot when autopilotDisabled', () => {
+    const fresh = TestBed.createComponent(LeftPanelComponent);
+    const comp = fresh.componentInstance;
+    comp.autopilotDisabled = true;
+    vi.spyOn(comp.autopilotStart, 'emit');
+    fresh.detectChanges();
+    expect(comp.activeTab).toBe('manual');
+    expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
+  });
+
+  it('should fall back to manual when autopilot becomes disabled after starting', () => {
+    // Default init lands on the autopilot tab.
+    expect(component.activeTab).toBe('autopilot');
+    vi.spyOn(component.autopilotStop, 'emit');
+    component.autopilotDisabled = true;
+    component.ngOnChanges({
+      autopilotDisabled: new SimpleChange(false, true, false),
+    });
+    expect(component.activeTab).toBe('manual');
+    expect(component.autopilotStop.emit).toHaveBeenCalled();
+  });
+
+  it('should ignore clicks on the autopilot tab while it is disabled', () => {
+    component.setTab('manual');
+    component.autopilotDisabled = true;
+    vi.spyOn(component.autopilotStart, 'emit');
+    component.setTab('autopilot');
+    expect(component.activeTab).toBe('manual');
+    expect(component.autopilotStart.emit).not.toHaveBeenCalled();
+  });
+
+  it('should disable the autopilot tab button when autopilotDisabled', () => {
+    component.autopilotDisabled = true;
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const tabs = el.querySelectorAll<HTMLButtonElement>('.left-tab');
+    // Second tab is Autopilot.
+    expect(tabs[1].disabled).toBe(true);
+  });
+
   it('should render autopilot tab content by default', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.tab-panel-autopilot')).toBeTruthy();

@@ -179,6 +179,7 @@
 @if (newDetectorFlow.open) {
   <vt-new-detector-modal
     [defaultMediaType]="newDetectorFlow.defaultMediaType"
+    [datasetEmbedder]="newDetectorFlow.datasetEmbedder"
     [seedMediaId]="newDetectorFlow.seedMediaId ?? null"
     [seedCropParams]="newDetectorFlow.seedCropParams ?? null"
     (closed)="onNewDetectorClosed()"
