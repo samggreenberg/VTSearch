@@ -1,6 +1,11 @@
 # Zoneless change detection — detailed migration plan
 
-Status: **Phase 0 shipped (test harness); Phase 1 complete — 1.1 + 1.3 + 1.4
+Status: **Phases 0–2 COMPLETE (all reactivity-surface conversions landed; the
+app is now correct under both zone and zoneless). Remaining: Phase 3 (the 3-line
+production provider flip + budget), Phase 4 (mandatory human browser QA — cannot
+run in the no-browser container), Phase 5 (optional cleanup).**
+
+Detailed history: **Phase 0 shipped (test harness); Phase 1 complete — 1.1 + 1.3 + 1.4
 (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
 signalized) and 1.2 (KeyboardService de-zoned + the coupled center-panel state
 signalized, i.e. the center-panel slice of Phase 2.3); Phase 2.1 shipped (leaf
@@ -30,9 +35,13 @@ verified safe as-is — canvas-only or already `markForCheck`/`@HostListener`
 disciplined); Phase 2.7 shipped (left-panel + media-list — signalized
 left-panel's effect-written `mediaTypeName`/`textSortAvailable`; media-list's
 `loadingMedias` → `computed`, `markForCheck` for the metadata-hydration
-subscribe, dropped the relayout `zone.run`); the rest of Phase 2 (2.8–2.9; note
-2.8 right-panel's `LabelsetStateService`/settings mirror still remains) and
-Phases 3–5 not started.**
+subscribe, dropped the relayout `zone.run`); **Phases 2.8 + 2.9 shipped**
+(right-panel LabelsetState/settings mirror; context-pulldown via markForCheck;
+dashboard's async/post-await/effect fields; the settings/load-sort/resort/
+new-detector/dataset-importer modals; app.component; plus a pre-flip safety
+sweep that caught export-modal + examples-editor-modal). **All of Phase 2 is
+now complete.** Remaining: Phase 3 (the production flip), Phase 4 (mandatory
+human browser QA), Phase 5 (cleanup).**
 This document
 is the exceedingly-explicit, source-verified plan for taking VTSearch's Angular
 21 frontend off zone.js and onto `provideZonelessChangeDetection()`. It
@@ -633,17 +642,39 @@ Suggested order (lightest/most-isolated first to build confidence):
    effect→signal fix is proven by the identical browse-selection-panel canary and
    the `left-panel` container deadlocks `whenStable()` via its media-grid
    rxResources; the existing specs cover behavior.)
-8. **`right-panel`** (vote piles ✅ DONE in Phase 2.5 — six `subscribe` mirrors →
-   `computed`s over the signalized `VoteStateService`; **remaining**: its
-   `LabelsetStateService` mirror `goodElements`/`badElements`/`currentMediaType`
-   and the settings-derived `viewMode`/`gridGoalWidth`, all still
-   subscribe/effect-written plain fields), **`context-pulldown`**, **`dashboard`**
-   (32 — mostly `ngOnInit` list reads, good `async`/signal candidates),
-   **`new-detector-modal`** / **`dataset-importer-modal`** (heaviest; convert the
-   clean list reads, leave dynamic field-option fetches imperative with Recipe C
-   where a signal is awkward), **`settings-modal`** (forkJoin init → signals;
-   "Saved" badge timer → signal), **`load-sort-modal`** / **`resort-prompt-modal`**.
-9. **`app.component`** and remaining shell pieces.
+8. **`right-panel`, `context-pulldown`, `dashboard`, the modals. ✅ DONE
+   (Phase 2.8).** `right-panel`: signalized the `LabelsetStateService` mirror
+   (`goodElements`/`badElements`/`currentMediaType` from `good$`/`bad$`/`mediaType$`)
+   and the settings-derived `viewMode`/`gridGoalWidth` (the settings `effect()`
+   was a Recipe-F write). `context-pulldown`: used **Recipe C** (markForCheck) at
+   its three async entry points — `rebuildRows()` (driven by the registry
+   `datasets$`/`detectors$`/`intentPair$`/`sortState$`/`busyPairs$` subscribes,
+   which the first audit wrongly marked safe), the `error$` subscribe, and
+   `openMenu()` (driven by `openSignal$`) — because its `focusedIndex` keyboard-nav
+   arithmetic reads cleaner as a plain field than a signal. `dashboard`:
+   signalized the template-bound fields written from async contexts —
+   `currentUser`/`isDefaultLogin` (auth `status$`), `trainLoading`/`findLoading`
+   (router events), `diskUsage`/`ramUsage` (10s timers),
+   `importerClosing`/`newDetectorClosing` (flow subscribes), the per-row +
+   bulk **delete-confirm flags** and `deletingDatasetId`/`deletingDetectorId`
+   (written from **post-`await dialog.confirmDestructive()` continuations** — an
+   unpatched microtask path), and `serverSetsAgeOff` (settings `effect()`,
+   Recipe F). `progressValue`/`progressTotal`/`progressIndeterminate` and
+   `visibleImporters` were found to be **write-only / not template-bound** and
+   left plain. `settings-modal` (forkJoin init → signals incl. the `settings`
+   object via `.update(s => ({...s, …}))` so the new reference notifies; "Saved"
+   badge timer → signal), `load-sort-modal`, `resort-prompt-modal`,
+   `new-detector-modal`, `dataset-importer-modal` (heaviest; subscribe/`.then`-
+   written list + mutation-result + example/demo state → signals).
+9. **`app.component`. ✅ DONE (Phase 2.9).** Signalized `isOnLabelView` (router
+   events), `showAchievements` (`openPanelRequest$` + handlers), `achievementsDisabled`
+   (settings `effect()`, Recipe F), `showIncompatibleExplainer` (written from
+   `recomputeExplainer()`, which runs from the router-events and pair/registry
+   `combineLatest` subscribes — the first audit wrongly marked it safe), and
+   `importerFlow`/`newDetectorFlow`/`recentSessions` (flow + sessions subscribes).
+   **Pre-flip safety sweep** additionally caught `export-modal` (`status`/`submitting`)
+   and `examples-editor-modal` (`error`/`status`), both mutation-result fields
+   written from POST subscribes.
 
 **Phase 2 gate (per cluster):** the cluster's specs run under the zoneless
 `TestBed`, assert on the DOM, include canaries, and pass; `./run-tests.sh` full
