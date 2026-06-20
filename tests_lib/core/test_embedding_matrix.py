@@ -147,7 +147,7 @@ class TestEmbedderAwareMatrix:
         ctx = self._ctx()
         del ctx.medias[2]["embeddings"]["dinov3_patch"]
         ctx.medias[2]["embedder"] = "siglip"  # singular mirror is siglip's, not the requested one
-        with pytest.raises(ValueError, match=r"media 2.*has no embedding for 'dinov3_patch'"):
+        with pytest.raises(ValueError, match=r"media 2.*has no embedding for embedder 'dinov3_patch'"):
             get_embedding_matrix(ctx, "dinov3_patch")
 
     def test_submatrix_named_embedder(self):
