@@ -6,6 +6,7 @@ import { routes } from './app.routes';
 import { activeContextInterceptor } from './interceptors/active-context.interceptor';
 import { achievementsRefreshInterceptor } from './interceptors/achievements-refresh.interceptor';
 import { errorInterceptor } from './interceptors/error.interceptor';
+import { timezoneInterceptor } from './interceptors/timezone.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -13,6 +14,7 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideHttpClient(
       withInterceptors([
+        timezoneInterceptor,
         activeContextInterceptor,
         achievementsRefreshInterceptor,
         errorInterceptor,

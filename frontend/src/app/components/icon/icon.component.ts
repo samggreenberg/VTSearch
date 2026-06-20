@@ -23,6 +23,7 @@ const KNOWN_TYPES = new Set([
   'palette', 'sort-descending', 'steering-wheel', 'cloud-upload',
   'thumbs-up', 'thumbs-down', 'factory',
   'house', 'lightning', 'flask', 'cubes', 'database',
+  'clock', 'running', 'calendar',
   'checkbox-checked', 'search', 'trophy',
   'zoom-in', 'zoom-out', 'zoom-fit',
 ]);
