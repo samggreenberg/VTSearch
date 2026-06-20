@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, input } from '@angular/core';
+import { Component, ElementRef, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, input, signal } from '@angular/core';
 
 import { ActiveContextService } from '../../services/active-context.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
@@ -21,7 +21,10 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   left = 0;
   top = 0;
   audioSrc = '';
-  textContent = '';
+  // Written both from `ngOnChanges` (a CD context) and from the async text
+  // `fetch().then()` continuation, so a signal so the late write repaints the
+  // popup body under zoneless.
+  readonly textContent = signal('');
   count = 0;
   private textLoadAbort: AbortController | null = null;
 
@@ -59,7 +62,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
 
     switch (mediaType) {
       case 'audio':
-        this.textContent = '';
+        this.textContent.set('');
         this.playAudio(representativeId);
         break;
       case 'text':
@@ -68,7 +71,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
         break;
       default:
         this.stopAudio();
-        this.textContent = `Item #${representativeId}`;
+        this.textContent.set(`Item #${representativeId}`);
     }
   }
 
@@ -77,7 +80,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     this.stopAudio();
     this.textLoadAbort?.abort();
     this.textLoadAbort = null;
-    this.textContent = '';
+    this.textContent.set('');
   }
 
   private playAudio(mediaId: number): void {
@@ -104,7 +107,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   }
 
   private loadText(mediaId: number): void {
-    this.textContent = `Loading...`;
+    this.textContent.set('Loading...');
     // Cancel any in-flight text load so a slow earlier response can't clobber
     // the preview after the cursor has moved to another hex.
     this.textLoadAbort?.abort();
@@ -116,13 +119,13 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
       .then((data) => {
         if (this.hover()?.cell.rep_id === mediaId) {
           const text: string = data.content || '';
-          this.textContent = text.length > 300 ? text.slice(0, 300) + '...' : text;
+          this.textContent.set(text.length > 300 ? text.slice(0, 300) + '...' : text);
         }
       })
       .catch((err) => {
         if (err?.name === 'AbortError') return;
         if (this.hover()?.cell.rep_id === mediaId) {
-          this.textContent = `Item #${mediaId}`;
+          this.textContent.set(`Item #${mediaId}`);
         }
       });
   }

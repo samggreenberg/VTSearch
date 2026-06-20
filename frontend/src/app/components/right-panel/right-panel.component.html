@@ -21,18 +21,18 @@
   <div class="view-row">
     <vt-view-controls
       side="right"
-      [currentMediaType]="currentMediaType"
+      [currentMediaType]="currentMediaType()"
       class="view-controls-slot" />
   </div>
 
   @if (useLabelset) {
     <vt-labelset-list
       label="good"
-      [elements]="goodElements"
+      [elements]="goodElements()"
       [modelName]="trainableModelName() ?? ''"
       [sortMode]="sortMode"
-      [viewMode]="viewMode"
-      [gridGoalWidth]="gridGoalWidth"
+      [viewMode]="viewMode()"
+      [gridGoalWidth]="gridGoalWidth()"
       [focusMode]="focusMode()"
       (elementSelected)="onLabelsetElementSelected($event)"
       (elementVote)="onLabelsetElementVote($event)"
@@ -42,11 +42,11 @@
 
     <vt-labelset-list
       label="bad"
-      [elements]="badElements"
+      [elements]="badElements()"
       [modelName]="trainableModelName() ?? ''"
       [sortMode]="sortMode"
-      [viewMode]="viewMode"
-      [gridGoalWidth]="gridGoalWidth"
+      [viewMode]="viewMode()"
+      [gridGoalWidth]="gridGoalWidth()"
       [focusMode]="focusMode()"
       (elementSelected)="onLabelsetElementSelected($event)"
       (elementVote)="onLabelsetElementVote($event)"
@@ -62,8 +62,8 @@
       [learnedScores]="learnedScores()"
       [regionBoxes]="goodRegionBoxes()"
       [sortMode]="sortMode"
-      [viewMode]="viewMode"
-      [gridGoalWidth]="gridGoalWidth"
+      [viewMode]="viewMode()"
+      [gridGoalWidth]="gridGoalWidth()"
       [focusMode]="focusMode()"
       (mediaSelected)="onMediaSelected($event)"
       (mediaVote)="onMediaVote($event)"
@@ -110,8 +110,8 @@
       [clickTimes]="clickTimes()"
       [learnedScores]="learnedScores()"
       [sortMode]="sortMode"
-      [viewMode]="viewMode"
-      [gridGoalWidth]="gridGoalWidth"
+      [viewMode]="viewMode()"
+      [gridGoalWidth]="gridGoalWidth()"
       [focusMode]="focusMode()"
       (mediaSelected)="onMediaSelected($event)"
       (mediaVote)="onMediaVote($event)"

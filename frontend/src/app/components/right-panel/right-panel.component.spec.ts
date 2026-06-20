@@ -68,7 +68,7 @@ describe('RightPanelComponent', () => {
     TestBed.tick();
     // Trigger ngOnChanges by setting medias via input
     component.ngOnChanges({ medias: { currentValue: component.medias, previousValue: [], firstChange: true, isFirstChange: () => true } });
-    expect(component.viewMode).toBe('list');
+    expect(component.viewMode()).toBe('list');
     cleanup();
   });
 
@@ -78,7 +78,7 @@ describe('RightPanelComponent', () => {
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
     httpMock.expectOne('/api/votes').flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
-    expect(component.viewMode).toBe('grid');
+    expect(component.viewMode()).toBe('grid');
     cleanup();
   }));
 

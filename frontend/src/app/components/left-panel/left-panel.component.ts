@@ -9,7 +9,8 @@ import {
   effect,
   inject,
   input,
-  output
+  output,
+  signal
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -132,8 +133,11 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   @ViewChild(MediaListComponent) mediaListComponent!: MediaListComponent;
 
   activeTab: 'manual' | 'autopilot' = 'autopilot';
-  mediaTypeName = 'Media';
-  textSortAvailable = true;
+  // Written from the constructor `effect()`s (when media-type / embedder
+  // metadata arrives) as well as the sync `ngOnChanges` path, so signals — an
+  // effect writing a plain template-bound field does not repaint under zoneless.
+  readonly mediaTypeName = signal('Media');
+  readonly textSortAvailable = signal(true);
 
   private readonly datasetsListingsApi = inject(DatasetsListingsApiService);
   private readonly embedderCaps = inject(EmbedderCapabilityService);
@@ -207,11 +211,11 @@ export class LeftPanelComponent implements OnInit, OnChanges {
   private updateMediaTypeName(): void {
     const typeId = this.medias.length > 0 ? this.medias[0].media_type : '';
     if (!typeId) {
-      this.mediaTypeName = 'Media';
+      this.mediaTypeName.set('Media');
       return;
     }
     const info = this.mediaTypeInfos().find((mt) => mt.type_id === typeId);
-    this.mediaTypeName = info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1);
+    this.mediaTypeName.set(info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1));
   }
 
   /**
@@ -222,7 +226,7 @@ export class LeftPanelComponent implements OnInit, OnChanges {
    */
   private updateTextSortAvailable(): void {
     const embedderName = this.medias.length > 0 ? this.medias[0].embedder ?? '' : '';
-    this.textSortAvailable = this.embedderCaps.supportsText(embedderName);
+    this.textSortAvailable.set(this.embedderCaps.supportsText(embedderName));
   }
 
   /**

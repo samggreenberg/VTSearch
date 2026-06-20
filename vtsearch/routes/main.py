@@ -105,7 +105,7 @@ def logo() -> tuple[str, int] | Response:
 def catch_all(path: str) -> Response:
     """Serve static files at root paths and fall back to Angular SPA.
 
-    The Angular build output (main.js, polyfills.js, styles.css, etc.) is
+    The Angular build output (main.js, styles.css, etc.) is
     referenced from index.html with ``<base href="/">``, so the browser
     requests them at ``/main.js`` rather than ``/static/main.js``.  This
     route serves those files when they exist, and falls back to

@@ -49,29 +49,29 @@ describe('NewDetectorModalComponent', () => {
   });
 
   it('should populate media types from API', () => {
-    expect(component.mediaTypes).toEqual(['audio', 'image']);
+    expect(component.mediaTypes()).toEqual(['audio', 'image']);
   });
 
   it('should show error when name is empty', () => {
-    component.name = '';
-    component.pendingText = 'test';
+    component.name.set('');
+    component.pendingText.set('test');
     component.submit();
-    expect(component.error).toBe('Name is required');
+    expect(component.error()).toBe('Name is required');
   });
 
   it('should show error when no example provided', () => {
-    component.name = 'Test Model';
-    component.pendingText = '';
+    component.name.set('Test Model');
+    component.pendingText.set('');
     component.submit();
-    expect(component.error).toBe('An example (text or media) is required');
+    expect(component.error()).toBe('An example (text or media) is required');
   });
 
   it('should accept pending text as text example on submit', () => {
     vi.spyOn(component.created, 'emit');
 
-    component.name = 'Dog Barks';
-    component.mediaType = 'audio';
-    component.pendingText = 'dog barking sounds';
+    component.name.set('Dog Barks');
+    component.mediaType.set('audio');
+    component.pendingText.set('dog barking sounds');
     component.submit();
 
     const req = httpMock.expectOne('/api/detectors/registry');
@@ -85,39 +85,39 @@ describe('NewDetectorModalComponent', () => {
   });
 
   it('should disable Create button when not ready', () => {
-    component.name = '';
-    component.pendingText = '';
+    component.name.set('');
+    component.pendingText.set('');
     expect(component.canSubmitBlank).toBe(false);
 
-    component.name = 'Test';
+    component.name.set('Test');
     expect(component.canSubmitBlank).toBe(false);
 
-    component.pendingText = 'query';
+    component.pendingText.set('query');
     expect(component.canSubmitBlank).toBe(true);
   });
 
   it('should disable media buttons when text is entered', () => {
-    component.pendingText = '';
+    component.pendingText.set('');
     expect(component.hasPendingText).toBe(false);
 
-    component.pendingText = 'some text';
+    component.pendingText.set('some text');
     expect(component.hasPendingText).toBe(true);
   });
 
   it('should clear pending text when media example is set', () => {
-    component.pendingText = 'some text';
-    component.exampleType = 'media';
-    component.exampleValue = 'file.wav';
-    component.exampleDisplay = 'file.wav';
-    component.pendingText = '';
+    component.pendingText.set('some text');
+    component.exampleType.set('media');
+    component.exampleValue.set('file.wav');
+    component.exampleDisplay.set('file.wav');
+    component.pendingText.set('');
 
     expect(component.hasMediaExample).toBe(true);
-    expect(component.pendingText).toBe('');
+    expect(component.pendingText()).toBe('');
   });
 
   it('should show server error on failure', () => {
-    component.name = 'Test';
-    component.pendingText = 'test';
+    component.name.set('Test');
+    component.pendingText.set('test');
     component.submit();
 
     httpMock.expectOne('/api/detectors/registry').flush(
@@ -125,7 +125,7 @@ describe('NewDetectorModalComponent', () => {
       { status: 409, statusText: 'Conflict' },
     );
 
-    expect(component.error).toBe('Detector already exists');
+    expect(component.error()).toBe('Detector already exists');
   });
 
   it('should return media type icon', () => {
@@ -166,56 +166,56 @@ describe('NewDetectorModalComponent', () => {
 
   it('pre-fills the name from the text seed while the name is untouched', () => {
     component.onPendingTextInput('dog barking sounds');
-    expect(component.pendingText).toBe('dog barking sounds');
-    expect(component.name).toBe('dog barking sounds');
+    expect(component.pendingText()).toBe('dog barking sounds');
+    expect(component.name()).toBe('dog barking sounds');
   });
 
   it('sanitises pasted whitespace when mirroring the seed into the name', () => {
     component.onPendingTextInput('   dog   barking\n  sounds   ');
-    expect(component.pendingText).toBe('   dog   barking\n  sounds   ');
-    expect(component.name).toBe('dog barking sounds');
+    expect(component.pendingText()).toBe('   dog   barking\n  sounds   ');
+    expect(component.name()).toBe('dog barking sounds');
   });
 
   it('warns about no-text datasets only for a text-hint-only detector', () => {
     // No warning before any text is entered.
     component.datasetEmbedder = 'dinov3';
-    component.pendingText = '';
+    component.pendingText.set('');
     expect(component.showNoTextWarning).toBe(false);
 
     // Text entered against a no-text embedder → warn.
-    component.pendingText = 'a red car';
+    component.pendingText.set('a red car');
     expect(component.showNoTextWarning).toBe(true);
 
     // A media example seed (not text-only) → no warning even on a no-text dataset.
-    component.exampleType = 'media';
-    component.exampleValue = 'file.jpg';
-    component.exampleDisplay = 'file.jpg';
+    component.exampleType.set('media');
+    component.exampleValue.set('file.jpg');
+    component.exampleDisplay.set('file.jpg');
     expect(component.showNoTextWarning).toBe(false);
   });
 
   it('does not warn when the dataset embedder can search by text', () => {
     component.datasetEmbedder = 'clap';
-    component.pendingText = 'dog barking';
+    component.pendingText.set('dog barking');
     expect(component.showNoTextWarning).toBe(false);
   });
 
   it('does not warn when the active dataset embedder is unknown', () => {
     component.datasetEmbedder = '';
-    component.pendingText = 'dog barking';
+    component.pendingText.set('dog barking');
     expect(component.showNoTextWarning).toBe(false);
   });
 
   it('stops mirroring once the user edits the name', () => {
     component.onPendingTextInput('dog');
-    expect(component.name).toBe('dog');
+    expect(component.name()).toBe('dog');
 
     component.onNameInput('Dog Barks');
-    expect(component.name).toBe('Dog Barks');
+    expect(component.name()).toBe('Dog Barks');
     expect(component.nameTouched).toBe(true);
 
     component.onPendingTextInput('cat meowing');
-    expect(component.pendingText).toBe('cat meowing');
-    expect(component.name).toBe('Dog Barks');
+    expect(component.pendingText()).toBe('cat meowing');
+    expect(component.name()).toBe('Dog Barks');
   });
 });
 
@@ -254,7 +254,7 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
   });
 
   it('should lock media type to the active dataset type', () => {
-    expect(component.mediaType).toBe('image');
+    expect(component.mediaType()).toBe('image');
     expect(component.mediaTypeLocked).toBe(true);
   });
 });

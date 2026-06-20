@@ -46,11 +46,11 @@ describe('LoadSortModalComponent', () => {
 
   it('should load server files and registry models on init', () => {
     flushInit();
-    expect(component.serverMediaFiles.length).toBe(2);
-    expect(component.serverMediaFiles[0].filename).toBe('example.wav');
-    expect(component.registryModels.length).toBe(1);
-    expect(component.registryModels[0].name).toBe('My Detector');
-    expect(component.loading).toBe(false);
+    expect(component.serverMediaFiles().length).toBe(2);
+    expect(component.serverMediaFiles()[0].filename).toBe('example.wav');
+    expect(component.registryModels().length).toBe(1);
+    expect(component.registryModels()[0].name).toBe('My Detector');
+    expect(component.loading()).toBe(false);
   });
 
   it('should emit modelSelected and close when a registry model is loaded', () => {

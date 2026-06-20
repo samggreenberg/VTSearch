@@ -77,7 +77,7 @@ describe('ExamplesEditorModalComponent', () => {
     httpMock
       .expectOne('/api/detectors/test-model/examples')
       .flush({ error: 'Save failed' }, { status: 500, statusText: 'Error' });
-    expect(component.error).toBe('Save failed');
+    expect(component.error()).toBe('Save failed');
   });
 
   it('should handle empty model name', () => {
@@ -92,7 +92,7 @@ describe('ExamplesEditorModalComponent', () => {
       .expectOne('/api/detectors/test-model')
       .flush({}, { status: 500, statusText: 'Error' });
     expect(component.loading).toBe(false);
-    expect(component.error).toBe('Failed to load examples');
+    expect(component.error()).toBe('Failed to load examples');
   });
 
   it('should emit closed on close', () => {

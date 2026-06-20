@@ -1,4 +1,4 @@
-import { Component, HostListener, Input, OnInit, inject, input, output } from '@angular/core';
+import { Component, HostListener, Input, OnInit, inject, input, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -72,19 +72,19 @@ export class NewDetectorModalComponent implements OnInit {
   readonly closed = output<void>();
   readonly created = output<string>();
 
-  view: ModalView = 'main';
+  readonly view = signal<ModalView>('main');
   tab: ModalTab = 'blank';
-  name = '';
+  readonly name = signal('');
   /** True once the user has typed into the name field. While false, the
    *  name auto-tracks ``pendingText`` (sanitised) so users don't have to
    *  type the same string twice. */
   nameTouched = false;
-  mediaType = 'audio';
-  pendingText = '';
-  mediaTypes: string[] = [];
-  mediaTypeInfos: MediaTypeInfo[] = [];
-  submitting = false;
-  error = '';
+  readonly mediaType = signal('audio');
+  readonly pendingText = signal('');
+  readonly mediaTypes = signal<string[]>([]);
+  readonly mediaTypeInfos = signal<MediaTypeInfo[]>([]);
+  readonly submitting = signal(false);
+  readonly error = signal('');
   mediaTypeDropdownOpen = false;
   /** True when the media-type field is locked to the active dataset's type.
    *  Set on init whenever `defaultMediaType` is provided; cleared when the
@@ -93,20 +93,20 @@ export class NewDetectorModalComponent implements OnInit {
   mediaTypeLocked = false;
 
   // Single example (text or media, not both)
-  exampleType: 'text' | 'media' | null = null;
-  exampleValue = '';
-  exampleDisplay = '';
+  readonly exampleType = signal<'text' | 'media' | null>(null);
+  readonly exampleValue = signal('');
+  readonly exampleDisplay = signal('');
   exampleMediaType = '';
-  exampleThumbFailed = false;
+  readonly exampleThumbFailed = signal(false);
 
   // --- Media picker state (shares structure with the Add Dataset modal) ---
 
   /** All importers discovered from the backend, filtered to picker_views we
    *  can use to select a single example file (demo, server_folder,
    *  local_folder, local_files). */
-  mediaImporters: ImporterInfo[] = [];
+  readonly mediaImporters = signal<ImporterInfo[]>([]);
   /** Tab declarations (categories) returned by the backend. */
-  declaredImporterTabs: ImporterPickerTab[] = [];
+  readonly declaredImporterTabs = signal<ImporterPickerTab[]>([]);
   /** Currently selected category tab (e.g. ``"demo"``, ``"server"``). */
   activeImporterTab = '';
   /** Currently selected importer within the active category. */
@@ -133,10 +133,10 @@ export class NewDetectorModalComponent implements OnInit {
   ]);
 
   // --- Demo picker state ---
-  demos: DemoDataset[] = [];
-  demoTabs: string[] = [];
+  readonly demos = signal<DemoDataset[]>([]);
+  readonly demoTabs = signal<string[]>([]);
   activeDemoTab = '';
-  demoLoading = false;
+  readonly demoLoading = signal(false);
 
   /** Demo table column metadata + controller.  Reuses the same storage key
    *  as the Add Dataset modal so column order and sort preferences stay in
@@ -160,13 +160,13 @@ export class NewDetectorModalComponent implements OnInit {
   demoFileBrowsing = false;
   demoFileBrowseSource = '';
   demoFileBrowseLabel = '';
-  demoFileLoading = false;
+  readonly demoFileLoading = signal(false);
   demoTypedPath = '';
-  demoTypedPathError = '';
+  readonly demoTypedPathError = signal('');
 
   // --- Server example-media picker. Path is validated when submitted. ---
-  sfBrowseError = '';
-  sfFileSelecting = false;
+  readonly sfBrowseError = signal('');
+  readonly sfFileSelecting = signal(false);
   sfTypedPath = '';
 
   // Pending crop confirmation state.
@@ -175,8 +175,8 @@ export class NewDetectorModalComponent implements OnInit {
 
   // "Trained" tab state
   trainedView: TrainedSubView = 'picker';
-  labelImporters: LabelImporterEntry[] = [];
-  labelImportersLoading = false;
+  readonly labelImporters = signal<LabelImporterEntry[]>([]);
+  readonly labelImportersLoading = signal(false);
   selectedLabelImporter: LabelImporterEntry | null = null;
   labelImporterValues: Record<string, string> = {};
   labelImporterFile: File | null = null;
@@ -212,8 +212,8 @@ export class NewDetectorModalComponent implements OnInit {
     this.embedderCaps.ensureLoaded();
     this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
-        this.mediaTypeInfos = res.media_types || [];
-        this.mediaTypes = this.mediaTypeInfos.map((t) => t.type_id || t.name);
+        this.mediaTypeInfos.set(res.media_types || []);
+        this.mediaTypes.set(this.mediaTypeInfos().map((t) => t.type_id || t.name));
       },
     });
     // Settings power the solo-mediaType lockdown; load them so the
@@ -224,13 +224,13 @@ export class NewDetectorModalComponent implements OnInit {
     // template hides the picker entirely (no unlock button rendered).
     const solo = this.effectiveSoloMediaType;
     if (solo) {
-      this.mediaType = solo;
+      this.mediaType.set(solo);
       this.mediaTypeLocked = true;
     } else if (this.defaultMediaType) {
       // Prefer the explicit default (active dataset's type) over the all-datasets guess.
       // When the active dataset dictates the type, lock the field so the user
       // can't change it without an explicit unlock click.
-      this.mediaType = this.defaultMediaType;
+      this.mediaType.set(this.defaultMediaType);
       this.mediaTypeLocked = true;
     } else {
       this.datasetsRegistryApi.getRegistry().subscribe({
@@ -239,7 +239,7 @@ export class NewDetectorModalComponent implements OnInit {
             (res.datasets || []).map((d) => d['media_type'] as string).filter(Boolean),
           );
           if (types.size === 1) {
-            this.mediaType = [...types][0];
+            this.mediaType.set([...types][0]);
           }
         },
       });
@@ -257,23 +257,23 @@ export class NewDetectorModalComponent implements OnInit {
     mediaId: number,
     cropParams?: Record<string, unknown>,
   ): void {
-    this.submitting = true;
+    this.submitting.set(true);
     this.sortingApi
       .saveServerMediaFromMediaId({ media_id: mediaId, crop_params: cropParams })
       .subscribe({
         next: (res) => {
-          this.exampleType = 'media';
-          this.exampleValue = res.filename;
-          this.exampleDisplay = res.original_name || res.filename;
-          this.exampleMediaType = this.mediaType;
-          this.exampleThumbFailed = false;
-          this.pendingText = '';
+          this.exampleType.set('media');
+          this.exampleValue.set(res.filename);
+          this.exampleDisplay.set(res.original_name || res.filename);
+          this.exampleMediaType = this.mediaType();
+          this.exampleThumbFailed.set(false);
+          this.pendingText.set('');
           this.autoFillNameFromExample();
-          this.submitting = false;
+          this.submitting.set(false);
         },
         error: (err) => {
-          this.submitting = false;
-          this.error = err.error?.message || 'Failed to load seed media';
+          this.submitting.set(false);
+          this.error.set(err.error?.message || 'Failed to load seed media');
         },
       });
   }
@@ -301,23 +301,23 @@ export class NewDetectorModalComponent implements OnInit {
    *  top-down and leave Name blank. */
   private autoFillNameFromExample(): void {
     if (this.nameTouched) return;
-    if (this.exampleType === 'media' && this.exampleDisplay) {
-      this.name = this.sanitizeName(this.nameFromFilename(this.exampleDisplay));
-    } else if (this.pendingText) {
-      this.name = this.sanitizeName(this.pendingText);
+    if (this.exampleType() === 'media' && this.exampleDisplay()) {
+      this.name.set(this.sanitizeName(this.nameFromFilename(this.exampleDisplay())));
+    } else if (this.pendingText()) {
+      this.name.set(this.sanitizeName(this.pendingText()));
     }
   }
 
   onPendingTextInput(value: string): void {
-    this.pendingText = value;
+    this.pendingText.set(value);
     if (!this.nameTouched) {
-      this.name = this.sanitizeName(value);
+      this.name.set(this.sanitizeName(value));
     }
   }
 
   onNameInput(value: string): void {
     this.nameTouched = true;
-    this.name = value;
+    this.name.set(value);
   }
 
   toggleMediaTypeDropdown(): void {
@@ -326,12 +326,12 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   get modalTitle(): string {
-    if (this.view === 'media-picker') return 'Select Media Example';
+    if (this.view() === 'media-picker') return 'Select Media Example';
     return 'New Detector';
   }
 
   get hasExample(): boolean {
-    return this.exampleType === 'media' || !!this.pendingText.trim();
+    return this.exampleType() === 'media' || !!this.pendingText().trim();
   }
 
   /**
@@ -349,38 +349,38 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   get hasMediaExample(): boolean {
-    return this.exampleType === 'media';
+    return this.exampleType() === 'media';
   }
 
   get hasPendingText(): boolean {
-    return !!this.pendingText.trim();
+    return !!this.pendingText().trim();
   }
 
   get canSubmitBlank(): boolean {
-    return !!this.name.trim() && this.hasExample && !this.submitting;
+    return !!this.name().trim() && this.hasExample && !this.submitting();
   }
 
   get canSubmitTrained(): boolean {
     return (
-      !!this.name.trim() &&
+      !!this.name().trim() &&
       !!this.selectedLabelImporter &&
       this.trainedView === 'form' &&
-      !this.submitting
+      !this.submitting()
     );
   }
 
   // --- Tab switching ---
 
   setTab(tab: ModalTab): void {
-    if (this.submitting) return;
+    if (this.submitting()) return;
     this.tab = tab;
-    this.error = '';
+    this.error.set('');
   }
 
   // --- Media picker (shared structure with Add Dataset) ---
 
   openMediaPicker(): void {
-    this.view = 'media-picker';
+    this.view.set('media-picker');
     this.activeImporterTab = '';
     this.selectedImporter = null;
     this.resetDemoPickerState();
@@ -391,12 +391,12 @@ export class NewDetectorModalComponent implements OnInit {
   private loadMediaImporters(): void {
     this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
-        this.mediaImporters = (res.importers || []).filter(
+        this.mediaImporters.set((res.importers || []).filter(
           (imp) =>
             !imp['hidden_from_picker'] &&
             NewDetectorModalComponent.SUPPORTED_PICKER_VIEWS.has(imp.picker_view || ''),
-        );
-        this.declaredImporterTabs = res.tabs || [];
+        ));
+        this.declaredImporterTabs.set(res.tabs || []);
       },
     });
   }
@@ -407,10 +407,10 @@ export class NewDetectorModalComponent implements OnInit {
     const order = NewDetectorModalComponent.PICKER_ORDER;
     const result: ImporterInfo[] = [];
     for (const name of order) {
-      const imp = this.mediaImporters.find((i) => i.name === name);
+      const imp = this.mediaImporters().find((i) => i.name === name);
       if (imp) result.push(imp);
     }
-    for (const imp of this.mediaImporters) {
+    for (const imp of this.mediaImporters()) {
       if (!order.includes(imp.name)) result.push(imp);
     }
     return result;
@@ -434,7 +434,7 @@ export class NewDetectorModalComponent implements OnInit {
     );
     const visible: ImporterPickerTab[] = [];
     const seen = new Set<string>();
-    const declared = [...this.declaredImporterTabs].sort(
+    const declared = [...this.declaredImporterTabs()].sort(
       (a, b) => (a.order ?? 100) - (b.order ?? 100),
     );
     for (const tab of declared) {
@@ -471,7 +471,7 @@ export class NewDetectorModalComponent implements OnInit {
 
   selectImporter(importer: ImporterInfo): void {
     this.selectedImporter = importer;
-    this.error = '';
+    this.error.set('');
     const view = importer.picker_view || '';
     if (view === 'demo') {
       this.openDemoPicker();
@@ -494,38 +494,39 @@ export class NewDetectorModalComponent implements OnInit {
   // --- Demo picker ---
 
   private resetDemoPickerState(): void {
-    this.demos = [];
-    this.demoTabs = [];
+    this.demos.set([]);
+    this.demoTabs.set([]);
     this.activeDemoTab = '';
-    this.demoLoading = false;
+    this.demoLoading.set(false);
     this.demoFileBrowsing = false;
     this.demoFileBrowseSource = '';
     this.demoFileBrowseLabel = '';
-    this.demoFileLoading = false;
+    this.demoFileLoading.set(false);
   }
 
   private openDemoPicker(): void {
     this.resetDemoPickerState();
-    this.demoLoading = true;
+    this.demoLoading.set(true);
     this.datasetsListingsApi.getDemoList().subscribe({
       next: (res) => {
-        this.demos = res.datasets || [];
+        this.demos.set(res.datasets || []);
         this.buildDemoTabs();
-        this.demoLoading = false;
+        this.demoLoading.set(false);
       },
       error: () => {
-        this.demoLoading = false;
+        this.demoLoading.set(false);
       },
     });
   }
 
   private buildDemoTabs(): void {
-    const grouped = new Set(this.demos.map((d) => d.media_type));
-    const registryOrder = this.mediaTypeInfos.map((mt) => mt.type_id);
-    this.demoTabs = registryOrder.filter((mt) => grouped.has(mt));
+    const grouped = new Set(this.demos().map((d) => d.media_type));
+    const registryOrder = this.mediaTypeInfos().map((mt) => mt.type_id);
+    const tabs = registryOrder.filter((mt) => grouped.has(mt));
     for (const mt of grouped) {
-      if (!this.demoTabs.includes(mt)) this.demoTabs.push(mt);
+      if (!tabs.includes(mt)) tabs.push(mt);
     }
+    this.demoTabs.set(tabs);
   }
 
   selectDemoTab(tab: string): void {
@@ -533,7 +534,7 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   get filteredDemos(): DemoDataset[] {
-    const items = this.demos.filter((d) => d.media_type === this.activeDemoTab);
+    const items = this.demos().filter((d) => d.media_type === this.activeDemoTab);
     const statusOrder: Record<string, number> = { ready: 0, needs_embedding: 1, needs_download: 2 };
     const sortKey = this.demoCols.sortColumn;
     const asc = this.demoCols.sortAsc;
@@ -585,7 +586,7 @@ export class NewDetectorModalComponent implements OnInit {
     this.demoFileBrowseSource = `demo:${demo.name}`;
     this.demoFileBrowseLabel = demo.label;
     this.demoTypedPath = '';
-    this.demoTypedPathError = '';
+    this.demoTypedPathError.set('');
   }
 
   /** Submit the typed demo-relative path. Server validates and returns
@@ -593,23 +594,23 @@ export class NewDetectorModalComponent implements OnInit {
   submitDemoTypedPath(): void {
     const raw = (this.demoTypedPath || '').trim();
     if (!raw) return;
-    this.demoFileLoading = true;
-    this.demoTypedPathError = '';
+    this.demoFileLoading.set(true);
+    this.demoTypedPathError.set('');
     this.datasetsUiApi.selectBrowsedFile(this.demoFileBrowseSource, raw).subscribe({
       next: (res) => {
-        this.exampleType = 'media';
-        this.exampleValue = res.filename;
-        this.exampleDisplay = res.original_name || raw;
-        this.exampleMediaType = this.activeDemoTab || this.mediaType;
-        this.exampleThumbFailed = false;
-        this.pendingText = '';
+        this.exampleType.set('media');
+        this.exampleValue.set(res.filename);
+        this.exampleDisplay.set(res.original_name || raw);
+        this.exampleMediaType = this.activeDemoTab || this.mediaType();
+        this.exampleThumbFailed.set(false);
+        this.pendingText.set('');
         this.autoFillNameFromExample();
-        this.demoFileLoading = false;
-        this.view = 'main';
+        this.demoFileLoading.set(false);
+        this.view.set('main');
       },
       error: (err) => {
-        this.demoTypedPathError = err?.error?.message || 'Path not found in this demo.';
-        this.demoFileLoading = false;
+        this.demoTypedPathError.set(err?.error?.message || 'Path not found in this demo.');
+        this.demoFileLoading.set(false);
       },
     });
   }
@@ -620,14 +621,14 @@ export class NewDetectorModalComponent implements OnInit {
     this.demoFileBrowseSource = '';
     this.demoFileBrowseLabel = '';
     this.demoTypedPath = '';
-    this.demoTypedPathError = '';
+    this.demoTypedPathError.set('');
   }
 
   // --- Server example-media (typed path) ---
 
   private resetServerFolderState(): void {
-    this.sfBrowseError = '';
-    this.sfFileSelecting = false;
+    this.sfBrowseError.set('');
+    this.sfFileSelecting.set(false);
     this.sfTypedPath = '';
   }
 
@@ -640,23 +641,23 @@ export class NewDetectorModalComponent implements OnInit {
   submitSfTypedPath(): void {
     const raw = (this.sfTypedPath || '').trim();
     if (!raw) return;
-    this.sfFileSelecting = true;
-    this.sfBrowseError = '';
+    this.sfFileSelecting.set(true);
+    this.sfBrowseError.set('');
     this.datasetsUiApi.selectBrowsedFile('server_fs', raw).subscribe({
       next: (res) => {
-        this.exampleType = 'media';
-        this.exampleValue = res.filename;
-        this.exampleDisplay = res.original_name || raw;
-        this.exampleMediaType = this.mediaType || this.mediaTypeFromFilename(raw);
-        this.exampleThumbFailed = false;
-        this.pendingText = '';
+        this.exampleType.set('media');
+        this.exampleValue.set(res.filename);
+        this.exampleDisplay.set(res.original_name || raw);
+        this.exampleMediaType = this.mediaType() || this.mediaTypeFromFilename(raw);
+        this.exampleThumbFailed.set(false);
+        this.pendingText.set('');
         this.autoFillNameFromExample();
-        this.sfFileSelecting = false;
-        this.view = 'main';
+        this.sfFileSelecting.set(false);
+        this.view.set('main');
       },
       error: (err) => {
-        this.sfBrowseError = err?.error?.message || 'Path not found on the server.';
-        this.sfFileSelecting = false;
+        this.sfBrowseError.set(err?.error?.message || 'Path not found on the server.');
+        this.sfFileSelecting.set(false);
       },
     });
   }
@@ -678,7 +679,7 @@ export class NewDetectorModalComponent implements OnInit {
     if (files.length === 0) return;
     const file = files[0];
     this.pendingFile = file;
-    this.pendingFileMediaType = this.mediaType || this.mediaTypeFromFile(file);
+    this.pendingFileMediaType = this.mediaType() || this.mediaTypeFromFile(file);
   }
 
   onCropConfirmed(result: MediaCropResult): void {
@@ -690,18 +691,18 @@ export class NewDetectorModalComponent implements OnInit {
       .uploadServerMediaFile(file, cropParams ? { mediaType, cropParams } : undefined)
       .subscribe({
         next: (res) => {
-          this.exampleType = 'media';
-          this.exampleValue = res.filename;
-          this.exampleDisplay = res.original_name || res.filename;
-          this.exampleMediaType = mediaType || this.mediaType;
-          this.exampleThumbFailed = false;
-          this.pendingText = '';
+          this.exampleType.set('media');
+          this.exampleValue.set(res.filename);
+          this.exampleDisplay.set(res.original_name || res.filename);
+          this.exampleMediaType = mediaType || this.mediaType();
+          this.exampleThumbFailed.set(false);
+          this.pendingText.set('');
           this.autoFillNameFromExample();
           // Close the picker if it was open so the user lands back on the form.
-          if (this.view === 'media-picker') this.view = 'main';
+          if (this.view() === 'media-picker') this.view.set('main');
         },
         error: () => {
-          this.error = 'Failed to upload file';
+          this.error.set('Failed to upload file');
         },
       });
   }
@@ -729,44 +730,44 @@ export class NewDetectorModalComponent implements OnInit {
   /** URL of the example thumbnail, or null if no media example is selected
    *  or the thumbnail endpoint already failed (so we fall back to the icon). */
   get exampleThumbnailUrl(): string | null {
-    if (this.exampleType !== 'media' || !this.exampleValue || this.exampleThumbFailed) {
+    if (this.exampleType() !== 'media' || !this.exampleValue() || this.exampleThumbFailed()) {
       return null;
     }
-    return `/api/server-media-files/${encodeURIComponent(this.exampleValue)}/thumbnail`;
+    return `/api/server-media-files/${encodeURIComponent(this.exampleValue())}/thumbnail`;
   }
 
   onExampleThumbError(): void {
-    this.exampleThumbFailed = true;
+    this.exampleThumbFailed.set(true);
   }
 
   backToMain(): void {
-    this.view = 'main';
+    this.view.set('main');
   }
 
   // --- Clear example ---
 
   clearExample(): void {
-    this.exampleType = null;
-    this.exampleValue = '';
-    this.exampleDisplay = '';
+    this.exampleType.set(null);
+    this.exampleValue.set('');
+    this.exampleDisplay.set('');
     this.exampleMediaType = '';
-    this.exampleThumbFailed = false;
-    this.pendingText = '';
+    this.exampleThumbFailed.set(false);
+    this.pendingText.set('');
   }
 
   // --- Trained tab: label importers ---
 
   private ensureLabelImportersLoaded(): void {
-    if (this.labelImporters.length > 0 || this.labelImportersLoading) return;
-    this.labelImportersLoading = true;
+    if (this.labelImporters().length > 0 || this.labelImportersLoading()) return;
+    this.labelImportersLoading.set(true);
     this.labelImportersApi.list().subscribe({
       next: (list) => {
-        this.labelImporters = list.filter((imp) => !imp.hidden_from_picker);
-        this.labelImportersLoading = false;
+        this.labelImporters.set(list.filter((imp) => !imp.hidden_from_picker));
+        this.labelImportersLoading.set(false);
       },
       error: () => {
-        this.labelImportersLoading = false;
-        this.error = 'Failed to load label importers';
+        this.labelImportersLoading.set(false);
+        this.error.set('Failed to load label importers');
       },
     });
   }
@@ -788,7 +789,7 @@ export class NewDetectorModalComponent implements OnInit {
     this.labelImporterValues = {};
     this.labelImporterFile = null;
     this.labelImporterFileFieldKey = null;
-    this.error = '';
+    this.error.set('');
     const fields = (importer.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -807,7 +808,7 @@ export class NewDetectorModalComponent implements OnInit {
   backToImporterPicker(): void {
     this.trainedView = 'picker';
     this.selectedLabelImporter = null;
-    this.error = '';
+    this.error.set('');
   }
 
   onLabelImporterFileSelected(event: Event, fieldName: string): void {
@@ -820,18 +821,18 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   submitTrained(): void {
-    const trimmedName = this.name.trim();
+    const trimmedName = this.name().trim();
     if (!trimmedName) {
-      this.error = 'Name is required';
+      this.error.set('Name is required');
       return;
     }
     if (!this.selectedLabelImporter) {
-      this.error = 'A label importer is required';
+      this.error.set('A label importer is required');
       return;
     }
 
-    this.submitting = true;
-    this.error = '';
+    this.submitting.set(true);
+    this.error.set('');
 
     const params: Record<string, unknown> = {
       name: trimmedName,
@@ -849,25 +850,25 @@ export class NewDetectorModalComponent implements OnInit {
         next: (resp: any) => {
           const newId = resp?.detector?.id || '';
           if (!newId) {
-            this.submitting = false;
-            this.error = 'Server did not return a detector id';
+            this.submitting.set(false);
+            this.error.set('Server did not return a detector id');
             return;
           }
           this.detectorsRegistryApi.loadDetector(newId).subscribe({
             next: () => {
-              this.submitting = false;
+              this.submitting.set(false);
               this.created.emit(newId);
             },
             error: () => {
               // Model exists in registry even if load failed; still emit.
-              this.submitting = false;
+              this.submitting.set(false);
               this.created.emit(newId);
             },
           });
         },
         error: (err) => {
-          this.submitting = false;
-          this.error = err.error?.error || 'Failed to create detector from labelset';
+          this.submitting.set(false);
+          this.error.set(err.error?.error || 'Failed to create detector from labelset');
         },
       });
   }
@@ -880,54 +881,56 @@ export class NewDetectorModalComponent implements OnInit {
       return;
     }
 
-    const trimmedName = this.name.trim();
+    const trimmedName = this.name().trim();
     if (!trimmedName) {
-      this.error = 'Name is required';
+      this.error.set('Name is required');
       return;
     }
 
     // Accept pending text as the text example on submit
-    const pendingTrimmed = this.pendingText.trim();
-    if (this.exampleType !== 'media' && pendingTrimmed) {
-      this.exampleType = 'text';
-      this.exampleValue = pendingTrimmed;
-      this.exampleDisplay = pendingTrimmed;
+    const pendingTrimmed = this.pendingText().trim();
+    if (this.exampleType() !== 'media' && pendingTrimmed) {
+      this.exampleType.set('text');
+      this.exampleValue.set(pendingTrimmed);
+      this.exampleDisplay.set(pendingTrimmed);
     }
 
-    if (!this.exampleType) {
-      this.error = 'An example (text or media) is required';
+    if (!this.exampleType()) {
+      this.error.set('An example (text or media) is required');
       return;
     }
 
-    this.submitting = true;
-    this.error = '';
+    this.submitting.set(true);
+    this.error.set('');
 
-    const textQuery = this.exampleType === 'text' ? this.exampleValue : '';
-    const mediaExample = this.exampleType === 'media' ? this.exampleValue : '';
-    const examplesPayload = [{ type: this.exampleType!, value: this.exampleValue }];
+    const exampleType = this.exampleType();
+    const exampleValue = this.exampleValue();
+    const textQuery = exampleType === 'text' ? exampleValue : '';
+    const mediaExample = exampleType === 'media' ? exampleValue : '';
+    const examplesPayload = [{ type: exampleType!, value: exampleValue }];
 
     this.detectorsRegistryApi
       .registerDetector({
         name: trimmedName,
-        media_type: this.mediaType,
+        media_type: this.mediaType(),
         text_query: textQuery,
         media_example: mediaExample,
         examples: examplesPayload,
       })
       .subscribe({
         next: (resp: any) => {
-          this.submitting = false;
+          this.submitting.set(false);
           this.created.emit(resp?.detector?.id || '');
         },
         error: (err) => {
-          this.submitting = false;
-          this.error = err.error?.error || 'Failed to create detector';
+          this.submitting.set(false);
+          this.error.set(err.error?.error || 'Failed to create detector');
         },
       });
   }
 
   getMediaTypeLabel(typeId: string): string {
-    const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
+    const mt = this.mediaTypeInfos().find((m) => m.type_id === typeId);
     if (mt) {
       return mt.name.trim();
     }
@@ -936,22 +939,25 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** "Image Example", "Audio Example", "Media Example" as a fallback. */
   get exampleColumnLabel(): string {
-    const name = this.mediaType ? this.getMediaTypeLabel(this.mediaType) : '';
+    const mediaType = this.mediaType();
+    const name = mediaType ? this.getMediaTypeLabel(mediaType) : '';
     return `${name || 'Media'} Example`;
   }
 
   /** "Browse Images...", "Browse Audio...", "Browse Media..." as a fallback. */
   get browseMediaLabel(): string {
-    const name = this.mediaType ? this.getMediaTypeLabel(this.mediaType) : '';
+    const mediaType = this.mediaType();
+    const name = mediaType ? this.getMediaTypeLabel(mediaType) : '';
     if (!name) return 'Browse Media...';
     // audio and text don't take a plural -s in this context.
-    const uncountable = this.mediaType === 'audio' || this.mediaType === 'text';
+    const uncountable = mediaType === 'audio' || mediaType === 'text';
     return `Browse ${uncountable ? name : name + 's'}...`;
   }
 
   /** "Drop an image file here", "Drop a video file here", etc. */
   get dropMediaLabel(): string {
-    const name = this.mediaType ? this.getMediaTypeLabel(this.mediaType) : '';
+    const mediaType = this.mediaType();
+    const name = mediaType ? this.getMediaTypeLabel(mediaType) : '';
     if (!name) return 'Drop a media file here';
     const lower = name.toLowerCase();
     const article = /^[aeiou]/.test(lower) ? 'an' : 'a';
@@ -959,7 +965,7 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   getMediaTypeIcon(typeId: string): string {
-    const mt = this.mediaTypeInfos.find((m) => m.type_id === typeId);
+    const mt = this.mediaTypeInfos().find((m) => m.type_id === typeId);
     return mt?.icon || '';
   }
 

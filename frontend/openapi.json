@@ -13909,7 +13909,7 @@
     },
     "/{path}": {
       "get": {
-        "description": "The Angular build output (main.js, polyfills.js, styles.css, etc.) is\nreferenced from index.html with ``<base href=\"/\">``, so the browser\nrequests them at ``/main.js`` rather than ``/static/main.js``.  This\nroute serves those files when they exist, and falls back to\n``index.html`` for any other path so that Angular Router can handle\nclient-side navigation.\n\nPaths under ``/api/`` are excluded; unmatched API routes should\nreturn 404, not the SPA page.",
+        "description": "The Angular build output (main.js, styles.css, etc.) is\nreferenced from index.html with ``<base href=\"/\">``, so the browser\nrequests them at ``/main.js`` rather than ``/static/main.js``.  This\nroute serves those files when they exist, and falls back to\n``index.html`` for any other path so that Angular Router can handle\nclient-side navigation.\n\nPaths under ``/api/`` are excluded; unmatched API routes should\nreturn 404, not the SPA page.",
         "operationId": "catch_all",
         "responses": {
           "default": {

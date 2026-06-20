@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, effect, inject, input, output } from '@angular/core';
+import { Component, OnDestroy, OnInit, effect, inject, input, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -65,11 +65,15 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   /** Emitted when the user marks the selection Verified Bad. */
   readonly verifyBad = output<void>();
 
-  count = 0;
+  // These four are template-bound and written from the selection-refresh and
+  // settings `effect()`s and the metadata-cache `version$` subscribe — none of
+  // which schedule CD for a plain field under zoneless — so they are signals.
+  // (`sortMode` stays plain: it is only written from the bound `(ngModelChange)`.)
+  readonly count = signal(0);
   sortMode: SelectionSortMode = 'time-desc';
-  viewMode: 'grid' | 'list' = 'grid';
-  gridGoalWidth = 80;
-  sortedEntries: SelectionEntry[] = [];
+  readonly viewMode = signal<'grid' | 'list'>('grid');
+  readonly gridGoalWidth = signal(80);
+  readonly sortedEntries = signal<SelectionEntry[]>([]);
 
   private ids: number[] = [];
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
@@ -104,7 +108,7 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.subs.push(
       this.metadataCache.version$.subscribe(() => {
-        this.sortedEntries = this.buildSortedEntries();
+        this.sortedEntries.set(this.buildSortedEntries());
       }),
     );
     this.settingsState.load();
@@ -116,16 +120,16 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   private refreshSelection(): void {
     this.ids = this.selection.ids();
-    this.count = this.ids.length;
+    this.count.set(this.ids.length);
     this.metadataCache.ensureLoaded(this.ids);
-    this.sortedEntries = this.buildSortedEntries();
+    this.sortedEntries.set(this.buildSortedEntries());
   }
 
   private applyViewPrefs(): void {
     const mediaType = this.mediaType();
     if (!mediaType) return;
-    this.viewMode = this.viewModeRightDict[mediaType] ?? 'grid';
-    this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[mediaType] ?? 'M');
+    this.viewMode.set(this.viewModeRightDict[mediaType] ?? 'grid');
+    this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[mediaType] ?? 'M'));
   }
 
   private buildSortedEntries(): SelectionEntry[] {
@@ -165,11 +169,11 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   onSortChange(mode: SelectionSortMode): void {
     this.sortMode = mode;
-    this.sortedEntries = this.buildSortedEntries();
+    this.sortedEntries.set(this.buildSortedEntries());
   }
 
   get isGrid(): boolean {
-    return this.viewMode === 'grid';
+    return this.viewMode() === 'grid';
   }
 
   clear(): void {
@@ -178,13 +182,13 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   /** Ask the browse view to mark the selected items Verified Good and drop them. */
   onVerifyGood(): void {
-    if (this.count === 0) return;
+    if (this.count() === 0) return;
     this.verifyGood.emit();
   }
 
   /** Ask the browse view to mark the selected items Verified Bad and drop them. */
   onVerifyBad(): void {
-    if (this.count === 0) return;
+    if (this.count() === 0) return;
     this.verifyBad.emit();
   }
 

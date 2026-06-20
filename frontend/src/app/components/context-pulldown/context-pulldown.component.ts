@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject, input } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject, input } from '@angular/core';
 
 import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -57,6 +57,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private pulldownControl = inject(PulldownControlService);
   private dashboardColumns = inject(DashboardColumnsService);
   private runningJobs = inject(RunningJobsService);
+  private cdr = inject(ChangeDetectorRef);
 
   readonly kind = input<PulldownKind>('dataset');
 
@@ -109,6 +110,9 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       .subscribe(() => this.rebuildRows());
     this.datasetState.error$.pipe(takeUntil(this.destroy$)).subscribe((err) => {
       this.registryError = err;
+      // Written from an async subscribe; notify the scheduler so the error row
+      // repaints under zoneless.
+      this.cdr.markForCheck();
     });
 
     this.newThingFlows.created$.pipe(takeUntil(this.destroy$)).subscribe(({ kind, id }) => {
@@ -214,6 +218,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       this.focusedIndex = i >= 0 ? i : -1;
     }
     setTimeout(() => this.scrollFocusedIntoView(), 0);
+    // `openMenu` is also driven by the `pulldownControl.openSignal$` subscribe
+    // (an unpatched callback), so notify the scheduler to open the menu under
+    // zoneless. (Calls from bound click/keydown handlers already schedule CD.)
+    this.cdr.markForCheck();
   }
 
   close(): void {
@@ -421,6 +429,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       if (i !== -1) this.focusedIndex = i;
       else if (this.focusedIndex >= this.rows.length) this.focusedIndex = -1;
     }
+    // Driven by the registry `datasets$`/`detectors$`/`intentPair$`/`busyPairs$`
+    // subscribes (unpatched callbacks), so notify the scheduler to repaint the
+    // row list / active-name chip under zoneless.
+    this.cdr.markForCheck();
   }
 
   private datasetRow(

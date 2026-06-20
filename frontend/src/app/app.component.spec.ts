@@ -100,7 +100,7 @@ describe('AppComponent', () => {
 
   it('should disable dataset-dependent items when not on label view', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.componentInstance.isOnLabelView = false;
+    fixture.componentInstance.isOnLabelView.set(false);
     fixture.detectChanges();
     const items = fixture.nativeElement.querySelectorAll('.burger-item');
     // Only Dashboard is dataset-dependent and gets disabled off the label view.
@@ -113,7 +113,7 @@ describe('AppComponent', () => {
 
   it('should enable dataset-dependent items when on label view', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.componentInstance.isOnLabelView = true;
+    fixture.componentInstance.isOnLabelView.set(true);
     fixture.detectChanges();
     const items = fixture.nativeElement.querySelectorAll('.burger-item');
     expect(items[0].classList).not.toContain('disabled');
@@ -126,7 +126,7 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     const router = TestBed.inject(Router);
     vi.spyOn(router, 'navigate').mockResolvedValue(true);
-    fixture.componentInstance.isOnLabelView = false;
+    fixture.componentInstance.isOnLabelView.set(false);
     fixture.componentInstance.onDashboard();
     expect(router.navigate).not.toHaveBeenCalled();
   });
@@ -135,7 +135,7 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     const router = TestBed.inject(Router);
     vi.spyOn(router, 'navigate').mockResolvedValue(true);
-    fixture.componentInstance.isOnLabelView = true;
+    fixture.componentInstance.isOnLabelView.set(true);
     fixture.componentInstance.onDashboard();
     expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
     expect(fixture.componentInstance.menuOpen).toBe(false);
@@ -165,7 +165,7 @@ describe('AppComponent', () => {
     vi.spyOn(mediaState, 'mediasSignal').mockReturnValue([
       { id: 1, media_type: 'image' },
     ]);
-    fixture.componentInstance.isOnLabelView = true;
+    fixture.componentInstance.isOnLabelView.set(true);
     fixture.componentInstance.onSettings();
     expect(fixture.componentInstance.settingsViewTab).toBe('image');
   });
@@ -180,7 +180,7 @@ describe('AppComponent', () => {
     vi.spyOn(datasetState, 'detectors', 'get').mockReturnValue([
       { id: 'm1', name: 'M1', media_type: 'audio' },
     ]);
-    fixture.componentInstance.isOnLabelView = false;
+    fixture.componentInstance.isOnLabelView.set(false);
     fixture.componentInstance.onSettings();
     expect(fixture.componentInstance.settingsViewTab).toBe('audio');
   });
@@ -193,7 +193,7 @@ describe('AppComponent', () => {
       { id: 'd2', name: 'DS2', media_type: 'image' },
     ]);
     vi.spyOn(datasetState, 'detectors', 'get').mockReturnValue([]);
-    fixture.componentInstance.isOnLabelView = false;
+    fixture.componentInstance.isOnLabelView.set(false);
     fixture.componentInstance.onSettings();
     expect(fixture.componentInstance.settingsViewTab).toBe('');
   });

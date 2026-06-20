@@ -179,22 +179,22 @@ describe('LeftPanelComponent', () => {
 
     it('derives the type label from the first grid item', () => {
       setMedias([stub('audio')]);
-      expect(component.mediaTypeName).toBe('Audio');
+      expect(component.mediaTypeName()).toBe('Audio');
     });
 
     it('resets to "Media" when the grid empties (no stale type label)', () => {
       setMedias([stub('audio')]);
-      expect(component.mediaTypeName).toBe('Audio');
+      expect(component.mediaTypeName()).toBe('Audio');
       // Switching to an empty grid must clear the previous type, not keep it.
       setMedias([]);
-      expect(component.mediaTypeName).toBe('Media');
+      expect(component.mediaTypeName()).toBe('Media');
     });
 
     it('re-derives when the grid switches media type', () => {
       setMedias([stub('audio')]);
-      expect(component.mediaTypeName).toBe('Audio');
+      expect(component.mediaTypeName()).toBe('Audio');
       setMedias([stub('image')]);
-      expect(component.mediaTypeName).toBe('Image');
+      expect(component.mediaTypeName()).toBe('Image');
     });
 
     it('upgrades from the fallback to the display name when type metadata loads after the grid', async () => {
@@ -205,7 +205,7 @@ describe('LeftPanelComponent', () => {
       // The grid populates before the getMediaTypes() request resolves, so the
       // header first shows the capitalized fallback.
       setMedias([stub('audio')]);
-      expect(component.mediaTypeName).toBe('Audio');
+      expect(component.mediaTypeName()).toBe('Audio');
 
       // Metadata arrives late with a custom display name: the header must
       // upgrade instead of staying stuck on the fallback. The resource value
@@ -214,7 +214,7 @@ describe('LeftPanelComponent', () => {
       const req = httpMock.expectOne((r) => r.url.includes('/api/media-types'));
       req.flush({ media_types: [{ type_id: 'audio', name: 'Sound Clips' }] });
       await settleResource();
-      expect(component.mediaTypeName).toBe('Sound Clips');
+      expect(component.mediaTypeName()).toBe('Sound Clips');
     });
   });
 });

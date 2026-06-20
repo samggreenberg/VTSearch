@@ -5,8 +5,8 @@
     [style.top.px]="top"
   >
     <div class="hover-count">{{ count }} {{ count === 1 ? 'item' : 'items' }}</div>
-    @if (textContent) {
-      <div class="hover-text">{{ textContent }}</div>
+    @if (textContent()) {
+      <div class="hover-text">{{ textContent() }}</div>
     }
   </div>
 }

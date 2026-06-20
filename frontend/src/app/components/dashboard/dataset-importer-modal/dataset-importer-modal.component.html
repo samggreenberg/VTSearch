@@ -3,17 +3,17 @@
     [visibleImporterTabs]="visibleImporterTabs"
     [importersForActiveTab]="importersForActiveTab"
     [activeImporterTabLabel]="activeImporterTabLabel"
-    [activeTab]="activeImporterTab"
+    [activeTab]="activeImporterTab()"
     (activeTabChange)="selectImporterTab($event)"
-    [selectedImporter]="selectedImporter"
+    [selectedImporter]="selectedImporter()"
     (importerSelected)="selectImporter($event)"
     [activePickerView]="activePickerView"
-    [mediaTypes]="mediaTypes"
-    [demos]="demos"
+    [mediaTypes]="mediaTypes()"
+    [demos]="demos()"
     [filteredDemos]="filteredDemos"
-    [demoLoading]="demoLoading"
-    [demoTabs]="demoTabs"
-    [activeDemoTab]="activeTab"
+    [demoLoading]="demoLoading()"
+    [demoTabs]="demoTabs()"
+    [activeDemoTab]="activeTab()"
     (activeDemoTabChange)="selectDemoTabWithEmbedder($event)"
     [demoCols]="demoCols"
     [showDemoMediaTypeTabs]="false"
@@ -31,9 +31,9 @@
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="demo-media-type"
-          [mediaType]="activeTab"
+          [mediaType]="activeTab()"
           (mediaTypeChange)="selectDemoTabWithEmbedder($event)"
-          [mediaTypeOptions]="demoTabs"
+          [mediaTypeOptions]="demoTabs()"
           [mediaTypeOptionLabels]="mediaTypeLabels"
           [mediaTypeOptionIcons]="demoMediaTypeIcons"
         ></vt-import-config>
@@ -53,20 +53,20 @@
         />
       </div>
 
-      @if (demoEmbedders.length > 1 || demoClippers.length > 1) {
+      @if (demoEmbedders().length > 1 || demoClippers().length > 1) {
         <div class="form-group form-group--section">
           <vt-import-advanced
             [availableConverters]="[]"
             [nativeType]="''"
             [typeLabels]="mediaTypeLabels"
-            [embedders]="demoEmbedders"
-            [clippers]="demoClippers"
+            [embedders]="demoEmbedders()"
+            [clippers]="demoClippers()"
             [showSourceSpecs]="false"
             [sourceSpecs]="[]"
-            [selectedEmbedder]="selectedDemoEmbedder"
+            [selectedEmbedder]="selectedDemoEmbedder()"
             (selectedEmbedderChange)="onDemoEmbedderChange($event)"
-            [lockedEmbedder]="lockedEmbedderFor(activeTab, demoEmbedders)"
-            [selectedClipper]="selectedDemoClipper"
+            [lockedEmbedder]="lockedEmbedderFor(activeTab(), demoEmbedders())"
+            [selectedClipper]="selectedDemoClipper()"
             [selectedClipperParams]="{}"
             (clipperChooserRequested)="openClipperChooser('demo')"
             [buildProjection]="buildProjection"
@@ -80,12 +80,12 @@
       @if (!effectiveSoloMediaType) {
         <vt-import-config
           mediaTypeFieldId="sf-media-type"
-          [mediaType]="sfMediaType"
+          [mediaType]="sfMediaType()"
           (mediaTypeChange)="sfOnMediaTypeChange($event)"
           [mediaTypeOptions]="sfMediaTypeOptions"
           [mediaTypeOptionLabels]="mediaTypeOptionLabels"
           [mediaTypeOptionIcons]="mediaTypeOptionIcons"
-          [detectionHint]="detectionHint(sfDetection)"
+          [detectionHint]="detectionHint(sfDetection())"
         ></vt-import-config>
       }
     </ng-container>
@@ -153,24 +153,24 @@
           [availableConverters]="sfAvailableConverters"
           [nativeType]="sfOutputTypeId"
           [typeLabels]="mediaTypeLabels"
-          [embedders]="sfEmbedders"
-          [clippers]="sfClippers"
+          [embedders]="sfEmbedders()"
+          [clippers]="sfClippers()"
           [showSourceSpecs]="true"
-          [sourceSpecs]="sfSourceSpecs"
+          [sourceSpecs]="sfSourceSpecs()"
           (sourceSpecsChange)="onSfSpecsChange($event)"
-          [selectedEmbedder]="sfSelectedEmbedder"
-          (selectedEmbedderChange)="sfSelectedEmbedder = $event"
-          [lockedEmbedder]="lockedEmbedderFor(sfMediaType, sfEmbedders)"
-          [selectedClipper]="sfSelectedClipper"
-          [selectedClipperParams]="sfClipperParamValues"
+          [selectedEmbedder]="sfSelectedEmbedder()"
+          (selectedEmbedderChange)="sfSelectedEmbedder.set($event)"
+          [lockedEmbedder]="lockedEmbedderFor(sfMediaType(), sfEmbedders())"
+          [selectedClipper]="sfSelectedClipper()"
+          [selectedClipperParams]="sfClipperParamValues()"
           (clipperChooserRequested)="openClipperChooser('sf')"
           [buildProjection]="buildProjection"
           (buildProjectionChange)="buildProjection = $event"
         ></vt-import-advanced>
       </div>
 
-      @if (sfBrowseError) {
-        <p class="error-text">{{ sfBrowseError }}</p>
+      @if (sfBrowseError()) {
+        <p class="error-text">{{ sfBrowseError() }}</p>
       }
     </ng-container>
 
@@ -230,32 +230,32 @@
           [availableConverters]="lfAvailableConverters"
           [nativeType]="lfOutputTypeId"
           [typeLabels]="mediaTypeLabels"
-          [embedders]="lfEmbedders"
-          [clippers]="lfClippers"
+          [embedders]="lfEmbedders()"
+          [clippers]="lfClippers()"
           [showSourceSpecs]="true"
           [sourceSpecs]="lfSourceSpecs"
           (sourceSpecsChange)="onLfSpecsChange($event)"
-          [selectedEmbedder]="lfSelectedEmbedder"
-          (selectedEmbedderChange)="lfSelectedEmbedder = $event"
-          [lockedEmbedder]="lockedEmbedderFor(lfMediaType, lfEmbedders)"
-          [selectedClipper]="lfSelectedClipper"
-          [selectedClipperParams]="lfClipperParamValues"
+          [selectedEmbedder]="lfSelectedEmbedder()"
+          (selectedEmbedderChange)="lfSelectedEmbedder.set($event)"
+          [lockedEmbedder]="lockedEmbedderFor(lfMediaType, lfEmbedders())"
+          [selectedClipper]="lfSelectedClipper()"
+          [selectedClipperParams]="lfClipperParamValues()"
           (clipperChooserRequested)="openClipperChooser('lf')"
           [buildProjection]="buildProjection"
           (buildProjectionChange)="buildProjection = $event"
         ></vt-import-advanced>
       </div>
 
-      @if (lfError) {
-        <p class="error-text">{{ lfError }}</p>
+      @if (lfError()) {
+        <p class="error-text">{{ lfError() }}</p>
       }
     </ng-container>
   </vt-source-picker>
 
-  @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter) {
+  @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {
     <div class="importer-form">
-      @if (selectedImporter.fields && selectedImporter.fields.length > 0) {
-        @for (field of selectedImporter.fields; track field.key) {
+      @if ((selectedImporter()?.fields?.length ?? 0) > 0) {
+        @for (field of selectedImporter()!.fields; track field.key) {
           @if (field.field_type === 'select' && field.key === 'media_type') {
             @if (!effectiveSoloMediaType) {
               <vt-import-config
@@ -303,20 +303,20 @@
                 [id]="'field-' + field.key"
                 class="form-select"
                 [(ngModel)]="formValues[field.key]"
-                [disabled]="!!dynamicFieldLoading[field.key] || (!!field.dynamic_options && optionsFor(field).length === 0)"
+                [disabled]="!!dynamicFieldLoading()[field.key] || (!!field.dynamic_options && optionsFor(field).length === 0)"
                 (ngModelChange)="onFormFieldChanged(field.key)"
               >
-                @if (field.dynamic_options && dynamicFieldLoading[field.key]) {
+                @if (field.dynamic_options && dynamicFieldLoading()[field.key]) {
                   <option [value]="''" disabled>Loading…</option>
-                } @else if (field.dynamic_options && optionsFor(field).length === 0 && !dynamicFieldError[field.key]) {
+                } @else if (field.dynamic_options && optionsFor(field).length === 0 && !dynamicFieldError()[field.key]) {
                   <option [value]="''" disabled>No options available</option>
                 }
                 @for (opt of optionsFor(field); track opt) {
                   <option [value]="opt">{{ opt }}</option>
                 }
               </select>
-              @if (field.dynamic_options && dynamicFieldError[field.key]) {
-                <p class="error-text">{{ dynamicFieldError[field.key] }}</p>
+              @if (field.dynamic_options && dynamicFieldError()[field.key]) {
+                <p class="error-text">{{ dynamicFieldError()[field.key] }}</p>
               }
             } @else if (field.key === 'dataset_name') {
               <input
@@ -388,33 +388,33 @@
           [availableConverters]="formAvailableConverters"
           [nativeType]="formOutputTypeId"
           [typeLabels]="mediaTypeLabels"
-          [embedders]="availableEmbedders"
-          [clippers]="availableClippers"
+          [embedders]="availableEmbedders()"
+          [clippers]="availableClippers()"
           [showSourceSpecs]="true"
           [sourceSpecs]="formSourceSpecs"
           (sourceSpecsChange)="onFormSpecsChange($event)"
-          [selectedEmbedder]="selectedEmbedder"
-          (selectedEmbedderChange)="selectedEmbedder = $event"
-          [lockedEmbedder]="lockedEmbedderFor(formOutputTypeId, availableEmbedders)"
-          [selectedClipper]="selectedClipper"
-          [selectedClipperParams]="clipperParamValues"
+          [selectedEmbedder]="selectedEmbedder()"
+          (selectedEmbedderChange)="selectedEmbedder.set($event)"
+          [lockedEmbedder]="lockedEmbedderFor(formOutputTypeId, availableEmbedders())"
+          [selectedClipper]="selectedClipper()"
+          [selectedClipperParams]="clipperParamValues()"
           (clipperChooserRequested)="openClipperChooser('form')"
           [buildProjection]="buildProjection"
           (buildProjectionChange)="buildProjection = $event"
         ></vt-import-advanced>
       </div>
 
-      @if (error) {
-        <p class="error-text">{{ error }}</p>
+      @if (error()) {
+        <p class="error-text">{{ error() }}</p>
       }
     </div>
   }
 
-  @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter) {
+  @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="submit()" [disabled]="submitting || !formCanSubmit">
-        @if (submitting) {
+      <button class="btn btn--primary" (click)="submit()" [disabled]="submitting() || !formCanSubmit">
+        @if (submitting()) {
           Importing...
         } @else {
           Import
@@ -423,11 +423,11 @@
     </div>
   }
 
-  @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter) {
+  @if ((activePickerView === 'local_folder' || activePickerView === 'local_files') && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="lfSubmit()" [disabled]="lfSubmitting || lfFiles.length === 0">
-        @if (lfSubmitting) {
+      <button class="btn btn--primary" (click)="lfSubmit()" [disabled]="lfSubmitting() || lfFiles.length === 0">
+        @if (lfSubmitting()) {
           Uploading...
         } @else {
           Upload &amp; Import
@@ -436,11 +436,11 @@
     </div>
   }
 
-  @if (activePickerView === 'server_folder' && selectedImporter) {
+  @if (activePickerView === 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
-      <button class="btn btn--primary" (click)="sfSubmit()" [disabled]="sfSubmitting || !sfAbsolutePath">
-        @if (sfSubmitting) {
+      <button class="btn btn--primary" (click)="sfSubmit()" [disabled]="sfSubmitting() || !sfAbsolutePath">
+        @if (sfSubmitting()) {
           Importing...
         } @else {
           Import
@@ -449,7 +449,7 @@
     </div>
   }
 
-  @if (activePickerView === 'demo' && selectedImporter) {
+  @if (activePickerView === 'demo' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>
       <button class="btn btn--primary" (click)="submitDemo()" [disabled]="!selectedDemo">Import</button>

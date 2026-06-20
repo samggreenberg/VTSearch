@@ -1,18 +1,18 @@
 <vt-modal title="Load Sort" [open]="true" (closed)="close()">
-  @if (loading) {
+  @if (loading()) {
     <p class="empty-state">Loading detectors…</p>
-  } @else if (showMediaPicker) {
+  } @else if (showMediaPicker()) {
     <div class="media-picker">
       <button class="btn btn--secondary btn--sm back-btn" (click)="closeMediaPicker()" title="Return to sort options">&larr; Back</button>
 
       <!-- Source selection -->
-      @if (mediaPickerView === 'sources') {
+      @if (mediaPickerView() === 'sources') {
         <p class="picker-instructions">Choose a source to browse media from:</p>
-        @if (browseLoading) {
+        @if (browseLoading()) {
           <p class="empty-state">Loading media sources…</p>
         } @else {
           <div class="source-list">
-            @for (src of mediaSources; track src.name) {
+            @for (src of mediaSources(); track src.name) {
               <button class="importer-card" (click)="selectSource(src)">
                 <span class="importer-name">@if (src.icon) {<span class="importer-icon"><vt-icon [icon]="src.icon"></vt-icon></span> }{{ src.display_name || src.name }}</span>
                 @if (src.description) {
@@ -25,13 +25,13 @@
       }
 
       <!-- Browse items (demo list or server media files) -->
-      @if (mediaPickerView === 'browse-items') {
+      @if (mediaPickerView() === 'browse-items') {
         <p class="picker-instructions">Select an item from <strong>{{ selectedSource?.display_name || selectedSource?.name }}</strong>:</p>
-        @if (browseLoading) {
+        @if (browseLoading()) {
           <p class="empty-state">Loading items from {{ selectedSource?.display_name || selectedSource?.name }}…</p>
-        } @else if (browseItems.length > 0) {
+        } @else if (browseItems().length > 0) {
           <div class="browse-list">
-            @for (item of browseItems; track item.key) {
+            @for (item of browseItems(); track item.key) {
               <button class="browse-item" (click)="selectBrowseItem(item)" [title]="item.key">
                 {{ item.display || item.key }}
               </button>
@@ -43,7 +43,7 @@
       }
 
       <!-- Typed path for example media -->
-      @if (mediaPickerView === 'file-browser') {
+      @if (mediaPickerView() === 'file-browser') {
         <div class="file-browser-step">
           @if (selectedSource?.name === 'demo') {
             <button class="btn btn--secondary btn--sm back-btn" (click)="backFromFileBrowser()" title="Return to the demo list">&larr; Back to demo list</button>
@@ -61,13 +61,13 @@
           <button
             type="button"
             class="btn btn--primary"
-            [disabled]="fileLoading || !typedPath.trim()"
+            [disabled]="fileLoading() || !typedPath.trim()"
             (click)="submitTypedPath()"
           >
-            @if (fileLoading) { Loading… } @else { Load }
+            @if (fileLoading()) { Loading… } @else { Load }
           </button>
-          @if (typedPathError) {
-            <p class="error-text">{{ typedPathError }}</p>
+          @if (typedPathError()) {
+            <p class="error-text">{{ typedPathError() }}</p>
           }
         </div>
       }
@@ -77,9 +77,9 @@
       <!-- Sort by Trained Detector -->
       <div class="sort-section">
         <h3 title="Load a trained detector and use it to find matching items in the active dataset">Sort by Detector</h3>
-        @if (registryModels.length > 0) {
+        @if (registryModels().length > 0) {
           <div class="file-list">
-            @for (model of registryModels; track model.id) {
+            @for (model of registryModels(); track model.id) {
               <button class="file-item" (click)="loadRegistryModel(model)" [title]="'Load detector: ' + model.name">
                 {{ model.name }}
                 @if (model.num_training) {
@@ -101,10 +101,10 @@
           <input type="file" (change)="onMediaFileSelected($event)" hidden />
         </label>
         <button class="btn btn--secondary file-btn" (click)="openMediaPicker()" title="Browse server media sources to pick an example file">Browse media sources...</button>
-        @if (serverMediaFiles.length > 0) {
+        @if (serverMediaFiles().length > 0) {
           <h4 class="subhead" title="Example media files available on the server">Server Example Media</h4>
           <div class="file-list">
-            @for (file of serverMediaFiles; track file.name) {
+            @for (file of serverMediaFiles(); track file.name) {
               <button class="file-item" (click)="loadServerMedia(file.filename || file.name)" [title]="'Sort by example: ' + (file.filename || file.name)">{{ file.filename || file.name }}</button>
             }
           </div>
@@ -112,11 +112,11 @@
       </div>
     </div>
 
-    @if (status) {
-      <p class="status-text">{{ status }}</p>
+    @if (status()) {
+      <p class="status-text">{{ status() }}</p>
     }
-    @if (error) {
-      <p class="error-text">{{ error }}</p>
+    @if (error()) {
+      <p class="error-text">{{ error() }}</p>
     }
   }
 </vt-modal>
