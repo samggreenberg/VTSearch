@@ -14,7 +14,12 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Callable
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
-from vtscore.embedding.media_vectors import ensure_embeddings_dict, set_media_embedding
+from vtscore.embedding.media_vectors import (
+    ensure_embeddings_dict,
+    media_embedder_names,
+    media_embedding,
+    set_media_embedding,
+)
 
 from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
 
@@ -67,15 +72,19 @@ def embed_missing(  # noqa: C901
     load pipeline drops them via :func:`_drop_none_embeddings_stage`.
     Patch-region tensors are also attached here for embedders that
     report ``supports_patch_regions``.
-    """
-    missing = [(mid, m) for mid, m in medias.items() if m.get("embedding") is None]
 
-    # Resolve the media type from the items that need work.  Prefer the
-    # unembedded items, but fall back to any media so the patch-region
-    # back-fill below can run even when every image already carries an
-    # embedding (e.g. a pre-embedded pickle or content-vector importer bound
-    # to a patch embedder).
-    media_type = _first_media_type(missing) or _first_media_type(medias.items())
+    Multi-embedder note: "missing" and the patch / structural back-fills are
+    keyed to *this* embedder's per-media vector (``media["embeddings"][name]``,
+    via :func:`media_embedding`), not the singular ``media["embedding"]``
+    mirror.  So a second bound embedder run over an already-text-embedded
+    dataset still embeds every item (it has no vector under its own key yet)
+    without disturbing the first embedder's vectors.
+    """
+    # Resolve the media type from any media so the patch-region back-fill
+    # below can run even when every image already carries an embedding (e.g. a
+    # pre-embedded pickle or content-vector importer bound to a patch
+    # embedder).  Homogeneous datasets share one media type.
+    media_type = _first_media_type(medias.items())
     if not media_type:
         return
 
@@ -107,6 +116,22 @@ def embed_missing(  # noqa: C901
     if emb is None:
         return
 
+    # Which items still need *this* embedder's vector.
+    #
+    # When the caller named an embedder explicitly (the bound-set driver and
+    # the reload path both do), "missing" is keyed to that embedder's own
+    # per-media entry, so a second bound embedder embeds items the first
+    # already covered (their singular vector belongs to the first model).
+    #
+    # When no embedder was named (bare default-resolution call), keep the
+    # legacy contract: only items with *no* vector at all are embedded, so a
+    # dataset already populated by some other source isn't re-embedded under
+    # the resolved default.
+    if embedder_name:
+        missing = [(mid, m) for mid, m in medias.items() if media_embedding(m, emb.name) is None]
+    else:
+        missing = [(mid, m) for mid, m in medias.items() if m.get("embedding") is None]
+
     # Patch-capable embedders attach a per-image HAC region tree + patch grid
     # alongside the CLS ``embedding``.  That side-channel must exist for any
     # image *this* embedder produced but that lacks ``patch_regions`` - not
@@ -120,13 +145,11 @@ def embed_missing(  # noqa: C901
     patch_capable = getattr(emb, "supports_patch_regions", False) is True
 
     def _needs_patch(m: dict[str, Any]) -> bool:
-        # Match the embedder so we never re-pool regions for an image whose
-        # CLS embedding came from a different model.
-        return (
-            m.get("embedding") is not None
-            and m.get("patch_regions") is None
-            and m.get("embedder") in (None, "", emb.name)
-        )
+        # This embedder must have produced a CLS vector for the image (so we
+        # never re-pool regions for an image it never embedded), but key off
+        # its own per-embedder entry rather than the singular mirror: in a
+        # multi-embedder dataset the mirror may belong to a *different* model.
+        return media_embedding(m, emb.name) is not None and m.get("patch_regions") is None
 
     # Structural embedders (SIFT/VLAD) attach a per-image keypoint+descriptor set
     # alongside the VLAD ``embedding``, on the same back-fill terms as patch
@@ -136,11 +159,7 @@ def embed_missing(  # noqa: C901
     structural_capable = getattr(emb, "supports_geometric_verification", False) is True
 
     def _needs_local_features(m: dict[str, Any]) -> bool:
-        return (
-            m.get("embedding") is not None
-            and m.get("local_features") is None
-            and m.get("embedder") in (None, "", emb.name)
-        )
+        return media_embedding(m, emb.name) is not None and m.get("local_features") is None
 
     has_patch_backfill = patch_capable and any(_needs_patch(m) for m in medias.values())
     has_structural_backfill = structural_capable and any(_needs_local_features(m) for m in medias.values())
@@ -250,17 +269,50 @@ def _attach_patch_regions_to_media(media: dict, patch_out) -> None:
     media["patch_grid"] = patch_out.patch_grid.astype(np.float16, copy=False)
 
 
+def _ordered_load_embedders(medias: dict[int, dict[str, Any]], requested: str) -> list[str]:
+    """Resolve the ordered set of embedders to run over *medias* at load.
+
+    The *requested* embedder (the create-time pick, if any) leads, followed by
+    any embedders already present on the medias that it doesn't cover — the
+    reload case, where a v3 pickle restores one vector per bound embedder under
+    ``media["embeddings"]`` and each must have its in-memory patch / structural
+    side-channels re-derived.
+
+    Returns ``[requested]`` (possibly ``[""]``, which lets
+    :func:`embed_missing` resolve the media-type default) when the medias carry
+    no embedder yet — the single-embedder create path, unchanged.
+    """
+    names: list[str] = []
+    if requested:
+        names.append(requested)
+    for m in medias.values():
+        present = media_embedder_names(m)
+        if present:
+            for name in present:
+                if name not in names:
+                    names.append(name)
+            break
+    return names or [requested]
+
+
 def _embed_missing_stage(
     ctx: DatasetContext,
     tracker,
     embedder_name: str,
 ) -> None:
-    """Pipeline wrapper around :func:`embed_missing` with tracker-routed progress."""
+    """Run every bound embedder over the context's medias (tracker-routed progress).
+
+    Single-embedder datasets resolve to one name and behave exactly as before;
+    a dataset bound to both a text and a patch embedder runs each in turn, so
+    ``media["embeddings"]`` carries a per-embedder vector and the patch
+    embedder also populates ``patch_regions`` / ``patch_grid``.
+    """
 
     def _emb_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
         tracker.check_cancelled()
         step = _STATUS_TO_STEP.get(status, _STATUS_TO_STEP["embedding"])
         tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
 
-    embed_missing(ctx.medias, embedder_name, on_progress=_emb_progress)
+    for name in _ordered_load_embedders(ctx.medias, embedder_name):
+        embed_missing(ctx.medias, name, on_progress=_emb_progress)
     invalidate_embedding_matrix(ctx)

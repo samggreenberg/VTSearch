@@ -156,6 +156,24 @@ def _embedding_for_pickle(embedding: Any) -> np.ndarray | None:
     return np.ascontiguousarray(embedding, dtype=np.float32)
 
 
+def _embeddings_dict_for_pickle(embeddings: Any) -> dict[str, np.ndarray] | None:
+    """Coerce a per-embedder ``{name: vector}`` map to compact ``float32`` arrays.
+
+    Returns ``None`` when there is nothing to store (no dict / empty), so a
+    legacy single-vector media adds no key to the pickle and a v3 media carries
+    one entry per bound embedder.  Entries whose vector coerces to ``None`` are
+    dropped.
+    """
+    if not isinstance(embeddings, dict) or not embeddings:
+        return None
+    out: dict[str, np.ndarray] = {}
+    for name, vec in embeddings.items():
+        coerced = _embedding_for_pickle(vec)
+        if name and coerced is not None:
+            out[name] = coerced
+    return out or None
+
+
 def export_dataset_to_file(
     medias: dict[int, dict[str, Any]],
     *,
@@ -217,6 +235,11 @@ def export_dataset_to_file(
             "md5": media["md5"],
             "embedder": media.get("embedder", ""),
             "embedding": _embedding_for_pickle(media["embedding"]),
+            # Per-embedder vectors (v3 three-slot model).  A single-embedder
+            # dataset writes a one-entry dict that the load side re-keys back;
+            # a text+patch dataset writes both, which the singular ``embedding``
+            # mirror alone could not round-trip.
+            "embeddings": _embeddings_dict_for_pickle(media.get("embeddings")),
             "filename": media.get("filename", f"media_{cid}.wav"),
             "category": media.get("category", "unknown"),
             "origin": media.get("origin"),
@@ -240,9 +263,25 @@ def export_dataset_to_file(
     pickle.dump(data, pkl_buf, protocol=_PICKLE_PROTOCOL)
     medias_pkl_bytes = pkl_buf.getvalue()
 
+    # Role-typed binding slots (v3): derived from the embedders actually
+    # present on the medias, so a text+patch dataset records both.  The legacy
+    # singular ``embedder`` is kept for older readers and the dashboard.  On
+    # reload the binding is re-derived from each media's ``embeddings`` keys, so
+    # these meta fields are informational (read_meta / external tooling), not
+    # the load-time source of truth.
+    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
+
+    text_embedder = patch_embedder = None
+    if medias:
+        first = next(iter(medias.values()))
+        text_embedder, patch_embedder = derive_binding_from_names(media_embedder_names(first))
+
     meta = {
         "format_version": 1,
         "embedder": embedder,
+        "text_embedder": text_embedder,
+        "patch_embedder": patch_embedder,
         "clipper": clipper,
         "media_type": media_type,
         "name": name,

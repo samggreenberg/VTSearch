@@ -11,6 +11,7 @@ import numpy as np
 
 from vtscore.embedding.media_vectors import (
     ensure_embeddings_dict,
+    media_embedder_names,
     media_embedding,
     primary_embedder_name,
     set_media_embedding,
@@ -111,3 +112,27 @@ def test_primary_embedder_name():
     assert primary_embedder_name({"embedder": "siglip"}) == "siglip"
     assert primary_embedder_name({"embeddings": {"clap": _vec(1)}}) == "clap"
     assert primary_embedder_name({}) is None
+
+
+class TestMediaEmbedderNames:
+    def test_empty(self):
+        assert media_embedder_names({}) == []
+
+    def test_singular_only(self):
+        assert media_embedder_names({"embedding": _vec(1), "embedder": "siglip"}) == ["siglip"]
+
+    def test_dict_keys(self):
+        media = {"embeddings": {"siglip": _vec(1), "dinov3_patch": _vec(2)}}
+        assert set(media_embedder_names(media)) == {"siglip", "dinov3_patch"}
+
+    def test_recorded_primary_ordered_first(self):
+        media = {
+            "embeddings": {"siglip": _vec(1), "dinov3_patch": _vec(2)},
+            "embedder": "dinov3_patch",
+        }
+        assert media_embedder_names(media) == ["dinov3_patch", "siglip"]
+
+    def test_dict_takes_precedence_over_singular_embedder(self):
+        media = {"embeddings": {"a": _vec(1)}, "embedder": "siglip"}
+        # "siglip" isn't a dict key, so it doesn't get prepended; the dict wins.
+        assert media_embedder_names(media) == ["a"]

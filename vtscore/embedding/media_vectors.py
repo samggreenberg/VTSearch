@@ -37,6 +37,26 @@ def primary_embedder_name(media: dict[str, Any]) -> str | None:
     return None
 
 
+def media_embedder_names(media: dict[str, Any]) -> list[str]:
+    """Return every embedder name that has a vector on *media*, primary first.
+
+    Reads the keys of ``media["embeddings"]`` (the dict-keyed form) and falls
+    back to the singular ``media["embedder"]`` when no dict is present.  The
+    recorded primary embedder is ordered first so role derivation and the
+    primary-vector mirror agree on which embedder leads.
+    """
+    embs = media.get(EMBEDDINGS_KEY)
+    if isinstance(embs, dict) and embs:
+        names = list(embs.keys())
+        primary = media.get("embedder")
+        if primary and primary in names:
+            names.remove(primary)
+            names.insert(0, primary)
+        return names
+    name = primary_embedder_name(media)
+    return [name] if name else []
+
+
 def media_embedding(media: dict[str, Any], embedder_name: str | None = None) -> Any:
     """Return the embedding vector for *embedder_name*, or the primary one.
 
