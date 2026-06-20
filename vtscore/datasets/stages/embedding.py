@@ -116,10 +116,21 @@ def embed_missing(  # noqa: C901
     if emb is None:
         return
 
-    # Items lacking *this* embedder's vector.  Keyed to the per-embedder
-    # accessor, not the singular mirror, so a second embedder embeds items the
-    # first already covered (their singular vector belongs to the first model).
-    missing = [(mid, m) for mid, m in medias.items() if media_embedding(m, emb.name) is None]
+    # Which items still need *this* embedder's vector.
+    #
+    # When the caller named an embedder explicitly (the bound-set driver and
+    # the reload path both do), "missing" is keyed to that embedder's own
+    # per-media entry, so a second bound embedder embeds items the first
+    # already covered (their singular vector belongs to the first model).
+    #
+    # When no embedder was named (bare default-resolution call), keep the
+    # legacy contract: only items with *no* vector at all are embedded, so a
+    # dataset already populated by some other source isn't re-embedded under
+    # the resolved default.
+    if embedder_name:
+        missing = [(mid, m) for mid, m in medias.items() if media_embedding(m, emb.name) is None]
+    else:
+        missing = [(mid, m) for mid, m in medias.items() if m.get("embedding") is None]
 
     # Patch-capable embedders attach a per-image HAC region tree + patch grid
     # alongside the CLS ``embedding``.  That side-channel must exist for any
