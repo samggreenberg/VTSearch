@@ -78,8 +78,7 @@ def validate_binding(text_embedder: str | None, patch_embedder: str | None) -> N
         supports_text, _ = _capabilities(text_embedder)
         if not supports_text:
             raise ValueError(
-                f"text_embedder {text_embedder!r} does not support text queries "
-                "(no supports_text capability)"
+                f"text_embedder {text_embedder!r} does not support text queries (no supports_text capability)"
             )
     if patch_embedder is not None:
         _, supports_patch = _capabilities(patch_embedder)

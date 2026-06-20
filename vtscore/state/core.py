@@ -356,9 +356,7 @@ class DatasetContext:
     # Role-typed embedder binding
     # ------------------------------------------------------------------
 
-    def bind_embedders(
-        self, *, text_embedder: str | None = None, patch_embedder: str | None = None
-    ) -> None:
+    def bind_embedders(self, *, text_embedder: str | None = None, patch_embedder: str | None = None) -> None:
         """Explicitly bind role-typed embedders to this dataset.
 
         Validates that each slot points at an embedder with the matching
