@@ -699,19 +699,34 @@ above it.
   every consumer (sorting / scoring / find / projection / training /
   positives-browse) funnels through, so routing can later request the right
   embedder per operation.
+- **Phase 2b.2 - dataset binding (in-memory).** `DatasetContext` gains
+  `text_embedder` / `patch_embedder` slots plus derived `supports_text` /
+  `supports_patch_regions` properties (today there is no dataset-level embedder
+  field at all; the embedder is recorded per-media).  By default the pair is
+  *derived* on demand from the dataset's medias - the single embedder a pre-v3
+  dataset was loaded with, role-typed against its capability flags by
+  `vtscore.embedding.binding.derive_binding`.  `bind_embedders()` sets an
+  explicit, validated pair for genuinely multi-embedder datasets (overrides the
+  derivation).  This is *in-memory only*: no pickle/registry/meta schema change,
+  no routing rewire, no frontend.  Persistence rides along with the loader
+  multi-embed slice (2b.3), where a real second vector exists to persist; the
+  documented `meta["embedder"]` → slot migration lands there.
 
 **Remaining, in order:**
 
-- **Phase 2b.2 - dataset binding.** Add `text_embedder` / `patch_embedder`
-  slots (today there is no dataset-level embedder field at all; the embedder is
-  recorded per-media).  `dataset.supports_text` / `supports_patch_regions`
-  become derived from which slot is filled.  See "Dataset binding" above.
 - **Phase 2b.3 - loader multi-embed.** Run both bound embedders at ingest so
   `media["embeddings"]` / `patch_regions` / `patch_grid` carry a per-embedder
   entry each.  See "Loader / exporter / importer impact".
 - **Phase 2b.4 - routing.** Wire the routing table (text sort → `text_embedder`;
   cosine/region ops → `patch_embedder`); pass the resolved embedder name into
   the now-embedder-aware matrix layer at each consumer.  See "Routing rules".
+  **Watch the single-vector gap:** a `*_single` embedder (e.g. `dinov2_single`,
+  `supports_text=False`, `supports_patch_regions=False`) binds *neither* role
+  slot, so the routing table's "patch_embedder if set, else text_embedder" rule
+  resolves to nothing for those datasets.  The 2b.2 binding leaves them working
+  via each media's primary vector (the per-media read path is untouched);
+  routing must keep a primary-vector fallback for cosine sort / MLP scoring on
+  no-slot datasets rather than 400-ing them.
 - **Phase 2b.5 - MLP keying.** Key MLPs by `(detector, dataset, embedder)`.
   See "Detector MLP keying".
 - **Phase 2c - drop the singular mirror.** Once every read site routes through
