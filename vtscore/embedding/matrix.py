@@ -80,12 +80,15 @@ def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None
     Returns ``([], np.empty((0, 0), dtype=np.float32))`` when the dataset is
     empty.  Raises ``ValueError`` if any media lacks the requested vector.
     """
+    # Phase 1 (locked): snapshot the media refs and serve a cache hit. The
+    # expensive _stack_embeddings build runs OUTSIDE the lock (phase 2) so a
+    # large primary or named-embedder build cannot hold _state_lock across the
+    # numpy stack and stall every other request's before_request state-sync.
     with _state_lock:
         sorted_ids = sorted(ctx.medias.keys())
         if embedder_name is None:
-            cached_ids = ctx._emb_matrix_ids
             cached_matrix = ctx._emb_matrix
-            if cached_matrix is not None and cached_ids == sorted_ids:
+            if cached_matrix is not None and ctx._emb_matrix_ids == sorted_ids:
                 return list(sorted_ids), cached_matrix
 
         if not sorted_ids:
@@ -95,12 +98,22 @@ def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None
                 return [], ctx._emb_matrix
             return [], np.empty((0, 0), dtype=np.float32)
 
-        matrix = _stack_embeddings(sorted_ids, ctx.medias, embedder_name)
+        # Shallow ref-copy so the build below reads a stable view even if
+        # ctx.medias is reassigned concurrently (cheap: pointers, not vectors).
+        medias_snapshot = dict(ctx.medias)
 
-        if embedder_name is None:
-            ctx._emb_matrix_ids = sorted_ids
-            ctx._emb_matrix = matrix
-        return list(sorted_ids), matrix
+    # Phase 2 (unlocked): the heavy contiguous (N, D) build.
+    matrix = _stack_embeddings(sorted_ids, medias_snapshot, embedder_name)
+
+    # Phase 3 (locked): repopulate the primary cache, double-checking the id
+    # set still matches so a media mutation during the unlocked build cannot
+    # cache a stale matrix. The named path never touches the cache.
+    if embedder_name is None:
+        with _state_lock:
+            if sorted(ctx.medias.keys()) == sorted_ids:
+                ctx._emb_matrix_ids = sorted_ids
+                ctx._emb_matrix = matrix
+    return list(sorted_ids), matrix
 
 
 def get_embedding_submatrix(
@@ -118,13 +131,17 @@ def get_embedding_submatrix(
     Returns ``([], np.empty((0, 0), dtype=np.float32))`` when nothing matches.
     Raises ``ValueError`` if any requested media lacks the requested vector.
     """
+    # Snapshot just the requested rows under the lock, then build the matrix
+    # outside it so a large subset stack does not hold _state_lock across the
+    # numpy build (see get_embedding_matrix for the rationale).
     with _state_lock:
         medias = ctx.medias
         sorted_ids = sorted({cid for cid in ids if cid in medias})
         if not sorted_ids:
             return [], np.empty((0, 0), dtype=np.float32)
+        medias_snapshot = {cid: medias[cid] for cid in sorted_ids}
 
-        return sorted_ids, _stack_embeddings(sorted_ids, medias, embedder_name)
+    return sorted_ids, _stack_embeddings(sorted_ids, medias_snapshot, embedder_name)
 
 
 def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
