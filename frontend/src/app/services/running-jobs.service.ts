@@ -1,7 +1,7 @@
 import { Injectable, OnDestroy, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, Subject, timer } from 'rxjs';
-import { catchError, distinctUntilChanged, map, switchMap, takeUntil } from 'rxjs/operators';
+import { catchError, distinctUntilChanged, exhaustMap, map, takeUntil, timeout } from 'rxjs/operators';
 
 /**
  * One entry returned by ``GET /api/jobs/active``.
@@ -42,7 +42,11 @@ export function pairKey(datasetId: string, detectorId: string): string {
 export class RunningJobsService implements OnDestroy {
   private http = inject(HttpClient);
 
-  private readonly intervalMs = 3000;
+  private readonly intervalMs = 5000;
+  // Bound a single poll so a hung backend request cannot stall the
+  // pipeline forever; on timeout we emit empty (clear spinners) and the
+  // next tick retries.
+  private readonly requestTimeoutMs = 10000;
   private readonly busyPairsSubject = new BehaviorSubject<Map<string, string[]>>(new Map());
   private readonly stopPolling$ = new Subject<void>();
   private readonly destroy$ = new Subject<void>();
@@ -98,12 +102,18 @@ export class RunningJobsService implements OnDestroy {
       .pipe(
         takeUntil(this.stopPolling$),
         takeUntil(this.destroy$),
-        switchMap(() =>
+        // exhaustMap (not switchMap): while one /api/jobs/active request
+        // is in flight, ignore further ticks instead of aborting and
+        // re-issuing. A slow or wedged backend then sees at most one poll
+        // at a time, not a growing pile of aborted requests that exhaust
+        // the worker's threads. timeout() bounds a hung request.
+        exhaustMap(() =>
           this.http.get<ActiveJobsResponse>('/api/jobs/active').pipe(
+            timeout(this.requestTimeoutMs),
             catchError(() => {
-              // A transient registry-fetch failure should not tear the
-              // polling pipeline down; the next tick will retry. Emit
-              // an empty payload so the UI clears any stale spinners.
+              // A transient failure (or the timeout above) should not
+              // tear the polling pipeline down; the next tick retries.
+              // Emit an empty payload so the UI clears stale spinners.
               return [{ busy_pairs: [] } as ActiveJobsResponse];
             }),
           ),
