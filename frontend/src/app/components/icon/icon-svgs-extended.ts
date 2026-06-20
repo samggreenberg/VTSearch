@@ -81,10 +81,10 @@ export const EXTENDED_ICON_SVGS: Record<string, string> = {
   // achievement.
   clock:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="12" x2="16.8" y2="9.2"/><line x1="12" y1="12" x2="8.4" y2="9.5"/></svg>',
-  // Outline of a running man, mid-stride (one leg forward, one pushing off;
-  // arms swinging). Backs the "Marathoner" achievement.
+  // Outline of a running man mid-stride (head, driving arms, forward/trailing
+  // legs). Backs the "Marathoner" achievement.
   running:
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="4" r="2"/><path d="M14 6 10.5 12.5"/><path d="M10.5 12.5 13 15.5 12 20"/><path d="M10.5 12.5 7.5 15 5.5 17"/><path d="M12.5 8.5 15.5 10 16 6.5"/><path d="M12.5 8.5 9 9.5 7.5 12"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg>',
   // Blank daily calendar page: rounded rectangle with a header rule and two
   // ring bindings crossing the top edge. Backs the "Your Days are Numbered"
   // achievement.
