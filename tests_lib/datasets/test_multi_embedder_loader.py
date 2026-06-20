@@ -9,7 +9,6 @@ a pickle save/reload round-trip.  Single-embedder datasets are unchanged.
 from __future__ import annotations
 
 import unittest.mock as mock
-from pathlib import Path
 
 import numpy as np
 
