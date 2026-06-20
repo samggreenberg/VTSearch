@@ -8,16 +8,19 @@ offending cid instead.
 
 from __future__ import annotations
 
+import threading
+
 import numpy as np
 import pytest
 
+from vtscore.embedding import matrix as matrix_mod
 from vtscore.embedding.matrix import (
     get_embedding_matrix,
     get_embedding_matrix_for_snap,
     get_embedding_submatrix,
     invalidate_embedding_matrix,
 )
-from vtscore.state.core import DatasetContext, set_thread_dataset_context
+from vtscore.state.core import DatasetContext, _state_lock, set_thread_dataset_context
 
 
 class TestGetEmbeddingMatrixRaisesOnNoneEmbedding:
@@ -211,3 +214,69 @@ class TestGetEmbeddingMatrixForSnapRaisesOnNoneEmbedding:
         snap = {cid: ctx.medias[cid] for cid in ctx.medias}
         with pytest.raises(ValueError, match=r"media 2.*has no embedding"):
             get_embedding_matrix_for_snap(snap)
+
+
+class TestEmbeddingMatrixLockScoping:
+    """The contiguous (N, D) build must run OUTSIDE ``_state_lock``.
+
+    Holding the global state lock across ``_stack_embeddings`` lets a large
+    (or multi-embedder named-path) build stall every other request's
+    ``before_request`` state-sync, which also takes ``_state_lock``, on the
+    single worker. These guard against re-introducing the in-lock build.
+    """
+
+    def _ctx(self) -> DatasetContext:
+        ctx = DatasetContext("test_lock_scoping")
+        for cid in (1, 2, 3, 4):
+            ctx.medias[cid] = {"id": cid, "embedding": np.full(4, float(cid), dtype=np.float32)}
+        return ctx
+
+    def _assert_lock_free_during_build(self, monkeypatch, call) -> None:
+        real_stack = matrix_mod._stack_embeddings
+        lock_was_free = threading.Event()
+
+        def probing_stack(sorted_ids, source, embedder_name):
+            def grab():
+                if _state_lock.acquire(timeout=2.0):
+                    lock_was_free.set()
+                    _state_lock.release()
+
+            t = threading.Thread(target=grab)
+            t.start()
+            t.join(3.0)
+            return real_stack(sorted_ids, source, embedder_name)
+
+        monkeypatch.setattr(matrix_mod, "_stack_embeddings", probing_stack)
+        call()
+        assert lock_was_free.is_set(), "_state_lock was held across the matrix build"
+
+    def test_get_embedding_matrix_builds_outside_state_lock(self, monkeypatch):
+        ctx = self._ctx()  # fresh context -> cache miss -> reaches the build
+        self._assert_lock_free_during_build(monkeypatch, lambda: get_embedding_matrix(ctx))
+
+    def test_get_embedding_submatrix_builds_outside_state_lock(self, monkeypatch):
+        ctx = self._ctx()
+        self._assert_lock_free_during_build(
+            monkeypatch, lambda: get_embedding_submatrix(ctx, [1, 2, 3, 4])
+        )
+
+    def test_stale_matrix_not_cached_when_medias_change_during_build(self, monkeypatch):
+        """Phase-3 double-check: a media-set change during the unlocked build
+        must NOT populate the primary cache with the now-stale matrix.
+        """
+        ctx = self._ctx()
+        real_stack = matrix_mod._stack_embeddings
+
+        def mutating_stack(sorted_ids, source, embedder_name):
+            built = real_stack(sorted_ids, source, embedder_name)
+            # A concurrent media insert lands while we build outside the lock.
+            ctx.medias[99] = {"id": 99, "embedding": np.full(4, 9.0, dtype=np.float32)}
+            return built
+
+        monkeypatch.setattr(matrix_mod, "_stack_embeddings", mutating_stack)
+        ids, mat = get_embedding_matrix(ctx)
+
+        assert ids == [1, 2, 3, 4]
+        assert mat.shape == (4, 4)
+        # Cache must not hold the stale [1,2,3,4] build now that medias changed.
+        assert ctx._emb_matrix_ids != [1, 2, 3, 4]
