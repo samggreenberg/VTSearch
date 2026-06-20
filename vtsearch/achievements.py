@@ -33,7 +33,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from vtsearch.auth import get_current_user
@@ -64,14 +64,14 @@ ACHIEVEMENTS: list[dict[str, Any]] = [
     },
     {
         "id": "detectors_trained",
-        "name": "Detector Collector",
+        "name": "Teacher's Pet",
         "description": "Each detector you trained, counted on its first vote.",
         "icon": "graduation",
         "tiers": [2, 20, 200, 2000],
     },
     {
         "id": "detectors_imported",
-        "name": "Detector Getter",
+        "name": "Detector Collector",
         "description": "Detectors built up from imported labels.",
         "icon": "robot",
         "tiers": [1, 10, 100, 1000],
@@ -81,13 +81,13 @@ ACHIEVEMENTS: list[dict[str, Any]] = [
         "name": "Finders Keepers",
         "description": "Media items scored by Find (GUI and CLI combined).",
         "icon": "search",
-        "tiers": [200, 2000, 20000, 200000],
+        "tiers": [2000, 20000, 200000, 2000000],
     },
     {
         "id": "days_active",
         "name": "Your Days are Numbered",
-        "description": "Distinct UTC calendar days on which you cast at least one vote.",
-        "icon": "lightning",
+        "description": "Distinct calendar days on which you cast at least one vote.",
+        "icon": "calendar",
         "tiers": [2, 20, 200, 2000],
     },
     {
@@ -100,15 +100,15 @@ ACHIEVEMENTS: list[dict[str, Any]] = [
     {
         "id": "vote_streak",
         "name": "Marathoner",
-        "description": "Longest run of consecutive votes with at most a 10-minute gap between any two.",
-        "icon": "flask",
+        "description": "Longest run of consecutive votes with at most a 10-minute gap.",
+        "icon": "running",
         "tiers": [200, 400, 600, 1000],
     },
     {
         "id": "hours_voted",
         "name": "Around the Clock",
-        "description": "Distinct hours of the day (UTC, 0-23) in which you've cast at least one vote.",
-        "icon": "steering-wheel",
+        "description": "Distinct hours of the day (0-23) in which you've cast at least one vote.",
+        "icon": "clock",
         "tiers": [6, 12, 20, 24],
     },
     {
@@ -148,7 +148,8 @@ MEDIA_TYPES: list[dict[str, str]] = [
     {"id": "document", "name": "Document"},
 ]
 
-#: Hours of the day (UTC) tracked by the "Around the Clock" achievement.
+#: Hours of the day tracked by the "Around the Clock" achievement, bucketed
+#: in the voter's local wall-clock time (see :func:`_user_tz_offset_minutes`).
 HOURS_OF_DAY: tuple[int, ...] = tuple(range(24))
 
 #: Readme Reader docs.  Each entry pairs a doc with the code phrase printed at
@@ -287,19 +288,55 @@ def wipe_state() -> None:
     mutate_user(_apply)
 
 
+def _user_tz_offset_minutes() -> int:
+    """Minutes to subtract from UTC to reach the voter's local wall-clock time.
+
+    Read from the ``X-Timezone-Offset`` request header, which the frontend
+    sets to the browser's ``Date.prototype.getTimezoneOffset()`` value (the
+    difference, in minutes, between UTC and local time: positive west of UTC,
+    negative east of it).  Subtracting it from a UTC instant yields the user's
+    local wall clock, so the "Around the Clock" hours and "Your Days are
+    Numbered" days bucket by the time the user actually saw on their screen.
+
+    Returns 0 (i.e. UTC) when there is no request context or header — CLI
+    runs, background threads, and tests all fall back to UTC.
+    """
+    try:
+        from flask import request
+
+        raw = request.headers.get("X-Timezone-Offset")
+    except RuntimeError:
+        # No Flask request context (CLI mode, background thread, etc.)
+        return 0
+    if raw is None:
+        return 0
+    try:
+        offset = int(raw)
+    except (TypeError, ValueError):
+        return 0
+    # Clamp to the real-world range (UTC-14 .. UTC+14) so a malformed or
+    # hostile header can't shove buckets into nonsense values.
+    return max(-14 * 60, min(14 * 60, offset))
+
+
 def record_vote(
     detector_id: str = "",
     media_type: str = "",
     *,
     now: float | None = None,
+    tz_offset_minutes: int | None = None,
 ) -> None:
     """Record one user vote and credit every vote-driven achievement.
 
     Credits ``votes_cast`` always, ``detectors_trained`` on a detector's first
     vote, ``media_types_touched`` on a media type's first vote, ``days_active``
-    on the first vote of each UTC calendar day, ``hours_voted`` on the first
-    vote within each UTC hour-of-day bucket, and updates the ``vote_streak``
+    on the first vote of each local calendar day, ``hours_voted`` on the first
+    vote within each local hour-of-day bucket, and updates the ``vote_streak``
     watermark (longest run of consecutive votes with gaps ≤ 10 minutes).
+
+    Days and hours bucket by the voter's local wall-clock time, resolved from
+    the request's timezone offset (see :func:`_user_tz_offset_minutes`), so the
+    milestones reflect the clock the user actually saw rather than UTC.
 
     Args:
         detector_id: ID of the detector the vote belongs to.  Empty string
@@ -309,13 +346,17 @@ def record_vote(
             ``media_types_touched`` credit.
         now: Override the current unix timestamp (seconds since epoch); only
             used by tests.  Default uses :func:`time.time`.
+        tz_offset_minutes: Override the local-time offset (UTC minus local, in
+            minutes) instead of reading it from the request header; only used
+            by tests.  Default resolves :func:`_user_tz_offset_minutes`.
     """
     if _is_disabled():
         return
     ts = time.time() if now is None else float(now)
-    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
-    date_str = dt.strftime("%Y-%m-%d")
-    hour = dt.hour
+    offset = _user_tz_offset_minutes() if tz_offset_minutes is None else int(tz_offset_minutes)
+    local_dt = datetime.fromtimestamp(ts, tz=timezone.utc) - timedelta(minutes=offset)
+    date_str = local_dt.strftime("%Y-%m-%d")
+    hour = local_dt.hour
 
     mutate_user(lambda cache: _credit_vote(cache, ts, detector_id, media_type, date_str, hour))
 

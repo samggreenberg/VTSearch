@@ -104,7 +104,7 @@
                   <li
                     class="hour-chip"
                     [class.hour-chip--on]="h.seen"
-                    [attr.aria-label]="(h.seen ? 'voted at ' : 'no vote at ') + h.hour + ':00 UTC'">
+                    [attr.aria-label]="(h.seen ? 'voted at ' : 'no vote at ') + h.hour + ':00'">
                     {{ h.hour.toString().padStart(2, '0') }}
                   </li>
                 }

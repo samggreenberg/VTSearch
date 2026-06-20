@@ -297,6 +297,40 @@ class TestHoursVoted:
         assert seen_hours == {0, 9, 23}
 
 
+class TestLocalTimezoneBucketing:
+    """days_active / hours_voted bucket by the voter's local wall clock.
+
+    ``tz_offset_minutes`` follows the JS ``getTimezoneOffset`` convention
+    (UTC minus local, in minutes): positive west of UTC, negative east.
+    """
+
+    def test_hour_shifts_into_local_time_east(self):
+        # 02:00 UTC at UTC+2 (offset -120) is 04:00 local.
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 2), tz_offset_minutes=-120)
+        hours = achievements.get_full_state()["hours"]
+        assert {h["hour"] for h in hours if h["seen"]} == {4}
+
+    def test_hour_shifts_into_local_time_west(self):
+        # 02:00 UTC at UTC-3 (offset 180) is 23:00 local on the prior day.
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 2), tz_offset_minutes=180)
+        state = achievements.get_full_state()
+        assert {h["hour"] for h in state["hours"] if h["seen"]} == {23}
+
+    def test_day_rolls_back_across_local_midnight(self):
+        # 02:00 UTC on the 13th at UTC-3 lands on the 12th locally, while
+        # 12:00 UTC the same day is still the 13th locally — two distinct
+        # local days even though they share a UTC date.
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 2), tz_offset_minutes=180)
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 12), tz_offset_minutes=180)
+        assert _by_id(achievements.get_full_state(), "days_active")["counter"] == 2
+
+    def test_offset_defaults_to_utc_without_request(self):
+        # No tz_offset_minutes and no request context → UTC bucketing.
+        achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 2))
+        hours = achievements.get_full_state()["hours"]
+        assert {h["hour"] for h in hours if h["seen"]} == {2}
+
+
 class TestVoteStreak:
     def test_single_vote_streak_is_one(self):
         achievements.record_vote("det", "audio", now=_ts(2026, 5, 13, 12))

@@ -76,6 +76,20 @@ export const EXTENDED_ICON_SVGS: Record<string, string> = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="4" x2="15" y2="4"/><line x1="3" y1="9" x2="13" y2="9"/><line x1="3" y1="14" x2="11" y2="14"/><line x1="3" y1="19" x2="9" y2="19"/><polyline points="19 10 19 20"/><polyline points="16 17 19 20 22 17"/></svg>',
   'steering-wheel':
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><line x1="12" y1="4" x2="12" y2="1"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="4" y1="12" x2="1" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/><line x1="6.34" y1="6.34" x2="4.22" y2="4.22"/><line x1="17.66" y1="6.34" x2="19.78" y2="4.22"/><line x1="6.34" y1="17.66" x2="4.22" y2="19.78"/><line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/></svg>',
+  // Analog clock whose hands point to 10:10 (hour hand toward 10, minute hand
+  // toward 2) — the classic display-watch pose. Backs the "Around the Clock"
+  // achievement.
+  clock:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="12" x2="16.8" y2="9.2"/><line x1="12" y1="12" x2="8.4" y2="9.5"/></svg>',
+  // Outline of a running man, mid-stride (one leg forward, one pushing off;
+  // arms swinging). Backs the "Marathoner" achievement.
+  running:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="4" r="2"/><path d="M14 6 10.5 12.5"/><path d="M10.5 12.5 13 15.5 12 20"/><path d="M10.5 12.5 7.5 15 5.5 17"/><path d="M12.5 8.5 15.5 10 16 6.5"/><path d="M12.5 8.5 9 9.5 7.5 12"/></svg>',
+  // Blank daily calendar page: rounded rectangle with a header rule and two
+  // ring bindings crossing the top edge. Backs the "Your Days are Numbered"
+  // achievement.
+  calendar:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><line x1="4" y1="9" x2="20" y2="9"/><line x1="9" y1="3" x2="9" y2="7"/><line x1="15" y1="3" x2="15" y2="7"/></svg>',
   'cloud-upload':
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
   'thumbs-up':
