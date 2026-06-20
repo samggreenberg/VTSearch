@@ -711,12 +711,31 @@ above it.
   no routing rewire, no frontend.  Persistence rides along with the loader
   multi-embed slice (2b.3), where a real second vector exists to persist; the
   documented `meta["embedder"]` → slot migration lands there.
+- **Phase 2b.3 - loader multi-embed.** The embed stage
+  (`vtscore/datasets/stages/embedding.py`) now runs the *set* of bound
+  embedders, not a single one: `_embed_missing_stage` resolves an ordered
+  embedder list via `_ordered_load_embedders` (the create-time pick leads,
+  followed by any embedders already present on the medias for the reload
+  back-fill) and calls `embed_missing` once per name.  `embed_missing`'s
+  "missing" and patch/structural back-fill detection are keyed to *that*
+  embedder's per-media vector (via `media_embedding(m, name)`) when a name is
+  given, so a second bound embedder embeds items the first already covered
+  without disturbing them; a bare default-resolution call keeps the legacy
+  "embed only the un-embedded" contract.  The binding derives from the full
+  set of embedder names present (`media_embedder_names` →
+  `derive_binding_from_names`), so a reloaded text+patch dataset recovers both
+  slots, not just the recorded primary.  Persistence rides along:
+  `export_dataset_to_file` serialises `media["embeddings"]` (one entry per
+  bound embedder) and records the role-typed slots in `meta`
+  (`text_embedder` / `patch_embedder`); the pickle loader re-keys the dict on
+  load, and a legacy single-vector pickle materialises its dict from the
+  singular mirror via `ensure_embeddings_dict`.  `patch_regions` / `patch_grid`
+  stay singular (the binding allows only one patch embedder, so per-embedder
+  keying would be a ≤1-entry dict); dict-keying them is deferred to whenever a
+  second patch slot is actually allowed.  See "Open follow-ups".
 
 **Remaining, in order:**
 
-- **Phase 2b.3 - loader multi-embed.** Run both bound embedders at ingest so
-  `media["embeddings"]` / `patch_regions` / `patch_grid` carry a per-embedder
-  entry each.  See "Loader / exporter / importer impact".
 - **Phase 2b.4 - routing.** Wire the routing table (text sort → `text_embedder`;
   cosine/region ops → `patch_embedder`); pass the resolved embedder name into
   the now-embedder-aware matrix layer at each consumer.  See "Routing rules".
@@ -732,6 +751,30 @@ above it.
 - **Phase 2c - drop the singular mirror.** Once every read site routes through
   the accessor with an explicit embedder, remove the `media["embedding"]`
   primary mirror (read-time re-key on load handles old pickles).
+
+### Open follow-ups (from 2b.3)
+
+- **No create-time path to bind two embedders yet.** 2b.3 makes the loader,
+  exporter, and pickle reader multi-embedder-*correct* (and exercises it via
+  the embed driver + persistence round-trip), but the standard create flow
+  still passes one `embedder` field, so production datasets remain
+  single-embedder until the frontend dual-picker (under "Frontend" in the v3
+  design) threads a `(text_embedder, patch_embedder)` pair into the load
+  pipeline.  Wire that alongside or after routing (2b.4).
+- **`patch_regions` / `patch_grid` stay singular.** The binding allows at most
+  one patch embedder, so these remain single-valued (owned by that embedder)
+  rather than dict-keyed.  Only revisit if "more than one patch embedder per
+  dataset" ever comes off the v3 non-goals list.
+- **Combine Datasets pair-match guard not added.** `combine_datasets` still
+  guards only on media type, not on the `(text_embedder, patch_embedder)`
+  pair (a pre-existing latitude — it never checked the single `embedder`
+  either).  Since nothing can create a two-embedder dataset yet, this is
+  harmless today; add the strict pair-match refusal (v3 design open question
+  #2) when the dual-picker lands.
+- **NPZ per-embedder layout (`vectors_<name>`) not added.** The `server_files`
+  NPZ importer still carries a single `vectors` array; the per-embedder layout
+  in "Loader / exporter / importer impact" lands with the create-time
+  multi-embed path that would populate it.
 
 ## Phasing
 
