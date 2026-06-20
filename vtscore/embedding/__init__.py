@@ -6,6 +6,10 @@ package exposes thin call-sites used throughout the rest of VTSearch
 :mod:`vtscore.eval.runner`, etc.).
 """
 
+from vtscore.embedding.binding import (
+    derive_binding,
+    validate_binding,
+)
 from vtscore.embedding.helpers import (
     clear_text_query_cache,
     embed_audio_file,
@@ -54,4 +58,6 @@ __all__ = [
     "invalidate_embedding_matrix",
     "get_embedding_matrix_for_snap",
     "get_region_matrix_for_snap",
+    "derive_binding",
+    "validate_binding",
 ]
