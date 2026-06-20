@@ -583,8 +583,8 @@ class TestTiers:
         assert achievements.acknowledge("datasets_loaded", 0) is False
 
     def test_jumping_multiple_tiers_pends_each(self):
-        # find_media: 200 / 2000 / 20000 / 200000
-        achievements.record_find(2500)  # Bronze + Silver in one go
+        # find_media: 2000 / 20000 / 200000 / 2000000
+        achievements.record_find(25000)  # Bronze + Silver in one go
         state = achievements.get_full_state()
         pending = _pending_for(state, "find_media")
         assert [p["tier_idx"] for p in pending] == [0, 1]
@@ -644,7 +644,7 @@ class TestToasts:
         assert achievements.mark_toasted("datasets_loaded", 0) is False
 
     def test_jumping_multiple_tiers_pends_each_toast(self):
-        achievements.record_find(2500)  # Bronze + Silver in one go
+        achievements.record_find(25000)  # Bronze + Silver in one go
         state = achievements.get_full_state()
         assert [p["tier_idx"] for p in _toasts_for(state, "find_media")] == [0, 1]
 
