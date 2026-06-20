@@ -1,9 +1,11 @@
 # Patch-based Image Embedder - Design
 
-**Status:** V1 shipped, V2 shipped, **V3 in design (not started).** The design
+**Status:** V1 shipped, V2 shipped, **V3 in progress.** The design
 body below is the living spec for the shipped V1/V2 behaviour; the *V1 - DONE*
 and *V2 - DONE* closeouts are collapsed to struck-through lists. **Remaining
-work** is *V3 - design* (one text + one patch embedder per dataset).
+work** is *V3* (one text + one patch embedder per dataset); see
+"V3 - implementation status" under "V3 work plan" for what's landed and the
+ordered phases that remain.
 
 ## Status of related work
 
@@ -672,6 +674,49 @@ during impl.  Rough size estimate: backend ~2× v2 (schema +
 loader + per-embedder MLP keying), frontend ~0.5× v2 (just the
 dual-picker on dataset-create).  No new ML algorithms - v3 is
 plumbing, not modelling.
+
+### V3 - implementation status
+
+V3 lands as a sequence of behavior-preserving substrate phases (so each
+commit is reviewable and the single-embedder world keeps working) followed by
+the user-visible binding.  Ordering is by dependency: each phase needs the one
+above it.
+
+**Shipped:**
+
+- **Phase 2a - per-media accessor substrate.** `vtscore/embedding/media_vectors.py`:
+  `media["embeddings"]` (dict keyed by embedder name) is the forward
+  representation; the singular `media["embedding"]` is kept as the *primary
+  mirror / fallback* so the ~50 not-yet-converted read sites stay valid while
+  only one embedder is bound.  `embed_missing` writes through
+  `set_media_embedding`; the `matrix.py` chokepoint reads through
+  `media_embedding`.
+- **Phase 2b.1 - matrix layer made embedder-aware.** `get_embedding_matrix`,
+  `get_embedding_submatrix`, and `get_embedding_matrix_for_snap` take an
+  optional `embedder_name`.  Unset → the cached primary path (byte-for-byte the
+  old behaviour).  Set → a fresh, uncached matrix built from that bound
+  embedder's vectors via the accessor.  This is the aggregate read chokepoint
+  every consumer (sorting / scoring / find / projection / training /
+  positives-browse) funnels through, so routing can later request the right
+  embedder per operation.
+
+**Remaining, in order:**
+
+- **Phase 2b.2 - dataset binding.** Add `text_embedder` / `patch_embedder`
+  slots (today there is no dataset-level embedder field at all; the embedder is
+  recorded per-media).  `dataset.supports_text` / `supports_patch_regions`
+  become derived from which slot is filled.  See "Dataset binding" above.
+- **Phase 2b.3 - loader multi-embed.** Run both bound embedders at ingest so
+  `media["embeddings"]` / `patch_regions` / `patch_grid` carry a per-embedder
+  entry each.  See "Loader / exporter / importer impact".
+- **Phase 2b.4 - routing.** Wire the routing table (text sort → `text_embedder`;
+  cosine/region ops → `patch_embedder`); pass the resolved embedder name into
+  the now-embedder-aware matrix layer at each consumer.  See "Routing rules".
+- **Phase 2b.5 - MLP keying.** Key MLPs by `(detector, dataset, embedder)`.
+  See "Detector MLP keying".
+- **Phase 2c - drop the singular mirror.** Once every read site routes through
+  the accessor with an explicit embedder, remove the `media["embedding"]`
+  primary mirror (read-time re-key on load handles old pickles).
 
 ## Phasing
 

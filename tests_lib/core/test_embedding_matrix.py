@@ -101,6 +101,87 @@ class TestGetEmbeddingSubmatrix:
         assert ctx._emb_matrix_ids is None
 
 
+class TestEmbedderAwareMatrix:
+    """The matrix builders can source rows from a specific bound embedder.
+
+    A multi-embedder dataset carries ``media["embeddings"]`` (dict keyed by
+    embedder name); requesting an explicit name builds that embedder's matrix,
+    while the default (no name) follows the primary mirror.
+    """
+
+    def _ctx(self) -> DatasetContext:
+        ctx = DatasetContext("test_embedder_aware")
+        for cid in (1, 2, 3):
+            ctx.medias[cid] = {
+                "id": cid,
+                "embedder": "siglip",
+                "embedding": np.full(4, float(cid), dtype=np.float32),
+                "embeddings": {
+                    "siglip": np.full(4, float(cid), dtype=np.float32),
+                    "dinov3_patch": np.full(4, float(cid) + 100.0, dtype=np.float32),
+                },
+            }
+        return ctx
+
+    def test_named_embedder_selects_that_matrix(self):
+        ctx = self._ctx()
+        ids, mat = get_embedding_matrix(ctx, "dinov3_patch")
+        assert ids == [1, 2, 3]
+        assert mat[0, 0] == 101.0
+        assert mat[2, 0] == 103.0
+
+    def test_default_follows_primary(self):
+        ctx = self._ctx()
+        ids, mat = get_embedding_matrix(ctx)
+        assert mat[0, 0] == 1.0
+        assert mat[2, 0] == 3.0
+
+    def test_named_path_does_not_populate_cache(self):
+        """The named path is uncached; the primary cache stays untouched."""
+        ctx = self._ctx()
+        get_embedding_matrix(ctx, "dinov3_patch")
+        assert ctx._emb_matrix is None
+        assert ctx._emb_matrix_ids is None
+
+    def test_named_missing_vector_raises_with_embedder_name(self):
+        ctx = self._ctx()
+        del ctx.medias[2]["embeddings"]["dinov3_patch"]
+        ctx.medias[2]["embedder"] = "siglip"  # singular mirror is siglip's, not the requested one
+        with pytest.raises(ValueError, match=r"media 2.*has no embedding for 'dinov3_patch'"):
+            get_embedding_matrix(ctx, "dinov3_patch")
+
+    def test_submatrix_named_embedder(self):
+        ctx = self._ctx()
+        ids, mat = get_embedding_submatrix(ctx, [3, 1], "dinov3_patch")
+        assert ids == [1, 3]
+        assert mat[0, 0] == 101.0
+        assert mat[1, 0] == 103.0
+
+    def test_snap_named_embedder_matching_active_ctx(self):
+        ctx = self._ctx()
+        set_thread_dataset_context(ctx)
+        invalidate_embedding_matrix(ctx)
+        snap = {cid: ctx.medias[cid] for cid in ctx.medias}
+        ids, mat = get_embedding_matrix_for_snap(snap, "dinov3_patch")
+        assert ids == [1, 2, 3]
+        assert mat[0, 0] == 101.0
+        # Delegated to the context builder, but the named path must not cache.
+        assert ctx._emb_matrix is None
+
+    def test_snap_named_embedder_temp_dict(self):
+        # Active ctx empty → snap can't match → fresh-build path.
+        ctx = DatasetContext("test_snap_named_temp")
+        set_thread_dataset_context(ctx)
+        snap = {
+            10: {"embedder": "siglip", "embeddings": {"dinov3_patch": np.full(4, 5.0, dtype=np.float32)}},
+            11: {"embedder": "siglip", "embeddings": {"dinov3_patch": np.full(4, 6.0, dtype=np.float32)}},
+        }
+        ids, mat = get_embedding_matrix_for_snap(snap, "dinov3_patch")
+        assert ids == [10, 11]
+        assert mat[0, 0] == 5.0
+        assert mat[1, 0] == 6.0
+
+
 class TestGetEmbeddingMatrixForSnapRaisesOnNoneEmbedding:
     """Same guarantee for the snap helper, including the cross-dataset
     'temp dict' path that does NOT hit the cached active-ctx branch."""

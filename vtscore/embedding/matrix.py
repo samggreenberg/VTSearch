@@ -35,62 +35,88 @@ if TYPE_CHECKING:
     from vtscore.state.core import DatasetContext
 
 
-def _require_embedding(cid: int, media: dict[str, Any]) -> Any:
-    emb = media_embedding(media)
+def _require_embedding(cid: int, media: dict[str, Any], embedder_name: str | None = None) -> Any:
+    emb = media_embedding(media, embedder_name)
     if emb is None:
+        suffix = f" for embedder {embedder_name!r}" if embedder_name else ""
         raise ValueError(
-            f"media {cid!r} has no embedding (embedding=None); "
+            f"media {cid!r} has no embedding{suffix} (embedding=None); "
             "scoring/sorting require every media to have a vector. "
             "This usually means an importer or re-embed step silently failed."
         )
     return emb
 
 
-def get_embedding_matrix(ctx: "DatasetContext") -> tuple[list[int], np.ndarray]:
+def _stack_embeddings(
+    sorted_ids: list[int],
+    source: dict[int, dict[str, Any]],
+    embedder_name: str | None,
+) -> np.ndarray:
+    """Build a contiguous ``(N, D)`` float32 matrix of *embedder_name*'s vectors.
+
+    Rows follow *sorted_ids* order, pulling each media's vector via
+    :func:`_require_embedding` (which routes through the dict-keyed accessor).
+    Raises ``ValueError`` naming the first media that lacks a vector.
+    """
+    first_emb = np.asarray(_require_embedding(sorted_ids[0], source[sorted_ids[0]], embedder_name), dtype=np.float32)
+    dim = int(first_emb.shape[-1])
+    matrix = np.empty((len(sorted_ids), dim), dtype=np.float32)
+    for i, cid in enumerate(sorted_ids):
+        matrix[i] = _require_embedding(cid, source[cid], embedder_name)
+    return matrix
+
+
+def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None) -> tuple[list[int], np.ndarray]:
     """Return ``(sorted_ids, (N, D) float32 matrix)`` for *ctx*'s medias.
 
-    The matrix is cached on the context and rebuilt only when the set of
-    media IDs changes.  Convert to a tensor with ``torch.from_numpy(matrix)``
-    for a zero-copy view.
+    With *embedder_name* unset the matrix is built from each media's *primary*
+    embedder and cached on the context, rebuilt only when the set of media IDs
+    changes.  Pass an explicit *embedder_name* (one of a multi-embedder
+    dataset's bound slots) to build a matrix from that embedder's vectors
+    instead; the named path builds fresh on every call and never touches the
+    cache, since the cache is reserved for the hot primary path.  Convert to a
+    tensor with ``torch.from_numpy(matrix)`` for a zero-copy view.
 
     Returns ``([], np.empty((0, 0), dtype=np.float32))`` when the dataset is
-    empty.  Raises ``ValueError`` if any media has ``embedding=None``.
+    empty.  Raises ``ValueError`` if any media lacks the requested vector.
     """
     with _state_lock:
         sorted_ids = sorted(ctx.medias.keys())
-        cached_ids = ctx._emb_matrix_ids
-        cached_matrix = ctx._emb_matrix
-        if cached_matrix is not None and cached_ids == sorted_ids:
-            return list(sorted_ids), cached_matrix
+        if embedder_name is None:
+            cached_ids = ctx._emb_matrix_ids
+            cached_matrix = ctx._emb_matrix
+            if cached_matrix is not None and cached_ids == sorted_ids:
+                return list(sorted_ids), cached_matrix
 
         if not sorted_ids:
-            ctx._emb_matrix_ids = []
-            ctx._emb_matrix = np.empty((0, 0), dtype=np.float32)
-            return [], ctx._emb_matrix
+            if embedder_name is None:
+                ctx._emb_matrix_ids = []
+                ctx._emb_matrix = np.empty((0, 0), dtype=np.float32)
+                return [], ctx._emb_matrix
+            return [], np.empty((0, 0), dtype=np.float32)
 
-        medias = ctx.medias
-        first_emb = np.asarray(_require_embedding(sorted_ids[0], medias[sorted_ids[0]]), dtype=np.float32)
-        dim = int(first_emb.shape[-1])
-        matrix = np.empty((len(sorted_ids), dim), dtype=np.float32)
-        for i, cid in enumerate(sorted_ids):
-            matrix[i] = _require_embedding(cid, medias[cid])
+        matrix = _stack_embeddings(sorted_ids, ctx.medias, embedder_name)
 
-        ctx._emb_matrix_ids = sorted_ids
-        ctx._emb_matrix = matrix
+        if embedder_name is None:
+            ctx._emb_matrix_ids = sorted_ids
+            ctx._emb_matrix = matrix
         return list(sorted_ids), matrix
 
 
-def get_embedding_submatrix(ctx: "DatasetContext", ids: list[int]) -> tuple[list[int], np.ndarray]:
+def get_embedding_submatrix(
+    ctx: "DatasetContext", ids: list[int], embedder_name: str | None = None
+) -> tuple[list[int], np.ndarray]:
     """Return ``(sorted_ids, (N, D) float32 matrix)`` for a *subset* of *ctx*'s medias.
 
     Unlike :func:`get_embedding_matrix`, this builds a fresh matrix over only
     the requested *ids* (intersected with the dataset's current medias) and
     never populates the context-wide cache - subset projections (e.g. the
     positives of a Find run) are ephemeral.  The returned id list is sorted and
-    de-duplicated; ids absent from the dataset are dropped silently.
+    de-duplicated; ids absent from the dataset are dropped silently.  Pass
+    *embedder_name* to source the rows from a specific bound embedder.
 
     Returns ``([], np.empty((0, 0), dtype=np.float32))`` when nothing matches.
-    Raises ``ValueError`` if any requested media has ``embedding=None``.
+    Raises ``ValueError`` if any requested media lacks the requested vector.
     """
     with _state_lock:
         medias = ctx.medias
@@ -98,12 +124,7 @@ def get_embedding_submatrix(ctx: "DatasetContext", ids: list[int]) -> tuple[list
         if not sorted_ids:
             return [], np.empty((0, 0), dtype=np.float32)
 
-        first_emb = np.asarray(_require_embedding(sorted_ids[0], medias[sorted_ids[0]]), dtype=np.float32)
-        dim = int(first_emb.shape[-1])
-        matrix = np.empty((len(sorted_ids), dim), dtype=np.float32)
-        for i, cid in enumerate(sorted_ids):
-            matrix[i] = _require_embedding(cid, medias[cid])
-        return sorted_ids, matrix
+        return sorted_ids, _stack_embeddings(sorted_ids, medias, embedder_name)
 
 
 def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
@@ -221,14 +242,16 @@ def get_region_matrix_for_snap(
 
 def get_embedding_matrix_for_snap(
     snap: dict,
+    embedder_name: str | None = None,
 ) -> tuple[list[int], np.ndarray]:
     """Return ``(sorted_ids, matrix)`` for *snap*.
 
-    When *snap*'s key set matches the active :class:`DatasetContext`'s
-    medias, the cached matrix is reused.  Otherwise (a different snapshot
-    or a temp dict from cross-dataset Find) the matrix is built fresh
-    without populating the cache.  Raises ``ValueError`` if any entry in
-    *snap* has ``embedding=None``.
+    With *embedder_name* unset and *snap*'s key set matching the active
+    :class:`DatasetContext`'s medias, the cached primary matrix is reused.
+    Otherwise (a different snapshot, a temp dict from cross-dataset Find, or an
+    explicit non-primary embedder) the matrix is built fresh without populating
+    the cache.  Raises ``ValueError`` if any entry in *snap* lacks the
+    requested vector.
     """
     from vtscore.state.core import get_active_context
 
@@ -237,21 +260,21 @@ def get_embedding_matrix_for_snap(
         return [], np.empty((0, 0), dtype=np.float32)
 
     ctx = get_active_context()
-    with _state_lock:
-        cached_ids = ctx._emb_matrix_ids
-        cached_matrix = ctx._emb_matrix
-    if cached_matrix is not None and cached_ids == sorted_ids:
-        return sorted_ids, cached_matrix
+    matches_active = sorted_ids == sorted(ctx.medias.keys())
 
-    # Populate the cache when *snap* matches the active dataset's medias
-    # (the common case: `snap = snapshot_medias()`).
-    if sorted_ids == sorted(ctx.medias.keys()):
-        return get_embedding_matrix(ctx)
+    if embedder_name is None:
+        with _state_lock:
+            cached_ids = ctx._emb_matrix_ids
+            cached_matrix = ctx._emb_matrix
+        if cached_matrix is not None and cached_ids == sorted_ids:
+            return sorted_ids, cached_matrix
+
+    # When *snap* matches the active dataset's medias (the common case:
+    # `snap = snapshot_medias()`), delegate to the context builder so the
+    # primary path populates / reuses the cache; the named path builds fresh
+    # there too.
+    if matches_active:
+        return get_embedding_matrix(ctx, embedder_name)
 
     # Temp dict / cross-dataset case: build fresh, don't cache.
-    first_emb = np.asarray(_require_embedding(sorted_ids[0], snap[sorted_ids[0]]), dtype=np.float32)
-    dim = int(first_emb.shape[-1])
-    matrix = np.empty((len(sorted_ids), dim), dtype=np.float32)
-    for i, cid in enumerate(sorted_ids):
-        matrix[i] = _require_embedding(cid, snap[cid])
-    return sorted_ids, matrix
+    return sorted_ids, _stack_embeddings(sorted_ids, snap, embedder_name)
