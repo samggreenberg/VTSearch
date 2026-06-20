@@ -24,6 +24,8 @@ capabilities" (and is therefore ineligible for either slot).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 
 def _capabilities(embedder_name: str) -> tuple[bool, bool]:
     """Return ``(supports_text, supports_patch_regions)`` for *embedder_name*.
@@ -52,11 +54,33 @@ def derive_binding(embedder_name: str | None) -> tuple[str | None, str | None]:
 
     ``None`` / empty in → ``(None, None)``.
     """
-    if not embedder_name:
-        return (None, None)
-    supports_text, supports_patch = _capabilities(embedder_name)
-    text_embedder = embedder_name if supports_text else None
-    patch_embedder = embedder_name if supports_patch else None
+    return derive_binding_from_names([embedder_name] if embedder_name else [])
+
+
+def derive_binding_from_names(embedder_names: Iterable[str | None]) -> tuple[str | None, str | None]:
+    """Role-type a *set* of embedder names into ``(text_embedder, patch_embedder)``.
+
+    This is the multi-embedder generalisation of :func:`derive_binding`: a
+    v3 dataset carries one vector per bound embedder under
+    ``media["embeddings"]``, so its binding is recovered by role-typing the
+    full set of embedder names present (the dict keys), not just one legacy
+    name.  Each role slot takes the **first** name that advertises that
+    capability; a dual-capability embedder (``supports_text`` *and*
+    ``supports_patch_regions``) can fill both.  Single-vector, non-text
+    names (e.g. ``dinov2_single``) fill neither and are skipped.
+
+    Empty / all-unknown in → ``(None, None)``.
+    """
+    text_embedder: str | None = None
+    patch_embedder: str | None = None
+    for name in embedder_names:
+        if not name:
+            continue
+        supports_text, supports_patch = _capabilities(name)
+        if supports_text and text_embedder is None:
+            text_embedder = name
+        if supports_patch and patch_embedder is None:
+            patch_embedder = name
     return (text_embedder, patch_embedder)
 
 

@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from vtscore.embedding import binding as binding_mod
-from vtscore.embedding.binding import derive_binding, validate_binding
+from vtscore.embedding.binding import derive_binding, derive_binding_from_names, validate_binding
 from vtscore.state.core import DatasetContext
 
 # embedder name -> (supports_text, supports_patch_regions)
@@ -49,6 +49,25 @@ class TestDeriveBinding:
 
     def test_unknown_name_fills_neither(self, fake_caps):
         assert derive_binding("nope") == (None, None)
+
+
+class TestDeriveBindingFromNames:
+    def test_empty_iterable(self):
+        assert derive_binding_from_names([]) == (None, None)
+        assert derive_binding_from_names([None, ""]) == (None, None)
+
+    def test_text_plus_patch_fills_both_slots(self, fake_caps):
+        assert derive_binding_from_names(["faketext", "fakepatch"]) == ("faketext", "fakepatch")
+
+    def test_order_independent(self, fake_caps):
+        assert derive_binding_from_names(["fakepatch", "faketext"]) == ("faketext", "fakepatch")
+
+    def test_first_of_each_role_wins(self, fake_caps):
+        # A second text-capable name does not displace the first.
+        assert derive_binding_from_names(["faketext", "fakeboth"]) == ("faketext", "fakeboth")
+
+    def test_single_vector_among_others_is_skipped(self, fake_caps):
+        assert derive_binding_from_names(["fakesingle", "faketext"]) == ("faketext", None)
 
 
 class TestValidateBinding:
@@ -103,6 +122,25 @@ class TestDatasetContextDerivedBinding:
         ctx = _ctx_with_embedder("fakesingle")
         assert ctx.text_embedder is None
         assert ctx.patch_embedder is None
+
+    def test_two_embedder_dataset_derives_both_slots(self, fake_caps):
+        # A v3 media carries one vector per bound embedder under "embeddings";
+        # the binding is recovered by role-typing both keys, not just the
+        # recorded primary.
+        ctx = DatasetContext("two")
+        ctx.medias[1] = {
+            "id": 1,
+            "embedder": "fakepatch",
+            "embedding": np.ones(4, dtype=np.float32),
+            "embeddings": {
+                "faketext": np.ones(4, dtype=np.float32),
+                "fakepatch": np.ones(4, dtype=np.float32),
+            },
+        }
+        assert ctx.text_embedder == "faketext"
+        assert ctx.patch_embedder == "fakepatch"
+        assert ctx.supports_text is True
+        assert ctx.supports_patch_regions is True
 
 
 class TestDatasetContextExplicitBinding:

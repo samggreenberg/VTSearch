@@ -385,11 +385,11 @@ class DatasetContext:
             return (self._text_embedder, self._patch_embedder)
         if not self.medias:
             return (None, None)
-        from vtscore.embedding.binding import derive_binding  # noqa: PLC0415
-        from vtscore.embedding.media_vectors import primary_embedder_name  # noqa: PLC0415
+        from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+        from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
 
         first = next(iter(self.medias.values()))
-        return derive_binding(primary_embedder_name(first))
+        return derive_binding_from_names(media_embedder_names(first))
 
     @property
     def text_embedder(self) -> str | None:
