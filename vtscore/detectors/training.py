@@ -23,19 +23,27 @@ if TYPE_CHECKING:
     import torch.nn as nn
 
 
-def _active_score_embedder() -> str | None:
-    """Resolve the active dataset's score embedder (patch-else-text).
+def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | None:
+    """Resolve the score embedder (patch-else-text) for the medias in *snap*.
 
     The detector MLP trains and scores against this embedder's vectors (the v3
-    routing table; see :meth:`DatasetContext.routed_embedder`).  Returns
-    ``None`` for a slot-less single-vector dataset, where the matrix layer
-    falls back to each media's primary vector.  For a single-embedder dataset
-    the resolved name equals the primary, which the matrix layer collapses to
-    the cached primary path.
+    routing table).  Derived from the embedder names *those* medias carry
+    rather than the active context, since :func:`_score_all_media` /
+    :func:`_build_vote_xy` may be handed an arbitrary snapshot (a test fixture,
+    a cross-dataset dict).  Returns ``None`` for a slot-less single-vector
+    dataset (e.g. ``dinov2_single``) or medias whose embedder is unregistered,
+    so the matrix layer falls back to each media's primary vector.  For a
+    single-embedder dataset the resolved name equals the primary, which the
+    matrix layer collapses to the cached primary path.
     """
-    from vtscore.state.core import get_active_context  # noqa: PLC0415
+    if not snap:
+        return None
+    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
 
-    return get_active_context().routed_embedder("score")
+    first = next(iter(snap.values()))
+    text, patch = derive_binding_from_names(media_embedder_names(first))
+    return patch or text
 
 
 def validate_good_bad_split(y_list: list[float]) -> tuple[int, int]:
@@ -121,7 +129,7 @@ def train_and_threshold(
         # `safe` is only True when `snap` is truthy (see assignment above),
         # so the narrowing is real even though pyright can't track it.
         assert snap is not None
-        _all_ids, all_embs = get_embedding_matrix_for_snap(snap, _active_score_embedder())
+        _all_ids, all_embs = get_embedding_matrix_for_snap(snap, _score_embedder_for_snap(snap))
         X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
             X_all = X_all.to(next(model.parameters()).device)
@@ -205,7 +213,7 @@ def _build_vote_xy(
 
     # Train against the dataset's score embedder so the MLP shares the space
     # _score_all_media scores against (the v3 routing table).
-    embedder_name = _active_score_embedder()
+    embedder_name = _score_embedder_for_snap(clips_dict)
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     for cid in good_votes:
@@ -248,7 +256,7 @@ def _score_all_media(
         # a multi-hundred-thousand-row matrix on every vote.
         all_ids, X_np, media_index_per_row, region_index_per_row = get_region_matrix_for_snap(clips_dict)
     else:
-        all_ids, X_np = get_embedding_matrix_for_snap(clips_dict, _active_score_embedder())
+        all_ids, X_np = get_embedding_matrix_for_snap(clips_dict, _score_embedder_for_snap(clips_dict))
         n = len(all_ids)
         media_index_per_row = np.arange(n, dtype=np.int64)
         region_index_per_row = np.zeros(n, dtype=np.int64)
