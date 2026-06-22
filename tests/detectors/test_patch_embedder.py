@@ -361,7 +361,8 @@ def _make_region_batch(
             regions.append(RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=v))
         batch[i] = {
             "patch_regions": regions,
-            "embedding": regions[0].vec.copy(),
+            "embedder": "siglip",
+            "embeddings": {"siglip": regions[0].vec.copy()},
         }
     return batch
 
@@ -373,7 +374,8 @@ def _to_fp16_batch(snap_fp32: dict[int, dict]) -> dict[int, dict]:
             "patch_regions": [
                 RegionVector(box=r.box, vec=r.vec.astype(np.float16), children=r.children) for r in m["patch_regions"]
             ],
-            "embedding": m["embedding"],
+            "embedder": "siglip",
+            "embeddings": {"siglip": media_embedding(m)},
         }
         for cid, m in snap_fp32.items()
     }

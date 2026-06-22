@@ -17,6 +17,7 @@ from vtscore.datasets.loader import (
     load_dataset_from_folder,
     load_dataset_from_pickle,
 )
+from vtscore.embedding.media_vectors import media_embedding
 
 
 from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file  # noqa: F401
@@ -64,7 +65,7 @@ class TestThinLoadFromFolder:
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_folder(tmp_path, "audio", medias, thin=True)
         media = medias[1]
-        assert media["embedding"] is None
+        assert media_embedding(media) is None
 
     def test_thin_clips_have_correct_file_size(self, tmp_path):
         wav_path = _make_wav_file(tmp_path, "test.wav")
@@ -116,6 +117,7 @@ class TestThinLoadFromPickle:
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
             "embedding": np.zeros(512).tolist(),
+            "embedder": "clap",
             "filename": "test.wav",
             "category": "test",
         }
@@ -146,7 +148,7 @@ class TestThinLoadFromPickle:
         pkl_path = self._make_pickle(tmp_path, inline_bytes=True)
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(pkl_path, medias, thin=True)
-        assert isinstance(medias[1]["embedding"], np.ndarray)
+        assert isinstance(media_embedding(medias[1]), np.ndarray)
 
     def test_thin_pickle_resolves_media_path_from_audio_dir(self, tmp_path):
         audio_dir = tmp_path / "audio"
@@ -251,6 +253,7 @@ class TestPickleNullEmbedding:
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
             "embedding": np.zeros(512).tolist(),
+            "embedder": "clap",
             "filename": "good.wav",
             "category": "test",
             "media_bytes": wav_bytes,
@@ -275,8 +278,8 @@ class TestPickleNullEmbedding:
         load_dataset_from_pickle(pkl_path, medias, thin=False)
         assert list(medias.keys()) == [1]
         # No poisoned 0-d object array snuck through.
-        assert medias[1]["embedding"].ndim >= 1
-        assert medias[1]["embedding"].dtype != object
+        assert media_embedding(medias[1]).ndim >= 1
+        assert media_embedding(medias[1]).dtype != object
 
     def test_chunked_loader_skips_null_embedding(self, tmp_path):
         from vtscore.datasets.loader import load_dataset_from_pickle_chunked
@@ -291,6 +294,7 @@ class TestPickleNullEmbedding:
                     "file_size": len(wav_bytes),
                     "md5": hashlib.md5(wav_bytes).hexdigest(),
                     "embedding": np.zeros(512).tolist(),
+                    "embedder": "clap",
                     "filename": "a.wav",
                     "category": "test",
                     "media_bytes": wav_bytes,

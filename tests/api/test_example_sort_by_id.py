@@ -62,6 +62,7 @@ class TestExampleSortByIdEndpoint:
         """Cropping is the only path that can re-derive; without crop, an
         embedding-less media is unsortable."""
         saved = medias[loaded_media_id].copy()
+        medias[loaded_media_id]["embeddings"] = {}
         medias[loaded_media_id].pop("embedding", None)
         try:
             resp = client.post(
