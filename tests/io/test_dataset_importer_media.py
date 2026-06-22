@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
+from vtscore.embedding.media_vectors import media_embedding
 
 
 def _write_wav(path: Path) -> None:
@@ -113,7 +114,7 @@ class TestImporterProvidedVectors:
             imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
+        np.testing.assert_array_equal(media_embedding(medias[1]), pre_vec)
         emb.embed_media.assert_not_called()
 
     def test_importer_vector_multiple_files(self, tmp_path):

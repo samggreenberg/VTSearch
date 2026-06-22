@@ -92,8 +92,8 @@ for the importer-side instance attributes that feed into the loader):
 | `type` | `str` | Yes | The media type's `type_id` (`"audio"`, `"image"`, …) |
 | `filename` | `str` | Yes | Display name and origin-resolution key |
 | `md5` | `str` | Recommended | Hex digest; computed by loader if absent |
-| `embedding` | `np.ndarray` | Recommended | Skips the embedding model when present |
-| `embedder` | `str` | Yes when `embedding` is set | Name of the embedder that produced the vector |
+| `embeddings` | `dict[str, np.ndarray]` | Recommended | Per-embedder `{name: vector}` dict; skips the embedding model when it carries a vector. Leave `{}` to let the framework embed. |
+| `embedder` | `str` | Yes when `embeddings` is set | Name of the embedder that produced the vector (must match the dict key) |
 | `media_bytes` | `bytes \| None` | Conditional | The actual content; `None` in thin mode |
 | `media_path` | `str \| None` | Conditional | Local path; required for thin mode if no `media_url` |
 | `media_url` | `str \| None` | Optional | Remote URL for lazy-fetch (PullWrest-style) |

@@ -73,7 +73,7 @@ def test_builds_context_over_positives_only(monkeypatch, tmp_path):
     assert len(ctx.medias) == 3
     for media in ctx.medias.values():
         assert media["media_type"] == "text"
-        assert isinstance(media["embedding"], np.ndarray)
+        assert isinstance(media_embedding(media), np.ndarray)
         assert media["media_bytes"] == b"hello"
         assert media["embedder"] == "e5"
     # A ready projection + hex pyramid is built up front.
@@ -102,7 +102,7 @@ def test_reuses_cached_embeddings(monkeypatch, tmp_path):
 
     (media,) = ctx.medias.values()
     # The cached vector is used verbatim (not re-embedded).
-    assert np.allclose(media["embedding"], 0.5)
+    assert np.allclose(media_embedding(media), 0.5)
 
 
 def test_raises_when_nothing_resolves(monkeypatch, tmp_path):

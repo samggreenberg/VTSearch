@@ -18,6 +18,7 @@ from vtscore.datasets.loader import (
     load_dataset_from_folder_chunked,
     load_dataset_from_pickle_chunked,
 )
+from vtscore.embedding.media_vectors import media_embedding
 
 
 from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file
@@ -34,6 +35,7 @@ def _make_pickle_with_base_freq(tmp_path: Path, num_clips: int, base_freq: float
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "embedder": "clap",
             "embedding": np.random.RandomState(42).randn(512).tolist(),
             "filename": f"clip_{i}.wav",
             "category": f"cat_{i % 3}",
@@ -59,6 +61,7 @@ def _make_pickle(tmp_path: Path, num_clips: int, inline_bytes: bool = True) -> P
             "duration": 0.1,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
+            "embedder": "clap",
             "embedding": np.random.RandomState(42).randn(512).tolist(),
             "filename": f"clip_{i}.wav",
             "category": f"cat_{i % 3}",

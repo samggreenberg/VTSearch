@@ -148,7 +148,8 @@ class TestTrainAndScore:
             center = 1.0 if i <= 5 else -1.0
             clips[i] = {
                 "id": i,
-                "embedding": (center + rng.standard_normal(8) * 0.05).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": (center + rng.standard_normal(8) * 0.05).astype(np.float32)},
             }
         good = {1: None, 2: None}
         bad = {6: None, 7: None}
