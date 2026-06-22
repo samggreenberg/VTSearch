@@ -342,7 +342,7 @@ class CatalogueImporter(DatasetImporter):
             "media_type": "audio",
             "filename": record["id"] + ".wav",
             "md5": record["md5"],
-            "embedding": embedding,
+            "embeddings": {"clap": embedding},
             "embedder": "clap",
             "media_bytes": None,
             "media_path": None,

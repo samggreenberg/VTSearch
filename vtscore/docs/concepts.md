@@ -28,7 +28,7 @@ medias[42] = {
     "embedder": "audio_clap",              # MediaEmbedder.name
     "file_size": 318456,                   # bytes
     "md5": "5d41402abc4b2a76b9719d911017c592",  # content hash
-    "embedding": np.ndarray,               # shape (D,), float32
+    "embeddings": {"audio_clap": np.ndarray},  # {embedder name: vector (D,) float32}
     "filename": "barks/poodle.wav",        # relative path from origin root
     "category": "custom",                  # demo-dataset slot
     "origin": {"importer": "server_folder",
@@ -49,7 +49,7 @@ must preserve the base contract.
 The dict-of-dicts representation is deliberate:
 
 - Cheap to serialise (it's already JSON-shaped except for the embedding).
-- Easy to project - `[m["embedding"] for m in medias.values()]` builds the
+- Easy to project - `[media_embedding(m) for m in medias.values()]` builds the
   training matrix in one line.
 - No risk of accidental method calls or stale class instances after a
   pickle round-trip.

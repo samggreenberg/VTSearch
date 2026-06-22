@@ -136,7 +136,7 @@ class TestImporterProvidedVectors:
             imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 2
-        embs = {m["filename"]: m["embedding"] for m in medias.values()}
+        embs = {m["filename"]: media_embedding(m) for m in medias.values()}
         np.testing.assert_array_equal(embs["a.wav"], vec_a)
         np.testing.assert_array_equal(embs["b.wav"], vec_b)
         emb.embed_media.assert_not_called()
@@ -161,7 +161,7 @@ class TestImporterProvidedVectors:
             imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 2
-        embs = {m["filename"]: m["embedding"] for m in medias.values()}
+        embs = {m["filename"]: media_embedding(m) for m in medias.values()}
         np.testing.assert_array_equal(embs["pre.wav"], pre_vec)
         assert embs["model.wav"] is None
 
@@ -182,7 +182,7 @@ class TestImporterProvidedVectors:
             imp.run({"path": str(tmp_path), "media_type": "audio"}, medias, thin=True)
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
+        np.testing.assert_array_equal(media_embedding(medias[1]), pre_vec)
         assert medias[1]["media_bytes"] is None  # thin mode
 
 
@@ -290,7 +290,7 @@ class TestImporterProvidedBoth:
             imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
+        np.testing.assert_array_equal(media_embedding(medias[1]), pre_vec)
         assert medias[1]["md5"] == pre_md5
         emb.embed_media.assert_not_called()
 
@@ -314,7 +314,7 @@ class TestImporterProvidedBoth:
         assert len(medias) == 3
         for m in medias.values():
             fname = m["filename"]
-            np.testing.assert_array_equal(m["embedding"], vectors[fname])
+            np.testing.assert_array_equal(media_embedding(m), vectors[fname])
             assert m["md5"] == md5s[fname]
 
 
@@ -471,7 +471,7 @@ class TestImporterCustomMetadataEmbedding:
             )
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+        np.testing.assert_array_equal(media_embedding(medias[1]), cm_vec)
         emb.embed_media.assert_not_called()
         assert medias[1]["custom_metadata"]["source"] == "test"
 
@@ -497,7 +497,7 @@ class TestImporterCustomMetadataEmbedding:
                 on_progress=lambda *a: None,
             )
 
-        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+        np.testing.assert_array_equal(media_embedding(medias[1]), cm_vec)
 
     def test_custom_metadata_embedding_in_thin_mode(self, tmp_path):
         """custom_metadata_map embedding should work in thin mode."""
@@ -520,7 +520,7 @@ class TestImporterCustomMetadataEmbedding:
                 thin=True,
             )
 
-        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+        np.testing.assert_array_equal(media_embedding(medias[1]), cm_vec)
         emb.embed_media.assert_not_called()
 
     def test_custom_metadata_both_embedding_and_md5(self, tmp_path):
@@ -544,7 +544,7 @@ class TestImporterCustomMetadataEmbedding:
                 on_progress=lambda *a: None,
             )
 
-        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+        np.testing.assert_array_equal(media_embedding(medias[1]), cm_vec)
         assert medias[1]["md5"] == cm_md5
         emb.embed_media.assert_not_called()
 
@@ -570,7 +570,7 @@ class TestImporterCustomMetadataEmbedding:
                 on_progress=lambda *a: None,
             )
 
-        embs = {m["filename"]: m["embedding"] for m in medias.values()}
+        embs = {m["filename"]: media_embedding(m) for m in medias.values()}
         np.testing.assert_array_equal(embs["meta.wav"], cm_vec)
         assert embs["model.wav"] is None
 
@@ -599,7 +599,7 @@ class TestImporterCustomMetadataEmbedding:
         for chunk in chunks:
             all_medias.update(chunk)
         assert len(all_medias) == 1
-        np.testing.assert_array_equal(all_medias[1]["embedding"], cm_vec)
+        np.testing.assert_array_equal(media_embedding(all_medias[1]), cm_vec)
         emb.embed_media.assert_not_called()
 
     def test_importer_custom_metadata_embedding_end_to_end(self, tmp_path):
@@ -644,7 +644,7 @@ class TestImporterCustomMetadataEmbedding:
             imp.run({"path": str(tmp_path), "media_type": "audio"}, medias)
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], cm_vec)
+        np.testing.assert_array_equal(media_embedding(medias[1]), cm_vec)
         assert medias[1]["md5"] == cm_md5
         assert medias[1]["custom_metadata"]["tag"] == "from_metadata"
         emb.embed_media.assert_not_called()
@@ -701,7 +701,7 @@ class TestFolderImporterPassthrough:
             with _patch_media_registry(mt, emb):
                 IMPORTER.run({"path": str(tmp_path), "media_type": "audio"}, medias)
             assert len(medias) == 1
-            np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
+            np.testing.assert_array_equal(media_embedding(medias[1]), pre_vec)
             emb.embed_media.assert_not_called()
         finally:
             IMPORTER.content_vectors = {}
@@ -764,7 +764,7 @@ class TestImporterMediasInSorting:
         query_vec = rng.standard_normal(8).astype(np.float32)
 
         all_ids = list(medias.keys())
-        all_embs = np.array([medias[cid]["embedding"] for cid in all_ids])
+        all_embs = np.array([media_embedding(medias[cid]) for cid in all_ids])
         query_norm = np.linalg.norm(query_vec)
         emb_norms = np.linalg.norm(all_embs, axis=1)
         norm_products = emb_norms * query_norm
