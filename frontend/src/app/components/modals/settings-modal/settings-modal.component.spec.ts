@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { SettingsModalComponent } from './settings-modal.component';
@@ -117,11 +117,12 @@ describe('SettingsModalComponent', () => {
     expect(component.getViewMode('view_mode_right', 'audio')).toBe('grid');
   });
 
-  it('should reset to defaults after confirmation', fakeAsync(() => {
+  it('should reset to defaults after confirmation', async () => {
     flushInit();
     vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
     component.resetDefaults();
-    tick();
+    // Drain the confirm() promise continuation that issues the GET.
+    await new Promise<void>((resolve) => setTimeout(resolve));
     httpMock.expectOne('/api/settings/defaults').flush({ ...mockSettings, theme: 'light' });
     // Applying the defaults persists twice: ThemeService.setTheme PUTs the
     // new theme, and save() PUTs the full settings object.
@@ -129,15 +130,15 @@ describe('SettingsModalComponent', () => {
     expect(reqs.length).toBe(2);
     reqs.forEach((r) => r.flush(mockSettings));
     expect(component.settings().theme).toBe('light');
-  }));
+  });
 
-  it('should not reset when confirmation is declined', fakeAsync(() => {
+  it('should not reset when confirmation is declined', async () => {
     flushInit();
     vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(false));
     component.resetDefaults();
-    tick();
+    await new Promise<void>((resolve) => setTimeout(resolve));
     httpMock.expectNone('/api/settings/defaults');
-  }));
+  });
 
   it('should use preselectedViewTab when valid', () => {
     component.preselectedViewTab = 'image';

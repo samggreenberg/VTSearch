@@ -79,24 +79,22 @@
             },
             "test": {
               // Build configuration used only by the unit-test target. Mirrors
-              // `development` but pins its OWN polyfills so the fakeAsync bridge
-              // survives the Phase 3 removal of zone.js from the base production
-              // polyfills (see docs/plans/zoneless-migration.md, Phase 0.1).
-              // "zone.js/plugins/vitest-patch" is the Angular-maintained bridge
-              // that keeps fakeAsync/tick/waitForAsync working under the Vitest
-              // runner (zone.js's jest patch bails outside jest). It is
-              // explicitly transitional — the long-term direction is native
-              // async + Vitest fake timers (plan Phase 5).
+              // `development` but pins its OWN polyfills, decoupled from the base
+              // production build (which dropped zone.js entirely at the Phase 3
+              // zoneless flip — see docs/plans/zoneless-migration.md).
               //
-              // Order matters: vitest-patch needs ProxyZoneSpec/SyncTestZoneSpec
-              // (from "zone.js/testing") to exist at its load time, so testing
-              // is listed BEFORE it. The builder also auto-appends another
-              // "zone.js/testing" at the end, but that re-import is a no-op (ES
-              // modules execute once).
+              // The fakeAsync/tick bridge (zone.js/testing + the Angular
+              // vitest-patch plugin) was removed in Phase 5: every spec now uses
+              // native async + Vitest fake timers, so no spec needs ProxyZone.
+              // Base "zone.js" stays only because the spec files that have not
+              // yet adopted the zoneless TestBed still rely on zone-based change
+              // detection in the default TestBed (manual fixture.detectChanges()
+              // alone is fine, but the default TestBed requires NgZone to exist).
+              // It drops once those specs migrate (plan Phase 5).
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true,
-              "polyfills": ["zone.js", "zone.js/testing", "zone.js/plugins/vitest-patch"]
+              "polyfills": ["zone.js"]
             }
           },
           "defaultConfiguration": "production"
@@ -127,9 +125,10 @@
             // `development`, so the test polyfills are decoupled from the
             // production build. The @angular/build:unit-test builder has no
             // `polyfills` option of its own; it inherits them from this
-            // buildTarget. Dropping "zone.js" from the base production polyfills
-            // (zoneless flip, Phase 3 of docs/plans/zoneless-migration.md) then
-            // cannot silently break fakeAsync, because build:test pins its own.
+            // buildTarget. The base production build dropped "zone.js" at the
+            // zoneless flip (Phase 3 of docs/plans/zoneless-migration.md); the
+            // test build still pins its own "zone.js" for the default-TestBed
+            // specs (Phase 5), so the two cannot drift.
             "buildTarget": "frontend:build:test",
             "runner": "vitest",
             "runnerConfig": "vitest.config.ts",

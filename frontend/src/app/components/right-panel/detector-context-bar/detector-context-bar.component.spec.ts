@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DetectorContextBarComponent } from './detector-context-bar.component';
 
 describe('DetectorContextBarComponent', () => {
@@ -35,18 +35,19 @@ describe('DetectorContextBarComponent', () => {
     expect(el.querySelector('.train-context-name')?.textContent).toContain('My Detector');
   });
 
-  it('should enter editing mode on startRename', fakeAsync(() => {
+  it('should enter editing mode on startRename', async () => {
     component.visible = true;
     component.detectorName = 'Old Name';
     fixture.detectChanges();
 
     component.startRename();
-    tick();
+    // Drain the focus setTimeout queued by startRename().
+    await new Promise<void>((resolve) => setTimeout(resolve));
     fixture.detectChanges();
 
     expect(component.editing).toBe(true);
     expect(component.editValue).toBe('Old Name');
-  }));
+  });
 
   it('should not start rename if detectorName is empty', () => {
     component.visible = true;

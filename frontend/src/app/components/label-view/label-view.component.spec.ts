@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -34,9 +34,9 @@ describe('LabelViewComponent', () => {
   // `fixture.detectChanges()`. label-view's ngOnInit loads medias, votes,
   // settings, dataset status, inclusion; the left panel loads media-types
   // and embedders. The `/api/labeling-status` and polling `/api/votes`
-  // requests are driven by `timer(0, …)` and only fire after a `tick(…)`
-  // inside `fakeAsync`, so they are NOT flushed here — they are drained
-  // by `afterEach`'s catch-all instead.
+  // requests are driven by `timer(0, …)`, which only fires on a real macrotask
+  // after the synchronous test body returns, so they are NOT flushed here —
+  // they are drained by `afterEach`'s catch-all instead.
   function flushInitialRequests(): void {
     fixture.detectChanges();
     // The medias and settings reads ride `rxResource`, whose loader runs in a
@@ -80,8 +80,8 @@ describe('LabelViewComponent', () => {
     component.ngOnDestroy();
     // Drain any outstanding polling requests from right-panel or label-view
     // (the timer-driven /api/votes and /api/labeling-status pollers, the
-    // metadata-batch fetch from selectMedia, plus anything a fakeAsync test
-    // left in flight). ngOnDestroy unsubscribes the component's own streams,
+    // metadata-batch fetch from selectMedia, plus anything a test left in
+    // flight). ngOnDestroy unsubscribes the component's own streams,
     // which cancels their in-flight requests; cancelled requests can't be
     // flushed, so skip them. Flush an empty array so the metadata-batch
     // handler (which iterates the body) doesn't choke on a non-iterable.
@@ -133,7 +133,7 @@ describe('LabelViewComponent', () => {
     expect(component.sortState.threshold).toBe(0.5);
   });
 
-  it('should handle learned sort', fakeAsync(() => {
+  it('should handle learned sort', () => {
     flushInitialRequests();
     // Set votes via vote state service
     component.voteState.loadVotes();
@@ -151,7 +151,7 @@ describe('LabelViewComponent', () => {
 
     expect(component.sortState.sortBusy).toBe(false);
     expect(component.sortState.sortOrder!.length).toBe(2);
-  }));
+  });
 
   it('should not trigger learned sort without votes', () => {
     flushInitialRequests();
@@ -225,7 +225,7 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedId()).toBe(1);
   });
 
-  it('should handle inclusion change', fakeAsync(() => {
+  it('should handle inclusion change', () => {
     flushInitialRequests();
     component.onInclusionChange(5);
     expect(component.sortState.inclusion).toBe(5);
@@ -233,7 +233,7 @@ describe('LabelViewComponent', () => {
     const req = httpMock.expectOne('/api/inclusion');
     expect(req.request.body).toEqual({ inclusion: 5 });
     req.flush({ inclusion: 5 });
-  }));
+  });
 
   it('should render center panel component', () => {
     flushInitialRequests();
@@ -433,7 +433,7 @@ describe('LabelViewComponent', () => {
     });
   });
 
-  it('should trigger learned sort when autopilot transitions from bad to hard', fakeAsync(() => {
+  it('should trigger learned sort when autopilot transitions from bad to hard', () => {
     flushInitialRequests();
 
     const autopilot = TestBed.inject(AutopilotStateService);
@@ -470,9 +470,9 @@ describe('LabelViewComponent', () => {
 
     expect(sortState.sortBusy).toBe(false);
     expect(sortState.threshold).toBe(0.5);
-  }));
+  });
 
-  it('should switch to hard select mode when bouncing from new back to hard', fakeAsync(() => {
+  it('should switch to hard select mode when bouncing from new back to hard', () => {
     flushInitialRequests();
 
     const autopilot = TestBed.inject(AutopilotStateService);
@@ -533,7 +533,7 @@ describe('LabelViewComponent', () => {
       threshold: 0.5,
     });
     expect(sortState.sortBusy).toBe(false);
-  }));
+  });
 
   it('should select hard items by index distance, not score distance', () => {
     flushInitialRequests();

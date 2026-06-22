@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { DatasetStateService } from './dataset-state.service';
@@ -63,16 +63,15 @@ describe('DatasetStateService', () => {
     expect(service.detectors[0].name).toBe('detector1');
   });
 
-  it('rapid refresh should cancel stale in-flight requests', fakeAsync(() => {
-    // First refresh; will be cancelled by the second
+  it('rapid refresh should cancel stale in-flight requests', () => {
+    // First refresh; will be cancelled by the second. The switchMap subscribes
+    // to the forkJoin synchronously, so both registry GETs register at once.
     service.refresh();
-    tick();
     const staleDs = httpMock.expectOne('/api/datasets/registry');
     const staleDetectors = httpMock.expectOne('/api/detectors/registry');
 
     // Second refresh; this one should win
     service.refresh();
-    tick();
     const freshDs = httpMock.expectOne('/api/datasets/registry');
     const freshDetectors = httpMock.expectOne('/api/detectors/registry');
 
@@ -86,7 +85,7 @@ describe('DatasetStateService', () => {
 
     expect(service.datasets.length).toBe(1);
     expect(service.datasets[0].name).toBe('fresh');
-  }));
+  });
 
   it('setLoading and setProgressMessage should update state', () => {
     service.setLoading(true);
