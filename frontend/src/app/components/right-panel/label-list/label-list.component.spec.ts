@@ -38,7 +38,7 @@ describe('LabelListComponent', () => {
     const heading = el.querySelector('h3');
     expect(heading?.textContent).toContain('Goods');
     expect(heading?.textContent).toContain('(2)');
-    expect(heading?.classList.contains('good')).toBeTrue();
+    expect(heading?.classList.contains('good')).toBe(true);
   });
 
   it('should display bad label heading', () => {
@@ -50,7 +50,7 @@ describe('LabelListComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     const heading = el.querySelector('h3');
     expect(heading?.textContent).toContain('Bads');
-    expect(heading?.classList.contains('bad')).toBeTrue();
+    expect(heading?.classList.contains('bad')).toBe(true);
   });
 
   describe('sorting', () => {
@@ -142,18 +142,21 @@ describe('LabelListComponent', () => {
   describe('view modes and thumbnails', () => {
     beforeEach(() => {
       component.medias = sampleMedias;
+      // ngOnInit builds the media-id → media lookup map from `medias`;
+      // detectChanges() runs it so thumbnailUrl()/hasThumbnailUrl() resolve.
+      fixture.detectChanges();
     });
 
     it('should have thumbnail URL for images', () => {
-      expect(component.hasThumbnailUrl(2)).toBeTrue();
+      expect(component.hasThumbnailUrl(2)).toBe(true);
     });
 
     it('should have thumbnail URL for videos', () => {
-      expect(component.hasThumbnailUrl(3)).toBeTrue();
+      expect(component.hasThumbnailUrl(3)).toBe(true);
     });
 
     it('should have thumbnail URL for audio', () => {
-      expect(component.hasThumbnailUrl(1)).toBeTrue();
+      expect(component.hasThumbnailUrl(1)).toBe(true);
     });
 
     it('should generate correct thumbnail URLs', () => {
@@ -164,12 +167,12 @@ describe('LabelListComponent', () => {
 
     it('should be in grid mode when viewMode is grid', () => {
       component.viewMode = 'grid';
-      expect(component.isGrid).toBeTrue();
+      expect(component.isGrid).toBe(true);
     });
 
     it('should not be in grid mode when viewMode is list', () => {
       component.viewMode = 'list';
-      expect(component.isGrid).toBeFalse();
+      expect(component.isGrid).toBe(false);
     });
 
     it('should not show placeholder icon for audio in grid mode (has thumbnail)', () => {
@@ -189,25 +192,25 @@ describe('LabelListComponent', () => {
   });
 
   it('should emit mediaSelected on entry click', () => {
-    spyOn(component.mediaSelected, 'emit');
+    vi.spyOn(component.mediaSelected, 'emit');
     component.onEntryClick(42);
     expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
   });
 
   it('should emit mediaSelected on Enter keydown', () => {
-    spyOn(component.mediaSelected, 'emit');
+    vi.spyOn(component.mediaSelected, 'emit');
     component.onEntryKeydown(new KeyboardEvent('keydown', { key: 'Enter' }), 42);
     expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
   });
 
   it('should emit mediaSelected on Space keydown', () => {
-    spyOn(component.mediaSelected, 'emit');
+    vi.spyOn(component.mediaSelected, 'emit');
     component.onEntryKeydown(new KeyboardEvent('keydown', { key: ' ' }), 42);
     expect(component.mediaSelected.emit).toHaveBeenCalledWith(42);
   });
 
   it('should not emit on other key', () => {
-    spyOn(component.mediaSelected, 'emit');
+    vi.spyOn(component.mediaSelected, 'emit');
     component.onEntryKeydown(new KeyboardEvent('keydown', { key: 'a' }), 42);
     expect(component.mediaSelected.emit).not.toHaveBeenCalled();
   });

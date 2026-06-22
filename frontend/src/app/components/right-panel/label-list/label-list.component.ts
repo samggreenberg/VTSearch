@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewChecked, OnDestroy } from '@angular/core';
+import { Component, Input, OnInit, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewChecked, OnDestroy, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -23,13 +23,16 @@ export interface LabelEntry {
   styleUrl: './label-list.component.scss',
 })
 export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterViewChecked {
+  private activeContext = inject(ActiveContextService);
+  private metadataCache = inject(MediaMetadataCacheService);
+
   @Input() label: 'good' | 'bad' = 'good';
   @Input() ids: number[] = [];
   /**
    * Overrides the bucket heading word ("Goods"/"Bads"). Find mode passes
    * "Verified Good" / "Verified Bad" so the bucket reads as the confirmed pile.
    */
-  @Input() headingLabel: string | null = null;
+  readonly headingLabel = input<string | null>(null);
   /**
    * Find mode: a small "[N] Unverified Good/Bad" line folded under the heading,
    * counting the items still on the left work queue that the bucket's actions
@@ -39,12 +42,21 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
   @Input() medias: Media[] = [];
   @Input() clickTimes: Record<string, number> = {};
   @Input() learnedScores: Record<string, number> = {};
+  /**
+   * Normalised [x0, y0, x1, y1] region boxes keyed by media id. When an id has
+   * a box (a region vote drawn on an image), its thumbnail is cropped to that
+   * region rather than showing the whole frame.
+   */
+  readonly regionBoxes = input<Record<string, number[]>>({});
   @Input() sortMode: LabelSortMode = 'time-desc';
   @Input() viewMode: 'grid' | 'list' = 'grid';
-  @Input() gridGoalWidth: number = 80;
-  @Input() focusMode: 'click' | 'hover' = 'click';
-  @Output() mediaSelected = new EventEmitter<number>();
-  @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  readonly gridGoalWidth = input<number>(80);
+  readonly focusMode = input<'click' | 'hover'>('click');
+  readonly mediaSelected = output<number>();
+  readonly mediaVote = output<{
+    id: number;
+    vote: 'good' | 'bad';
+}>();
 
   @ViewChild('voteListContainer') voteListContainer?: ElementRef<HTMLDivElement>;
 
@@ -53,11 +65,6 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
   /** Pre-built Map for O(1) media stub lookups by id (rebuilt when medias input changes). */
   private mediaMap = new Map<number, Media>();
   private readonly destroy$ = new Subject<void>();
-
-  constructor(
-    private activeContext: ActiveContextService,
-    private metadataCache: MediaMetadataCacheService,
-  ) {}
 
   ngOnInit(): void {
     this.mediaMap = new Map(this.medias.map(m => [m.id, m]));
@@ -170,7 +177,16 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
     // Downscaled tile, not the full-resolution ``/image``: the labeled set can
     // hold hundreds of items, and decoding every full-size bitmap at once
     // exhausts browser memory.
-    return this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
+    let url = this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
+    // A region-voted item shows a thumbnail of just the voted crop. The box
+    // coordinates ride in the query string so a re-vote with a different box
+    // is a distinct URL (and cache entry) rather than a stale tile.
+    const box = this.regionBoxes()[String(id)];
+    if (box && box.length === 4) {
+      const sep = url.includes('?') ? '&' : '?';
+      url += `${sep}region=${box.map((v) => v.toFixed(4)).join(',')}`;
+    }
+    return url;
   }
 
   onThumbnailError(url: string): void {
@@ -191,7 +207,7 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
   }
 
   onEntryClick(id: number): void {
-    if (this.focusMode === 'hover') {
+    if (this.focusMode() === 'hover') {
       this.mediaVote.emit({ id, vote: 'bad' });
     } else {
       this.mediaSelected.emit(id);
@@ -199,14 +215,14 @@ export class LabelListComponent implements OnInit, OnChanges, OnDestroy, AfterVi
   }
 
   onEntryContextMenu(event: MouseEvent, id: number): void {
-    if (this.focusMode === 'hover') {
+    if (this.focusMode() === 'hover') {
       event.preventDefault();
       this.mediaVote.emit({ id, vote: 'good' });
     }
   }
 
   onEntryMouseEnter(id: number): void {
-    if (this.focusMode === 'hover') {
+    if (this.focusMode() === 'hover') {
       this.mediaSelected.emit(id);
     }
   }

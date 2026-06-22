@@ -46,7 +46,7 @@ describe('MediaItemComponent', () => {
   });
 
   it('should emit select on click', () => {
-    spyOn(component.select, 'emit');
+    vi.spyOn(component.select, 'emit');
     fixture.nativeElement.querySelector('.media-item').click();
     expect(component.select.emit).toHaveBeenCalledWith(1);
   });

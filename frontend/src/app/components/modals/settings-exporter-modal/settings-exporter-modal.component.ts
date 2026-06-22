@@ -1,5 +1,6 @@
-import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, computed, inject, signal, output } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
+
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
@@ -14,25 +15,42 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-settings-exporter-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
   templateUrl: './settings-exporter-modal.component.html',
   styleUrl: './settings-exporter-modal.component.scss',
 })
-export class SettingsExporterModalComponent implements OnInit, OnDestroy {
-  @Output() closed = new EventEmitter<void>();
-  @Output() exported = new EventEmitter<void>();
+export class SettingsExporterModalComponent implements OnDestroy {
+  readonly closed = output<void>();
+  readonly exported = output<void>();
+
+  private readonly settingsIoApi = inject(SettingsIoApiService);
 
   view: ModalView = 'picker';
-  exporters: SettingsExporterEntry[] = [];
-  loading = true;
+
+  // Eager `rxResource`: loads the settings-exporter list once on creation,
+  // wrapping the generated-client read so the interceptor chain still applies.
+  private readonly exportersResource = rxResource({
+    stream: () => this.settingsIoApi.listExporters(),
+  });
+  readonly exporters = computed<SettingsExporterEntry[]>(() =>
+    (this.exportersResource.value() ?? []).filter((exp) => !exp.hidden_from_picker),
+  );
+  readonly loading = computed(() => this.exportersResource.isLoading());
+
   selectedExporter: SettingsExporterEntry | null = null;
   formValues: Record<string, string> = {};
-  submitting = false;
-  error = '';
-  successMessage = '';
-  private closeTimer: ReturnType<typeof setTimeout> | null = null;
+  // Signalized: the submit subscribe writes these from an unpatched callback.
+  readonly submitting = signal(false);
 
-  constructor(private settingsIoApi: SettingsIoApiService) {}
+  /** Error from a failed export action; the list-load failure is merged in. */
+  private readonly exportError = signal('');
+  readonly error = computed(
+    () =>
+      this.exportError() ||
+      (this.exportersResource.error() ? 'Failed to load settings exporters' : ''),
+  );
+  readonly successMessage = signal('');
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   get modalTitle(): string {
     if (this.view === 'form' && this.selectedExporter) {
@@ -48,24 +66,11 @@ export class SettingsExporterModalComponent implements OnInit, OnDestroy {
     return (this.selectedExporter?.fields ?? []) as ImporterField[];
   }
 
-  ngOnInit(): void {
-    this.settingsIoApi.listExporters().subscribe({
-      next: (list) => {
-        this.exporters = list.filter((exp) => !exp.hidden_from_picker);
-        this.loading = false;
-      },
-      error: () => {
-        this.loading = false;
-        this.error = 'Failed to load settings exporters';
-      },
-    });
-  }
-
   selectExporter(exporter: SettingsExporterEntry): void {
     this.selectedExporter = exporter;
     this.formValues = {};
-    this.error = '';
-    this.successMessage = '';
+    this.exportError.set('');
+    this.successMessage.set('');
     const fields = (exporter.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -90,19 +95,19 @@ export class SettingsExporterModalComponent implements OnInit, OnDestroy {
   back(): void {
     this.view = 'picker';
     this.selectedExporter = null;
-    this.error = '';
-    this.successMessage = '';
+    this.exportError.set('');
+    this.successMessage.set('');
   }
 
   submit(): void {
     if (!this.selectedExporter) return;
-    this.submitting = true;
-    this.error = '';
-    this.successMessage = '';
+    this.submitting.set(true);
+    this.exportError.set('');
+    this.successMessage.set('');
 
     this.settingsIoApi.runExport(this.selectedExporter.name, this.formValues).subscribe({
       next: (res: RunSettingsExportResponse) => {
-        this.submitting = false;
+        this.submitting.set(false);
 
         // Handle browser download response
         if (res.download && res.data) {
@@ -115,13 +120,13 @@ export class SettingsExporterModalComponent implements OnInit, OnDestroy {
           URL.revokeObjectURL(url);
         }
 
-        this.successMessage = res.message || 'Settings exported successfully';
+        this.successMessage.set(res.message || 'Settings exported successfully');
         this.exported.emit();
         this.closeTimer = setTimeout(() => this.close(), 1500);
       },
       error: (err) => {
-        this.submitting = false;
-        this.error = err.error?.error || 'Export failed';
+        this.submitting.set(false);
+        this.exportError.set(err.error?.error || 'Export failed');
       },
     });
   }

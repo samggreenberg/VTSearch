@@ -1,5 +1,5 @@
-import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject, input } from '@angular/core';
+
 import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DatasetStateService } from '../../services/dataset-state.service';
@@ -44,12 +44,22 @@ interface PulldownRow {
 @Component({
   selector: 'vt-context-pulldown',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './context-pulldown.component.html',
   styleUrl: './context-pulldown.component.scss',
 })
 export class ContextPulldownComponent implements OnInit, OnDestroy {
-  @Input() kind: PulldownKind = 'dataset';
+  private host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private datasetState = inject(DatasetStateService);
+  private activeContext = inject(ActiveContextService);
+  private contextSwitch = inject(ContextSwitchService);
+  private newThingFlows = inject(NewThingFlowsService);
+  private pulldownControl = inject(PulldownControlService);
+  private dashboardColumns = inject(DashboardColumnsService);
+  private runningJobs = inject(RunningJobsService);
+  private cdr = inject(ChangeDetectorRef);
+
+  readonly kind = input<PulldownKind>('dataset');
 
   @ViewChild('menuRef') menuRef?: ElementRef<HTMLDivElement>;
 
@@ -86,17 +96,6 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
    *  needing a separate per-row subscription. */
   private busyPairs: Map<string, string[]> = new Map();
 
-  constructor(
-    private host: ElementRef<HTMLElement>,
-    private datasetState: DatasetStateService,
-    private activeContext: ActiveContextService,
-    private contextSwitch: ContextSwitchService,
-    private newThingFlows: NewThingFlowsService,
-    private pulldownControl: PulldownControlService,
-    private dashboardColumns: DashboardColumnsService,
-    private runningJobs: RunningJobsService,
-  ) {}
-
   ngOnInit(): void {
     this.datasetState.datasets$.pipe(takeUntil(this.destroy$)).subscribe(() => {
       this.rebuildRows();
@@ -111,10 +110,13 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       .subscribe(() => this.rebuildRows());
     this.datasetState.error$.pipe(takeUntil(this.destroy$)).subscribe((err) => {
       this.registryError = err;
+      // Written from an async subscribe; notify the scheduler so the error row
+      // repaints under zoneless.
+      this.cdr.markForCheck();
     });
 
     this.newThingFlows.created$.pipe(takeUntil(this.destroy$)).subscribe(({ kind, id }) => {
-      if (kind !== this.kind || !id || !this.awaitingNew) return;
+      if (kind !== this.kind() || !id || !this.awaitingNew) return;
       this.sawSuccessSignal = true;
       this.awaitingNew = false;
       this.switchToNewItem(id);
@@ -143,7 +145,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     });
 
     this.pulldownControl
-      .openSignal$(this.kind)
+      .openSignal$(this.kind())
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.openMenu());
 
@@ -175,7 +177,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   get isDataset(): boolean {
-    return this.kind === 'dataset';
+    return this.kind() === 'dataset';
   }
 
   get placeholderLabel(): string {
@@ -216,6 +218,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       this.focusedIndex = i >= 0 ? i : -1;
     }
     setTimeout(() => this.scrollFocusedIntoView(), 0);
+    // `openMenu` is also driven by the `pulldownControl.openSignal$` subscribe
+    // (an unpatched callback), so notify the scheduler to open the menu under
+    // zoneless. (Calls from bound click/keydown handlers already schedule CD.)
+    this.cdr.markForCheck();
   }
 
   close(): void {
@@ -247,7 +253,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       const other = this.activeContext.intentDatasetId
         ? this.datasetState.datasets.find((d) => d.id === this.activeContext.intentDatasetId)
         : null;
-      this.newThingFlows.openNewDetector({ defaultMediaType: other?.media_type || '' });
+      this.newThingFlows.openNewDetector({
+        defaultMediaType: other?.media_type || '',
+        datasetEmbedder: other?.embedder || '',
+      });
     }
   }
 
@@ -420,6 +429,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       if (i !== -1) this.focusedIndex = i;
       else if (this.focusedIndex >= this.rows.length) this.focusedIndex = -1;
     }
+    // Driven by the registry `datasets$`/`detectors$`/`intentPair$`/`busyPairs$`
+    // subscribes (unpatched callbacks), so notify the scheduler to repaint the
+    // row list / active-name chip under zoneless.
+    this.cdr.markForCheck();
   }
 
   private datasetRow(

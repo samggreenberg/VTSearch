@@ -2,12 +2,11 @@ import {
   AfterViewInit,
   Component,
   ElementRef,
-  EventEmitter,
-  Input,
-  Output,
   ViewChild,
+  input,
+  output
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 
 export interface ImageCropResult {
   /** Crop box in original-image pixel coordinates: [x1, y1, x2, y2]. */
@@ -21,14 +20,14 @@ const HANDLE_HIT_RADIUS = 12;
 @Component({
   selector: 'vt-image-crop-overlay',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './image-crop-overlay.component.html',
   styleUrl: './image-crop-overlay.component.scss',
 })
 export class ImageCropOverlayComponent implements AfterViewInit {
-  @Input() imageUrl = '';
-  @Output() applied = new EventEmitter<ImageCropResult>();
-  @Output() cancelled = new EventEmitter<void>();
+  readonly imageUrl = input('');
+  readonly applied = output<ImageCropResult>();
+  readonly cancelled = output<void>();
 
   @ViewChild('img') imgRef!: ElementRef<HTMLImageElement>;
 

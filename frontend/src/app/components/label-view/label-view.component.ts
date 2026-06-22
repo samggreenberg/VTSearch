@@ -1,5 +1,5 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit, effect, inject, signal, untracked } from '@angular/core';
+
 import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
 import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
@@ -26,6 +26,7 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { DetectorRegistryEntry, ProgressEvent } from '../../models/api.models';
@@ -43,7 +44,6 @@ import { buildMediaContextMenuItems } from './media-context-menu-items';
   selector: 'vt-label-view',
   standalone: true,
   imports: [
-    CommonModule,
     LeftPanelComponent,
     CenterPanelComponent,
     RightPanelComponent,
@@ -51,27 +51,51 @@ import { buildMediaContextMenuItems } from './media-context-menu-items';
     ResortPromptModalComponent,
     ContextMenuComponent,
     MediaCropModalComponent,
-    PanelResizeDirective,
-  ],
+    PanelResizeDirective
+],
   providers: [LabelViewPanelStateService],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
 })
 export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
+  private sortingApi = inject(SortingApiService);
+  private detectorsFindApi = inject(DetectorsFindApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private mediasApi = inject(MediasApiService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private labelSession = inject(LabelSessionService);
+  mediaState = inject(MediaStateService);
+  voteState = inject(VoteStateService);
+  sortState = inject(SortStateService);
+  private settingsState = inject(SettingsStateService);
+  private autopilotStateService = inject(AutopilotStateService);
+  private embedderCaps = inject(EmbedderCapabilityService);
+  private activeContext = inject(ActiveContextService);
+  private progressEvents = inject(ProgressEventsService);
+  private newThingFlows = inject(NewThingFlowsService);
+  private toast = inject(ToastService);
+  panelState = inject(LabelViewPanelStateService);
+
   @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
-  datasetName = '';
+  readonly datasetName = signal('');
   /** Name of the trainable model owning the labels shown on the right pane.
    *  Empty when no trainable model is active; the right pane then falls
    *  back to cid-based vote display. */
-  trainableModelName: string | null = null;
-  labelingStatus: LabelingStatusResponse | null = null;
-  leftWidth = 260;
-  rightWidth = 300;
-  autopilotCollapsed = false;
-  autopilotEnabled = true;
+  readonly trainableModelName = signal<string | null>(null);
+  readonly labelingStatus = signal<LabelingStatusResponse | null>(null);
+  readonly leftWidth = signal(260);
+  readonly rightWidth = signal(300);
+  readonly autopilotCollapsed = signal(false);
+  readonly autopilotEnabled = signal(true);
   progressModalMetric: ProgressMetric | null = null;
+
+  // SortStateService / VoteStateService are now signal-backed (their value
+  // getters read private signals), so the template binds those getters directly
+  // — `sortState.sortBusy`, `voteState.goodVotes`, … — and they repaint under
+  // zoneless when the state changes from async callbacks. The per-consumer
+  // `toSignal` bridges this component used to carry are gone (Phase 2.5).
 
   // Per-media-type panel preferences (view mode, grid size, focus mode, saved
   // widths) live on `panelState`; the template reads getters on it directly.
@@ -81,7 +105,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   get focusModeRight(): 'click' | 'hover' { return this.panelState.focusModeRight; }
 
   // Re-sort prompt state
-  showResortPrompt = false;
+  readonly showResortPrompt = signal(false);
   resortCurrentType: 'text' | 'media' = 'text';
   resortCurrentDisplay = '';
   private resortInterval = 10;
@@ -107,44 +131,106 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  ``applyLearnedSortResult`` / the error/cancel paths. Used by the
    *  Cancel button on the sort progress bar to target the right job. */
   private currentLearnedSortJobId: string | null = null;
-  /** Held subscription to the one-shot `labelsetGoodCount$` watcher that
-   *  re-fires `onLearnedSort` after a pair switch, when sortMode was
-   *  already `learned`. Cleared on each switch so back-to-back switches
-   *  don't leak handlers from earlier pairs. */
-  private rehydrateLearnedSub?: Subscription;
+  /** Set by `reloadForNewPair` when the user was in `learned` sort mode at the
+   *  time of a pair switch: a constructor effect watches the labelset counts and
+   *  re-fires `onLearnedSort` once, after the reloaded votes make both classes
+   *  available. Replaces the old one-shot `labelsetGoodCount$` subscription now
+   *  that VoteStateService is signal-backed. */
+  private pendingRehydrateLearned = false;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
 
-  constructor(
-    private sortingApi: SortingApiService,
-    private detectorsFindApi: DetectorsFindApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private mediasApi: MediasApiService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private labelSession: LabelSessionService,
-    public mediaState: MediaStateService,
-    public voteState: VoteStateService,
-    public sortState: SortStateService,
-    private settingsState: SettingsStateService,
-    private autopilotStateService: AutopilotStateService,
-    private activeContext: ActiveContextService,
-    private progressEvents: ProgressEventsService,
-    private newThingFlows: NewThingFlowsService,
-    private toast: ToastService,
-    public panelState: LabelViewPanelStateService,
-  ) {}
+  constructor() {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      // Settings is the only intended dependency. The body reads and writes the
+      // panel-width / autopilot-collapsed signals (directly and via
+      // `applyPanelPx`/`setAutopilotCollapsed`); without `untracked` those reads
+      // would make the effect depend on signals it also writes — an infinite
+      // loop, plus spurious re-runs that revert a manual collapse toggle while
+      // the settings write is still in flight.
+      untracked(() => {
+        this.panelState.loadFromSettings(settings);
+        if (this.panelState.currentMediaType) {
+          this.applyPanelPx();
+        }
+        if (settings.autopilot_enabled != null) {
+          this.autopilotEnabled.set(settings.autopilot_enabled);
+        }
+        if (settings.hide_autopilot && !this.autopilotCollapsed()) {
+          this.setAutopilotCollapsed(true);
+        } else if (settings.hide_autopilot === false && this.autopilotCollapsed()) {
+          this.setAutopilotCollapsed(false);
+        }
+        if (settings.autopilot_resort_interval != null) {
+          this.resortInterval = settings.autopilot_resort_interval;
+          // Initialize the threshold if not yet set
+          if (this.resortNextThreshold === 0) {
+            this.resortNextThreshold = this.resortInterval;
+          }
+        }
+      });
+    });
+
+    effect(() => {
+      const medias = this.mediaState.mediasSignal();
+      // Track the embedder registry too, so the text-support check inside
+      // `triggerAutopilotTextSort` is reliable (and we never fire a doomed text
+      // sort on a no-text dataset); reading `infos()` here makes this effect
+      // re-run once the registry resolves. Everything else runs `untracked` so
+      // `applyPanelPx`'s width-signal reads/writes don't loop the effect.
+      const infos = this.embedderCaps.infos();
+      untracked(() => {
+        if (medias.length > 0) {
+          const newType = medias[0].media_type;
+          if (newType !== this.panelState.currentMediaType) {
+            this.panelState.setMediaType(newType);
+            this.applyPanelPx();
+          }
+        }
+        if (this.autopilotTextSortPending && medias.length > 0 && infos !== null) {
+          this.autopilotTextSortPending = false;
+          this.triggerAutopilotTextSort();
+        }
+        if (this.autopilotMediaSortPending && medias.length > 0) {
+          this.autopilotMediaSortPending = false;
+          this.triggerAutopilotMediaSort();
+        }
+      });
+    });
+
+    // Phase-3 learned-sort rehydration after a pair switch. `reloadForNewPair`
+    // clears votes (counts → 0) then reloads them; when the reloaded counts make
+    // both classes available again and the user was in `learned` mode, fire one
+    // `onLearnedSort`. Tracking both labelset counts re-runs this effect when
+    // `loadVotes` lands; the body runs `untracked` so reading
+    // `learnedSortAvailable` (which also reads the counts) can't loop it.
+    effect(() => {
+      this.voteState.labelsetGoodCount;
+      this.voteState.labelsetBadCount;
+      untracked(() => {
+        if (!this.pendingRehydrateLearned) return;
+        if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
+          this.pendingRehydrateLearned = false;
+          this.onLearnedSort(false);
+        }
+      });
+    });
+  }
 
   ngOnInit(): void {
     this.autopilotStateService.clear();
+    this.embedderCaps.ensureLoaded();
     this.voteState.clear();
-    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
-    this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
+    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
+    this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     this.loadSettings();
     this.startStatusPolling();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (status) => { this.datasetName = status.display_name || ''; },
+      next: (status) => { this.datasetName.set(status.display_name || ''); },
     });
 
     this.activeContext.modelId$
@@ -165,26 +251,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           return;
         }
         this.reloadForNewPair();
-      });
-
-    this.mediaState.medias$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((medias) => {
-        if (medias.length > 0) {
-          const newType = medias[0].media_type;
-          if (newType !== this.panelState.currentMediaType) {
-            this.panelState.setMediaType(newType);
-            this.applyPanelPx();
-          }
-        }
-        if (this.autopilotTextSortPending && medias.length > 0) {
-          this.autopilotTextSortPending = false;
-          this.triggerAutopilotTextSort();
-        }
-        if (this.autopilotMediaSortPending && medias.length > 0) {
-          this.autopilotMediaSortPending = false;
-          this.triggerAutopilotMediaSort();
-        }
       });
 
     this.autopilotStateService.state$
@@ -230,8 +296,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  and starts a fresh job otherwise; either way the user lands on
    *  learned-sorted content without a manual mode toggle. */
   private reloadForNewPair(): void {
-    this.rehydrateLearnedSub?.unsubscribe();
-    this.rehydrateLearnedSub = undefined;
+    this.pendingRehydrateLearned = false;
     this.sortState.setSortResults([], 0);
     this.sortState.setSortStatus('');
     this.sortState.setSortProgress(0, 0);
@@ -239,23 +304,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (status) => { this.datasetName = status.display_name || ''; },
+      next: (status) => { this.datasetName.set(status.display_name || ''); },
     });
     // Re-seed the slider for the detector we just switched to.
     this.seedInclusion();
 
-    if (this.sortState.sortMode === 'learned') {
-      this.rehydrateLearnedSub = this.voteState.labelsetGoodCount$
-        .pipe(
-          takeUntil(this.destroy$),
-          filter(
-            () =>
-              this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable,
-          ),
-          take(1),
-        )
-        .subscribe(() => this.onLearnedSort(false));
-    }
+    // Arm the rehydrate effect: it fires `onLearnedSort` once the reloaded
+    // votes land (counts go 0 → available) if the user is still in learned mode.
+    this.pendingRehydrateLearned = this.sortState.sortMode === 'learned';
   }
 
   ngOnDestroy(): void {
@@ -270,82 +326,58 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Min width the left panel can shrink to right now (autopilot-collapsed
    *  state lets the user drag down to a thin sliver). */
   get leftMin(): number {
-    return this.autopilotCollapsed ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
+    return this.autopilotCollapsed() ? this.COLLAPSED_WIDTH : this.LEFT_MIN;
   }
 
   onLeftWidthChange(width: number): void {
-    if (this.autopilotCollapsed && width >= this.LEFT_MIN) {
-      this.autopilotCollapsed = false;
+    if (this.autopilotCollapsed() && width >= this.LEFT_MIN) {
+      this.autopilotCollapsed.set(false);
       this.settingsState.update({ hide_autopilot: false }).subscribe();
     }
-    this.leftWidth = width;
+    this.leftWidth.set(width);
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${width}px`);
   }
 
   onLeftResizeEnd(width: number): void {
-    this.leftWidth = width;
+    this.leftWidth.set(width);
     const leftPanelEl = this.layoutRef.nativeElement.querySelector('vt-left-panel') as HTMLElement | null;
     if (leftPanelEl) {
-      const snapped = snapPanelWidthToGridColumns(leftPanelEl, this.leftWidth);
+      const snapped = snapPanelWidthToGridColumns(leftPanelEl, this.leftWidth());
       if (snapped !== null) {
-        const leftMax = this.layoutRef.nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
+        const leftMax = this.layoutRef.nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth();
         const clamped = Math.max(this.leftMin, Math.min(leftMax, snapped));
-        this.leftWidth = clamped;
+        this.leftWidth.set(clamped);
         this.layoutRef.nativeElement.style.setProperty('--left-width', `${clamped}px`);
       }
     }
-    this.panelState.savePanelPx('left', this.leftWidth);
+    this.panelState.savePanelPx('left', this.leftWidth());
   }
 
   onRightWidthChange(width: number): void {
-    this.rightWidth = width;
+    this.rightWidth.set(width);
     this.layoutRef.nativeElement.style.setProperty('--right-width', `${width}px`);
   }
 
   onRightResizeEnd(width: number): void {
-    this.rightWidth = width;
+    this.rightWidth.set(width);
     const rightPanelEl = this.layoutRef.nativeElement.querySelector('vt-right-panel') as HTMLElement | null;
     if (rightPanelEl) {
-      const snapped = snapPanelWidthToGridColumns(rightPanelEl, this.rightWidth);
+      const snapped = snapPanelWidthToGridColumns(rightPanelEl, this.rightWidth());
       if (snapped !== null) {
         const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
-        const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
+        const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth();
         const clamped = Math.max(this.RIGHT_MIN, Math.min(rightMax, snapped));
-        this.rightWidth = clamped;
+        this.rightWidth.set(clamped);
         this.layoutRef.nativeElement.style.setProperty('--right-width', `${clamped}px`);
       }
     }
-    this.panelState.savePanelPx('right', this.rightWidth);
+    this.panelState.savePanelPx('right', this.rightWidth());
   }
 
   // --- Data loading ---
 
   private loadSettings(): void {
     this.settingsState.load();
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((settings) => {
-        if (!settings) return;
-        this.panelState.loadFromSettings(settings);
-        if (this.panelState.currentMediaType) {
-          this.applyPanelPx();
-        }
-        if (settings.autopilot_enabled != null) {
-          this.autopilotEnabled = settings.autopilot_enabled;
-        }
-        if (settings.hide_autopilot && !this.autopilotCollapsed) {
-          this.setAutopilotCollapsed(true);
-        } else if (settings.hide_autopilot === false && this.autopilotCollapsed) {
-          this.setAutopilotCollapsed(false);
-        }
-        if (settings.autopilot_resort_interval != null) {
-          this.resortInterval = settings.autopilot_resort_interval;
-          // Initialize the threshold if not yet set
-          if (this.resortNextThreshold === 0) {
-            this.resortNextThreshold = this.resortInterval;
-          }
-        }
-      });
   }
 
   private startStatusPolling(): void {
@@ -360,7 +392,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: (status) => {
-          this.labelingStatus = status;
+          this.labelingStatus.set(status);
         },
       });
   }
@@ -496,7 +528,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((prog: ProgressEvent) => {
         if (prog.status === 'running') {
           this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
-          this.sortState.setSortProgress(prog.current ?? 0, prog.total ?? 0);
+          this.sortState.setSortProgress(
+            prog.current ?? 0,
+            prog.total ?? 0,
+            prog.overall ?? null,
+            prog.eta_seconds ?? null,
+          );
         }
       });
   }
@@ -636,16 +673,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Pending crop modal state. When set, the user has chosen a "Crop and …"
    *  action and we have fetched the media bytes; the crop modal renders. */
-  cropPending: {
+  readonly cropPending = signal<{
     file: File;
     mediaId: number;
     mediaType: string;
     /** What to do after the crop is confirmed. */
     action: 'sort' | 'seed';
-  } | null = null;
+  } | null>(null);
 
   onMediaContextRequest(event: { id: number; x: number; y: number }): void {
-    const media = this.mediaState.medias.find((m) => m.id === event.id);
+    const media = this.mediaState.mediasSignal().find((m) => m.id === event.id);
     this.contextMenuItems = buildMediaContextMenuItems(media?.media_type ?? '');
     this.contextMenuMediaId = event.id;
     this.contextMenuX = event.x;
@@ -699,9 +736,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private openSeedNewDetector(mediaId: number, cropParams?: Record<string, unknown>): void {
-    const media = this.mediaState.medias.find((m) => m.id === mediaId);
+    const media = this.mediaState.mediasSignal().find((m) => m.id === mediaId);
     this.newThingFlows.openNewDetector({
       defaultMediaType: media?.media_type ?? '',
+      datasetEmbedder: media?.embedder ?? '',
       seedMediaId: mediaId,
       seedCropParams: cropParams,
     });
@@ -726,7 +764,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .then((blob) => {
         const name = media.filename || `media_${mediaId}`;
         const file = new File([blob], name, { type: blob.type });
-        this.cropPending = { file, mediaId, mediaType, action };
+        this.cropPending.set({ file, mediaId, mediaType, action });
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
       })
@@ -738,8 +776,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onCropConfirmed(result: MediaCropResult): void {
-    const pending = this.cropPending;
-    this.cropPending = null;
+    const pending = this.cropPending();
+    this.cropPending.set(null);
     if (!pending) return;
     const cropParams = result.cropParams as Record<string, unknown> | undefined;
     if (pending.action === 'sort') {
@@ -750,21 +788,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onCropCancelled(): void {
-    this.cropPending = null;
+    this.cropPending.set(null);
   }
 
   private refreshTrainableModelName(modelId: string): void {
     if (!modelId) {
-      this.trainableModelName = null;
+      this.trainableModelName.set(null);
       return;
     }
     this.detectorsRegistryApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
       next: (resp) => {
         const entry = resp.detectors.find((m: DetectorRegistryEntry) => m.id === modelId);
-        this.trainableModelName = entry?.name || null;
+        this.trainableModelName.set(entry?.name || null);
       },
       error: () => {
-        this.trainableModelName = null;
+        this.trainableModelName.set(null);
       },
     });
   }
@@ -816,6 +854,31 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Autopilot ---
 
+  /**
+   * Whether the active dataset's embedder can embed text queries. Drives the
+   * Text-sort gate and the Autopilot availability check. Defaults to ``true``
+   * until medias / the embedder registry have loaded so we never hide a
+   * working feature on missing metadata.
+   */
+  get textSupported(): boolean {
+    const medias = this.mediaState.mediasSignal();
+    if (medias.length === 0) return true;
+    return this.embedderCaps.supportsText(medias[0].embedder ?? '');
+  }
+
+  /**
+   * True when Autopilot has no way to seed its first sort: the dataset's
+   * embedder can't search by text, the detector carries no media-example seed,
+   * and there aren't yet enough labels for Learn sort. Bound into the
+   * left-panel to disable the Autopilot tab; it re-enables automatically once
+   * the user labels a good and a bad (Learn sort becomes available).
+   */
+  get autopilotDisabled(): boolean {
+    if (this.textSupported) return false;
+    if (this.labelSession.mediaExample) return false;
+    return !this.voteState.learnedSortAvailable;
+  }
+
   onAutopilotStart(): void {
     // Initialize re-sort tracking
     this.resortVoteCount = 0;
@@ -844,13 +907,15 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const textQuery = this.labelSession.textQuery;
       const mediaExample = this.labelSession.mediaExample;
       if (textQuery) {
-        if (this.mediaState.medias.length > 0) {
+        // Defer until both medias and the embedder registry are loaded so the
+        // no-text check in `triggerAutopilotTextSort` is reliable.
+        if (this.mediaState.mediasSignal().length > 0 && this.embedderCaps.infos() !== null) {
           this.triggerAutopilotTextSort();
         } else {
           this.autopilotTextSortPending = true;
         }
       } else if (mediaExample) {
-        if (this.mediaState.medias.length > 0) {
+        if (this.mediaState.mediasSignal().length > 0) {
           this.triggerAutopilotMediaSort();
         } else {
           this.autopilotMediaSortPending = true;
@@ -864,9 +929,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private triggerAutopilotTextSort(): void {
     const textQuery = this.labelSession.textQuery;
-    if (textQuery) {
-      this.onTextSort(textQuery);
-    }
+    if (!textQuery) return;
+    // No-text dataset, text-hint-only detector: the dataset's embedder can't
+    // embed the query, so don't fire a sort that's guaranteed to fail. The
+    // left-panel disables the Autopilot tab (see `autopilotDisabled`) and the
+    // user labels manually until Learn sort re-enables Autopilot.
+    if (!this.textSupported) return;
+    this.onTextSort(textQuery);
   }
 
   private triggerAutopilotMediaSort(): void {
@@ -921,19 +990,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       } else {
         return; // No example to prompt about
       }
-      this.showResortPrompt = true;
+      this.showResortPrompt.set(true);
     }
   }
 
   onResortKeep(): void {
-    this.showResortPrompt = false;
+    this.showResortPrompt.set(false);
     // Multiply threshold by 1.5 for next prompt
     this.resortNextThreshold = Math.round(this.resortNextThreshold * 1.5);
     this.resortVoteCount = 0;
   }
 
   onResortNewExample(result: ResortResult): void {
-    this.showResortPrompt = false;
+    this.showResortPrompt.set(false);
     this.resortVoteCount = 0;
     // Reset threshold back to the base interval
     this.resortNextThreshold = this.resortInterval;
@@ -961,24 +1030,24 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onAutopilotToggleCollapse(): void {
-    const newVal = !this.autopilotCollapsed;
+    const newVal = !this.autopilotCollapsed();
     this.setAutopilotCollapsed(newVal);
     this.settingsState.update({ hide_autopilot: newVal }).subscribe();
   }
 
   private setAutopilotCollapsed(collapsed: boolean): void {
-    this.autopilotCollapsed = collapsed;
+    this.autopilotCollapsed.set(collapsed);
     if (collapsed) {
-      this.savedLeftWidth = this.leftWidth;
-      this.leftWidth = this.COLLAPSED_WIDTH;
+      this.savedLeftWidth = this.leftWidth();
+      this.leftWidth.set(this.COLLAPSED_WIDTH);
     } else {
-      this.leftWidth = this.savedLeftWidth;
+      this.leftWidth.set(this.savedLeftWidth);
     }
-    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
+    this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
   }
 
   onAutopilotEnabledChange(enabled: boolean): void {
-    this.autopilotEnabled = enabled;
+    this.autopilotEnabled.set(enabled);
     this.settingsState.update({ autopilot_enabled: enabled }).subscribe();
   }
 
@@ -1009,7 +1078,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Deactivate autopilot state so resort prompt and phase logic stop firing.
     this.autopilotStateService.deactivate();
-    this.showResortPrompt = false;
+    this.showResortPrompt.set(false);
+    // Drop any deferred seed sort that hasn't fired yet (e.g. we stopped before
+    // medias finished loading) so it can't fire after autopilot is gone.
+    this.autopilotTextSortPending = false;
+    this.autopilotMediaSortPending = false;
   }
 
   // --- Panel width helpers ---
@@ -1020,16 +1093,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private applyPanelPx(): void {
     const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width || 1200;
     const leftPx = this.panelState.getPanelPx('left');
-    if (leftPx != null && !this.autopilotCollapsed) {
-      const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
-      this.leftWidth = Math.max(this.LEFT_MIN, Math.min(leftMax, leftPx));
-      this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
+    if (leftPx != null && !this.autopilotCollapsed()) {
+      const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth();
+      this.leftWidth.set(Math.max(this.LEFT_MIN, Math.min(leftMax, leftPx)));
+      this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
     }
     const rightPx = this.panelState.getPanelPx('right');
     if (rightPx != null) {
-      const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
-      this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, rightPx));
-      this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth}px`);
+      const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth();
+      this.rightWidth.set(Math.max(this.RIGHT_MIN, Math.min(rightMax, rightPx)));
+      this.layoutRef.nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
     }
   }
 

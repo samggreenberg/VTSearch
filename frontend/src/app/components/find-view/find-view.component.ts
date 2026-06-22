@@ -1,7 +1,7 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, NgZone, AfterViewInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { combineLatest, Subject, Subscription } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { finalize, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
@@ -26,7 +26,12 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { ProgressEvent } from '../../models/api.models';
-import { formatProgressMessage } from '../../utils/format-progress';
+import {
+  ProgressBarState,
+  formatEta,
+  formatProgressMessage,
+  progressBarState,
+} from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
@@ -45,14 +50,37 @@ import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/gr
   styleUrl: './find-view.component.scss',
 })
 export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
+  private mediasApi = inject(MediasApiService);
+  private detectorsFindApi = inject(DetectorsFindApiService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private toast = inject(ToastService);
+  private dialog = inject(VtDialogService);
+  private ngZone = inject(NgZone);
+  private activeContext = inject(ActiveContextService);
+  private datasetState = inject(DatasetStateService);
+  mediaState = inject(MediaStateService);
+  voteState = inject(VoteStateService);
+  sortState = inject(SortStateService);
+  private sortingApi = inject(SortingApiService);
+  private settingsState = inject(SettingsStateService);
+  private progressEvents = inject(ProgressEventsService);
+  private browseSubset = inject(BrowseSubsetService);
+  private router = inject(Router);
+
   @ViewChild('layout', { static: true }) layoutRef!: ElementRef<HTMLElement>;
   @ViewChild(CenterPanelComponent) centerPanel?: CenterPanelComponent;
 
-  datasetName = '';
-  viewModeLeft: 'grid' | 'list' = 'list';
-  gridGoalWidthLeft: number = 80;
-  focusModeLeft: 'click' | 'hover' = 'click';
-  focusModeRight: 'click' | 'hover' = 'click';
+  // Written from non-bound callbacks (HTTP status subscribe, the settings-mirror
+  // effect, the media-type effect) and read in the template, so under zoneless
+  // they must be signals — a plain-field write from those contexts would not
+  // schedule CD and the view would go stale (zoneless-migration.md, Phase 2.5,
+  // Recipe B & F).
+  readonly datasetName = signal('');
+  readonly viewModeLeft = signal<'grid' | 'list'>('list');
+  readonly gridGoalWidthLeft = signal(80);
+  readonly focusModeLeft = signal<'click' | 'hover'>('click');
+  readonly focusModeRight = signal<'click' | 'hover'>('click');
   private viewModeLeftDict: Record<string, 'grid' | 'list'> = {};
   private gridIconSizeLeftDict: Record<string, string> = {};
   private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
@@ -63,18 +91,21 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   leftWidth = 260;
   rightWidth = 300;
 
-  /** Verified ids (Find mode): the right-panel confirmed pile. */
-  verifiedIds: Set<number> = new Set();
   /**
    * The left work queue: the scored ranking with verified items removed. The
    * left panel is the *unverified* pile — once an item is verified it knows
    * its colour and moves to the right, so it drops off the left (and out of
-   * the stripe).  Recomputed only when the ranking or the verified set
-   * changes (not every change-detection cycle) so the media-list / stripe
-   * don't rebuild needlessly.  Fed to both the media-list and the stripe so
-   * their index spaces stay aligned for stripe-click navigation.
+   * the stripe).  A `computed` over the sort ranking + the verified set, so it
+   * recomputes only when one of those signals changes (not every change-detection
+   * cycle) and the memoised identity keeps the media-list / stripe from
+   * rebuilding needlessly.  Fed to both the media-list and the stripe so their
+   * index spaces stay aligned for stripe-click navigation.
    */
-  unverifiedSortOrder: SortedItem[] | null = null;
+  readonly unverifiedSortOrder = computed<SortedItem[] | null>(() => {
+    const order = this.sortState.sortOrder;
+    const verified = this.voteState.verifiedIds;
+    return order && verified.size > 0 ? order.filter((item) => !verified.has(item.id)) : order;
+  });
   /**
    * Stable empty vote sets handed to the left panel in Find mode: the left
    * shows only unverified items, which carry no colour, so the media-list and
@@ -100,25 +131,71 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private boundRightMouseMove = this.onRightMouseMove.bind(this);
   private boundRightMouseUp = this.onRightMouseUp.bind(this);
 
-  constructor(
-    private mediasApi: MediasApiService,
-    private detectorsFindApi: DetectorsFindApiService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private toast: ToastService,
-    private dialog: VtDialogService,
-    private ngZone: NgZone,
-    private activeContext: ActiveContextService,
-    private datasetState: DatasetStateService,
-    public mediaState: MediaStateService,
-    public voteState: VoteStateService,
-    public sortState: SortStateService,
-    private sortingApi: SortingApiService,
-    private settingsState: SettingsStateService,
-    private progressEvents: ProgressEventsService,
-    private browseSubset: BrowseSubsetService,
-    private router: Router,
-  ) {}
+  constructor() {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      const dict = settings.view_mode_left;
+      if (dict && typeof dict === 'object') {
+        this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
+        if (this.currentMediaType) {
+          this.viewModeLeft.set(this.viewModeLeftDict[this.currentMediaType] ?? 'list');
+        }
+      }
+      const sizeDict = settings.grid_icon_size_left;
+      if (sizeDict && typeof sizeDict === 'object') {
+        this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
+        if (this.currentMediaType) {
+          this.gridGoalWidthLeft.set(
+            iconSizeToGoalWidth(this.gridIconSizeLeftDict[this.currentMediaType] ?? 'M'),
+          );
+        }
+      }
+      const fmLeft = settings.focus_mode_left;
+      if (fmLeft && typeof fmLeft === 'object') {
+        this.focusModeLeftDict = fmLeft as Record<string, 'click' | 'hover'>;
+        if (this.currentMediaType) {
+          this.focusModeLeft.set(this.focusModeLeftDict[this.currentMediaType] ?? 'click');
+        }
+      }
+      const fmRight = settings.focus_mode_right;
+      if (fmRight && typeof fmRight === 'object') {
+        this.focusModeRightDict = fmRight as Record<string, 'click' | 'hover'>;
+        if (this.currentMediaType) {
+          this.focusModeRight.set(this.focusModeRightDict[this.currentMediaType] ?? 'click');
+        }
+      }
+      const pplDict = settings.panel_pct_left;
+      if (pplDict && typeof pplDict === 'object') {
+        this.panelPxLeftDict = pplDict as Record<string, number>;
+        if (this.currentMediaType) {
+          this.applyPanelPx(this.currentMediaType);
+        }
+      }
+      const pprDict = settings.panel_pct_right;
+      if (pprDict && typeof pprDict === 'object') {
+        this.panelPxRightDict = pprDict as Record<string, number>;
+        if (this.currentMediaType) {
+          this.applyPanelPx(this.currentMediaType);
+        }
+      }
+    });
+
+    effect(() => {
+      const medias = this.mediaState.mediasSignal();
+      if (medias.length > 0) {
+        const newType = medias[0].media_type;
+        if (newType !== this.currentMediaType) {
+          this.currentMediaType = newType;
+          this.viewModeLeft.set(this.viewModeLeftDict[newType] ?? 'list');
+          this.gridGoalWidthLeft.set(iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M'));
+          this.focusModeLeft.set(this.focusModeLeftDict[newType] ?? 'click');
+          this.focusModeRight.set(this.focusModeRightDict[newType] ?? 'click');
+          this.applyPanelPx(newType);
+        }
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.layoutRef.nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
@@ -129,36 +206,15 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.setFindMode(true);
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
-    // The left work queue = the ranking minus verified items. Recompute it
-    // only when the ranking or the verified set changes.
-    combineLatest([this.sortState.sortOrder$, this.voteState.verifiedIds$])
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(([order, verified]) => {
-        this.verifiedIds = verified;
-        this.unverifiedSortOrder =
-          order && verified.size > 0 ? order.filter((item) => !verified.has(item.id)) : order;
-      });
+    // The left work queue (ranking minus verified items) is the
+    // `unverifiedSortOrder` computed, which tracks sortOrder + verifiedIds.
     this.loadSettings();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (status) => { this.datasetName = status.display_name || ''; },
+      next: (status) => { this.datasetName.set(status.display_name || ''); },
     });
 
-    // When medias arrive, run the find-label scoring
-    this.mediaState.medias$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((medias) => {
-        if (medias.length > 0) {
-          const newType = medias[0].media_type;
-          if (newType !== this.currentMediaType) {
-            this.currentMediaType = newType;
-            this.viewModeLeft = this.viewModeLeftDict[newType] ?? 'list';
-            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M');
-            this.focusModeLeft = this.focusModeLeftDict[newType] ?? 'click';
-            this.focusModeRight = this.focusModeRightDict[newType] ?? 'click';
-            this.applyPanelPx(newType);
-          }
-        }
-      });
+    // When medias arrive, the media-type sync runs from a constructor effect
+    // on `mediaState.mediasSignal()`.
 
     // Run find-label to score and label all medias — unless we're returning
     // from the Browser after verifying a selection there. In that case the
@@ -200,7 +256,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (status) => { this.datasetName = status.display_name || ''; },
+      next: (status) => { this.datasetName.set(status.display_name || ''); },
     });
     this.seedInclusion();
     this.runFindLabel();
@@ -234,6 +290,21 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private progressPollSub: Subscription | null = null;
 
+  /** Unified bar state for the scoring overlay: prefers the whole-job
+   *  ``overall`` fraction so the bar fills once across all Find phases. */
+  get sortBar(): ProgressBarState {
+    return progressBarState({
+      current: this.sortState.sortProgress,
+      total: this.sortState.sortProgressTotal,
+      overall: this.sortState.sortOverall,
+    });
+  }
+
+  /** Overall ETA chip for the scoring overlay (empty when unavailable). */
+  get sortEta(): string {
+    return formatEta(this.sortState.sortEtaSeconds);
+  }
+
   private startProgressPolling(): void {
     this.stopProgressPolling();
     this.progressPollSub = this.progressEvents.find$
@@ -241,7 +312,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((prog: ProgressEvent) => {
         if (prog.status === 'running') {
           this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
-          this.sortState.setSortProgress(prog.current ?? 0, prog.total ?? 0);
+          this.sortState.setSortProgress(
+            prog.current ?? 0,
+            prog.total ?? 0,
+            prog.overall ?? null,
+            prog.eta_seconds ?? null,
+          );
         }
       });
   }
@@ -318,10 +394,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     let newWidth = event.clientX - layoutRect.left;
     const leftMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
     newWidth = Math.max(this.LEFT_MIN, Math.min(leftMax, newWidth));
-    this.ngZone.run(() => {
-      this.leftWidth = newWidth;
-      this.layoutRef.nativeElement.style.setProperty('--left-width', `${newWidth}px`);
-    });
+    // `leftWidth` is not template-bound — it only drives the `--left-width` CSS
+    // custom property set imperatively here — so no CD is needed and the former
+    // `ngZone.run` (a zoneless no-op anyway) is dropped.
+    this.leftWidth = newWidth;
+    this.layoutRef.nativeElement.style.setProperty('--left-width', `${newWidth}px`);
   }
 
   private onMouseUp(): void {
@@ -334,10 +411,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       if (snapped !== null) {
         const leftMax = this.layoutRef.nativeElement.getBoundingClientRect().width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
         const clamped = Math.max(this.LEFT_MIN, Math.min(leftMax, snapped));
-        this.ngZone.run(() => {
-          this.leftWidth = clamped;
-          this.layoutRef.nativeElement.style.setProperty('--left-width', `${clamped}px`);
-        });
+        this.leftWidth = clamped;
+        this.layoutRef.nativeElement.style.setProperty('--left-width', `${clamped}px`);
       }
     }
     this.savePanelPx('left');
@@ -360,10 +435,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     let newWidth = layoutRect.right - event.clientX;
     const rightMax = layoutRect.width - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
     newWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, newWidth));
-    this.ngZone.run(() => {
-      this.rightWidth = newWidth;
-      this.layoutRef.nativeElement.style.setProperty('--right-width', `${newWidth}px`);
-    });
+    this.rightWidth = newWidth;
+    this.layoutRef.nativeElement.style.setProperty('--right-width', `${newWidth}px`);
   }
 
   private onRightMouseUp(): void {
@@ -377,10 +450,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         const layoutWidth = this.layoutRef.nativeElement.getBoundingClientRect().width;
         const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
         const clamped = Math.max(this.RIGHT_MIN, Math.min(rightMax, snapped));
-        this.ngZone.run(() => {
-          this.rightWidth = clamped;
-          this.layoutRef.nativeElement.style.setProperty('--right-width', `${clamped}px`);
-        });
+        this.rightWidth = clamped;
+        this.layoutRef.nativeElement.style.setProperty('--right-width', `${clamped}px`);
       }
     }
     this.savePanelPx('right');
@@ -390,53 +461,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private loadSettings(): void {
     this.settingsState.load();
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((settings) => {
-        if (!settings) return;
-        const dict = settings.view_mode_left;
-        if (dict && typeof dict === 'object') {
-          this.viewModeLeftDict = dict as Record<string, 'grid' | 'list'>;
-          if (this.currentMediaType) {
-            this.viewModeLeft = this.viewModeLeftDict[this.currentMediaType] ?? 'list';
-          }
-        }
-        const sizeDict = settings.grid_icon_size_left;
-        if (sizeDict && typeof sizeDict === 'object') {
-          this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
-          if (this.currentMediaType) {
-            this.gridGoalWidthLeft = iconSizeToGoalWidth(this.gridIconSizeLeftDict[this.currentMediaType] ?? 'M');
-          }
-        }
-        const fmLeft = settings.focus_mode_left;
-        if (fmLeft && typeof fmLeft === 'object') {
-          this.focusModeLeftDict = fmLeft as Record<string, 'click' | 'hover'>;
-          if (this.currentMediaType) {
-            this.focusModeLeft = this.focusModeLeftDict[this.currentMediaType] ?? 'click';
-          }
-        }
-        const fmRight = settings.focus_mode_right;
-        if (fmRight && typeof fmRight === 'object') {
-          this.focusModeRightDict = fmRight as Record<string, 'click' | 'hover'>;
-          if (this.currentMediaType) {
-            this.focusModeRight = this.focusModeRightDict[this.currentMediaType] ?? 'click';
-          }
-        }
-        const pplDict = settings.panel_pct_left;
-        if (pplDict && typeof pplDict === 'object') {
-          this.panelPxLeftDict = pplDict as Record<string, number>;
-          if (this.currentMediaType) {
-            this.applyPanelPx(this.currentMediaType);
-          }
-        }
-        const pprDict = settings.panel_pct_right;
-        if (pprDict && typeof pprDict === 'object') {
-          this.panelPxRightDict = pprDict as Record<string, number>;
-          if (this.currentMediaType) {
-            this.applyPanelPx(this.currentMediaType);
-          }
-        }
-      });
   }
 
   // --- Media selection ---
@@ -666,7 +690,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const modelId = this.activeContext.modelId;
     const detectorName =
       this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
-    const base = [this.datasetName, detectorName, 'Results'].filter((s) => !!s).join(' ');
+    const base = [this.datasetName(), detectorName, 'Results'].filter((s) => !!s).join(' ');
 
     this.dialog.prompt('Name the new dataset', base).then((name) => {
       const trimmed = (name ?? '').trim();

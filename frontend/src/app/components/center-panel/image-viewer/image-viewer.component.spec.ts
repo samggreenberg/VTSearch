@@ -42,10 +42,10 @@ describe('ImageViewerComponent', () => {
     component.ngOnChanges({
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
-    expect(component.imageReady).toBeFalse();
+    expect(component.imageReady).toBe(false);
 
     component.onImageLoad();
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
   });
 
   it('should reset imageReady when media changes', () => {
@@ -54,14 +54,14 @@ describe('ImageViewerComponent', () => {
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
     component.onImageLoad();
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
 
     const nextMedia = { ...mockMedia, id: 3, filename: 'next.png' };
     component.media = nextMedia;
     component.ngOnChanges({
       media: { currentValue: nextMedia, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
     });
-    expect(component.imageReady).toBeFalse();
+    expect(component.imageReady).toBe(false);
   });
 
   // Regression: when MediaMetadataCacheService hydrates the stub into a
@@ -77,7 +77,7 @@ describe('ImageViewerComponent', () => {
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
     component.onImageLoad();
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
 
     // Same id, new object reference (typical metadata-cache enrichment).
     const enriched: Media = { ...mockMedia, filename: 'real-name.png' };
@@ -85,7 +85,7 @@ describe('ImageViewerComponent', () => {
     component.ngOnChanges({
       media: { currentValue: enriched, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
     });
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
   });
 
   it('should show image on error to avoid stuck black screen', () => {
@@ -93,10 +93,10 @@ describe('ImageViewerComponent', () => {
     component.ngOnChanges({
       media: { currentValue: mockMedia, previousValue: null, firstChange: true, isFirstChange: () => true },
     });
-    expect(component.imageReady).toBeFalse();
+    expect(component.imageReady).toBe(false);
 
     component.onImageError();
-    expect(component.imageReady).toBeTrue();
+    expect(component.imageReady).toBe(true);
   });
 
   it('should render image element', () => {
@@ -150,8 +150,8 @@ describe('ImageViewerComponent', () => {
     // rendered image. Lets each test focus on the transform math, not on DOM
     // plumbing.
     function setupWrap(component: ImageViewerComponent) {
-      component.renderedW = 100;
-      component.renderedH = 100;
+      component.renderedW.set(100);
+      component.renderedH.set(100);
       component.wrapRef = {
         nativeElement: {
           getBoundingClientRect: () => ({
@@ -211,7 +211,7 @@ describe('ImageViewerComponent', () => {
       // Image translated 20px right; a click at screen 70 used to map to image
       // 0.7 at zoom 2 (50px = 0.5 + 20/100/2 * 2... see math). Concretely:
       // dx = 70 - 50 - 20 = 0; sx = 0; image x = 0.5.
-      component.panX = 20;
+      component.panX.set(20);
       const local = component.screenToImageNormalized(makeEvent(70, 50))!;
       expect(local.x).toBeCloseTo(0.5, 6);
       expect(local.y).toBeCloseTo(0.5, 6);
@@ -226,11 +226,46 @@ describe('ImageViewerComponent', () => {
       expect(local.y).toBeCloseTo(0, 5);
     });
 
+    it('compensates for an ancestor CSS zoom (visual getBoundingClientRect vs layout coords)', () => {
+      // Regression: the app renders <html> at `zoom: 1.1` (styles.scss). A CSS
+      // `zoom` scales an element's rendered box without changing its layout box,
+      // so getBoundingClientRect() and MouseEvent client coords report VISUAL
+      // pixels while clientWidth / renderedW / panX are LAYOUT pixels. Here the
+      // wrap is 100 layout px wide but 110 visual px (Z = 1.1). Without the
+      // visual→layout conversion, every offset from the wrap centre came out
+      // 1.1× too large, drawing the box further from the view centre than the
+      // cursor (proportional to distance from centre, sign-flipping across it).
+      component.renderedW.set(100);
+      component.renderedH.set(100);
+      component.wrapRef = {
+        nativeElement: {
+          clientWidth: 100,
+          clientHeight: 100,
+          getBoundingClientRect: () => ({
+            left: 0,
+            top: 0,
+            width: 110,
+            height: 110,
+            right: 110,
+            bottom: 110,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          }),
+        } as unknown as HTMLDivElement,
+      } as ElementRef<HTMLDivElement>;
+      // Visual centre is at (55, 55). A click 11 visual px right of centre is
+      // 10 layout px → 0.1 normalised, so image x = 0.6, y stays 0.5.
+      const local = component.screenToImageNormalized(makeEvent(66, 55))!;
+      expect(local.x).toBeCloseTo(0.6, 6);
+      expect(local.y).toBeCloseTo(0.5, 6);
+    });
+
     it('combines pan + zoom + rotate self-consistently', () => {
       setupWrap(component);
       component.zoom = 2;
-      component.panX = 10;
-      component.panY = -5;
+      component.panX.set(10);
+      component.panY.set(-5);
       component.rotation = 90;
       // Map a couple of points and verify the transform is invertible:
       // taking two points on screen and rotating by the matching angle, the
@@ -255,17 +290,17 @@ describe('ImageViewerComponent', () => {
    */
   describe('region box coord stability', () => {
     it('does not mutate the box coords when zoom changes', () => {
-      component.regionBox = [0.1, 0.2, 0.5, 0.6];
+      component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
       component.zoom = 2;
-      expect(component.regionBox).toEqual([0.1, 0.2, 0.5, 0.6]);
+      expect(component.regionBox()).toEqual([0.1, 0.2, 0.5, 0.6]);
       component.zoom = 4;
-      expect(component.regionBox).toEqual([0.1, 0.2, 0.5, 0.6]);
+      expect(component.regionBox()).toEqual([0.1, 0.2, 0.5, 0.6]);
       component.zoom = 1;
-      expect(component.regionBox).toEqual([0.1, 0.2, 0.5, 0.6]);
+      expect(component.regionBox()).toEqual([0.1, 0.2, 0.5, 0.6]);
     });
 
     it('keeps regionBoxStyle (percent-of-stage) stable across zoom changes', () => {
-      component.regionBox = [0.1, 0.2, 0.5, 0.6];
+      component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
       const before = component.regionBoxStyle;
       component.zoom = 3;
       expect(component.regionBoxStyle).toEqual(before);
@@ -274,7 +309,7 @@ describe('ImageViewerComponent', () => {
     });
 
     it('returns null style when no box is drawn', () => {
-      component.regionBox = null;
+      component.regionBox.set(null);
       expect(component.regionBoxStyle).toBeNull();
     });
   });
@@ -286,8 +321,8 @@ describe('ImageViewerComponent', () => {
    */
   describe('region box preservation on zero-area Shift-drag', () => {
     function setupWrap(component: ImageViewerComponent) {
-      component.renderedW = 100;
-      component.renderedH = 100;
+      component.renderedW.set(100);
+      component.renderedH.set(100);
       component.wrapRef = {
         nativeElement: {
           getBoundingClientRect: () => ({
@@ -308,8 +343,8 @@ describe('ImageViewerComponent', () => {
     it('keeps the prior box when a Shift-click resolves to zero area', () => {
       setupWrap(component);
       const original: RegionBox = [0.2, 0.3, 0.6, 0.7];
-      component.regionBox = original;
-      component.shiftHeld = true;
+      component.regionBox.set(original);
+      component.shiftHeld.set(true);
 
       let lastEmitted: RegionBox | null | undefined = undefined;
       component.regionBoxChange.subscribe((v) => (lastEmitted = v));
@@ -326,15 +361,15 @@ describe('ImageViewerComponent', () => {
       // mouseup with no motion should restore the original box.
       (component as unknown as { onWindowMouseUp: () => void }).onWindowMouseUp();
 
-      expect(component.regionBox).toEqual(original);
+      expect(component.regionBox()).toEqual(original);
       // Restored to a state the parent already knew; no emit needed.
       expect(lastEmitted).toBeUndefined();
     });
 
     it('leaves the box null when the canvas was already empty and the click is zero-area', () => {
       setupWrap(component);
-      component.regionBox = null;
-      component.shiftHeld = true;
+      component.regionBox.set(null);
+      component.shiftHeld.set(true);
 
       const ev: MouseEvent = {
         button: 0,
@@ -345,14 +380,14 @@ describe('ImageViewerComponent', () => {
       component.onMouseDown(ev);
       (component as unknown as { onWindowMouseUp: () => void }).onWindowMouseUp();
 
-      expect(component.regionBox).toBeNull();
+      expect(component.regionBox()).toBeNull();
     });
   });
 
   describe('marquee mode toggle', () => {
     function setupWrap(component: ImageViewerComponent) {
-      component.renderedW = 100;
-      component.renderedH = 100;
+      component.renderedW.set(100);
+      component.renderedH.set(100);
       component.wrapRef = {
         nativeElement: {
           getBoundingClientRect: () => ({
@@ -371,20 +406,20 @@ describe('ImageViewerComponent', () => {
     }
 
     it('starts off and flips on toggle', () => {
-      expect(component.marqueeMode).toBeFalse();
+      expect(component.marqueeMode).toBe(false);
       component.toggleMarqueeMode();
-      expect(component.marqueeMode).toBeTrue();
+      expect(component.marqueeMode).toBe(true);
       component.toggleMarqueeMode();
-      expect(component.marqueeMode).toBeFalse();
+      expect(component.marqueeMode).toBe(false);
     });
 
     it('reports regionDrawActive when either Shift is held or marquee is on', () => {
-      expect(component.regionDrawActive).toBeFalse();
-      component.shiftHeld = true;
-      expect(component.regionDrawActive).toBeTrue();
-      component.shiftHeld = false;
+      expect(component.regionDrawActive).toBe(false);
+      component.shiftHeld.set(true);
+      expect(component.regionDrawActive).toBe(true);
+      component.shiftHeld.set(false);
       component.marqueeMode = true;
-      expect(component.regionDrawActive).toBeTrue();
+      expect(component.regionDrawActive).toBe(true);
     });
 
     it('shows a crosshair cursor when marquee mode is on', () => {
@@ -406,9 +441,9 @@ describe('ImageViewerComponent', () => {
       component.onMouseDown(ev);
 
       // Mid-drag the box should already exist as the zero-area anchor.
-      expect(component.regionBox).not.toBeNull();
-      expect(component.regionBox![0]).toBeCloseTo(0.3, 5);
-      expect(component.regionBox![1]).toBeCloseTo(0.3, 5);
+      expect(component.regionBox()).not.toBeNull();
+      expect(component.regionBox()![0]).toBeCloseTo(0.3, 5);
+      expect(component.regionBox()![1]).toBeCloseTo(0.3, 5);
     });
 
     it('persists across media changes', () => {
@@ -418,13 +453,62 @@ describe('ImageViewerComponent', () => {
       component.ngOnChanges({
         media: { currentValue: next, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
       });
-      expect(component.marqueeMode).toBeTrue();
+      expect(component.marqueeMode).toBe(true);
+    });
+  });
+
+  describe('best-match highlight overlay', () => {
+    it('starts off and flips on toggle', () => {
+      expect(component.highlightMode).toBe(false);
+      component.toggleHighlightMode();
+      expect(component.highlightMode).toBe(true);
+      component.toggleHighlightMode();
+      expect(component.highlightMode).toBe(false);
+    });
+
+    it('is not visible until both the toggle is on and a box is present', () => {
+      expect(component.highlightVisible).toBe(false);
+      component.highlightMode = true;
+      expect(component.highlightVisible).toBe(false); // no box yet
+      component.highlightBox = [0.1, 0.2, 0.6, 0.7];
+      expect(component.highlightVisible).toBe(true);
+    });
+
+    it('positions the box as percent-of-stage', () => {
+      component.highlightBox = [0.1, 0.2, 0.6, 0.8];
+      expect(component.highlightBoxStyle).toEqual({
+        left: '10.000%',
+        top: '20.000%',
+        width: '50.000%',
+        height: '60.000%',
+      });
+    });
+
+    it('rejects malformed, degenerate, and near-full-image boxes', () => {
+      component.highlightBox = null;
+      expect(component.highlightBoxStyle).toBeNull();
+      component.highlightBox = [0.5, 0.5, 0.4, 0.6]; // x1 < x0 -> zero/negative width
+      expect(component.highlightBoxStyle).toBeNull();
+      component.highlightBox = [0, 0, 1, 1]; // whole-image fallback
+      expect(component.highlightBoxStyle).toBeNull();
+      component.highlightBox = [0, 0, NaN, 0.5];
+      expect(component.highlightBoxStyle).toBeNull();
+    });
+
+    it('persists the toggle across media changes', () => {
+      component.highlightMode = true;
+      const next: Media = { ...mockMedia, id: 77, filename: 'c.png' };
+      component.media = next;
+      component.ngOnChanges({
+        media: { currentValue: next, previousValue: mockMedia, firstChange: false, isFirstChange: () => false },
+      });
+      expect(component.highlightMode).toBe(true);
     });
   });
 
   describe('armed-confirm cancel routing', () => {
     it('emits armedConfirmCanceled instead of clearing the box when Esc is pressed while armed', () => {
-      component.regionBox = [0.1, 0.2, 0.5, 0.6];
+      component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
       component.pendingBadConfirm = true;
       let canceled = false;
       let cleared = false;
@@ -434,19 +518,19 @@ describe('ImageViewerComponent', () => {
       });
       const esc = new KeyboardEvent('keydown', { key: 'Escape' });
       (component as unknown as { onWindowKeyDown: (e: KeyboardEvent) => void }).onWindowKeyDown(esc);
-      expect(canceled).toBeTrue();
-      expect(cleared).toBeFalse();
-      expect(component.regionBox).toEqual([0.1, 0.2, 0.5, 0.6]);
+      expect(canceled).toBe(true);
+      expect(cleared).toBe(false);
+      expect(component.regionBox()).toEqual([0.1, 0.2, 0.5, 0.6]);
     });
 
     it('clears the box on Esc when no armed confirm is pending', () => {
-      component.regionBox = [0.1, 0.2, 0.5, 0.6];
+      component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
       component.pendingBadConfirm = false;
       let emitted: RegionBox | null | undefined = undefined;
       component.regionBoxChange.subscribe((v) => (emitted = v));
       const esc = new KeyboardEvent('keydown', { key: 'Escape' });
       (component as unknown as { onWindowKeyDown: (e: KeyboardEvent) => void }).onWindowKeyDown(esc);
-      expect(component.regionBox).toBeNull();
+      expect(component.regionBox()).toBeNull();
       expect(emitted).toBeNull();
     });
   });

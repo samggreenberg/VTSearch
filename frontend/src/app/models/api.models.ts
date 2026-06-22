@@ -41,6 +41,10 @@ export interface VotesResponse {
   learned_scores: Record<string, number>;
   labelset_good_count?: number;
   labelset_bad_count?: number;
+  /** Normalised [x0, y0, x1, y1] region boxes for good votes cast by drawing
+   *  a box on an image, keyed by media id. Lets the Good pile request a
+   *  cropped thumbnail of just the voted region. Empty when no region votes. */
+  good_region_boxes?: Record<string, number[]>;
 }
 
 // --- Progress ---
@@ -73,6 +77,14 @@ export interface ProgressEvent {
    * enough (>5s) with a known total. ``null`` means "no estimate yet".
    */
   eta_seconds?: number | null;
+  /**
+   * Whole-job completion fraction (0..1) for multi-step operations, computed
+   * by ``ProgressTracker._compute_overall``. When present, the progress bar
+   * fills once across the entire job (download → load → embed → finalize)
+   * instead of resetting at each phase. ``null`` for single-phase operations,
+   * where consumers fall back to ``current``/``total``.
+   */
+  overall?: number | null;
   /** Dataset-only: payload returned by combine-datasets staging. */
   staging_result?: unknown;
   [key: string]: unknown;
@@ -191,6 +203,10 @@ export interface ImporterField {
   max?: string;
   /** For ``number`` fields: step increment (empty / ``"any"`` = unconstrained). */
   step?: string;
+  /** Field keys this field is mutually exclusive with.  Entering a
+   *  non-empty value here blanks each listed field (and they list this
+   *  one back), so only one of the set is ever active at a time. */
+  clears?: string[];
 }
 
 export interface ImporterPickerTab {
@@ -406,6 +422,14 @@ export interface EmbedderInfo {
    * a faint outline over the matched region for datasets using them.
    */
   supports_patch_regions?: boolean;
+  /**
+   * Whether this embedder produces local features (keypoints + descriptors)
+   * for instance matching. ``true`` for structural embedders (SIFT/VLAD and
+   * learned-local-feature variants later); the loader then stores per-image
+   * local features and the geometric re-rank + match-stat verification paths
+   * activate. ``false`` (the default) for every semantic embedder.
+   */
+  supports_geometric_verification?: boolean;
   /**
    * User-facing licence warning to show before the user picks this embedder.
    * ``null`` for embedders with no special licensing constraints; a short

@@ -73,6 +73,11 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["vtsearch*", "vtscore*"]
 
+[tool.setuptools.package-data]
+# Ship the fixed VLAD visual vocabulary (a code asset, like model weights) used
+# by the structural (SIFT/VLAD) embedder.  Rebuilt via scripts/build_vlad_codebook.py.
+"vtscore.media" = ["assets/*.npy"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
@@ -215,6 +220,7 @@ markers = [
     "cli: CLI autodetect, load sort window, progress",
     "converters: document and media converters",
     "projection: VTSBrowse UMAP projection and hex-tile pyramid",
+    "frontend: frontend-only gate (Angular build + npm audit + Vitest unit suite); has no Python tests, runs via ./run-tests.sh frontend",
 ]
 addopts = "-m 'not gpu and not slow'"
 
@@ -241,7 +247,7 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,
-# ans as a shell read-loop variable in scripts/grid),
+# ans as a shell read-loop variable in scripts/slurm),
 # and stylistic spellings the project uses consistently (re-use,
 # pre-select, unparseable, invokable). usera = the "userA" persona in
 # design docs; teh = Yee Whye Teh in references.

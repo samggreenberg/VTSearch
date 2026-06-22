@@ -1,7 +1,5 @@
-import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Component, OnChanges, OnInit, SimpleChanges, effect, inject, input } from '@angular/core';
+
 import { SettingsStateService } from '../../services/settings-state.service';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -13,19 +11,21 @@ type IconSize = (typeof ICON_SIZES)[number];
 @Component({
   selector: 'vt-view-controls',
   standalone: true,
-  imports: [CommonModule, IconComponent],
+  imports: [IconComponent],
   templateUrl: './view-controls.component.html',
   styleUrl: './view-controls.component.scss',
 })
-export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
-  @Input() side: 'left' | 'right' | 'popup' = 'left';
-  @Input() currentMediaType = '';
+export class ViewControlsComponent implements OnInit, OnChanges {
+  private settingsState = inject(SettingsStateService);
+
+  readonly side = input<'left' | 'right' | 'popup'>('left');
+  readonly currentMediaType = input('');
   /**
    * Whether to show the click/hover focus toggle. The VTSBrowse selection
    * panel reuses this control for its Grid/List + size buttons but has no
    * good/bad voting, so it hides the focus group with ``[showFocus]="false"``.
    */
-  @Input() showFocus = true;
+  readonly showFocus = input(true);
   /**
    * Whether the thumbnail-size buttons stay active in list mode. The
    * left/right Find panels keep the historic behavior (size applies to grid
@@ -33,37 +33,31 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
    * scales its list-mode thumbnails too, so it opts in with
    * ``[allowSizeInList]="true"``.
    */
-  @Input() allowSizeInList = false;
+  readonly allowSizeInList = input(false);
   /**
    * Whether to show the Grid/List toggle. The VTSBrowse bin popup is grid-only
    * (it pairs the grid with a large hover preview), so it hides the toggle with
    * ``[showViewMode]="false"`` while keeping the thumbnail-size buttons.
    */
-  @Input() showViewMode = true;
+  readonly showViewMode = input(true);
 
   viewMode: 'grid' | 'list' = 'list';
   focusMode: 'click' | 'hover' = 'click';
   gridIconSize: IconSize = 'M';
 
   private settings: AppSettings = { volume: 50 };
-  private destroy$ = new Subject<void>();
 
-  constructor(private settingsState: SettingsStateService) {}
+  constructor() {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      this.settings = settings;
+      this.refresh();
+    });
+  }
 
   ngOnInit(): void {
     this.settingsState.load();
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(settings => {
-        if (!settings) return;
-        this.settings = settings;
-        this.refresh();
-      });
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -73,7 +67,7 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private refresh(): void {
-    const type = this.currentMediaType;
+    const type = this.currentMediaType();
     this.viewMode = (this.getDict('view_mode')[type] as 'grid' | 'list') ?? this.defaultViewMode();
     this.focusMode = (this.getDict('focus_mode')[type] as 'click' | 'hover') ?? 'click';
     const size = this.getDict('grid_icon_size')[type] as IconSize | undefined;
@@ -83,11 +77,11 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   private defaultViewMode(): 'grid' | 'list' {
     // Left panel reads as a list by default; the right panel and the
     // VTSBrowse bin popup default to a thumbnail grid.
-    return this.side === 'left' ? 'list' : 'grid';
+    return this.side() === 'left' ? 'list' : 'grid';
   }
 
   private key(prefix: 'view_mode' | 'focus_mode' | 'grid_icon_size'): keyof AppSettings {
-    return `${prefix}_${this.side}` as keyof AppSettings;
+    return `${prefix}_${this.side()}` as keyof AppSettings;
   }
 
   private getDict(prefix: 'view_mode' | 'focus_mode' | 'grid_icon_size'): Record<string, string> {
@@ -96,17 +90,17 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   setViewMode(mode: 'grid' | 'list'): void {
-    if (!this.currentMediaType || this.viewMode === mode) return;
+    if (!this.currentMediaType() || this.viewMode === mode) return;
     this.save('view_mode', mode);
   }
 
   setFocusMode(mode: 'click' | 'hover'): void {
-    if (!this.currentMediaType || this.focusMode === mode) return;
+    if (!this.currentMediaType() || this.focusMode === mode) return;
     this.save('focus_mode', mode);
   }
 
   bumpSize(delta: 1 | -1): void {
-    if (!this.currentMediaType || (this.viewMode === 'list' && !this.allowSizeInList)) return;
+    if (!this.currentMediaType() || (this.viewMode === 'list' && !this.allowSizeInList())) return;
     const idx = ICON_SIZES.indexOf(this.gridIconSize);
     const next = ICON_SIZES[Math.max(0, Math.min(ICON_SIZES.length - 1, idx + delta))];
     if (next === this.gridIconSize) return;
@@ -123,7 +117,7 @@ export class ViewControlsComponent implements OnInit, OnChanges, OnDestroy {
 
   private save(prefix: 'view_mode' | 'focus_mode' | 'grid_icon_size', value: string): void {
     const key = this.key(prefix);
-    const updated = { ...this.getDict(prefix), [this.currentMediaType]: value };
+    const updated = { ...this.getDict(prefix), [this.currentMediaType()]: value };
     this.settingsState.update({ [key]: updated } as SettingsUpdate).subscribe();
   }
 }

@@ -1,74 +1,74 @@
 <vt-modal title="Settings" [open]="true" (closed)="close()">
-  @if (loading) {
+  @if (loading()) {
     <p class="empty-state">Loading settings...</p>
   } @else {
     <div class="settings-layout">
       <nav class="settings-tabs">
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'appearance'"
-          (click)="activeSettingsTab = 'appearance'"
+          [class.settings-tab--active]="activeSettingsTab() === 'appearance'"
+          (click)="activeSettingsTab.set('appearance')"
           title="Theme, animations, and view layout options">
-          <vt-icon type="palette" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'appearance'"></vt-icon>
+          <vt-icon type="palette" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'appearance'"></vt-icon>
           Appearance
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'autopilot'"
-          (click)="activeSettingsTab = 'autopilot'"
+          [class.settings-tab--active]="activeSettingsTab() === 'autopilot'"
+          (click)="activeSettingsTab.set('autopilot')"
           title="Configure the guided autopilot labeling workflow">
-          <vt-icon type="steering-wheel" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'autopilot'"></vt-icon>
+          <vt-icon type="steering-wheel" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autopilot'"></vt-icon>
           Autopilot
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'sorting'"
-          (click)="activeSettingsTab = 'sorting'"
+          [class.settings-tab--active]="activeSettingsTab() === 'sorting'"
+          (click)="activeSettingsTab.set('sorting')"
           title="Options that control how learned sorting and calibration behave">
-          <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'sorting'"></vt-icon>
+          <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'sorting'"></vt-icon>
           Sorting
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'imports'"
-          (click)="activeSettingsTab = 'imports'"
+          [class.settings-tab--active]="activeSettingsTab() === 'imports'"
+          (click)="activeSettingsTab.set('imports')"
           title="Default embedder, clipper, and converters to apply when importing each kind of dataset">
-          <vt-icon type="import" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'imports'"></vt-icon>
+          <vt-icon type="import" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'imports'"></vt-icon>
           Data Imports
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'autofind'"
-          (click)="activeSettingsTab = 'autofind'"
+          [class.settings-tab--active]="activeSettingsTab() === 'autofind'"
+          (click)="activeSettingsTab.set('autofind')"
           title="Detectors that auto-run on import, and what to do with their results">
-          <vt-icon type="auto-find" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'autofind'"></vt-icon>
+          <vt-icon type="auto-find" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autofind'"></vt-icon>
           Auto-Find
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'browser'"
-          (click)="activeSettingsTab = 'browser'"
+          [class.settings-tab--active]="activeSettingsTab() === 'browser'"
+          (click)="activeSettingsTab.set('browser')"
           title="VTSBrowse projection-browser look per media type: bin shape, density colormap, and cell size">
-          <vt-icon type="eye" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'browser'"></vt-icon>
+          <vt-icon type="eye" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'browser'"></vt-icon>
           Browser
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab === 'server'"
-          (click)="activeSettingsTab = 'server'"
+          [class.settings-tab--active]="activeSettingsTab() === 'server'"
+          (click)="activeSettingsTab.set('server')"
           title="Settings fixed when the server started; shared by everyone and read-only here">
-          <vt-icon type="server" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab === 'server'"></vt-icon>
+          <vt-icon type="server" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'server'"></vt-icon>
           Server
         </button>
       </nav>
 
       <div class="settings-panel">
         <!-- Appearance -->
-        @if (activeSettingsTab === 'appearance') {
+        @if (activeSettingsTab() === 'appearance') {
           <h3>Appearance</h3>
           <div class="form-group">
             <label class="form-label" title="Color theme for the application interface">Theme</label>
-            <select class="form-select" [ngModel]="settings.theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme" aria-label="Theme">
+            <select class="form-select" [ngModel]="settings().theme" (ngModelChange)="onThemeChange($event)" title="Choose the visual color scheme" aria-label="Theme">
               <option value="system">System</option>
               <option value="dark">Dark</option>
               <option value="light">Light</option>
@@ -85,32 +85,32 @@
               (ngModelChange)="onSoloMediaTypeChange($event)"
               aria-label="Solo media type">
               <option value="">Show everything</option>
-              @for (mt of mediaTypes; track mt.type_id) {
+              @for (mt of mediaTypes(); track mt.type_id) {
                 <option [value]="mt.type_id">{{ mt.name }}</option>
               }
             </select>
           </div>
           <label class="checkbox-row" title="Turn decorative motion on or off across the whole app">
-            <input type="checkbox" [ngModel]="settings.show_animations" (ngModelChange)="onToggle('show_animations', $event)" />
+            <input type="checkbox" [ngModel]="settings().show_animations" (ngModelChange)="onToggle('show_animations', $event)" />
             Show Animations<vt-field-hint-icon hint="Turns decorative motion on or off everywhere at once: the swipe transition when you vote, icon spins/waggles/tilts on buttons and cards, toast and banner slide-ins, smooth scrolling, and projection-browser zoom tweens. (Your operating system’s “reduce motion” setting disables the same things.)"></vt-field-hint-icon>
           </label>
           <label class="checkbox-row" title="Show the collapsible metadata tray below the media viewer (name, type, MD5, custom fields)">
-            <input type="checkbox" [ngModel]="settings.show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
+            <input type="checkbox" [ngModel]="settings().show_metadata" (ngModelChange)="onToggle('show_metadata', $event)" />
             Show metadata panel
           </label>
           <label class="checkbox-row" title="Show the trophy button, unlock pop-ups, and the achievements panel, and track usage milestones. Turning this off zeros all achievement counters and keeps them at zero.">
-            <input type="checkbox" [ngModel]="settings.enable_achievements" (ngModelChange)="onToggleEnableAchievements($event)" />
+            <input type="checkbox" [ngModel]="settings().enable_achievements" (ngModelChange)="onToggleEnableAchievements($event)" />
             Enable achievements
           </label>
 
-          @if (mediaTypes.length > 0) {
+          @if (mediaTypes().length > 0) {
             <h4 class="subhead" title="Configure how media items are displayed and selected in each panel, per media type">Scroll Style</h4>
             <div class="view-tabs">
-              @for (mt of mediaTypes; track mt.type_id) {
+              @for (mt of mediaTypes(); track mt.type_id) {
                 <button
                   class="view-tab"
-                  [class.view-tab--active]="activeViewTab === mt.type_id"
-                  (click)="activeViewTab = mt.type_id">
+                  [class.view-tab--active]="activeViewTab() === mt.type_id"
+                  (click)="activeViewTab.set(mt.type_id)">
                   @if (mt.icon) {
                     <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
                   }
@@ -124,10 +124,10 @@
                 <div class="form-group">
                   <label class="form-label" title="Display media as a vertical list or a thumbnail grid">View Mode:</label>
                   <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab) === 'list'" (click)="onViewModeChange('view_mode_left', activeViewTab, 'list')" title="Show items as a single-column list with names">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab()) === 'list'" (click)="onViewModeChange('view_mode_left', activeViewTab(), 'list')" title="Show items as a single-column list with names">
                       <vt-icon type="list" [size]="14"></vt-icon> List
                     </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab) === 'grid'" (click)="onViewModeChange('view_mode_left', activeViewTab, 'grid')" title="Show items as a thumbnail grid">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_left', activeViewTab()) === 'grid'" (click)="onViewModeChange('view_mode_left', activeViewTab(), 'grid')" title="Show items as a thumbnail grid">
                       <vt-icon type="grid" [size]="14"></vt-icon> Grid
                     </button>
                   </div>
@@ -135,17 +135,17 @@
                 <div class="form-group">
                   <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
                   <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab, 'click')" title="Click an item to preview it in the center panel">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
                       <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
                     </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab) === 'hover'" (click)="onFocusModeChange('focus_mode_left', activeViewTab, 'hover')" title="Hover over an item to immediately preview it">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_left', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_left', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
                       <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
                     </button>
                   </div>
                 </div>
                 <div class="form-group">
                   <label class="form-label" title="Thumbnail size when in grid view mode">Grid Icon Size:</label>
-                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab, $event)" title="Choose thumbnail size for the grid view" aria-label="Left grid icon size">
+                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_left', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_left', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Left grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
                     <option value="M">M</option>
@@ -159,10 +159,10 @@
                 <div class="form-group">
                   <label class="form-label" title="Display labeled items as a vertical list or a thumbnail grid">View Mode:</label>
                   <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab) === 'list'" (click)="onViewModeChange('view_mode_right', activeViewTab, 'list')" title="Show items as a single-column list with names">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab()) === 'list'" (click)="onViewModeChange('view_mode_right', activeViewTab(), 'list')" title="Show items as a single-column list with names">
                       <vt-icon type="list" [size]="14"></vt-icon> List
                     </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab) === 'grid'" (click)="onViewModeChange('view_mode_right', activeViewTab, 'grid')" title="Show items as a thumbnail grid">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getViewMode('view_mode_right', activeViewTab()) === 'grid'" (click)="onViewModeChange('view_mode_right', activeViewTab(), 'grid')" title="Show items as a thumbnail grid">
                       <vt-icon type="grid" [size]="14"></vt-icon> Grid
                     </button>
                   </div>
@@ -170,17 +170,17 @@
                 <div class="form-group">
                   <label class="form-label" title="How an item is selected for preview: click to select, or hover to preview on mouseover">Focus Mode:</label>
                   <div class="toggle-group">
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab, 'click')" title="Click an item to preview it in the center panel">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'click'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'click')" title="Click an item to preview it in the center panel">
                       <vt-icon type="cursor-click" [size]="14"></vt-icon> Click
                     </button>
-                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab) === 'hover'" (click)="onFocusModeChange('focus_mode_right', activeViewTab, 'hover')" title="Hover over an item to immediately preview it">
+                    <button class="toggle-btn" [class.toggle-btn--active]="getFocusMode('focus_mode_right', activeViewTab()) === 'hover'" (click)="onFocusModeChange('focus_mode_right', activeViewTab(), 'hover')" title="Hover over an item to immediately preview it">
                       <vt-icon type="cursor-hover" [size]="14"></vt-icon> Hover
                     </button>
                   </div>
                 </div>
                 <div class="form-group">
                   <label class="form-label" title="Thumbnail size when in grid view mode">Grid Icon Size:</label>
-                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab)" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab, $event)" title="Choose thumbnail size for the grid view" aria-label="Right grid icon size">
+                  <select class="form-select" [ngModel]="getGridIconSize('grid_icon_size_right', activeViewTab())" (ngModelChange)="onGridIconSizeChange('grid_icon_size_right', activeViewTab(), $event)" title="Choose thumbnail size for the grid view" aria-label="Right grid icon size">
                     <option value="XS">XS</option>
                     <option value="S">S</option>
                     <option value="M">M</option>
@@ -194,31 +194,31 @@
         }
 
         <!-- Sorting & Calibration -->
-        @if (activeSettingsTab === 'sorting') {
+        @if (activeSettingsTab() === 'sorting') {
           <h3>Sorting &amp; Calibration</h3>
           <label class="checkbox-row" title="Prepend item filenames to text-sort queries to improve semantic matching for named items">
-            <input type="checkbox" [ngModel]="settings.enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
+            <input type="checkbox" [ngModel]="settings().enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
             Enrich descriptions
           </label>
           <label class="checkbox-row" title="Blend the learned threshold toward 0.5 to reduce aggressive inclusion/exclusion. Useful when the detector has few training examples.">
-            <input type="checkbox" [ngModel]="settings.safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
+            <input type="checkbox" [ngModel]="settings().safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
             Safe thresholds
           </label>
           <div class="form-group">
             <label class="form-label" title="Number of items to evaluate when calibrating the decision threshold after training">Calibrate count</label>
-            <input type="number" class="form-input" [ngModel]="settings.calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to evaluate during threshold calibration" />
+            <input type="number" class="form-input" [ngModel]="settings().calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to evaluate during threshold calibration" />
           </div>
           <div class="form-group">
             <label class="form-label" title="Fraction of labeled items to hold out for calibration (0 = none, 1 = all)">Calibration fraction</label>
-            <input type="number" class="form-input" [ngModel]="settings.calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" title="Hold-out fraction for threshold calibration (0.0 to 1.0)" />
+            <input type="number" class="form-input" [ngModel]="settings().calibration_fraction" (ngModelChange)="onNumberChange('calibration_fraction', $event)" min="0" max="1" step="0.05" title="Hold-out fraction for threshold calibration (0.0 to 1.0)" />
           </div>
         }
 
         <!-- Data Imports -->
-        @if (activeSettingsTab === 'imports') {
+        @if (activeSettingsTab() === 'imports') {
           <h3>Data Imports<vt-field-hint-icon hint="Default import settings per media type. These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type."></vt-field-hint-icon></h3>
           <vt-import-defaults-settings
-            [mediaTypes]="mediaTypes"
+            [mediaTypes]="mediaTypes()"
             [defaults]="importDefaults"
             [effectiveSoloMediaType]="effectiveSoloMediaType"
             (defaultsChange)="onImportDefaultsChange($event)"
@@ -226,7 +226,7 @@
         }
 
         <!-- Auto-Find -->
-        @if (activeSettingsTab === 'autofind') {
+        @if (activeSettingsTab() === 'autofind') {
           <h3>Auto-Find</h3>
           <vt-auto-find-settings
             [autofindExporter]="autofindExporter"
@@ -236,41 +236,41 @@
         }
 
         <!-- Autopilot & Actions -->
-        @if (activeSettingsTab === 'autopilot') {
+        @if (activeSettingsTab() === 'autopilot') {
           <h3>Autopilot &amp; Actions</h3>
           <label class="checkbox-row" title="Hide the Autopilot tab from the left panel in labeling mode">
-            <input type="checkbox" [ngModel]="settings.hide_autopilot" (ngModelChange)="onToggle('hide_autopilot', $event)" />
+            <input type="checkbox" [ngModel]="settings().hide_autopilot" (ngModelChange)="onToggle('hide_autopilot', $event)" />
             Hide autopilot panel
           </label>
           <div class="form-group">
             <label class="form-label" title="Number of Good votes needed before autopilot moves past the initial good-examples phase"># Good to start</label>
-            <input type="number" class="form-input" [ngModel]="settings.autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" title="Good votes required to advance past the first phase" />
+            <input type="number" class="form-input" [ngModel]="settings().autopilot_top_greens" (ngModelChange)="onNumberChange('autopilot_top_greens', $event)" min="0" title="Good votes required to advance past the first phase" />
           </div>
           <div class="form-group">
             <label class="form-label" title="Number of Bad votes needed before autopilot moves past the bad-examples phase"># Bad to start</label>
-            <input type="number" class="form-input" [ngModel]="settings.autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" title="Bad votes required to advance past the second phase" />
+            <input type="number" class="form-input" [ngModel]="settings().autopilot_hard_reds" (ngModelChange)="onNumberChange('autopilot_hard_reds', $event)" min="0" title="Bad votes required to advance past the second phase" />
           </div>
           <div class="form-group">
             <label class="form-label" title="How many new votes to collect before autopilot triggers a re-sort (retrain + re-rank)"># Start to re-sort</label>
-            <input type="number" class="form-input" [ngModel]="settings.autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes between automatic re-sorts" />
+            <input type="number" class="form-input" [ngModel]="settings().autopilot_resort_interval" (ngModelChange)="onNumberChange('autopilot_resort_interval', $event)" min="1" title="Votes between automatic re-sorts" />
           </div>
           <div class="form-group">
             <label class="form-label" title="Target diversity level for the exploration phase. Higher values mean autopilot will push you to sample from more distinct regions of the dataset.">Goal Diversity</label>
-            <input type="number" class="form-input" [ngModel]="settings.autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
+            <input type="number" class="form-input" [ngModel]="settings().autopilot_goal_diversity" (ngModelChange)="onNumberChange('autopilot_goal_diversity', $event)" min="1" title="Target diversity level for the exploration phase" />
           </div>
 
         }
 
         <!-- Browser (VTSBrowse projection browser) -->
-        @if (activeSettingsTab === 'browser') {
+        @if (activeSettingsTab() === 'browser') {
           <h3>Browser<vt-field-hint-icon hint="How the VTSBrowse projection browser looks, per media type. The same controls live on the browse canvas itself; changes here are remembered for next time."></vt-field-hint-icon></h3>
-          @if (mediaTypes.length > 0) {
+          @if (mediaTypes().length > 0) {
             <div class="view-tabs">
-              @for (mt of mediaTypes; track mt.type_id) {
+              @for (mt of mediaTypes(); track mt.type_id) {
                 <button
                   class="view-tab"
-                  [class.view-tab--active]="activeBrowseTab === mt.type_id"
-                  (click)="activeBrowseTab = mt.type_id"
+                  [class.view-tab--active]="activeBrowseTab() === mt.type_id"
+                  (click)="activeBrowseTab.set(mt.type_id)"
                   [title]="'Browser settings for ' + mt.name + ' datasets'">
                   @if (mt.icon) {
                     <vt-icon [type]="mt.icon" [size]="14"></vt-icon>
@@ -283,10 +283,10 @@
               <div class="form-group">
                 <label class="form-label" title="Tile the projection as hexagons or squares">Bin shape</label>
                 <div class="toggle-group">
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseBinShape(activeBrowseTab) === 'hex'" (click)="onBrowseBinShapeChange(activeBrowseTab, 'hex')" title="Tile the projection with hexagons">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseBinShape(activeBrowseTab()) === 'hex'" (click)="onBrowseBinShapeChange(activeBrowseTab(), 'hex')" title="Tile the projection with hexagons">
                     Hexagons
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseBinShape(activeBrowseTab) === 'square'" (click)="onBrowseBinShapeChange(activeBrowseTab, 'square')" title="Tile the projection with squares">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseBinShape(activeBrowseTab()) === 'square'" (click)="onBrowseBinShapeChange(activeBrowseTab(), 'square')" title="Tile the projection with squares">
                     Squares
                   </button>
                 </div>
@@ -294,22 +294,22 @@
               <div class="form-group">
                 <label class="form-label" title="Slide clusters together to close the empty space between them when the projection is built">Compaction<vt-field-hint-icon hint="Slides clusters together to close the empty “oceans” between them, keeping each cluster’s shape intact. Applies to the next projection build or Re-project."></vt-field-hint-icon></label>
                 <div class="toggle-group">
-                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab)" (click)="onBrowseCompactChange(activeBrowseTab, true)" title="Close the empty space between clusters">
+                  <button class="toggle-btn" [class.toggle-btn--active]="getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), true)" title="Close the empty space between clusters">
                     On
                   </button>
-                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseCompact(activeBrowseTab)" (click)="onBrowseCompactChange(activeBrowseTab, false)" title="Keep UMAP's raw spacing">
+                  <button class="toggle-btn" [class.toggle-btn--active]="!getBrowseCompact(activeBrowseTab())" (click)="onBrowseCompactChange(activeBrowseTab(), false)" title="Keep UMAP's raw spacing">
                     Off
                   </button>
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab) ? 'Thumbnail datasets (image, video) always use grayscale, so the density shading never tints the thumbnails.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
-                @if (browseTabUsesThumbnails(activeBrowseTab)) {
+                <label class="form-label" title="Colors the density heatmap. Auto follows your theme: blue (Ocean) in light mode, red→yellow (Heat) in dark mode.">Colormap<vt-field-hint-icon [hint]="browseTabUsesThumbnails(activeBrowseTab()) ? 'Thumbnail datasets (image, video) always use grayscale, so the density shading never tints the thumbnails.' : 'Darker bins mean more items in light mode; brighter bins mean more in dark mode.'"></vt-field-hint-icon></label>
+                @if (browseTabUsesThumbnails(activeBrowseTab())) {
                   <select class="form-select" disabled aria-label="Browser colormap" title="Thumbnail datasets always use grayscale">
                     <option value="gray" selected>Grayscale</option>
                   </select>
                 } @else {
-                  <select class="form-select" [ngModel]="getBrowseColormap(activeBrowseTab)" (ngModelChange)="onBrowseColormapChange(activeBrowseTab, $event)" aria-label="Browser colormap">
+                  <select class="form-select" [ngModel]="getBrowseColormap(activeBrowseTab())" (ngModelChange)="onBrowseColormapChange(activeBrowseTab(), $event)" aria-label="Browser colormap">
                     <option value="auto">Auto (match theme)</option>
                     <option value="heat">Heat (red → yellow)</option>
                     <option value="ocean">Ocean (blue)</option>
@@ -319,7 +319,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label" title="On-screen size of the projection cells">Cell size</label>
-                <select class="form-select" [ngModel]="getBrowseIconSize(activeBrowseTab)" (ngModelChange)="onBrowseIconSizeChange(activeBrowseTab, $event)" aria-label="Browser cell size">
+                <select class="form-select" [ngModel]="getBrowseIconSize(activeBrowseTab())" (ngModelChange)="onBrowseIconSizeChange(activeBrowseTab(), $event)" aria-label="Browser cell size">
                   <option value="XS">XS</option>
                   <option value="S">S</option>
                   <option value="M">M</option>
@@ -339,13 +339,13 @@
                   min="0"
                   [max]="maxThumbnailBorder"
                   step="1"
-                  [ngModel]="getBrowseThumbnailBorder(activeBrowseTab)"
-                  (ngModelChange)="onBrowseThumbnailBorderChange(activeBrowseTab, $event)"
+                  [ngModel]="getBrowseThumbnailBorder(activeBrowseTab())"
+                  (ngModelChange)="onBrowseThumbnailBorderChange(activeBrowseTab(), $event)"
                   aria-label="Browser thumbnail border width" />
               </div>
               <div class="form-group">
                 <label class="form-label" title="Thumbnail size in the bin popup's grid">Popup thumbnail size<vt-field-hint-icon hint="Thumbnail size in the right-click bin popup's grid. Changing it on a popup while browsing remembers the choice here for this media type."></vt-field-hint-icon></label>
-                <select class="form-select" [ngModel]="getPopupGridIconSize(activeBrowseTab)" (ngModelChange)="onPopupGridIconSizeChange(activeBrowseTab, $event)" aria-label="Bin popup thumbnail size">
+                <select class="form-select" [ngModel]="getPopupGridIconSize(activeBrowseTab())" (ngModelChange)="onPopupGridIconSizeChange(activeBrowseTab(), $event)" aria-label="Bin popup thumbnail size">
                   <option value="XS">XS</option>
                   <option value="S">S</option>
                   <option value="M">M</option>
@@ -360,24 +360,24 @@
         }
 
         <!-- Server Settings (read-only) -->
-        @if (activeSettingsTab === 'server') {
+        @if (activeSettingsTab() === 'server') {
           <h3>Server Settings<vt-field-hint-icon hint="These are fixed when the server starts (via config file, environment, or CLI flags) and shared by everyone. They’re shown here for reference and can’t be changed."></vt-field-hint-icon></h3>
 
           <div class="form-group">
             <label class="form-label" title="Root directory where saved datasets are stored on the server">Saved datasets directory</label>
-            <div class="server-value server-value--mono">{{ settings.saved_datasets_dir || '—' }}</div>
+            <div class="server-value server-value--mono">{{ settings().saved_datasets_dir || '—' }}</div>
           </div>
           <div class="form-group">
             <label class="form-label" title="Root directory where detector configurations are stored on the server">Detectors directory</label>
-            <div class="server-value server-value--mono">{{ settings.detectors_dir || '—' }}</div>
+            <div class="server-value server-value--mono">{{ settings().detectors_dir || '—' }}</div>
           </div>
           <div class="form-group">
             <label class="form-label" title="Maximum number of dataset downloads the server runs in parallel">Max concurrent dataset downloads</label>
-            <div class="server-value">{{ settings.max_concurrent_dataset_downloads ?? '—' }}</div>
+            <div class="server-value">{{ settings().max_concurrent_dataset_downloads ?? '—' }}</div>
           </div>
           <div class="form-group">
             <label class="form-label" title="Maximum number of dataset embedding jobs the server runs in parallel">Max concurrent dataset embeddings</label>
-            <div class="server-value">{{ settings.max_concurrent_dataset_embeddings ?? '—' }}</div>
+            <div class="server-value">{{ settings().max_concurrent_dataset_embeddings ?? '—' }}</div>
           </div>
           <div class="form-group">
             <label class="form-label" title="Plugins hidden from pickers and listings for this deployment (still callable by name). Combines the persisted setting with any --hide-plugin CLI flags.">Hidden plugins</label>
@@ -396,16 +396,16 @@
       </div>
     </div>
 
-    @if (error) {
-      <p class="error-text">{{ error }}</p>
+    @if (error()) {
+      <p class="error-text">{{ error() }}</p>
     }
   }
 
   <div class="settings-actions" modal-footer>
-    @if (version) {
-      <span class="settings-version" title="App version (UTC timestamp of the last dev to main merge). Include this when reporting issues.">v {{ version }}</span>
+    @if (version()) {
+      <span class="settings-version" title="App version (UTC timestamp of the last dev to main merge). Include this when reporting issues.">v {{ version() }}</span>
     }
-    <span class="settings-saved" [class.settings-saved--visible]="savedVisible" role="status" aria-live="polite" title="Settings auto-save as you change them">&#10003; saved</span>
+    <span class="settings-saved" [class.settings-saved--visible]="savedVisible()" role="status" aria-live="polite" title="Settings auto-save as you change them">&#10003; saved</span>
     <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
     <button class="btn btn--secondary" (click)="openImporter()" title="Import settings from a file">Import</button>
     <button class="btn btn--secondary" (click)="openExporter()" aria-label="Export" title="Export settings to a file">

@@ -1,4 +1,4 @@
-import { Injectable, NgZone, OnDestroy } from '@angular/core';
+import { Injectable, NgZone, OnDestroy, inject } from '@angular/core';
 import { Subject } from 'rxjs';
 
 export type VoteDirection = 'good' | 'bad';
@@ -15,11 +15,17 @@ export interface KeyboardAction {
 
 @Injectable({ providedIn: 'root' })
 export class KeyboardService implements OnDestroy {
+  private zone = inject(NgZone);
+
+  // Shortcuts are dispatched as a plain Subject emit. Under zoneless CD the
+  // re-entry that used to wrap every `.next()` in `zone.run(...)` is gone: the
+  // CD trigger now lives in the consumer (center-panel), whose shortcut-driven
+  // state is signalized so a write from this callback notifies the scheduler.
+  // The keydown listener still runs in `runOutsideAngular` (a harmless no-op
+  // under zoneless, and it still avoids per-keystroke churn while prod is zoned).
   readonly action$ = new Subject<KeyboardAction>();
 
   private listener: ((e: KeyboardEvent) => void) | null = null;
-
-  constructor(private zone: NgZone) {}
 
   /** Start listening for keyboard shortcuts on the document. */
   start(): void {
@@ -56,7 +62,7 @@ export class KeyboardService implements OnDestroy {
       e.preventDefault();
       (document.activeElement as HTMLElement)?.blur();
       const type = e.shiftKey ? 'redo' : 'undo';
-      this.zone.run(() => this.action$.next({ type }));
+      this.action$.next({ type });
       return;
     }
 
@@ -67,49 +73,49 @@ export class KeyboardService implements OnDestroy {
       case 'ArrowRight':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.zone.run(() => this.action$.next({ type: 'vote', direction: 'good' }));
+        this.action$.next({ type: 'vote', direction: 'good' });
         break;
       case 'ArrowLeft':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.zone.run(() => this.action$.next({ type: 'vote', direction: 'bad' }));
+        this.action$.next({ type: 'vote', direction: 'bad' });
         break;
       case 'ArrowUp':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.zone.run(() => this.action$.next({ type: 'volume', volumeDelta: 0.05 }));
+        this.action$.next({ type: 'volume', volumeDelta: 0.05 });
         break;
       case 'ArrowDown':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.zone.run(() => this.action$.next({ type: 'volume', volumeDelta: -0.05 }));
+        this.action$.next({ type: 'volume', volumeDelta: -0.05 });
         break;
       case ' ':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.zone.run(() => this.action$.next({ type: 'playback' }));
+        this.action$.next({ type: 'playback' });
         break;
       case '+':
       case '=':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.zone.run(() => this.action$.next({ type: 'zoom', zoomDirection: 'in' }));
+        this.action$.next({ type: 'zoom', zoomDirection: 'in' });
         break;
       case '-':
       case '_':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.zone.run(() => this.action$.next({ type: 'zoom', zoomDirection: 'out' }));
+        this.action$.next({ type: 'zoom', zoomDirection: 'out' });
         break;
       case '[':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.zone.run(() => this.action$.next({ type: 'rotate', rotateDirection: 'left' }));
+        this.action$.next({ type: 'rotate', rotateDirection: 'left' });
         break;
       case ']':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.zone.run(() => this.action$.next({ type: 'rotate', rotateDirection: 'right' }));
+        this.action$.next({ type: 'rotate', rotateDirection: 'right' });
         break;
     }
   }

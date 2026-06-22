@@ -1,23 +1,23 @@
-import { Component, EventEmitter, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, inject, output } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'vt-login',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss',
 })
 export class LoginComponent {
-  @Output() loggedIn = new EventEmitter<void>();
+  private auth = inject(AuthService);
+
+  readonly loggedIn = output<void>();
 
   username = '';
   error = '';
   busy = false;
-
-  constructor(private auth: AuthService) {}
 
   submit(): void {
     const name = this.username.trim();

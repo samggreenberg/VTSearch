@@ -1,5 +1,5 @@
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnChanges, SimpleChanges, input, output } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 
 import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.models';
@@ -18,41 +18,41 @@ import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.m
 @Component({
   selector: 'vt-source-specs-picker',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './source-specs-picker.component.html',
   styleUrl: './source-specs-picker.component.scss',
 })
 export class SourceSpecsPickerComponent implements OnChanges {
   /** All converters whose ``target_type`` matches the current native
    *  type.  Comes from the importer's ``to_dict()`` payload. */
-  @Input() availableConverters: ConverterInfo[] = [];
+  readonly availableConverters = input<ConverterInfo[]>([]);
   /** Native media type id (e.g. ``"image"``) - the dataset's output
    *  type.  The native checkbox represents "include direct files of
    *  this type, no conversion". */
-  @Input() nativeType = '';
+  readonly nativeType = input('');
   /** Two-way bound source-spec list submitted to the importer. */
-  @Input() specs: SourceSpec[] = [];
+  readonly specs = input<SourceSpec[]>([]);
   /** Map of type_id → human-readable label.  Falls back to the type_id
    *  when a label is missing. */
-  @Input() typeLabels: Record<string, string> = {};
+  readonly typeLabels = input<Record<string, string>>({});
   /** Clippers available for the native media type.  Drives the native
    *  row's "Details" button - shown only when there is more than one
    *  clipper to pick between (same gate as the legacy standalone
    *  Clipper section).  An empty list means "no clipper choice", and
    *  the Details button is suppressed. */
-  @Input() clippers: ClipperInfo[] = [];
+  readonly clippers = input<ClipperInfo[]>([]);
   /** Name of the clipper currently selected by the parent for the
    *  native row.  Used to look up the matching :class:`ClipperInfo`
    *  for the inline summary preview. */
-  @Input() selectedClipperName = '';
+  readonly selectedClipperName = input('');
   /** Current parameter values for the selected native clipper, keyed by
    *  the clipper's parameter ``key``.  Substituted into the clipper's
    *  ``summary_template`` to render the inline preview. */
-  @Input() selectedClipperParams: Record<string, string | number> = {};
-  @Output() specsChange = new EventEmitter<SourceSpec[]>();
+  readonly selectedClipperParams = input<Record<string, string | number>>({});
+  readonly specsChange = output<SourceSpec[]>();
   /** Fired when the user clicks the native row's "Details" button.
    *  The parent opens the shared clipper-chooser modal in response. */
-  @Output() clipperChooserRequested = new EventEmitter<void>();
+  readonly clipperChooserRequested = output<void>();
 
   /** Per-source-type draft so the user can configure a converter via
    *  the Details panel *before* checking the box.  Edits made while
@@ -65,29 +65,29 @@ export class SourceSpecsPickerComponent implements OnChanges {
       this.drafts.clear();
       this.detailsOpenSet.clear();
     }
-    for (const s of this.specs) {
+    for (const s of this.specs()) {
       if (s.converter !== null) this.drafts.set(s.source_type, s);
     }
   }
 
   get nonNativeSourceTypes(): string[] {
     const set = new Set<string>();
-    for (const c of this.availableConverters) {
-      if (c.source_type !== this.nativeType) set.add(c.source_type);
+    for (const c of this.availableConverters()) {
+      if (c.source_type !== this.nativeType()) set.add(c.source_type);
     }
     return Array.from(set).sort();
   }
 
   labelFor(sourceType: string): string {
-    return this.typeLabels[sourceType] || sourceType;
+    return this.typeLabels()[sourceType] || sourceType;
   }
 
   isNonNativeChecked(sourceType: string): boolean {
-    return this.specs.some((s) => s.source_type === sourceType && s.converter !== null);
+    return this.specs().some((s) => s.source_type === sourceType && s.converter !== null);
   }
 
   convertersFor(sourceType: string): ConverterInfo[] {
-    return this.availableConverters.filter((c) => c.source_type === sourceType);
+    return this.availableConverters().filter((c) => c.source_type === sourceType);
   }
 
   /** True iff the Details opener should be rendered for *sourceType*:
@@ -112,7 +112,7 @@ export class SourceSpecsPickerComponent implements OnChanges {
    *  there has to be more than one clipper for the user to pick
    *  between.  Same gate as the legacy standalone Clipper section. */
   hasNativeDetails(): boolean {
-    return this.clippers.length > 1;
+    return this.clippers().length > 1;
   }
 
   /** Click handler for the native row's Details button - bubbles up to
@@ -126,9 +126,10 @@ export class SourceSpecsPickerComponent implements OnChanges {
    *  first available clipper so the summary still renders when the
    *  parent hasn't picked one yet. */
   private currentClipper(): ClipperInfo | null {
-    if (!this.clippers.length) return null;
-    const byName = this.clippers.find((c) => c.name === this.selectedClipperName);
-    return byName || this.clippers[0];
+    const clippers = this.clippers();
+    if (!clippers.length) return null;
+    const byName = clippers.find((c) => c.name === this.selectedClipperName());
+    return byName || clippers[0];
   }
 
   /** Live one-line summary of the native row's clipper, with current
@@ -144,8 +145,8 @@ export class SourceSpecsPickerComponent implements OnChanges {
     for (const p of c.parameters || []) {
       params[p.key] = p.default;
     }
-    for (const k of Object.keys(this.selectedClipperParams)) {
-      const v = this.selectedClipperParams[k];
+    for (const k of Object.keys(this.selectedClipperParams())) {
+      const v = this.selectedClipperParams()[k];
       if (v !== undefined && v !== null && v !== '') params[k] = v;
     }
     return formatSummary(c.summary_template || c.description || '', params);
@@ -165,7 +166,7 @@ export class SourceSpecsPickerComponent implements OnChanges {
 
   currentConverter(sourceType: string): ConverterInfo | null {
     const name = this.currentConverterName(sourceType);
-    return this.availableConverters.find((c) => c.name === name) || null;
+    return this.availableConverters().find((c) => c.name === name) || null;
   }
 
   paramValue(sourceType: string, key: string): string | number | null {
@@ -174,7 +175,7 @@ export class SourceSpecsPickerComponent implements OnChanges {
   }
 
   toggleNonNative(sourceType: string, checked: boolean): void {
-    const others = this.specs.filter((s) => !(s.source_type === sourceType && s.converter !== null));
+    const others = this.specs().filter((s) => !(s.source_type === sourceType && s.converter !== null));
     if (checked) {
       this.specsChange.emit([...others, { ...this.getDraft(sourceType) }]);
     } else {
@@ -183,7 +184,7 @@ export class SourceSpecsPickerComponent implements OnChanges {
   }
 
   setConverter(sourceType: string, converterName: string): void {
-    const c = this.availableConverters.find((x) => x.name === converterName);
+    const c = this.availableConverters().find((x) => x.name === converterName);
     if (!c) return;
     const draft: SourceSpec = {
       source_type: sourceType,
@@ -192,7 +193,7 @@ export class SourceSpecsPickerComponent implements OnChanges {
     };
     this.drafts.set(sourceType, draft);
     if (this.isNonNativeChecked(sourceType)) {
-      this.specsChange.emit(this.specs.map((s) =>
+      this.specsChange.emit(this.specs().map((s) =>
         (s.source_type === sourceType && s.converter !== null) ? { ...draft } : s
       ));
     }
@@ -200,10 +201,19 @@ export class SourceSpecsPickerComponent implements OnChanges {
 
   setParam(sourceType: string, key: string, value: string | number | null): void {
     const draft = this.getDraft(sourceType);
-    const updated: SourceSpec = { ...draft, params: { ...draft.params, [key]: value } };
+    const params = { ...draft.params, [key]: value };
+    // Mutually-exclusive fields: entering a non-empty value blanks the
+    // peers it declares via ``clears`` so only one stays active.
+    if (value !== null && value !== undefined && String(value) !== '') {
+      const f = this.currentConverter(sourceType)?.fields?.find((x) => x.key === key);
+      for (const peer of f?.clears ?? []) {
+        params[peer] = '';
+      }
+    }
+    const updated: SourceSpec = { ...draft, params };
     this.drafts.set(sourceType, updated);
     if (this.isNonNativeChecked(sourceType)) {
-      this.specsChange.emit(this.specs.map((s) =>
+      this.specsChange.emit(this.specs().map((s) =>
         (s.source_type === sourceType && s.converter !== null) ? { ...updated } : s
       ));
     }

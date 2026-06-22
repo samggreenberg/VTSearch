@@ -3,61 +3,61 @@
 @if (auth.needsLogin) {
   <vt-login (loggedIn)="auth.checkStatus()" />
 } @else {
-<header>
-  <nav class="burger-menu" aria-label="Main menu">
-    <button
-      class="burger-btn"
-      title="Open main menu"
-      aria-label="Menu"
-      [attr.aria-expanded]="menuOpen"
-      aria-haspopup="true"
-      (click)="toggleMenu($event)"
-    >
-      <span aria-hidden="true"></span>
-      <span aria-hidden="true"></span>
-      <span aria-hidden="true"></span>
-    </button>
-    <div
-      class="burger-dropdown"
-      [class.show]="menuOpen"
-      role="menu"
-      aria-label="Main menu"
-      (keydown)="onMenuKeydown($event)"
-    >
+  <header>
+    <nav class="burger-menu" aria-label="Main menu">
+      <button
+        class="burger-btn"
+        title="Open main menu"
+        aria-label="Menu"
+        [attr.aria-expanded]="menuOpen"
+        aria-haspopup="true"
+        (click)="toggleMenu($event)"
+        >
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+      </button>
       <div
-        class="burger-item"
-        [class.disabled]="!isOnLabelView"
-        role="menuitem"
-        tabindex="-1"
-        (click)="onDashboard()"
-        [title]="isOnLabelView ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
-      ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        class="burger-dropdown"
+        [class.show]="menuOpen"
+        role="menu"
+        aria-label="Main menu"
+        (keydown)="onMenuKeydown($event)"
+        >
+        <div
+          class="burger-item"
+          [class.disabled]="!isOnLabelView()"
+          role="menuitem"
+          tabindex="-1"
+          (click)="onDashboard()"
+          [title]="isOnLabelView() ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
+          ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <rect x="1" y="1" width="14" height="11" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
           <rect x="3.5" y="3" width="9" height="3" rx="0.5" stroke="currentColor" stroke-width="1.0"/>
           <rect x="3.5" y="7.5" width="9" height="3" rx="0.5" stroke="currentColor" stroke-width="1.0"/>
           <line x1="8" y1="12" x2="8" y2="14" stroke="currentColor" stroke-width="1.2"/>
           <line x1="5.5" y1="14" x2="10.5" y2="14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
         </svg> Dashboard</div>
-      <div
-        class="burger-item"
-        role="menuitem"
-        tabindex="-1"
-        (click)="onHelp()"
-        title="Show help (keyboard shortcuts and user guide)"
-      ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.2"/>
-          <path d="M5.8 6.2a2.2 2.2 0 014.4 0c0 1.1-.8 1.5-1.5 2-.5.3-.7.7-.7 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
-          <circle cx="8" cy="12" r="0.7" fill="currentColor"/>
-        </svg> Help</div>
-      @if (!achievementsDisabled) {
         <div
           class="burger-item"
           role="menuitem"
           tabindex="-1"
-          (click)="onAchievements()"
-          title="Achievements: usage milestones and tier progress"
-        ><svg class="menu-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          (click)="onHelp()"
+          title="Show help (keyboard shortcuts and user guide)"
+          ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M5.8 6.2a2.2 2.2 0 014.4 0c0 1.1-.8 1.5-1.5 2-.5.3-.7.7-.7 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+          <circle cx="8" cy="12" r="0.7" fill="currentColor"/>
+        </svg> Help</div>
+        @if (!achievementsDisabled()) {
+          <div
+            class="burger-item"
+            role="menuitem"
+            tabindex="-1"
+            (click)="onAchievements()"
+            title="Achievements: usage milestones and tier progress"
+            ><svg class="menu-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 4h12v4a6 6 0 0 1-12 0z"/>
             <path d="M6 6H3a2 2 0 0 0 0 4h3"/>
             <path d="M18 6h3a2 2 0 0 1 0 4h-3"/>
@@ -65,138 +65,142 @@
             <line x1="14" y1="14" x2="14" y2="18"/>
             <rect x="7" y="18" width="10" height="3" rx="1"/>
           </svg> Achievements</div>
-      }
-      <div
-        class="burger-item"
-        role="menuitem"
-        tabindex="-1"
-        (click)="onSettings()"
-        title="Open the Settings panel to configure appearance, sorting, autopilot, and autoload"
-      ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        }
+        <div
+          class="burger-item"
+          role="menuitem"
+          tabindex="-1"
+          (click)="onSettings()"
+          title="Open the Settings panel to configure appearance, sorting, autopilot, and autoload"
+          ><svg class="menu-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M6.7 2.2h2.6l.3 1.8a5.2 5.2 0 011.2.7l1.7-.7 1.3 2.2-1.4 1.1a5.3 5.3 0 010 1.4l1.4 1.1-1.3 2.2-1.7-.7a5.2 5.2 0 01-1.2.7l-.3 1.8H6.7l-.3-1.8a5.2 5.2 0 01-1.2-.7l-1.7.7-1.3-2.2 1.4-1.1a5.3 5.3 0 010-1.4L2.2 6.2l1.3-2.2 1.7.7a5.2 5.2 0 011.2-.7l.3-1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
           <circle cx="8" cy="8" r="1.6" fill="currentColor"/>
         </svg> Settings</div>
-      @if (recentSessions.length > 0) {
-        <div class="burger-section-header">Recent sessions</div>
-        @for (s of recentSessions; track s.dataset_id + '::' + s.detector_id) {
-          <div
-            class="burger-item burger-subitem"
-            role="menuitem"
-            tabindex="-1"
-            (click)="onRecentClicked(s)"
-            [title]="'Resume ' + s.dataset_name + ' / ' + s.detector_name"
-          >
-            <div class="recent-line">
-              <span class="recent-pair">{{ s.dataset_name }} <span class="recent-sep">/</span> {{ s.detector_name }}</span>
-              <span class="recent-time">{{ formatRecentTime(s.last_activity) }}</span>
+        @if (recentSessions().length > 0) {
+          <div class="burger-section-header">Recent sessions</div>
+          @for (s of recentSessions(); track s.dataset_id + '::' + s.detector_id) {
+            <div
+              class="burger-item burger-subitem"
+              role="menuitem"
+              tabindex="-1"
+              (click)="onRecentClicked(s)"
+              [title]="'Resume ' + s.dataset_name + ' / ' + s.detector_name"
+              >
+              <div class="recent-line">
+                <span class="recent-pair">{{ s.dataset_name }} <span class="recent-sep">/</span> {{ s.detector_name }}</span>
+                <span class="recent-time">{{ formatRecentTime(s.last_activity) }}</span>
+              </div>
             </div>
-          </div>
+          }
         }
+      </div>
+    </nav>
+    <a href="mailto:?subject=VTSearch%20Issue%3A" title="Email us with any comments, concerns, or suggestions!">
+      <img src="logo.png" alt="VTSearch logo" class="header-logo">
+    </a>
+    <button
+      class="top-bar-btn"
+      [class.disabled]="!isOnLabelView()"
+      [disabled]="!isOnLabelView()"
+      (click)="onDashboard()"
+      [title]="isOnLabelView() ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
+    >Dashboard</button>
+    <vt-context-pulldown kind="dataset" />
+    <vt-context-pulldown kind="detector" />
+    <span class="top-bar-spacer"></span>
+    @if (!achievementsDisabled()) {
+      <button
+        class="achievements-btn"
+        aria-label="Achievements"
+        title="Achievements: usage milestones and tier progress"
+        (click)="onAchievements()"
+        ><svg aria-hidden="true" [class.trophy-open]="showAchievements()" [class.trophy-close]="achievementsClosing"
+        (animationend)="onTrophyAnimationEnd()"
+        viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 4h12v4a6 6 0 0 1-12 0z"/>
+        <path d="M6 6H3a2 2 0 0 0 0 4h3"/>
+        <path d="M18 6h3a2 2 0 0 1 0 4h-3"/>
+        <line x1="10" y1="14" x2="10" y2="18"/>
+        <line x1="14" y1="14" x2="14" y2="18"/>
+        <rect x="7" y="18" width="10" height="3" rx="1"/>
+      </svg>
+      @if (achievements.hasPending$ | async) {
+        <span class="notif-dot" aria-hidden="true"></span>
       }
-    </div>
-  </nav>
-  <a href="mailto:?subject=VTSearch%20Issue%3A" title="Email us with any comments, concerns, or suggestions!">
-    <img src="logo.png" alt="VTSearch logo" class="header-logo">
-  </a>
-  <button
-    class="top-bar-btn"
-    [class.disabled]="!isOnLabelView"
-    [disabled]="!isOnLabelView"
-    (click)="onDashboard()"
-    [title]="isOnLabelView ? 'Return to the Dashboard to manage datasets and detectors' : 'Already at the Dashboard'"
-  >Dashboard</button>
-  <vt-context-pulldown kind="dataset" />
-  <vt-context-pulldown kind="detector" />
-  <span class="top-bar-spacer"></span>
-  <button
-    *ngIf="!achievementsDisabled"
-    class="achievements-btn"
-    aria-label="Achievements"
-    title="Achievements: usage milestones and tier progress"
-    (click)="onAchievements()"
-  ><svg aria-hidden="true" [class.trophy-open]="showAchievements" [class.trophy-close]="achievementsClosing"
-       (animationend)="onTrophyAnimationEnd()"
-       viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
-       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M6 4h12v4a6 6 0 0 1-12 0z"/>
-      <path d="M6 6H3a2 2 0 0 0 0 4h3"/>
-      <path d="M18 6h3a2 2 0 0 1 0 4h-3"/>
-      <line x1="10" y1="14" x2="10" y2="18"/>
-      <line x1="14" y1="14" x2="14" y2="18"/>
-      <rect x="7" y="18" width="10" height="3" rx="1"/>
-    </svg>
-    @if (achievements.hasPending$ | async) {
-      <span class="notif-dot" aria-hidden="true"></span>
-    }
-  </button>
+    </button>
+  }
   <button
     class="help-btn"
     aria-label="Help"
     title="Help (?)"
     (click)="onHelp()"
-  ><svg aria-hidden="true" [class.help-open]="showKeyboardHelp" [class.help-close]="helpClosing"
-       (animationend)="onHelpAnimationEnd()"
-       viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.2"/>
-      <path d="M5.8 6.2a2.2 2.2 0 014.4 0c0 1.1-.8 1.5-1.5 2-.5.3-.7.7-.7 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
-      <circle cx="8" cy="12" r="0.7" fill="currentColor"/>
-    </svg></button>
+    ><svg aria-hidden="true" [class.help-open]="showKeyboardHelp" [class.help-close]="helpClosing"
+    (animationend)="onHelpAnimationEnd()"
+    viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.2"/>
+    <path d="M5.8 6.2a2.2 2.2 0 014.4 0c0 1.1-.8 1.5-1.5 2-.5.3-.7.7-.7 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+    <circle cx="8" cy="12" r="0.7" fill="currentColor"/>
+  </svg></button>
   <button
     class="settings-btn"
     aria-label="Settings"
     title="Settings"
     (click)="onSettings()"
-  ><svg aria-hidden="true" [class.gear-open]="showSettings" [class.gear-close]="gearClosing"
-       (animationend)="onGearAnimationEnd()"
-       viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M6.7 2.2h2.6l.3 1.8a5.2 5.2 0 011.2.7l1.7-.7 1.3 2.2-1.4 1.1a5.3 5.3 0 010 1.4l1.4 1.1-1.3 2.2-1.7-.7a5.2 5.2 0 01-1.2.7l-.3 1.8H6.7l-.3-1.8a5.2 5.2 0 01-1.2-.7l-1.7.7-1.3-2.2 1.4-1.1a5.3 5.3 0 010-1.4L2.2 6.2l1.3-2.2 1.7.7a5.2 5.2 0 011.2-.7l.3-1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
-      <circle cx="8" cy="8" r="1.6" fill="currentColor"/>
-    </svg></button>
+    ><svg aria-hidden="true" [class.gear-open]="showSettings" [class.gear-close]="gearClosing"
+    (animationend)="onGearAnimationEnd()"
+    viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M6.7 2.2h2.6l.3 1.8a5.2 5.2 0 011.2.7l1.7-.7 1.3 2.2-1.4 1.1a5.3 5.3 0 010 1.4l1.4 1.1-1.3 2.2-1.7-.7a5.2 5.2 0 01-1.2.7l-.3 1.8H6.7l-.3-1.8a5.2 5.2 0 01-1.2-.7l-1.7.7-1.3-2.2 1.4-1.1a5.3 5.3 0 010-1.4L2.2 6.2l1.3-2.2 1.7.7a5.2 5.2 0 011.2-.7l.3-1.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+    <circle cx="8" cy="8" r="1.6" fill="currentColor"/>
+  </svg></button>
 </header>
 <div class="main-content" role="main">
-  @if (showIncompatibleExplainer) {
-    <vt-incompatible-pair-explainer />
+  @if (showIncompatibleExplainer()) {
+    @defer (when showIncompatibleExplainer()) {
+      <vt-incompatible-pair-explainer />
+    }
   } @else {
     <router-outlet />
   }
 </div>
-@defer (when importerFlow.open) {
-  @if (importerFlow.open) {
-    <vt-dataset-importer-modal
-      [guessedMediaType]="importerFlow.guessedMediaType"
-      [guessedMediaEmbedder]="importerFlow.guessedMediaEmbedder"
-      [initialTab]="importerFlow.initialTab"
-      (closed)="onImporterClosed()"
-      (importStarted)="onImportStarted()"
-      (demoSelected)="onDemoSelected($event)"
+@defer (when importerFlow().open) {
+@if (importerFlow().open) {
+  <vt-dataset-importer-modal
+    [guessedMediaType]="importerFlow().guessedMediaType"
+    [guessedMediaEmbedder]="importerFlow().guessedMediaEmbedder"
+    [initialTab]="importerFlow().initialTab"
+    (closed)="onImporterClosed()"
+    (importStarted)="onImportStarted()"
+    (demoSelected)="onDemoSelected($event)"
     />
-  }
 }
-@defer (when newDetectorFlow.open) {
-  @if (newDetectorFlow.open) {
-    <vt-new-detector-modal
-      [defaultMediaType]="newDetectorFlow.defaultMediaType"
-      [seedMediaId]="newDetectorFlow.seedMediaId ?? null"
-      [seedCropParams]="newDetectorFlow.seedCropParams ?? null"
-      (closed)="onNewDetectorClosed()"
-      (created)="onDetectorCreated($event)"
+}
+@defer (when newDetectorFlow().open) {
+@if (newDetectorFlow().open) {
+  <vt-new-detector-modal
+    [defaultMediaType]="newDetectorFlow().defaultMediaType"
+    [datasetEmbedder]="newDetectorFlow().datasetEmbedder"
+    [seedMediaId]="newDetectorFlow().seedMediaId ?? null"
+    [seedCropParams]="newDetectorFlow().seedCropParams ?? null"
+    (closed)="onNewDetectorClosed()"
+    (created)="onDetectorCreated($event)"
     />
-  }
+}
 }
 @defer (when showSettings) {
-  @if (showSettings) {
-    <vt-settings-modal [preselectedViewTab]="settingsViewTab" (closed)="onSettingsClosed()" />
-  }
+@if (showSettings) {
+  <vt-settings-modal [preselectedViewTab]="settingsViewTab" (closed)="onSettingsClosed()" />
 }
-@defer (when showAchievements) {
-  @if (showAchievements) {
-    <vt-achievements-modal (closed)="onAchievementsClosed()" />
-  }
+}
+@defer (when showAchievements()) {
+@if (showAchievements()) {
+  <vt-achievements-modal (closed)="onAchievementsClosed()" />
+}
 }
 @defer (when showKeyboardHelp) {
-  @if (showKeyboardHelp) {
-    <vt-keyboard-help-modal (closed)="onKeyboardHelpClosed()" />
-  }
+@if (showKeyboardHelp) {
+  <vt-keyboard-help-modal (closed)="onKeyboardHelpClosed()" />
+}
 }
 <vt-dialog-host />
 <vt-achievement-unlock-host />

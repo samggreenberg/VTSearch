@@ -43,9 +43,9 @@ describe('VoteStateService', () => {
     const req = httpMock.expectOne('/api/votes');
     req.flush(mockVotes);
 
-    expect(service.goodVotes.has(1)).toBeTrue();
-    expect(service.goodVotes.has(2)).toBeTrue();
-    expect(service.badVotes.has(3)).toBeTrue();
+    expect(service.goodVotes.has(1)).toBe(true);
+    expect(service.goodVotes.has(2)).toBe(true);
+    expect(service.badVotes.has(3)).toBe(true);
     expect(service.clickTimes).toEqual({ '1': 100, '2': 200 });
     expect(service.learnedScores).toEqual({ '1': 0.9 });
   });
@@ -53,7 +53,8 @@ describe('VoteStateService', () => {
   it('startPolling should periodically fetch votes', fakeAsync(() => {
     service.startPolling(1000);
 
-    // First poll at t=0
+    // First poll at t=0 (timer(0, …) emits on a macrotask; flush it).
+    tick(0);
     httpMock.expectOne('/api/votes').flush(mockVotes);
     expect(service.goodVotes.size).toBe(2);
 
@@ -68,6 +69,7 @@ describe('VoteStateService', () => {
 
   it('stopPolling should stop periodic fetches', fakeAsync(() => {
     service.startPolling(1000);
+    tick(0);
     httpMock.expectOne('/api/votes').flush(mockVotes);
 
     service.stopPolling();
@@ -86,19 +88,20 @@ describe('VoteStateService', () => {
 
     // First tick: server is unreachable. Pre-fix this would tear the
     // whole observable down.
+    tick(0);
     httpMock.expectOne('/api/votes').flush(null, { status: 502, statusText: 'Bad Gateway' });
 
     // Local state must NOT be clobbered to empty on a failed tick.
     // (Without the EMPTY shortcut, an empty stub VotesResponse here
     // would silently erase optimistic votes.)
     service.applyOptimisticState(99, 'good');
-    expect(service.goodVotes.has(99)).toBeTrue();
+    expect(service.goodVotes.has(99)).toBe(true);
 
     // Second tick: server is back. The chain must still be alive.
     tick(1000);
     httpMock.expectOne('/api/votes').flush(mockVotes);
-    expect(service.goodVotes.has(1)).toBeTrue();
-    expect(service.goodVotes.has(2)).toBeTrue();
+    expect(service.goodVotes.has(1)).toBe(true);
+    expect(service.goodVotes.has(2)).toBe(true);
 
     service.stopPolling();
     discardPeriodicTasks();
@@ -151,8 +154,8 @@ describe('VoteStateService', () => {
       service.setFindMode(true);
 
       // Buttons read neutral...
-      expect(service.effectiveGood(5)).toBeFalse();
-      expect(service.effectiveBad(5)).toBeFalse();
+      expect(service.effectiveGood(5)).toBe(false);
+      expect(service.effectiveBad(5)).toBe(false);
       // ...and clicking Good verifies (sets absolute good) rather than toggling off.
       expect(service.toggleTargetFor(5, 'good')).toBe('good');
       // Clicking Bad flips the presumption to a verified bad (cull).
@@ -163,8 +166,8 @@ describe('VoteStateService', () => {
       flushVotes([5], [], [5]);
       service.setFindMode(true);
 
-      expect(service.effectiveGood(5)).toBeTrue();
-      expect(service.effectiveBad(5)).toBeFalse();
+      expect(service.effectiveGood(5)).toBe(true);
+      expect(service.effectiveBad(5)).toBe(false);
       // A verified-good item toggles off when Good is clicked again.
       expect(service.toggleTargetFor(5, 'good')).toBe('none');
       // ...and flips to bad when Bad is clicked.
@@ -174,7 +177,7 @@ describe('VoteStateService', () => {
     it('outside Find mode, membership alone decides state', () => {
       flushVotes([5], [], []);
       // findMode left false (default).
-      expect(service.effectiveGood(5)).toBeTrue();
+      expect(service.effectiveGood(5)).toBe(true);
       expect(service.toggleTargetFor(5, 'good')).toBe('none');
     });
   });
@@ -182,23 +185,23 @@ describe('VoteStateService', () => {
   describe('applyOptimisticState (absolute target)', () => {
     it('sets good and assigns a click time', () => {
       service.applyOptimisticState(5, 'good');
-      expect(service.goodVotes.has(5)).toBeTrue();
-      expect(service.badVotes.has(5)).toBeFalse();
+      expect(service.goodVotes.has(5)).toBe(true);
+      expect(service.badVotes.has(5)).toBe(false);
       expect(service.clickTimes['5']).toBe(1);
     });
 
     it('sets bad and assigns a click time', () => {
       service.applyOptimisticState(5, 'bad');
-      expect(service.badVotes.has(5)).toBeTrue();
-      expect(service.goodVotes.has(5)).toBeFalse();
+      expect(service.badVotes.has(5)).toBe(true);
+      expect(service.goodVotes.has(5)).toBe(false);
       expect(service.clickTimes['5']).toBe(1);
     });
 
     it('target=none clears the vote and click time', () => {
       service.applyOptimisticState(5, 'good');
       service.applyOptimisticState(5, 'none');
-      expect(service.goodVotes.has(5)).toBeFalse();
-      expect(service.badVotes.has(5)).toBeFalse();
+      expect(service.goodVotes.has(5)).toBe(false);
+      expect(service.badVotes.has(5)).toBe(false);
       expect(service.clickTimes['5']).toBeUndefined();
     });
 
@@ -207,8 +210,8 @@ describe('VoteStateService', () => {
       expect(service.clickTimes['5']).toBe(1);
 
       service.applyOptimisticState(5, 'good');
-      expect(service.goodVotes.has(5)).toBeTrue();
-      expect(service.badVotes.has(5)).toBeFalse();
+      expect(service.goodVotes.has(5)).toBe(true);
+      expect(service.badVotes.has(5)).toBe(false);
       expect(service.clickTimes['5']).toBe(2);
     });
 
@@ -228,7 +231,7 @@ describe('VoteStateService', () => {
       const req = httpMock.expectOne('/api/medias/5/vote');
       expect(req.request.body).toEqual({ target: 'good' });
       req.flush({ ok: true, state: 'good', click_time: 1 });
-      expect(service.goodVotes.has(5)).toBeTrue();
+      expect(service.goodVotes.has(5)).toBe(true);
     });
 
     it('posts absolute target=none when clicking good on an already-good media (toggle off)', () => {
@@ -237,7 +240,7 @@ describe('VoteStateService', () => {
       const req = httpMock.expectOne('/api/medias/5/vote');
       expect(req.request.body).toEqual({ target: 'none' });
       req.flush({ ok: true, state: 'none', click_time: null });
-      expect(service.goodVotes.has(5)).toBeFalse();
+      expect(service.goodVotes.has(5)).toBe(false);
       expect(service.clickTimes['5']).toBeUndefined();
     });
 
@@ -247,8 +250,8 @@ describe('VoteStateService', () => {
       const req = httpMock.expectOne('/api/medias/5/vote');
       expect(req.request.body).toEqual({ target: 'bad' });
       req.flush({ ok: true, state: 'bad', click_time: 2 });
-      expect(service.badVotes.has(5)).toBeTrue();
-      expect(service.goodVotes.has(5)).toBeFalse();
+      expect(service.badVotes.has(5)).toBe(true);
+      expect(service.goodVotes.has(5)).toBe(false);
     });
 
     it('honours region_box only when the computed target is good', () => {
@@ -271,8 +274,8 @@ describe('VoteStateService', () => {
       // ahead of us); the optimistic 'good' must be overridden.
       req.flush({ ok: true, state: 'none', click_time: null });
 
-      expect(service.goodVotes.has(5)).toBeFalse();
-      expect(service.badVotes.has(5)).toBeFalse();
+      expect(service.goodVotes.has(5)).toBe(false);
+      expect(service.badVotes.has(5)).toBe(false);
       expect(service.clickTimes['5']).toBeUndefined();
     });
   });
@@ -290,9 +293,9 @@ describe('VoteStateService', () => {
       });
 
       // Optimistic vote should still be visible.
-      expect(service.goodVotes.has(10)).toBeTrue();
-      expect(service.goodVotes.has(1)).toBeTrue();
-      expect(service.goodVotes.has(2)).toBeTrue();
+      expect(service.goodVotes.has(10)).toBe(true);
+      expect(service.goodVotes.has(1)).toBe(true);
+      expect(service.goodVotes.has(2)).toBe(true);
 
       // Drain the POST so the test doesn't leave a pending request.
       httpMock.expectOne('/api/medias/10/vote').flush({ ok: true, state: 'good', click_time: 1 });
@@ -312,7 +315,7 @@ describe('VoteStateService', () => {
         .expectOne('/api/votes')
         .flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
 
-      expect(service.goodVotes.has(10)).toBeFalse();
+      expect(service.goodVotes.has(10)).toBe(false);
     });
 
     it('does not get stuck in a predict-vs-server desync (H1 stuck-prediction scenario)', () => {
@@ -325,7 +328,7 @@ describe('VoteStateService', () => {
       expect(req.request.body).toEqual({ target: 'good' });
       req.flush({ ok: true, state: 'good', click_time: 42 });
 
-      expect(service.goodVotes.has(5)).toBeTrue();
+      expect(service.goodVotes.has(5)).toBe(true);
       expect(service.clickTimes['5']).toBe(42);
     });
   });
@@ -345,8 +348,8 @@ describe('VoteStateService', () => {
       expect(req.request.body).toEqual({ target: 'good' });
       req.flush({ ok: true, state: 'good', click_time: 1 });
 
-      expect(service.canRedo()).toBeTrue();
-      expect(service.canUndo()).toBeFalse();
+      expect(service.canRedo()).toBe(true);
+      expect(service.canUndo()).toBe(false);
     });
 
     it('undo of a first-time vote posts target=none', () => {
@@ -373,8 +376,8 @@ describe('VoteStateService', () => {
       expect(req.request.body).toEqual({ target: 'bad' });
       req.flush({ ok: true, state: 'bad', click_time: 2 });
 
-      expect(service.canRedo()).toBeFalse();
-      expect(service.canUndo()).toBeTrue();
+      expect(service.canRedo()).toBe(false);
+      expect(service.canUndo()).toBe(true);
     });
 
     it('a new recordVote clears the redo stack', () => {
@@ -384,16 +387,16 @@ describe('VoteStateService', () => {
       httpMock
         .expectOne('/api/medias/1/vote')
         .flush({ ok: true, state: 'none', click_time: null });
-      expect(service.canRedo()).toBeTrue();
+      expect(service.canRedo()).toBe(true);
 
       service.recordVote(2, 'bad', 'b');
-      expect(service.canRedo()).toBeFalse();
+      expect(service.canRedo()).toBe(false);
     });
 
     it('undo with empty stack is a no-op', () => {
       service.undo();
       httpMock.expectNone('/api/medias/0/vote');
-      expect(service.canUndo()).toBeFalse();
+      expect(service.canUndo()).toBe(false);
     });
 
     it('emits a toast on undo and redo', () => {
@@ -435,10 +438,10 @@ describe('VoteStateService', () => {
 
     it('clear() wipes the undo/redo stacks', () => {
       service.recordVote(1, 'good', 'a');
-      expect(service.canUndo()).toBeTrue();
+      expect(service.canUndo()).toBe(true);
       service.clear();
-      expect(service.canUndo()).toBeFalse();
-      expect(service.canRedo()).toBeFalse();
+      expect(service.canUndo()).toBe(false);
+      expect(service.canRedo()).toBe(false);
     });
   });
 
@@ -446,13 +449,13 @@ describe('VoteStateService', () => {
     it('records the undo entry only after the POST succeeds', () => {
       service.submitToggleVoteAndRecord(5, 'good', 'foo.wav').subscribe();
       // Undo stack must be empty while the POST is in flight.
-      expect(service.canUndo()).toBeFalse();
+      expect(service.canUndo()).toBe(false);
 
       const req = httpMock.expectOne('/api/medias/5/vote');
       req.flush({ ok: true, state: 'good', click_time: 1 });
 
       // After confirmation, the entry should be on the stack.
-      expect(service.canUndo()).toBeTrue();
+      expect(service.canUndo()).toBe(true);
     });
 
     it('does NOT record an undo entry when the POST errors', () => {
@@ -465,7 +468,7 @@ describe('VoteStateService', () => {
 
       // The failed POST must not leave a phantom undo entry; Cmd-Z next
       // would otherwise post a "reversal" of a vote that never happened.
-      expect(service.canUndo()).toBeFalse();
+      expect(service.canUndo()).toBe(false);
     });
 
     it('captures previousPolarity before the optimistic flip', () => {
@@ -474,7 +477,7 @@ describe('VoteStateService', () => {
 
       service.submitToggleVoteAndRecord(5, 'bad', 'foo.wav').subscribe();
       // submitToggleVote inside has already optimistically flipped 5 to bad.
-      expect(service.badVotes.has(5)).toBeTrue();
+      expect(service.badVotes.has(5)).toBe(true);
 
       const req = httpMock.expectOne('/api/medias/5/vote');
       req.flush({ ok: true, state: 'bad', click_time: 2 });
@@ -495,7 +498,7 @@ describe('VoteStateService', () => {
       httpMock
         .expectOne('/api/medias/1/vote')
         .flush({ ok: true, state: 'none', click_time: null });
-      expect(service.canRedo()).toBeTrue();
+      expect(service.canRedo()).toBe(true);
 
       // A new vote whose POST fails must NOT wipe the redo stack; the
       // vote never happened, so the redo entry is still legitimate.
@@ -506,14 +509,14 @@ describe('VoteStateService', () => {
       httpMock
         .expectOne('/api/medias/2/vote')
         .flush(null, { status: 500, statusText: 'Server Error' });
-      expect(service.canRedo()).toBeTrue();
+      expect(service.canRedo()).toBe(true);
 
       // A new vote whose POST succeeds wipes the redo stack as expected.
       service.submitToggleVoteAndRecord(3, 'good', 'c').subscribe();
       httpMock
         .expectOne('/api/medias/3/vote')
         .flush({ ok: true, state: 'good', click_time: 5 });
-      expect(service.canRedo()).toBeFalse();
+      expect(service.canRedo()).toBe(false);
     });
 
     it('honours regionBox on a good vote', () => {
@@ -524,20 +527,55 @@ describe('VoteStateService', () => {
       expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
       req.flush({ ok: true, state: 'good', click_time: 1 });
     });
+
+    it('redo of a region good vote re-applies the click crop', () => {
+      service
+        .submitToggleVoteAndRecord(5, 'good', 'foo.wav', [0.1, 0.2, 0.3, 0.4])
+        .subscribe();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'good', click_time: 1 });
+
+      service.undo();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'none', click_time: null });
+
+      // Redo must restore the original crop, not POST a box-less good vote.
+      service.redo();
+      const redoReq = httpMock.expectOne('/api/medias/5/vote');
+      expect(redoReq.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
+      redoReq.flush({ ok: true, state: 'good', click_time: 2 });
+      expect(service.goodRegionBoxes['5']).toEqual([0.1, 0.2, 0.3, 0.4]);
+    });
+
+    it('undo restores the crop of the previous good vote', () => {
+      // Media 5 already has a region good vote with a known crop.
+      service.applyOptimisticState(5, 'good');
+      service['_goodRegionBoxes'].set({ '5': [0.5, 0.6, 0.7, 0.8] });
+
+      // User re-crops the same good vote with a new box.
+      service
+        .submitToggleVoteAndRecord(5, 'good', 'foo.wav', [0.1, 0.2, 0.3, 0.4])
+        .subscribe();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'good', click_time: 1 });
+
+      // Undo must restore the prior crop, not drop it.
+      service.undo();
+      const undoReq = httpMock.expectOne('/api/medias/5/vote');
+      expect(undoReq.request.body).toEqual({ target: 'good', region_box: [0.5, 0.6, 0.7, 0.8] });
+      undoReq.flush({ ok: true, state: 'good', click_time: 2 });
+      expect(service.goodRegionBoxes['5']).toEqual([0.5, 0.6, 0.7, 0.8]);
+    });
   });
 
-  it('goodVotes$ should emit on load', (done: DoneFn) => {
-    const emissions: Set<number>[] = [];
-    service.goodVotes$.subscribe((v) => emissions.push(v));
-
+  it('goodVotes getter reflects a loaded /api/votes response', () => {
     service.loadVotes();
     httpMock.expectOne('/api/votes').flush(mockVotes);
 
-    setTimeout(() => {
-      const last = emissions[emissions.length - 1];
-      expect(last.has(1)).toBeTrue();
-      expect(last.has(2)).toBeTrue();
-      done();
-    });
+    expect(service.goodVotes.has(1)).toBe(true);
+    expect(service.goodVotes.has(2)).toBe(true);
   });
 });

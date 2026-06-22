@@ -1,14 +1,5 @@
-import {
-  Component,
-  EventEmitter,
-  Input,
-  OnChanges,
-  OnDestroy,
-  OnInit,
-  Output,
-  SimpleChanges,
-} from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, input, output } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -53,19 +44,22 @@ export interface AutoFindExporterChange {
 @Component({
   selector: 'vt-auto-find-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent],
   templateUrl: './auto-find-settings.component.html',
   styleUrl: './auto-find-settings.component.scss',
 })
 export class AutoFindSettingsComponent implements OnInit, OnChanges, OnDestroy {
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private exportersApi = inject(ExportersApiService);
+
   /** Currently configured results-exporter name ('' = no auto-export). */
-  @Input() autofindExporter = '';
+  readonly autofindExporter = input('');
   /** Per-exporter saved field values: `{exporter_name: {field_key: value}}`. */
-  @Input() autofindExporterFieldValues: Record<string, Record<string, string>> = {};
+  readonly autofindExporterFieldValues = input<Record<string, Record<string, string>>>({});
 
   /** Emits the new exporter selection + field-value map for the parent to
    *  persist whenever the user changes the exporter or any of its fields. */
-  @Output() exporterChange = new EventEmitter<AutoFindExporterChange>();
+  readonly exporterChange = output<AutoFindExporterChange>();
 
   detectors: AutofindDetectorEntry[] = [];
   exporters: ExporterEntry[] = [];
@@ -82,23 +76,18 @@ export class AutoFindSettingsComponent implements OnInit, OnChanges, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
-  constructor(
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private exportersApi: ExportersApiService,
-  ) {}
-
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['autofindExporter']) {
-      this.activeExporter = this.autofindExporter || '';
+      this.activeExporter = this.autofindExporter() || '';
     }
     if (changes['autofindExporterFieldValues']) {
-      this.fieldValues = this.cloneFieldValues(this.autofindExporterFieldValues);
+      this.fieldValues = this.cloneFieldValues(this.autofindExporterFieldValues());
     }
   }
 
   ngOnInit(): void {
-    this.activeExporter = this.autofindExporter || '';
-    this.fieldValues = this.cloneFieldValues(this.autofindExporterFieldValues);
+    this.activeExporter = this.autofindExporter() || '';
+    this.fieldValues = this.cloneFieldValues(this.autofindExporterFieldValues());
 
     this.detectorsRegistryApi
       .getRegistry()

@@ -11,7 +11,7 @@
         [disabled]="true"
       />
       <span class="ssp-row-label">
-        <strong>{{ labelFor(nativeType) }}</strong>
+        <strong>{{ labelFor(nativeType()) }}</strong>
       </span>
     </label>
 
@@ -35,7 +35,7 @@
     <div class="ssp-row">
       <label
         class="ssp-row-main"
-        [title]="'Pull in ' + labelFor(st) + ' files and convert them to ' + labelFor(nativeType) + '.'"
+        [title]="'Pull in ' + labelFor(st) + ' files and convert them to ' + labelFor(nativeType()) + '.'"
       >
         <input
           type="checkbox"

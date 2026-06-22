@@ -1,5 +1,5 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, Input, OnDestroy, OnInit, inject, output } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -19,13 +19,15 @@ import type { ExporterEntry } from '../../../generated/api-client/models/exporte
 @Component({
   selector: 'vt-autodetect-results-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, ClipboardCopyComponent],
+  imports: [FormsModule, ModalComponent, ClipboardCopyComponent],
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',
 })
 export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
+  private exportersApi = inject(ExportersApiService);
+
   @Input() data: AutoDetectResultsData = { results: {} };
-  @Output() closed = new EventEmitter<void>();
+  readonly closed = output<void>();
 
   exportSides: 'good' | 'bad' | 'both' = 'good';
   exporters: ExporterEntry[] = [];
@@ -43,8 +45,6 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   ];
 
   private destroy$ = new Subject<void>();
-
-  constructor(private exportersApi: ExportersApiService) {}
 
   ngOnInit(): void {
     this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({

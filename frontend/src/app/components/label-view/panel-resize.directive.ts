@@ -1,14 +1,4 @@
-import {
-  Directive,
-  ElementRef,
-  EventEmitter,
-  HostBinding,
-  HostListener,
-  Input,
-  NgZone,
-  OnDestroy,
-  Output,
-} from '@angular/core';
+import { Directive, ElementRef, HostBinding, HostListener, NgZone, OnDestroy, inject, input, output } from '@angular/core';
 
 /**
  * Handles a vertical-divider drag for a flanking panel inside `vt-label-view`.
@@ -39,23 +29,24 @@ import {
   standalone: true,
 })
 export class PanelResizeDirective implements OnDestroy {
-  @Input('vtPanelResize') side: 'left' | 'right' = 'left';
-  @Input({ required: true }) layoutEl!: HTMLElement;
-  @Input() minWidth = 100;
-  @Input() opposingWidth = 0;
-  @Input() centerMin = 100;
-  @Input() dividerTotal = 16;
+  private host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private ngZone = inject(NgZone);
 
-  @Output() widthChange = new EventEmitter<number>();
-  @Output() resizeEnd = new EventEmitter<number>();
+  readonly side = input<'left' | 'right'>('left', { alias: "vtPanelResize" });
+  readonly layoutEl = input.required<HTMLElement>();
+  readonly minWidth = input(100);
+  readonly opposingWidth = input(0);
+  readonly centerMin = input(100);
+  readonly dividerTotal = input(16);
+
+  readonly widthChange = output<number>();
+  readonly resizeEnd = output<number>();
 
   @HostBinding('class.dragging') dragging = false;
 
   private boundMove = this.onMouseMove.bind(this);
   private boundUp = this.onMouseUp.bind(this);
   private lastWidth = 0;
-
-  constructor(private host: ElementRef<HTMLElement>, private ngZone: NgZone) {}
 
   @HostListener('mousedown', ['$event'])
   onMouseDown(event: MouseEvent): void {
@@ -74,10 +65,10 @@ export class PanelResizeDirective implements OnDestroy {
 
   private onMouseMove(event: MouseEvent): void {
     if (!this.dragging) return;
-    const rect = this.layoutEl.getBoundingClientRect();
-    const raw = this.side === 'left' ? event.clientX - rect.left : rect.right - event.clientX;
-    const max = rect.width - this.dividerTotal - this.centerMin - this.opposingWidth;
-    const width = Math.max(this.minWidth, Math.min(max, raw));
+    const rect = this.layoutEl().getBoundingClientRect();
+    const raw = this.side() === 'left' ? event.clientX - rect.left : rect.right - event.clientX;
+    const max = rect.width - this.dividerTotal() - this.centerMin() - this.opposingWidth();
+    const width = Math.max(this.minWidth(), Math.min(max, raw));
     this.lastWidth = width;
     this.ngZone.run(() => this.widthChange.emit(width));
   }

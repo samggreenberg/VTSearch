@@ -23,6 +23,10 @@ describe('DatasetCardComponent', () => {
     fixture = TestBed.createComponent(DatasetCardComponent);
     component = fixture.componentInstance;
     component.dataset = { ...mockDataset };
+    // The card only renders middle columns listed in columnOrder; the
+    // dashboard supplies this ordering. Provide a representative set so the
+    // media-type and item-count cells render.
+    component.columnOrder = ['media_type', 'num_items', 'created_at'];
     fixture.detectChanges();
   });
 
@@ -46,17 +50,16 @@ describe('DatasetCardComponent', () => {
     expect(el.textContent).toContain('100');
   });
 
-  it('should show checkmark when loaded', () => {
+  it('should hide the load button when already loaded', () => {
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.check')).toBeTruthy();
+    expect(el.querySelector('.load-btn')).toBeFalsy();
   });
 
-  it('should show dash when not loaded', () => {
+  it('should show the load button when not loaded', () => {
     component.dataset = { ...mockDataset, loaded: false };
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    const dims = el.querySelectorAll('.dim');
-    expect(dims.length).toBeGreaterThan(0);
+    expect(el.querySelector('.load-btn')).toBeTruthy();
   });
 
   it('should enter rename mode on rename button click', () => {
@@ -64,7 +67,7 @@ describe('DatasetCardComponent', () => {
     const renameBtn = el.querySelector('.edit-btn') as HTMLElement;
     renameBtn.click();
     fixture.detectChanges();
-    expect(component.editing).toBeTrue();
+    expect(component.editing).toBe(true);
     expect(component.editName).toBe('Test Dataset');
     expect(el.querySelector('.inline-edit')).toBeTruthy();
   });
@@ -80,25 +83,25 @@ describe('DatasetCardComponent', () => {
   }));
 
   it('should emit rename on Enter key', () => {
-    spyOn(component.rename, 'emit');
+    vi.spyOn(component.rename, 'emit');
     component.editing = true;
     component.editName = 'New Name';
     component.onRenameKeydown(new KeyboardEvent('keydown', { key: 'Enter' }));
     expect(component.rename.emit).toHaveBeenCalledWith('New Name');
-    expect(component.editing).toBeFalse();
+    expect(component.editing).toBe(false);
   });
 
   it('should cancel rename on Escape key', () => {
-    spyOn(component.rename, 'emit');
+    vi.spyOn(component.rename, 'emit');
     component.editing = true;
     component.editName = 'New Name';
     component.onRenameKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(component.rename.emit).not.toHaveBeenCalled();
-    expect(component.editing).toBeFalse();
+    expect(component.editing).toBe(false);
   });
 
   it('should not emit rename when name unchanged', () => {
-    spyOn(component.rename, 'emit');
+    vi.spyOn(component.rename, 'emit');
     component.editing = true;
     component.editName = 'Test Dataset';
     component.confirmRename();
@@ -106,7 +109,7 @@ describe('DatasetCardComponent', () => {
   });
 
   it('should emit delete on delete button click', () => {
-    spyOn(component.delete, 'emit');
+    vi.spyOn(component.delete, 'emit');
     const el = fixture.nativeElement as HTMLElement;
     const deleteBtn = el.querySelector('.delete-btn') as HTMLElement;
     deleteBtn.click();
@@ -114,10 +117,10 @@ describe('DatasetCardComponent', () => {
   });
 
   it('should emit browse on browse button click for audio datasets', () => {
-    spyOn(component.browse, 'emit');
+    vi.spyOn(component.browse, 'emit');
     const el = fixture.nativeElement as HTMLElement;
     const browseBtn = el.querySelector('.browse-btn') as HTMLButtonElement;
-    expect(browseBtn.disabled).toBeFalse();
+    expect(browseBtn.disabled).toBe(false);
     browseBtn.click();
     expect(component.browse.emit).toHaveBeenCalled();
   });
@@ -125,10 +128,10 @@ describe('DatasetCardComponent', () => {
   it('should emit browse for non-audio datasets too', () => {
     component.dataset = { ...mockDataset, media_type: 'image' };
     fixture.detectChanges();
-    spyOn(component.browse, 'emit');
+    vi.spyOn(component.browse, 'emit');
     const el = fixture.nativeElement as HTMLElement;
     const browseBtn = el.querySelector('.browse-btn') as HTMLButtonElement;
-    expect(browseBtn.disabled).toBeFalse();
+    expect(browseBtn.disabled).toBe(false);
     browseBtn.click();
     expect(component.browse.emit).toHaveBeenCalled();
   });
@@ -142,6 +145,6 @@ describe('DatasetCardComponent', () => {
   it('should apply selected class via host binding', () => {
     component.selected = true;
     fixture.detectChanges();
-    expect(fixture.nativeElement.classList.contains('selected')).toBeTrue();
+    expect(fixture.nativeElement.classList.contains('selected')).toBe(true);
   });
 });

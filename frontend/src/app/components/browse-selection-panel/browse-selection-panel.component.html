@@ -1,24 +1,24 @@
 <div class="bsp">
   <div class="bsp-header">
-    <h3 class="bsp-title" [title]="'Items you have selected on the canvas (' + count + ')'">
-      Selection ({{ count | number }})
+    <h3 class="bsp-title" [title]="'Items you have selected on the canvas (' + count() + ')'">
+      Selection ({{ count() | number }})
     </h3>
     <button
       type="button"
       class="bsp-clear"
-      [disabled]="count === 0"
+      [disabled]="count() === 0"
       (click)="clear()"
       title="Clear the whole selection">
       Clear
     </button>
   </div>
 
-  @if (canVerify) {
+  @if (canVerify()) {
     <div class="bsp-actions">
       <button
         type="button"
         class="btn btn--sm bsp-verify-good"
-        [disabled]="count === 0"
+        [disabled]="count() === 0"
         (click)="onVerifyGood()"
         title="Mark the selected items Verified Good and remove them from this browse (they're no longer unverified)">
         Verified Good
@@ -26,7 +26,7 @@
       <button
         type="button"
         class="btn btn--sm bsp-verify-bad"
-        [disabled]="count === 0"
+        [disabled]="count() === 0"
         (click)="onVerifyBad()"
         title="Mark the selected items Verified Bad and remove them from this browse (they're no longer unverified)">
         Verified Bad
@@ -51,7 +51,7 @@
     </select>
     <vt-view-controls
       side="right"
-      [currentMediaType]="mediaType"
+      [currentMediaType]="mediaType()"
       [showFocus]="false"
       class="bsp-view-controls" />
   </div>
@@ -59,11 +59,11 @@
   <div
     class="bsp-list"
     [class.grid-layout]="isGrid"
-    [style.--grid-goal-width]="gridGoalWidth + 'px'">
-    @if (count === 0) {
+    [style.--grid-goal-width]="gridGoalWidth() + 'px'">
+    @if (count() === 0) {
       <p class="bsp-empty">Nothing selected. Click bins on the canvas to add items.</p>
     }
-    @for (entry of sortedEntries; track trackById($index, entry)) {
+    @for (entry of sortedEntries(); track trackById($index, entry)) {
       <div
         class="bsp-entry"
         [class.bsp-entry-grid]="isGrid"

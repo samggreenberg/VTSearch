@@ -1,18 +1,18 @@
-import { Component, ElementRef, EventEmitter, Input, Output, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, ElementRef, Input, ViewChild, output } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'vt-detector-context-bar',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './detector-context-bar.component.html',
   styleUrl: './detector-context-bar.component.scss',
 })
 export class DetectorContextBarComponent {
   @Input() detectorName = '';
   @Input() visible = false;
-  @Output() renamed = new EventEmitter<string>();
+  readonly renamed = output<string>();
 
   editing = false;
   editValue = '';

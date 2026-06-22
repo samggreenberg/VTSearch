@@ -19,7 +19,7 @@ describe('DatasetsRegistryApiService', () => {
 
   it('getStatus should GET', () => {
     service.getStatus().subscribe((data) => {
-      expect(data.loaded).toBeTrue();
+      expect(data.loaded).toBe(true);
       expect(data.num_medias).toBe(10);
     });
     const req = httpMock.expectOne('/api/dataset/status');

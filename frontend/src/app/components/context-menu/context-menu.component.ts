@@ -1,12 +1,5 @@
-import { CommonModule } from '@angular/common';
-import {
-  Component,
-  ElementRef,
-  EventEmitter,
-  HostListener,
-  Input,
-  Output,
-} from '@angular/core';
+
+import { Component, ElementRef, HostListener, inject, input, output } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 export interface ContextMenuItem {
@@ -29,24 +22,22 @@ export interface ContextMenuItem {
 @Component({
   selector: 'vt-context-menu',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './context-menu.component.html',
   styleUrl: './context-menu.component.scss',
 })
 export class ContextMenuComponent {
-  @Input({ required: true }) x = 0;
-  @Input({ required: true }) y = 0;
-  @Input() items: ContextMenuItem[] = [];
+  private host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private sanitizer = inject(DomSanitizer);
 
-  @Output() actionSelected = new EventEmitter<string>();
-  @Output() dismissed = new EventEmitter<void>();
+  readonly x = input.required<number>();
+  readonly y = input.required<number>();
+  readonly items = input<ContextMenuItem[]>([]);
+
+  readonly actionSelected = output<string>();
+  readonly dismissed = output<void>();
 
   private iconCache = new Map<string, SafeHtml>();
-
-  constructor(
-    private host: ElementRef<HTMLElement>,
-    private sanitizer: DomSanitizer,
-  ) {}
 
   /** Sanitise (once per distinct SVG string) the item icon for `[innerHTML]`. */
   safeIcon(svg: string): SafeHtml {

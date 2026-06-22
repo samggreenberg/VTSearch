@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, OnDestroy, OnInit, effect, inject, input, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -42,8 +42,13 @@ interface SelectionEntry {
   styleUrl: './browse-selection-panel.component.scss',
 })
 export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
+  private selection = inject(BrowseSelectionService);
+  private metadataCache = inject(MediaMetadataCacheService);
+  private activeContext = inject(ActiveContextService);
+  private settingsState = inject(SettingsStateService);
+
   /** Active media type, used to resolve the per-type view-mode + size prefs. */
-  @Input() mediaType = '';
+  readonly mediaType = input('');
 
   /**
    * Whether to offer the verify actions. Only meaningful when browsing a Find
@@ -52,19 +57,23 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
    * leave the unverified set and drop from the browse. The browse view owns the
    * actual mutation + re-projection.
    */
-  @Input() canVerify = false;
+  readonly canVerify = input(false);
 
   /** Emitted when the user marks the selection Verified Good. */
-  @Output() verifyGood = new EventEmitter<void>();
+  readonly verifyGood = output<void>();
 
   /** Emitted when the user marks the selection Verified Bad. */
-  @Output() verifyBad = new EventEmitter<void>();
+  readonly verifyBad = output<void>();
 
-  count = 0;
+  // These four are template-bound and written from the selection-refresh and
+  // settings `effect()`s and the metadata-cache `version$` subscribe — none of
+  // which schedule CD for a plain field under zoneless — so they are signals.
+  // (`sortMode` stays plain: it is only written from the bound `(ngModelChange)`.)
+  readonly count = signal(0);
   sortMode: SelectionSortMode = 'time-desc';
-  viewMode: 'grid' | 'list' = 'grid';
-  gridGoalWidth = 80;
-  sortedEntries: SelectionEntry[] = [];
+  readonly viewMode = signal<'grid' | 'list'>('grid');
+  readonly gridGoalWidth = signal(80);
+  readonly sortedEntries = signal<SelectionEntry[]>([]);
 
   private ids: number[] = [];
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
@@ -72,31 +81,34 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   private readonly thumbnailFailedUrls = new Set<string>();
   private readonly subs: Subscription[] = [];
 
-  constructor(
-    private selection: BrowseSelectionService,
-    private metadataCache: MediaMetadataCacheService,
-    private activeContext: ActiveContextService,
-    private settingsState: SettingsStateService,
-  ) {}
+  constructor() {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      const viewDict = settings.view_mode_right;
+      if (viewDict && typeof viewDict === 'object') {
+        this.viewModeRightDict = viewDict as Record<string, 'grid' | 'list'>;
+      }
+      const sizeDict = settings.grid_icon_size_right;
+      if (sizeDict && typeof sizeDict === 'object') {
+        this.gridIconSizeRightDict = sizeDict as Record<string, string>;
+      }
+      this.applyViewPrefs();
+    });
+    // Rebuild the list whenever the selection changes. An effect on the signal
+    // (rather than a `changed$` subscription) covers both the initial fill and
+    // every later mutation, and schedules the refresh under zoneless from any
+    // context. The first run (post-construction) does the initial refresh.
+    effect(() => {
+      this.selection.version();
+      this.refreshSelection();
+    });
+  }
 
   ngOnInit(): void {
-    this.refreshSelection();
     this.subs.push(
-      this.selection.changed$.subscribe(() => this.refreshSelection()),
       this.metadataCache.version$.subscribe(() => {
-        this.sortedEntries = this.buildSortedEntries();
-      }),
-      this.settingsState.settings$.subscribe((settings) => {
-        if (!settings) return;
-        const viewDict = settings.view_mode_right;
-        if (viewDict && typeof viewDict === 'object') {
-          this.viewModeRightDict = viewDict as Record<string, 'grid' | 'list'>;
-        }
-        const sizeDict = settings.grid_icon_size_right;
-        if (sizeDict && typeof sizeDict === 'object') {
-          this.gridIconSizeRightDict = sizeDict as Record<string, string>;
-        }
-        this.applyViewPrefs();
+        this.sortedEntries.set(this.buildSortedEntries());
       }),
     );
     this.settingsState.load();
@@ -108,15 +120,16 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   private refreshSelection(): void {
     this.ids = this.selection.ids();
-    this.count = this.ids.length;
+    this.count.set(this.ids.length);
     this.metadataCache.ensureLoaded(this.ids);
-    this.sortedEntries = this.buildSortedEntries();
+    this.sortedEntries.set(this.buildSortedEntries());
   }
 
   private applyViewPrefs(): void {
-    if (!this.mediaType) return;
-    this.viewMode = this.viewModeRightDict[this.mediaType] ?? 'grid';
-    this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[this.mediaType] ?? 'M');
+    const mediaType = this.mediaType();
+    if (!mediaType) return;
+    this.viewMode.set(this.viewModeRightDict[mediaType] ?? 'grid');
+    this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[mediaType] ?? 'M'));
   }
 
   private buildSortedEntries(): SelectionEntry[] {
@@ -156,11 +169,11 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   onSortChange(mode: SelectionSortMode): void {
     this.sortMode = mode;
-    this.sortedEntries = this.buildSortedEntries();
+    this.sortedEntries.set(this.buildSortedEntries());
   }
 
   get isGrid(): boolean {
-    return this.viewMode === 'grid';
+    return this.viewMode() === 'grid';
   }
 
   clear(): void {
@@ -169,13 +182,13 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
 
   /** Ask the browse view to mark the selected items Verified Good and drop them. */
   onVerifyGood(): void {
-    if (this.count === 0) return;
+    if (this.count() === 0) return;
     this.verifyGood.emit();
   }
 
   /** Ask the browse view to mark the selected items Verified Bad and drop them. */
   onVerifyBad(): void {
-    if (this.count === 0) return;
+    if (this.count() === 0) return;
     this.verifyBad.emit();
   }
 

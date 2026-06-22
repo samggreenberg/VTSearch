@@ -23,6 +23,29 @@ if TYPE_CHECKING:
     import torch.nn as nn
 
 
+def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | None:
+    """Resolve the score embedder (patch-else-text) for the medias in *snap*.
+
+    The detector MLP trains and scores against this embedder's vectors (the v3
+    routing table).  Derived from the embedder names *those* medias carry
+    rather than the active context, since :func:`_score_all_media` /
+    :func:`_build_vote_xy` may be handed an arbitrary snapshot (a test fixture,
+    a cross-dataset dict).  Returns ``None`` for a slot-less single-vector
+    dataset (e.g. ``dinov2_single``) or medias whose embedder is unregistered,
+    so the matrix layer falls back to each media's primary vector.  For a
+    single-embedder dataset the resolved name equals the primary, which the
+    matrix layer collapses to the cached primary path.
+    """
+    if not snap:
+        return None
+    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
+
+    first = next(iter(snap.values()))
+    text, patch = derive_binding_from_names(media_embedder_names(first))
+    return patch or text
+
+
 def validate_good_bad_split(y_list: list[float]) -> tuple[int, int]:
     """Check that *y_list* contains at least one good and one bad label.
 
@@ -106,7 +129,7 @@ def train_and_threshold(
         # `safe` is only True when `snap` is truthy (see assignment above),
         # so the narrowing is real even though pyright can't track it.
         assert snap is not None
-        _all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+        _all_ids, all_embs = get_embedding_matrix_for_snap(snap, _score_embedder_for_snap(snap))
         X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
             X_all = X_all.to(next(model.parameters()).device)
@@ -157,15 +180,19 @@ def pool_box_from_media(
 def _training_vec_for_vote(
     media: dict[str, Any],
     region_box: tuple[float, float, float, float] | None,
+    embedder_name: str | None = None,
 ) -> np.ndarray:
     """Return the training vector for one vote on *media*.
 
     Region-pools via :func:`pool_box_from_media` when the vote designated a
-    box and *media* carries a ``patch_grid``; otherwise falls back to
-    ``media["embedding"]`` - the v1/legacy image-level vector.
+    box and *media* carries a ``patch_grid``; otherwise falls back to the
+    image-level vector of *embedder_name* (the score embedder) - or the
+    primary vector when ``None``.
     """
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
     pooled = pool_box_from_media(media, region_box)
-    return pooled if pooled is not None else media["embedding"]
+    return pooled if pooled is not None else media_embedding(media, embedder_name)
 
 
 def _build_vote_xy(
@@ -182,15 +209,20 @@ def _build_vote_xy(
     (:func:`_train_and_score_xy`) enforces the ≥2-samples / ≥1-good /
     ≥1-bad guard.
     """
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    # Train against the dataset's score embedder so the MLP shares the space
+    # _score_all_media scores against (the v3 routing table).
+    embedder_name = _score_embedder_for_snap(clips_dict)
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     for cid in good_votes:
         if cid in clips_dict:
-            X_list.append(_training_vec_for_vote(clips_dict[cid], region_boxes.get(cid)))
+            X_list.append(_training_vec_for_vote(clips_dict[cid], region_boxes.get(cid), embedder_name))
             y_list.append(1.0)
     for cid in bad_votes:
         if cid in clips_dict:
-            X_list.append(clips_dict[cid]["embedding"])
+            X_list.append(media_embedding(clips_dict[cid], embedder_name))
             y_list.append(0.0)
     return X_list, y_list
 
@@ -211,51 +243,75 @@ def _score_all_media(
     """
     import torch  # noqa: PLC0415
 
+    from vtscore.embedding.matrix import (  # noqa: PLC0415
+        get_embedding_matrix_for_snap,
+        get_region_matrix_for_snap,
+    )
+
     has_regions = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
     if has_regions:
-        all_ids = sorted(clips_dict.keys())
-        flat_vecs: list[np.ndarray] = []
-        media_index_per_row: list[int] = []
-        region_index_per_row: list[int] = []
-        for mi, cid in enumerate(all_ids):
-            media = clips_dict[cid]
-            regions = media.get("patch_regions")
-            if regions:
-                for ri, r in enumerate(regions):
-                    flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
-                    media_index_per_row.append(mi)
-                    region_index_per_row.append(ri)
-            else:
-                flat_vecs.append(np.asarray(media["embedding"], dtype=np.float32))
-                media_index_per_row.append(mi)
-                region_index_per_row.append(0)
-        X_all = torch.from_numpy(np.stack(flat_vecs).astype(np.float32, copy=False))
+        # One row per (media, region) pair, built once and cached on the
+        # dataset context (the region vectors never change between votes -
+        # only the MLP weights do), so online retraining no longer rebuilds
+        # a multi-hundred-thousand-row matrix on every vote.
+        all_ids, X_np, media_index_per_row, region_index_per_row = get_region_matrix_for_snap(clips_dict)
     else:
-        from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
-
-        all_ids, all_embs = get_embedding_matrix_for_snap(clips_dict)
-        X_all = torch.from_numpy(all_embs)
+        all_ids, X_np = get_embedding_matrix_for_snap(clips_dict, _score_embedder_for_snap(clips_dict))
         n = len(all_ids)
-        media_index_per_row = list(range(n))
-        region_index_per_row = [0] * n
+        media_index_per_row = np.arange(n, dtype=np.int64)
+        region_index_per_row = np.zeros(n, dtype=np.int64)
+
+    if not all_ids:
+        return [], [], []
 
     with torch.no_grad():
-        X_all = X_all.to(next(model.parameters()).device)
+        X_all = torch.from_numpy(X_np).to(next(model.parameters()).device)
         # ``sigmoid_to_finite_scores`` replaces NaN/±Inf with the
         # ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised MLP cannot
         # leak non-finite floats into the JSON response. The downstream
-        # ``s > scores[mi]`` max-pool then incidentally drops sentinels in
-        # favour of any real score for the same media.
-        flat_scores = sigmoid_to_finite_scores(model(X_all))
+        # segmented max-pool then incidentally drops sentinels in favour of
+        # any real score (in ``[0, 1]``) for the same media.
+        flat_scores = np.asarray(sigmoid_to_finite_scores(model(X_all)), dtype=np.float64)
 
-    scores: list[float] = [-1.0] * len(all_ids)
-    best_region: list[int] = [0] * len(all_ids)
-    for s, mi, ri in zip(flat_scores, media_index_per_row, region_index_per_row, strict=True):
-        if s > scores[mi]:
-            scores[mi] = float(s)
-            best_region[mi] = ri
-
+    scores, best_region = _segmented_max_pool(flat_scores, media_index_per_row, region_index_per_row, len(all_ids))
     return all_ids, scores, best_region
+
+
+def _segmented_max_pool(
+    flat_scores: np.ndarray,
+    media_index_per_row: np.ndarray,
+    region_index_per_row: np.ndarray,
+    n_media: int,
+) -> tuple[list[float], list[int]]:
+    """Max-pool per-row scores down to one score + winning region per media.
+
+    *media_index_per_row* is non-decreasing and contiguous (every media owns
+    a single run of rows), and every media has at least one row, so each
+    media's rows form one ``reduceat`` segment.  Returns ``(scores,
+    best_region)`` as plain Python lists, where ``best_region[m]`` is the
+    region index of the *first* row achieving media ``m``'s max - matching
+    the strict-``>`` "first wins" tie-break of the original scalar loop.
+
+    Fully vectorised so the per-vote scoring tail holds the GIL for
+    microseconds rather than iterating hundreds of thousands of rows in
+    Python (which, in the background training thread, would stall the
+    ``gthread`` pool serving the next vote).
+    """
+    # Start of each media's contiguous run of rows.
+    seg_starts = np.searchsorted(media_index_per_row, np.arange(n_media))
+    seg_max = np.maximum.reduceat(flat_scores, seg_starts)
+
+    # First row per media that reaches its segment max (region 0 - the
+    # CLS/full-image node - is always row 0 of a segment, so an all-sentinel
+    # media resolves to region 0, exactly as the old -1.0-seeded loop did).
+    is_max = flat_scores >= seg_max[media_index_per_row]
+    cand_rows = np.flatnonzero(is_max)
+    cand_media = media_index_per_row[cand_rows]
+    first_cand = np.searchsorted(cand_media, np.arange(n_media))
+    winning_rows = cand_rows[first_cand]
+    best_region = region_index_per_row[winning_rows]
+
+    return seg_max.tolist(), best_region.tolist()
 
 
 def _format_results(
@@ -285,6 +341,25 @@ def _format_results(
             entry["best_region"] = list(regions[bri].box)
         results.append(entry)
     return results
+
+
+def score_media_with_model(
+    model: nn.Sequential,
+    clips_dict: dict[int, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Score every media in *clips_dict* with an already-trained *model*.
+
+    Returns sorted (descending by score) result dicts of the same shape the
+    vote-driven training path produces: ``{"id", "score"}`` plus a
+    ``best_region`` box for patch-region-aware media (the argmax region that
+    drove the media's score).  Use this from any route that scores with a
+    pre-trained detector - e.g. the Find / detector-scoring path - so the
+    best-match highlight is populated regardless of which entry point ran the
+    scoring.  Plain single-vector datasets are scored via the cached embedding
+    matrix and gain no ``best_region`` field, exactly as before.
+    """
+    all_ids, scores, best_region = _score_all_media(model, clips_dict)
+    return _format_results(all_ids, scores, best_region, clips_dict)
 
 
 def _train_and_score_xy(
@@ -414,7 +489,7 @@ def train_and_score(
     """
     region_boxes = vote_region_boxes or {}
     X_list, y_list = _build_vote_xy(clips_dict, good_votes, bad_votes, region_boxes)
-    return _train_and_score_xy(
+    results, threshold, model = _train_and_score_xy(
         X_list,
         y_list,
         clips_dict,
@@ -424,6 +499,19 @@ def train_and_score(
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,
     )
+
+    # Stage-2 structural re-rank: a no-op for every non-structural dataset
+    # (gated on media carrying ``local_features``), so existing datasets are
+    # untouched.  For a structural (SIFT/VLAD) dataset it geometrically
+    # verifies the VLAD shortlist against the RegionYes templates and re-ranks
+    # by the match-statistic classifier (or the cold-start inlier gate).  See
+    # docs/plans/structural-embedder.md.
+    from vtscore.training.structural_similarity import maybe_structural_rerank  # noqa: PLC0415
+
+    results, threshold = maybe_structural_rerank(
+        results, threshold, clips_dict, good_votes, bad_votes, region_boxes, det_ctx
+    )
+    return results, threshold, model
 
 
 # ---------------------------------------------------------------------------

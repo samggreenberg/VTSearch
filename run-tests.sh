@@ -190,7 +190,7 @@ for arg in "$@"; do
 done
 
 # Run frontend TypeScript build check for full suite or when core/frontend groups are requested.
-# Catches compilation errors without needing a browser (ng test requires Chrome, build:prod does not).
+# Catches compilation errors without needing a browser (build:prod is headless).
 _run_frontend_check=false
 if [[ ${#TEST_GROUPS[@]} -eq 0 ]]; then
     _run_frontend_check=true
@@ -198,6 +198,23 @@ else
     for _g in "${TEST_GROUPS[@]}"; do
         if [[ "$_g" == "core" || "$_g" == "frontend" ]]; then
             _run_frontend_check=true
+            break
+        fi
+    done
+fi
+
+# Run the frontend Vitest unit suite for the full run or an explicit `frontend`
+# group, but NOT for `core`. The unit run (a full app build + headless Vitest)
+# is heavier than the compile-only build check, so it stays off the fast `core`
+# path; the full `./run-tests.sh` (the real gate, since there's no CI) and
+# `./run-tests.sh frontend` are where it runs.
+_run_frontend_unit=false
+if [[ ${#TEST_GROUPS[@]} -eq 0 ]]; then
+    _run_frontend_unit=true
+else
+    for _g in "${TEST_GROUPS[@]}"; do
+        if [[ "$_g" == "frontend" ]]; then
+            _run_frontend_unit=true
             break
         fi
     done
@@ -251,6 +268,37 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
     rm -f "$_audit_log"
 elif $_run_frontend_check && [ ! -d "frontend/node_modules" ]; then
     echo "Skipping frontend build check (node_modules not installed; run: cd frontend && npm install)"
+fi
+
+# Frontend unit tests (Vitest, headless via jsdom). `npm run test:ci` regenerates
+# the API client (pretest:ci) then runs `ng test --no-watch`, which exits
+# non-zero on any spec failure.
+if $_run_frontend_unit && [ -d "frontend/node_modules" ]; then
+    echo "Running frontend unit tests (Vitest)..."
+    _vt_log=$(mktemp)
+    if (cd frontend && npm run test:ci 2>&1) > "$_vt_log"; then
+        _vt_count=$(sed -r 's/\x1b\[[0-9;]*m//g' "$_vt_log" | grep -oE 'Tests +[0-9]+ passed' | tail -1)
+        echo "Frontend unit tests OK${_vt_count:+ ($_vt_count)}"
+    else
+        echo ""
+        echo "============================================================"
+        echo "TESTS BLOCKED: Frontend unit tests failed"
+        echo "============================================================"
+        tail -80 "$_vt_log"
+        rm -f "$_vt_log"
+        exit 1
+    fi
+    rm -f "$_vt_log"
+elif $_run_frontend_unit && [ ! -d "frontend/node_modules" ]; then
+    echo "Skipping frontend unit tests (node_modules not installed; run: cd frontend && npm install)"
+fi
+
+# `frontend` is a frontend-only gate (build + audit + Vitest above); it has no
+# Python tests. If it's the only requested group, skip pytest entirely so it
+# doesn't error on an empty `-m frontend` selection.
+if [[ ${#TEST_GROUPS[@]} -eq 1 && "${TEST_GROUPS[0]}" == "frontend" ]]; then
+    echo "Frontend-only run complete (no Python tests in the 'frontend' group)."
+    exit 0
 fi
 
 # Build the pytest marker expression

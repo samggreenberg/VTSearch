@@ -12,6 +12,11 @@ export interface ImporterFlowState {
 export interface NewDetectorFlowState {
   open: boolean;
   defaultMediaType: string;
+  /** Embedder name of the active dataset, if one is in context. Lets the
+   *  modal warn when a text-only detector is being created against a dataset
+   *  whose embedder can't search by text (no Autopilot / Text sort). Empty
+   *  when unknown, which suppresses the warning. */
+  datasetEmbedder: string;
   /** ID of a loaded media to use as the new detector's seed example.
    *  When set, the modal materialises this media to ``example_media/``
    *  on open and pre-fills the example field, skipping the picker. */
@@ -56,6 +61,7 @@ export class NewThingFlowsService {
   private readonly newDetectorSubject = new BehaviorSubject<NewDetectorFlowState>({
     open: false,
     defaultMediaType: '',
+    datasetEmbedder: '',
     seedMediaId: undefined,
     seedCropParams: undefined,
   });
@@ -106,6 +112,7 @@ export class NewThingFlowsService {
     this.newDetectorSubject.next({
       open: true,
       defaultMediaType: opts.defaultMediaType ?? '',
+      datasetEmbedder: opts.datasetEmbedder ?? '',
       seedMediaId: opts.seedMediaId,
       seedCropParams: opts.seedCropParams,
     });
@@ -115,6 +122,7 @@ export class NewThingFlowsService {
     this.newDetectorSubject.next({
       open: false,
       defaultMediaType: '',
+      datasetEmbedder: '',
       seedMediaId: undefined,
       seedCropParams: undefined,
     });

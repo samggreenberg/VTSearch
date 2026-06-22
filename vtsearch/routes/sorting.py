@@ -19,6 +19,7 @@ import json
 import logging
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from flask import request
 from flask_smorest import Blueprint, abort
@@ -74,6 +75,9 @@ from vtsearch.state import (
 )
 from vtscore.concurrency.progress import update_sort_progress
 
+if TYPE_CHECKING:
+    from vtscore.media.embedder import MediaEmbedder
+
 sorting_bp = Blueprint(
     "sorting",
     __name__,
@@ -81,12 +85,17 @@ sorting_bp = Blueprint(
 )
 
 
-def _cosine_sort(query_vec):
+def _cosine_sort(query_vec, *, role: str = "score"):
     """Sort all loaded medias by cosine similarity to *query_vec*.
 
     Returns ``(results, threshold)`` where *results* is a list of
     ``{"id": …, "similarity": …}`` dicts sorted descending, and
     *threshold* is the GMM-based boundary (rounded to 4 decimals).
+
+    *role* selects which bound embedder the haystack is scored against (the
+    v3 routing table, see :meth:`DatasetContext.routed_embedder`): ``"text"``
+    for a text query, ``"score"`` (patch-else-text) for an example/cosine
+    query.  *query_vec* must have been embedded by that same embedder.
 
     For datasets embedded with a patch-aware embedder (DINOv2, DINOv3,
     EUPE), each result also carries a ``best_region`` field containing the
@@ -96,10 +105,17 @@ def _cosine_sort(query_vec):
 
     Both paths live in :mod:`vtscore.training.region_similarity`.
     """
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
     from vtscore.training.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
 
+    ctx = get_active_context()
+    embedder_name = ctx.routed_embedder(role)
+    # Region vectors belong to the patch embedder; the per-region max-pool is
+    # valid only when the query was scored against that same embedder.
+    region_aware = embedder_name is not None and embedder_name == ctx.patch_embedder
+
     snap = snapshot_medias()
-    results, sims_list = cosine_sort_with_boxes(snap, query_vec)
+    results, sims_list = cosine_sort_with_boxes(snap, query_vec, embedder_name, region_aware=region_aware)
     threshold = calculate_gmm_threshold(sims_list)
     return results, round(threshold, 4)
 
@@ -110,6 +126,29 @@ _embedder_load_lock = threading.Lock()
 def _get_embedder_for_loaded_data():
     """Return the appropriate embedder for the currently loaded dataset."""
     return get_embedder_for_medias(snapshot_medias())
+
+
+def _score_embedder_for_loaded_data() -> tuple["MediaEmbedder | None", str | None]:
+    """Return ``(embedder, embedder_name)`` for the dataset's score embedder.
+
+    The score embedder is the patch slot if bound, else the text slot (the v3
+    routing table; see :meth:`DatasetContext.routed_embedder`).  Used to embed
+    an example/label query so it shares the space the haystack is scored
+    against.  A slot-less single-vector dataset falls back to the primary
+    embedder and a ``None`` name (the matrix layer then reads the primary
+    vector); for single-embedder datasets the two coincide.
+    """
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
+
+    score_name = get_active_context().routed_embedder("score")
+    if score_name is not None:
+        from vtscore.media import get_embedder  # noqa: PLC0415
+
+        try:
+            return get_embedder(score_name), score_name
+        except KeyError:
+            pass
+    return _get_embedder_for_loaded_data(), score_name
 
 
 def _load_embedder_with_progress(media_type, total_steps):
@@ -156,37 +195,26 @@ def sort_clips(body: dict):
 
     first = next(iter(snap.values()))
     media_type = first.get("media_type", "audio")
-    embedder_name = first.get("embedder", "")
     total_steps = 3  # load embedder, embed query, compute similarities
 
-    # Reject the request up-front when the active embedder is vision-only
-    # (e.g. DINOv3, Perception Encoder). Without this short-circuit we'd
-    # waste time loading the model into RAM just to discover it can't embed
-    # text; the frontend wouldn't get a clean ``supports_text=False``
-    # signal to hide its text-search UI.
-    if embedder_name:
-        try:
-            from vtscore.media import get_embedder  # noqa: PLC0415
+    # Resolve the dataset's bound text embedder (v3 routing table). Reject the
+    # request up-front when no text slot is bound (a vision-only dataset, e.g.
+    # DINOv3 patch). Without this short-circuit we'd waste time loading a model
+    # just to discover it can't embed text; the frontend already reads the same
+    # ``supports_text`` signal per embedder to hide its text-search UI.
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
 
-            _active_emb = get_embedder(embedder_name)
-        except KeyError:
-            _active_emb = None
-        if _active_emb is not None and not _active_emb.supports_text:
-            update_sort_progress("idle")
-            # flask-smorest's error handler only flows ``message`` and
-            # ``errors`` from ``abort()`` kwargs into the response body,
-            # so the original ``supports_text=False`` flag would be
-            # silently dropped. The frontend already reads the same flag
-            # from each embedder's ``EmbedderInfo`` (see
-            # ``left-panel.component.ts: updateTextSortAvailable``), so
-            # we don't need to ship it on the error response too.
-            abort(
-                400,
-                message=(
-                    f"Embedder '{_active_emb.name}' does not support text queries. "
-                    "Use learned sort or load a saved sort instead."
-                ),
-            )
+    ctx = get_active_context()
+    embedder_name = ctx.routed_embedder("text")
+    if embedder_name is None:
+        update_sort_progress("idle")
+        primary = first.get("embedder", "") or "this dataset's embedder"
+        abort(
+            400,
+            message=(
+                f"Embedder '{primary}' does not support text queries. Use learned sort or load a saved sort instead."
+            ),
+        )
 
     try:
         _load_embedder_with_progress(media_type, total_steps)
@@ -201,7 +229,7 @@ def sort_clips(body: dict):
             abort(500, message=f"Could not embed text for media type {media_type}")
 
         update_sort_progress("sorting", "Computing similarities…", 2, total_steps)
-        results, threshold = _cosine_sort(text_vec)
+        results, threshold = _cosine_sort(text_vec, role="text")
         update_sort_progress("idle")
         return {"results": results, "threshold": threshold}
     except Exception as exc:
@@ -428,6 +456,13 @@ def get_votes():
         "learned_scores": {str(k): round(finite_or(v), 4) for k, v in learned_scores.items()},
         "labelset_good_count": labelset_good_count,
         "labelset_bad_count": labelset_bad_count,
+        # Region boxes live only on good votes (popped on bad/un-vote); intersect
+        # with ``good_votes`` defensively so a stale entry can't leak through.
+        "good_region_boxes": {
+            str(k): [float(c) for c in box]
+            for k, box in vote_region_boxes.items()
+            if k in good_votes and box is not None
+        },
     }
 
 
@@ -579,17 +614,34 @@ def _example_sort_from_path(file_path: Path) -> tuple:
     if not snap:
         raise ValueError("No medias loaded")
 
-    emb = _get_embedder_for_loaded_data()
+    # Embed the example with the dataset's score embedder so the query shares
+    # the space the haystack is scored against.
+    emb, _score_name = _score_embedder_for_loaded_data()
     if emb is None:
         raise ValueError("No embedder available for loaded dataset")
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
-    example_embedding = emb.embed_media(media_from_path(file_path))
+    media = media_from_path(file_path)
+    example_embedding = emb.embed_media(media)
 
     if example_embedding is None:
         raise ValueError("Failed to embed media file")
 
-    return _cosine_sort(example_embedding)
+    results, threshold = _cosine_sort(example_embedding)
+
+    # Stage-2 structural re-rank (a no-op for non-structural datasets): for a
+    # SIFT/VLAD dataset, geometrically verify the VLAD shortlist against the
+    # uploaded example's own local features.  The example is the template; any
+    # crop was already applied to the file above, so it restricts the template.
+    if getattr(emb, "supports_geometric_verification", False):
+        from vtscore.training.structural_similarity import maybe_structural_rerank_example  # noqa: PLC0415
+
+        example_features = emb.local_features_forward(media)
+        results, threshold = maybe_structural_rerank_example(
+            results, threshold, snap, example_features, score_key="similarity"
+        )
+
+    return results, threshold
 
 
 def _parse_crop_params(raw: str | None) -> dict | None:
@@ -747,8 +799,16 @@ def _embed_external_labels(labels: list[dict], emb) -> tuple[list, list[float], 
     return X_list, y_list, loaded, skipped
 
 
-def _train_and_score_dataset(X_list: list, y_list: list[float]) -> tuple[list[dict], float]:
-    """Train an MLP on (X, y), then score every media in the active dataset."""
+def _train_and_score_dataset(
+    X_list: list, y_list: list[float], embedder_name: str | None = None
+) -> tuple[list[dict], float]:
+    """Train an MLP on (X, y), then score every media in the active dataset.
+
+    *embedder_name* is the embedder the external labels in *X_list* were
+    embedded with; scoring sources the haystack matrix from the same embedder
+    so the trained MLP and the scored vectors share one space.  ``None`` reads
+    each media's primary vector.
+    """
     import torch  # noqa: PLC0415
 
     from vtscore.detectors.training import train_and_threshold
@@ -758,7 +818,7 @@ def _train_and_score_dataset(X_list: list, y_list: list[float]) -> tuple[list[di
     snap = snapshot_medias()
     model, threshold = train_and_threshold(X_list, y_list, snap=snap)
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap, embedder_name)
     X_all = torch.from_numpy(all_embs)
     with torch.no_grad():
         X_all = X_all.to(next(model.parameters()).device)
@@ -791,7 +851,9 @@ def label_file_sort():
     if not snapshot_medias():
         abort(400, message="No medias loaded")
 
-    emb = _get_embedder_for_loaded_data()
+    # Embed external labels with (and later score against) the dataset's
+    # score embedder so training and scoring share one space.
+    emb, score_name = _score_embedder_for_loaded_data()
     if emb is None:
         abort(400, message="No embedder available for loaded dataset")
 
@@ -812,7 +874,7 @@ def label_file_sort():
         except ValueError:
             abort(400, message="Need at least one good and one bad labeled example")
 
-        results, threshold = _train_and_score_dataset(X_list, y_list)
+        results, threshold = _train_and_score_dataset(X_list, y_list, score_name)
         return {
             "results": results,
             "threshold": round(threshold, 4),

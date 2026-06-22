@@ -21,15 +21,13 @@ The importer participates in the multi-media import flow.  Each
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import tarfile
-import zipfile
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Iterator
 from uuid import uuid4
 
 from vtscore.config import DATA_DIR
+from vtscore.datasets.archive import extract_archive, is_archive_path, load_archive_into
 from vtscore.datasets.downloader import download_file_with_progress
 from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder
@@ -48,92 +46,9 @@ def _default_progress() -> ProgressCallback:
     return update_progress
 
 
-def _reject_traversal(extract_dir_resolved: Path, member_name: str) -> None:
-    """Raise ValueError if *member_name* would extract outside extract_dir.
-
-    Validates before extraction so a malicious member is never written to disk.
-    Rejects absolute paths, ``..`` traversal, and any name that - once joined
-    and normalised - escapes the extraction root.
-    """
-    # Reject absolute member names outright; on Windows they'd also drop the
-    # root prefix when joined, but we want to fail loudly either way.
-    if member_name.startswith(("/", "\\")) or (len(member_name) > 1 and member_name[1] == ":"):
-        raise ValueError(f"Path traversal detected in archive: {member_name}")
-
-    # Use os.path.normpath-style joining without resolving symlinks: the
-    # extract_dir is freshly created and contains no symlinks yet, and we
-    # don't want a symlink planted by an earlier member in the same archive
-    # to mask a later traversal.
-    target = Path(os.path.normpath(extract_dir_resolved / member_name))
-    if target != extract_dir_resolved and not target.is_relative_to(extract_dir_resolved):
-        raise ValueError(f"Path traversal detected in archive: {member_name}")
-
-
-def _extract_archive(  # noqa: C901
-    archive_path: Path,
-    extract_dir: Path,
-    on_progress: Optional[ProgressCallback] = None,
-) -> None:
-    """Extract *archive_path* into *extract_dir*, supporting zip/tar/rar."""
-    if on_progress is None:
-        on_progress = _default_progress()
-
-    name = archive_path.name.lower()
-    extract_dir_resolved = extract_dir.resolve()
-
-    if name.endswith(".zip"):
-        with zipfile.ZipFile(archive_path, "r") as zf:
-            members = zf.namelist()
-            total = len(members)
-            for i, member in enumerate(members, 1):
-                on_progress(
-                    "loading",
-                    f"Extracting {member.split('/')[-1]}...",
-                    i,
-                    total,
-                )
-                _reject_traversal(extract_dir_resolved, member)
-                zf.extract(member, extract_dir)
-
-    elif tarfile.is_tarfile(archive_path):
-        with tarfile.open(archive_path, "r:*") as tf:
-            members = tf.getmembers()
-            total = len(members)
-            for i, member in enumerate(members, 1):
-                on_progress(
-                    "loading",
-                    f"Extracting {member.name.split('/')[-1]}...",
-                    i,
-                    total,
-                )
-                _reject_traversal(extract_dir_resolved, member.name)
-                tf.extract(member, extract_dir, filter="data")
-
-    elif name.endswith(".rar"):
-        try:
-            import rarfile  # optional dependency  # pyright: ignore[reportMissingImports]
-        except ImportError as exc:
-            raise RuntimeError(
-                "RAR extraction requires the 'rarfile' package. Install it with: pip install rarfile"
-            ) from exc
-        with rarfile.RarFile(archive_path, "r") as rf:
-            members = rf.namelist()
-            total = len(members)
-            for i, member in enumerate(members, 1):
-                on_progress(
-                    "loading",
-                    f"Extracting {member.split('/')[-1]}...",
-                    i,
-                    total,
-                )
-                _reject_traversal(extract_dir_resolved, member)
-                rf.extract(member, extract_dir)
-
-    else:
-        raise ValueError(
-            f"Unsupported archive format: {archive_path.name}. "
-            "Supported formats: .zip, .tar, .tar.gz, .tar.bz2, .tar.xz, .rar"
-        )
+def _is_url(value: str) -> bool:
+    """Return ``True`` when *value* looks like an http(s) URL (vs a local path)."""
+    return value.startswith(("http://", "https://"))
 
 
 def _run_converter_specs(
@@ -169,13 +84,18 @@ def _run_converter_specs(
 
 
 class HttpArchiveDatasetImporter(DatasetImporter):
-    """Download a publicly-accessible archive and load its media files.
+    """Load media files from an archive given by a web URL **or** a local path.
 
-    The archive is streamed to a temporary file in ``DATA_DIR``, extracted
-    to a unique ``DATA_DIR/http_archive_extract_<id>/`` directory, then
-    scanned with the standard
-    :func:`~vtscore.datasets.loader.load_dataset_from_folder` pipeline.
-    Both temporary paths are cleaned up after the run completes.
+    For an ``http://`` / ``https://`` URL the archive is streamed to a
+    temporary file in ``DATA_DIR``, extracted to a unique
+    ``DATA_DIR/http_archive_extract_<id>/`` directory, then scanned with the
+    standard :func:`~vtscore.datasets.loader.load_dataset_from_folder`
+    pipeline (both temporary paths are cleaned up afterwards).
+
+    For a local **server path** to an archive file, the download step is
+    skipped and the archive is extracted (and cached) via
+    :func:`~vtscore.datasets.archive.load_archive_into`; the resulting media
+    carry a ``local_archive`` origin so they re-derive on demand.
 
     Supported archive formats: ``.zip``, ``.tar``, ``.tar.gz``,
     ``.tar.bz2``, ``.tar.xz``, ``.rar`` (requires ``rarfile`` package).
@@ -189,7 +109,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
     name = "http_archive"
     display_name = "Import from URL"
-    description = "Download an archive (.zip, .tar, .rar) from a web URL and embed the media files inside"
+    description = "Download an archive (.zip, .tar, .rar) from a web URL or local path and embed the media inside"
     icon = "\U0001f310"
     hidden_from_picker = True
     fields = [
@@ -197,8 +117,11 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             key="url",
             label="Path or URL",
             field_type="url",
-            description="A publicly accessible archive of media files to download and unpack.",
-            hint="Supported archive formats: .zip, .tar, .tar.gz / .tgz, .tar.bz2, .rar.",
+            description="A web URL or local server path to an archive of media files to unpack.",
+            hint=(
+                "An http(s):// URL or an absolute server path. "
+                "Supported archive formats: .zip, .tar, .tar.gz / .tgz, .tar.bz2, .rar."
+            ),
         ),
         ImporterField(
             key="media_type",
@@ -219,10 +142,35 @@ class HttpArchiveDatasetImporter(DatasetImporter):
                 f.options = all_folder_names()
                 break
 
+    def _output_type_id(self, media_type: str) -> str:
+        """Resolve a folder-name media type (e.g. ``"audio"``) to its type id."""
+        from vtscore.media import get_by_folder_name  # noqa: PLC0415
+
+        try:
+            return get_by_folder_name(media_type).type_id
+        except (KeyError, AttributeError):
+            return media_type
+
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         url = field_values["url"]
         media_type = field_values.get("media_type", "audio")
         specs = self.effective_source_specs(field_values)
+
+        if not _is_url(url):
+            # Local server path to an archive: extract (cached) and load,
+            # stamping local_archive origins for on-demand re-derivation.
+            medias.clear()
+            load_archive_into(
+                url,
+                self._output_type_id(media_type),
+                specs,
+                medias,
+                thin=thin,
+                content_vectors=self.content_vectors,
+                content_md5s=self.content_md5s,
+                custom_metadata_map=self.custom_metadata_map,
+            )
+            return
 
         DATA_DIR.mkdir(exist_ok=True)
 
@@ -240,7 +188,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
         progress("loading", "Extracting archive...", 0, 0)
         extract_dir.mkdir(exist_ok=True)
-        _extract_archive(archive_path, extract_dir, on_progress=progress)
+        extract_archive(archive_path, extract_dir, on_progress=progress)
         archive_path.unlink(missing_ok=True)
 
         try:
@@ -259,6 +207,13 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             shutil.rmtree(extract_dir, ignore_errors=True)
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
+        url = field_values.get("url", "")
+        if not _is_url(url):
+            path = Path(url)
+            if not path.exists():
+                raise FileNotFoundError(f"Archive not found: {path}")
+            if not is_archive_path(path):
+                raise ValueError(f"Not a supported archive: {path}")
         self.run(field_values, medias, thin=thin)
 
     @property
@@ -288,7 +243,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
         progress("loading", "Extracting archive...", 0, 0)
         extract_dir.mkdir(exist_ok=True)
-        _extract_archive(archive_path, extract_dir, on_progress=progress)
+        extract_archive(archive_path, extract_dir, on_progress=progress)
         archive_path.unlink(missing_ok=True)
 
         return extract_dir
@@ -300,6 +255,14 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         from vtscore.datasets.loader import load_dataset_from_folder_chunked
+
+        if not _is_url(field_values.get("url", "")):
+            # Local archive path: load everything as a single chunk via run().
+            local_medias: dict[int, dict[str, Any]] = {}
+            self.run(field_values, local_medias, thin=thin)
+            if local_medias:
+                yield local_medias
+            return
 
         extract_dir = self._download_and_extract(field_values)
         media_type = field_values.get("media_type", "audio")
@@ -337,8 +300,12 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
         url = field_values.get("url", "")
-        if not url.startswith(("http://", "https://")):
-            raise ValueError(f"Invalid URL (must start with http:// or https://): {url}")
+        if not _is_url(url):
+            path = Path(url)
+            if not path.exists():
+                raise FileNotFoundError(f"Archive not found: {path}")
+            if not is_archive_path(path):
+                raise ValueError(f"Not a supported archive: {path}")
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
     def build_cli_args(self, field_values: dict[str, Any]) -> str:
@@ -357,7 +324,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
             tail = url_path.split("/")[-1]
             if tail:
                 # Strip a few common archive extensions for a tidier label.
-                for suffix in (".tar.gz", ".tar.bz2", ".tar.xz", ".tar", ".zip", ".rar"):
+                for suffix in (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz", ".tar", ".zip", ".rar"):
                     if tail.lower().endswith(suffix):
                         return tail[: -len(suffix)] or self.display_name
                 return tail

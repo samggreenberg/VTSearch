@@ -1,16 +1,4 @@
-import {
-  Component,
-  ElementRef,
-  EventEmitter,
-  Input,
-  NgZone,
-  OnChanges,
-  OnDestroy,
-  OnInit,
-  Output,
-  SimpleChanges,
-  ViewChild,
-} from '@angular/core';
+import { Component, ElementRef, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild, effect, inject, input, output } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -66,14 +54,20 @@ const HOVER_RADIUS_SCALE = 1.38;
   styleUrl: './browse-canvas.component.scss',
 })
 export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
+  private ngZone = inject(NgZone);
+  private tileCache = inject(TileCacheService);
+  private activeContext = inject(ActiveContextService);
+  private viewport = inject(BrowseViewportService);
+  private selection = inject(BrowseSelectionService);
+
   @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
-  @Input() meta: ProjectionMeta | null = null;
+  readonly meta = input<ProjectionMeta | null>(null);
   /**
    * Active dataset media type. For ``image`` and ``video`` the representative
    * item's thumbnail is painted directly onto each hex; other types keep the
    * flat density (darkred→yellow) shading.
    */
-  @Input() mediaType = '';
+  readonly mediaType = input('');
   /** On-screen bin radius (CSS px) the "M" thumbnail size targets, and the
    * default before any saved size is applied. See {@link targetRadius}. */
   static readonly DEFAULT_TARGET_RADIUS = 28;
@@ -97,7 +91,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * a specific map. Resolved to concrete colours against the live theme at
    * draw time, so a theme switch repaints with the right ramp.
    */
-  @Input() colormap: BrowseColormapId = 'auto';
+  readonly colormap = input<BrowseColormapId>('auto');
   /**
    * Width (CSS px) of the colormap-coloured border painted around multi-item
    * ("pile") thumbnails. The band's colour is the density colour for the cell's
@@ -105,24 +99,24 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * disables it (cells fall back to the faint dark separator). Only takes effect
    * in {@link thumbnailMode} (image/video); singletons never get the band.
    */
-  @Input() thumbnailBorder = 0;
+  readonly thumbnailBorder = input(0);
   /**
    * GUI parallel to the Shift modifier: when on, a plain left-drag rubber-bands
    * a selection marquee instead of panning, so the region-select gesture is
    * discoverable without knowing the Shift+drag hotkey. Shift+drag keeps working
    * regardless. Toggled by the region-select button in the browse toolbar.
    */
-  @Input() marqueeMode = false;
-  @Output() hexHover = new EventEmitter<HexHoverEvent | null>();
+  readonly marqueeMode = input(false);
+  readonly hexHover = output<HexHoverEvent | null>();
   /** A right-click on the canvas; the view opens the bin popup in response. */
-  @Output() contextMenu = new EventEmitter<BrowseContextMenuEvent>();
+  readonly contextMenu = output<BrowseContextMenuEvent>();
   /**
    * The densest visible cell's item count, emitted whenever it changes. Density
    * shading is renormalized to this per frame (yellow = this many items, the
    * darkest red = 1), so the legend reads it to label the ramp with live
    * numbers that track pan/zoom.
    */
-  @Output() densityMaxChanged = new EventEmitter<number>();
+  readonly densityMaxChanged = output<number>();
 
   /** Loaded representative thumbnails, keyed by media id (insertion-ordered LRU). */
   private thumbCache = new Map<number, HTMLImageElement>();
@@ -286,19 +280,21 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private boundContextMenu = this.onContextMenu.bind(this);
 
   private recenterSub: Subscription | null = null;
-  private selectionSub: Subscription | null = null;
 
-  constructor(
-    private ngZone: NgZone,
-    private tileCache: TileCacheService,
-    private activeContext: ActiveContextService,
-    private viewport: BrowseViewportService,
-    private selection: BrowseSelectionService,
-  ) {}
+  // Repaint when the selection changes so the per-cell selection rings track
+  // the live set. An effect (not a subscription) so a signal write — including
+  // one from a raw canvas event handler — schedules the redraw under zoneless
+  // without an NgZone.run re-entry. The first run (post-ngOnInit) just queues a
+  // harmless redraw. Unselected cells are left untouched: a selection elsewhere
+  // never dims or otherwise alters them.
+  private readonly selectionRedraw = effect(() => {
+    this.selection.version();
+    this.requestRedraw();
+  });
 
   /** True when cells should be painted with the central item's thumbnail. */
   private get thumbnailMode(): boolean {
-    return usesThumbnails(this.mediaType);
+    return usesThumbnails(this.mediaType());
   }
 
   /** At the largest zoom levels a cell is drawn wider (in device px) than the
@@ -322,7 +318,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   /** Geometry (hex or square) for the active projection's bin shape. */
   private get geom(): BinGeometry {
-    return binGeometry(this.meta?.bin_shape);
+    return binGeometry(this.meta()?.bin_shape);
   }
 
   /** On-screen scale (projection units → CSS px). Used for all projection↔screen
@@ -355,11 +351,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.requestRedraw();
     });
 
-    // Repaint when the selection changes so the per-cell selection rings track
-    // the live set. Unselected cells are left untouched — a selection elsewhere
-    // never dims or otherwise alters them.
-    this.selectionSub = this.selection.changed$.subscribe(() => this.requestRedraw());
-
     this.resizeObserver = new ResizeObserver(() => {
       this.ngZone.runOutsideAngular(() => this.resize());
     });
@@ -383,20 +374,21 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['meta'] && this.meta) {
+    const meta = this.meta();
+    if (changes['meta'] && meta) {
       // Fresh meta re-bins (new projection, bin-shape toggle, cull). Any zoom
       // transition was easing the *old* data, so abandon it; the redraw below
       // paints the new state. A boundary settle would spring toward the old
       // bounds, so stop it too.
       this.cancelZoomAnim();
       this.cancelSettle();
-      this.tileCache.setProjectionId(this.meta.projection_id);
+      this.tileCache.setProjectionId(meta.projection_id);
       // A bin-shape toggle delivers fresh meta for the *same* projection id
       // (hex and square share one UMAP layout). In that case keep the current
       // pan/zoom and just re-bin visually; only a genuinely new projection
       // re-frames to data and drops stale representative thumbnails.
-      if (this.meta.projection_id !== this.lastProjectionId) {
-        this.lastProjectionId = this.meta.projection_id;
+      if (meta.projection_id !== this.lastProjectionId) {
+        this.lastProjectionId = meta.projection_id;
         // A brand-new projection opens auto-fit: clear the user-framed flag so a
         // saved cell size applied right after load re-fits to keep it all in view.
         this.framedByUser = false;
@@ -419,7 +411,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     }
     // Entering region-select mode: drop any hover preview/highlight that was
     // showing, since hover is suppressed while the mode is on.
-    if (changes['marqueeMode'] && this.marqueeMode) {
+    if (changes['marqueeMode'] && this.marqueeMode()) {
       this.clearHover();
     }
     // A colormap change only affects flat (non-thumbnail) shading; repaint.
@@ -436,7 +428,6 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   ngOnDestroy(): void {
     this.tileLoadSub?.unsubscribe();
     this.recenterSub?.unsubscribe();
-    this.selectionSub?.unsubscribe();
     this.viewport.setViewport(null);
     this.resizeObserver?.disconnect();
     this.themeObserver?.disconnect();
@@ -491,7 +482,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // framing and the viewport bounds published to the minimap match the actual
     // canvas. Only on the first real measurement — a later window resize keeps
     // the user's pan/zoom.
-    if (!this.fittedAgainstRealSize && this.meta && this.width > 0 && this.height > 0) {
+    if (!this.fittedAgainstRealSize && this.meta() && this.width > 0 && this.height > 0) {
       this.fitToData();
     } else {
       // The viewport changed size: a shrunk canvas raises the fit floor and a
@@ -503,8 +494,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private fitToData(): void {
-    if (!this.meta || this.meta.point_count === 0) return;
-    const [xmin, ymin, xmax, ymax] = this.meta.bounds;
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return;
+    const [xmin, ymin, xmax, ymax] = meta.bounds;
     this.transform.zoom = this.computeFitZoom();
     this.transform.centerX = (xmin + xmax) / 2;
     this.transform.centerY = (ymin + ymax) / 2;
@@ -527,8 +519,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * at 0, so this settles immediately).
    */
   private computeFitZoom(): number {
-    if (!this.meta) return this.transform.zoom;
-    const [xmin, ymin, xmax, ymax] = this.meta.bounds;
+    const meta = this.meta();
+    if (!meta) return this.transform.zoom;
+    const [xmin, ymin, xmax, ymax] = meta.bounds;
     const dataW = xmax - xmin || 1;
     const dataH = ymax - ymin || 1;
     // Small breathing room beyond the bins themselves.
@@ -541,7 +534,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     );
     for (let i = 0; i < 3; i++) {
       const level = this.levelForEffZoom(zoom);
-      const r = this.meta.base_radius / Math.pow(2, level);
+      const r = meta.base_radius / Math.pow(2, level);
       const padW = dataW + 2 * (r + dataW * padding);
       const padH = dataH + 2 * (r + dataH * padding);
       zoom = Math.min(w / padW, h / padH);
@@ -567,9 +560,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    */
   private computeMaxZoom(): number {
     const minZoom = this.computeFitZoom();
-    if (!this.meta || this.meta.levels.length === 0) return minZoom;
-    const maxLevel = this.meta.levels.length - 1;
-    const maxZoom = (this.targetRadius * Math.pow(2, maxLevel + 0.5)) / this.meta.base_radius;
+    const meta = this.meta();
+    if (!meta || meta.levels.length === 0) return minZoom;
+    const maxLevel = meta.levels.length - 1;
+    const maxZoom = (this.targetRadius * Math.pow(2, maxLevel + 0.5)) / meta.base_radius;
     // A tiny projection can fit whole at a zoom already past its finest-level
     // size; never let the ceiling drop below the floor (that would invert the
     // clamp and trap the view between two crossed limits).
@@ -595,7 +589,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * clamp no longer force-recentres on zoom-out.)
    */
   private clampView(): void {
-    if (!this.meta || this.meta.point_count === 0) return;
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return;
     if (this.width <= 0 || this.height <= 0) return;
     const c = this.clampedTransform(this.transform);
     this.transform.zoom = c.zoom;
@@ -633,9 +628,10 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   private panLimits(
     z: number,
   ): { loX: number; hiX: number; loY: number; hiY: number; viewX: number; viewY: number } | null {
-    if (!this.meta || this.meta.point_count === 0) return null;
-    const [xmin, ymin, xmax, ymax] = this.meta.bounds;
-    const r = this.meta.base_radius / Math.pow(2, this.levelForEffZoom(z));
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return null;
+    const [xmin, ymin, xmax, ymax] = meta.bounds;
+    const r = meta.base_radius / Math.pow(2, this.levelForEffZoom(z));
     return { loX: xmin - r, hiX: xmax + r, loY: ymin - r, hiY: ymax + r, viewX: this.width / z, viewY: this.height / z };
   }
 
@@ -744,18 +740,20 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    * ({@link targetRadius}) at the given on-screen zoom. Shared by live level
    * selection and fit framing. */
   private levelForEffZoom(effZoom: number): number {
-    if (!this.meta || this.meta.levels.length === 0) return 0;
+    const meta = this.meta();
+    if (!meta || meta.levels.length === 0) return 0;
     const idealLevel = Math.log2(
-      (this.meta.base_radius * effZoom) / this.targetRadius,
+      (meta.base_radius * effZoom) / this.targetRadius,
     );
     return Math.max(
       0,
-      Math.min(this.meta.levels.length - 1, Math.round(idealLevel)),
+      Math.min(meta.levels.length - 1, Math.round(idealLevel)),
     );
   }
 
   private updateActiveLevel(): void {
-    if (!this.meta || this.meta.levels.length === 0) return;
+    const meta = this.meta();
+    if (!meta || meta.levels.length === 0) return;
     // Floor the level at the coarsest one reachable in "normal space" (the
     // level the fit zoom lands on). Zooming out past the whole-projection fit
     // only happens in the rubber-band overshoot zone, and that overshoot is
@@ -793,11 +791,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private getVisibleTiles(): { tx: number; ty: number }[] {
-    if (!this.meta) return [];
+    const meta = this.meta();
+    if (!meta) return [];
     const level = this.activeLevel;
-    const radius = this.meta.base_radius / Math.pow(2, level);
+    const radius = meta.base_radius / Math.pow(2, level);
     const geom = this.geom;
-    const tileSpan = this.meta.tile_span;
+    const tileSpan = meta.tile_span;
     const tileW = tileSpan * geom.dx(radius);
     const tileH = tileSpan * geom.dy(radius);
 
@@ -976,7 +975,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       clearTimeout(this.settleTimer);
       this.settleTimer = null;
     }
-    if (!this.meta || this.meta.point_count === 0) return;
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) return;
     if (this.width <= 0 || this.height <= 0) return;
     const dest = this.clampedTransform(this.transform);
     const cur = this.transform;
@@ -1065,7 +1065,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     ctx.fillStyle = this.themeColor('--bg-body');
     ctx.fillRect(0, 0, this.width, this.height);
 
-    if (!this.meta || this.meta.point_count === 0) {
+    const meta = this.meta();
+    if (!meta || meta.point_count === 0) {
       ctx.fillStyle = this.themeColor('--text-muted');
       ctx.font = '16px sans-serif';
       ctx.textAlign = 'center';
@@ -1074,7 +1075,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     const level = this.activeLevel;
-    const radius = this.meta.base_radius / Math.pow(2, level);
+    const radius = meta.base_radius / Math.pow(2, level);
     const screenRadius = radius * this.effZoom;
 
     const visibleTiles = this.getVisibleTiles();
@@ -1099,7 +1100,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     // Resolve the colormap against the live theme once per frame, not per cell.
-    const cmap = resolveColormap(this.colormap, this.effectiveTheme());
+    const cmap = resolveColormap(this.colormap(), this.effectiveTheme());
     // Accent for selection rings + marquee, also resolved once per frame.
     this.selAccent = this.themeColor('--accent-color') || '#4f9dff';
     const selectionActive = this.selection.size > 0;
@@ -1156,13 +1157,13 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
    *  re-scan every bin's members each frame. */
   private selStateFor(cell: HexCellPayload): 0 | 1 | 2 {
     const memo = cell as HexCellPayload & { _selVer?: number; _selState?: 0 | 1 | 2 };
-    if (memo._selVer === this.selection.version && memo._selState !== undefined) {
+    if (memo._selVer === this.selection.version() && memo._selState !== undefined) {
       return memo._selState;
     }
     const members = this.cellMembers(cell);
     const sel = this.selection.selectedCountIn(members);
     const state: 0 | 1 | 2 = sel === 0 ? 0 : sel === members.length ? 2 : 1;
-    memo._selVer = this.selection.version;
+    memo._selVer = this.selection.version();
     memo._selState = state;
     return state;
   }
@@ -1253,7 +1254,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       if (selState === 1) ctx.setLineDash([6, 4]);
       ctx.stroke();
       ctx.restore();
-    } else if (thumb && !single && this.thumbnailBorder > 0) {
+    } else if (thumb && !single && this.thumbnailBorder() > 0) {
       // Pile thumbnail: a band whose colormap colour encodes how many items are
       // stacked under this tile. Clipped to the cell so the full width sits just
       // inside the thumbnail edge rather than bleeding onto neighbours (a
@@ -1262,7 +1263,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       ctx.save();
       ctx.clip();
       ctx.strokeStyle = densityColor(Math.max(0, Math.min(1, t)), cmap.ramp);
-      ctx.lineWidth = this.thumbnailBorder * 2;
+      ctx.lineWidth = this.thumbnailBorder() * 2;
       ctx.stroke();
       ctx.restore();
     } else {
@@ -1439,7 +1440,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private prefetchNeighbors(visibleTiles: { tx: number; ty: number }[]): void {
-    if (!this.meta) return;
+    const meta = this.meta();
+    if (!meta) return;
     const level = this.activeLevel;
     const seen = new Set(visibleTiles.map((t) => `${t.tx}:${t.ty}`));
     for (const { tx, ty } of visibleTiles) {
@@ -1455,15 +1457,16 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (level > 0) {
       this.prefetchLevel(level - 1, visibleTiles);
     }
-    if (this.meta.levels.length > level + 1) {
+    if (meta.levels.length > level + 1) {
       this.prefetchLevel(level + 1, visibleTiles);
     }
   }
 
   private prefetchLevel(targetLevel: number, sourceTiles: { tx: number; ty: number }[]): void {
-    if (!this.meta) return;
-    const sourceRadius = this.meta.base_radius / Math.pow(2, this.activeLevel);
-    const targetRadius = this.meta.base_radius / Math.pow(2, targetLevel);
+    const meta = this.meta();
+    if (!meta) return;
+    const sourceRadius = meta.base_radius / Math.pow(2, this.activeLevel);
+    const targetRadius = meta.base_radius / Math.pow(2, targetLevel);
     const ratio = sourceRadius / targetRadius;
     const seen = new Set<string>();
     for (const { tx, ty } of sourceTiles) {
@@ -1500,7 +1503,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.panStartY = event.clientY;
     this.dragMoved = false;
 
-    if (event.shiftKey || this.marqueeMode) {
+    if (event.shiftKey || this.marqueeMode()) {
       // Shift+drag (or the region-select toggle): rubber-band a region to add to
       // the selection. Suppress any hover preview while marqueeing so it doesn't
       // flicker over the rectangle.
@@ -1614,7 +1617,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   /** Double-click zooms in about the cursor (map idiom). Shift/region-select are
    *  reserved for the marquee, so they don't zoom. */
   private onDblClick(event: MouseEvent): void {
-    if (event.shiftKey || this.marqueeMode) return;
+    if (event.shiftKey || this.marqueeMode()) return;
     this.cancelPendingToggle();
     const [mx, my] = this.canvasXY(event);
     this.zoomBy(BrowseCanvasComponent.DOUBLE_CLICK_ZOOM, mx, my);
@@ -1664,7 +1667,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
 
   /** Add every bin whose centre falls inside the marquee rectangle. */
   private commitMarquee(): void {
-    if (!this.marquee || !this.meta) return;
+    if (!this.marquee || !this.meta()) return;
     const [px0, py0] = this.screenToProj(this.marquee.x0, this.marquee.y0);
     const [px1, py1] = this.screenToProj(this.marquee.x1, this.marquee.y1);
     const minX = Math.min(px0, px1);
@@ -1759,7 +1762,8 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   setThumbnailRadius(radius: number, reframe: boolean): void {
     if (radius <= 0 || radius === this.targetRadius) return;
     this.cancelSettle();
-    if (reframe && this.meta && this.fittedAgainstRealSize) {
+    const meta = this.meta();
+    if (reframe && meta && this.fittedAgainstRealSize) {
       this.framedByUser = true;
       this.transform.zoom *= radius / this.targetRadius;
     }
@@ -1772,7 +1776,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // letting the now-larger edge bins spill past the default-radius framing.
     // Once the user has panned/zoomed, only re-select the level so their view is
     // preserved.
-    if (!reframe && !this.framedByUser && this.meta && this.fittedAgainstRealSize) {
+    if (!reframe && !this.framedByUser && meta && this.fittedAgainstRealSize) {
       this.fitToData();
     } else {
       // A reframe scales the zoom in lock-step with the size, which can push it
@@ -1797,7 +1801,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     // No hover while panning or marqueeing (mid-drag), and none at all in
     // region-select mode: the cursor is a crosshair for drawing a box, so a
     // hover preview/highlight popping up under it would just be noise.
-    if (this.isPanning || this.isMarquee || this.marqueeMode) return;
+    if (this.isPanning || this.isMarquee || this.marqueeMode()) return;
     const rect = this.canvasRef.nativeElement.getBoundingClientRect();
     const mx = event.clientX - rect.left;
     const my = event.clientY - rect.top;
@@ -1872,13 +1876,14 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private hitTest(sx: number, sy: number): HexCellPayload | null {
-    if (!this.meta) return null;
+    const meta = this.meta();
+    if (!meta) return null;
     const [px, py] = this.screenToProj(sx, sy);
     const level = this.activeLevel;
-    const radius = this.meta.base_radius / Math.pow(2, level);
+    const radius = meta.base_radius / Math.pow(2, level);
     const geom = this.geom;
-    const tileW = this.meta.tile_span * geom.dx(radius);
-    const tileH = this.meta.tile_span * geom.dy(radius);
+    const tileW = meta.tile_span * geom.dx(radius);
+    const tileH = meta.tile_span * geom.dy(radius);
 
     const txEst = Math.floor(px / tileW);
     const tyEst = Math.floor(py / tileH);

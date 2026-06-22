@@ -1,16 +1,17 @@
-<vt-modal [open]="dialog.dialogOpen" [title]="dialog.dialogTitle" [showCloseButton]="false" (closed)="onClosed()">
-  <p class="dialog-message"><vt-icon [type]="dialog.getIconType()" [size]="32"></vt-icon> {{ dialog.dialogMessage }}</p>
-  @if (dialog.dialogShowInput) {
+<vt-modal [open]="dialog.dialogOpen()" [title]="dialog.dialogTitle()" [showCloseButton]="false" (closed)="onClosed()">
+  <p class="dialog-message"><vt-icon [type]="dialog.getIconType()" [size]="32"></vt-icon> {{ dialog.dialogMessage() }}</p>
+  @if (dialog.dialogShowInput()) {
     <input
       class="form-input"
-      [(ngModel)]="dialog.dialogInputValue"
+      [ngModel]="dialog.dialogInputValue()"
+      (ngModelChange)="dialog.dialogInputValue.set($event)"
       (keydown.enter)="onButtonClick('__input__')"
-      [attr.aria-label]="dialog.dialogTitle"
+      [attr.aria-label]="dialog.dialogTitle()"
       autofocus
     />
   }
   <div modal-footer>
-    @for (btn of dialog.dialogButtons; track btn.label) {
+    @for (btn of dialog.dialogButtons(); track btn.label) {
       <button
         class="btn"
         [class.btn--primary]="btn.primary"

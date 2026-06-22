@@ -1,5 +1,4 @@
-import { Injectable } from '@angular/core';
-import { Observable, Subject } from 'rxjs';
+import { Injectable, signal } from '@angular/core';
 
 /**
  * Tracks which media items are selected in the VTSBrowse canvas.
@@ -21,11 +20,7 @@ import { Observable, Subject } from 'rxjs';
 @Injectable()
 export class BrowseSelectionService {
   private selected = new Set<number>();
-  private _version = 0;
-  private readonly changedSubject = new Subject<void>();
-
-  /** Emits after every change to the selection set. */
-  readonly changed$: Observable<void> = this.changedSubject.asObservable();
+  private readonly _version = signal(0);
 
   /** How many items are currently selected. */
   get size(): number {
@@ -42,10 +37,15 @@ export class BrowseSelectionService {
     if (this.selected.delete(id)) this.bump();
   }
 
-  /** A monotonically increasing token that changes on every mutation. */
-  get version(): number {
-    return this._version;
-  }
+  /**
+   * A monotonically increasing token that changes on every mutation. Read it
+   * in a template or an `effect` (e.g. the canvas redraw, the selection panel
+   * refresh, the bin popup re-highlight) to react to selection changes; it
+   * bumps on every add/remove/clear. Because it is a signal, a write from any
+   * context — including a raw canvas event handler — schedules change detection
+   * under zoneless without an `NgZone.run` re-entry.
+   */
+  readonly version = this._version.asReadonly();
 
   /** Whether a specific media id is selected. */
   has(id: number): boolean {
@@ -126,7 +126,6 @@ export class BrowseSelectionService {
   }
 
   private bump(): void {
-    this._version++;
-    this.changedSubject.next();
+    this._version.update((v) => v + 1);
   }
 }

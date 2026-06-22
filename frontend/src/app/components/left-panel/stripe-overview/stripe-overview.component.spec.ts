@@ -20,7 +20,7 @@ describe('StripeOverviewComponent', () => {
   });
 
   it('should not be visible when no sort order', () => {
-    expect(component.visible).toBeFalse();
+    expect(component.visible).toBe(false);
   });
 
   it('should be visible when sort order exists', () => {
@@ -28,7 +28,7 @@ describe('StripeOverviewComponent', () => {
       { id: 1, score: 0.9 },
       { id: 2, score: 0.5 },
     ];
-    expect(component.visible).toBeTrue();
+    expect(component.visible).toBe(true);
   });
 
   it('should generate good dots', () => {

@@ -1,20 +1,22 @@
-import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
-import { NgIf } from '@angular/common';
+import { Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, input, output } from '@angular/core';
+
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
   selector: 'vt-video-player',
   standalone: true,
-  imports: [NgIf],
+  imports: [],
   templateUrl: './video-player.component.html',
   styleUrl: './video-player.component.scss',
 })
 export class VideoPlayerComponent implements OnChanges, OnDestroy {
+  private activeContext = inject(ActiveContextService);
+
   @Input() media!: Media;
-  @Input() volume = 1;
-  @Input() audioPlaying = true;
-  @Output() playingChanged = new EventEmitter<boolean>();
+  readonly volume = input(1);
+  readonly audioPlaying = input(true);
+  readonly playingChanged = output<boolean>();
 
   @ViewChild('videoEl') videoRef!: ElementRef<HTMLVideoElement>;
 
@@ -32,8 +34,6 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   // case (loadedmetadata) does not fire again, so we (re)apply the bounds here.
   private metadataLoaded = false;
 
-  constructor(private activeContext: ActiveContextService) {}
-
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['media'] && this.media) {
       if (this.media.id !== this.lastMediaId) {
@@ -50,7 +50,7 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
       }
     }
     if (changes['volume'] && this.videoRef?.nativeElement) {
-      this.videoRef.nativeElement.volume = this.volume;
+      this.videoRef.nativeElement.volume = this.volume();
     }
     if (changes['audioPlaying'] && !changes['media'] && this.videoRef?.nativeElement) {
       this.syncPlaybackState();
@@ -68,7 +68,7 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   }
 
   onPlay(): void {
-    if (!this.audioPlaying) {
+    if (!this.audioPlaying()) {
       this.playingChanged.emit(true);
     }
   }
@@ -78,7 +78,7 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   }
 
   onPause(): void {
-    if (this.audioPlaying) {
+    if (this.audioPlaying()) {
       this.playingChanged.emit(false);
     }
   }
@@ -103,7 +103,7 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
     const video = this.videoRef?.nativeElement;
     if (!video) return;
     this.metadataLoaded = true;
-    video.volume = this.volume;
+    video.volume = this.volume();
     this.applyClipBounds();
     this.syncPlaybackState();
   }
@@ -159,9 +159,10 @@ export class VideoPlayerComponent implements OnChanges, OnDestroy {
   private syncPlaybackState(): void {
     const video = this.videoRef?.nativeElement;
     if (!video) return;
-    if (this.audioPlaying && video.paused) {
+    const audioPlaying = this.audioPlaying();
+    if (audioPlaying && video.paused) {
       video.play().catch(() => {});
-    } else if (!this.audioPlaying && !video.paused) {
+    } else if (!audioPlaying && !video.paused) {
       video.pause();
     }
   }

@@ -148,38 +148,61 @@ describe('DatasetImporterModalComponent', () => {
     { id: 'demo', label: 'Demo', icon: 'flask', order: 40 },
   ];
 
+  /** ngOnInit fires four requests besides the importer list: a bare
+   *  ``/api/embedders`` (no media_type), ``/api/media-types``, and the
+   *  settings load (``/api/settings``).  Flush all of them so each test
+   *  starts from a clean request queue. */
+  function flushInitRequests(): void {
+    httpMock.expectOne(req => req.url === '/api/embedders' && !req.params.get('media_type'))
+      .flush({ embedders: [] });
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
+    httpMock.expectOne('/api/settings').flush({});
+  }
+
   function flushImporters(): void {
     fixture.detectChanges();
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers: mockImporters, tabs: mockTabs });
+    flushInitRequests();
   }
 
-  /** Open the demo picker and flush the always-issued requests.  Unlike
-   *  the previous behavior, opening the picker no longer auto-selects a
-   *  media-type tab, so no per-tab embedder/clipper requests fire here.
-   *  Tests that need a tab selected should call ``selectDemoTab`` (or
-   *  ``selectDemoTabWithEmbedder``) explicitly and flush the resulting
-   *  requests themselves. */
-  function openAndFlushDemoPicker(): void {
-    component.openDemoPicker();
-
-    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
-    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
-  }
-
-  /** Helper: select a demo media-type tab and flush the embedder + clipper
-   *  fetches plus the embedder-aware refetch.  Returns the flushed
-   *  embedders for convenience. */
-  function selectDemoTabAndFlush(tab: string, embedders: typeof mockEmbedders): void {
-    component.selectDemoTabWithEmbedder(tab);
+  /** Flush the embedder + clipper fetches and the embedder-aware demo-list
+   *  refetch that fire when a demo media-type tab is selected (either via
+   *  the auto-select inside ``buildDemoTabs`` or an explicit user pick). */
+  function flushDemoTabRequests(tab: string, embedders: typeof mockEmbedders): void {
     httpMock.expectOne(req =>
       req.url === '/api/embedders' && req.params.get('media_type') === tab,
     ).flush({ embedders });
-    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req =>
+      req.url === '/api/clippers' && req.params.get('media_type') === tab,
+    ).flush({ clippers: [] });
     if (embedders.length > 0) {
       httpMock.expectOne(req =>
         req.url === '/api/dataset/demo-list' && req.params.get('embedder') === embedders[0].name,
       ).flush({ datasets: mockDemos });
     }
+  }
+
+  /** Open the demo picker and flush the always-issued requests.  Opening
+   *  the picker now auto-selects a media-type tab (``buildDemoTabs``
+   *  prefers the solo type, then the guessed type, then ``audio``), so the
+   *  per-tab embedder/clipper/refetch requests for that tab fire here too.
+   *  With the default mocks the auto-selected tab is ``audio``. */
+  function openAndFlushDemoPicker(): void {
+    component.openDemoPicker();
+
+    httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
+    httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && !req.params.get('embedder'))
+      .flush({ datasets: mockDemos });
+    // buildDemoTabs auto-selects the 'audio' tab.
+    flushDemoTabRequests('audio', mockEmbedders);
+  }
+
+  /** Helper: select a demo media-type tab and flush the embedder + clipper
+   *  fetches plus the embedder-aware refetch. */
+  function selectDemoTabAndFlush(tab: string, embedders: typeof mockEmbedders): void {
+    component.selectDemoTabWithEmbedder(tab);
+    flushDemoTabRequests(tab, embedders);
   }
 
   it('should create', () => {
@@ -189,14 +212,14 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should fetch importers on init', () => {
     flushImporters();
-    expect(component.importers.length).toBe(7);
+    expect(component.importers().length).toBe(7);
   });
 
   it('should start with no top-level tab selected and a blank content area', () => {
     flushImporters();
     fixture.detectChanges();
-    expect(component.activeImporterTab).toBe('');
-    expect(component.selectedImporter).toBeNull();
+    expect(component.activeImporterTab()).toBe('');
+    expect(component.selectedImporter()).toBeNull();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelectorAll('.importer-subtab').length).toBe(0);
   });
@@ -204,13 +227,13 @@ describe('DatasetImporterModalComponent', () => {
   it('should pre-select the initialTab once importers and tabs arrive', () => {
     component.initialTab = 'server';
     flushImporters();
-    expect(component.activeImporterTab).toBe('server');
+    expect(component.activeImporterTab()).toBe('server');
   });
 
   it('should ignore an initialTab id that no declared/used tab matches', () => {
     component.initialTab = 'no-such-tab';
     flushImporters();
-    expect(component.activeImporterTab).toBe('');
+    expect(component.activeImporterTab()).toBe('');
   });
 
   it('should always render the Services tab even when no importers populate it', () => {
@@ -220,7 +243,7 @@ describe('DatasetImporterModalComponent', () => {
     const tabLabels = Array.from(el.querySelectorAll('.importer-tab')).map(
       (b) => (b.textContent || '').trim(),
     );
-    expect(tabLabels.some((l) => l.includes('Services'))).toBeTrue();
+    expect(tabLabels.some((l) => l.includes('Services'))).toBe(true);
     // No importer is wired to category="services" in the mocks, so the
     // tab renders but importersForActiveTab is empty when selected.
     component.selectImporterTab('services');
@@ -240,7 +263,7 @@ describe('DatasetImporterModalComponent', () => {
     // Switching to the Server tab swaps in the server importers and
     // clears the prior importer selection so the user must click again.
     component.selectImporterTab('server');
-    expect(component.selectedImporter).toBeNull();
+    expect(component.selectedImporter()).toBeNull();
     fixture.detectChanges();
     const serverSubtabs = el.querySelectorAll('.importer-subtab');
     expect(serverSubtabs.length).toBe(2);
@@ -255,58 +278,62 @@ describe('DatasetImporterModalComponent', () => {
       { name: 'recaller', display_name: 'ReCaller', hidden_from_picker: true, fields: [] },
     ];
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers: importersWithHidden, tabs: mockTabs });
-    expect(component.importers.find((i) => i.name === 'recaller')).toBeUndefined();
+    flushInitRequests();
+    expect(component.importers().find((i) => i.name === 'recaller')).toBeUndefined();
   });
 
   it('should set activePickerView=local_folder when the Local Folder sub-tab is clicked', () => {
     flushImporters();
-    const localFolder = component.importers.find((i) => i.name === 'local_folder')!;
+    const localFolder = component.importers().find((i) => i.name === 'local_folder')!;
     component.selectImporter(localFolder);
     expect(component.activePickerView).toBe('local_folder');
-    expect(component.selectedImporter?.name).toBe('local_folder');
+    expect(component.selectedImporter()?.name).toBe('local_folder');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });
 
   it('should set activePickerView=server_folder when the Server Folder sub-tab is clicked', () => {
     flushImporters();
-    const folder = component.importers.find((i) => i.name === 'server_folder')!;
+    const folder = component.importers().find((i) => i.name === 'server_folder')!;
     component.selectImporter(folder);
     expect(component.activePickerView).toBe('server_folder');
-    expect(component.selectedImporter?.name).toBe('server_folder');
+    expect(component.selectedImporter()?.name).toBe('server_folder');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
-    httpMock.expectOne(req => req.url === '/api/browse-media-files').flush({ directories: [], files: [], root_path: '' });
+    // The server-filesystem folder browser is now opened lazily by the
+    // user (no /api/browse-media-files fires on importer selection).
   });
 
   it('should set activePickerView=local_files (paths-file picker) when the Local Files sub-tab is clicked', () => {
     flushImporters();
-    const localFiles = component.importers.find((i) => i.name === 'local_files')!;
+    const localFiles = component.importers().find((i) => i.name === 'local_files')!;
     component.selectImporter(localFiles);
     expect(component.activePickerView).toBe('local_files');
     expect(component.lfPickerKind).toBe('files');
-    expect(component.selectedImporter?.name).toBe('local_files');
+    expect(component.selectedImporter()?.name).toBe('local_files');
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });
 
   it('should set activePickerView=demo when the Demo sub-tab is clicked', () => {
     flushImporters();
-    const demo = component.importers.find((i) => i.name === 'demo')!;
+    const demo = component.importers().find((i) => i.name === 'demo')!;
     component.selectImporter(demo);
     expect(component.activePickerView).toBe('demo');
-    expect(component.selectedImporter?.name).toBe('demo');
-    // Opening the demo picker no longer auto-selects a media-type tab,
-    // so only the always-issued media-types + demo-list calls fire.
+    expect(component.selectedImporter()?.name).toBe('demo');
+    // Opening the demo picker fetches media-types + demo-list, then
+    // auto-selects the 'audio' tab (which fires its embedder/clipper/refetch).
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
-    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+    httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && !req.params.get('embedder'))
+      .flush({ datasets: mockDemos });
+    flushDemoTabRequests('audio', mockEmbedders);
   });
 
   it('should POST uploaded folder via importLocalFolder', () => {
     flushImporters();
-    spyOn(component.importStarted, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
-    const localFolder = component.importers.find((i) => i.name === 'local_folder')!;
+    const localFolder = component.importers().find((i) => i.name === 'local_folder')!;
     component.selectImporter(localFolder);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
@@ -324,15 +351,15 @@ describe('DatasetImporterModalComponent', () => {
     expect(body.getAll('files').length).toBe(1);
     req.flush({ ok: true });
 
-    expect(component.lfSubmitting).toBeFalse();
+    expect(component.lfSubmitting()).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
   it('should POST uploaded paths file via importLocalFiles', () => {
     flushImporters();
-    spyOn(component.importStarted, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
-    const localFiles = component.importers.find((i) => i.name === 'local_files')!;
+    const localFiles = component.importers().find((i) => i.name === 'local_files')!;
     component.selectImporter(localFiles);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
@@ -351,7 +378,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(body.get('files')).toBeNull();
     req.flush({ ok: true });
 
-    expect(component.lfSubmitting).toBeFalse();
+    expect(component.lfSubmitting()).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
@@ -360,7 +387,7 @@ describe('DatasetImporterModalComponent', () => {
     const imp = genericForm();
     component.selectImporter(imp);
     expect(component.activePickerView).toBe('form');
-    expect(component.selectedImporter).toBe(imp);
+    expect(component.selectedImporter()).toBe(imp);
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
   });
@@ -379,15 +406,18 @@ describe('DatasetImporterModalComponent', () => {
     component.selectImporter(genericForm());
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
     httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
-    expect(component.selectedImporter).not.toBeNull();
-    component.selectImporterTab('demo');
-    expect(component.selectedImporter).toBeNull();
+    expect(component.selectedImporter()).not.toBeNull();
+    // Switch to a multi-importer tab so the tab change clears the prior
+    // selection without auto-selecting a lone importer (the 'demo' tab has
+    // a single importer, which selectImporterTab would auto-open).
+    component.selectImporterTab('server');
+    expect(component.selectedImporter()).toBeNull();
     expect(component.activePickerView).toBe('');
   });
 
   it('should submit form values via runImporter', () => {
     flushImporters();
-    spyOn(component.importStarted, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
     component.selectImporter(genericForm());
     httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
@@ -400,7 +430,7 @@ describe('DatasetImporterModalComponent', () => {
     expect(req.request.body['path']).toBe('/data/sounds');
     req.flush({});
 
-    expect(component.submitting).toBeFalse();
+    expect(component.submitting()).toBe(false);
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
@@ -416,20 +446,20 @@ describe('DatasetImporterModalComponent', () => {
       { status: 404, statusText: 'Not Found' },
     );
 
-    expect(component.submitting).toBeFalse();
-    expect(component.error).toBe('Not found');
+    expect(component.submitting()).toBe(false);
+    expect(component.error()).toBe('Not found');
   });
 
   it('should emit closed on close', () => {
     flushImporters();
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
   it('should use loadFile for file type fields', () => {
     flushImporters();
-    spyOn(component.importStarted, 'emit');
+    vi.spyOn(component.importStarted, 'emit');
 
     component.selectImporter(pickleImp());
     const mockFile = new File(['data'], 'test.pkl');
@@ -451,28 +481,31 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.activePickerView).toBe('');
     component.openDemoPicker();
     expect(component.activePickerView).toBe('demo');
-    expect(component.demoLoading).toBeTrue();
+    expect(component.demoLoading()).toBe(true);
 
     // Flush media types and demo list requests
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
-    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+    httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && !req.params.get('embedder'))
+      .flush({ datasets: mockDemos });
 
-    // No media-type tab is auto-selected anymore, so no embedder/clipper
-    // fetches fire automatically.
-    expect(component.demoLoading).toBeFalse();
-    expect(component.demos.length).toBe(2);
-    expect(component.activeTab).toBe('');
+    // buildDemoTabs auto-selects the 'audio' tab, firing its
+    // embedder/clipper/refetch.
+    flushDemoTabRequests('audio', mockEmbedders);
+
+    expect(component.demoLoading()).toBe(false);
+    expect(component.demos().length).toBe(2);
+    expect(component.activeTab()).toBe('audio');
   });
 
-  it('should build tabs from media types in demo data without auto-selecting one', () => {
+  it('should build tabs from media types in demo data and auto-select the first', () => {
     flushImporters();
     openAndFlushDemoPicker();
 
-    expect(component.demoTabs).toEqual(['audio', 'image']);
-    // No media-type tab is auto-selected; the demo table area stays
-    // blank until the user clicks one.
-    expect(component.activeTab).toBe('');
-    expect(component.filteredDemos.length).toBe(0);
+    expect(component.demoTabs()).toEqual(['audio', 'image']);
+    // buildDemoTabs auto-selects the 'audio' tab so the demo table shows
+    // results immediately instead of sitting blank.
+    expect(component.activeTab()).toBe('audio');
+    expect(component.filteredDemos.length).toBe(1);
   });
 
   it('should default the demo media-type tab to the active context type when known', () => {
@@ -483,19 +516,14 @@ describe('DatasetImporterModalComponent', () => {
 
     component.openDemoPicker();
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
-    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+    httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && !req.params.get('embedder'))
+      .flush({ datasets: mockDemos });
 
     // buildDemoTabs pre-selects the guessed type instead of falling back to
     // audio, so the image embedder/clipper fetches fire for that tab.
-    httpMock.expectOne(req =>
-      req.url === '/api/embedders' && req.params.get('media_type') === 'image',
-    ).flush({ embedders: mockImageEmbedders });
-    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
-    httpMock.expectOne(req =>
-      req.url === '/api/dataset/demo-list' && req.params.get('embedder') === mockImageEmbedders[0].name,
-    ).flush({ datasets: mockDemos });
+    flushDemoTabRequests('image', mockImageEmbedders);
 
-    expect(component.activeTab).toBe('image');
+    expect(component.activeTab()).toBe('image');
   });
 
   it('should filter demos by the explicitly selected media-type tab', () => {
@@ -517,22 +545,22 @@ describe('DatasetImporterModalComponent', () => {
 
     // Default sort is num_files ascending
     expect(component.demoCols.sortColumn).toBe('num_files');
-    expect(component.demoCols.sortAsc).toBeTrue();
+    expect(component.demoCols.sortAsc).toBe(true);
 
     // Click same column to toggle direction
     component.demoCols.sortBy('num_files');
-    expect(component.demoCols.sortAsc).toBeFalse();
+    expect(component.demoCols.sortAsc).toBe(false);
 
     // Click different column to switch
     component.demoCols.sortBy('label');
     expect(component.demoCols.sortColumn).toBe('label');
-    expect(component.demoCols.sortAsc).toBeTrue();
+    expect(component.demoCols.sortAsc).toBe(true);
   });
 
   it('should record the demo selection without submitting on row click', () => {
     flushImporters();
-    spyOn(component.demoSelected, 'emit');
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.demoSelected, 'emit');
+    vi.spyOn(component.closed, 'emit');
 
     openAndFlushDemoPicker();
 
@@ -547,8 +575,8 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should emit demoSelected and close when submitDemo is called', () => {
     flushImporters();
-    spyOn(component.demoSelected, 'emit');
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.demoSelected, 'emit');
+    vi.spyOn(component.closed, 'emit');
 
     openAndFlushDemoPicker();
 
@@ -569,10 +597,12 @@ describe('DatasetImporterModalComponent', () => {
     // dropdown, so no .demo-tab buttons render in this modal anymore.
     expect(el.querySelectorAll('.demo-tab').length).toBe(0);
 
-    // No media type picked yet → no rows.
-    expect(el.querySelectorAll('.demo-row').length).toBe(0);
+    // The 'audio' tab is auto-selected on open, so its single demo row
+    // (gtzan) is already rendered.
+    expect(el.querySelectorAll('.demo-row').length).toBe(1);
 
-    selectDemoTabAndFlush('audio', mockEmbedders);
+    // Switching to the 'image' tab swaps in that tab's single row.
+    selectDemoTabAndFlush('image', mockImageEmbedders);
     fixture.detectChanges();
     expect(el.querySelectorAll('.demo-row').length).toBe(1);
   });
@@ -593,7 +623,7 @@ describe('DatasetImporterModalComponent', () => {
 
   it('should get correct tab label from media types', () => {
     flushImporters();
-    component.mediaTypes = mockMediaTypes as any;
+    component.mediaTypes.set(mockMediaTypes as any);
 
     expect(component.getTabLabel('audio')).toContain('Audio');
     expect(component.getTabLabel('unknown')).toBe('unknown');
@@ -609,8 +639,8 @@ describe('DatasetImporterModalComponent', () => {
       { status: 500, statusText: 'Internal Server Error' },
     );
 
-    expect(component.demoLoading).toBeFalse();
-    expect(component.demos.length).toBe(0);
+    expect(component.demoLoading()).toBe(false);
+    expect(component.demos().length).toBe(0);
   });
 
   // --- Embedder-aware status tests ---
@@ -649,16 +679,16 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = demosWithEmbedder;
-    component.activeTab = 'image';
-    component.selectedDemoEmbedder = 'siglip';
+    component.demos.set(demosWithEmbedder);
+    component.activeTab.set('image');
+    component.selectedDemoEmbedder.set('siglip');
 
     // Call updateDemoStatuses via the public embedder change handler
     // (we set up state directly to test the client-side logic)
     (component as any).updateDemoStatuses();
 
     expect(demosWithEmbedder[0].status).toBe('needs_embedding');
-    expect(demosWithEmbedder[0].ready).toBeFalse();
+    expect(demosWithEmbedder[0].ready).toBe(false);
   });
 
   it('should restore ready status when pkl_embedder matches selected embedder', () => {
@@ -679,14 +709,14 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = demosWithEmbedder;
-    component.activeTab = 'image';
-    component.selectedDemoEmbedder = 'clip';
+    component.demos.set(demosWithEmbedder);
+    component.activeTab.set('image');
+    component.selectedDemoEmbedder.set('clip');
 
     (component as any).updateDemoStatuses();
 
     expect(demosWithEmbedder[0].status).toBe('ready');
-    expect(demosWithEmbedder[0].ready).toBeTrue();
+    expect(demosWithEmbedder[0].ready).toBe(true);
   });
 
   it('should conservatively downgrade ready demos with unknown pkl_embedder', () => {
@@ -707,15 +737,15 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = demosUnknown;
-    component.activeTab = 'image';
-    component.selectedDemoEmbedder = 'clip';
+    component.demos.set(demosUnknown);
+    component.activeTab.set('image');
+    component.selectedDemoEmbedder.set('clip');
 
     (component as any).updateDemoStatuses();
 
     // Since we don't know the pkl_embedder, we can't confirm it matches
     expect(demosUnknown[0].status).toBe('needs_embedding');
-    expect(demosUnknown[0].ready).toBeFalse();
+    expect(demosUnknown[0].ready).toBe(false);
   });
 
   it('should not modify demos from other tabs during updateDemoStatuses', () => {
@@ -748,9 +778,9 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = crossTabDemos;
-    component.activeTab = 'image';
-    component.selectedDemoEmbedder = 'siglip';  // Doesn't match 'clip'
+    component.demos.set(crossTabDemos);
+    component.activeTab.set('image');
+    component.selectedDemoEmbedder.set('siglip');  // Doesn't match 'clip'
 
     (component as any).updateDemoStatuses();
 
@@ -778,33 +808,32 @@ describe('DatasetImporterModalComponent', () => {
       },
     ];
 
-    component.demos = downloadDemos;
-    component.activeTab = 'audio';
-    component.selectedDemoEmbedder = 'clap';
+    component.demos.set(downloadDemos);
+    component.activeTab.set('audio');
+    component.selectedDemoEmbedder.set('clap');
 
     (component as any).updateDemoStatuses();
 
     expect(downloadDemos[0].status).toBe('needs_download');
   });
 
-  it('should re-fetch demos with the tab embedder once the user picks a media-type tab', () => {
+  it('should re-fetch demos with the tab embedder once a media-type tab is selected', () => {
     flushImporters();
     component.openDemoPicker();
 
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
-    httpMock.expectOne('/api/dataset/demo-list').flush({ datasets: mockDemos });
+    httpMock.expectOne(req => req.url === '/api/dataset/demo-list' && !req.params.get('embedder'))
+      .flush({ datasets: mockDemos });
 
-    // No requests fire yet; the user hasn't picked a media-type tab.
-    httpMock.expectNone(req => req.url === '/api/embedders');
-
-    // Picking a media-type tab loads its embedders + clippers and then
-    // re-fetches the demo list with the now-known default embedder.
-    component.selectDemoTabWithEmbedder('audio');
-
+    // buildDemoTabs auto-selects the 'audio' tab, which loads its
+    // embedders + clippers and re-fetches the demo list with the now-known
+    // default embedder ('clap').
     httpMock.expectOne(req =>
       req.url === '/api/embedders' && req.params.get('media_type') === 'audio',
     ).flush({ embedders: mockEmbedders });
-    httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+    httpMock.expectOne(req =>
+      req.url === '/api/clippers' && req.params.get('media_type') === 'audio',
+    ).flush({ clippers: [] });
 
     const refetchReq = httpMock.expectOne(req =>
       req.url === '/api/dataset/demo-list' && req.params.get('embedder') === 'clap',

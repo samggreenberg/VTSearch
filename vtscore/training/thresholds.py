@@ -20,6 +20,15 @@ import numpy as np
 # stored on ``DetectorContext.threshold`` and break every comparison.
 NO_GOOD_THRESHOLD = 2.0
 
+# Above this many scores, fit the GMM on a random subsample instead of the full
+# set. A 2-component, 1-D GMM only needs to recover the two clusters' means and
+# variances, which 50k samples estimate as accurately as the full population -
+# so the threshold is statistically indistinguishable while the EM fit stays
+# O(50k) instead of O(N). This matters because ``calculate_gmm_threshold`` runs
+# on the *full* score distribution on every cosine/text sort (sorting.py) and in
+# the safe-threshold blend, where N reaches ~250k (GUI Find) to 2M+ (CLI Find).
+_GMM_MAX_SAMPLES = 50_000
+
 
 def calculate_gmm_threshold(scores: list[float]) -> float:
     """Use a Gaussian Mixture Model to find a threshold between two score distributions.
@@ -27,6 +36,10 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     Fits a 2-component GMM to the provided scores, assuming a bimodal distribution
     representing Bad (low) and Good (high) classes. Returns the midpoint between the
     two component means as the decision threshold.
+
+    For score sets larger than :data:`_GMM_MAX_SAMPLES`, fits on a deterministic
+    (seed-42) random subsample - the two-Gaussian fit is unchanged in practice
+    but the cost no longer grows with the dataset size.
 
     Args:
         scores: List of model confidence scores, expected to follow a bimodal distribution.
@@ -41,8 +54,13 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
 
     from sklearn.mixture import GaussianMixture  # noqa: PLC0415
 
+    arr = np.asarray(scores, dtype=np.float64)
+    if arr.shape[0] > _GMM_MAX_SAMPLES:
+        rng = np.random.default_rng(42)
+        arr = rng.choice(arr, size=_GMM_MAX_SAMPLES, replace=False)
+
     # Reshape for sklearn
-    X = np.array(scores).reshape(-1, 1)
+    X = arr.reshape(-1, 1)
 
     try:
         # Fit a 2-component GMM
@@ -64,8 +82,9 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
 
         return float(threshold)
     except Exception:
-        # If GMM fails, return median
-        return float(np.median(scores))
+        # If GMM fails, return median (of the subsample when one was taken -
+        # representative of the full distribution and keeps this path bounded).
+        return float(np.median(arr))
 
 
 def _calibration_cache_key(

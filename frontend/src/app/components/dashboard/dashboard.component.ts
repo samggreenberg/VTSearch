@@ -1,5 +1,5 @@
-import { Component, HostListener, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, HostListener, OnInit, OnDestroy, effect, inject, signal } from '@angular/core';
+
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, filter, switchMap, take, takeUntil } from 'rxjs/operators';
@@ -24,10 +24,12 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { DatasetRegistryEntry, DemoDataset, DetectorRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import {
+  ProgressBarState,
   ProgressHeader,
   formatProgressHeader,
   formatProgressMessage,
   isProgressIndeterminate,
+  progressBarState,
 } from '../../utils/format-progress';
 import {
   DashboardColumnsService,
@@ -52,7 +54,6 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
   selector: 'vt-dashboard',
   standalone: true,
   imports: [
-    CommonModule,
     ProgressBarComponent,
     AutoDetectResultsModalComponent,
     DatasetCardComponent,
@@ -65,41 +66,69 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
     DetectorStatsModalComponent,
     IconComponent,
     UsageBarComponent,
-    SkeletonComponent,
-  ],
+    SkeletonComponent
+],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent implements OnInit, OnDestroy {
+  private router = inject(Router);
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private datasetsUiApi = inject(DatasetsUiApiService);
+  private detectorsFindApi = inject(DetectorsFindApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private toast = inject(ToastService);
+  private dialog = inject(VtDialogService);
+  private labelSession = inject(LabelSessionService);
+  datasetState = inject(DatasetStateService);
+  private activeContext = inject(ActiveContextService);
+  private contextSwitch = inject(ContextSwitchService);
+  private authService = inject(AuthService);
+  private topBarState = inject(TopBarStateService);
+  private newThingFlows = inject(NewThingFlowsService);
+  modals = inject(DashboardModalsService);
+  loadingTasksSvc = inject(DashboardLoadingTasksService);
+  browsePrep = inject(BrowsePrepService);
+  private progressEvents = inject(ProgressEventsService);
+  private settingsState = inject(SettingsStateService);
+
   selectedDatasetIds: Set<string> = new Set();
   selectedDetectorIds: Set<string> = new Set();
 
   // Confirm flags hold the trash icon at 90° while the confirm dialog is up,
-  // and play a reverse animation back to 0° once the dialog resolves.
-  deletingSelectedDatasetsConfirm = false;
-  wasDeletingSelectedDatasetsConfirm = false;
-  deletingSelectedDetectorsConfirm = false;
-  wasDeletingSelectedDetectorsConfirm = false;
+  // and play a reverse animation back to 0° once the dialog resolves. Written
+  // from the post-`await dialog.confirmDestructive()` continuation (an unpatched
+  // microtask), so signals so the trash-icon animation repaints under zoneless.
+  readonly deletingSelectedDatasetsConfirm = signal(false);
+  readonly wasDeletingSelectedDatasetsConfirm = signal(false);
+  readonly deletingSelectedDetectorsConfirm = signal(false);
+  readonly wasDeletingSelectedDetectorsConfirm = signal(false);
 
   progressValue = 0;
   progressTotal = 0;
   progressIndeterminate = false;
 
-  importerClosing = false;
+  readonly importerClosing = signal(false);
   /** Visible importers (i.e. ``hidden_from_picker !== true``), fetched
    *  once on init so the welcome banner can detect Services-tab
    *  importers without waiting for the modal to open. */
   visibleImporters: ImporterInfo[] = [];
-  newDetectorClosing = false;
-  deletingDatasetId = '';
-  deletingDetectorId = '';
+  readonly newDetectorClosing = signal(false);
+  // Written post-`await dialog.confirmDestructive()` (an unpatched microtask),
+  // so signals so the per-row deleting affordance repaints under zoneless.
+  readonly deletingDatasetId = signal('');
+  readonly deletingDetectorId = signal('');
   trainAfterModelCreation = false;
   /** Mirrors the user's click intent so the Train/Find button icons
    *  can waggle while the `activeContextGuard` waits between click and
    *  route activation. Reset when `contextSwitch.switching$` settles
    *  back to false (either route activated or canActivate denied). */
-  trainLoading = false;
-  findLoading = false;
+  // Written from the router-events subscribe (an unpatched callback) as well as
+  // the bound Train/Find click handlers, so signals so the button-icon waggle
+  // repaints under zoneless.
+  readonly trainLoading = signal(false);
+  readonly findLoading = signal(false);
 
   /** Lifted out of this component into `DashboardColumnsService` so the
    *  top-bar context pulldowns can mirror the user's sort. Assigned in
@@ -111,14 +140,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
    *  `dataset_max_age_days` setting is set). Gates the Age-Off column:
    *  with no server age-off there is nothing to show, so the column is
    *  dropped entirely. Mirrored from `SettingsStateService` in ngOnInit. */
-  serverSetsAgeOff = false;
+  // Written from a settings `effect()` (Recipe F) and read in the
+  // `visibleDatasetColumns` getter, so a signal so the column set repaints.
+  readonly serverSetsAgeOff = signal(false);
 
   get visibleDatasetColumns(): DatasetColumn[] {
     let cols = this.datasetCols.columnOrder;
-    if (this.isDefaultLogin) {
+    if (this.isDefaultLogin()) {
       cols = cols.filter((c) => c !== 'created_by' && c !== 'readers');
     }
-    if (!this.serverSetsAgeOff) {
+    if (!this.serverSetsAgeOff()) {
       cols = cols.filter((c) => c !== 'expires_at');
     }
     return cols;
@@ -126,7 +157,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get visibleDetectorColumns(): DetectorColumn[] {
     let cols = this.detectorCols.columnOrder;
-    if (this.isDefaultLogin) {
+    if (this.isDefaultLogin()) {
       cols = cols.filter((c) => c !== 'created_by' && c !== 'readers');
     }
     return cols;
@@ -154,54 +185,33 @@ export class DashboardComponent implements OnInit, OnDestroy {
    *  user reshuffles selections. */
   private preloadedDatasetIds = new Set<string>();
 
-  currentUser = '';
-  isDefaultLogin = true;
+  // Written from the auth `status$` subscribe (unpatched callback), so signals.
+  readonly currentUser = signal('');
+  readonly isDefaultLogin = signal(true);
 
-  diskUsage: UsageBytes | null = null;
-  ramUsage: UsageBytes | null = null;
+  // Written from the 10s `timer(...)` usage pollers (unpatched callbacks).
+  readonly diskUsage = signal<UsageBytes | null>(null);
+  readonly ramUsage = signal<UsageBytes | null>(null);
 
-  constructor(
-    private router: Router,
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private datasetsUiApi: DatasetsUiApiService,
-    private detectorsFindApi: DetectorsFindApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private toast: ToastService,
-    private dialog: VtDialogService,
-    private labelSession: LabelSessionService,
-    public datasetState: DatasetStateService,
-    private activeContext: ActiveContextService,
-    private contextSwitch: ContextSwitchService,
-    private authService: AuthService,
-    private topBarState: TopBarStateService,
-    private newThingFlows: NewThingFlowsService,
-    public modals: DashboardModalsService,
-    public loadingTasksSvc: DashboardLoadingTasksService,
-    public browsePrep: BrowsePrepService,
-    private progressEvents: ProgressEventsService,
-    private settingsState: SettingsStateService,
-    columnsService: DashboardColumnsService,
-  ) {
+  constructor() {
+    const columnsService = inject(DashboardColumnsService);
+
     this.datasetCols = columnsService.datasetCols;
     this.detectorCols = columnsService.detectorCols;
+    // Mirror the server's age-off setting so the Age-Off column appears
+    // only when the server actually stamps datasets with an expiry.
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      this.serverSetsAgeOff.set(settings?.dataset_max_age_days != null);
+    });
   }
 
   ngOnInit(): void {
     this.authService.status$
       .pipe(takeUntil(this.destroy$))
       .subscribe((status) => {
-        this.currentUser = status?.user || '';
-        this.isDefaultLogin = status?.provider === 'default';
-      });
-    // Mirror the server's age-off setting so the Age-Off column appears
-    // only when the server actually stamps datasets with an expiry. The
-    // settings are loaded once at app startup (AppComponent); subscribing
-    // to the BehaviorSubject replays the latest value immediately.
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((settings) => {
-        this.serverSetsAgeOff = settings?.dataset_max_age_days != null;
+        this.currentUser.set(status?.user || '');
+        this.isDefaultLogin.set(status?.provider === 'default');
       });
     // Auto-select newly added items whenever the dataset/model lists change
     this.datasetState.datasets$
@@ -270,8 +280,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
           e instanceof NavigationCancel ||
           e instanceof NavigationError
         ) {
-          this.trainLoading = false;
-          this.findLoading = false;
+          this.trainLoading.set(false);
+          this.findLoading.set(false);
         }
       });
   }
@@ -299,7 +309,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.newThingFlows.importer$
       .pipe(takeUntil(this.destroy$))
       .subscribe((state) => {
-        if (importerWasOpen && !state.open) this.importerClosing = true;
+        if (importerWasOpen && !state.open) this.importerClosing.set(true);
         importerWasOpen = state.open;
       });
     let detectorWasOpen = false;
@@ -307,7 +317,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((state) => {
         if (detectorWasOpen && !state.open) {
-          this.newDetectorClosing = true;
+          this.newDetectorClosing.set(true);
           // Reset the "navigate to Train after create" intent if the
           // user dismissed without creating. The handler in
           // handleDetectorCreated() also clears it on success.
@@ -341,7 +351,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         switchMap(() => this.datasetsUiApi.getDiskUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
-        this.diskUsage = { total: usage.total, used: usage.used, free: usage.free };
+        this.diskUsage.set({ total: usage.total, used: usage.used, free: usage.free });
       });
   }
 
@@ -352,7 +362,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         switchMap(() => this.datasetsUiApi.getRamUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
-        this.ramUsage = { total: usage.total, used: usage.used, free: usage.free };
+        this.ramUsage.set({ total: usage.total, used: usage.used, free: usage.free });
       });
   }
 
@@ -540,7 +550,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const targets = this.datasets.filter((d) => this.selectedDatasetIds.has(d.id));
     if (targets.length === 0) return;
     const names = targets.map((d) => `"${d.name}"`).join(', ');
-    this.deletingSelectedDatasetsConfirm = true;
+    this.deletingSelectedDatasetsConfirm.set(true);
     let ok = false;
     try {
       const question =
@@ -550,8 +560,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const detail = '(Detectors are unaffected.)';
       ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
-      this.deletingSelectedDatasetsConfirm = false;
-      this.wasDeletingSelectedDatasetsConfirm = true;
+      this.deletingSelectedDatasetsConfirm.set(false);
+      this.wasDeletingSelectedDatasetsConfirm.set(true);
     }
     if (!ok) return;
     for (const dataset of targets) {
@@ -565,8 +575,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onDeleteSelectedDatasetsAnimationEnd(): void {
-    if (!this.deletingSelectedDatasetsConfirm) {
-      this.wasDeletingSelectedDatasetsConfirm = false;
+    if (!this.deletingSelectedDatasetsConfirm()) {
+      this.wasDeletingSelectedDatasetsConfirm.set(false);
     }
   }
 
@@ -627,7 +637,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const targets = this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
     if (targets.length === 0) return;
     const names = targets.map((m) => `"${m.name}"`).join(', ');
-    this.deletingSelectedDetectorsConfirm = true;
+    this.deletingSelectedDetectorsConfirm.set(true);
     let ok = false;
     try {
       const question =
@@ -637,8 +647,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const detail = '(This deletes your labels. The underlying media is unaffected.)';
       ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
-      this.deletingSelectedDetectorsConfirm = false;
-      this.wasDeletingSelectedDetectorsConfirm = true;
+      this.deletingSelectedDetectorsConfirm.set(false);
+      this.wasDeletingSelectedDetectorsConfirm.set(true);
     }
     if (!ok) return;
     for (const model of targets) {
@@ -703,8 +713,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onDeleteSelectedDetectorsAnimationEnd(): void {
-    if (!this.deletingSelectedDetectorsConfirm) {
-      this.wasDeletingSelectedDetectorsConfirm = false;
+    if (!this.deletingSelectedDetectorsConfirm()) {
+      this.wasDeletingSelectedDetectorsConfirm.set(false);
     }
   }
 
@@ -717,12 +727,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   async deleteDataset(dataset: DatasetRegistryEntry): Promise<void> {
-    this.deletingDatasetId = dataset.id;
+    this.deletingDatasetId.set(dataset.id);
     const ok = await this.dialog.confirmDestructive(
       `Delete dataset "${dataset.name}" from your list?`,
       '(Detectors are unaffected.)',
     );
-    this.deletingDatasetId = '';
+    this.deletingDatasetId.set('');
     if (!ok) return;
     this.datasetsRegistryApi.deleteRegistered(dataset.id).subscribe({
       next: () => {
@@ -787,7 +797,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   async deleteDetector(model: DetectorRegistryEntry): Promise<void> {
-    this.deletingDetectorId = model.id;
+    this.deletingDetectorId.set(model.id);
     const autofindWarning = model.autofind
       ? ' This detector is on your Auto-Find list; deleting it removes it from that list too.'
       : '';
@@ -795,7 +805,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       `Delete detector "${model.name}"?`,
       `(This deletes your labels. The underlying media is unaffected.${autofindWarning})`,
     );
-    this.deletingDetectorId = '';
+    this.deletingDetectorId.set('');
     if (!ok) return;
     this.detectorsRegistryApi.deleteFromRegistry(model.id).subscribe({
       next: () => {
@@ -890,7 +900,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             takeUntil(this.destroy$),
           )
           .subscribe(() => {
-            const failed = this.progressEvents.detectorLoadingTasks.some(
+            const failed = this.progressEvents.detectorLoadingTasks().some(
               (t) => t.task_id === resp.task_id && !!t.error,
             );
             if (failed) return; // ToastService surfaces the build error from the SSE task
@@ -947,7 +957,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   openImporterModal(): void {
-    this.importerClosing = false;
+    this.importerClosing.set(false);
     this.newThingFlows.openImporter({
       guessedMediaType: this.guessedMediaType,
       guessedMediaEmbedder: this.guessedMediaEmbedder,
@@ -955,7 +965,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onImporterAnimationEnd(): void {
-    this.importerClosing = false;
+    this.importerClosing.set(false);
   }
 
   /** Open-state of the dataset importer modal (hosted on AppComponent;
@@ -971,12 +981,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private handleImportStarted(): void {
-    this.importerClosing = true;
+    this.importerClosing.set(true);
     this.loadingTasksSvc.startProgressPolling();
   }
 
   private handleDemoSelected(demo: DemoDataset): void {
-    this.importerClosing = true;
+    this.importerClosing.set(true);
     // The importer modal augments the DemoDataset payload with the
     // user-chosen embedder / clipper / display name before emitting;
     // those extras aren't part of the typed schema so we read them
@@ -1018,13 +1028,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return loadingTypes.size === 1 ? [...loadingTypes][0] : '';
   }
 
+  /** Embedder of the single active/selected dataset (mirrors
+   *  ``activeDatasetMediaType``). Empty when ambiguous or unrecorded; lets the
+   *  new-detector modal warn about text-only detectors on no-text datasets. */
+  get activeDatasetEmbedder(): string {
+    if (this.selectedDatasetIds.size === 1) {
+      const selId = [...this.selectedDatasetIds][0];
+      const sel = this.datasets.find((d) => d.id === selId);
+      if (sel?.embedder) return sel.embedder;
+    }
+    const loaded = this.datasets.find((d) => d.loaded);
+    return loaded?.embedder ?? '';
+  }
+
   openNewDetectorModal(): void {
-    this.newDetectorClosing = false;
-    this.newThingFlows.openNewDetector({ defaultMediaType: this.activeDatasetMediaType });
+    this.newDetectorClosing.set(false);
+    this.newThingFlows.openNewDetector({
+      defaultMediaType: this.activeDatasetMediaType,
+      datasetEmbedder: this.activeDatasetEmbedder,
+    });
   }
 
   onNewDetectorAnimationEnd(): void {
-    this.newDetectorClosing = false;
+    this.newDetectorClosing.set(false);
   }
 
   // --- Cancel ---
@@ -1039,8 +1065,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return formatProgressHeader(task, 'dataset', task.embedder);
   }
 
-  taskIsIndeterminate(task: LoadingTask): boolean {
-    return isProgressIndeterminate(task);
+  taskBar(task: LoadingTask): ProgressBarState {
+    return progressBarState(task);
   }
 
   // --- Sorting ---
@@ -1076,8 +1102,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // dashboard controls stay disabled while the guard waits between
     // click and route activation.
     return (
-      this.trainLoading ||
-      this.findLoading ||
+      this.trainLoading() ||
+      this.findLoading() ||
       this.browsePrep.preparing ||
       this.contextSwitch.switching ||
       this.datasetState.loading
@@ -1186,7 +1212,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // The `activeContextGuard` on /label/:datasetId/:detectorId flips
     // ActiveContextService and runs any needed loads via
     // ContextSwitchService before activating the route.
-    this.trainLoading = true;
+    this.trainLoading.set(true);
     this.router.navigate(['/label', dataset.id, modelId]);
   }
 
@@ -1198,7 +1224,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!model) return;
 
     // See `onLabel`; the route guard owns context + loading.
-    this.findLoading = true;
+    this.findLoading.set(true);
     this.router.navigate(['/find', dataset.id, model.id]);
   }
 

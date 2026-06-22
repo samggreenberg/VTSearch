@@ -1,9 +1,9 @@
 <vt-modal [open]="true" title="Detector Stats" (closed)="close()">
-  @if (loading) {
+  @if (loading()) {
     <p class="loading-text">Loading stats…</p>
-  } @else if (error) {
-    <p class="error-text">{{ error }}</p>
-  } @else if (stats) {
+  } @else if (error()) {
+    <p class="error-text">{{ error() }}</p>
+  } @else if (stats(); as stats) {
     @if (stats.stale) {
       <p class="stale-note" role="note">
         ⚠ Out of date: these numbers evaluate the detector <strong>before</strong> your last corrections were added.

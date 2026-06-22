@@ -1,17 +1,17 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, input, output } from '@angular/core';
+
 
 @Component({
   selector: 'vt-inclusion-slider',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './inclusion-slider.component.html',
   styleUrl: './inclusion-slider.component.scss',
 })
 export class InclusionSliderComponent {
-  @Input() value = 0;
+  readonly value = input(0);
 
-  @Output() valueChange = new EventEmitter<number>();
+  readonly valueChange = output<number>();
 
   onInput(event: Event): void {
     const target = event.target as HTMLInputElement;

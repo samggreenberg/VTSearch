@@ -1,9 +1,11 @@
 # Patch-based Image Embedder - Design
 
-**Status:** V1 shipped, V2 shipped, **V3 in design (not started).** The design
+**Status:** V1 shipped, V2 shipped, **V3 in progress.** The design
 body below is the living spec for the shipped V1/V2 behaviour; the *V1 - DONE*
 and *V2 - DONE* closeouts are collapsed to struck-through lists. **Remaining
-work** is *V3 - design* (one text + one patch embedder per dataset).
+work** is *V3* (one text + one patch embedder per dataset); see
+"V3 - implementation status" under "V3 work plan" for what's landed and the
+ordered phases that remain.
 
 ## Status of related work
 
@@ -442,6 +444,25 @@ Closeout, struck through:
 **Deferred (out of scope for v2):** touch support (no Shift modifier); multiple
 regions per vote; region votes on non-image media types.
 
+## Focus-pane best-match Highlight toggle - DONE
+
+Extends the v1 gallery-card `best_region` outline into the center/focus viewer.
+A **Highlight** toggle sits next to the Marquee button in the image-view controls
+(image media only) and is **hidden unless the active dataset's embedder reports
+`supports_patch_regions`**. When on, the focused image overlays a neutral
+white/black **dashed** "marching ants" box (distinct from the user's solid yellow
+voting box, which keeps the attention color) around the region the detector
+matched best at inference.
+
+No new bookkeeping: reuses the `best_region` the backend already returns on every
+sort/train result and which the frontend already keeps in
+`SortStateService.sortOrder[*].bestRegion` (in-memory, kept exactly as long as the
+score). `CenterPanelComponent` looks the box up by media id and passes it to
+`ImageViewerComponent` as `highlightBox`; the viewer owns the `highlightMode`
+toggle and renders the box in its own `.region-stage` so it tracks pan/zoom/rotate.
+Read-only (`pointer-events: none`), and the near-full `(0,0,1,1)` single-vector
+fallback box is suppressed (same rule as the gallery outline). Frontend-only.
+
 ## V3 - design
 
 V3 lets a dataset bind **up to one text-capable embedder + up to one
@@ -653,6 +674,137 @@ during impl.  Rough size estimate: backend ~2× v2 (schema +
 loader + per-embedder MLP keying), frontend ~0.5× v2 (just the
 dual-picker on dataset-create).  No new ML algorithms - v3 is
 plumbing, not modelling.
+
+### V3 - implementation status
+
+V3 lands as a sequence of behavior-preserving substrate phases (so each
+commit is reviewable and the single-embedder world keeps working) followed by
+the user-visible binding.  Ordering is by dependency: each phase needs the one
+above it.  **Status: Phases 2a-2b.4 shipped; 2b.5 (MLP keying) and 2c (drop
+the singular mirror) remain, then the create-time dual-picker.**
+
+**Shipped:**
+
+- **Phase 2a - per-media accessor substrate.** `vtscore/embedding/media_vectors.py`:
+  `media["embeddings"]` (dict keyed by embedder name) is the forward
+  representation; the singular `media["embedding"]` is kept as the *primary
+  mirror / fallback* so the ~50 not-yet-converted read sites stay valid while
+  only one embedder is bound.  `embed_missing` writes through
+  `set_media_embedding`; the `matrix.py` chokepoint reads through
+  `media_embedding`.
+- **Phase 2b.1 - matrix layer made embedder-aware.** `get_embedding_matrix`,
+  `get_embedding_submatrix`, and `get_embedding_matrix_for_snap` take an
+  optional `embedder_name`.  Unset → the cached primary path (byte-for-byte the
+  old behaviour).  Set → a fresh, uncached matrix built from that bound
+  embedder's vectors via the accessor.  This is the aggregate read chokepoint
+  every consumer (sorting / scoring / find / projection / training /
+  positives-browse) funnels through, so routing can later request the right
+  embedder per operation.
+- **Phase 2b.2 - dataset binding (in-memory).** `DatasetContext` gains
+  `text_embedder` / `patch_embedder` slots plus derived `supports_text` /
+  `supports_patch_regions` properties (today there is no dataset-level embedder
+  field at all; the embedder is recorded per-media).  By default the pair is
+  *derived* on demand from the dataset's medias - the single embedder a pre-v3
+  dataset was loaded with, role-typed against its capability flags by
+  `vtscore.embedding.binding.derive_binding`.  `bind_embedders()` sets an
+  explicit, validated pair for genuinely multi-embedder datasets (overrides the
+  derivation).  This is *in-memory only*: no pickle/registry/meta schema change,
+  no routing rewire, no frontend.  Persistence rides along with the loader
+  multi-embed slice (2b.3), where a real second vector exists to persist; the
+  documented `meta["embedder"]` → slot migration lands there.
+- **Phase 2b.3 - loader multi-embed.** The embed stage
+  (`vtscore/datasets/stages/embedding.py`) now runs the *set* of bound
+  embedders, not a single one: `_embed_missing_stage` resolves an ordered
+  embedder list via `_ordered_load_embedders` (the create-time pick leads,
+  followed by any embedders already present on the medias for the reload
+  back-fill) and calls `embed_missing` once per name.  `embed_missing`'s
+  "missing" and patch/structural back-fill detection are keyed to *that*
+  embedder's per-media vector (via `media_embedding(m, name)`) when a name is
+  given, so a second bound embedder embeds items the first already covered
+  without disturbing them; a bare default-resolution call keeps the legacy
+  "embed only the un-embedded" contract.  The binding derives from the full
+  set of embedder names present (`media_embedder_names` →
+  `derive_binding_from_names`), so a reloaded text+patch dataset recovers both
+  slots, not just the recorded primary.  Persistence rides along:
+  `export_dataset_to_file` serialises `media["embeddings"]` (one entry per
+  bound embedder) and records the role-typed slots in `meta`
+  (`text_embedder` / `patch_embedder`); the pickle loader re-keys the dict on
+  load, and a legacy single-vector pickle materialises its dict from the
+  singular mirror via `ensure_embeddings_dict`.  `patch_regions` / `patch_grid`
+  stay singular (the binding allows only one patch embedder, so per-embedder
+  keying would be a ≤1-entry dict); dict-keying them is deferred to whenever a
+  second patch slot is actually allowed.  See "Open follow-ups".
+
+- **Phase 2b.4 - routing.** `DatasetContext.routed_embedder(role)` is the one
+  place that encodes the routing table: ``"text"`` → text slot (else the caller
+  400s), ``"patch"`` → patch slot, ``"score"`` → patch-else-text (else ``None``).
+  Each active-dataset consumer resolves its role and threads the name into the
+  embedder-aware matrix layer: text sort (`/api/sort`, role text), example /
+  by-id cosine sort (`/api/example-sort`, role score), label-file sort (embeds
+  *and* scores with the score embedder so they share a space), the detector MLP
+  (`_score_all_media`, `_build_vote_xy`, `train_and_threshold` safe-scoring, the
+  labelset embed name, and Auto-Find scoring), and the diversity tree /
+  projection (full + subset + load-stage + positives-browse).  The query side is
+  routed too: example/by-id sort embeds the example with the score embedder, and
+  text sort embeds the query with the text slot.  **Single-vector gap handled:**
+  a `*_single` embedder binds neither slot, so `score` resolves to ``None`` and
+  the matrix layer reads the primary vector (cosine sort / MLP scoring keep
+  working rather than 400-ing).  **Cache preserved:** a routed name equal to the
+  dataset's primary collapses to the cached primary path
+  (`matrix._collapse_to_primary`), so the single-embedder hot path is
+  byte-for-byte unchanged.  Region-aware cosine scoring is gated on the resolved
+  embedder being the patch embedder, so a text query on a dual dataset scores
+  against the text embedder's full-image vectors, not the patch tree.  See "Open
+  follow-ups" for the cross-dataset Find / CLI-chunk scoring still on primary.
+
+**Remaining, in order:**
+
+- **Phase 2b.5 - MLP keying.** Key MLPs by `(detector, dataset, embedder)`.
+  See "Detector MLP keying".
+- **Phase 2c - drop the singular mirror.** Once every read site routes through
+  the accessor with an explicit embedder, remove the `media["embedding"]`
+  primary mirror (read-time re-key on load handles old pickles).
+
+### Open follow-ups (from 2b.4)
+
+- **Cross-dataset Find and CLI-chunk scoring stay on the primary vector.**
+  `find._score_dataset` / `_score_with_cold_detector` score *other* datasets'
+  `temp_medias`, and `cli._score_medias_with_detectors` scores per-chunk
+  subsets - neither is the active `DatasetContext`, so they keep building the
+  matrix from each media's primary vector (no `routed_embedder` call).  This is
+  correct for every single-embedder dataset (primary == score embedder) and
+  only matters once a dual-embedder dataset can be created and Find-scored; wire
+  a binding derived from those medias' own embedder names when the create-time
+  dual path lands.
+- **Region-less media in a region matrix fall back to the primary vector.**
+  `matrix._build_region_arrays` sources a region-less media's single row from
+  `media["embedding"]` (primary), not the patch embedder's vector.  On a real
+  patch dataset every media has `patch_regions`, so this branch is unreachable
+  today; revisit if a dual dataset ever mixes patch and non-patch media.
+
+### Open follow-ups (from 2b.3)
+
+- **No create-time path to bind two embedders yet.** 2b.3 makes the loader,
+  exporter, and pickle reader multi-embedder-*correct* (and exercises it via
+  the embed driver + persistence round-trip), but the standard create flow
+  still passes one `embedder` field, so production datasets remain
+  single-embedder until the frontend dual-picker (under "Frontend" in the v3
+  design) threads a `(text_embedder, patch_embedder)` pair into the load
+  pipeline.  Wire that alongside or after routing (2b.4).
+- **`patch_regions` / `patch_grid` stay singular.** The binding allows at most
+  one patch embedder, so these remain single-valued (owned by that embedder)
+  rather than dict-keyed.  Only revisit if "more than one patch embedder per
+  dataset" ever comes off the v3 non-goals list.
+- **Combine Datasets pair-match guard not added.** `combine_datasets` still
+  guards only on media type, not on the `(text_embedder, patch_embedder)`
+  pair (a pre-existing latitude — it never checked the single `embedder`
+  either).  Since nothing can create a two-embedder dataset yet, this is
+  harmless today; add the strict pair-match refusal (v3 design open question
+  #2) when the dual-picker lands.
+- **NPZ per-embedder layout (`vectors_<name>`) not added.** The `server_files`
+  NPZ importer still carries a single `vectors` array; the per-embedder layout
+  in "Loader / exporter / importer impact" lands with the create-time
+  multi-embed path that would populate it.
 
 ## Phasing
 

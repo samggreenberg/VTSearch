@@ -1,12 +1,17 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, Input, input, output } from '@angular/core';
+
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import {
+  ProgressBarState,
+  formatEta,
+  progressBarState,
+} from '../../../utils/format-progress';
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 
 @Component({
   selector: 'vt-progress-indicators',
   standalone: true,
-  imports: [CommonModule, ProgressBarComponent],
+  imports: [ProgressBarComponent],
   templateUrl: './progress-indicators.component.html',
   styleUrl: './progress-indicators.component.scss',
 })
@@ -14,18 +19,38 @@ export class ProgressIndicatorsComponent {
   @Input() labelingStatus: LabelingStatusResponse | null = null;
   @Input() sortBusy = false;
   @Input() sortStatus = '';
-  @Input() sortProgress = 0;
-  @Input() sortProgressTotal = 0;
+  readonly sortProgress = input(0);
+  readonly sortProgressTotal = input(0);
+  /** Whole-job fraction (0..1) for multi-step scoring; ``null`` falls back to
+   *  current/total. See ProgressEvent.overall. */
+  readonly sortOverall = input<number | null>(null);
+  /** Overall remaining-seconds estimate; ``null`` hides the ETA chip. */
+  readonly sortEtaSeconds = input<number | null>(null);
 
-  @Output() indicatorClick = new EventEmitter<string>();
-  @Output() cancel = new EventEmitter<void>();
+  readonly indicatorClick = output<string>();
+  readonly cancel = output<void>();
 
   onCancel(): void {
     this.cancel.emit();
   }
 
+  /** Unified bar state: prefers the whole-job ``overall`` fraction so the bar
+   *  fills once across all phases instead of resetting per phase. */
+  get sortBar(): ProgressBarState {
+    return progressBarState({
+      current: this.sortProgress(),
+      total: this.sortProgressTotal(),
+      overall: this.sortOverall(),
+    });
+  }
+
+  /** Overall ETA chip (empty when no estimate is available). */
+  get sortEta(): string {
+    return formatEta(this.sortEtaSeconds());
+  }
+
   get isIndeterminate(): boolean {
-    return this.sortProgressTotal <= 0;
+    return this.sortBar.indeterminate;
   }
 
   get smartStatus(): string {

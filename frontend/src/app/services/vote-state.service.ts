@@ -1,5 +1,5 @@
-import { Injectable, OnDestroy } from '@angular/core';
-import { BehaviorSubject, EMPTY, Observable, Subject, timer } from 'rxjs';
+import { Injectable, OnDestroy, inject, signal } from '@angular/core';
+import { EMPTY, Observable, Subject, timer } from 'rxjs';
 import { catchError, switchMap, takeUntil, tap } from 'rxjs/operators';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import { VotesResponse } from '../models/api.models';
@@ -15,6 +15,20 @@ export interface UndoEntry {
   mediaId: number;
   clickedDirection: 'good' | 'bad';
   previousPolarity: 'good' | 'bad' | null;
+  /**
+   * Region box the media's good vote carried *before* the click, or ``null``
+   * when it had none (was un-voted / bad / a box-less good).  Replayed on
+   * undo so restoring back to a good vote also restores its crop instead of
+   * silently dropping it (a box-less good POST).
+   */
+  previousRegionBox: number[] | null;
+  /**
+   * Region box the click itself applied (the box drawn for the good vote that
+   * produced this entry), or ``null`` when the click set bad / un-voted / a
+   * box-less good.  Replayed on redo so re-applying a good vote restores its
+   * crop.
+   */
+  clickedRegionBox: number[] | null;
   mediaName: string;
 }
 
@@ -27,15 +41,32 @@ type VoteState = 'good' | 'bad' | 'none';
 
 const UNDO_STACK_MAX = 20;
 
+/**
+ * Shared vote state. The per-pile sets/maps are backed by signals so a write
+ * from any context — a vote POST continuation, the 2s poll timer, an undo/redo
+ * — notifies Angular's scheduler and repaints the views that bind these getters
+ * with no zone.js (docs/plans/zoneless-migration.md, Phase 2.5 / Recipe B).
+ * Each value is exposed via a value-returning getter over a private signal, so
+ * existing `voteState.goodVotes` reads stay the same yet become reactive under
+ * zoneless (see `SortStateService` for the getter-signal rationale).
+ *
+ * `toast$` stays a `Subject`: it is a fire-once *event* (an undo/redo fired),
+ * not retained state, so a signal would be the wrong shape. Its consumer
+ * reacts imperatively and writes its own signals, which schedule CD.
+ */
 @Injectable({ providedIn: 'root' })
 export class VoteStateService implements OnDestroy {
-  private readonly goodVotesSubject = new BehaviorSubject<Set<number>>(new Set());
-  private readonly badVotesSubject = new BehaviorSubject<Set<number>>(new Set());
-  private readonly verifiedIdsSubject = new BehaviorSubject<Set<number>>(new Set());
-  private readonly clickTimesSubject = new BehaviorSubject<Record<string, number>>({});
-  private readonly learnedScoresSubject = new BehaviorSubject<Record<string, number>>({});
-  private readonly labelsetGoodCountSubject = new BehaviorSubject<number>(0);
-  private readonly labelsetBadCountSubject = new BehaviorSubject<number>(0);
+  private sortingApi = inject(SortingApiService);
+  private mediasApi = inject(MediasApiService);
+
+  private readonly _goodVotes = signal<Set<number>>(new Set());
+  private readonly _badVotes = signal<Set<number>>(new Set());
+  private readonly _verifiedIds = signal<Set<number>>(new Set());
+  private readonly _clickTimes = signal<Record<string, number>>({});
+  private readonly _learnedScores = signal<Record<string, number>>({});
+  private readonly _labelsetGoodCount = signal(0);
+  private readonly _labelsetBadCount = signal(0);
+  private readonly _goodRegionBoxes = signal<Record<string, number[]>>({});
   private readonly destroy$ = new Subject<void>();
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
@@ -67,27 +98,24 @@ export class VoteStateService implements OnDestroy {
    */
   private pendingVerified = new Map<number, boolean>();
 
+  /**
+   * Optimistic per-media region box for an in-flight good vote (the box drawn
+   * on an image), or ``null`` when an in-flight vote cleared the box (un-vote /
+   * bad / box-less good).  Merged over the server's ``good_region_boxes`` in
+   * {@link applyVotes} so the Good pile crops to the voted region immediately,
+   * without waiting for the next /api/votes poll.  Each entry is cleared once
+   * the server's response agrees.
+   */
+  private pendingRegionBoxes = new Map<number, number[] | null>();
+
   /** Past votes available to undo, most-recent last.  Capped at UNDO_STACK_MAX. */
   private past: UndoEntry[] = [];
   /** Votes that have been undone and can be redone via Cmd/Ctrl-Shift-Z. */
   private future: UndoEntry[] = [];
   private readonly toastSubject = new Subject<UndoToast>();
 
-  readonly goodVotes$ = this.goodVotesSubject.asObservable();
-  readonly badVotes$ = this.badVotesSubject.asObservable();
-  /** Find mode: ids the human has explicitly verified (acted on). */
-  readonly verifiedIds$ = this.verifiedIdsSubject.asObservable();
-  readonly clickTimes$ = this.clickTimesSubject.asObservable();
-  readonly learnedScores$ = this.learnedScoresSubject.asObservable();
-  readonly labelsetGoodCount$ = this.labelsetGoodCountSubject.asObservable();
-  readonly labelsetBadCount$ = this.labelsetBadCountSubject.asObservable();
   /** Emits a short message every time an undo or redo executes. */
   readonly toast$ = this.toastSubject.asObservable();
-
-  constructor(
-    private sortingApi: SortingApiService,
-    private mediasApi: MediasApiService,
-  ) {}
 
   ngOnDestroy(): void {
     this.destroy$.next();
@@ -97,15 +125,16 @@ export class VoteStateService implements OnDestroy {
   }
 
   get goodVotes(): Set<number> {
-    return this.goodVotesSubject.value;
+    return this._goodVotes();
   }
 
   get badVotes(): Set<number> {
-    return this.badVotesSubject.value;
+    return this._badVotes();
   }
 
+  /** Find mode: ids the human has explicitly verified (acted on). */
   get verifiedIds(): Set<number> {
-    return this.verifiedIdsSubject.value;
+    return this._verifiedIds();
   }
 
   /**
@@ -139,18 +168,18 @@ export class VoteStateService implements OnDestroy {
    */
   setOptimisticVerified(id: number, verified: boolean): void {
     this.pendingVerified.set(id, verified);
-    const next = new Set(this.verifiedIdsSubject.value);
+    const next = new Set(this._verifiedIds());
     if (verified) next.add(id);
     else next.delete(id);
-    this.verifiedIdsSubject.next(next);
+    this._verifiedIds.set(next);
   }
 
   get clickTimes(): Record<string, number> {
-    return this.clickTimesSubject.value;
+    return this._clickTimes();
   }
 
   get learnedScores(): Record<string, number> {
-    return this.learnedScoresSubject.value;
+    return this._learnedScores();
   }
 
   /**
@@ -159,12 +188,16 @@ export class VoteStateService implements OnDestroy {
    * dataset's good vote count when no detector is loaded.
    */
   get labelsetGoodCount(): number {
-    return this.labelsetGoodCountSubject.value;
+    return this._labelsetGoodCount();
   }
 
   /** Bad-label counterpart of {@link labelsetGoodCount}. */
   get labelsetBadCount(): number {
-    return this.labelsetBadCountSubject.value;
+    return this._labelsetBadCount();
+  }
+
+  get goodRegionBoxes(): Record<string, number[]> {
+    return this._goodRegionBoxes();
   }
 
   /**
@@ -185,9 +218,9 @@ export class VoteStateService implements OnDestroy {
    * unverified item rather than toggle the presumption off.
    */
   private currentState(id: number): VoteState {
-    if (this.findMode && !this.verifiedIdsSubject.value.has(id)) return 'none';
-    if (this.goodVotesSubject.value.has(id)) return 'good';
-    if (this.badVotesSubject.value.has(id)) return 'bad';
+    if (this.findMode && !this._verifiedIds().has(id)) return 'none';
+    if (this._goodVotes().has(id)) return 'good';
+    if (this._badVotes().has(id)) return 'bad';
     return 'none';
   }
 
@@ -219,7 +252,9 @@ export class VoteStateService implements OnDestroy {
   ): Observable<MediaVoteResponse> {
     const target = this.toggleTargetFor(id, clickedDirection);
     this.applyOptimisticState(id, target);
-    return this.mediasApi.vote(id, target, target === 'good' ? regionBox : null).pipe(
+    const effectiveBox = target === 'good' && regionBox && regionBox.length === 4 ? regionBox : null;
+    this.applyOptimisticRegionBox(id, effectiveBox);
+    return this.mediasApi.vote(id, target, effectiveBox).pipe(
       tap((resp) => this.reconcileVoteResponse(id, resp)),
     );
   }
@@ -245,14 +280,29 @@ export class VoteStateService implements OnDestroy {
     mediaName: string,
     regionBox?: readonly number[] | null,
   ): Observable<MediaVoteResponse> {
-    const previousPolarity: 'good' | 'bad' | null = this.goodVotesSubject.value.has(id)
+    const previousPolarity: 'good' | 'bad' | null = this._goodVotes().has(id)
       ? 'good'
-      : this.badVotesSubject.value.has(id)
+      : this._badVotes().has(id)
         ? 'bad'
         : null;
+    // Snapshot the crop the good vote carried before the click (for undo) and
+    // the crop this click applies (for redo).  Both captured synchronously,
+    // before the optimistic flip clears/overwrites the region-box map.
+    const prevBox = this._goodRegionBoxes()[String(id)];
+    const previousRegionBox = previousPolarity === 'good' && prevBox ? [...prevBox] : null;
+    const target = this.toggleTargetFor(id, clickedDirection);
+    const clickedRegionBox =
+      target === 'good' && regionBox && regionBox.length === 4 ? [...regionBox] : null;
     return this.submitToggleVote(id, clickedDirection, regionBox).pipe(
       tap(() => {
-        this.past.push({ mediaId: id, clickedDirection, previousPolarity, mediaName });
+        this.past.push({
+          mediaId: id,
+          clickedDirection,
+          previousPolarity,
+          previousRegionBox,
+          clickedRegionBox,
+          mediaName,
+        });
         if (this.past.length > UNDO_STACK_MAX) this.past.shift();
         this.future = [];
       }),
@@ -266,9 +316,9 @@ export class VoteStateService implements OnDestroy {
    * directly (a polarity to restore, or ``'none'`` to wipe the vote).
    */
   applyOptimisticState(id: number, target: VoteState): void {
-    const good = new Set(this.goodVotesSubject.value);
-    const bad = new Set(this.badVotesSubject.value);
-    const times = { ...this.clickTimesSubject.value };
+    const good = new Set(this._goodVotes());
+    const bad = new Set(this._badVotes());
+    const times = { ...this._clickTimes() };
 
     good.delete(id);
     bad.delete(id);
@@ -292,9 +342,23 @@ export class VoteStateService implements OnDestroy {
     this.pendingOptimistic.set(id, { state: target, clickTime: optimisticClickTime });
 
     // Emit all changes together so Angular sees a single consistent state.
-    this.goodVotesSubject.next(good);
-    this.badVotesSubject.next(bad);
-    this.clickTimesSubject.next(times);
+    this._goodVotes.set(good);
+    this._badVotes.set(bad);
+    this._clickTimes.set(times);
+  }
+
+  /**
+   * Optimistically record the region box for an in-flight good vote (or
+   * ``null`` to clear it).  Mirrors {@link applyOptimisticState} for region
+   * crops: the Good-pile thumbnail crops to the box immediately, and the entry
+   * is reconciled against the server's ``good_region_boxes`` on the next poll.
+   */
+  private applyOptimisticRegionBox(id: number, box: readonly number[] | null): void {
+    this.pendingRegionBoxes.set(id, box ? [...box] : null);
+    const boxes = { ...this._goodRegionBoxes() };
+    if (box) boxes[String(id)] = [...box];
+    else delete boxes[String(id)];
+    this._goodRegionBoxes.set(boxes);
   }
 
   /**
@@ -305,9 +369,9 @@ export class VoteStateService implements OnDestroy {
    */
   reconcileVoteResponse(id: number, resp: MediaVoteResponse): void {
     this.pendingOptimistic.delete(id);
-    const good = new Set(this.goodVotesSubject.value);
-    const bad = new Set(this.badVotesSubject.value);
-    const times = { ...this.clickTimesSubject.value };
+    const good = new Set(this._goodVotes());
+    const bad = new Set(this._badVotes());
+    const times = { ...this._clickTimes() };
 
     good.delete(id);
     bad.delete(id);
@@ -320,9 +384,9 @@ export class VoteStateService implements OnDestroy {
       delete times[String(id)];
     }
 
-    this.goodVotesSubject.next(good);
-    this.badVotesSubject.next(bad);
-    this.clickTimesSubject.next(times);
+    this._goodVotes.set(good);
+    this._badVotes.set(bad);
+    this._clickTimes.set(times);
   }
 
   loadVotes(): void {
@@ -357,15 +421,17 @@ export class VoteStateService implements OnDestroy {
   }
 
   clear(): void {
-    this.goodVotesSubject.next(new Set());
-    this.badVotesSubject.next(new Set());
-    this.verifiedIdsSubject.next(new Set());
-    this.clickTimesSubject.next({});
-    this.learnedScoresSubject.next({});
-    this.labelsetGoodCountSubject.next(0);
-    this.labelsetBadCountSubject.next(0);
+    this._goodVotes.set(new Set());
+    this._badVotes.set(new Set());
+    this._verifiedIds.set(new Set());
+    this._clickTimes.set({});
+    this._learnedScores.set({});
+    this._labelsetGoodCount.set(0);
+    this._labelsetBadCount.set(0);
+    this._goodRegionBoxes.set({});
     this.pendingOptimistic.clear();
     this.pendingVerified.clear();
+    this.pendingRegionBoxes.clear();
     this.past = [];
     this.future = [];
   }
@@ -382,12 +448,24 @@ export class VoteStateService implements OnDestroy {
    * are dropped, matching standard editor undo semantics.
    */
   recordVote(mediaId: number, clickedDirection: 'good' | 'bad', mediaName: string): void {
-    const previousPolarity: 'good' | 'bad' | null = this.goodVotesSubject.value.has(mediaId)
+    const previousPolarity: 'good' | 'bad' | null = this._goodVotes().has(mediaId)
       ? 'good'
-      : this.badVotesSubject.value.has(mediaId)
+      : this._badVotes().has(mediaId)
         ? 'bad'
         : null;
-    this.past.push({ mediaId, clickedDirection, previousPolarity, mediaName });
+    const prevBox = this._goodRegionBoxes()[String(mediaId)];
+    const previousRegionBox = previousPolarity === 'good' && prevBox ? [...prevBox] : null;
+    this.past.push({
+      mediaId,
+      clickedDirection,
+      previousPolarity,
+      previousRegionBox,
+      // This low-level primitive isn't told the click's region box; redo of a
+      // good vote recorded this way restores no crop.  Production callers use
+      // submitToggleVoteAndRecord, which captures it.
+      clickedRegionBox: null,
+      mediaName,
+    });
     if (this.past.length > UNDO_STACK_MAX) this.past.shift();
     this.future = [];
   }
@@ -415,8 +493,10 @@ export class VoteStateService implements OnDestroy {
     if (!entry) return;
     this.future.push(entry);
     const target: VoteState = entry.previousPolarity ?? 'none';
+    const box = target === 'good' ? entry.previousRegionBox : null;
     this.applyOptimisticState(entry.mediaId, target);
-    this.mediasApi.vote(entry.mediaId, target).subscribe({
+    this.applyOptimisticRegionBox(entry.mediaId, box);
+    this.mediasApi.vote(entry.mediaId, target, box).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       error: () => this.loadVotes(),
     });
@@ -434,12 +514,20 @@ export class VoteStateService implements OnDestroy {
     // click was an un-vote).
     const target: VoteState =
       entry.previousPolarity === entry.clickedDirection ? 'none' : entry.clickedDirection;
+    const box = target === 'good' ? entry.clickedRegionBox : null;
     this.applyOptimisticState(entry.mediaId, target);
-    this.mediasApi.vote(entry.mediaId, target).subscribe({
+    this.applyOptimisticRegionBox(entry.mediaId, box);
+    this.mediasApi.vote(entry.mediaId, target, box).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       error: () => this.loadVotes(),
     });
     this.toastSubject.next({ action: 'redo', mediaName: entry.mediaName });
+  }
+
+  /** True when two region boxes match coordinate-for-coordinate (both 4-tuples). */
+  private boxesEqual(a: number[] | null, b: number[] | null): boolean {
+    if (a === null || b === null) return a === b;
+    return a.length === b.length && a.every((v, i) => v === b[i]);
   }
 
   private applyVotes(votes: VotesResponse): void {
@@ -478,12 +566,30 @@ export class VoteStateService implements OnDestroy {
       }
     }
 
-    this.goodVotesSubject.next(good);
-    this.badVotesSubject.next(bad);
-    this.verifiedIdsSubject.next(verified);
-    this.clickTimesSubject.next(times);
-    this.learnedScoresSubject.next(votes.learned_scores);
-    this.labelsetGoodCountSubject.next(votes.labelset_good_count ?? good.size);
-    this.labelsetBadCountSubject.next(votes.labelset_bad_count ?? bad.size);
+    // Region boxes: start from the server map, then apply pending optimistic
+    // overrides (clearing each once the server already agrees) so an in-flight
+    // region vote isn't clobbered by a poll that raced the vote POST.
+    const regionBoxes: Record<string, number[]> = { ...(votes.good_region_boxes ?? {}) };
+    for (const [id, want] of this.pendingRegionBoxes) {
+      const key = String(id);
+      const server = regionBoxes[key] ?? null;
+      const agrees = want === null ? server === null : this.boxesEqual(server, want);
+      if (agrees) {
+        this.pendingRegionBoxes.delete(id);
+      } else if (want) {
+        regionBoxes[key] = [...want];
+      } else {
+        delete regionBoxes[key];
+      }
+    }
+
+    this._goodVotes.set(good);
+    this._badVotes.set(bad);
+    this._verifiedIds.set(verified);
+    this._clickTimes.set(times);
+    this._goodRegionBoxes.set(regionBoxes);
+    this._learnedScores.set(votes.learned_scores);
+    this._labelsetGoodCount.set(votes.labelset_good_count ?? good.size);
+    this._labelsetBadCount.set(votes.labelset_bad_count ?? bad.size);
   }
 }

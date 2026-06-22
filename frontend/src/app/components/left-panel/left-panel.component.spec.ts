@@ -7,6 +7,7 @@ import {
 import { SimpleChange } from '@angular/core';
 import { LeftPanelComponent } from './left-panel.component';
 import type { Media } from '../../models/api.models';
+import { settleResource } from '../../testing/settle-resource';
 
 describe('LeftPanelComponent', () => {
   let component: LeftPanelComponent;
@@ -34,7 +35,7 @@ describe('LeftPanelComponent', () => {
   it('should emit autopilotStart on init', () => {
     const fresh = TestBed.createComponent(LeftPanelComponent);
     const comp = fresh.componentInstance;
-    spyOn(comp.autopilotStart, 'emit');
+    vi.spyOn(comp.autopilotStart, 'emit');
     fresh.detectChanges();
     expect(comp.autopilotStart.emit).toHaveBeenCalled();
   });
@@ -48,10 +49,50 @@ describe('LeftPanelComponent', () => {
     const fresh = TestBed.createComponent(LeftPanelComponent);
     const comp = fresh.componentInstance;
     comp.autopilotEnabled = false;
-    spyOn(comp.autopilotStart, 'emit');
+    vi.spyOn(comp.autopilotStart, 'emit');
     fresh.detectChanges();
     expect(comp.activeTab).toBe('manual');
     expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
+  });
+
+  it('should default to manual and not start autopilot when autopilotDisabled', () => {
+    const fresh = TestBed.createComponent(LeftPanelComponent);
+    const comp = fresh.componentInstance;
+    comp.autopilotDisabled = true;
+    vi.spyOn(comp.autopilotStart, 'emit');
+    fresh.detectChanges();
+    expect(comp.activeTab).toBe('manual');
+    expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
+  });
+
+  it('should fall back to manual when autopilot becomes disabled after starting', () => {
+    // Default init lands on the autopilot tab.
+    expect(component.activeTab).toBe('autopilot');
+    vi.spyOn(component.autopilotStop, 'emit');
+    component.autopilotDisabled = true;
+    component.ngOnChanges({
+      autopilotDisabled: new SimpleChange(false, true, false),
+    });
+    expect(component.activeTab).toBe('manual');
+    expect(component.autopilotStop.emit).toHaveBeenCalled();
+  });
+
+  it('should ignore clicks on the autopilot tab while it is disabled', () => {
+    component.setTab('manual');
+    component.autopilotDisabled = true;
+    vi.spyOn(component.autopilotStart, 'emit');
+    component.setTab('autopilot');
+    expect(component.activeTab).toBe('manual');
+    expect(component.autopilotStart.emit).not.toHaveBeenCalled();
+  });
+
+  it('should disable the autopilot tab button when autopilotDisabled', () => {
+    component.autopilotDisabled = true;
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const tabs = el.querySelectorAll<HTMLButtonElement>('.left-tab');
+    // Second tab is Autopilot.
+    expect(tabs[1].disabled).toBe(true);
   });
 
   it('should render autopilot tab content by default', () => {
@@ -72,56 +113,56 @@ describe('LeftPanelComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     const tabs = el.querySelectorAll('.left-tab');
     // Default: autopilot is active (second tab)
-    expect(tabs[0].classList.contains('active')).toBeFalse();
-    expect(tabs[1].classList.contains('active')).toBeTrue();
+    expect(tabs[0].classList.contains('active')).toBe(false);
+    expect(tabs[1].classList.contains('active')).toBe(true);
 
     component.setTab('manual');
     fixture.detectChanges();
     const tabsAfter = el.querySelectorAll('.left-tab');
-    expect(tabsAfter[0].classList.contains('active')).toBeTrue();
-    expect(tabsAfter[1].classList.contains('active')).toBeFalse();
+    expect(tabsAfter[0].classList.contains('active')).toBe(true);
+    expect(tabsAfter[1].classList.contains('active')).toBe(false);
   });
 
   it('should emit autopilotStart when switching to autopilot tab', () => {
     component.setTab('manual');
-    spyOn(component.autopilotStart, 'emit');
+    vi.spyOn(component.autopilotStart, 'emit');
     component.setTab('autopilot');
     expect(component.autopilotStart.emit).toHaveBeenCalled();
   });
 
   it('should emit autopilotStop when switching from autopilot to manual tab', () => {
-    spyOn(component.autopilotStop, 'emit');
+    vi.spyOn(component.autopilotStop, 'emit');
     component.setTab('manual');
     expect(component.autopilotStop.emit).toHaveBeenCalled();
   });
 
   it('should not emit start when setting the same tab', () => {
-    spyOn(component.autopilotStart, 'emit');
+    vi.spyOn(component.autopilotStart, 'emit');
     component.setTab('autopilot');
     expect(component.autopilotStart.emit).not.toHaveBeenCalled();
   });
 
   it('should emit autopilotRefocus when clicking already-active autopilot tab', () => {
-    spyOn(component.autopilotRefocus, 'emit');
+    vi.spyOn(component.autopilotRefocus, 'emit');
     component.setTab('autopilot');
     expect(component.autopilotRefocus.emit).toHaveBeenCalled();
   });
 
   it('should not emit autopilotRefocus when clicking already-active manual tab', () => {
     component.setTab('manual');
-    spyOn(component.autopilotRefocus, 'emit');
+    vi.spyOn(component.autopilotRefocus, 'emit');
     component.setTab('manual');
     expect(component.autopilotRefocus.emit).not.toHaveBeenCalled();
   });
 
   it('should emit sortModeChange', () => {
-    spyOn(component.sortModeChange, 'emit');
+    vi.spyOn(component.sortModeChange, 'emit');
     component.sortModeChange.emit('learned');
     expect(component.sortModeChange.emit).toHaveBeenCalledWith('learned');
   });
 
   it('should emit mediaSelect', () => {
-    spyOn(component.mediaSelect, 'emit');
+    vi.spyOn(component.mediaSelect, 'emit');
     component.mediaSelect.emit(42);
     expect(component.mediaSelect.emit).toHaveBeenCalledWith(42);
   });
@@ -138,36 +179,42 @@ describe('LeftPanelComponent', () => {
 
     it('derives the type label from the first grid item', () => {
       setMedias([stub('audio')]);
-      expect(component.mediaTypeName).toBe('Audio');
+      expect(component.mediaTypeName()).toBe('Audio');
     });
 
     it('resets to "Media" when the grid empties (no stale type label)', () => {
       setMedias([stub('audio')]);
-      expect(component.mediaTypeName).toBe('Audio');
+      expect(component.mediaTypeName()).toBe('Audio');
       // Switching to an empty grid must clear the previous type, not keep it.
       setMedias([]);
-      expect(component.mediaTypeName).toBe('Media');
+      expect(component.mediaTypeName()).toBe('Media');
     });
 
     it('re-derives when the grid switches media type', () => {
       setMedias([stub('audio')]);
-      expect(component.mediaTypeName).toBe('Audio');
+      expect(component.mediaTypeName()).toBe('Audio');
       setMedias([stub('image')]);
-      expect(component.mediaTypeName).toBe('Image');
+      expect(component.mediaTypeName()).toBe('Image');
     });
 
-    it('upgrades from the fallback to the display name when type metadata loads after the grid', () => {
+    it('upgrades from the fallback to the display name when type metadata loads after the grid', async () => {
       const httpMock = TestBed.inject(HttpTestingController);
-      // The grid populates before the getMediaTypes() request (fired in
-      // ngOnInit) resolves, so the header first shows the capitalized fallback.
+      // The media-types read rides `rxResource`, whose loader runs in a root
+      // effect rather than during `detectChanges()`; tick so the GET is issued.
+      TestBed.tick();
+      // The grid populates before the getMediaTypes() request resolves, so the
+      // header first shows the capitalized fallback.
       setMedias([stub('audio')]);
-      expect(component.mediaTypeName).toBe('Audio');
+      expect(component.mediaTypeName()).toBe('Audio');
 
       // Metadata arrives late with a custom display name: the header must
-      // upgrade instead of staying stuck on the fallback.
+      // upgrade instead of staying stuck on the fallback. The resource value
+      // commits on a microtask and the deriving effect runs on the next tick,
+      // so settle before asserting.
       const req = httpMock.expectOne((r) => r.url.includes('/api/media-types'));
       req.flush({ media_types: [{ type_id: 'audio', name: 'Sound Clips' }] });
-      expect(component.mediaTypeName).toBe('Sound Clips');
+      await settleResource();
+      expect(component.mediaTypeName()).toBe('Sound Clips');
     });
   });
 });

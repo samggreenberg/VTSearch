@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { SettingsStateService } from './settings-state.service';
+import { settleResource } from '../testing/settle-resource';
 
 describe('SettingsStateService', () => {
   let service: SettingsStateService;
@@ -15,6 +16,17 @@ describe('SettingsStateService', () => {
     view_mode_right: { audio: 'list' as const, image: 'list' as const },
     inclusion: 0.5,
   };
+
+  // `load()` drives the `rxResource`, whose loader runs in an effect rather than
+  // synchronously. `TestBed.tick()` runs the loader effect so the request is
+  // issued; `settleResource()` then lets the flushed response propagate to the
+  // value.
+  async function load() {
+    service.load();
+    TestBed.tick();
+    httpMock.expectOne('/api/settings').flush(mockSettings);
+    await settleResource();
+  }
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -30,48 +42,39 @@ describe('SettingsStateService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should start with null settings', () => {
-    expect(service.settings).toBeNull();
+  it('should start with null settings and not fetch until load()', () => {
+    TestBed.tick();
+    expect(service.settingsSignal()).toBeNull();
+    httpMock.expectNone('/api/settings');
   });
 
-  it('load should fetch and store settings', () => {
-    service.load();
-    const req = httpMock.expectOne('/api/settings');
-    req.flush(mockSettings);
-    expect(service.settings).toEqual(mockSettings);
+  it('load should fetch and store settings', async () => {
+    await load();
+    expect(service.settingsSignal()).toEqual(mockSettings);
   });
 
-  it('update should PUT and update cached settings', () => {
-    service.load();
-    httpMock.expectOne('/api/settings').flush(mockSettings);
+  it('update should PUT and update cached settings', async () => {
+    await load();
 
     const updated = { ...mockSettings, volume: 0.5 };
     service.update({ volume: 0.5 }).subscribe();
     const req = httpMock.expectOne('/api/settings');
     expect(req.request.method).toBe('PUT');
     req.flush(updated);
-    expect(service.settings?.volume).toBe(0.5);
+    TestBed.tick();
+    expect(service.settingsSignal()?.volume).toBe(0.5);
   });
 
-  it('clear should reset settings to null', () => {
-    service.load();
-    httpMock.expectOne('/api/settings').flush(mockSettings);
+  it('clear should reset settings to null', async () => {
+    await load();
 
     service.clear();
-    expect(service.settings).toBeNull();
+    TestBed.tick();
+    expect(service.settingsSignal()).toBeNull();
   });
 
-  it('settings$ should emit on load', (done) => {
-    const emissions: any[] = [];
-    service.settings$.subscribe((s) => emissions.push(s));
-
-    service.load();
-    httpMock.expectOne('/api/settings').flush(mockSettings);
-
-    setTimeout(() => {
-      expect(emissions.length).toBeGreaterThanOrEqual(2);
-      expect(emissions[emissions.length - 1]).toEqual(mockSettings);
-      done();
-    });
+  it('settingsSignal should expose the loaded settings', async () => {
+    await load();
+    expect(service.settingsSignal()).toEqual(mockSettings);
   });
 });

@@ -1,5 +1,5 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, OnInit, effect, inject } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -28,11 +28,14 @@ interface AchievementRow extends AchievementEntry {
 @Component({
   selector: 'vt-achievements-tab',
   standalone: true,
-  imports: [CommonModule, FormsModule, AchievementBadgeComponent],
+  imports: [FormsModule, AchievementBadgeComponent],
   templateUrl: './achievements-tab.component.html',
   styleUrl: './achievements-tab.component.scss',
 })
 export class AchievementsTabComponent implements OnInit, OnDestroy {
+  private achievements = inject(AchievementsService);
+  private settingsState = inject(SettingsStateService);
+
   rows: AchievementRow[] = [];
   docs: DocEntry[] = [];
   mediaTypes: MediaTypeEntry[] = [];
@@ -53,19 +56,18 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
   private disableAchievements = false;
   private lastState: AchievementState | null = null;
 
-  constructor(
-    private achievements: AchievementsService,
-    private settingsState: SettingsStateService,
-  ) {}
+  constructor() {
+    effect(() => {
+      const s = this.settingsState.settingsSignal();
+      this.disableAchievements = s?.enable_achievements === false;
+      if (this.lastState) this.applyState(this.lastState);
+    });
+  }
 
   ngOnInit(): void {
     this.achievements.state.pipe(takeUntil(this.destroy$)).subscribe((state) => {
       this.lastState = state;
       this.applyState(state);
-    });
-    this.settingsState.settings$.pipe(takeUntil(this.destroy$)).subscribe((s) => {
-      this.disableAchievements = s?.enable_achievements === false;
-      if (this.lastState) this.applyState(this.lastState);
     });
     this.achievements.refresh();
   }

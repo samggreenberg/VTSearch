@@ -1,5 +1,5 @@
 <div class="toast-stack" aria-live="assertive" aria-atomic="false">
-  @for (t of toasts; track trackById($index, t)) {
+  @for (t of (toastService.toasts$ | async) ?? []; track trackById($index, t)) {
     <div class="toast" [class.toast--success]="t.level === 'success'" role="alert">
       <div class="toast__main">
         @if (t.level === 'success') {
@@ -30,7 +30,7 @@
               {{ expandedId === t.id ? 'Hide details' : 'Details' }}
             </button>
             <button type="button" class="toast__btn" (click)="copyDebugInfo(t)" title="Copy a debug bundle to your clipboard">
-              {{ copiedId === t.id ? 'Copied!' : 'Copy debug info' }}
+              {{ copiedId() === t.id ? 'Copied!' : 'Copy debug info' }}
             </button>
           }
           <button type="button" class="toast__close" (click)="dismiss(t)" aria-label="Dismiss" title="Dismiss">

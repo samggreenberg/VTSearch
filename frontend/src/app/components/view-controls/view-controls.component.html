@@ -3,7 +3,7 @@
     <button
       type="button"
       class="vc-btn vc-btn--size"
-      [disabled]="atMinSize || !currentMediaType || (viewMode === 'list' && !allowSizeInList)"
+      [disabled]="atMinSize || !currentMediaType() || (viewMode === 'list' && !allowSizeInList())"
       (click)="bumpSize(-1)"
       title="Smaller thumbnails"
       aria-label="Smaller thumbnails">
@@ -12,7 +12,7 @@
     <button
       type="button"
       class="vc-btn vc-btn--size"
-      [disabled]="atMaxSize || !currentMediaType || (viewMode === 'list' && !allowSizeInList)"
+      [disabled]="atMaxSize || !currentMediaType() || (viewMode === 'list' && !allowSizeInList())"
       (click)="bumpSize(1)"
       title="Bigger thumbnails"
       aria-label="Bigger thumbnails">
@@ -20,7 +20,7 @@
     </button>
   </div>
 
-  @if (showViewMode) {
+  @if (showViewMode()) {
   <div class="vc-group">
     <button
       type="button"
@@ -45,7 +45,7 @@
   </div>
   }
 
-  @if (showFocus) {
+  @if (showFocus()) {
   <div class="vc-group">
     <button
       type="button"

@@ -2,15 +2,20 @@
   Drag the blue handles to set the start and end of the clip. Drag inside the selection to move it.
 </div>
 
-<div class="errorMsg" *ngIf="errorMsg">{{ errorMsg }}</div>
-<div class="loading" *ngIf="loading">Decoding audio…</div>
+@if (errorMsg) {
+  <div class="errorMsg">{{ errorMsg }}</div>
+}
+@if (loading) {
+  <div class="loading">Decoding audio…</div>
+}
 
-<audio
-  *ngIf="audioUrl"
-  [src]="audioUrl"
-  controls
-  (loadedmetadata)="onAudioLoadedMetadata($event)">
-</audio>
+@if (audioUrl) {
+  <audio
+    [src]="audioUrl"
+    controls
+    (loadedmetadata)="onAudioLoadedMetadata($event)">
+  </audio>
+}
 
 <canvas
   #canvas

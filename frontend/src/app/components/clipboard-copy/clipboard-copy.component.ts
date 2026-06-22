@@ -1,5 +1,5 @@
-import { Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnChanges, OnDestroy, SimpleChanges, input, signal } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 
 export interface ClipboardColumn {
@@ -29,18 +29,18 @@ interface DelimiterOption {
 @Component({
   selector: 'vt-clipboard-copy',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './clipboard-copy.component.html',
   styleUrl: './clipboard-copy.component.scss',
 })
 export class ClipboardCopyComponent implements OnChanges, OnDestroy {
-  @Input() mode: 'table' | 'list' = 'table';
-  @Input() rows: Record<string, unknown>[] = [];
-  @Input() columns: ClipboardColumn[] = [];
+  readonly mode = input<'table' | 'list'>('table');
+  readonly rows = input<Record<string, unknown>[]>([]);
+  readonly columns = input<ClipboardColumn[]>([]);
   /** Extra disable condition layered on top of the empty-data guards. */
-  @Input() disabled = false;
-  @Input() copyLabel = 'Copy';
-  @Input() buttonVariant: 'primary' | 'secondary' = 'primary';
+  readonly disabled = input(false);
+  readonly copyLabel = input('Copy');
+  readonly buttonVariant = input<'primary' | 'secondary'>('primary');
 
   /** Unified delimiter vocabulary, shared across both modes. */
   static readonly DELIMITERS: DelimiterOption[] = [
@@ -55,32 +55,36 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
   delimiter = ',';
   /** List mode: which single column to copy. */
   selectedColumnKey = '';
-  buttonText = '';
+  /** Transient copy-feedback label ("Copied!" / "Copy failed"). A signal so the
+   *  `setTimeout` reset in {@link flash} repaints back to the default label under
+   *  zoneless change detection. */
+  readonly buttonText = signal('');
 
   private feedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   get delimiterOptions(): DelimiterOption[] {
-    return this.mode === 'list'
+    return this.mode() === 'list'
       ? ClipboardCopyComponent.DELIMITERS
       : ClipboardCopyComponent.DELIMITERS.filter((d) => !d.listOnly);
   }
 
   get isDisabled(): boolean {
-    if (this.disabled) return true;
-    if (this.rows.length === 0) return true;
-    if (this.mode === 'table') return this.columns.length === 0;
+    if (this.disabled()) return true;
+    if (this.rows().length === 0) return true;
+    if (this.mode() === 'table') return this.columns().length === 0;
     return !this.selectedColumnKey;
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['mode']) {
       // Default delimiter per mode: list → newline, table → comma.
-      this.delimiter = this.mode === 'list' ? '\n' : ',';
+      this.delimiter = this.mode() === 'list' ? '\n' : ',';
     }
-    if (changes['columns'] && this.mode === 'list') {
+    if (changes['columns'] && this.mode() === 'list') {
       // Keep the single-column selector pointed at a valid column.
-      if (!this.columns.some((c) => c.key === this.selectedColumnKey)) {
-        this.selectedColumnKey = this.columns[0]?.key ?? '';
+      const columns = this.columns();
+      if (!columns.some((c) => c.key === this.selectedColumnKey)) {
+        this.selectedColumnKey = columns[0]?.key ?? '';
       }
     }
   }
@@ -99,14 +103,15 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
   }
 
   private buildText(): string {
-    if (this.mode === 'list') {
+    if (this.mode() === 'list') {
       const key = this.selectedColumnKey;
-      return this.rows.map((r) => this.cell(r, key)).join(this.delimiter);
+      return this.rows().map((r) => this.cell(r, key)).join(this.delimiter);
     }
-    if (this.columns.length === 0) return '';
-    const header = this.columns.map((c) => c.label).join(this.delimiter);
-    const body = this.rows.map((r) =>
-      this.columns.map((c) => this.cell(r, c.key)).join(this.delimiter),
+    const columns = this.columns();
+    if (columns.length === 0) return '';
+    const header = columns.map((c) => c.label).join(this.delimiter);
+    const body = this.rows().map((r) =>
+      this.columns().map((c) => this.cell(r, c.key)).join(this.delimiter),
     );
     return [header, ...body].join('\n');
   }
@@ -116,10 +121,10 @@ export class ClipboardCopyComponent implements OnChanges, OnDestroy {
   }
 
   private flash(text: string): void {
-    this.buttonText = text;
+    this.buttonText.set(text);
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
     this.feedbackTimer = setTimeout(() => {
-      this.buttonText = '';
+      this.buttonText.set('');
       this.feedbackTimer = null;
     }, 2000);
   }

@@ -46,10 +46,10 @@ describe('MediasApiService', () => {
   });
 
   it('vote should POST with label', () => {
-    service.vote(1, 'good').subscribe(data => expect(data.ok).toBeTrue());
+    service.vote(1, 'good').subscribe(data => expect(data.ok).toBe(true));
     const req = httpMock.expectOne('/api/medias/1/vote');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ vote: 'good' });
+    expect(req.request.body).toEqual({ target: 'good' });
     req.flush({ ok: true });
   });
 });

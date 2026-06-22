@@ -1,5 +1,4 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { Injectable, signal } from '@angular/core';
 
 export type SortMode = 'text' | 'learned' | 'load';
 export type SelectMode = 'top' | 'bottom' | 'hard' | 'new';
@@ -13,125 +12,149 @@ export interface SortedItem {
   bestRegion?: number[];
 }
 
+/**
+ * Shared sort state. Backed by signals so a write from any context — an HTTP
+ * subscribe, a poll timer, a learned-sort job continuation — notifies Angular's
+ * scheduler and repaints the views that bind these getters, with no zone.js
+ * involved (docs/plans/zoneless-migration.md, Phase 2.5 / Recipe B).
+ *
+ * Each value is exposed as a *value-returning getter* over a private signal, so
+ * existing `sortState.sortBusy` template bindings stay byte-for-byte the same
+ * yet become reactive under zoneless: a signal read through a getter during
+ * template evaluation is tracked as a dependency of that view (proven by
+ * `testing/getter-signal-zoneless.spec.ts`). Imperative callers read the same
+ * getters; mutation goes through the `set*` methods.
+ */
 @Injectable({ providedIn: 'root' })
 export class SortStateService {
-  private readonly sortModeSubject = new BehaviorSubject<SortMode>('text');
-  private readonly selectModeSubject = new BehaviorSubject<SelectMode>('top');
-  private readonly sortOrderSubject = new BehaviorSubject<SortedItem[] | null>(null);
-  private readonly thresholdSubject = new BehaviorSubject<number | null>(null);
-  private readonly sortBusySubject = new BehaviorSubject<boolean>(false);
-  private readonly sortStatusSubject = new BehaviorSubject<string>('');
-  private readonly sortProgressSubject = new BehaviorSubject<number>(0);
-  private readonly sortProgressTotalSubject = new BehaviorSubject<number>(0);
-  private readonly inclusionSubject = new BehaviorSubject<number>(0);
-  private readonly loadSortLabelSubject = new BehaviorSubject<string>('');
-  private readonly textQuerySubject = new BehaviorSubject<string>('');
-
-  readonly sortMode$ = this.sortModeSubject.asObservable();
-  readonly selectMode$ = this.selectModeSubject.asObservable();
-  readonly sortOrder$ = this.sortOrderSubject.asObservable();
-  readonly threshold$ = this.thresholdSubject.asObservable();
-  readonly sortBusy$ = this.sortBusySubject.asObservable();
-  readonly sortStatus$ = this.sortStatusSubject.asObservable();
-  readonly sortProgress$ = this.sortProgressSubject.asObservable();
-  readonly sortProgressTotal$ = this.sortProgressTotalSubject.asObservable();
-  readonly inclusion$ = this.inclusionSubject.asObservable();
-  readonly loadSortLabel$ = this.loadSortLabelSubject.asObservable();
-  readonly textQuery$ = this.textQuerySubject.asObservable();
+  private readonly _sortMode = signal<SortMode>('text');
+  private readonly _selectMode = signal<SelectMode>('top');
+  private readonly _sortOrder = signal<SortedItem[] | null>(null);
+  private readonly _threshold = signal<number | null>(null);
+  private readonly _sortBusy = signal(false);
+  private readonly _sortStatus = signal('');
+  private readonly _sortProgress = signal(0);
+  private readonly _sortProgressTotal = signal(0);
+  // Whole-job fraction (0..1) and overall ETA for multi-step scoring jobs
+  // (Find / detector sort), so the bar fills once across all phases instead of
+  // resetting per phase. ``null`` for single-phase sorts (fall back to
+  // current/total). See ProgressEvent.overall / ProgressTracker._compute_overall.
+  private readonly _sortOverall = signal<number | null>(null);
+  private readonly _sortEtaSeconds = signal<number | null>(null);
+  private readonly _inclusion = signal(0);
+  private readonly _loadSortLabel = signal('');
+  private readonly _textQuery = signal('');
 
   get sortMode(): SortMode {
-    return this.sortModeSubject.value;
+    return this._sortMode();
   }
 
   get selectMode(): SelectMode {
-    return this.selectModeSubject.value;
+    return this._selectMode();
   }
 
   get sortOrder(): SortedItem[] | null {
-    return this.sortOrderSubject.value;
+    return this._sortOrder();
   }
 
   get threshold(): number | null {
-    return this.thresholdSubject.value;
+    return this._threshold();
   }
 
   get sortBusy(): boolean {
-    return this.sortBusySubject.value;
+    return this._sortBusy();
   }
 
   get sortStatus(): string {
-    return this.sortStatusSubject.value;
+    return this._sortStatus();
   }
 
   get sortProgress(): number {
-    return this.sortProgressSubject.value;
+    return this._sortProgress();
   }
 
   get sortProgressTotal(): number {
-    return this.sortProgressTotalSubject.value;
+    return this._sortProgressTotal();
+  }
+
+  get sortOverall(): number | null {
+    return this._sortOverall();
+  }
+
+  get sortEtaSeconds(): number | null {
+    return this._sortEtaSeconds();
   }
 
   get inclusion(): number {
-    return this.inclusionSubject.value;
+    return this._inclusion();
   }
 
   get loadSortLabel(): string {
-    return this.loadSortLabelSubject.value;
+    return this._loadSortLabel();
   }
 
   get textQuery(): string {
-    return this.textQuerySubject.value;
+    return this._textQuery();
   }
 
   setSortMode(mode: SortMode): void {
-    this.sortModeSubject.next(mode);
+    this._sortMode.set(mode);
   }
 
   setSelectMode(mode: SelectMode): void {
-    this.selectModeSubject.next(mode);
+    this._selectMode.set(mode);
   }
 
   setSortResults(order: SortedItem[], threshold: number): void {
-    this.sortOrderSubject.next(order);
-    this.thresholdSubject.next(threshold);
+    this._sortOrder.set(order);
+    this._threshold.set(threshold);
   }
 
   setSortBusy(busy: boolean): void {
-    this.sortBusySubject.next(busy);
+    this._sortBusy.set(busy);
   }
 
   setSortStatus(status: string): void {
-    this.sortStatusSubject.next(status);
+    this._sortStatus.set(status);
   }
 
-  setSortProgress(current: number, total: number): void {
-    this.sortProgressSubject.next(current);
-    this.sortProgressTotalSubject.next(total);
+  setSortProgress(
+    current: number,
+    total: number,
+    overall: number | null = null,
+    etaSeconds: number | null = null,
+  ): void {
+    this._sortProgress.set(current);
+    this._sortProgressTotal.set(total);
+    this._sortOverall.set(overall);
+    this._sortEtaSeconds.set(etaSeconds);
   }
 
   setInclusion(value: number): void {
-    this.inclusionSubject.next(value);
+    this._inclusion.set(value);
   }
 
   setLoadSortLabel(label: string): void {
-    this.loadSortLabelSubject.next(label);
+    this._loadSortLabel.set(label);
   }
 
   setTextQuery(query: string): void {
-    this.textQuerySubject.next(query);
+    this._textQuery.set(query);
   }
 
   clear(): void {
-    this.sortModeSubject.next('text');
-    this.selectModeSubject.next('top');
-    this.sortOrderSubject.next(null);
-    this.thresholdSubject.next(null);
-    this.sortBusySubject.next(false);
-    this.sortStatusSubject.next('');
-    this.sortProgressSubject.next(0);
-    this.sortProgressTotalSubject.next(0);
-    this.inclusionSubject.next(0);
-    this.loadSortLabelSubject.next('');
-    this.textQuerySubject.next('');
+    this._sortMode.set('text');
+    this._selectMode.set('top');
+    this._sortOrder.set(null);
+    this._threshold.set(null);
+    this._sortBusy.set(false);
+    this._sortStatus.set('');
+    this._sortProgress.set(0);
+    this._sortProgressTotal.set(0);
+    this._sortOverall.set(null);
+    this._sortEtaSeconds.set(null);
+    this._inclusion.set(0);
+    this._loadSortLabel.set('');
+    this._textQuery.set('');
   }
 }

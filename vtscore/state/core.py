@@ -278,6 +278,20 @@ class DatasetContext:
         # we don't rebuild a 10k-row matrix per call.
         "_emb_matrix_ids",
         "_emb_matrix",
+        # Cached *flattened region matrix* for patch-region (e.g. DINOv3)
+        # datasets, mirroring ``_emb_matrix`` but expanded to one row per
+        # (media, region) pair.  ``_region_matrix`` is the ``(R, D)`` float32
+        # matrix; ``_region_media_index`` / ``_region_index_per_row`` are the
+        # parallel ``int64`` arrays mapping each row back to its media index
+        # (into the sorted id list) and its region index within that media.
+        # Built lazily by ``vtscore.embedding.matrix.get_region_matrix_for_snap``
+        # and reused across votes so online retraining never rebuilds the
+        # multi-hundred-thousand-row matrix per vote.  Keyed, like
+        # ``_emb_matrix``, on the sorted media-id list in ``_region_matrix_ids``.
+        "_region_matrix_ids",
+        "_region_matrix",
+        "_region_media_index",
+        "_region_index_per_row",
         # VTSBrowse: cached projection (frozen at ingest) + per-bin-shape
         # pyramids derived from it. The projection (UMAP coords) is shared
         # across bin shapes; ``_pyramids`` maps "hex"/"square" -> Pyramid so the
@@ -296,6 +310,17 @@ class DatasetContext:
         "_subset_ids",
         "_subset_job_id",
         "_subset_content_version",
+        # Role-typed embedder binding (v3 "three-slot" model; see
+        # docs/plans/patch-embedder.md).  A dataset binds up to one
+        # text-capable embedder and up to one patch-capable embedder.  By
+        # default the binding is *derived* on demand from the dataset's
+        # medias (the single embedder a pre-v3 dataset was loaded with);
+        # ``bind_embedders`` overrides that with an explicit, validated
+        # pair for genuinely multi-embedder datasets.  The values are
+        # embedder *names*, never vectors - no embeddings live here.
+        "_text_embedder",
+        "_patch_embedder",
+        "_binding_explicit",
     )
 
     def __init__(self, dataset_id: str = "") -> None:
@@ -305,6 +330,10 @@ class DatasetContext:
         self.dataset_display_name: str | None = None
         self._emb_matrix_ids: list[int] | None = None
         self._emb_matrix: Any = None  # np.ndarray | None
+        self._region_matrix_ids: list[int] | None = None
+        self._region_matrix: Any = None  # np.ndarray | None, shape (R, D)
+        self._region_media_index: Any = None  # np.ndarray | None, int64 (R,)
+        self._region_index_per_row: Any = None  # np.ndarray | None, int64 (R,)
         self._projection: Any = None  # Projection | None
         self._pyramids: dict[str, Any] = {}  # bin_shape -> Pyramid
         self._subset_projection: Any = None  # Projection | None (ephemeral subset UMAP)
@@ -317,6 +346,100 @@ class DatasetContext:
         # only the tile cache key/URL so stale tiles aren't served (the tile URL
         # is otherwise cached ``immutable``).  Reset to 0 on a fresh subset fit.
         self._subset_content_version: int = 0
+        # Role-typed embedder binding (see __slots__ comment).  ``None``
+        # until either explicitly bound or derived from the medias.
+        self._text_embedder: str | None = None
+        self._patch_embedder: str | None = None
+        self._binding_explicit: bool = False
+
+    # ------------------------------------------------------------------
+    # Role-typed embedder binding
+    # ------------------------------------------------------------------
+
+    def bind_embedders(self, *, text_embedder: str | None = None, patch_embedder: str | None = None) -> None:
+        """Explicitly bind role-typed embedders to this dataset.
+
+        Validates that each slot points at an embedder with the matching
+        capability (text / patch) and then stores the pair, overriding the
+        default media-derived binding.  Use this for genuinely
+        multi-embedder datasets; a single-embedder dataset can rely on the
+        derived binding instead.
+
+        Stores embedder *names* only - never vectors or models.
+        """
+        from vtscore.embedding.binding import validate_binding  # noqa: PLC0415
+
+        validate_binding(text_embedder, patch_embedder)
+        self._text_embedder = text_embedder
+        self._patch_embedder = patch_embedder
+        self._binding_explicit = True
+
+    def _resolve_binding(self) -> tuple[str | None, str | None]:
+        """Return the ``(text_embedder, patch_embedder)`` pair for this dataset.
+
+        An explicit binding (set via :meth:`bind_embedders`) wins; otherwise
+        the pair is derived from the dataset's medias - the single embedder a
+        pre-v3 dataset was loaded with, role-typed by its capabilities.
+        """
+        if self._binding_explicit:
+            return (self._text_embedder, self._patch_embedder)
+        if not self.medias:
+            return (None, None)
+        from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+        from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
+
+        first = next(iter(self.medias.values()))
+        return derive_binding_from_names(media_embedder_names(first))
+
+    @property
+    def text_embedder(self) -> str | None:
+        """Name of the bound text-capable embedder, or ``None``."""
+        return self._resolve_binding()[0]
+
+    @property
+    def patch_embedder(self) -> str | None:
+        """Name of the bound patch-capable embedder, or ``None``."""
+        return self._resolve_binding()[1]
+
+    def routed_embedder(self, role: str) -> str | None:
+        """Resolve which bound embedder serves *role* (the v3 routing table).
+
+        Roles (see "Routing rules" in ``docs/plans/patch-embedder.md``):
+
+        * ``"text"`` - text queries (``POST /api/sort``): the text slot, or
+          ``None`` (the caller 400s with ``supports_text=False``).
+        * ``"patch"`` - region similarity / voting (``/api/find-label`` region
+          overlays, region votes): the patch slot, or ``None`` (the caller 400s;
+          region ops need a patch embedder).
+        * ``"score"`` - cosine example sort, the detector MLP (train + score),
+          and the diversity tree: the patch slot if bound, else the text slot,
+          else ``None``.  ``None`` means a slot-less single-vector dataset (e.g.
+          ``dinov2_single``); the matrix layer then reads each media's primary
+          vector, so cosine sort / MLP scoring keep working rather than 400-ing.
+
+        Returns an embedder *name* (or ``None``).  Pass the result straight to
+        the embedder-aware matrix layer: a name equal to the dataset's primary
+        embedder collapses to the cached primary path there, so the
+        single-embedder hot path is unchanged byte-for-byte.
+        """
+        text, patch = self._resolve_binding()
+        if role == "text":
+            return text
+        if role == "patch":
+            return patch
+        if role == "score":
+            return patch or text
+        raise ValueError(f"unknown embedder routing role: {role!r}")
+
+    @property
+    def supports_text(self) -> bool:
+        """Whether this dataset can answer text queries (text slot is bound)."""
+        return self.text_embedder is not None
+
+    @property
+    def supports_patch_regions(self) -> bool:
+        """Whether this dataset has region overlays / voting (patch slot is bound)."""
+        return self.patch_embedder is not None
 
 
 class DetectorContext:
@@ -378,7 +501,21 @@ class DetectorContext:
         # region-pooled vector keyed to an element that no longer has a
         # region.  See ``logical-bug-audit.md`` finding M4.
         "label_embedding_regions",
+        # Cross-dataset local features (StructuralFeatures) for the labelset's
+        # elements, keyed by stable_element_id.  Re-derived from each element's
+        # origin so a saved structural detector can build templates + train its
+        # verification classifier against datasets that aren't currently loaded;
+        # the full (unfiltered) features are cached and the region_box is applied
+        # downstream at template-build time.  In-memory only, never persisted.
+        # See docs/plans/structural-embedder.md.
+        "label_local_features",  # str → StructuralFeatures
         "model",  # nn.Sequential | None (current trained MLP)
+        # Structural (SIFT/VLAD) detectors carry a *second* learned object next
+        # to the retrieval MLP: the match-statistic verification classifier
+        # (None until trained / for non-structural detectors).  In-memory only,
+        # re-derived from votes on every retrain, never persisted.  See
+        # docs/plans/structural-embedder.md.
+        "verification_classifier",  # nn.Sequential | None
         "threshold",  # decision threshold
         # Cross-dataset training-corpus counts (from on-disk labelset).  These
         # are independent of ``good_votes``/``bad_votes``, which only count
@@ -453,7 +590,11 @@ class DetectorContext:
         # those whose underlying media isn't part of the active dataset.
         self.label_embeddings: dict[str, Any] = {}
         self.label_embedding_regions: dict[str, tuple[float, float, float, float] | None] = {}
+        self.label_local_features: dict[str, Any] = {}
         self.model: Any = None  # nn.Sequential | None
+        # Match-statistic verification classifier for structural detectors;
+        # None for non-structural detectors and until first trained.
+        self.verification_classifier: Any = None  # nn.Sequential | None
         self.threshold: float = 0.5
         self.labelset_good_count: int = 0
         self.labelset_bad_count: int = 0
@@ -508,6 +649,13 @@ class _RequestMissingDatasetContext(DatasetContext):
         object.__setattr__(self, "dataset_display_name", None)
         object.__setattr__(self, "_emb_matrix_ids", None)
         object.__setattr__(self, "_emb_matrix", None)
+        object.__setattr__(self, "_region_matrix_ids", None)
+        object.__setattr__(self, "_region_matrix", None)
+        object.__setattr__(self, "_region_media_index", None)
+        object.__setattr__(self, "_region_index_per_row", None)
+        object.__setattr__(self, "_text_embedder", None)
+        object.__setattr__(self, "_patch_embedder", None)
+        object.__setattr__(self, "_binding_explicit", False)
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise _frozen_mutation_error("dataset")
@@ -673,7 +821,9 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "training_medias", _FrozenDict("detector"))
         object.__setattr__(self, "label_embeddings", _FrozenDict("detector"))
         object.__setattr__(self, "label_embedding_regions", _FrozenDict("detector"))
+        object.__setattr__(self, "label_local_features", _FrozenDict("detector"))
         object.__setattr__(self, "model", None)
+        object.__setattr__(self, "verification_classifier", None)
         object.__setattr__(self, "threshold", 0.5)
         object.__setattr__(self, "labelset_good_count", 0)
         object.__setattr__(self, "labelset_bad_count", 0)

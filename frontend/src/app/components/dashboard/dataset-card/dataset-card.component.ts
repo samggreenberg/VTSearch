@@ -1,13 +1,14 @@
-import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, ElementRef, HostBinding, HostListener, Input, OnChanges, SimpleChanges, ViewChild, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import {
+  ProgressBarState,
   ProgressHeader,
   ProgressKind,
   formatProgressHeader,
-  isProgressIndeterminate,
+  progressBarState,
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
@@ -22,21 +23,21 @@ import { buildDatasetCardMenuItems } from '../card-context-menu-items';
 })
 export class DatasetCardComponent implements OnChanges {
   @Input() dataset: any;
-  @Input() currentUser = '';
-  @Input() isDefaultLogin = true;
+  readonly currentUser = input('');
+  readonly isDefaultLogin = input(true);
   @Input() columnOrder: string[] = [];
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
   @Input() loadingTask?: LoadingTask;
   /** Which progress vocabulary to render the inline row with. ``projection``
    *  is used while the Browse button pre-builds the dataset's projection. */
-  @Input() taskKind: ProgressKind = 'dataset';
+  readonly taskKind = input<ProgressKind>('dataset');
 
   @HostBinding('class.loading-error')
   get hasLoadingError(): boolean {
     return !!this.loadingTask?.error;
   }
-  @Output() rowClick = new EventEmitter<MouseEvent>();
+  readonly rowClick = output<MouseEvent>();
 
   @HostListener('click', ['$event'])
   onClick(event: MouseEvent): void {
@@ -52,31 +53,31 @@ export class DatasetCardComponent implements OnChanges {
     if (this.loadingTask) return;
     event.preventDefault();
     this.contextMenuItems = buildDatasetCardMenuItems(this.dataset, {
-      isDefaultLogin: this.isDefaultLogin,
+      isDefaultLogin: this.isDefaultLogin(),
       isOwner: this.isOwner,
     });
     this.contextMenuX = event.clientX;
     this.contextMenuY = event.clientY;
     this.contextMenuOpen = true;
   }
-  @Output() rename = new EventEmitter<string>();
-  @Output() stats = new EventEmitter<void>();
-  @Output() delete = new EventEmitter<void>();
-  @Output() load = new EventEmitter<void>();
-  @Output() browse = new EventEmitter<void>();
-  @Output() security = new EventEmitter<void>();
-  @Output() cancelTask = new EventEmitter<string>();
-  @Output() dismissTask = new EventEmitter<string>();
-  @Output() checkboxToggle = new EventEmitter<void>();
+  readonly rename = output<string>();
+  readonly stats = output<void>();
+  readonly delete = output<void>();
+  readonly load = output<void>();
+  readonly browse = output<void>();
+  readonly security = output<void>();
+  readonly cancelTask = output<string>();
+  readonly dismissTask = output<string>();
+  readonly checkboxToggle = output<void>();
 
   get isOwner(): boolean {
-    return this.dataset?.created_by === this.currentUser;
+    return this.dataset?.created_by === this.currentUser();
   }
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
-  @Input() statsOpen = false;
-  @Input() deleteConfirmOpen = false;
+  readonly statsOpen = input(false);
+  readonly deleteConfirmOpen = input(false);
 
   editing = false;
   wasEditing = false;
@@ -158,13 +159,13 @@ export class DatasetCardComponent implements OnChanges {
   }
 
   onPieAnimationEnd(): void {
-    if (!this.statsOpen) {
+    if (!this.statsOpen()) {
       this.wasStatsOpen = false;
     }
   }
 
   onTrashAnimationEnd(): void {
-    if (!this.deleteConfirmOpen) {
+    if (!this.deleteConfirmOpen()) {
       this.wasDeleteOpen = false;
     }
   }
@@ -219,13 +220,13 @@ export class DatasetCardComponent implements OnChanges {
   get taskProgressInfo(): ProgressHeader {
     const task = this.loadingTask;
     if (!task) return { header: '', subtitle: '', detail: '', eta: '' };
-    return formatProgressHeader(task, this.taskKind, task.embedder);
+    return formatProgressHeader(task, this.taskKind(), task.embedder);
   }
 
-  get taskIsIndeterminate(): boolean {
+  get taskBar(): ProgressBarState {
     const task = this.loadingTask;
-    if (!task) return true;
-    return isProgressIndeterminate(task);
+    if (!task) return { value: 0, max: 1, indeterminate: true };
+    return progressBarState(task);
   }
 
   onCancelTask(event: MouseEvent): void {

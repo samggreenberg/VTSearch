@@ -19,21 +19,21 @@ describe('VtDialogService', () => {
 
   it('confirm should have Cancel and OK buttons', async () => {
     const promise = service.confirm('Are you sure?');
-    expect(service.dialogButtons.length).toBe(2);
-    expect(service.dialogButtons[0].label).toBe('Cancel');
-    expect(service.dialogButtons[1].label).toBe('OK');
+    expect(service.dialogButtons().length).toBe(2);
+    expect(service.dialogButtons()[0].label).toBe('Cancel');
+    expect(service.dialogButtons()[1].label).toBe('OK');
 
     service.resolve(false);
     const result = await promise;
-    expect(result).toBeFalse();
+    expect(result).toBe(false);
   });
 
   it('prompt should return input value', async () => {
     const promise = service.prompt('Enter name', 'default');
-    expect(service.dialogShowInput).toBeTrue();
-    expect(service.dialogInputValue).toBe('default');
+    expect(service.dialogShowInput()).toBe(true);
+    expect(service.dialogInputValue()).toBe('default');
 
-    service.dialogInputValue = 'typed value';
+    service.dialogInputValue.set('typed value');
     service.resolve('__input__');
     const result = await promise;
     expect(result).toBe('typed value');
@@ -47,13 +47,13 @@ describe('VtDialogService', () => {
   });
 
   it('getIconType should return correct icon type', () => {
-    service.dialogType = 'warning';
+    service.dialogType.set('warning');
     expect(service.getIconType()).toBe('warning');
 
-    service.dialogType = 'error';
+    service.dialogType.set('error');
     expect(service.getIconType()).toBe('x-circle');
 
-    service.dialogType = 'success';
+    service.dialogType.set('success');
     expect(service.getIconType()).toBe('check');
   });
 });

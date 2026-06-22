@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, input } from '@angular/core';
 
 export interface UsageBytes {
   total: number;
@@ -13,28 +13,30 @@ export interface UsageBytes {
   templateUrl: './usage-bar.component.html',
   styleUrl: './usage-bar.component.scss',
   host: {
-    '[class.side-left]': "side === 'left'",
-    '[class.side-right]': "side === 'right'",
+    '[class.side-left]': "side() === 'left'",
+    '[class.side-right]': "side() === 'right'",
   },
 })
 export class UsageBarComponent {
-  @Input() usage: UsageBytes | null = null;
-  @Input() label = '';
-  @Input() side: 'left' | 'right' = 'right';
-  @Input() titlePrefix = '';
+  readonly usage = input<UsageBytes | null>(null);
+  readonly label = input('');
+  readonly side = input<'left' | 'right'>('right');
+  readonly titlePrefix = input('');
 
   get usedPct(): number {
-    if (!this.usage || this.usage.total <= 0) return 0;
-    return (this.usage.used / this.usage.total) * 100;
+    const usage = this.usage();
+    if (!usage || usage.total <= 0) return 0;
+    return (usage.used / usage.total) * 100;
   }
 
   get freeText(): string {
-    if (!this.usage) return '';
-    return `${this.formatBytes(this.usage.free)} free of ${this.formatBytes(this.usage.total)}`;
+    const usage = this.usage();
+    if (!usage) return '';
+    return `${this.formatBytes(usage.free)} free of ${this.formatBytes(usage.total)}`;
   }
 
   get title(): string {
-    const prefix = this.titlePrefix || this.label;
+    const prefix = this.titlePrefix() || this.label();
     return prefix ? `${prefix}: ${this.freeText}` : this.freeText;
   }
 

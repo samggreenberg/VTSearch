@@ -1,5 +1,5 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+
 import { Router } from '@angular/router';
 import { Subject, combineLatest } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -20,22 +20,20 @@ import { DatasetRegistryEntry, DetectorRegistryEntry } from '../../models/api.mo
 @Component({
   selector: 'vt-incompatible-pair-explainer',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './incompatible-pair-explainer.component.html',
   styleUrl: './incompatible-pair-explainer.component.scss',
 })
 export class IncompatiblePairExplainerComponent implements OnInit, OnDestroy {
+  private router = inject(Router);
+  private activeContext = inject(ActiveContextService);
+  private datasetState = inject(DatasetStateService);
+  private pulldownControl = inject(PulldownControlService);
+
   dataset: DatasetRegistryEntry | null = null;
   detector: DetectorRegistryEntry | null = null;
 
   private destroy$ = new Subject<void>();
-
-  constructor(
-    private router: Router,
-    private activeContext: ActiveContextService,
-    private datasetState: DatasetStateService,
-    private pulldownControl: PulldownControlService,
-  ) {}
 
   ngOnInit(): void {
     combineLatest([

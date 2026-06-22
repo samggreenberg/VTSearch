@@ -1,42 +1,38 @@
-import {
-  Component,
-  ElementRef,
-  Input,
-  OnChanges,
-  OnDestroy,
-  SimpleChanges,
-  ViewChild,
-} from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, ElementRef, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, input, signal } from '@angular/core';
+
 import { ActiveContextService } from '../../services/active-context.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
 
 @Component({
   selector: 'vt-browse-hover-preview',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './browse-hover-preview.component.html',
   styleUrl: './browse-hover-preview.component.scss',
 })
 export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
-  @Input() hover: HexHoverEvent | null = null;
-  @Input() mediaType = '';
+  private activeContext = inject(ActiveContextService);
+
+  readonly hover = input<HexHoverEvent | null>(null);
+  readonly mediaType = input('');
   @ViewChild('audioEl') audioRef?: ElementRef<HTMLAudioElement>;
 
   visible = false;
   left = 0;
   top = 0;
   audioSrc = '';
-  textContent = '';
+  // Written both from `ngOnChanges` (a CD context) and from the async text
+  // `fetch().then()` continuation, so a signal so the late write repaints the
+  // popup body under zoneless.
+  readonly textContent = signal('');
   count = 0;
   private textLoadAbort: AbortController | null = null;
 
-  constructor(private activeContext: ActiveContextService) {}
-
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['hover']) {
-      if (this.hover) {
-        this.show(this.hover);
+      const hover = this.hover();
+      if (hover) {
+        this.show(hover);
       } else {
         this.hide();
       }
@@ -53,7 +49,8 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
 
     // Image and video paint their thumbnail directly onto the hex (see
     // browse-canvas); nothing happens on hover, so suppress the pop-up.
-    if (this.mediaType === 'image' || this.mediaType === 'video') {
+    const mediaType = this.mediaType();
+    if (mediaType === 'image' || mediaType === 'video') {
       this.hide();
       return;
     }
@@ -63,9 +60,9 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     this.top = event.screenY - 8;
     this.count = event.cell.count;
 
-    switch (this.mediaType) {
+    switch (mediaType) {
       case 'audio':
-        this.textContent = '';
+        this.textContent.set('');
         this.playAudio(representativeId);
         break;
       case 'text':
@@ -74,7 +71,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
         break;
       default:
         this.stopAudio();
-        this.textContent = `Item #${representativeId}`;
+        this.textContent.set(`Item #${representativeId}`);
     }
   }
 
@@ -83,7 +80,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     this.stopAudio();
     this.textLoadAbort?.abort();
     this.textLoadAbort = null;
-    this.textContent = '';
+    this.textContent.set('');
   }
 
   private playAudio(mediaId: number): void {
@@ -110,7 +107,7 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
   }
 
   private loadText(mediaId: number): void {
-    this.textContent = `Loading...`;
+    this.textContent.set('Loading...');
     // Cancel any in-flight text load so a slow earlier response can't clobber
     // the preview after the cursor has moved to another hex.
     this.textLoadAbort?.abort();
@@ -120,15 +117,15 @@ export class BrowseHoverPreviewComponent implements OnChanges, OnDestroy {
     fetch(url, { signal: abort.signal })
       .then((r) => r.json())
       .then((data) => {
-        if (this.hover?.cell.rep_id === mediaId) {
+        if (this.hover()?.cell.rep_id === mediaId) {
           const text: string = data.content || '';
-          this.textContent = text.length > 300 ? text.slice(0, 300) + '...' : text;
+          this.textContent.set(text.length > 300 ? text.slice(0, 300) + '...' : text);
         }
       })
       .catch((err) => {
         if (err?.name === 'AbortError') return;
-        if (this.hover?.cell.rep_id === mediaId) {
-          this.textContent = `Item #${mediaId}`;
+        if (this.hover()?.cell.rep_id === mediaId) {
+          this.textContent.set(`Item #${mediaId}`);
         }
       });
   }

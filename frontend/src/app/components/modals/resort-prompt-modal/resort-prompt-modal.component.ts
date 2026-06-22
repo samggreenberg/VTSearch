@@ -1,5 +1,5 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, Input, inject, input, output, signal } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
@@ -25,40 +25,38 @@ type ModalView = 'prompt' | 'media-picker';
 @Component({
   selector: 'vt-resort-prompt-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent],
+  imports: [FormsModule, ModalComponent, IconComponent],
   templateUrl: './resort-prompt-modal.component.html',
   styleUrl: './resort-prompt-modal.component.scss',
 })
 export class ResortPromptModalComponent {
-  @Input() currentExampleType: 'text' | 'media' = 'text';
-  @Input() currentExampleDisplay = '';
+  private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private datasetsListingsApi = inject(DatasetsListingsApiService);
+  private datasetsUiApi = inject(DatasetsUiApiService);
+  private sortingApi = inject(SortingApiService);
+
+  readonly currentExampleType = input<'text' | 'media'>('text');
+  readonly currentExampleDisplay = input('');
   @Input() keepLabelsCount = 0;
-  @Output() closed = new EventEmitter<void>();
-  @Output() keepExample = new EventEmitter<void>();
-  @Output() newExample = new EventEmitter<ResortResult>();
+  readonly closed = output<void>();
+  readonly keepExample = output<void>();
+  readonly newExample = output<ResortResult>();
 
   view: ModalView = 'prompt';
   pendingText = '';
-  error = '';
+  readonly error = signal('');
 
   // Media picker state
-  mediaSources: ImporterInfo[] = [];
+  readonly mediaSources = signal<ImporterInfo[]>([]);
   selectedSource: ImporterInfo | null = null;
-  browseItems: BrowseItem[] = [];
-  browseLoading = false;
+  readonly browseItems = signal<BrowseItem[]>([]);
+  readonly browseLoading = signal(false);
   browseSource = '';
   browseSourceLabel = '';
   fileBrowsing = false;
-  fileLoading = false;
+  readonly fileLoading = signal(false);
   typedPath = '';
-  typedPathError = '';
-
-  constructor(
-    private datasetsCrudApi: DatasetsCrudApiService,
-    private datasetsListingsApi: DatasetsListingsApiService,
-    private datasetsUiApi: DatasetsUiApiService,
-    private sortingApi: SortingApiService,
-  ) {}
+  readonly typedPathError = signal('');
 
   onKeep(): void {
     this.keepExample.emit();
@@ -77,19 +75,21 @@ export class ResortPromptModalComponent {
   openMediaPicker(): void {
     this.view = 'media-picker';
     this.selectedSource = null;
-    this.browseItems = [];
+    this.browseItems.set([]);
     this.fileBrowsing = false;
     this.browseSource = '';
     this.browseSourceLabel = '';
     this.typedPath = '';
-    this.typedPathError = '';
+    this.typedPathError.set('');
     this.datasetsCrudApi.getAllImporters().subscribe({
       next: (res) => {
-        this.mediaSources = (res.importers || []).filter(
-          (imp) =>
-            imp.name === 'demo' ||
-            imp.name === 'server_folder' ||
-            (!imp['hidden_from_picker'] && imp.name !== 'combine_datasets'),
+        this.mediaSources.set(
+          (res.importers || []).filter(
+            (imp) =>
+              imp.name === 'demo' ||
+              imp.name === 'server_folder' ||
+              (!imp['hidden_from_picker'] && imp.name !== 'combine_datasets'),
+          ),
         );
       },
     });
@@ -97,34 +97,38 @@ export class ResortPromptModalComponent {
 
   selectSource(source: ImporterInfo): void {
     this.selectedSource = source;
-    this.browseLoading = true;
-    this.browseItems = [];
+    this.browseLoading.set(true);
+    this.browseItems.set([]);
     this.fileBrowsing = false;
 
     if (source.name === 'demo') {
       this.datasetsListingsApi.getDemoList().subscribe({
         next: (res) => {
-          this.browseItems = (res.datasets || []).map((d) => ({
-            key: d.name,
-            display: `${d.label} (${d.media_type}, ${d.num_files} items)`,
-          }));
-          this.browseLoading = false;
+          this.browseItems.set(
+            (res.datasets || []).map((d) => ({
+              key: d.name,
+              display: `${d.label} (${d.media_type}, ${d.num_files} items)`,
+            })),
+          );
+          this.browseLoading.set(false);
         },
-        error: () => { this.browseLoading = false; },
+        error: () => { this.browseLoading.set(false); },
       });
     } else if (source.name === 'server_folder') {
-      this.browseLoading = false;
+      this.browseLoading.set(false);
       this.startFileBrowsing('folder', 'Saved Datasets');
     } else {
       this.sortingApi.getServerMediaFiles().subscribe({
         next: (res) => {
-          this.browseItems = (res.files || []).map((f) => ({
-            key: f.filename || f.name,
-            display: f.name,
-          }));
-          this.browseLoading = false;
+          this.browseItems.set(
+            (res.files || []).map((f) => ({
+              key: f.filename || f.name,
+              display: f.name,
+            })),
+          );
+          this.browseLoading.set(false);
         },
-        error: () => { this.browseLoading = false; },
+        error: () => { this.browseLoading.set(false); },
       });
     }
   }
@@ -142,22 +146,22 @@ export class ResortPromptModalComponent {
     this.browseSource = source;
     this.browseSourceLabel = label;
     this.typedPath = '';
-    this.typedPathError = '';
+    this.typedPathError.set('');
   }
 
   submitTypedPath(): void {
     const raw = (this.typedPath || '').trim();
     if (!raw) return;
-    this.fileLoading = true;
-    this.typedPathError = '';
+    this.fileLoading.set(true);
+    this.typedPathError.set('');
     this.datasetsUiApi.selectBrowsedFile(this.browseSource, raw).subscribe({
       next: (res) => {
-        this.fileLoading = false;
+        this.fileLoading.set(false);
         this.newExample.emit({ action: 'new-example', type: 'media', value: res.filename });
       },
       error: (err) => {
-        this.fileLoading = false;
-        this.typedPathError = err?.error?.message || 'Path not found on the server.';
+        this.fileLoading.set(false);
+        this.typedPathError.set(err?.error?.message || 'Path not found on the server.');
       },
     });
   }
@@ -171,7 +175,7 @@ export class ResortPromptModalComponent {
         this.newExample.emit({ action: 'new-example', type: 'media', value: res.filename });
       },
       error: () => {
-        this.error = 'Failed to upload file';
+        this.error.set('Failed to upload file');
       },
     });
     input.value = '';

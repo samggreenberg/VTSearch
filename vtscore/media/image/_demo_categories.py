@@ -812,3 +812,23 @@ UCSF_DOCUMENTS_CATEGORIES = [
     "Fossil Fuel",
     "Opioids",
 ]
+
+# Revisited Oxford Buildings (ROxford5k) landmark categories.  Each is a
+# filename prefix in the Oxford Buildings image set (e.g. ``all_souls_000013``);
+# the 11 named landmarks are the dataset's query buildings.  ``other`` collects
+# the remaining Oxford photos, which act as distractors in the haystack so the
+# structural search has a realistic non-match background to reject.
+ROXFORD_CATEGORIES = [
+    "all_souls",
+    "ashmolean",
+    "balliol",
+    "bodleian",
+    "christ_church",
+    "cornmarket",
+    "hertford",
+    "keble",
+    "magdalen",
+    "pitt_rivers",
+    "radcliffe_camera",
+    "other",
+]

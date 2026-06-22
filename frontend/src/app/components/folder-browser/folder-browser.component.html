@@ -5,7 +5,7 @@
       class="vfb-crumb"
       [class.active]="!currentPath"
       (click)="navigateRoot()"
-    >{{ rootLabel }}</button>
+    >{{ rootLabel() }}</button>
     @for (crumb of breadcrumbs; track $index) {
       <span class="vfb-crumb-sep">/</span>
       <button
@@ -31,7 +31,7 @@
         (click)="setSort('name')"
         title="Sort by name"
       >Name <span class="vfb-sort-ind">{{ sortIndicator('name') }}</span></button>
-      @if (showDate) {
+      @if (showDate()) {
         <button
           type="button"
           class="vfb-col vfb-col-date"
@@ -39,7 +39,7 @@
           title="Sort by modified date"
         >Modified <span class="vfb-sort-ind">{{ sortIndicator('modified') }}</span></button>
       }
-      @if (showFiles && showSize) {
+      @if (showFiles() && showSize()) {
         <button
           type="button"
           class="vfb-col vfb-col-size"
@@ -66,7 +66,7 @@
         </button>
       }
       @if (rows.length === 0) {
-        <p class="vfb-empty">{{ emptyMessage || (showFiles ? 'Empty folder.' : 'No subdirectories.') }}</p>
+        <p class="vfb-empty">{{ emptyMessage() || (showFiles() ? 'Empty folder.' : 'No subdirectories.') }}</p>
       }
       @for (row of rows; track trackRow($index, row); let i = $index) {
         <button
@@ -75,7 +75,7 @@
           [class.vfb-row--dir]="row.kind === 'dir'"
           [class.vfb-row--file]="row.kind === 'file'"
           [class.vfb-row--selected]="i === selectedIndex"
-          [disabled]="busy && row.kind === 'file'"
+          [disabled]="busy() && row.kind === 'file'"
           (click)="selectRow(i)"
           (dblclick)="onRowDblClick(row)"
           [title]="row.path"
@@ -88,10 +88,10 @@
             }
           </span>
           <span class="vfb-name">{{ row.name }}</span>
-          @if (showDate) {
+          @if (showDate()) {
             <span class="vfb-date">{{ row.modified_at }}</span>
           }
-          @if (showFiles && showSize) {
+          @if (showFiles() && showSize()) {
             <span class="vfb-size">{{ row.kind === 'file' ? formatSize(row.size_bytes) : '' }}</span>
           }
         </button>
@@ -99,7 +99,7 @@
     }
   </div>
 
-  @if (showPathFooter && rootPath) {
+  @if (showPathFooter() && rootPath) {
     <div class="vfb-path-footer">
       <span class="vfb-path-label">Path:</span>
       <code class="vfb-path-value">{{ absolutePath }}</code>

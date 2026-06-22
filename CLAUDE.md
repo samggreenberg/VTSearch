@@ -95,7 +95,8 @@ If a feature seems to require persisting a vector or MLP, push back: either re-d
 When you run a build, typecheck, linter, or test suite, **fix every error and failure you see; not only the ones you introduced**. Do not dismiss errors as "pre-existing", "unrelated to my change", or "not my fault" and move on. Do not announce them and ask the user to triage. The user does not want to scan your output for problems you decided to ignore.
 
 This applies to:
-- TypeScript errors from `tsc` / `npm run build:prod` (including in `*.spec.ts` files, even though specs do not currently run: they must still typecheck).
+- TypeScript errors from `tsc` / `npm run build:prod` (including in `*.spec.ts` files).
+- Frontend unit-test failures from the Vitest suite (`cd frontend && npm run test:ci`, also run by `./run-tests.sh` and `./run-tests.sh frontend`).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them: fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
 - Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch has no GitHub Actions workflows; `./run-tests.sh` is the source of truth, so do not push a change without running it.
@@ -141,6 +142,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
 - **Frontend audit**: `cd frontend && npm audit` (checks for known vulnerabilities in dependencies)
+- **Frontend unit tests**: `cd frontend && npm run test:ci` (headless Vitest via the `@angular/build:unit-test` builder + jsdom; no browser needed). Also run by `./run-tests.sh` (full suite) and `./run-tests.sh frontend` (frontend-only gate: build + audit + Vitest). `npm test` is the watch-mode variant.
 - **Lint**: `ruff check .`
 - **Format**: `ruff format .`
 - **Spell check**: `codespell --toml pyproject.toml`
@@ -164,6 +166,7 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 | `cli` | CLI autodetect, load sort window, progress bars |
 | `converters` | Media converters (document, video, image) |
 | `projection` | VTSBrowse UMAP projection + hex-tile pyramid (library tier) |
+| `frontend` | Frontend-only gate: Angular `build:prod` + `npm audit` + the headless Vitest unit suite. No Python tests; `./run-tests.sh frontend` skips pytest. Also runs as part of the full `./run-tests.sh`. |
 | `gpu` | CUDA-only tests (excluded by default) |
 
 **Recommended workflow**: Run `./run-tests.sh <group>` for the area you changed, then `./run-tests.sh` for the full suite.
@@ -293,7 +296,7 @@ def slow_load():
 
 ## Environment Notes (Claude Code on the web)
 
-- **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed. Karma has been removed from frontend devDependencies. The Python backend tests (`./run-tests.sh`) work fine without a browser.
+- **No Chrome/Chromium available.** The cloud container (Ubuntu 24.04) does not have Chrome or Chromium installed. The frontend unit suite runs on **Vitest + jsdom** (the Angular 21 `@angular/build:unit-test` builder), which is headless and needs no browser; Karma is gone. The Python backend tests (`./run-tests.sh`) also work fine without a browser.
 
 ## More docs
 

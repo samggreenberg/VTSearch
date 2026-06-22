@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { LoadingTask } from '../models/api.models';
 import { ProgressEventsService } from './progress-events.service';
@@ -88,7 +88,9 @@ export class ToastService {
   private readonly seenTaskKeys = new Set<string>();
   private readonly autoDismissTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
-  constructor(progressEvents: ProgressEventsService) {
+  constructor() {
+    const progressEvents = inject(ProgressEventsService);
+
     progressEvents.loadingTasks$.subscribe((tasks) => this.routeTaskErrors(tasks, 'dataset'));
     progressEvents.detectorLoadingTasks$.subscribe((tasks) => this.routeTaskErrors(tasks, 'detector'));
   }

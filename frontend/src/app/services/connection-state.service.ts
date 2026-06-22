@@ -3,8 +3,7 @@ import {
   HttpContext,
   HttpContextToken,
 } from '@angular/common/http';
-import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { Injectable, inject, signal } from '@angular/core';
 
 /**
  * Marks a request as the connection-recovery probe so the
@@ -52,6 +51,8 @@ export type ConnectionStatus = 'online' | 'offline';
  */
 @Injectable({ providedIn: 'root' })
 export class ConnectionStateService {
+  private http = inject(HttpClient);
+
   /**
    * Consecutive network failures needed to declare the backend offline. A
    * threshold above 1 keeps a single transient blip (one dropped request
@@ -61,17 +62,22 @@ export class ConnectionStateService {
    */
   private static readonly OFFLINE_THRESHOLD = 3;
 
-  private readonly statusSubject = new BehaviorSubject<ConnectionStatus>('online');
-  private readonly retryingSubject = new BehaviorSubject<boolean>(false);
+  private readonly _status = signal<ConnectionStatus>('online');
+  private readonly _retrying = signal(false);
 
-  /** Current connectivity, `online` until proven otherwise. */
-  readonly status$ = this.statusSubject.asObservable();
+  /**
+   * Current connectivity, `online` until proven otherwise. A signal so a write
+   * from a raw `offline`-event listener (or the interceptor) schedules change
+   * detection on bound templates under zoneless without an `NgZone.run`.
+   * Read-only to callers; only this service flips it.
+   */
+  readonly status = this._status.asReadonly();
   /** True while a Retry probe is in flight (drives the button's busy state). */
-  readonly retrying$ = this.retryingSubject.asObservable();
+  readonly retrying = this._retrying.asReadonly();
 
   private consecutiveFailures = 0;
 
-  constructor(private http: HttpClient) {
+  constructor() {
     // A browser-level `offline` event (the OS lost its network interface) is
     // an unambiguous, immediate signal — trip the breaker at once rather
     // than waiting for the failure threshold. The matching `online` event is
@@ -83,11 +89,7 @@ export class ConnectionStateService {
   }
 
   get isOffline(): boolean {
-    return this.statusSubject.value === 'offline';
-  }
-
-  get status(): ConnectionStatus {
-    return this.statusSubject.value;
+    return this._status() === 'offline';
   }
 
   /**
@@ -97,8 +99,8 @@ export class ConnectionStateService {
    */
   recordSuccess(): void {
     this.consecutiveFailures = 0;
-    if (this.statusSubject.value !== 'online') {
-      this.statusSubject.next('online');
+    if (this._status() !== 'online') {
+      this._status.set('online');
     }
   }
 
@@ -114,8 +116,8 @@ export class ConnectionStateService {
   }
 
   private goOffline(): void {
-    if (this.statusSubject.value !== 'offline') {
-      this.statusSubject.next('offline');
+    if (this._status() !== 'offline') {
+      this._status.set('offline');
     }
   }
 
@@ -127,8 +129,8 @@ export class ConnectionStateService {
    * running.
    */
   retry(): void {
-    if (this.retryingSubject.value) return;
-    this.retryingSubject.next(true);
+    if (this._retrying()) return;
+    this._retrying.set(true);
     this.http
       .get('/healthz', {
         context: new HttpContext().set(CONNECTION_PROBE, true),
@@ -137,13 +139,13 @@ export class ConnectionStateService {
       .subscribe({
         next: () => {
           this.recordSuccess();
-          this.retryingSubject.next(false);
+          this._retrying.set(false);
         },
         // A network error leaves us offline (the interceptor already counted
         // it); any HTTP error status means the server answered, so the
         // interceptor will have flipped us back online. Either way the probe
         // is done.
-        error: () => this.retryingSubject.next(false),
+        error: () => this._retrying.set(false),
       });
   }
 }

@@ -1,5 +1,5 @@
-<div class="autopilot-panel" [class.collapsed]="collapsed">
-  @if (collapsed) {
+<div class="autopilot-panel" [class.collapsed]="collapsed()">
+  @if (collapsed()) {
     <div class="collapsed-steps">
       <button class="collapse-toggle" (click)="toggleCollapse.emit()" title="Show autopilot panel" aria-label="Show autopilot panel">&#9654;</button>
       @for (step of steps; track step.phase) {

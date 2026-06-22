@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, effect, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, Subject, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -61,7 +61,8 @@ export class AchievementsService {
   private readonly emittedUnlocks = new Set<string>();
 
   constructor() {
-    this.settingsState.settings$.subscribe((s) => {
+    effect(() => {
+      const s = this.settingsState.settingsSignal();
       const next = s?.enable_achievements === false;
       const flipped = next && !this.disabled;
       this.disabled = next;

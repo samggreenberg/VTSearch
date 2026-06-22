@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, OnDestroy, NgZone, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, OnDestroy, NgZone, ViewChild, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -60,25 +60,43 @@ import type { SettingsUpdate } from '../../generated/api-client/models/settings-
   styleUrl: './browse-view.component.scss',
 })
 export class BrowseViewComponent implements OnInit, OnDestroy {
+  private projectionApi = inject(ProjectionApiService);
+  private tileCache = inject(TileCacheService);
+  private activeContext = inject(ActiveContextService);
+  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private settingsState = inject(SettingsStateService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private browseSubset = inject(BrowseSubsetService);
+  private selection = inject(BrowseSelectionService);
+  private mediasApi = inject(MediasApiService);
+  private dialog = inject(VtDialogService);
+  private toast = inject(ToastService);
+  private ngZone = inject(NgZone);
+
   @ViewChild(BrowseCanvasComponent) private canvas?: BrowseCanvasComponent;
   /** The 3-column grid (canvas | divider | side panel); the divider drag
    *  measures against its box. Only present in the ``ready`` state. */
   @ViewChild('content') private content?: ElementRef<HTMLElement>;
 
-  meta: ProjectionMeta | null = null;
-  mediaType = '';
+  readonly meta = signal<ProjectionMeta | null>(null);
+  // Written from raw/async callbacks (dataset-status subscribe, projection
+  // build poller, settings effect), so a signal so those writes repaint the
+  // canvas/minimap inputs and the info row under zoneless.
+  readonly mediaType = signal('');
   hoverEvent: HexHoverEvent | null = null;
   /**
    * Top of the density scale for the legend: the densest cell currently in
    * view, pushed up from the canvas. The legend labels the yellow end with it.
    */
   densityMax = 1;
-  status: 'loading' | 'building' | 'ready' | 'error' | 'done' = 'loading';
-  errorMessage = '';
-  buildProgress = 0;
-  buildTotal = 0;
-  buildMessage = '';
-  datasetName = '';
+  readonly status = signal<'loading' | 'building' | 'ready' | 'error' | 'done'>('loading');
+  readonly errorMessage = signal('');
+  readonly buildProgress = signal(0);
+  readonly buildTotal = signal(0);
+  readonly buildMessage = signal('');
+  readonly datasetName = signal('');
 
   /**
    * Discrete thumbnail-size multipliers, one per named icon size (XS…XL),
@@ -95,14 +113,14 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * (4XL/5XL) render a cell close to the full media, so some users use them to
    * inspect (essentially) the whole image rather than a thumbnail. */
   static readonly ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'] as const;
-  hexScaleIndex = 2;
+  readonly hexScaleIndex = signal(2);
 
   /**
    * Density colormap preset for the flat (non-thumbnail) shading, mirrored
    * from the per-media ``browse_colormap`` setting and passed to the canvas
    * and minimap. ``auto`` follows the theme (Ocean in light, Heat in dark).
    */
-  colormap: BrowseColormapId = 'auto';
+  readonly colormap = signal<BrowseColormapId>('auto');
 
   /**
    * Width (CSS px) of the colormap-coloured border drawn around multi-item
@@ -110,7 +128,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * setting and passed to the canvas. Only image/video datasets paint
    * thumbnails, so it has no visible effect for other media types.
    */
-  thumbnailBorder = DEFAULT_THUMBNAIL_BORDER;
+  readonly thumbnailBorder = signal(DEFAULT_THUMBNAIL_BORDER);
 
   /** Last settings snapshot, kept so per-media browser prefs can be
    *  re-resolved when the active media type becomes known after load. */
@@ -122,7 +140,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * re-bins the (shared, frozen) UMAP layout — it never re-fits UMAP — and keeps
    * the canvas mounted so pan/zoom survive the switch.
    */
-  binShape: BinShape = 'hex';
+  readonly binShape = signal<BinShape>('hex');
 
   /**
    * Region-select mode: the GUI parallel to the Shift+drag hotkey. When on, a
@@ -148,7 +166,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * overview minimap), mirrored from the ``browse_panel_width`` setting and
    * driven by the draggable divider between the canvas and the panel.
    */
-  panelWidth = 300;
+  readonly panelWidth = signal(300);
   /** Clamp + divider geometry, mirroring the Find view's panel dividers. */
   private static readonly PANEL_MIN = 160;
   private static readonly PANEL_MAX = 800;
@@ -183,36 +201,25 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private pollErrors = 0;
   private static readonly MAX_POLL_ERRORS = 5;
 
-  constructor(
-    private projectionApi: ProjectionApiService,
-    private tileCache: TileCacheService,
-    private activeContext: ActiveContextService,
-    private datasetsRegistryApi: DatasetsRegistryApiService,
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    private settingsState: SettingsStateService,
-    private route: ActivatedRoute,
-    private router: Router,
-    private browseSubset: BrowseSubsetService,
-    private selection: BrowseSelectionService,
-    private mediasApi: MediasApiService,
-    private dialog: VtDialogService,
-    private toast: ToastService,
-    private ngZone: NgZone,
-  ) {}
-
-  ngOnInit(): void {
-    this.settingsState.settings$.pipe(takeUntil(this.destroy$)).subscribe((settings) => {
+  constructor() {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
       if (!settings) return;
       this.lastSettings = settings;
       if (settings.browse_panel_width != null) {
-        this.panelWidth = this.clamp(
-          settings.browse_panel_width,
-          BrowseViewComponent.PANEL_MIN,
-          BrowseViewComponent.PANEL_MAX,
+        this.panelWidth.set(
+          this.clamp(
+            settings.browse_panel_width,
+            BrowseViewComponent.PANEL_MIN,
+            BrowseViewComponent.PANEL_MAX,
+          ),
         );
       }
       this.applyBrowsePrefsForMediaType();
     });
+  }
+
+  ngOnInit(): void {
     this.settingsState.load();
 
     // Subset mode: the Find view handed off a set of positive ids to project
@@ -222,26 +229,27 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       const handoff = this.browseSubset.take();
       if (handoff && handoff.ids.length > 0) {
         this.subsetIds = handoff.ids;
-        this.datasetName = handoff.label;
+        this.datasetName.set(handoff.label);
       } else {
         // No handoff (e.g. a hard reload): the ephemeral subset is gone.
-        this.status = 'error';
-        this.errorMessage =
-          'This subset projection has expired. Re-run Find and click Browse to rebuild it.';
-        this.tileCache.setBinShape(this.binShape);
+        this.status.set('error');
+        this.errorMessage.set(
+          'This subset projection has expired. Re-run Find and click Browse to rebuild it.',
+        );
+        this.tileCache.setBinShape(this.binShape());
         return;
       }
     }
     this.tileCache.setSubset(this.subset);
-    this.tileCache.setBinShape(this.binShape);
+    this.tileCache.setBinShape(this.binShape());
 
     this.datasetsRegistryApi
       .getStatus()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (status) => {
-          if (!this.subset) this.datasetName = status.display_name || '';
-          this.mediaType = status.media_type || '';
+          if (!this.subset) this.datasetName.set(status.display_name || '');
+          this.mediaType.set(status.media_type || '');
           this.applyBrowsePrefsForMediaType();
         },
       });
@@ -304,18 +312,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   get atMinHexSize(): boolean {
-    return this.hexScaleIndex === 0;
+    return this.hexScaleIndex() === 0;
   }
 
   get atMaxHexSize(): boolean {
-    return this.hexScaleIndex === this.HEX_SCALES.length - 1;
+    return this.hexScaleIndex() === this.HEX_SCALES.length - 1;
   }
 
   /** Target bin radius (CSS px) for the current named thumbnail size. Also
    *  passed to the bin popup so its preview pane tracks the on-canvas hover
    *  size. */
   get thumbnailRadius(): number {
-    return BrowseCanvasComponent.DEFAULT_TARGET_RADIUS * this.HEX_SCALES[this.hexScaleIndex];
+    return BrowseCanvasComponent.DEFAULT_TARGET_RADIUS * this.HEX_SCALES[this.hexScaleIndex()];
   }
 
   /** Grow (+1) or shrink (-1) the on-screen thumbnail size, clamped to the
@@ -325,10 +333,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   bumpHexSize(delta: 1 | -1): void {
     const next = Math.max(
       0,
-      Math.min(this.HEX_SCALES.length - 1, this.hexScaleIndex + delta),
+      Math.min(this.HEX_SCALES.length - 1, this.hexScaleIndex() + delta),
     );
-    if (next === this.hexScaleIndex) return;
-    this.hexScaleIndex = next;
+    if (next === this.hexScaleIndex()) return;
+    this.hexScaleIndex.set(next);
     this.canvas?.setThumbnailRadius(this.thumbnailRadius, true);
     this.persistBrowsePref('browse_icon_size', BrowseViewComponent.ICON_SIZES[next]);
   }
@@ -343,38 +351,40 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   private applyBrowsePrefsForMediaType(): void {
     const s = this.lastSettings;
     if (!s) return;
-    const mt = this.mediaType;
+    const mt = this.mediaType();
 
     // Thumbnail media (image/video) are pinned to grayscale so the colourful
     // density presets never tint real thumbnails; the saved per-type value is
     // ignored for them (the Settings UI hides the picker to match).
     if (usesThumbnails(mt)) {
-      this.colormap = 'gray';
+      this.colormap.set('gray');
     } else {
       const cmap = mt ? this.perMediaValue(s.browse_colormap, mt) : '';
-      this.colormap =
+      this.colormap.set(
         cmap && (BROWSE_COLORMAP_IDS as readonly string[]).includes(cmap)
           ? (cmap as BrowseColormapId)
-          : 'auto';
+          : 'auto',
+      );
     }
 
     const sizeLabel = mt ? this.perMediaValue(s.browse_icon_size, mt) : '';
     const sizeIdx = (BrowseViewComponent.ICON_SIZES as readonly string[]).indexOf(sizeLabel);
-    this.hexScaleIndex = sizeIdx >= 0 ? sizeIdx : 2;
+    this.hexScaleIndex.set(sizeIdx >= 0 ? sizeIdx : 2);
     // Seed the saved size as the overview granularity (no reframe): a settings
     // change re-bins at the current framing rather than zooming the viewport,
     // and on first load the initial fit picks the matching level.
     this.canvas?.setThumbnailRadius(this.thumbnailRadius, false);
 
     const shape: BinShape = this.perMediaValue(s.browse_bin_shape, mt) === 'square' ? 'square' : 'hex';
-    if (shape !== this.binShape) this.switchBinShape(shape, false);
+    if (shape !== this.binShape()) this.switchBinShape(shape, false);
 
     const borderMap = s.browse_thumbnail_border as { [key: string]: number } | undefined;
     const rawBorder = mt && borderMap ? borderMap[mt] : undefined;
-    this.thumbnailBorder =
+    this.thumbnailBorder.set(
       rawBorder == null
         ? DEFAULT_THUMBNAIL_BORDER
-        : Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, rawBorder));
+        : Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, rawBorder)),
+    );
   }
 
   /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */
@@ -390,7 +400,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     key: 'browse_bin_shape' | 'browse_colormap' | 'browse_icon_size',
     value: string,
   ): void {
-    const mt = this.mediaType;
+    const mt = this.mediaType();
     if (!mt) return;
     const existing = (this.lastSettings?.[key] as { [k: string]: string } | undefined) || {};
     const next = { ...existing, [mt]: value };
@@ -427,9 +437,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const rect = this.content.nativeElement.getBoundingClientRect();
     // The panel is on the right, so its width grows as the cursor moves left.
     const width = this.clamp(rect.right - event.clientX, BrowseViewComponent.PANEL_MIN, this.panelMax());
-    this.ngZone.run(() => {
-      this.panelWidth = width;
-    });
+    // `panelWidth` is a signal read in the template's `--browse-panel-width`
+    // binding, so the `.set()` schedules CD on its own — no `ngZone.run`.
+    this.panelWidth.set(width);
   }
 
   private onPanelMouseUp(): void {
@@ -437,7 +447,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.dragging = false;
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
-    this.settingsState.update({ browse_panel_width: Math.round(this.panelWidth) }).subscribe();
+    this.settingsState.update({ browse_panel_width: Math.round(this.panelWidth()) }).subscribe();
   }
 
   /** Switch the bin shape from the toggle, persisting the choice. */
@@ -452,8 +462,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * choice to settings (true for the toggle, false when mirroring settings).
    */
   private switchBinShape(shape: BinShape, persist: boolean): void {
-    if (shape === this.binShape) return;
-    this.binShape = shape;
+    if (shape === this.binShape()) return;
+    this.binShape.set(shape);
     if (persist) this.persistBrowsePref('browse_bin_shape', shape);
     // Don't repoint the tile cache here. While ``ready``, the canvas stays
     // mounted across the switch (so pan/zoom survive), and its redraw loop
@@ -461,7 +471,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // built yet would make those fetches 404 until the build lands. Instead,
     // the cache is repointed only once the new shape is confirmed ready — in
     // ``applyMeta``/``pollBuildStatus`` (keyed to the shape the meta is for).
-    if (this.status === 'ready') {
+    if (this.status() === 'ready') {
       this.ensureShape();
     } else {
       this.loadProjection();
@@ -480,7 +490,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (resp) => {
           if (resp.status === 'ready') {
-            const shape = this.binShape;
+            const shape = this.binShape();
             this.projectionApi
               .getMeta(shape, this.subset)
               .pipe(takeUntil(this.destroy$))
@@ -490,17 +500,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
               });
           } else {
             // Rare: this shape needs a full UMAP fit (no shared layout yet).
-            this.status = 'building';
-            this.buildProgress = 0;
-            this.buildTotal = 0;
-            this.buildMessage = '';
+            this.status.set('building');
+            this.buildProgress.set(0);
+            this.buildTotal.set(0);
+            this.buildMessage.set('');
             this.pollBuildStatus();
           }
         },
         error: (err) => {
-          this.status = 'error';
-          this.errorMessage =
-            err?.error?.message || err?.error?.error || 'Failed to switch bin shape';
+          this.status.set('error');
+          this.errorMessage.set(
+            err?.error?.message || err?.error?.error || 'Failed to switch bin shape',
+          );
         },
       });
   }
@@ -552,22 +563,23 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    */
   private buildRequest() {
     return this.subset
-      ? this.projectionApi.buildSubset(this.binShape, this.subsetIds)
-      : this.projectionApi.build(this.binShape);
+      ? this.projectionApi.buildSubset(this.binShape(), this.subsetIds)
+      : this.projectionApi.build(this.binShape());
   }
 
   onBuild(): void {
     if (this.subset && this.subsetIds.length === 0) {
       // Nothing to rebuild (e.g. Retry after the handoff expired).
-      this.status = 'error';
-      this.errorMessage =
-        'This subset projection has expired. Re-run Find and click Browse to rebuild it.';
+      this.status.set('error');
+      this.errorMessage.set(
+        'This subset projection has expired. Re-run Find and click Browse to rebuild it.',
+      );
       return;
     }
-    this.status = 'building';
-    this.buildProgress = 0;
-    this.buildTotal = 0;
-    this.buildMessage = '';
+    this.status.set('building');
+    this.buildProgress.set(0);
+    this.buildTotal.set(0);
+    this.buildMessage.set('');
     this.buildRequest()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -580,9 +592,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           this.pollBuildStatus();
         },
         error: (err) => {
-          this.status = 'error';
-          this.errorMessage =
-            err?.error?.message || err?.error?.error || 'Failed to start projection build';
+          this.status.set('error');
+          this.errorMessage.set(
+            err?.error?.message || err?.error?.error || 'Failed to start projection build',
+          );
         },
       });
   }
@@ -603,13 +616,13 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // arm the one-shot survive mark so the canvas keeps it when the fresh
     // projection id lands, instead of treating the re-fit as a new projection.
     this.selection.markSurviveProjectionChange();
-    this.status = 'building';
-    this.buildProgress = 0;
-    this.buildTotal = 0;
-    this.buildMessage = '';
+    this.status.set('building');
+    this.buildProgress.set(0);
+    this.buildTotal.set(0);
+    this.buildMessage.set('');
     const request$ = this.subset
-      ? this.projectionApi.reprojectSubset(this.binShape, this.subsetIds)
-      : this.projectionApi.reproject(this.binShape);
+      ? this.projectionApi.reprojectSubset(this.binShape(), this.subsetIds)
+      : this.projectionApi.reproject(this.binShape());
     request$.pipe(takeUntil(this.destroy$)).subscribe({
       next: (resp) => {
         if (resp.status === 'ready') {
@@ -623,9 +636,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         // Disarm: no new projection is coming, so the mark would otherwise
         // linger and wrongly exempt the next genuine projection change.
         this.selection.consumeSurviveProjectionChange();
-        this.status = 'error';
-        this.errorMessage =
-          err?.error?.message || err?.error?.error || 'Failed to start re-projection';
+        this.status.set('error');
+        this.errorMessage.set(
+          err?.error?.message || err?.error?.error || 'Failed to start re-projection',
+        );
       },
     });
   }
@@ -675,10 +689,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       // Nothing left to project; verifying emptied the browse. This is a
       // success, not an error — render the ``done`` state (green, with a
       // Back to Find button) rather than the red error state.
-      this.status = 'done';
+      this.status.set('done');
       return;
     }
-    const shape = this.binShape;
+    const shape = this.binShape();
     this.projectionApi
       .subsetRemove(shape, removedIds)
       .pipe(takeUntil(this.destroy$))
@@ -726,9 +740,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   private loadProjection(): void {
-    this.status = 'loading';
+    this.status.set('loading');
     this.polling = false;
-    const shape = this.binShape;
+    const shape = this.binShape();
     this.projectionApi
       .getMeta(shape, this.subset)
       .pipe(takeUntil(this.destroy$))
@@ -740,9 +754,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
           if (err.status === 404 || err.status === 409) {
             this.onBuild();
           } else {
-            this.status = 'error';
-            this.errorMessage =
-              err?.error?.message || err?.error?.error || 'Failed to load projection';
+            this.status.set('error');
+            this.errorMessage.set(
+              err?.error?.message || err?.error?.error || 'Failed to load projection',
+            );
           }
         },
       });
@@ -757,9 +772,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * to.
    */
   private applyMeta(meta: ProjectionMeta, shape: BinShape): void {
-    this.meta = meta;
+    this.meta.set(meta);
     if (meta.media_type) {
-      this.mediaType = meta.media_type;
+      this.mediaType.set(meta.media_type);
       this.applyBrowsePrefsForMediaType();
     }
     this.tileCache.setProjectionId(meta.projection_id);
@@ -769,20 +784,20 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       // This shape's pyramid is built, so the canvas can render it without
       // 404ing — only now is it safe to point the tile cache at it.
       this.tileCache.setBinShape(shape);
-      this.status = 'ready';
+      this.status.set('ready');
       return;
     }
     if (meta.status === 'error') {
-      this.status = 'error';
-      this.errorMessage = meta.error || 'Projection build failed';
+      this.status.set('error');
+      this.errorMessage.set(meta.error || 'Projection build failed');
       return;
     }
     if (meta.status === 'building') {
       // A build is already in flight (e.g. started at ingest); track it.
-      this.status = 'building';
-      this.buildProgress = meta.current ?? 0;
-      this.buildTotal = meta.total ?? 0;
-      this.buildMessage = meta.message ?? '';
+      this.status.set('building');
+      this.buildProgress.set(meta.current ?? 0);
+      this.buildTotal.set(meta.total ?? 0);
+      this.buildMessage.set(meta.message ?? '');
       this.pollBuildStatus();
       return;
     }
@@ -794,7 +809,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.polling) return;
     this.polling = true;
     this.pollErrors = 0;
-    const shape = this.binShape;
+    const shape = this.binShape();
     const poll = (): void => {
       this.projectionApi
         .getMeta(shape, this.subset)
@@ -802,9 +817,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
         .subscribe({
           next: (meta) => {
             this.pollErrors = 0;
-            this.meta = meta;
+            this.meta.set(meta);
             if (meta.media_type) {
-              this.mediaType = meta.media_type;
+              this.mediaType.set(meta.media_type);
               this.applyBrowsePrefsForMediaType();
             }
             this.tileCache.setProjectionId(meta.projection_id);
@@ -813,18 +828,18 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
               // the canvas remounts and starts fetching its tiles.
               this.tileCache.setBinShape(shape);
               this.polling = false;
-              this.status = 'ready';
+              this.status.set('ready');
               return;
             }
             if (meta.status === 'error') {
               this.polling = false;
-              this.status = 'error';
-              this.errorMessage = meta.error || 'Projection build failed';
+              this.status.set('error');
+              this.errorMessage.set(meta.error || 'Projection build failed');
               return;
             }
-            this.buildProgress = meta.current ?? 0;
-            this.buildTotal = meta.total ?? 0;
-            this.buildMessage = meta.message ?? '';
+            this.buildProgress.set(meta.current ?? 0);
+            this.buildTotal.set(meta.total ?? 0);
+            this.buildMessage.set(meta.message ?? '');
             this.pollTimer = setTimeout(poll, 1000);
           },
           error: () => {
@@ -832,8 +847,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             // Give up after a run of failures rather than retrying forever.
             if (this.pollErrors >= BrowseViewComponent.MAX_POLL_ERRORS) {
               this.polling = false;
-              this.status = 'error';
-              this.errorMessage = 'Lost contact with the server while building the projection.';
+              this.status.set('error');
+              this.errorMessage.set(
+                'Lost contact with the server while building the projection.',
+              );
               return;
             }
             // Exponential backoff: 2s, 4s, 8s, … capped at 30s.

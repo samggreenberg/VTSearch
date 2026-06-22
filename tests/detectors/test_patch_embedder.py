@@ -627,6 +627,79 @@ class TestEmbedderCapabilities:
         assert e.patch_forward({"media_path": "/nonexistent.jpg"}) is None
 
 
+class TestDinoAttentionBackend:
+    """Patch-capable DINO loaders must request the eager attention backend.
+
+    The patch variants read CLS→patch attention out of the forward pass
+    (``output_attentions=True``).  The SDPA backend silently drops those
+    tensors, leaving an empty ``attentions`` tuple that ``attentions[-1]``
+    then indexes into and raises ``IndexError``.  The single-vector variants
+    never read attentions, so they must keep the faster default (no
+    ``attn_implementation`` override).
+    """
+
+    def _captured_load_kwargs(self, embedder, shared_module):
+        """Drive ``_load_models_impl`` with the network/weight load stubbed and
+        return the kwargs passed to the model ``from_pretrained`` call."""
+        from contextlib import contextmanager
+        from unittest.mock import patch
+
+        @contextmanager
+        def _noop_cm(*args, **kwargs):
+            yield
+
+        calls = []
+
+        def fake_load(load_fn, *args, **kwargs):
+            kwargs.pop("on_progress", None)
+            calls.append(kwargs)
+            # First call loads the model, second loads the processor.  Return a
+            # lightweight stand-in that supports the chained .to(...).eval().
+            stub = MagicMock()
+            stub.to.return_value = stub
+            return stub
+
+        with (
+            patch.object(shared_module, "load_pretrained_local_first", side_effect=fake_load),
+            patch.object(shared_module, "embedder_load_setup", return_value=None),
+            patch.object(shared_module, "timed_progress", _noop_cm),
+            patch.object(shared_module, "intercept_tqdm_progress", _noop_cm),
+            patch.object(shared_module, "intercept_weight_loading_progress", _noop_cm),
+            patch.object(shared_module, "hf_token", return_value=None),
+        ):
+            embedder._load_models_impl()
+        # The model load is the first call; the processor load is the second.
+        return calls[0]
+
+    def test_dinov3_patch_requests_eager_attention(self):
+        from vtscore.media.image import _dinov3_shared
+        from vtscore.media.image.embedder_dinov3_patch import ImageDinov3PatchEmbedder
+
+        kwargs = self._captured_load_kwargs(ImageDinov3PatchEmbedder(), _dinov3_shared)
+        assert kwargs.get("attn_implementation") == "eager"
+
+    def test_dinov3_single_does_not_force_attention_backend(self):
+        from vtscore.media.image import _dinov3_shared
+        from vtscore.media.image.embedder_dinov3_single import ImageDinov3SingleEmbedder
+
+        kwargs = self._captured_load_kwargs(ImageDinov3SingleEmbedder(), _dinov3_shared)
+        assert "attn_implementation" not in kwargs
+
+    def test_dinov2_patch_requests_eager_attention(self):
+        from vtscore.media.image import _dinov2_shared
+        from vtscore.media.image.embedder_dinov2_patch import ImageDinov2PatchEmbedder
+
+        kwargs = self._captured_load_kwargs(ImageDinov2PatchEmbedder(), _dinov2_shared)
+        assert kwargs.get("attn_implementation") == "eager"
+
+    def test_dinov2_single_does_not_force_attention_backend(self):
+        from vtscore.media.image import _dinov2_shared
+        from vtscore.media.image.embedder_dinov2_single import ImageDinov2SingleEmbedder
+
+        kwargs = self._captured_load_kwargs(ImageDinov2SingleEmbedder(), _dinov2_shared)
+        assert "attn_implementation" not in kwargs
+
+
 # ---------------------------------------------------------------------------
 # Region-aware similarity scoring
 # ---------------------------------------------------------------------------
@@ -1000,6 +1073,28 @@ class TestVoteEndpointRegionBox:
         assert resp.status_code == 200
         assert 1 in good_votes
         assert vote_region_boxes[1] == (0.1, 0.2, 0.7, 0.8)
+
+    def test_votes_response_exposes_good_region_boxes(self, client):
+        # A region good-vote's box surfaces in GET /api/votes so the Good pile
+        # can request a cropped thumbnail of just the voted region.
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+        )
+        votes = client.get("/api/votes")
+        assert votes.status_code == 200
+        boxes = votes.get_json()["good_region_boxes"]
+        assert boxes["1"] == [0.1, 0.2, 0.7, 0.8]
+
+    def test_votes_response_drops_region_box_on_revote_bad(self, client):
+        # Re-voting the item bad clears its region box from the votes payload.
+        client.post(
+            "/api/medias/1/vote",
+            json={"target": "good", "region_box": [0.1, 0.2, 0.7, 0.8]},
+        )
+        client.post("/api/medias/1/vote", json={"target": "bad"})
+        votes = client.get("/api/votes")
+        assert "1" not in votes.get_json()["good_region_boxes"]
 
     def test_good_vote_without_region_box_omits_from_state(self, client):
         from vtsearch.state import (

@@ -303,6 +303,65 @@ class DiversityTree:
             return -1
         return max(self.nodes_by_depth.keys())
 
+    # ------------------------------------------------------------------
+    # Persistence
+    #
+    # The tree's *structure* (cluster topology + per-vector leaf assignment)
+    # is expensive to rebuild - hierarchical k-means over every embedding - so
+    # a dataset pickle caches it to skip the rebuild on reload.  Only plain
+    # Python containers are emitted (ints, strs, lists, dicts), never the
+    # ``DiversityTree`` class itself, so the restricted unpickler in
+    # ``vtscore.security.pickle`` (allowlist: plain types + numpy) accepts the
+    # cache without widening its class allowlist.
+    #
+    # ``seen`` / ``_labeled`` are deliberately *not* persisted: they are
+    # per-session label state, repopulated from the active detector's votes via
+    # ``resync_diversity_tree_to_detector`` after a restore.
+    # ------------------------------------------------------------------
+
+    _SERIAL_FORMAT = 1
+
+    def to_serializable(self) -> dict:
+        """Return a plain-dict snapshot of the tree structure for caching.
+
+        Contains only ints, strs, lists and dicts so it survives the
+        restricted unpickler.  Pair with :meth:`from_serializable`.
+        """
+        return {
+            "format": self._SERIAL_FORMAT,
+            "k": self.k,
+            "max_depth": self.max_depth,
+            "min_node_size": self.min_node_size,
+            "nodes": self.nodes,
+            "vector_to_leaf": self.vector_to_leaf,
+            "nodes_by_depth": self.nodes_by_depth,
+        }
+
+    @classmethod
+    def from_serializable(cls, data: object) -> DiversityTree:
+        """Reconstruct a tree from a :meth:`to_serializable` snapshot.
+
+        Bypasses ``__init__`` (and thus the expensive k-means build).  Raises
+        ``ValueError`` when the snapshot is missing keys or carries an
+        unrecognised format version, so callers can fall back to a rebuild.
+        """
+        if not isinstance(data, dict) or data.get("format") != cls._SERIAL_FORMAT:
+            got = data.get("format") if isinstance(data, dict) else type(data).__name__
+            raise ValueError(f"Unrecognised diversity-tree cache format: {got!r}")
+        tree = cls.__new__(cls)
+        try:
+            tree.k = data["k"]
+            tree.max_depth = data["max_depth"]
+            tree.min_node_size = data["min_node_size"]
+            tree.nodes = data["nodes"]
+            tree.vector_to_leaf = data["vector_to_leaf"]
+            tree.nodes_by_depth = data["nodes_by_depth"]
+        except KeyError as exc:
+            raise ValueError(f"Incomplete diversity-tree cache: missing {exc}") from exc
+        tree.seen = set()
+        tree._labeled = set()
+        return tree
+
     def span_info(self) -> dict:
         """Return span level details for the labeling progress indicator.
 

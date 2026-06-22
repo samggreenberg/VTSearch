@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
@@ -22,6 +22,8 @@ type FocusMode = 'click' | 'hover';
  */
 @Injectable()
 export class LabelViewPanelStateService {
+  private settingsState = inject(SettingsStateService);
+
   private viewModeLeftDict: Record<string, ViewMode> = {};
   private gridIconSizeLeftDict: Record<string, string> = {};
   private focusModeLeftDict: Record<string, FocusMode> = {};
@@ -30,8 +32,6 @@ export class LabelViewPanelStateService {
   private panelPxRightDict: Record<string, number> = {};
 
   private _currentMediaType = '';
-
-  constructor(private settingsState: SettingsStateService) {}
 
   setMediaType(mediaType: string): void {
     this._currentMediaType = mediaType;

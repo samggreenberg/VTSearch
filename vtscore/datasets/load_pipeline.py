@@ -35,7 +35,12 @@ from vtscore.datasets.loader import apply_custom_metadata_md5
 from vtscore.datasets.registry import unregister_dataset as _reg_unregister
 from vtscore.state import DatasetContext, clear_all, register_context
 
-from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS, _origin_to_str
+from vtscore.datasets.stages._common import (
+    _LOAD_STEP_WEIGHTS,
+    _STATUS_TO_STEP,
+    _TOTAL_LOAD_STEPS,
+    _origin_to_str,
+)
 from vtscore.datasets.stages.clipper import _apply_clipper_stage
 from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
@@ -363,7 +368,11 @@ def _run_origin_load_in_background(
     task_id = f"_loading_{uuid4().hex[:8]}"
     ingest_started_at = time.time()
     tracker = loading_tasks.create_task(
-        task_id, name or _origin_to_str(origin), media_type=media_type, embedder=embedder
+        task_id,
+        name or _origin_to_str(origin),
+        media_type=media_type,
+        embedder=embedder,
+        step_weights=_LOAD_STEP_WEIGHTS,
     )
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 

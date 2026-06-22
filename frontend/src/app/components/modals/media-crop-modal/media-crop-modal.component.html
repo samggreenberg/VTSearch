@@ -2,20 +2,26 @@
   [open]="true"
   [title]="view === 'cropping' ? 'Crop example' : 'Use this example?'"
   (closed)="onCancel()">
-  <ng-container *ngIf="view === 'confirm'">
+  @if (view === 'confirm') {
     <div class="preview">
-      <ng-container [ngSwitch]="mediaType">
-        <img *ngSwitchCase="'image'" [src]="fileUrl" alt="Example preview" />
-        <audio *ngSwitchCase="'audio'" [src]="fileUrl" controls></audio>
-        <video *ngSwitchCase="'video'" [src]="fileUrl" controls></video>
-        <div *ngSwitchDefault class="generic-preview">
-          {{ file.name }}
-        </div>
-      </ng-container>
+      @switch (mediaType()) {
+        @case ('image') {
+          <img [src]="fileUrl" alt="Example preview" />
+        }
+        @case ('audio') {
+          <audio [src]="fileUrl" controls></audio>
+        }
+        @case ('video') {
+          <video [src]="fileUrl" controls></video>
+        }
+        @default {
+          <div class="generic-preview">
+            {{ file().name }}
+          </div>
+        }
+      }
     </div>
-
-    <div class="filename">{{ file.name }}</div>
-
+    <div class="filename">{{ file().name }}</div>
     <div class="actions">
       <button type="button" class="primary" (click)="onOk()">OK</button>
       <button
@@ -28,21 +34,23 @@
       </button>
       <button type="button" class="cancel" (click)="onCancel()">Cancel</button>
     </div>
-  </ng-container>
+  }
 
-  <ng-container *ngIf="view === 'cropping'">
-    <vt-image-crop-overlay
-      *ngIf="mediaType === 'image'"
-      [imageUrl]="fileUrl"
-      (applied)="onImageCropApplied($event)"
-      (cancelled)="onCropOverlayCancelled()">
-    </vt-image-crop-overlay>
-    <vt-audio-crop-overlay
-      *ngIf="mediaType === 'audio'"
-      [audioUrl]="fileUrl"
-      [audioFile]="file"
-      (applied)="onAudioCropApplied($event)"
-      (cancelled)="onCropOverlayCancelled()">
-    </vt-audio-crop-overlay>
-  </ng-container>
+  @if (view === 'cropping') {
+    @if (mediaType() === 'image') {
+      <vt-image-crop-overlay
+        [imageUrl]="fileUrl"
+        (applied)="onImageCropApplied($event)"
+        (cancelled)="onCropOverlayCancelled()">
+      </vt-image-crop-overlay>
+    }
+    @if (mediaType() === 'audio') {
+      <vt-audio-crop-overlay
+        [audioUrl]="fileUrl"
+        [audioFile]="file()"
+        (applied)="onAudioCropApplied($event)"
+        (cancelled)="onCropOverlayCancelled()">
+      </vt-audio-crop-overlay>
+    }
+  }
 </vt-modal>

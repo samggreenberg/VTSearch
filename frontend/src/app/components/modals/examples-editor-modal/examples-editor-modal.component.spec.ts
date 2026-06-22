@@ -43,7 +43,7 @@ describe('ExamplesEditorModalComponent', () => {
   it('should load examples on init', () => {
     flushInit();
     expect(component.examples.length).toBe(3);
-    expect(component.loading).toBeFalse();
+    expect(component.loading).toBe(false);
   });
 
   it('should count good and bad examples', () => {
@@ -60,14 +60,14 @@ describe('ExamplesEditorModalComponent', () => {
 
   it('should save examples', () => {
     flushInit();
-    spyOn(component.saved, 'emit');
+    vi.spyOn(component.saved, 'emit');
     component.save();
 
     const req = httpMock.expectOne('/api/detectors/test-model/examples');
     expect(req.request.method).toBe('PUT');
     req.flush({});
 
-    expect(component.saving).toBeFalse();
+    expect(component.saving).toBe(false);
     expect(component.saved.emit).toHaveBeenCalled();
   });
 
@@ -77,13 +77,13 @@ describe('ExamplesEditorModalComponent', () => {
     httpMock
       .expectOne('/api/detectors/test-model/examples')
       .flush({ error: 'Save failed' }, { status: 500, statusText: 'Error' });
-    expect(component.error).toBe('Save failed');
+    expect(component.error()).toBe('Save failed');
   });
 
   it('should handle empty model name', () => {
     component.modelName = '';
     fixture.detectChanges();
-    expect(component.loading).toBeFalse();
+    expect(component.loading).toBe(false);
   });
 
   it('should handle load error', () => {
@@ -91,13 +91,13 @@ describe('ExamplesEditorModalComponent', () => {
     httpMock
       .expectOne('/api/detectors/test-model')
       .flush({}, { status: 500, statusText: 'Error' });
-    expect(component.loading).toBeFalse();
-    expect(component.error).toBe('Failed to load examples');
+    expect(component.loading).toBe(false);
+    expect(component.error()).toBe('Failed to load examples');
   });
 
   it('should emit closed on close', () => {
     flushInit();
-    spyOn(component.closed, 'emit');
+    vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });

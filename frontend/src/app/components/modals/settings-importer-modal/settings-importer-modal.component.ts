@@ -1,5 +1,6 @@
-import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, computed, inject, signal, output } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
+
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
@@ -13,27 +14,44 @@ type ModalView = 'picker' | 'form';
 @Component({
   selector: 'vt-settings-importer-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
   templateUrl: './settings-importer-modal.component.html',
   styleUrl: './settings-importer-modal.component.scss',
 })
-export class SettingsImporterModalComponent implements OnInit, OnDestroy {
-  @Output() closed = new EventEmitter<void>();
-  @Output() imported = new EventEmitter<void>();
+export class SettingsImporterModalComponent implements OnDestroy {
+  readonly closed = output<void>();
+  readonly imported = output<void>();
+
+  private readonly settingsIoApi = inject(SettingsIoApiService);
 
   view: ModalView = 'picker';
-  importers: SettingsImporterEntry[] = [];
-  loading = true;
+
+  // Eager `rxResource`: loads the settings-importer list once on creation,
+  // wrapping the generated-client read so the interceptor chain still applies.
+  private readonly importersResource = rxResource({
+    stream: () => this.settingsIoApi.listImporters(),
+  });
+  readonly importers = computed<SettingsImporterEntry[]>(() =>
+    (this.importersResource.value() ?? []).filter((imp) => !imp.hidden_from_picker),
+  );
+  readonly loading = computed(() => this.importersResource.isLoading());
+
   selectedImporter: SettingsImporterEntry | null = null;
   formValues: Record<string, string> = {};
   selectedFile: File | null = null;
   selectedFileFieldKey: string | null = null;
-  submitting = false;
-  error = '';
-  successMessage = '';
-  private closeTimer: ReturnType<typeof setTimeout> | null = null;
+  // Signalized: the submit subscribe writes these from an unpatched callback.
+  readonly submitting = signal(false);
 
-  constructor(private settingsIoApi: SettingsIoApiService) {}
+  /** Error from a failed import action; the list-load failure is merged in. */
+  private readonly importError = signal('');
+  readonly error = computed(
+    () =>
+      this.importError() ||
+      (this.importersResource.error() ? 'Failed to load settings importers' : ''),
+  );
+  readonly successMessage = signal('');
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   get modalTitle(): string {
     if (this.view === 'form' && this.selectedImporter) {
@@ -49,26 +67,13 @@ export class SettingsImporterModalComponent implements OnInit, OnDestroy {
     return (this.selectedImporter?.fields ?? []) as ImporterField[];
   }
 
-  ngOnInit(): void {
-    this.settingsIoApi.listImporters().subscribe({
-      next: (list) => {
-        this.importers = list.filter((imp) => !imp.hidden_from_picker);
-        this.loading = false;
-      },
-      error: () => {
-        this.loading = false;
-        this.error = 'Failed to load settings importers';
-      },
-    });
-  }
-
   selectImporter(importer: SettingsImporterEntry): void {
     this.selectedImporter = importer;
     this.formValues = {};
     this.selectedFile = null;
     this.selectedFileFieldKey = null;
-    this.error = '';
-    this.successMessage = '';
+    this.importError.set('');
+    this.successMessage.set('');
     const fields = (importer.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -87,8 +92,8 @@ export class SettingsImporterModalComponent implements OnInit, OnDestroy {
   back(): void {
     this.view = 'picker';
     this.selectedImporter = null;
-    this.error = '';
-    this.successMessage = '';
+    this.importError.set('');
+    this.successMessage.set('');
   }
 
   onFileSelected(event: Event, fieldName: string): void {
@@ -102,9 +107,9 @@ export class SettingsImporterModalComponent implements OnInit, OnDestroy {
 
   submit(): void {
     if (!this.selectedImporter) return;
-    this.submitting = true;
-    this.error = '';
-    this.successMessage = '';
+    this.submitting.set(true);
+    this.importError.set('');
+    this.successMessage.set('');
 
     this.settingsIoApi
       .runImport(
@@ -115,14 +120,14 @@ export class SettingsImporterModalComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (res) => {
-          this.submitting = false;
-          this.successMessage = res.message || 'Settings imported successfully';
+          this.submitting.set(false);
+          this.successMessage.set(res.message || 'Settings imported successfully');
           this.imported.emit();
           this.closeTimer = setTimeout(() => this.close(), 1500);
         },
         error: (err) => {
-          this.submitting = false;
-          this.error = err.error?.error || 'Import failed';
+          this.submitting.set(false);
+          this.importError.set(err.error?.error || 'Import failed');
         },
       });
   }

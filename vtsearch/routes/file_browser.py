@@ -51,6 +51,26 @@ def _get_browse_root() -> Path:
     return base
 
 
+def _display_path(entry: Path, root: Path) -> str:
+    """Return the path to expose for *entry* under *root*.
+
+    Confinement always uses ``relative_to(root)``; the *displayed* form
+    keeps the leading slash when the browse root is the filesystem root
+    (single-user / no-auth mode) so the path the user picks is a usable
+    absolute path. Otherwise the bare relative form (e.g.
+    ``exp/mlucio/walkingtour.txt``) is handed to the importer/exporter,
+    whose path validation resolves relative paths against the process CWD;
+    the leading ``/`` would be silently dropped and the wrong file opened.
+
+    For a confined per-user root we keep the relative form so the server's
+    absolute filesystem layout never leaks into responses.
+    """
+    rel = str(entry.relative_to(root))
+    if root == Path(root.anchor):  # filesystem root, e.g. "/"
+        return "/" + rel if rel != "." else ""
+    return rel
+
+
 @file_browser_bp.route("/api/browse")
 @file_browser_bp.arguments(BrowseQuerySchema, location="query")
 @file_browser_bp.response(200, BrowseResponseSchema)
@@ -112,7 +132,7 @@ def browse(query: dict):  # noqa: C901
                 entry.resolve(strict=True).relative_to(root)
             except (OSError, ValueError):
                 continue
-        rel = str(entry.relative_to(root))
+        rel = _display_path(entry, root)
         if entry.is_dir():
             directories.append({"name": entry.name, "path": rel, "modified_at": format_mtime(entry)})
         elif entry.is_file():
@@ -124,7 +144,7 @@ def browse(query: dict):  # noqa: C901
                 size = 0
             files.append({"name": entry.name, "path": rel, "size_bytes": size, "modified_at": format_mtime(entry)})
 
-    current_path = str(target.relative_to(root)) if target != root else ""
+    current_path = _display_path(target, root) if target != root else ""
 
     return {
         "directories": directories,

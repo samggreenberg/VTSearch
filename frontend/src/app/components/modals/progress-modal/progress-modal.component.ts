@@ -1,5 +1,5 @@
-import { Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild, inject, input, output } from '@angular/core';
+
 import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
@@ -19,14 +19,19 @@ export type ProgressMetric = 'smart' | 'stable' | 'diverse';
 @Component({
   selector: 'vt-progress-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, ProgressBarComponent],
+  imports: [ModalComponent, ProgressBarComponent],
   templateUrl: './progress-modal.component.html',
   styleUrl: './progress-modal.component.scss',
 })
 export class ProgressModalComponent implements OnInit, OnDestroy {
+  private sortingApi = inject(SortingApiService);
+  private chartsService = inject(ChartsService);
+  private settingsState = inject(SettingsStateService);
+  private progressEvents = inject(ProgressEventsService);
+
   @Input() metric: ProgressMetric = 'smart';
-  @Input() useCachedHistory = false;
-  @Output() closed = new EventEmitter<void>();
+  readonly useCachedHistory = input(false);
+  readonly closed = output<void>();
 
   @ViewChild('chartCanvas') chartCanvas!: ElementRef<HTMLCanvasElement>;
 
@@ -40,13 +45,6 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
-  constructor(
-    private sortingApi: SortingApiService,
-    private chartsService: ChartsService,
-    private settingsState: SettingsStateService,
-    private progressEvents: ProgressEventsService,
-  ) {}
-
   get title(): string {
     switch (this.metric) {
       case 'smart':
@@ -59,7 +57,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    if (this.useCachedHistory) {
+    if (this.useCachedHistory()) {
       this.loadCachedHistory();
     } else {
       this.runAnalysis();
@@ -186,7 +184,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
         this.chartsService.renderDiversityChart(
           canvas,
           this.chartData as DiversityDataPoint[],
-          this.settingsState.settings?.autopilot_goal_diversity ?? 40,
+          this.settingsState.settingsSignal()?.autopilot_goal_diversity ?? 40,
         );
         break;
     }

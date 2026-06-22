@@ -16,9 +16,9 @@
   - [GPU](#gpu)
   - [Data persistence](#data-persistence)
   - [Rebuilding](#rebuilding)
-- [Running on a SLURM GPU cluster (Grid)](#running-on-a-slurm-gpu-cluster-grid)
+- [Running on a SLURM GPU cluster](#running-on-a-slurm-gpu-cluster)
   - [One-time setup on the cluster](#one-time-setup-on-the-cluster)
-  - [One-time setup on your laptop](#one-time-setup-on-your-laptop)
+  - [One-time setup on your local machine](#one-time-setup-on-your-local-machine)
   - [Daily workflow](#daily-workflow)
   - [Tuning the allocation](#tuning-the-allocation)
 - [Running the tests](#running-the-tests)
@@ -192,10 +192,23 @@ bash scripts/install-cpu.sh
 **For GPU** (NVIDIA CUDA-compatible systems):
 
 ```bash
-bash scripts/install-gpu.sh          # defaults to CUDA 11.8 (cu118)
-bash scripts/install-gpu.sh cu121    # for CUDA 12.1
-bash scripts/install-gpu.sh cu124    # for CUDA 12.4
+bash scripts/install-gpu.sh          # defaults to CUDA 12.4 (cu124; spans Volta..Hopper)
+bash scripts/install-gpu.sh cu118    # for CUDA 11.8 (older drivers)
+bash scripts/install-gpu.sh cu128    # for CUDA 12.8 (Blackwell; drops Volta)
 ```
+
+The CUDA tag picks a torch wheel that only ships kernels for certain GPU
+architectures, so match it to your hardware. There's a **floor** — newer GPUs
+need newer tags: Ampere/Ada on `cu118`+, Hopper (H100) on `cu121`+, Blackwell
+on `cu128`+ — and a **ceiling**: the newest wheels *drop* the oldest
+architectures, so "just use the latest tag" is wrong for old hardware. For
+example, `cu128` dropped Volta (`sm_70`), so a **Tesla V100 needs `cu124`**
+(or `cu121`/`cu118`), not `cu128`. Rule of thumb: pick the oldest tag your
+driver supports that still covers your GPU; `cu124` is a safe default spanning
+Volta through Hopper. A mismatched wheel imports fine and then raises
+`cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
+runtime and falls back to CPU (with a warning) rather than crashing, but you
+only get GPU acceleration with a matching wheel.
 
 Both scripts run `pip install -r requirements/{base,gpu}.txt`, which
 installs every runtime + dev dep and editable-installs the `vtsearch`
@@ -378,25 +391,34 @@ docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (
 
 Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
 
-## Running on a SLURM GPU cluster (Grid)
+## Running on a SLURM GPU cluster
 
 VTSearch is happiest with a GPU (for embedding and detector training). On a
 shared SLURM cluster — like the JHU HLTCOE "Grid" — you don't run heavy work on
 the login nodes; you ask SLURM for a GPU compute node and run the app there,
-then forward its port back to your laptop so you can use the browser UI.
+then forward its port back to your local machine so you can use the browser UI.
 
-Two helper scripts in [`scripts/grid/`](../scripts/grid/) automate the loop:
+Two helper scripts in [`scripts/slurm/`](../scripts/slurm/) automate the loop:
 
-- **`vtsearch-grid.sh`** runs *on the cluster*. It allocates a GPU node with
+- **`vtsearch-slurm.sh`** runs *on the cluster*. It allocates a GPU node with
   `srun`, activates the virtualenv, and runs `app.py` on the node — printing
-  which node it landed on. It holds the allocation until you quit.
-- **`vtsearch-tunnel.sh`** runs *on your laptop*. It finds your running
-  VTSearch job, SSH-forwards `localhost:5000` to that compute node, and drops
+  which node and port it landed on. It holds the allocation until you quit.
+- **`vtsearch-tunnel.sh`** runs *on your local machine*. It finds your running
+  VTSearch job, SSH-forwards your local port to that compute node, and drops
   you into the project directory for git/edits.
 
 Both scripts are parameterized entirely by environment variables (no hard-coded
 usernames, hostnames, or paths), so they should adapt to most SLURM clusters
 with a shared filesystem.
+
+> **Why a per-user port?** GPU nodes usually hold several GPUs, so SLURM can
+> pack multiple users' single-GPU jobs onto one physical node — where a single
+> shared `:5000` would collide (the second app can't bind it, and a naive
+> tunnel would forward you into someone else's session). So the scripts derive
+> a port from your UID (`10000 + UID % 20000`); both compute the same value, so
+> the tunnel finds your app with no extra coordination. `app.py` honors this
+> via `VTSEARCH_PORT` (or `--port`). Override with `VTS_PORT` on *both* scripts
+> if you ever need to.
 
 ### One-time setup on the cluster
 
@@ -418,11 +440,33 @@ with a shared filesystem.
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   bash scripts/install-gpu.sh cu124     # or cu121 / cu118 to match your cluster
+   bash scripts/install-gpu.sh cu124     # or cu118 / cu121 / cu128 to match your node's GPU
    ```
 
    The scripts default to a venv named `.venv` in the project dir; override with
    `VTS_VENV` if yours differs.
+
+   > **Module-based Python (e.g. the HLTCOE Grid).** Many clusters ship Python
+   > only via environment modules, and the system `python3` may be too old
+   > (VTSearch needs 3.10+). Load a recent one first, and build the venv with
+   > the **versioned** interpreter name so a `pyenv` shim on your `PATH` can't
+   > shadow it:
+   >
+   > ```bash
+   > module avail python                 # find an available 3.10+ module
+   > module load python/3.12.3
+   > which python3.12                     # should be the module's, not a pyenv shim
+   > python3.12 -m venv .venv
+   > source .venv/bin/activate
+   > python --version                     # confirm 3.12.x before installing
+   > bash scripts/install-gpu.sh cu124
+   > ```
+   >
+   > A venv built this way is **not** self-contained — its `python` needs the
+   > module's `libpython` at runtime — so the launcher must load the module
+   > before activating the venv. Set `VTS_MODULE` (see
+   > [Tuning](#tuning-the-allocation)) so `vtsearch` does this for you:
+   > `VTS_MODULE="python/3.12.3" vtsearch` (or `export` it in `~/.bashrc`).
 
 3. **Build the frontend** (needs Node.js 22+; see [Building the
    frontend](#building-the-frontend)):
@@ -435,7 +479,7 @@ with a shared filesystem.
 
    ```bash
    mkdir -p ~/.local/bin
-   cp scripts/grid/vtsearch-grid.sh ~/.local/bin/vtsearch
+   cp scripts/slurm/vtsearch-slurm.sh ~/.local/bin/vtsearch
    chmod +x ~/.local/bin/vtsearch
    ```
 
@@ -444,19 +488,19 @@ with a shared filesystem.
    > (e.g. `export HF_HOME=/exp/$USER/.cache/huggingface`). Setting `HF_TOKEN`
    > there too avoids anonymous Hugging Face rate limits on a shared egress IP.
 
-### One-time setup on your laptop
+### One-time setup on your local machine
 
 1. **Add an SSH host entry** for the cluster login node so the tunnel script
    can reach it by a short name. In `~/.ssh/config`:
 
    ```sshconfig
-   Host grid
+   Host cluster
        HostName login.your-cluster.edu     # e.g. login1.hltcoe.jhu.edu
        User your-cluster-username
        IdentityFile ~/.ssh/id_ed25519
    ```
 
-   Verify it works: `ssh grid true` should connect without prompting. If your
+   Verify it works: `ssh cluster true` should connect without prompting. If your
    cluster is only reachable through a VPN or campus network, connect to that
    first.
 
@@ -464,20 +508,20 @@ with a shared filesystem.
 
    ```bash
    mkdir -p ~/.local/bin
-   cp scripts/grid/vtsearch-tunnel.sh ~/.local/bin/vtsearch-tunnel
+   cp scripts/slurm/vtsearch-tunnel.sh ~/.local/bin/vtsearch-tunnel
    chmod +x ~/.local/bin/vtsearch-tunnel
    ```
 
-   (Clone VTSearch on your laptop too, or just copy the one script — it only
+   (Clone VTSearch on your local machine too, or just copy the one script — it only
    needs SSH access to the cluster.) If you named your SSH host something other
-   than `grid`, point the script at it with `GRID_HOST=mycluster vtsearch-tunnel`.
+   than `cluster`, point the script at it with `CLUSTER_HOST=mycluster vtsearch-tunnel`.
 
 ### Daily workflow
 
 1. **On the cluster**, start VTSearch and leave the terminal running:
 
    ```bash
-   ssh grid
+   ssh cluster
    vtsearch
    ```
 
@@ -485,15 +529,16 @@ with a shared filesystem.
    prints the compute node it got. Keep this terminal open — closing it releases
    the node.
 
-2. **On your laptop**, in a second terminal, open the tunnel:
+2. **On your local machine**, in a second terminal, open the tunnel:
 
    ```bash
    vtsearch-tunnel
    ```
 
-   It finds the running job automatically (no need to know the node name),
-   forwards `localhost:5000`, and drops you into the project directory on the
-   login node for git pulls / edits. Browse **http://localhost:5000**.
+   It finds the running job automatically (no need to know the node name or
+   port), forwards your local port to it, and drops you into the project
+   directory on the login node for git pulls / edits. It prints the URL to
+   browse — **http://localhost:&lt;port&gt;** (the per-user port, see above).
 
 3. **To pick up code changes**: pull on the cluster, then in the `vtsearch`
    terminal press **Ctrl+C** (this stops `app.py` but *keeps* the GPU node) and
@@ -506,29 +551,35 @@ with a shared filesystem.
 
 ### Tuning the allocation
 
-`vtsearch-grid.sh` reads these environment variables (defaults shown). Set them
+`vtsearch-slurm.sh` reads these environment variables (defaults shown). Set them
 inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Path to the VTSearch checkout on the cluster |
 | `VTS_VENV` | `.venv` | Virtualenv to activate (relative to `VTS_DIR`, or absolute) |
+| `VTS_MODULE` | (none) | Environment module(s) to `module load` before activating the venv (space-separated). Needed when your venv is built from a module-provided Python, e.g. `VTS_MODULE="python/3.12.3"` |
 | `VTS_PART` | `gpu` | SLURM partition |
 | `VTS_GPU` | `l40s` | GPU type requested via `--gres=gpu:<type>:1` |
 | `VTS_CPUS` | `8` | CPU cores |
 | `VTS_MEM` | `48G` | Memory (headroom for two model loads in one process) |
 | `VTS_TIME` | `8:00:00` | Walltime |
+| `VTS_PORT` | `10000 + UID % 20000` | Port the app binds (passed as `VTSEARCH_PORT`); per-user by default so co-located jobs don't collide |
 
 `vtsearch-tunnel.sh` reads:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `GRID_HOST` | `grid` | SSH host alias for the cluster login node |
+| `CLUSTER_HOST` | `cluster` | SSH host alias for the cluster login node |
 | `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Project dir to drop into on the login node |
+| `VTS_PORT` | (cluster-computed) | Forwarded port; defaults to the same per-user value the launcher binds. Set it only if you overrode `VTS_PORT` on the cluster too |
 
 Adjust `VTS_GPU`, `VTS_PART`, and the CUDA wheel in `install-gpu.sh` to match
-your cluster's hardware. Check what's available with `sinfo` and your cluster's
-documentation.
+your cluster's hardware. To find the exact GPU type string for `VTS_GPU`, check
+a node's gres: `scontrol show node <node> | grep -i Gres` (e.g. `Gres=gpu:v100:8`
+→ use `VTS_GPU=v100`) or list partition gres with `sinfo -o '%P %G'`. Note
+`VTS_GPU` takes just the type (`v100`), not the full `gpu:v100:8` spec — the
+launcher adds the `gpu:` prefix and `:1` count itself.
 
 ## Running the tests
 
@@ -584,6 +635,7 @@ VTSearch reads several optional environment variables:
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (set this in production) |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `INFO`/`DEBUG` also enable the per-request access log. `python app.py -v`/`-vv` is the CLI shortcut. |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
+| `VTSEARCH_PORT` | `5000` | Port for the `python app.py` dev server (also `--port`). Lets several instances share a host, e.g. co-located SLURM jobs. Gunicorn uses `VTSEARCH_BIND` instead. |
 | `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn; triggers model init / settings sync at import time |
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
 | `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |

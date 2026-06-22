@@ -1,12 +1,13 @@
-import { Component, ElementRef, EventEmitter, HostBinding, HostListener, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, ElementRef, HostBinding, HostListener, Input, OnChanges, SimpleChanges, ViewChild, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import {
+  ProgressBarState,
   ProgressHeader,
   formatProgressHeader,
-  isProgressIndeterminate,
+  progressBarState,
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
@@ -21,8 +22,8 @@ import { buildDetectorCardMenuItems } from '../card-context-menu-items';
 })
 export class DetectorCardComponent implements OnChanges {
   @Input() detector: any;
-  @Input() currentUser = '';
-  @Input() isDefaultLogin = true;
+  readonly currentUser = input('');
+  readonly isDefaultLogin = input(true);
   @Input() columnOrder: string[] = [];
   @Input() @HostBinding('class.selected') selected = false;
   @Input() @HostBinding('class.dimmed') dimmed = false;
@@ -33,7 +34,7 @@ export class DetectorCardComponent implements OnChanges {
     return !!this.loadingTask?.error;
   }
 
-  @Output() rowClick = new EventEmitter<MouseEvent>();
+  readonly rowClick = output<MouseEvent>();
 
   @HostListener('click', ['$event'])
   onClick(event: MouseEvent): void {
@@ -49,30 +50,30 @@ export class DetectorCardComponent implements OnChanges {
     if (this.loadingTask) return;
     event.preventDefault();
     this.contextMenuItems = buildDetectorCardMenuItems(this.detector, {
-      isDefaultLogin: this.isDefaultLogin,
+      isDefaultLogin: this.isDefaultLogin(),
       isOwner: this.isOwner,
     });
     this.contextMenuX = event.clientX;
     this.contextMenuY = event.clientY;
     this.contextMenuOpen = true;
   }
-  @Output() rename = new EventEmitter<string>();
-  @Output() delete = new EventEmitter<void>();
-  @Output() export = new EventEmitter<void>();
-  @Output() addLabels = new EventEmitter<void>();
-  @Output() load = new EventEmitter<void>();
-  @Output() unload = new EventEmitter<void>();
-  @Output() browse = new EventEmitter<void>();
-  @Output() stats = new EventEmitter<void>();
-  @Output() cancelTask = new EventEmitter<string>();
-  @Output() dismissTask = new EventEmitter<string>();
-  @Output() checkboxToggle = new EventEmitter<void>();
-  @Output() security = new EventEmitter<void>();
+  readonly rename = output<string>();
+  readonly delete = output<void>();
+  readonly export = output<void>();
+  readonly addLabels = output<void>();
+  readonly load = output<void>();
+  readonly unload = output<void>();
+  readonly browse = output<void>();
+  readonly stats = output<void>();
+  readonly cancelTask = output<string>();
+  readonly dismissTask = output<string>();
+  readonly checkboxToggle = output<void>();
+  readonly security = output<void>();
 
   /** True when the current user created this detector (only the creator may
    *  rename/delete it or edit its access list). */
   get isOwner(): boolean {
-    return this.detector?.created_by === this.currentUser;
+    return this.detector?.created_by === this.currentUser();
   }
 
   onSecurity(event: MouseEvent): void {
@@ -82,10 +83,10 @@ export class DetectorCardComponent implements OnChanges {
 
   @ViewChild('renameInput') renameInput?: ElementRef<HTMLInputElement>;
 
-  @Input() deleteConfirmOpen = false;
-  @Input() addLabelsOpen = false;
-  @Input() exportOpen = false;
-  @Input() statsOpen = false;
+  readonly deleteConfirmOpen = input(false);
+  readonly addLabelsOpen = input(false);
+  readonly exportOpen = input(false);
+  readonly statsOpen = input(false);
 
   editing = false;
   wasEditing = false;
@@ -181,25 +182,25 @@ export class DetectorCardComponent implements OnChanges {
   }
 
   onTrashAnimationEnd(): void {
-    if (!this.deleteConfirmOpen) {
+    if (!this.deleteConfirmOpen()) {
       this.wasDeleteOpen = false;
     }
   }
 
   onCapAnimationEnd(): void {
-    if (!this.addLabelsOpen) {
+    if (!this.addLabelsOpen()) {
       this.wasAddLabelsOpen = false;
     }
   }
 
   onExportAnimationEnd(): void {
-    if (!this.exportOpen) {
+    if (!this.exportOpen()) {
       this.wasExportOpen = false;
     }
   }
 
   onPieAnimationEnd(): void {
-    if (!this.statsOpen) {
+    if (!this.statsOpen()) {
       this.wasStatsOpen = false;
     }
   }
@@ -275,10 +276,10 @@ export class DetectorCardComponent implements OnChanges {
     }
   }
 
-  taskIsIndeterminate(): boolean {
+  taskBar(): ProgressBarState {
     const t = this.loadingTask;
-    if (!t) return true;
-    return isProgressIndeterminate(t);
+    if (!t) return { value: 0, max: 1, indeterminate: true };
+    return progressBarState(t);
   }
 
   get taskProgressInfo(): ProgressHeader {

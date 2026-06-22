@@ -10,7 +10,7 @@ import gc
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, ImporterField
 
 
 def _get_progress():
@@ -112,7 +112,7 @@ def _iter_unique_source_clips(
         yield pkl_path, deduped, dupes
 
 
-class CombineDatasetsImporter(DatasetImporter):
+class CombineDatasetsImporter(ImporterBase):
     """Merge two or more existing ``.pkl`` datasets into a single dataset.
 
     All datasets must be of the same media type.  Entries with duplicate

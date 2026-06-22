@@ -1,3 +1,4 @@
+import { computed } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { SortStateService, SortedItem } from './sort-state.service';
 
@@ -18,7 +19,7 @@ describe('SortStateService', () => {
     expect(service.selectMode).toBe('top');
     expect(service.sortOrder).toBeNull();
     expect(service.threshold).toBeNull();
-    expect(service.sortBusy).toBeFalse();
+    expect(service.sortBusy).toBe(false);
     expect(service.sortStatus).toBe('');
     expect(service.inclusion).toBe(0);
     expect(service.loadSortLabel).toBe('');
@@ -47,7 +48,7 @@ describe('SortStateService', () => {
   it('setSortBusy and setSortStatus should update', () => {
     service.setSortBusy(true);
     service.setSortStatus('Sorting...');
-    expect(service.sortBusy).toBeTrue();
+    expect(service.sortBusy).toBe(true);
     expect(service.sortStatus).toBe('Sorting...');
   });
 
@@ -76,23 +77,23 @@ describe('SortStateService', () => {
     expect(service.selectMode).toBe('top');
     expect(service.sortOrder).toBeNull();
     expect(service.threshold).toBeNull();
-    expect(service.sortBusy).toBeFalse();
+    expect(service.sortBusy).toBe(false);
     expect(service.sortStatus).toBe('');
     expect(service.inclusion).toBe(0);
     expect(service.loadSortLabel).toBe('');
   });
 
-  it('sortMode$ should emit on change', (done) => {
-    const modes: string[] = [];
-    service.sortMode$.subscribe((m) => modes.push(m));
+  it('sortMode getter is reactive (drives a computed that reads it)', () => {
+    // The state is signal-backed and exposed via value getters; a computed that
+    // reads the getter must recompute when the setter writes the backing signal.
+    // This is the property the zoneless template bindings rely on.
+    const derived = TestBed.runInInjectionContext(() => computed(() => service.sortMode));
+    expect(derived()).toBe('text');
 
     service.setSortMode('learned');
-    service.setSortMode('load');
+    expect(derived()).toBe('learned');
 
-    setTimeout(() => {
-      expect(modes).toContain('learned');
-      expect(modes).toContain('load');
-      done();
-    });
+    service.setSortMode('load');
+    expect(derived()).toBe('load');
   });
 });

@@ -144,7 +144,7 @@ when one is in scope). Tests rely on this: they override
 | Constant                 | Default | Override env var              | Meaning                                                                                                          |
 |--------------------------|---------|-------------------------------|------------------------------------------------------------------------------------------------------------------|
 | `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs.     |
-| `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` pass through. |
+| `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
 | `MAX_UPLOAD_MB`          | `0`     | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes. `0` = unlimited (Flask's out-of-the-box behaviour).                                  |
 | `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on MLP training epochs. `vtscore.training.mlp.train_model` may early-stop sooner.                    |
 | `TRAIN_PATIENCE`         | `10`    | `VTSEARCH_TRAIN_PATIENCE`     | Epochs the training loss must fail to improve before early-stop fires. `0` disables early-stop.                  |
@@ -155,23 +155,33 @@ when one is in scope). Tests rely on this: they override
 
 ### `resolve_device()`
 
-Defined at `vtscore/config.py:45-62`. Returns the concrete device
-string this host will actually use:
+Returns the concrete device string this host will actually use:
 
 ```python
 from vtscore.config import resolve_device
 
 torch_device = resolve_device()
-# "cuda" if CUDA is visible
+# "cuda" if CUDA is visible AND torch can run a kernel on it
 # "mps" on Apple Silicon
 # "cpu" otherwise
 ```
 
 Imports `torch` lazily so simply importing `vtscore.config` does not
 pull torch into the process. Returns `"cpu"` if torch isn't installed
-at all. When `DEVICE` is anything other than `"auto"`, the env var's
-value is returned unchanged - this is how you pin to `"cuda:1"` or
-`"mps"` for a specific run.
+at all.
+
+**CUDA is smoke-tested, not just probed for availability.**
+`torch.cuda.is_available()` returns `True` whenever a driver and device
+are visible, even when the installed torch wheel was built without a
+kernel image for that GPU's compute capability - in which case every real
+op raises `cudaErrorNoKernelImageForDevice`. `resolve_device()` therefore
+launches one tiny kernel (`_cuda_can_run()`, cached per device per process)
+before committing to CUDA; if it can't run, the host falls back to `"cpu"`
+with a one-time warning instead of crash-looping. This holds for an
+explicit `VTSEARCH_DEVICE=cuda`/`cuda:N` pin too: the pin is honoured when
+it works and falls back to CPU when it doesn't, so one install runs across
+a heterogeneous GPU fleet. To actually use a newer GPU, reinstall a torch
+build whose CUDA tag covers its arch (see `scripts/install-gpu.sh`).
 
 ## Server-path access
 

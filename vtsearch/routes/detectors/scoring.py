@@ -63,8 +63,6 @@ def find_label(body: dict):  # noqa: C901
     applies Good/Bad labels for ALL elements based on the threshold.  Returns
     the sort results so the frontend can display the stripe and scroll order.
     """
-    import torch  # noqa: PLC0415
-
     from vtscore.detectors.registry import get_detector as reg_get_detector
     from vtscore.detectors.store import _detector_path, _read_detector
     from vtsearch.state import (
@@ -75,12 +73,17 @@ def find_label(body: dict):  # noqa: C901
 
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
     _FIND_LABEL_STEPS = 4
+    # Train + score carry the cost; resolve/apply are quick. Paces the unified
+    # whole-job bar (ETA self-corrects from the real rate).
+    #                       resolve  train  score  apply
+    _FIND_LABEL_STEP_WEIGHTS = [0.10, 0.45, 0.40, 0.05]
 
     detector_id = body["detector_id"]
 
     # Clear a leftover cancel flag from a previously-cancelled run so
     # the new operation doesn't trip on it immediately.
     find_progress.reset_cancel()
+    find_progress.set_step_weights(_FIND_LABEL_STEP_WEIGHTS)
 
     update_find_progress(
         "running",
@@ -156,29 +159,41 @@ def find_label(body: dict):  # noqa: C901
         total_steps=_FIND_LABEL_STEPS,
     )
 
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap
+    # Region-aware scoring: for patch datasets (DINOv2/v3, EUPE) this
+    # max-pools over each media's region vectors and surfaces the winning
+    # region's box as ``best_region`` so the gallery thumbnails and focus-view
+    # Highlight overlay can outline it - matching the learned-sort path.  Plain
+    # single-vector datasets take the cached embedding-matrix path inside and
+    # gain no ``best_region`` field.
+    from vtscore.detectors.training import score_media_with_model
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
-    X_all = torch.from_numpy(all_embs).to(next(mlp.parameters()).device)
+    results = score_media_with_model(mlp, snap)
+    update_find_progress(
+        "running",
+        f"Scoring {n_total} items…",
+        current=n_total,
+        total=n_total,
+        step=3,
+        total_steps=_FIND_LABEL_STEPS,
+    )
 
-    batch_size = max(1, min(500, n_total // 10))
-    scores: list[float] = []
-    with torch.no_grad():
-        for start in range(0, n_total, batch_size):
-            end = min(start + batch_size, n_total)
-            batch_logits = mlp(X_all[start:end])
-            scores.extend(sigmoid_to_finite_scores(batch_logits))
-            update_find_progress(
-                "running",
-                f"Scoring {n_total} items…",
-                current=end,
-                total=n_total,
-                step=3,
-                total_steps=_FIND_LABEL_STEPS,
-            )
+    # Stage-2 structural re-rank for a saved structural (SIFT/VLAD) detector:
+    # geometrically verify the VLAD shortlist against the detector's RegionYes
+    # templates and re-rank by the match-statistic verification classifier.
+    # This is the Find counterpart to the re-rank already wired into the
+    # vote-driven (``train_and_score``) and learned-sort (``labelset_train_and_score``)
+    # paths, so a pre-trained structural detector verifies in Find too instead of
+    # stopping at the coarse VLAD retrieval.  A no-op for every non-structural
+    # detector (gated on the active snapshot carrying ``local_features``).  See
+    # docs/plans/structural-embedder.md.
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.labelset_training import maybe_labelset_structural_rerank
+    from vtscore.state.core import get_active_detector_context
 
-    results = [{"id": cid, "score": round(s, 4)} for cid, s in zip(all_ids, scores, strict=True)]
-    results.sort(key=lambda x: x["score"], reverse=True)
+    labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
+    results, threshold = maybe_labelset_structural_rerank(
+        get_active_detector_context(), labelset, results, threshold, snap
+    )
 
     update_find_progress(
         "running",
@@ -602,8 +617,9 @@ def auto_detect(body: dict):
         abort(400, message=f"No Auto-Find detectors found for media type: {media_type}")
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap, get_active_context().routed_embedder("score"))
     X_all = torch.from_numpy(all_embs)
 
     embed_dim = int(all_embs.shape[1]) if all_embs.ndim > 1 else 0

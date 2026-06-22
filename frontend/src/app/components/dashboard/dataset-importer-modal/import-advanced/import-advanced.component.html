@@ -10,27 +10,27 @@
   </button>
 }
 
-@if (advancedOpen && showSourceSpecs) {
+@if (advancedOpen && showSourceSpecs()) {
   <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
   <vt-source-specs-picker
-    [availableConverters]="availableConverters"
-    [nativeType]="nativeType"
-    [typeLabels]="typeLabels"
-    [specs]="sourceSpecs"
-    [clippers]="clippers"
-    [selectedClipperName]="selectedClipper"
-    [selectedClipperParams]="selectedClipperParams"
+    [availableConverters]="availableConverters()"
+    [nativeType]="nativeType()"
+    [typeLabels]="typeLabels()"
+    [specs]="sourceSpecs()"
+    [clippers]="clippers()"
+    [selectedClipperName]="selectedClipper()"
+    [selectedClipperParams]="selectedClipperParams()"
     (specsChange)="onSourceSpecsChange($event)"
     (clipperChooserRequested)="onClipperClick()"
   ></vt-source-specs-picker>
 }
 
-@if (embedders.length > 1 && showEmbedderPicker) {
+@if (embedders().length > 1 && showEmbedderPicker) {
   <label class="form-label" for="import-advanced-embedder" title="Embedding model used to compute vector representations of each media item">Embedder</label>
   <select
     id="import-advanced-embedder"
     class="form-select"
-    [ngModel]="selectedEmbedder"
+    [ngModel]="selectedEmbedder()"
     (ngModelChange)="onEmbedderChange($event)"
   >
     @if (recommendedEmbedders.length > 0) {
@@ -69,7 +69,7 @@
     <input
       id="import-advanced-projection"
       type="checkbox"
-      [ngModel]="buildProjection"
+      [ngModel]="buildProjection()"
       (ngModelChange)="onBuildProjectionChange($event)"
     />
     Build 2-D Browse projection now

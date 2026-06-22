@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, OnInit, inject, input, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
@@ -18,25 +18,27 @@ import { formatTimestamp as formatTs } from '../../../utils/format-date';
   styleUrl: './detector-stats-modal.component.scss',
 })
 export class DetectorStatsModalComponent implements OnInit {
-  @Input() detectorId = '';
-  @Input() detectorName = '';
-  @Output() closed = new EventEmitter<void>();
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
 
-  loading = true;
-  error = '';
-  stats: DetectorRegistryStatsResponse | null = null;
+  readonly detectorId = input('');
+  readonly detectorName = input('');
+  readonly closed = output<void>();
 
-  constructor(private detectorsRegistryApi: DetectorsRegistryApiService) {}
+  // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
+  // schedules CD when the stats land. See docs/plans/zoneless-migration.md.
+  readonly loading = signal(true);
+  readonly error = signal('');
+  readonly stats = signal<DetectorRegistryStatsResponse | null>(null);
 
   ngOnInit(): void {
-    this.detectorsRegistryApi.getDetectorStats(this.detectorId).subscribe({
+    this.detectorsRegistryApi.getDetectorStats(this.detectorId()).subscribe({
       next: (data) => {
-        this.stats = data;
-        this.loading = false;
+        this.stats.set(data);
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err.error?.error || err.error?.message || 'Failed to load stats';
-        this.loading = false;
+        this.error.set(err.error?.error || err.error?.message || 'Failed to load stats');
+        this.loading.set(false);
       },
     });
   }
@@ -52,7 +54,7 @@ export class DetectorStatsModalComponent implements OnInit {
   /** "N of M (in \"dataset\")" for the resolved-positives row, or a hint
    *  when no dataset is loaded to resolve against. */
   get resolvedSummary(): string {
-    const s = this.stats;
+    const s = this.stats();
     if (!s) return '-';
     if (!s.active_dataset_name) return 'No dataset loaded';
     return `${s.num_positive_resolved} of ${s.num_positive} in "${s.active_dataset_name}"`;

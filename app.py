@@ -241,6 +241,15 @@ def _set_user_context():
         g.user = "default"
 
 
+# Endpoints whose handlers never read the dataset/detector proxies do not
+# need the lock-taking state-sync in `_set_request_context` below. Keeping
+# them off `_state_lock` stops a high-frequency poll (e.g. the jobs/active
+# spinner feed) from piling up behind a long lock-holder and exhausting
+# the worker's threads (2026-06-19: one stuck job parked 23 threads on
+# the futex and froze the whole UI).
+_STATE_SYNC_EXEMPT_PREFIXES = ("/api/jobs/active",)
+
+
 @app.before_request
 def _set_request_context():
     """Resolve per-request dataset/detector context from HTTP headers.
@@ -311,20 +320,24 @@ def _set_request_context():
     # trained on; scoring with a cross-space MLP either crashes (different
     # dim) or silently produces garbage labels (same dim).  See H5 in
     # docs/plans/logical-bug-audit.md.
-    try:
-        from vtscore.detectors.dataset_sync import (
-            ensure_detector_model_matches_active_embedder,
-            ensure_votes_match_active_dataset,
-        )
+    # Skip the lock-taking state-sync for endpoints whose handlers never
+    # read the proxies (e.g. the jobs/active spinner poll), so a frequent
+    # poll cannot queue on `_state_lock` behind a long-running job.
+    if not request.path.startswith(_STATE_SYNC_EXEMPT_PREFIXES):
+        try:
+            from vtscore.detectors.dataset_sync import (
+                ensure_detector_model_matches_active_embedder,
+                ensure_votes_match_active_dataset,
+            )
 
-        ensure_votes_match_active_dataset()
-        ensure_detector_model_matches_active_embedder()
-    except (DatasetNotLoadedError, DetectorNotLoadedError):
-        # The route handler will hit the same error when it touches the
-        # proxies; the global error handler turns it into a clean 409.
-        pass
-    except Exception:
-        logging.getLogger(__name__).exception("Vote rehydrate failed")
+            ensure_votes_match_active_dataset()
+            ensure_detector_model_matches_active_embedder()
+        except (DatasetNotLoadedError, DetectorNotLoadedError):
+            # The route handler will hit the same error when it touches
+            # the proxies; the global error handler turns it into a 409.
+            pass
+        except Exception:
+            logging.getLogger(__name__).exception("Vote rehydrate failed")
 
 
 # ---------------------------------------------------------------------------

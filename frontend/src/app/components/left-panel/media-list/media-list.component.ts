@@ -1,19 +1,5 @@
-import {
-  Component,
-  Input,
-  Output,
-  EventEmitter,
-  ElementRef,
-  ViewChild,
-  AfterViewChecked,
-  ChangeDetectorRef,
-  NgZone,
-  OnChanges,
-  OnDestroy,
-  OnInit,
-  SimpleChanges,
-} from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, Input, ElementRef, ViewChild, AfterViewChecked, ChangeDetectorRef, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, computed, inject, input, output } from '@angular/core';
+
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -63,7 +49,6 @@ interface OrderedItem {
   media: Media;
   score: number | null;
   showThreshold: boolean;
-  bestRegion: number[] | null;
 }
 
 /** One virtualized grid row: a run of cards, or the full-width threshold marker. */
@@ -72,25 +57,37 @@ type GridRow = { kind: 'items'; items: OrderedItem[] } | { kind: 'threshold' };
 @Component({
   selector: 'vt-media-list',
   standalone: true,
-  imports: [CommonModule, ScrollingModule, MediaItemComponent, SkeletonComponent],
+  imports: [ScrollingModule, MediaItemComponent, SkeletonComponent],
   templateUrl: './media-list.component.html',
   styleUrl: './media-list.component.scss',
 })
 export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, OnDestroy {
+  private metadataCache = inject(MediaMetadataCacheService);
+  private mediaState = inject(MediaStateService);
+  private cdr = inject(ChangeDetectorRef);
+  private zone = inject(NgZone);
+
   @Input() medias: Media[] = [];
   @Input() sortOrder: SortedItem[] | null = null;
   @Input() threshold: number | null = null;
-  @Input() selectedId: number | null = null;
+  readonly selectedId = input<number | null>(null);
   @Input() goodVotes: Set<number> = new Set();
   @Input() badVotes: Set<number> = new Set();
-  @Input() viewMode: 'grid' | 'list' = 'list';
-  @Input() gridGoalWidth: number = 80;
-  @Input() focusMode: 'click' | 'hover' = 'click';
-  @Input() showScores = true;
+  readonly viewMode = input<'grid' | 'list'>('list');
+  readonly gridGoalWidth = input<number>(80);
+  readonly focusMode = input<'click' | 'hover'>('click');
+  readonly showScores = input(true);
 
-  @Output() mediaSelect = new EventEmitter<number>();
-  @Output() mediaVote = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
-  @Output() mediaContextRequest = new EventEmitter<{ id: number; x: number; y: number }>();
+  readonly mediaSelect = output<number>();
+  readonly mediaVote = output<{
+    id: number;
+    vote: 'good' | 'bad';
+}>();
+  readonly mediaContextRequest = output<{
+    id: number;
+    x: number;
+    y: number;
+}>();
   @ViewChild('listContainer') listContainer!: ElementRef<HTMLDivElement>;
   @ViewChild(CdkVirtualScrollViewport) virtualViewport?: CdkVirtualScrollViewport;
 
@@ -115,17 +112,13 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
   /** True once ``gridRowHeight`` has been measured from a real rendered card. */
   private gridHeightMeasured = false;
 
-  /** Mirror of ``MediaStateService.loading``; drives the skeleton rows when the
-   *  list is empty during the initial /api/medias/ids fetch. */
-  loadingMedias = false;
+  /** Mirror of ``MediaStateService.isLoading()``; drives the skeleton rows when
+   *  the list is empty during the initial /api/medias/ids fetch. */
+  // A `computed` over the signal-backed loading flag: read in the template via
+  // `showSkeletons`, so reading the signal there marks the view dirty under
+  // zoneless (the old plain-field-written-from-an-effect path went stale).
+  readonly loadingMedias = computed(() => this.mediaState.isLoading());
   readonly skeletonPlaceholders = Array.from({ length: 12 });
-
-  constructor(
-    private metadataCache: MediaMetadataCacheService,
-    private mediaState: MediaStateService,
-    private cdr: ChangeDetectorRef,
-    private zone: NgZone,
-  ) {}
 
   ngOnInit(): void {
     // When the cache hydrates new items, re-enrich the displayed rows so
@@ -133,13 +126,10 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     this.metadataCache.version$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.rebuildOrderedItems());
-    this.mediaState.loading$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((loading) => (this.loadingMedias = loading));
   }
 
   get showSkeletons(): boolean {
-    return this.loadingMedias && this.cachedOrderedItems.length === 0;
+    return this.loadingMedias() && this.cachedOrderedItems.length === 0;
   }
 
   ngOnDestroy(): void {
@@ -150,12 +140,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
   /** Whether list mode is virtualizing (many lightweight rows). */
   get useListVirtual(): boolean {
-    return this.viewMode === 'list' && this.cachedOrderedItems.length > VIRTUAL_SCROLL_THRESHOLD;
+    return this.viewMode() === 'list' && this.cachedOrderedItems.length > VIRTUAL_SCROLL_THRESHOLD;
   }
 
   /** Whether grid mode is virtualizing (many heavy thumbnail cards). */
   get useGridVirtual(): boolean {
-    return this.viewMode === 'grid' && this.cachedOrderedItems.length > GRID_VIRTUAL_THRESHOLD;
+    return this.viewMode() === 'grid' && this.cachedOrderedItems.length > GRID_VIRTUAL_THRESHOLD;
   }
 
   /**
@@ -224,15 +214,14 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
         items.push({
           media,
-          score: this.showScores ? sorted.score : null,
+          score: this.showScores() ? sorted.score : null,
           showThreshold,
-          bestRegion: sorted.bestRegion ?? null,
         });
       }
     } else {
       for (const stub of this.medias) {
         const media = this.metadataCache.get(stub.id) ?? stub;
-        items.push({ media, score: null, showThreshold: false, bestRegion: null });
+        items.push({ media, score: null, showThreshold: false });
       }
     }
 
@@ -241,6 +230,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
 
     // Prefetch metadata for the initial visible window.
     this.prefetchVisibleMetadata();
+
+    // `cachedOrderedItems`/`gridRows` are plain template-bound arrays; this
+    // method runs from the async `metadataCache.version$` subscribe (an
+    // unpatched callback) as well as the sync `ngOnChanges` path, so notify the
+    // scheduler explicitly to repaint the list under zoneless.
+    this.cdr.markForCheck();
   }
 
   /**
@@ -250,7 +245,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
    * same stride so CDK's fixed-size strategy scrolls accurately.
    */
   private rebuildGridRows(): void {
-    if (this.viewMode !== 'grid') {
+    if (this.viewMode() !== 'grid') {
       this.gridRows = [];
       return;
     }
@@ -284,7 +279,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     if (!el) return false;
     const inner = el.clientWidth - 2 * GRID_GAP_PX;
     if (inner <= 0) return false;
-    const cols = Math.max(1, Math.floor((inner + GRID_GAP_PX) / (this.gridGoalWidth + GRID_GAP_PX)));
+    const cols = Math.max(1, Math.floor((inner + GRID_GAP_PX) / (this.gridGoalWidth() + GRID_GAP_PX)));
     if (cols === this.gridColumns) return false;
     this.gridColumns = cols;
     return true;
@@ -336,7 +331,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
       if (this.useVirtualScroll && this.virtualViewport) {
         // In virtual-scroll mode, find the index and scroll to it.  Grid items
         // are chunked into rows, so map the item index to its row first.
-        const idx = this.cachedOrderedItems.findIndex((i) => i.media.id === this.selectedId);
+        const idx = this.cachedOrderedItems.findIndex((i) => i.media.id === this.selectedId());
         if (idx >= 0) {
           const target = this.useGridVirtual ? this.itemIndexToRow(idx) : idx;
           this.virtualViewport.scrollToIndex(target, behavior);
@@ -406,7 +401,11 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnChanges, 
     }
 
     if (changed) {
-      this.zone.run(() => this.cdr.detectChanges());
+      // `detectChanges()` runs CD on this view synchronously and is
+      // zone-independent, so the former `zone.run(...)` re-entry is dropped.
+      // (This relayout flush fires from the `ResizeObserver` callback and from
+      // `ngAfterViewChecked`.)
+      this.cdr.detectChanges();
     }
   }
 

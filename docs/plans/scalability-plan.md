@@ -3,10 +3,22 @@
 **Status:** Mostly open.  **§3.3 (S16) virtual grid mode has shipped** — the
 gallery now virtualizes both grid and list and no longer freezes the UI at a
 few hundred items (added §3.4/S17 as the deferred backend cancel/progress
-follow-up surfaced by that work).  Separately, the CLI-specific streaming work
-(lazy folder enumeration, per-chunk embed, and streaming export — partial
-fixes for S20/S15/S13 on the `--autodetect` target side) **has** shipped; see
+follow-up surfaced by that work).  **§1.2 (S9) GMM subsampling has shipped.**
+**§2.1 is partially shipped** — the diversity tree is now cached in the dataset
+pickle and restored on reload (skipping the rebuild), but the first build at
+dataset creation still pays full cost; the cap/defer/on-demand-endpoint scope
+remains open.
+Separately, the CLI-specific streaming work (lazy folder enumeration, per-chunk
+embed, and streaming export — partial fixes for S20/S15/S13 on the
+`--autodetect` target side) **has** shipped; see
 [`cli-stream-massive-images.md`](cli-stream-massive-images.md).
+
+**Target scale (confirmed 2026-06-19, drives what's worth doing):** GUI Train
+~50k, GUI Find ~250k, CLI Find 2M+.  A critical re-read of Phase 1 against these
+numbers (below) **rejected §1.1** as a misdiagnosis and **gated §1.3/§1.4** as
+not worth their correctness risk until interactive datasets actually approach
+the million-item range — at 50k–250k the `sorted(medias.keys())` cost they
+target is 5–80 ms, noise next to the matmul/argsort.  See per-section notes.
 
 **Parent:** [`scalability.md`](scalability.md); the brainstorm that defines
 all S# IDs referenced here.
@@ -25,7 +37,19 @@ independently.
 These are 1–3 line fixes that eliminate growing hot paths.  Land them
 together in a single PR.
 
-### 1.1  Hash-based threshold cache key (S5)
+### 1.1  Hash-based threshold cache key (S5) — ❌ REJECTED (misdiagnosis)
+
+> **Verdict (2026-06-19): do not implement.** The premise conflates training-set
+> size with dataset size. `X_list`/`y_list` here are the **labeled examples**
+> (good/bad votes + labelset elements), not the dataset — you do not
+> interactively hand-label 100k items, so the "150 MB at 100k" figure never
+> occurs. The cache is also a **single overwritten slot**
+> (`det_ctx.calibration_cache = (key, payload)`), not a growing structure, so
+> even a large imported labelset costs one key's worth of memory. Worse, the
+> proposed fix still calls `np.stack(...).tobytes()` to build the key and *then*
+> hashes it, **adding** compute on the comparison path to save a few MB on a
+> non-bottleneck. Left here as a record of the dead end; revisit only if
+> labelsets ever grow to tens of thousands of elements (a different feature).
 
 **File:** `vtscore/training/thresholds.py:71–97` (`_calibration_cache_key`)
 
@@ -55,7 +79,16 @@ the current path.
 
 ---
 
-### 1.2  Subsample GMM threshold (S9)
+### 1.2  Subsample GMM threshold (S9) — ✅ SHIPPED
+
+> **Shipped 2026-06-19.** Subsampling now lives *inside*
+> `calculate_gmm_threshold` (single point, so every caller — the every-sort
+> cosine path at `sorting.py:103` and the safe-threshold blend — benefits),
+> gated by `_GMM_MAX_SAMPLES = 50_000` with a seed-42 `default_rng`. The
+> exception-fallback median was also bounded to the subsample. This was the one
+> Phase-1 item with a real, scale-justified payoff: the GMM fits the **full**
+> score distribution, which reaches 250k (GUI Find) to 2M+ (CLI Find). Covered
+> by `tests_lib/sorting/test_gmm_subsample.py`.
 
 **File:** `vtscore/training/thresholds.py:24–68` (`calculate_gmm_threshold`)
 
@@ -88,7 +121,20 @@ is called from the safe-threshold blender
 
 ---
 
-### 1.3  Epoch counter for embedding matrix invalidation (S6)
+### 1.3  Epoch counter for embedding matrix invalidation (S6) — ⏸ GATED on 1M-scale interactive use
+
+> **Verdict (2026-06-19): defer; not worth the correctness risk at current
+> target scale.** The `sorted(ctx.medias.keys())` it removes costs ~5–15 ms at
+> 50k (GUI Train) and ~30–80 ms at 250k (GUI Find) — noise beside the matmul and
+> argsort on the same call. The only regime where it matters is CLI Find at
+> 2M+, which is a *batch* path (latency-insensitive) rather than interactive.
+> Against that thin payoff, the current check (`cached_ids == sorted_ids`) is
+> **self-correcting — it can never serve a stale matrix.** The epoch scheme
+> replaces it with a manual invariant that every one of ~5 mutation sites must
+> bump; a single miss silently serves the **wrong embedding matrix → wrong
+> scores, no error**. Trading a self-correcting check for a silent-corruption
+> footgun is only justified if interactive datasets approach 1M. Revisit then,
+> with the test in §1.3's checklist landing first.
 
 **File:** `vtscore/state/core.py` (`DatasetContext`),
 `vtscore/embedding/matrix.py:58–79`
@@ -169,7 +215,15 @@ when medias change.
 
 ---
 
-### 1.4  Epoch-based learned-sort signature (S7)
+### 1.4  Epoch-based learned-sort signature (S7) — ⏸ GATED (depends on 1.3)
+
+> **Verdict (2026-06-19): defer with 1.3.** Same `sorted(snap.keys())` cost
+> profile (negligible ≤250k), and this item piggybacks on 1.3's epoch counter,
+> so it inherits the same gating and the same staleness risk. The actual
+> signature builder now lives in
+> `vtscore/detectors/learned_sort.py:build_learned_sort_signature` (the line
+> reference below is stale). Note learned-sort is the GUI **Train** path, capped
+> at ~50k — the regime where this optimization matters least.
 
 **File:** `vtsearch/routes/sorting.py:340–358` (`_build_learned_sort_signature`)
 
@@ -213,14 +267,27 @@ medias) cannot happen because the epoch is only bumped on structural change.
 
 ## Phase 2: Medium effort, high leverage
 
-### 2.1  Cap and defer diversity tree construction (S2, S8)
+### 2.1  Cap and defer diversity tree construction (S2, S8) — ⏳ PARTIALLY SHIPPED
+
+> **Reload caching shipped 2026-06-19** (commit 64cccd5e, PR #1987). The
+> diversity tree is now serialized into the dataset pickle at creation and
+> restored on reload via `restore_diversity_tree_from_cache`, which adopts the
+> cache only when its vector set exactly matches the loaded medias (any
+> remap/dedup/drop falls back to a rebuild). `_build_diversity_tree_stage`
+> skips when a tree is already present; cache-less (pre-change) pickles keep
+> rebuilding eagerly and age off. This removes the rebuild cost on every
+> *reload*, but the **first** build at dataset creation still pays full cost.
+> **Still open below:** Part A (smarter k-means defaults / auto-capped depth)
+> and Part B (skip auto-build above a threshold + on-demand build endpoint),
+> which together address that first-build cost at scale.
 
 **Files:** `vtscore/state/diversity_tree.py`,
 `vtscore/datasets/load_pipeline.py:968–981`
 
 **Problem:** The diversity tree is always built at load time.  At 100 k
 items it already takes several seconds; at 1 M it takes minutes and
-allocates GBs.
+allocates GBs.  (The reload path is now cached — see the shipped note above —
+so what remains is the cost of the *initial* build at creation time.)
 
 **Fix (two parts):**
 

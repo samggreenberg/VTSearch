@@ -16,18 +16,34 @@ When the output type is ``"image"``, ``*.pdf`` files in the folder are
 also expanded as per-page images.  (PDFs participate independently of
 the explicit converter rows - they are tied to the "image" output type
 rather than to a converter.)
+
+Archives
+--------
+The folder field accepts either a directory **or** a single archive file
+(``.zip`` / ``.tar`` / ``.rar`` …): an archive path is extracted and its
+contents loaded directly.  Additionally, when the ``dig_archives`` checkbox
+is enabled, any archives found *inside* the scanned directory are extracted
+and their media folded into the dataset.  Archive-derived media carry a
+``local_archive`` origin so they re-derive by re-extracting on demand (see
+:mod:`vtscore.datasets.archive`).
 """
 
 from __future__ import annotations
 
-import hashlib
-import io
 from pathlib import Path
 from typing import Any, Iterator
 
+from vtscore.datasets.archive import (
+    append_medias,
+    extract_archive_cached,
+    find_archives,
+    is_archive_path,
+    iter_archive_chunks,
+    load_archive_into,
+)
 from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
-from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
+from vtscore.datasets.pdf import load_pdf_images_into
 
 
 def _coerce_recursive(field_values: dict[str, Any]) -> bool:
@@ -38,67 +54,12 @@ def _coerce_recursive(field_values: dict[str, Any]) -> bool:
     return str(val).lower() != "false"
 
 
-def _load_pdf_images(
-    folder: Path,
-    medias: dict[int, dict[str, Any]],
-    thin: bool = False,
-    recursive: bool = True,
-) -> None:
-    """Expand all PDFs in *folder* into per-page image medias.
-
-    Each page is rendered at 150 DPI and appended to *medias* with
-    sequential IDs continuing from the current maximum.  Pages leave
-    here with ``embedding=None``; the framework embed stage fills the
-    vectors in.  The ``origin`` is set to ``{"importer": "pdf",
-    "params": {"path": ...}}`` so provenance points back to the source
-    document.
-    """
-    pdf_files = sorted(rglob_follow_symlinks(folder, "*.pdf") if recursive else glob_top_level(folder, "*.pdf"))
-    if not pdf_files:
-        return
-
-    from vtscore.datasets.pdf import render_pdf_pages  # noqa: PLC0415
-    from vtscore.media import get_by_folder_name  # noqa: PLC0415
-
-    mt = get_by_folder_name("image")
-    media_id = max(medias.keys(), default=0) + 1
-
-    for pdf_path in pdf_files:
-        origin = {"importer": "pdf", "params": {"path": str(pdf_path)}}
-        pages = render_pdf_pages(pdf_path)
-        pdf_rel = pdf_path.relative_to(folder).as_posix()
-
-        for page_name, pil_image in pages:
-            buf = io.BytesIO()
-            pil_image.save(buf, format="PNG")
-            image_bytes = buf.getvalue()
-
-            rel_dir = str(Path(pdf_rel).parent)
-            if rel_dir and rel_dir != ".":
-                full_page_name = f"{rel_dir}/{page_name}"
-            else:
-                full_page_name = page_name
-
-            media_data: dict[str, Any] = {
-                "id": media_id,
-                "media_type": mt.type_id,
-                "embedder": "",
-                "file_size": len(image_bytes),
-                "md5": hashlib.md5(image_bytes).hexdigest(),
-                "embedding": None,
-                "filename": full_page_name,
-                "category": "custom",
-                "origin": origin,
-                "origin_name": full_page_name,
-                "media_bytes": None if thin else image_bytes,
-                "media_string": None,
-                "media_path": str(pdf_path.resolve()),
-                "duration": 0,
-                "width": pil_image.width,
-                "height": pil_image.height,
-            }
-            medias[media_id] = media_data
-            media_id += 1
+def _coerce_dig_archives(field_values: dict[str, Any]) -> bool:
+    """Parse the ``dig_archives`` field value as a bool; default ``False``."""
+    val = field_values.get("dig_archives", False)
+    if isinstance(val, bool):
+        return val
+    return str(val).lower() == "true"
 
 
 def _run_converter_specs(
@@ -140,6 +101,11 @@ class ServerFolderDatasetImporter(DatasetImporter):
     which source types to scan for (and which converters to apply).  See
     :doc:`/docs/EXTENDING-media` for the full design.
 
+    The path may also point at a single **archive file** (``.zip`` / ``.tar``
+    / ``.rar`` …), in which case the archive is extracted and its contents
+    imported.  With ``dig_archives`` enabled, archives found inside the
+    scanned directory are extracted and folded in too.
+
     When the output media type is ``"image"``, any ``*.pdf`` files in the
     folder are also processed: each page is rendered as a separate image.
 
@@ -157,7 +123,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
 
     name = "server_folder"
     display_name = "Folder"
-    description = "Browse the server's filesystem and import media files from a directory"
+    description = "Browse the server's filesystem and import media files from a directory or archive"
     icon = "\U0001f4c1"  # 📁 - frontend renders as a folder icon
     picker_view = "server_folder"
     category = "server"
@@ -172,9 +138,12 @@ class ServerFolderDatasetImporter(DatasetImporter):
         ),
         ImporterField(
             key="path",
-            label="Folder",
+            label="Folder or archive",
             field_type="folder",
-            description="Absolute path to the directory containing media files.",
+            description=(
+                "Absolute path to a directory containing media files, or to a single "
+                "archive file (.zip, .tar, .tar.gz, .tar.bz2, .tar.xz, .rar)."
+            ),
         ),
         ImporterField(
             key="recursive",
@@ -185,6 +154,18 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 "only files directly inside the chosen folder are imported."
             ),
             default="true",
+            required=False,
+        ),
+        ImporterField(
+            key="dig_archives",
+            label="Dig into archives",
+            field_type="checkbox",
+            description=(
+                "When enabled, archives (.zip, .tar, .rar …) found inside the chosen "
+                "folder are extracted and their media imported too.  Has no effect when "
+                "the path itself is an archive (that is always extracted)."
+            ),
+            default="false",
             required=False,
         ),
     ]
@@ -198,28 +179,41 @@ class ServerFolderDatasetImporter(DatasetImporter):
                 f.options = all_folder_names()
                 break
 
-    def _load_direct(
+    def _resolve_output_type(self, field_values: dict[str, Any], specs: list[SourceSpec]) -> str:
+        """Resolve the output media type from the direct spec or ``media_type``."""
+        for spec in specs:
+            if spec.converter is None:
+                return spec.source_type
+        # Multi-media imports without a direct row still have an output type
+        # from ``media_type``; resolve it explicitly so PDF expansion and
+        # origin recording behave correctly.
+        from vtscore.media import get_by_folder_name  # noqa: PLC0415
+
+        return get_by_folder_name(field_values.get("media_type", "")).type_id
+
+    def _accumulate_direct(
         self,
         folder: Path,
         spec: SourceSpec,
-        field_values: dict[str, Any],
         medias: dict,
         thin: bool,
         recursive: bool,
     ) -> bool:
-        """Load files of ``spec.source_type`` directly into *medias*.
+        """Load files of ``spec.source_type`` and append them to *medias*.
 
-        Returns ``True`` if any files were found (i.e. the loader did not
-        raise ``ValueError`` for an empty folder), ``False`` otherwise.
+        Loads into a temporary dict (so the per-call ``medias.clear()`` of
+        :func:`load_dataset_from_folder` doesn't wipe earlier rows / archives)
+        and merges the result in.  Returns ``True`` if any files were found.
         """
         from vtscore.media import get  # noqa: PLC0415
 
         mt = get(spec.source_type)
+        temp: dict[int, dict[str, Any]] = {}
         try:
             load_dataset_from_folder(
                 folder,
                 mt.folder_import_name,
-                medias,
+                temp,
                 thin=thin,
                 content_vectors=self.content_vectors or None,
                 content_md5s=self.content_md5s or None,
@@ -228,59 +222,69 @@ class ServerFolderDatasetImporter(DatasetImporter):
             )
         except ValueError:
             return False
+        append_medias(medias, temp)
         return True
 
-    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:  # noqa: C901
-        folder = Path(field_values["path"])
+    def _load_archive(self, archive: Path, output_type: str, specs: list[SourceSpec], medias: dict, thin: bool) -> None:
+        load_archive_into(
+            archive,
+            output_type,
+            specs,
+            medias,
+            thin=thin,
+            content_vectors=self.content_vectors,
+            content_md5s=self.content_md5s,
+            custom_metadata_map=self.custom_metadata_map,
+        )
+
+    def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
+        path = Path(field_values["path"])
         recursive = _coerce_recursive(field_values)
-
+        dig_archives = _coerce_dig_archives(field_values)
         specs = self.effective_source_specs(field_values)
-        output_type = ""
-        for spec in specs:
-            if spec.converter is None:
-                output_type = spec.source_type
-                break
-        if not output_type:
-            # Multi-media imports without a direct row still have an
-            # output type from ``media_type``; resolve it explicitly so
-            # PDF expansion and origin recording behave correctly.
-            from vtscore.media import get_by_folder_name  # noqa: PLC0415
+        output_type = self._resolve_output_type(field_values, specs)
 
-            output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
+        # Single clear up front: every loader below appends from here.
+        medias.clear()
+
+        if is_archive_path(path):
+            self._load_archive(path, output_type, specs, medias, thin)
+            if not medias:
+                raise ValueError(f"No {output_type} files found in archive")
+            return
 
         has_direct_files = False
         for spec in specs:
             if spec.converter is None:
-                if self._load_direct(folder, spec, field_values, medias, thin, recursive):
+                if self._accumulate_direct(path, spec, medias, thin, recursive):
                     has_direct_files = True
 
         if output_type == "image":
-            _load_pdf_images(
-                folder,
-                medias,
-                thin=thin,
-                recursive=recursive,
-            )
+            load_pdf_images_into(path, medias, thin=thin, recursive=recursive)
 
         _run_converter_specs(
-            folder,
+            path,
             output_type,
             [s for s in specs if s.converter is not None],
             medias,
             thin=thin,
             recursive=recursive,
-            folder_path_for_origin=str(folder),
+            folder_path_for_origin=str(path),
         )
+
+        if dig_archives:
+            for archive in find_archives(path, recursive):
+                self._load_archive(archive, output_type, specs, medias, thin)
 
         if not has_direct_files and not medias:
             raise ValueError(f"No {output_type} files found in folder")
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
-        folder = Path(field_values["path"])
-        if not folder.exists():
-            raise FileNotFoundError(f"Folder not found: {folder}")
-        if not folder.is_dir():
-            raise NotADirectoryError(f"Not a directory: {folder}")
+        path = Path(field_values["path"])
+        if not path.exists():
+            raise FileNotFoundError(f"Path not found: {path}")
+        if not is_archive_path(path) and not path.is_dir():
+            raise NotADirectoryError(f"Not a directory or supported archive: {path}")
         self.run(field_values, medias, thin=thin)
 
     @property
@@ -293,29 +297,28 @@ class ServerFolderDatasetImporter(DatasetImporter):
         chunk_size: int,
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
-        folder = Path(field_values["path"])
+        path = Path(field_values["path"])
         recursive = _coerce_recursive(field_values)
+        dig_archives = _coerce_dig_archives(field_values)
 
         specs = self.effective_source_specs(field_values)
         direct_specs = [s for s in specs if s.converter is None]
         converter_specs = [s for s in specs if s.converter is not None]
+        output_type = self._resolve_output_type(field_values, specs)
 
-        output_type = direct_specs[0].source_type if direct_specs else ""
-        if not output_type:
-            from vtscore.media import get_by_folder_name  # noqa: PLC0415
+        if is_archive_path(path):
+            yield from self._chunk_archive(path, output_type, specs, chunk_size, thin)
+            return
 
-            output_type = get_by_folder_name(field_values.get("media_type", "")).type_id
-
-        # Chunked load only fires for the direct row.  Converter rows
-        # produce a separate chunk afterwards (matching legacy
-        # behaviour).
+        # Chunked load only fires for the direct rows.  Converter rows produce
+        # a separate chunk afterwards (matching legacy behaviour).
         for spec in direct_specs:
             from vtscore.media import get  # noqa: PLC0415
 
             mt = get(spec.source_type)
             try:
                 yield from load_dataset_from_folder_chunked(
-                    folder,
+                    path,
                     mt.folder_import_name,
                     chunk_size,
                     thin=thin,
@@ -331,23 +334,46 @@ class ServerFolderDatasetImporter(DatasetImporter):
 
         if output_type == "image":
             chunk: dict[int, dict[str, Any]] = {}
-            _load_pdf_images(folder, chunk, thin=thin, recursive=recursive)
+            load_pdf_images_into(path, chunk, thin=thin, recursive=recursive)
             if chunk:
                 yield chunk
 
         if converter_specs:
             converter_chunk: dict[int, dict[str, Any]] = {}
             _run_converter_specs(
-                folder,
+                path,
                 output_type,
                 converter_specs,
                 converter_chunk,
                 thin=thin,
                 recursive=recursive,
-                folder_path_for_origin=str(folder),
+                folder_path_for_origin=str(path),
             )
             if converter_chunk:
                 yield converter_chunk
+
+        if dig_archives:
+            for archive in find_archives(path, recursive):
+                yield from self._chunk_archive(archive, output_type, specs, chunk_size, thin)
+
+    def _chunk_archive(
+        self,
+        archive: Path,
+        output_type: str,
+        specs: list[SourceSpec],
+        chunk_size: int,
+        thin: bool,
+    ) -> Iterator[dict[int, dict[str, Any]]]:
+        yield from iter_archive_chunks(
+            archive,
+            output_type,
+            specs,
+            chunk_size,
+            thin=thin,
+            content_vectors=self.content_vectors,
+            content_md5s=self.content_md5s,
+            custom_metadata_map=self.custom_metadata_map,
+        )
 
     def run_chunked_cli(
         self,
@@ -355,11 +381,11 @@ class ServerFolderDatasetImporter(DatasetImporter):
         chunk_size: int,
         thin: bool = False,
     ) -> Iterator[dict[int, dict[str, Any]]]:
-        folder = Path(field_values["path"])
-        if not folder.exists():
-            raise FileNotFoundError(f"Folder not found: {folder}")
-        if not folder.is_dir():
-            raise NotADirectoryError(f"Not a directory: {folder}")
+        path = Path(field_values["path"])
+        if not path.exists():
+            raise FileNotFoundError(f"Path not found: {path}")
+        if not is_archive_path(path) and not path.is_dir():
+            raise NotADirectoryError(f"Not a directory or supported archive: {path}")
         yield from self.run_chunked(field_values, chunk_size, thin=thin)
 
     def build_cli_args(self, field_values: dict[str, Any]) -> str:
@@ -377,6 +403,11 @@ class ServerFolderDatasetImporter(DatasetImporter):
         path_str = (field_values.get("path") or "").strip()
         if path_str:
             leaf = Path(path_str).name
+            if leaf and is_archive_path(leaf):
+                # Strip the archive extension for a tidier dataset name.
+                for suffix in (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz", ".tar", ".zip", ".rar"):
+                    if leaf.lower().endswith(suffix):
+                        return leaf[: -len(suffix)] or self.display_name
             if leaf:
                 return leaf
         return self.display_name
@@ -388,7 +419,10 @@ class ServerFolderDatasetImporter(DatasetImporter):
     def can_reload_from_origin(self, origin: dict[str, Any]) -> bool:
         params = origin.get("params", {})
         folder_path = params.get("path", "")
-        return bool(folder_path) and Path(folder_path).is_dir()
+        if not folder_path:
+            return False
+        p = Path(folder_path)
+        return p.is_dir() or (is_archive_path(p) and p.is_file())
 
     def resolve_file(
         self,
@@ -399,7 +433,14 @@ class ServerFolderDatasetImporter(DatasetImporter):
         folder = origin.get("params", {}).get("path", "")
         if not folder:
             return None
-        from vtscore.datasets.sources.local_folder import LocalFolderSource
+        if is_archive_path(folder):
+            # A server_folder dataset whose path is a single archive: resolve
+            # via the extracted (cached) directory.
+            from vtscore.datasets.sources.local_folder import LocalFolderSource  # noqa: PLC0415
+
+            extract_dir = extract_archive_cached(folder)
+            return LocalFolderSource(extract_dir).resolve_path(origin_name, filename).path
+        from vtscore.datasets.sources.local_folder import LocalFolderSource  # noqa: PLC0415
 
         source = LocalFolderSource(folder)
         return source.resolve_path(origin_name, filename).path

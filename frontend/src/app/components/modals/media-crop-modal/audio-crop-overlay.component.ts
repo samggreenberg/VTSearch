@@ -2,13 +2,13 @@ import {
   AfterViewInit,
   Component,
   ElementRef,
-  EventEmitter,
   Input,
   OnDestroy,
-  Output,
   ViewChild,
+  input,
+  output
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 
 export interface AudioCropResult {
   start: number;
@@ -22,16 +22,16 @@ const HANDLE_HIT_PX = 12;
 @Component({
   selector: 'vt-audio-crop-overlay',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './audio-crop-overlay.component.html',
   styleUrl: './audio-crop-overlay.component.scss',
 })
 export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
   @Input() audioUrl = '';
   /** Original audio file, used to decode the waveform. */
-  @Input() audioFile?: File;
-  @Output() applied = new EventEmitter<AudioCropResult>();
-  @Output() cancelled = new EventEmitter<void>();
+  readonly audioFile = input<File>();
+  readonly applied = output<AudioCropResult>();
+  readonly cancelled = output<void>();
 
   @ViewChild('canvas') canvasRef!: ElementRef<HTMLCanvasElement>;
 
@@ -46,12 +46,13 @@ export class AudioCropOverlayComponent implements AfterViewInit, OnDestroy {
   private peaks: number[] = [];
 
   async ngAfterViewInit(): Promise<void> {
-    if (!this.audioFile) {
+    const audioFile = this.audioFile();
+    if (!audioFile) {
       this.loading = false;
       return;
     }
     try {
-      const arrayBuffer = await this.audioFile.arrayBuffer();
+      const arrayBuffer = await audioFile.arrayBuffer();
       const AudioCtx = (window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
       const ctx = new AudioCtx();

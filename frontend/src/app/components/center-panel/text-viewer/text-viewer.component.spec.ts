@@ -42,6 +42,10 @@ describe('TextViewerComponent', () => {
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Loading...');
+    // ngOnChanges kicks off the text fetch; flush the in-flight request so the
+    // afterEach httpMock.verify() sees no dangling request. The loading-state
+    // assertion above is checked before the response arrives.
+    httpMock.expectOne('/api/medias/4/text').flush({ content: 'done' });
   });
 
   it('should load and display text', () => {

@@ -68,8 +68,8 @@ class HttpArchiveSource(MediaSource):
             self._inner = LocalFolderSource(cached_dir)
             return self._inner
 
+        from vtscore.datasets.archive import extract_archive
         from vtscore.datasets.downloader import download_file_with_progress
-        from vtscore.datasets.importers.http_archive import _extract_archive
         from vtscore.security.url_validation import validate_url
 
         validate_url(self._url)
@@ -86,7 +86,7 @@ class HttpArchiveSource(MediaSource):
             log.info("Downloading %s for media source...", self._url)
             download_file_with_progress(self._url, archive_path)
             extract_dir.mkdir(exist_ok=True)
-            _extract_archive(archive_path, extract_dir)
+            extract_archive(archive_path, extract_dir)
         finally:
             archive_path.unlink(missing_ok=True)
 

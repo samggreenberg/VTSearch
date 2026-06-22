@@ -85,6 +85,7 @@ from vtscore.state.diversity import (  # noqa: F401
     diversity_tree_next_sample,
     diversity_tree_unlabel,
     get_diversity_tree,
+    restore_diversity_tree_from_cache,
     resync_diversity_tree_to_detector,
 )
 
@@ -143,6 +144,10 @@ def clear_medias() -> None:
         ctx.medias.clear()
         ctx._emb_matrix_ids = None
         ctx._emb_matrix = None
+        ctx._region_matrix_ids = None
+        ctx._region_matrix = None
+        ctx._region_media_index = None
+        ctx._region_index_per_row = None
         ctx._projection = None
         ctx._pyramids = {}
         ctx.diversity_tree = None

@@ -1,12 +1,12 @@
 <vt-modal [title]="modalTitle" [open]="true" (closed)="close()">
   @if (view === 'picker') {
     <div class="importer-picker">
-      @if (loading) {
+      @if (loading()) {
         <p class="empty-state">Loading importers...</p>
-      } @else if (importers.length === 0) {
+      } @else if (importers().length === 0) {
         <p class="empty-state">No label importers available.</p>
       } @else {
-        @for (imp of importers; track imp.name) {
+        @for (imp of importers(); track imp.name) {
           <button class="importer-card" (click)="selectImporter(imp)">
             <span class="importer-name">@if (imp.icon) {<span class="importer-icon"><vt-icon [icon]="imp.icon"></vt-icon></span> }{{ imp.display_name || imp.name }}</span>
             @if (imp.description) {
@@ -17,7 +17,7 @@
       }
     </div>
 
-    @if (!targetModelName) {
+    @if (!targetModelName()) {
     <div class="add-media-section">
       <p class="add-media-heading">Add media directly</p>
       <div class="add-media-buttons">
@@ -29,11 +29,11 @@
         />
         <button
           class="btn btn-add-bad"
-          [disabled]="addingBad"
+          [disabled]="addingBad()"
           (click)="triggerAddBad()"
           title="Upload a media file and add it to the Bad pile."
         >
-          {{ addingBad ? 'Adding to Bad pile…' : 'Add media to Bad' }}
+          {{ addingBad() ? 'Adding to Bad pile…' : 'Add media to Bad' }}
         </button>
         <input
           #addGoodInput
@@ -43,21 +43,21 @@
         />
         <button
           class="btn btn-add-good"
-          [disabled]="addingGood"
+          [disabled]="addingGood()"
           (click)="triggerAddGood()"
           title="Upload a media file and add it to the Good pile."
         >
-          {{ addingGood ? 'Adding to Good pile…' : 'Add media to Good' }}
+          {{ addingGood() ? 'Adding to Good pile…' : 'Add media to Good' }}
         </button>
       </div>
     </div>
     }
 
-    @if (error) {
-      <p class="error-text">{{ error }}</p>
+    @if (error()) {
+      <p class="error-text">{{ error() }}</p>
     }
-    @if (successMessage) {
-      <p class="success-text">{{ successMessage }}</p>
+    @if (successMessage()) {
+      <p class="success-text">{{ successMessage() }}</p>
     }
   }
 
@@ -125,19 +125,19 @@
                 class="form-select"
                 [(ngModel)]="formValues[field.key]"
                 (ngModelChange)="onFormFieldChanged(field.key)"
-                [disabled]="!!dynamicFieldLoading[field.key] || (!!field.dynamic_options && optionsFor(field).length === 0)"
+                [disabled]="!!dynamicFieldLoading()[field.key] || (!!field.dynamic_options && optionsFor(field).length === 0)"
               >
-                @if (field.dynamic_options && dynamicFieldLoading[field.key]) {
+                @if (field.dynamic_options && dynamicFieldLoading()[field.key]) {
                   <option value="">Loading…</option>
-                } @else if (field.dynamic_options && optionsFor(field).length === 0 && !dynamicFieldError[field.key]) {
+                } @else if (field.dynamic_options && optionsFor(field).length === 0 && !dynamicFieldError()[field.key]) {
                   <option value="">No options available</option>
                 }
                 @for (opt of optionsFor(field); track opt) {
                   <option [value]="opt">{{ opt }}</option>
                 }
               </select>
-              @if (field.dynamic_options && dynamicFieldError[field.key]) {
-                <p class="error-text">{{ dynamicFieldError[field.key] }}</p>
+              @if (field.dynamic_options && dynamicFieldError()[field.key]) {
+                <p class="error-text">{{ dynamicFieldError()[field.key] }}</p>
               }
             } @else if (field.field_type === 'number') {
               <input
@@ -165,18 +165,18 @@
         <p class="info-text">This importer requires no additional configuration.</p>
       }
 
-      @if (error) {
-        <p class="error-text">{{ error }}</p>
+      @if (error()) {
+        <p class="error-text">{{ error() }}</p>
       }
-      @if (successMessage) {
-        <p class="success-text">{{ successMessage }}</p>
+      @if (successMessage()) {
+        <p class="success-text">{{ successMessage() }}</p>
       }
 
       <div class="form-actions" modal-footer>
         <button class="btn btn--secondary" (click)="back()">Cancel</button>
-        <button class="btn btn--primary" (click)="submit()" [disabled]="submitting">
-          <svg aria-hidden="true" [class.icon-waggle]="submitting" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          @if (submitting) {
+        <button class="btn btn--primary" (click)="submit()" [disabled]="submitting()">
+          <svg aria-hidden="true" [class.icon-waggle]="submitting()" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          @if (submitting()) {
             Importing labels from {{ selectedImporter.display_name || selectedImporter.name }}…
           } @else {
             Import

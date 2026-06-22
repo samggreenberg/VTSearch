@@ -21,6 +21,24 @@ from vtscore.embedding.normalize import l2_normalize
 logger = logging.getLogger(__name__)
 
 
+def _load_embeddings_dict(media_info: dict[str, Any]) -> dict[str, Any] | None:
+    """Re-key a pickle entry's per-embedder vectors, L2-normalising each.
+
+    Returns the ``{name: vector}`` dict (v3 pickles carry one entry per bound
+    embedder) or ``None`` for legacy single-vector pickles, where the embed
+    stage materialises the dict from the singular ``embedding`` on load via
+    :func:`vtscore.embedding.media_vectors.ensure_embeddings_dict`.
+    """
+    embs = media_info.get("embeddings")
+    if not isinstance(embs, dict) or not embs:
+        return None
+    out: dict[str, Any] = {}
+    for name, vec in embs.items():
+        if name and vec is not None:
+            out[name] = l2_normalize(vec)
+    return out or None
+
+
 def _read_pickle_dataset(file_path: Path) -> dict[str, Any]:
     """Load a dataset ZIP container and assert the ``"medias"`` envelope.
 
@@ -127,6 +145,7 @@ def _build_pickle_thin_media(
         "embedding": l2_normalize(media_info["embedding"]),
         "media_bytes": None,
         "media_string": None,
+        "embeddings": _load_embeddings_dict(media_info),
         "media_path": media_path,
         "filename": fname,
         "category": media_info.get("category", "unknown"),
@@ -160,6 +179,7 @@ def _build_pickle_full_media(
         "file_size": media_info.get("file_size", len(media_bytes)),
         "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
         "embedding": l2_normalize(media_info["embedding"]),
+        "embeddings": _load_embeddings_dict(media_info),
         "media_bytes": media_bytes,
         "media_string": media_string,
         "media_path": media_path or media_info.get("media_path"),
@@ -264,13 +284,18 @@ def load_dataset_from_pickle(
             workflows that only need embeddings for scoring.
 
     Returns:
-        ``None``.
+        The cached ``"diversity_tree"`` payload (a plain-dict snapshot written
+        by :func:`export_dataset_to_file`) when the pickle carries one, else
+        ``None``.  Callers can hand it to
+        :func:`vtscore.state.diversity.restore_diversity_tree_from_cache` to
+        skip rebuilding the diversity tree.
     """
     if on_progress is not None:
         on_progress("loading", f"Reading {file_path.name}…", 0, 0)
 
     data = _read_pickle_dataset(file_path)
     medias.clear()
+    cached_diversity_tree = data.get("diversity_tree")
     medias_data = data["medias"]
     dir_keys, extra_fields_map = _build_pickle_dir_maps()
 
@@ -315,7 +340,7 @@ def load_dataset_from_pickle(
     if missing_media > 0:
         print(f"WARNING: {missing_media} media files missing from {file_path}", flush=True)
 
-    return None
+    return cached_diversity_tree
 
 
 def load_dataset_from_pickle_chunked(

@@ -1,7 +1,5 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Component, Input, computed, inject, signal, input, output } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { ExportersApiService } from '../../../services/exporters-api.service';
@@ -11,48 +9,41 @@ import type { ExporterEntry } from '../../../generated/api-client/models/exporte
 @Component({
   selector: 'vt-label-exporter-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent, IconComponent],
+  imports: [ModalComponent, IconComponent],
   templateUrl: './label-exporter-modal.component.html',
   styleUrl: './label-exporter-modal.component.scss',
 })
-export class LabelExporterModalComponent implements OnInit, OnDestroy {
+export class LabelExporterModalComponent {
   @Input() goodsOnly = false;
-  @Input() customTitle = '';
-  @Output() closed = new EventEmitter<void>();
-  @Output() exportComplete = new EventEmitter<void>();
+  readonly customTitle = input('');
+  readonly closed = output<void>();
+  readonly exportComplete = output<void>();
 
-  exporters: ExporterEntry[] = [];
-  loading = true;
-  error = '';
+  private readonly exportersApi = inject(ExportersApiService);
+  private readonly sortingApi = inject(SortingApiService);
 
-  private destroy$ = new Subject<void>();
+  // Eager `rxResource`: loads the exporter list once on creation (no request
+  // signal), wrapping the generated-client read so the interceptor chain still
+  // applies. Replaces the old `ngOnInit` subscribe + `destroy$` plumbing.
+  private readonly exportersResource = rxResource({
+    stream: () => this.exportersApi.getExporters(),
+  });
+  readonly exporters = computed<ExporterEntry[]>(() =>
+    (this.exportersResource.value() ?? []).filter((exp) => !exp.hidden_from_picker),
+  );
+  readonly loading = computed(() => this.exportersResource.isLoading());
 
-  constructor(
-    private exportersApi: ExportersApiService,
-    private sortingApi: SortingApiService,
-  ) {}
+  /** Error from a failed export action; the list-load failure is merged in. */
+  private readonly exportError = signal('');
+  readonly error = computed(
+    () =>
+      this.exportError() || (this.exportersResource.error() ? 'Failed to load exporters' : ''),
+  );
 
   get title(): string {
-    if (this.customTitle) return this.customTitle;
+    const customTitle = this.customTitle();
+    if (customTitle) return customTitle;
     return this.goodsOnly ? 'Export Labels (Goods)' : 'Export Labels';
-  }
-
-  ngOnInit(): void {
-    this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
-      next: (list) => {
-        this.exporters = list.filter((exp) => !exp.hidden_from_picker);
-        this.loading = false;
-      },
-      error: () => {
-        this.loading = false;
-        this.error = 'Failed to load exporters';
-      },
-    });
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   selectExporter(exporter: ExporterEntry): void {
@@ -69,12 +60,12 @@ export class LabelExporterModalComponent implements OnInit, OnDestroy {
               this.closed.emit();
             },
             error: () => {
-              this.error = 'Export failed';
+              this.exportError.set('Export failed');
             },
           });
       },
       error: () => {
-        this.error = 'Failed to fetch labels';
+        this.exportError.set('Failed to fetch labels');
       },
     });
   }

@@ -115,6 +115,37 @@ def build_diversity_tree_for_context(
     # Fresh context has no votes - nothing to replay.
 
 
+def restore_diversity_tree_from_cache(ctx: DatasetContext, cached: object) -> bool:
+    """Adopt a cached diversity tree onto *ctx* when it matches the medias.
+
+    *cached* is the ``"diversity_tree"`` payload read from a dataset pickle (or
+    ``None``).  The cache is adopted only when it deserialises cleanly **and**
+    its vector set exactly matches *ctx*'s current media IDs.  A mismatch means
+    the medias were remapped, deduplicated, or partially dropped since the
+    cache was written, so the caller must rebuild from scratch instead.
+
+    Returns ``True`` when the tree was restored (the caller should skip the
+    rebuild), ``False`` otherwise.  The caller remains responsible for
+    replaying the active detector's votes via
+    :func:`resync_diversity_tree_to_detector` once the tree is in place.
+    """
+    if not cached:
+        return False
+
+    from vtscore.state.diversity_tree import DiversityTree
+
+    try:
+        tree = DiversityTree.from_serializable(cached)
+    except (ValueError, TypeError):
+        return False
+    # dict_keys compare as sets; require an exact 1:1 with the loaded medias so
+    # a remapped / deduped / dropped media set falls through to a rebuild.
+    if tree.vector_to_leaf.keys() != ctx.medias.keys():
+        return False
+    ctx.diversity_tree = tree
+    return True
+
+
 def get_diversity_tree():
     """Return the active dataset context's DiversityTree instance, or ``None``."""
     with _state_lock:

@@ -1,17 +1,4 @@
-import {
-  AfterViewInit,
-  ChangeDetectorRef,
-  Component,
-  ElementRef,
-  EventEmitter,
-  HostListener,
-  Input,
-  OnChanges,
-  OnDestroy,
-  Output,
-  SimpleChanges,
-  ViewChild,
-} from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, OnChanges, OnDestroy, SimpleChanges, ViewChild, effect, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
@@ -101,24 +88,31 @@ const HOVER_EXTENT_PER_RADIUS = 3;
   styleUrl: './browse-bin-popup.component.scss',
 })
 export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDestroy {
+  private host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private selection = inject(BrowseSelectionService);
+  private metadataCache = inject(MediaMetadataCacheService);
+  private activeContext = inject(ActiveContextService);
+  private settingsState = inject(SettingsStateService);
+  private cdr = inject(ChangeDetectorRef);
+
   /** Member media ids of the bin the popup was summoned over. */
-  @Input() memberIds: number[] = [];
+  readonly memberIds = input<number[]>([]);
   /** Active dataset media type, used for the view prefs, hover-to-hear, and placeholders. */
-  @Input() mediaType = '';
+  readonly mediaType = input('');
   /** Viewport anchor (clientX/clientY) the popup opens at, then clamps inward. */
-  @Input() x = 0;
-  @Input() y = 0;
+  readonly x = input(0);
+  readonly y = input(0);
   /** The canvas's bounding rect (viewport coords); the popup is clamped to the
    *  on-screen part of it so it stays fully visible. Null falls back to the
    *  full viewport. */
-  @Input() bounds: DOMRect | null = null;
+  readonly bounds = input<DOMRect | null>(null);
   /** Current on-screen bin radius (CSS px) of the main canvas, i.e. the radius
    *  the hovered thumbnail breaks out from. The preview pane is sized relative
    *  to this so it tracks the main-canvas thumbnail-size setting. */
-  @Input() hoverThumbRadius = 28;
+  readonly hoverThumbRadius = input(28);
 
   /** Emitted when the popup should close (outside click, Escape, or the X). */
-  @Output() dismissed = new EventEmitter<void>();
+  readonly dismissed = output<void>();
 
   @ViewChild('panel') private panelRef?: ElementRef<HTMLElement>;
   @ViewChild('header') private headerRef?: ElementRef<HTMLElement>;
@@ -176,18 +170,28 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   private readonly subs: Subscription[] = [];
   private scrollSub: Subscription | null = null;
 
-  constructor(
-    private host: ElementRef<HTMLElement>,
-    private selection: BrowseSelectionService,
-    private metadataCache: MediaMetadataCacheService,
-    private activeContext: ActiveContextService,
-    private settingsState: SettingsStateService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  constructor() {
+    // Re-read the popup's thumbnail size whenever settings change (this is how
+    // the in-header size buttons take effect, and how a change on one popup
+    // becomes the default for every future popup of this media type).
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
+      this.applyViewPrefs();
+    });
+    // A selection change anywhere (here, the canvas, the panel) re-highlights.
+    // An effect on the signal (rather than a `changed$` subscription) schedules
+    // the repaint under zoneless from any mutation context.
+    effect(() => {
+      this.selection.version();
+      this.cdr.markForCheck();
+    });
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['memberIds']) {
-      this.ids = this.memberIds ?? [];
+      this.ids = this.memberIds() ?? [];
       this.stopAudio();
       // Open on the bin's representative so the pane is never blank (a singleton
       // therefore lands straight on a large high-res view).
@@ -214,8 +218,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
       // Re-anchor to the summon point, unless the user has dragged the popup —
       // then keep their spot (``place`` re-clamps it back on-screen if needed).
       if (!this.dragged) {
-        this.left = this.x;
-        this.top = this.y;
+        this.left = this.x();
+        this.top = this.y();
       }
       // Measure + clamp after the new content lays out.
       setTimeout(() => this.place());
@@ -226,16 +230,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
     this.subs.push(
       // Names/thumbnails arrive asynchronously; repaint the visible rows.
       this.metadataCache.version$.subscribe(() => this.cdr.markForCheck()),
-      // A selection change anywhere (here, the canvas, the panel) re-highlights.
-      this.selection.changed$.subscribe(() => this.cdr.markForCheck()),
-      // Re-read the popup's thumbnail size whenever settings change (this is how
-      // the in-header size buttons take effect, and how a change on one popup
-      // becomes the default for every future popup of this media type).
-      this.settingsState.settings$.subscribe((settings) => {
-        if (!settings) return;
-        this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
-        this.applyViewPrefs();
-      }),
     );
     this.settingsState.load();
     this.scrollSub =
@@ -255,15 +249,16 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   /** True for media types that carry real visual thumbnails (image / video):
    *  the ones that magnify on the main canvas and are worth a large preview. */
   get showPreview(): boolean {
-    return usesThumbnails(this.mediaType);
+    return usesThumbnails(this.mediaType());
   }
 
   /** Pull the remembered thumbnail size for the active media type, rechunk the
    *  rows, and re-clamp (the body height may have changed). */
   private applyViewPrefs(): void {
     const prevGoal = this.gridGoalWidth;
+    const mediaType = this.mediaType();
     this.gridGoalWidth = iconSizeToGoalWidth(
-      (this.mediaType && this.gridSizeDict[this.mediaType]) || 'M',
+      (mediaType && this.gridSizeDict[mediaType]) || 'M',
     );
     if (this.gridGoalWidth !== prevGoal) {
       this.rebuildRows();
@@ -308,7 +303,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
    *  taller. Zero when there is no preview. */
   get previewSize(): number {
     if (!this.showPreview) return 0;
-    const desired = this.hoverThumbRadius * HOVER_EXTENT_PER_RADIUS * PREVIEW_OVERSIZE;
+    const desired = this.hoverThumbRadius() * HOVER_EXTENT_PER_RADIUS * PREVIEW_OVERSIZE;
     // Keep it within the vertical room the region leaves (which already folds in
     // the absolute MAX_PREVIEW_PX cap via ``previewCapPx``).
     return Math.round(Math.max(MIN_PREVIEW_PX, Math.min(desired, this.previewCapPx)));
@@ -412,7 +407,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   onEntryEnter(id: number): void {
     // Thumbnail media: paint the hovered item's full-res original into the pane.
     if (this.showPreview) this.previewId = id;
-    if (this.mediaType !== 'audio') return;
+    if (this.mediaType() !== 'audio') return;
     const src = this.activeContext.mediaUrl(`/api/medias/${id}/audio`);
     if (this.audioSrc === src) return;
     this.audioSrc = src;
@@ -508,7 +503,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   /** Re-clamp the popup, anchoring at the summon point unless the user has
    *  dragged it (then keep their spot, just nudged back on-screen if needed). */
   private place(): void {
-    this.clampInto(this.dragged ? this.left : this.x, this.dragged ? this.top : this.y);
+    this.clampInto(this.dragged ? this.left : this.x(), this.dragged ? this.top : this.y());
   }
 
   /** Clamp ``(desiredLeft, desiredTop)`` so the *whole* popup sits inside the
@@ -522,7 +517,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnChanges, OnDest
   private clampInto(desiredLeft: number, desiredTop: number): void {
     const panel = this.panelRef?.nativeElement;
     if (!panel) return;
-    const b = this.bounds;
+    const b = this.bounds();
     // Visible region = canvas rect clipped to the viewport. Clipping to the
     // window is what keeps the popup fully on-screen when the canvas extends
     // past the bottom/right edges of the window.

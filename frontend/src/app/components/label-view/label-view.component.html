@@ -1,10 +1,10 @@
 <div class="layout" #layout>
   <div class="panel-left">
     <vt-left-panel
-      [medias]="mediaState.medias"
+      [medias]="mediaState.mediasSignal()"
       [sortOrder]="sortState.sortOrder"
       [threshold]="sortState.threshold"
-      [selectedId]="mediaState.selectedId"
+      [selectedId]="mediaState.selectedId()"
       [goodVotes]="voteState.goodVotes"
       [badVotes]="voteState.badVotes"
       [learnedSortAvailable]="voteState.learnedSortAvailable"
@@ -17,7 +17,9 @@
       [sortStatus]="sortState.sortStatus"
       [sortProgress]="sortState.sortProgress"
       [sortProgressTotal]="sortState.sortProgressTotal"
-      [labelingStatus]="labelingStatus"
+      [sortOverall]="sortState.sortOverall"
+      [sortEtaSeconds]="sortState.sortEtaSeconds"
+      [labelingStatus]="labelingStatus()"
       [viewMode]="viewModeLeft"
       [gridGoalWidth]="gridGoalWidthLeft"
       [focusMode]="focusModeLeft"
@@ -36,9 +38,10 @@
       (mediaContextRequest)="onMediaContextRequest($event)"
       (indicatorClick)="onIndicatorClick($event)"
       (sortCancel)="onSortCancel()"
-      [datasetName]="datasetName"
-      [autopilotCollapsed]="autopilotCollapsed"
-      [autopilotEnabled]="autopilotEnabled"
+      [datasetName]="datasetName()"
+      [autopilotCollapsed]="autopilotCollapsed()"
+      [autopilotEnabled]="autopilotEnabled()"
+      [autopilotDisabled]="autopilotDisabled"
       (autopilotStart)="onAutopilotStart()"
       (autopilotStop)="onAutopilotStop()"
       (autopilotRefocus)="onAutopilotRefocus()"
@@ -51,7 +54,7 @@
     vtPanelResize="left"
     [layoutEl]="layoutRef.nativeElement"
     [minWidth]="leftMin"
-    [opposingWidth]="rightWidth"
+    [opposingWidth]="rightWidth()"
     [centerMin]="CENTER_MIN"
     [dividerTotal]="DIVIDER_TOTAL"
     (widthChange)="onLeftWidthChange($event)"
@@ -68,7 +71,7 @@
     vtPanelResize="right"
     [layoutEl]="layoutRef.nativeElement"
     [minWidth]="RIGHT_MIN"
-    [opposingWidth]="leftWidth"
+    [opposingWidth]="leftWidth()"
     [centerMin]="CENTER_MIN"
     [dividerTotal]="DIVIDER_TOTAL"
     (widthChange)="onRightWidthChange($event)"
@@ -76,9 +79,9 @@
   ></div>
   <div class="panel-right">
     <vt-right-panel
-      [medias]="mediaState.medias"
+      [medias]="mediaState.mediasSignal()"
       [focusMode]="focusModeRight"
-      [trainableModelName]="trainableModelName"
+      [trainableModelName]="trainableModelName()"
       (mediaSelected)="onMediaSelect($event)"
       (mediaVoted)="onHoverVote($event)"
     />
@@ -103,16 +106,16 @@
   />
 }
 
-@if (cropPending) {
+@if (cropPending(); as crop) {
   <vt-media-crop-modal
-    [file]="cropPending.file"
-    [mediaType]="cropPending.mediaType"
+    [file]="crop.file"
+    [mediaType]="crop.mediaType"
     (confirmed)="onCropConfirmed($event)"
     (cancelled)="onCropCancelled()"
   />
 }
 
-@if (showResortPrompt) {
+@if (showResortPrompt()) {
   <vt-resort-prompt-modal
     [currentExampleType]="resortCurrentType"
     [currentExampleDisplay]="resortCurrentDisplay"

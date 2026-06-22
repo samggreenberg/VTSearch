@@ -1,21 +1,21 @@
-import { Component, ElementRef, EventEmitter, Input, Output, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, ElementRef, Input, ViewChild, input, output } from '@angular/core';
+
 
 @Component({
   selector: 'vt-drop-zone',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   templateUrl: './drop-zone.component.html',
   styleUrl: './drop-zone.component.scss',
 })
 export class DropZoneComponent {
-  @Input() label = 'Drop files here, or click to browse';
+  readonly label = input('Drop files here, or click to browse');
   @Input() sublabel = '';
-  @Input() accept = '';
-  @Input() multiple = false;
-  @Input() directory = false;
-  @Input() disabled = false;
-  @Output() filesSelected = new EventEmitter<File[]>();
+  readonly accept = input('');
+  readonly multiple = input(false);
+  readonly directory = input(false);
+  readonly disabled = input(false);
+  readonly filesSelected = output<File[]>();
 
   @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
 
@@ -23,7 +23,7 @@ export class DropZoneComponent {
   private dragDepth = 0;
 
   openPicker(): void {
-    if (this.disabled) return;
+    if (this.disabled()) return;
     this.fileInput?.nativeElement.click();
   }
 
@@ -38,7 +38,7 @@ export class DropZoneComponent {
     if (!this.hasFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    if (this.disabled) return;
+    if (this.disabled()) return;
     this.dragDepth++;
     this.isDragging = true;
   }
@@ -47,7 +47,7 @@ export class DropZoneComponent {
     if (!this.hasFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
-    if (this.disabled) return;
+    if (this.disabled()) return;
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'copy';
     }
@@ -65,7 +65,7 @@ export class DropZoneComponent {
     event.stopPropagation();
     this.dragDepth = 0;
     this.isDragging = false;
-    if (this.disabled) return;
+    if (this.disabled()) return;
     const dt = event.dataTransfer;
     if (!dt) return;
 
@@ -90,7 +90,7 @@ export class DropZoneComponent {
 
     if (files.length === 0) return;
     // For single-file pickers, only emit the first dropped file.
-    if (!this.directory && !this.multiple) {
+    if (!this.directory() && !this.multiple()) {
       this.filesSelected.emit([files[0]]);
     } else {
       this.filesSelected.emit(files);

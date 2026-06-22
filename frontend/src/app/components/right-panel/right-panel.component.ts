@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, computed, effect, inject, input, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -42,62 +42,99 @@ export interface TrainModeContext {
   styleUrl: './right-panel.component.scss',
 })
 export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  voteState = inject(VoteStateService);
+  labelsetState = inject(LabelsetStateService);
+  private settingsState = inject(SettingsStateService);
+  private dialog = inject(VtDialogService);
+
   @Input() medias: Media[] = [];
   @Input() trainMode: TrainModeContext | null = null;
-  @Input() focusMode: 'click' | 'hover' = 'click';
+  readonly focusMode = input<'click' | 'hover'>('click');
   /** 'label' = Labeling mode (detector export allowed), 'find' = Finding mode (no detector export). */
-  @Input() mode: 'label' | 'find' = 'label';
+  readonly mode = input<'label' | 'find'>('label');
   /**
    * Trainable model name that owns the labels shown in the right pane.
    * When set in label mode, the pane is sourced from the on-disk labelset
    * (so detector labels survive across dataset switches).  When empty, the
    * pane falls back to cid-based vote display.
    */
-  @Input() trainableModelName: string | null = null;
+  readonly trainableModelName = input<string | null>(null);
   /** Disable interactive buttons (used during Find scoring). */
-  @Input() disabled = false;
-  @Output() mediaSelected = new EventEmitter<number>();
-  @Output() mediaVoted = new EventEmitter<{ id: number; vote: 'good' | 'bad' }>();
+  readonly disabled = input(false);
+  readonly mediaSelected = output<number>();
+  readonly mediaVoted = output<{
+    id: number;
+    vote: 'good' | 'bad';
+}>();
   /** Find mode: browse the positive results as their own UMAP projection. */
-  @Output() browse = new EventEmitter<void>();
+  readonly browse = output<void>();
   /** Find mode: promote the goods into their own dataset. */
-  @Output() toDataset = new EventEmitter<void>();
+  readonly toDataset = output<void>();
   /** Find mode: export a label partition (good / bad). */
-  @Output() exportLabels = new EventEmitter<'good' | 'bad'>();
+  readonly exportLabels = output<'good' | 'bad'>();
   /** Find mode: open the detector-evaluation Stats modal. */
-  @Output() stats = new EventEmitter<void>();
+  readonly stats = output<void>();
   /** Find mode: fold the corrections into the detector's labelset and retrain. */
-  @Output() addCorrections = new EventEmitter<void>();
+  readonly addCorrections = output<void>();
 
-  goodIds: number[] = [];
-  badIds: number[] = [];
-  verifiedIds: Set<number> = new Set();
-  clickTimes: Record<string, number> = {};
-  learnedScores: Record<string, number> = {};
-  goodElements: DetectorLabelView[] = [];
-  badElements: DetectorLabelView[] = [];
+  // Vote piles mirror VoteStateService, which is signal-backed. `computed`
+  // wrappers track the service getters and recompute (with stable, memoised
+  // identity between changes) only when the underlying votes change, so under
+  // zoneless the bound label-lists repaint on a vote/poll without the former
+  // `subscribe`-into-plain-field plumbing (zoneless-migration.md, Phase 2.5/2.8).
+  readonly goodIds = computed(() => Array.from(this.voteState.goodVotes));
+  readonly badIds = computed(() => Array.from(this.voteState.badVotes));
+  readonly verifiedIds = computed(() => this.voteState.verifiedIds);
+  readonly clickTimes = computed(() => this.voteState.clickTimes);
+  readonly learnedScores = computed(() => this.voteState.learnedScores);
+  /** Normalised region boxes for good votes, keyed by media id; drives cropped
+   *  Good-pile thumbnails when an item was region-voted. */
+  readonly goodRegionBoxes = computed(() => this.voteState.goodRegionBoxes);
+  // Template-bound and written from the LabelsetStateService `good$`/`bad$`/
+  // `mediaType$` subscribes and the settings `effect()` (Recipe F for
+  // viewMode/gridGoalWidth) — none of which schedule CD for a plain field under
+  // zoneless — so they are signals. (`sortMode` stays plain: only written from
+  // the bound `(sortModeChange)` handler.)
+  readonly goodElements = signal<DetectorLabelView[]>([]);
+  readonly badElements = signal<DetectorLabelView[]>([]);
   sortMode: LabelSortMode = 'time-desc';
-  viewMode: 'grid' | 'list' = 'grid';
-  gridGoalWidth: number = 80;
+  readonly viewMode = signal<'grid' | 'list'>('grid');
+  readonly gridGoalWidth = signal(80);
   showLabelImport = false;
   showExport = false;
 
   private viewModeRightDict: Record<string, 'grid' | 'list'> = {};
   private gridIconSizeRightDict: Record<string, string> = {};
-  protected currentMediaType = '';
+  protected readonly currentMediaType = signal('');
   private destroy$ = new Subject<void>();
 
-  constructor(
-    private detectorsRegistryApi: DetectorsRegistryApiService,
-    public voteState: VoteStateService,
-    public labelsetState: LabelsetStateService,
-    private settingsState: SettingsStateService,
-    private dialog: VtDialogService,
-  ) {}
+  constructor() {
+    effect(() => {
+      const settings = this.settingsState.settingsSignal();
+      if (!settings) return;
+      const dict = settings.view_mode_right;
+      if (dict && typeof dict === 'object') {
+        this.viewModeRightDict = dict as Record<string, 'grid' | 'list'>;
+        if (this.currentMediaType()) {
+          this.viewMode.set(this.viewModeRightDict[this.currentMediaType()] ?? 'grid');
+        }
+      }
+      const sizeDict = settings.grid_icon_size_right;
+      if (sizeDict && typeof sizeDict === 'object') {
+        this.gridIconSizeRightDict = sizeDict as Record<string, string>;
+        if (this.currentMediaType()) {
+          this.gridGoalWidth.set(
+            iconSizeToGoalWidth(this.gridIconSizeRightDict[this.currentMediaType()] ?? 'M'),
+          );
+        }
+      }
+    });
+  }
 
   /** True when the right pane should be sourced from the labelset (not /api/votes). */
   get useLabelset(): boolean {
-    return this.mode === 'label' && !!this.trainableModelName;
+    return this.mode() === 'label' && !!this.trainableModelName();
   }
 
   /**
@@ -106,33 +143,33 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
    * just ``good ∩ verified``. In Label mode it shows every good vote.
    */
   get goodDisplayIds(): number[] {
-    if (this.mode !== 'find') return this.goodIds;
-    return this.goodIds.filter((id) => this.verifiedIds.has(id));
+    if (this.mode() !== 'find') return this.goodIds();
+    const verified = this.verifiedIds();
+    return this.goodIds().filter((id) => verified.has(id));
   }
 
   /** Bad-bucket counterpart of {@link goodDisplayIds}. */
   get badDisplayIds(): number[] {
-    if (this.mode !== 'find') return this.badIds;
-    return this.badIds.filter((id) => this.verifiedIds.has(id));
+    if (this.mode() !== 'find') return this.badIds();
+    const verified = this.verifiedIds();
+    return this.badIds().filter((id) => verified.has(id));
   }
 
   /** Find mode: count of unverified goods (the left work queue above the cutoff). */
   get unverifiedGoodCount(): number {
-    return this.goodIds.length - this.goodDisplayIds.length;
+    return this.goodIds().length - this.goodDisplayIds.length;
   }
 
   /** Find mode: count of unverified bads (the left work queue below the cutoff). */
   get unverifiedBadCount(): number {
-    return this.badIds.length - this.badDisplayIds.length;
+    return this.badIds().length - this.badDisplayIds.length;
   }
 
   ngOnInit(): void {
     this.settingsState.load();
-    this.loadSettings();
     this.voteState.startPolling();
-    this.subscribeToVotes();
     if (this.useLabelset) {
-      this.labelsetState.setModel(this.trainableModelName);
+      this.labelsetState.setModel(this.trainableModelName());
       this.labelsetState.startPolling();
     }
     this.subscribeToLabelset();
@@ -141,15 +178,15 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['medias'] && this.medias.length > 0) {
       const newType = this.medias[0].media_type;
-      if (newType !== this.currentMediaType) {
-        this.currentMediaType = newType;
-        this.viewMode = this.viewModeRightDict[newType] ?? 'grid';
-        this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M');
+      if (newType !== this.currentMediaType()) {
+        this.currentMediaType.set(newType);
+        this.viewMode.set(this.viewModeRightDict[newType] ?? 'grid');
+        this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M'));
       }
     }
     if (changes['trainableModelName'] || changes['mode']) {
       if (this.useLabelset) {
-        this.labelsetState.setModel(this.trainableModelName);
+        this.labelsetState.setModel(this.trainableModelName());
         this.labelsetState.startPolling();
       } else {
         this.labelsetState.stopPolling();
@@ -240,76 +277,24 @@ export class RightPanelComponent implements OnInit, OnChanges, OnDestroy {
     });
   }
 
-  private loadSettings(): void {
-    this.settingsState.settings$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: settings => {
-          if (!settings) return;
-          const dict = settings.view_mode_right;
-          if (dict && typeof dict === 'object') {
-            this.viewModeRightDict = dict as Record<string, 'grid' | 'list'>;
-            if (this.currentMediaType) {
-              this.viewMode = this.viewModeRightDict[this.currentMediaType] ?? 'grid';
-            }
-          }
-          const sizeDict = settings.grid_icon_size_right;
-          if (sizeDict && typeof sizeDict === 'object') {
-            this.gridIconSizeRightDict = sizeDict as Record<string, string>;
-            if (this.currentMediaType) {
-              this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[this.currentMediaType] ?? 'M');
-            }
-          }
-        },
-      });
-  }
-
-  private subscribeToVotes(): void {
-    this.voteState.goodVotes$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((votes) => {
-        this.goodIds = Array.from(votes);
-      });
-    this.voteState.badVotes$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((votes) => {
-        this.badIds = Array.from(votes);
-      });
-    this.voteState.verifiedIds$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((ids) => {
-        this.verifiedIds = ids;
-      });
-    this.voteState.clickTimes$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((times) => {
-        this.clickTimes = times;
-      });
-    this.voteState.learnedScores$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((scores) => {
-        this.learnedScores = scores;
-      });
-  }
-
   private subscribeToLabelset(): void {
     this.labelsetState.good$
       .pipe(takeUntil(this.destroy$))
       .subscribe((elements) => {
-        this.goodElements = elements;
+        this.goodElements.set(elements);
       });
     this.labelsetState.bad$
       .pipe(takeUntil(this.destroy$))
       .subscribe((elements) => {
-        this.badElements = elements;
+        this.badElements.set(elements);
       });
     this.labelsetState.mediaType$
       .pipe(takeUntil(this.destroy$))
       .subscribe((mt) => {
-        if (this.useLabelset && mt && mt !== this.currentMediaType) {
-          this.currentMediaType = mt;
-          this.viewMode = this.viewModeRightDict[mt] ?? 'grid';
-          this.gridGoalWidth = iconSizeToGoalWidth(this.gridIconSizeRightDict[mt] ?? 'M');
+        if (this.useLabelset && mt && mt !== this.currentMediaType()) {
+          this.currentMediaType.set(mt);
+          this.viewMode.set(this.viewModeRightDict[mt] ?? 'grid');
+          this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[mt] ?? 'M'));
         }
       });
   }

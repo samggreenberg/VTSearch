@@ -54,7 +54,12 @@ def cached_thumbnail_response(thumb_bytes: bytes, download_name: str):
     return resp
 
 
-def image_thumbnail_response(image_bytes: bytes, fallback_mimetype: str, download_name: str):
+def image_thumbnail_response(
+    image_bytes: bytes,
+    fallback_mimetype: str,
+    download_name: str,
+    crop: object = None,
+):
     """Build a cached, downscaled-image thumbnail response from ``image_bytes``.
 
     Shared by every route that serves a small image tile (the media grid/list,
@@ -65,17 +70,31 @@ def image_thumbnail_response(image_bytes: bytes, fallback_mimetype: str, downloa
     bytes.  An ``ETag`` fingerprints the *source* bytes so the browser reuses
     one thumbnail per item across scrolls and zoom levels, and conditional
     requests short-circuit to a 304 without regenerating the thumbnail.
-    """
-    from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
-    etag = hashlib.md5(image_bytes).hexdigest()
+    When ``crop`` is a valid normalised ``(x0, y0, x1, y1)`` region (see
+    :func:`vtscore.media.image.thumbnail.normalize_region_crop`), the thumbnail
+    shows only that sub-region -- used so a region-voted item displays its crop
+    rather than the whole frame.  The crop is folded into the ``ETag`` so a
+    re-vote with a different box invalidates the cached tile.
+    """
+    from vtscore.media.image.thumbnail import (  # noqa: PLC0415
+        make_image_thumbnail,
+        normalize_region_crop,
+    )
+
+    crop_box = normalize_region_crop(crop) if crop is not None else None
+
+    hasher = hashlib.md5(image_bytes)
+    if crop_box is not None:
+        hasher.update(repr(crop_box).encode("ascii"))
+    etag = hasher.hexdigest()
     if etag in request.if_none_match:
         resp = make_response("", 304)
         resp.set_etag(etag)
         resp.headers["Cache-Control"] = "private, max-age=86400"
         return resp
 
-    result = make_image_thumbnail(image_bytes)
+    result = make_image_thumbnail(image_bytes, crop=crop_box)
     thumb, mimetype = result if result is not None else (image_bytes, fallback_mimetype)
 
     resp = make_response(send_file(io.BytesIO(thumb), mimetype=mimetype, download_name=download_name))

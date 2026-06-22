@@ -24,6 +24,7 @@ from vtscore.media.image._demo_categories import (
     FOOD101_CATEGORIES,
     OXFORD_FLOWERS_CATEGORIES,
     PLACES365_CATEGORIES,
+    ROXFORD_CATEGORIES,
     STANFORD_DOGS_CATEGORIES,
     UCSF_DOCUMENTS_CATEGORIES,
 )
@@ -41,6 +42,7 @@ def build_demo_datasets() -> list[DemoDataset]:
         FOOD101_DOWNLOAD_SIZE_MB,
         OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
         PLACES365_DOWNLOAD_SIZE_MB,
+        ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
         STANFORD_DOGS_DOWNLOAD_SIZE_MB,
         UCSF_IDL_DOWNLOAD_SIZE_MB,
     )
@@ -361,6 +363,30 @@ def build_demo_datasets() -> list[DemoDataset]:
             download_size_mb=PLACES365_DOWNLOAD_SIZE_MB,
         ),
         DemoDataset(
+            id="roxford5k_s",
+            label="ROxford5k (S)",
+            description="Oxford landmarks — instance matching",
+            categories=ROXFORD_CATEGORIES,
+            source="roxford5k",
+            required_folder=DATA_DIR / "roxford5k" / "jpg",
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 10,
+            items_per_category=1500,
+            download_size_mb=ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
+            id="roxford5k_a",
+            label="ROxford5k (A)",
+            description="Oxford landmarks — instance matching",
+            categories=ROXFORD_CATEGORIES,
+            source="roxford5k",
+            required_folder=DATA_DIR / "roxford5k" / "jpg",
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=1500,
+            download_size_mb=ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
+        ),
+        DemoDataset(
             id="ucsf_documents_a",
             label="UCSF Documents (A)",
             description="Scanned document pages",
@@ -435,6 +461,36 @@ def _collect_stanford_dogs_files(categories, slice_args, on_progress) -> list:
             continue
         for ext in ["*.jpg", "*.jpeg", "*.png"]:
             for img_path in sorted(folder.glob(ext)):
+                by_cat.setdefault(cat, []).append((img_path, cat))
+    return _slice_by_category(by_cat, categories, *slice_args)
+
+
+def _roxford_category_for(stem: str, landmark_set: frozenset[str]) -> str:
+    """Map an Oxford Buildings filename stem to its landmark category.
+
+    Filenames look like ``radcliffe_camera_000158``; the landmark is the stem
+    with the trailing ``_<digits>`` index removed.  Anything not in the known
+    query-landmark set falls into ``"other"`` (the distractor haystack).
+    """
+    import re  # noqa: PLC0415
+
+    prefix = re.sub(r"_\d+$", "", stem)
+    return prefix if prefix in landmark_set else "other"
+
+
+def _collect_roxford_files(categories, slice_args, on_progress) -> list:
+    from vtscore.datasets.downloader import download_roxford5k  # noqa: PLC0415
+
+    roxford_dir = download_roxford5k(on_progress=on_progress)
+    jpg_dir = roxford_dir / "jpg"
+    # "other" is a catch-all, not a filename prefix, so it never matches a stem.
+    landmark_set = frozenset(c for c in categories if c != "other")
+
+    by_cat: dict = {}
+    if jpg_dir.exists():
+        for img_path in sorted(jpg_dir.glob("*.jpg")):
+            cat = _roxford_category_for(img_path.stem, landmark_set)
+            if cat in categories:
                 by_cat.setdefault(cat, []).append((img_path, cat))
     return _slice_by_category(by_cat, categories, *slice_args)
 
@@ -644,7 +700,7 @@ def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin) -> 
         clip_id += 1
 
 
-def load_demo_source(
+def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per demo source
     source,
     categories,
     slice_start,
@@ -695,6 +751,16 @@ def load_demo_source(
     if source == "stanford_dogs":
         _embed_file_images(
             _collect_stanford_dogs_files(categories, slice_args, on_progress),
+            clips,
+            embedder,
+            on_progress,
+            demo_origin,
+        )
+        return None
+
+    if source == "roxford5k":
+        _embed_file_images(
+            _collect_roxford_files(categories, slice_args, on_progress),
             clips,
             embedder,
             on_progress,

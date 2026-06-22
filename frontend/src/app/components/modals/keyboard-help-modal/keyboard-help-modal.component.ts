@@ -1,5 +1,5 @@
-import { Component, EventEmitter, Output, inject, signal, OnInit, SecurityContext } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, inject, signal, OnInit, SecurityContext, output } from '@angular/core';
+
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -43,12 +43,12 @@ const ABSOLUTE_SRC_RE = /^([a-z]+:)?\/\//i;
 @Component({
   selector: 'vt-keyboard-help-modal',
   standalone: true,
-  imports: [CommonModule, ModalComponent],
+  imports: [ModalComponent],
   templateUrl: './keyboard-help-modal.component.html',
   styleUrl: './keyboard-help-modal.component.scss',
 })
 export class KeyboardHelpModalComponent implements OnInit {
-  @Output() closed = new EventEmitter<void>();
+  readonly closed = output<void>();
 
   private readonly http = inject(HttpClient);
   private readonly sanitizer = inject(DomSanitizer);

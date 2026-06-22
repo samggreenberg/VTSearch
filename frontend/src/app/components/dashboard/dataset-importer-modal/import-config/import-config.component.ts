@@ -1,5 +1,5 @@
-import { Component, ElementRef, EventEmitter, HostListener, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, ElementRef, HostListener, Input, inject, input, output } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../icon/icon.component';
 
@@ -25,34 +25,36 @@ import { IconComponent } from '../../../icon/icon.component';
 @Component({
   selector: 'vt-import-config',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent],
   templateUrl: './import-config.component.html',
   styleUrl: './import-config.component.scss',
 })
 export class ImportConfigComponent {
+  private hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+
   /** ``id`` value for the rendered media-type trigger button.  Each
    *  call site supplies a unique value so the modal does not contain
    *  duplicate ids when multiple flows are present in the DOM. */
-  @Input() mediaTypeFieldId = 'import-config-media-type';
+  readonly mediaTypeFieldId = input('import-config-media-type');
 
   /** Two-way bound output media type (folder_import_name, e.g.
    *  ``"images"``).  Parent reloads embedders/clippers/source-specs on
    *  every change. */
   @Input() mediaType = '';
-  @Output() mediaTypeChange = new EventEmitter<string>();
+  readonly mediaTypeChange = output<string>();
 
   /** ``folder_import_name`` values to show in the dropdown (same list
    *  the importer's ``media_type`` field declares as ``options``). */
-  @Input() mediaTypeOptions: string[] = [];
+  readonly mediaTypeOptions = input<string[]>([]);
 
   /** Map of ``folder_import_name`` → human label.  Parent computes this
    *  once from the ``/api/media-types`` response. */
-  @Input() mediaTypeOptionLabels: Record<string, string> = {};
+  readonly mediaTypeOptionLabels = input<Record<string, string>>({});
 
   /** Map of ``folder_import_name`` → icon string (emoji or named SVG
    *  type from :class:`MediaTypeInfo.icon`).  When empty for a given
    *  option, the row renders label-only. */
-  @Input() mediaTypeOptionIcons: Record<string, string> = {};
+  readonly mediaTypeOptionIcons = input<Record<string, string>>({});
 
   /** Pre-formatted hint string from
    *  :meth:`DatasetImporterModalComponent.detectionHint`.  Empty hides
@@ -67,19 +69,17 @@ export class ImportConfigComponent {
    *  closed or no option is highlighted. */
   activeIndex = -1;
 
-  constructor(private hostEl: ElementRef<HTMLElement>) {}
-
   /** ``id`` for the popup ``role="listbox"`` element, derived from the
    *  trigger's id so it stays unique across the multiple flows the modal
    *  may render at once. */
   get listboxId(): string {
-    return `${this.mediaTypeFieldId}-listbox`;
+    return `${this.mediaTypeFieldId()}-listbox`;
   }
 
   /** ``id`` for the option at ``index`` so the combobox trigger can
    *  point ``aria-activedescendant`` at the highlighted row. */
   optionId(index: number): string {
-    return `${this.mediaTypeFieldId}-option-${index}`;
+    return `${this.mediaTypeFieldId()}-option-${index}`;
   }
 
   /** ``id`` of the currently active option, or ``null`` when the popup
@@ -93,13 +93,13 @@ export class ImportConfigComponent {
    *  option value when no label is supplied (e.g. the parent's
    *  ``mediaTypes`` list has not loaded yet). */
   optionLabel(opt: string): string {
-    return this.mediaTypeOptionLabels[opt] || opt;
+    return this.mediaTypeOptionLabels()[opt] || opt;
   }
 
   /** Icon string for an option (emoji or :class:`IconComponent` type
    *  name).  Empty hides the icon for that row. */
   iconFor(opt: string): string {
-    return this.mediaTypeOptionIcons[opt] || '';
+    return this.mediaTypeOptionIcons()[opt] || '';
   }
 
   toggle(): void {
@@ -115,7 +115,7 @@ export class ImportConfigComponent {
    *  point. */
   private openPopup(): void {
     this.open = true;
-    const selected = this.mediaTypeOptions.indexOf(this.mediaType);
+    const selected = this.mediaTypeOptions().indexOf(this.mediaType);
     this.activeIndex = selected >= 0 ? selected : 0;
   }
 
@@ -134,7 +134,7 @@ export class ImportConfigComponent {
   /** Move the keyboard highlight to ``index`` (clamped) and scroll it
    *  into view within the popup. */
   private setActiveIndex(index: number): void {
-    const last = this.mediaTypeOptions.length - 1;
+    const last = this.mediaTypeOptions().length - 1;
     if (last < 0) return;
     this.activeIndex = Math.max(0, Math.min(last, index));
     // Defer until the ``[id]`` binding has flushed so the lookup hits the
@@ -173,14 +173,14 @@ export class ImportConfigComponent {
         break;
       case 'End':
         event.preventDefault();
-        this.setActiveIndex(this.mediaTypeOptions.length - 1);
+        this.setActiveIndex(this.mediaTypeOptions().length - 1);
         break;
       case 'Enter':
       case ' ':
       case 'Spacebar':
         event.preventDefault();
         if (this.activeIndex >= 0) {
-          this.select(this.mediaTypeOptions[this.activeIndex]);
+          this.select(this.mediaTypeOptions()[this.activeIndex]);
         }
         break;
       case 'Escape':

@@ -128,15 +128,50 @@ export function formatProgressMessage(
   return msg;
 }
 
+/** Resolved inputs for a `<vt-progress-bar>` derived from a progress event. */
+export interface ProgressBarState {
+  value: number;
+  max: number;
+  indeterminate: boolean;
+}
+
 /**
- * Return ``true`` when a progress event has no known total; callers
- * should show an indeterminate spinner rather than a percent bar.
+ * Resolve the value/max/indeterminate a `<vt-progress-bar>` should render for a
+ * progress event, preferring the whole-job ``overall`` fraction so the bar
+ * fills once across a multi-step job (download → load → embed → finalize)
+ * instead of resetting at each phase.
+ *
+ * Precedence:
+ *   1. ``overall`` (0..1) when the backend reports a multi-step structure →
+ *      one continuous bar for the entire job.
+ *   2. ``current``/``total`` when a single-phase total is known.
+ *   3. Indeterminate spinner when neither is available.
+ */
+export function progressBarState(
+  progress: ProgressEvent | null | undefined,
+): ProgressBarState {
+  const prog = progress ?? {};
+  const overall = prog.overall;
+  if (overall != null && isFinite(overall)) {
+    return { value: Math.min(1, Math.max(0, overall)), max: 1, indeterminate: false };
+  }
+  const current = prog.current;
+  const total = prog.total;
+  if (current != null && total != null && total > 0) {
+    return { value: current, max: total, indeterminate: false };
+  }
+  return { value: 0, max: 1, indeterminate: true };
+}
+
+/**
+ * Return ``true`` when a progress event should render as an indeterminate
+ * spinner rather than a percent bar — i.e. neither a whole-job ``overall``
+ * fraction nor a single-phase ``current``/``total`` is available.
  */
 export function isProgressIndeterminate(
   progress: ProgressEvent | null | undefined,
 ): boolean {
-  const prog = progress ?? {};
-  return !(prog.current != null && prog.total != null && prog.total > 0);
+  return progressBarState(progress).indeterminate;
 }
 
 /**
@@ -289,7 +324,15 @@ export function formatProgressHeader(
       : 'Setting up the load pipeline.';
   }
 
-  const header = phase ? `${what} · ${phase}` : what;
+  // Surface the step count in the header ("step 3 of 4") so the user always
+  // knows how many phases the whole job has — per the consolidation brief, the
+  // job count matters more than any single phase's fine detail. The redundant
+  // "[Step S/T]" text is stripped from the detail line below.
+  const step = prog.step;
+  const totalSteps = prog.total_steps;
+  const stepPart =
+    step != null && totalSteps != null && totalSteps > 1 ? `step ${step} of ${totalSteps}` : '';
+  const header = [what, stepPart, phase].filter(Boolean).join(' · ');
   const detail = stripStepPrefix(formatProgressMessage(progress, '', { includeEta: false }));
   const eta = formatEta(prog.eta_seconds);
   return { header, subtitle, detail, eta };

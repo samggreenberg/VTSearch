@@ -2,21 +2,22 @@
   @if (!media) {
     <p class="placeholder-text">Select a media item to view</p>
   } @else {
-    <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass">
+    <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass()">
       @switch (mediaType) {
         @case ('audio') {
-          <vt-audio-player [media]="media" [volume]="volume" [audioPlaying]="audioPlaying" [swipeClass]="swipeClass" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
+          <vt-audio-player [media]="media" [volume]="volume()" [audioPlaying]="audioPlaying()" [swipeClass]="swipeClass()" (playingChanged)="onPlayingChanged($event)"></vt-audio-player>
         }
         @case ('image') {
           <vt-image-viewer
             [media]="media"
-            [pendingBadConfirm]="pendingBadConfirm"
+            [pendingBadConfirm]="pendingBadConfirm()"
+            [highlightBox]="highlightBox"
             (regionBoxChange)="onRegionBoxChange($event)"
             (armedConfirmCanceled)="onArmedConfirmCanceled()"
           ></vt-image-viewer>
         }
         @case ('video') {
-          <vt-video-player [media]="media" [volume]="volume" [audioPlaying]="audioPlaying" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
+          <vt-video-player [media]="media" [volume]="volume()" [audioPlaying]="audioPlaying()" (playingChanged)="onPlayingChanged($event)"></vt-video-player>
         }
         @case ('text') {
           <vt-text-viewer [media]="media"></vt-text-viewer>
@@ -36,12 +37,24 @@
           class="ivc-btn ivc-btn-toggle"
           [class.active]="imageViewer.marqueeMode"
           (click)="imageViewer.toggleMarqueeMode()"
-          title="Marquee: drag to draw a region (Shift+drag also works)"
-          aria-label="Marquee: draw region"
+          [title]="marqueeTitle"
+          [attr.aria-label]="marqueeAriaLabel"
           [attr.aria-pressed]="imageViewer.marqueeMode"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 2.5" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="0.5"/></svg>
         </button>
+        @if (regionOverlayCapable) {
+          <button
+            class="ivc-btn ivc-btn-toggle"
+            [class.active]="imageViewer.highlightMode"
+            (click)="imageViewer.toggleHighlightMode()"
+            title="Highlight: outline the region the detector matched best"
+            aria-label="Highlight: outline best-matched region"
+            [attr.aria-pressed]="imageViewer.highlightMode"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4l6 6-8 8-6-6z"/><path d="M6 12l-2.5 6.5L10 16z" fill="currentColor"/></svg>
+          </button>
+        }
         <span class="ivc-sep" aria-hidden="true"></span>
         <button class="ivc-btn" (click)="imageViewer.rotateLeft()" title="Rotate left ([)" aria-label="Rotate image left">&#x21BA;</button>
         <button class="ivc-btn" (click)="imageViewer.rotateRight()" title="Rotate right (])" aria-label="Rotate image right">&#x21BB;</button>
@@ -65,12 +78,12 @@
       </div>
     }
 
-    <div class="metadata-tray" [class.collapsed]="!showMetadata">
-      <button class="metadata-toggle" (click)="toggleMetadata()" [title]="showMetadata ? 'Hide metadata' : 'Show metadata'" [attr.aria-label]="showMetadata ? 'Hide metadata' : 'Show metadata'">
-        <span class="metadata-toggle-icon">{{ showMetadata ? '&#x25BC;' : '&#x25B2;' }}</span>
+    <div class="metadata-tray" [class.collapsed]="!showMetadata()">
+      <button class="metadata-toggle" (click)="toggleMetadata()" [title]="showMetadata() ? 'Hide metadata' : 'Show metadata'" [attr.aria-label]="showMetadata() ? 'Hide metadata' : 'Show metadata'">
+        <span class="metadata-toggle-icon">{{ showMetadata() ? '&#x25BC;' : '&#x25B2;' }}</span>
         <span class="metadata-toggle-label">Metadata</span>
       </button>
-      @if (showMetadata) {
+      @if (showMetadata()) {
         <div class="metadata-grid">
           <div class="metadata-item">
             <span class="metadata-label">Name</span>
@@ -94,21 +107,21 @@
       }
     </div>
 
-    @if (pendingBadConfirm) {
+    @if (pendingBadConfirm()) {
       <div class="bad-confirm-hint" role="status" aria-live="polite">
         Press &larr; again to vote no and discard the box, or Esc to keep the box.
       </div>
     }
 
-    @if (undoToastText) {
-      <div class="undo-toast" role="status" aria-live="polite">{{ undoToastText }}</div>
+    @if (undoToastText()) {
+      <div class="undo-toast" role="status" aria-live="polite">{{ undoToastText() }}</div>
     }
 
     <vt-voting-overlay
       [isGood]="isGood"
       [isBad]="isBad"
-      [disabled]="isVoting || disabled"
-      [spinningVote]="spinningVote"
+      [disabled]="isVoting() || disabled()"
+      [spinningVote]="spinningVote()"
       [showHint]="showFirstVoteHint"
       (voted)="castVote($event)"
     ></vt-voting-overlay>

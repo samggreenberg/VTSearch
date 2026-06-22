@@ -18,7 +18,7 @@
     </span>
     <vt-view-controls
       side="popup"
-      [currentMediaType]="mediaType"
+      [currentMediaType]="mediaType()"
       [showFocus]="false"
       [showViewMode]="false"
       [allowSizeInList]="true"
@@ -89,7 +89,7 @@
     }
   </div>
 
-  @if (mediaType === 'audio') {
+  @if (mediaType() === 'audio') {
     <audio #audioEl class="sr-only" [src]="audioSrc"></audio>
   }
 </div>

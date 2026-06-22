@@ -59,6 +59,7 @@ class TestImageSiglipEmbedderProperties:
             "is_default": True,
             "supports_text": True,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -155,6 +156,7 @@ class TestAudioClapMusicEmbedderProperties:
             "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -231,6 +233,7 @@ class TestAudioClapGeneralEmbedderProperties:
             "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -288,6 +291,7 @@ class TestAudioASTEmbedderProperties:
             "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -345,6 +349,7 @@ class TestAudioWhisperEncoderEmbedderProperties:
             "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -418,6 +423,7 @@ class TestAudioParaSpeechClapEmbedderProperties:
             "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -512,6 +518,7 @@ class TestTextBGEEmbedderProperties:
             "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -642,6 +649,7 @@ class TestVideoLanguageBindEmbedderProperties:
             "is_default": False,
             "supports_text": True,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -734,6 +742,7 @@ class TestVideoMAEEmbedderProperties:
             "is_default": False,
             "supports_text": False,
             "supports_patch_regions": False,
+            "supports_geometric_verification": False,
             "license_notice": None,
         }
 
@@ -853,9 +862,10 @@ class TestAllEmbeddersRegistration:
         embedders = all_embedders()
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
         # variants for dinov2, dinov3, eupe) + 1 face embedder
+        # + 1 structural image embedder (sift_vlad)
         # + 1 vision-only video embedder (videomae)
         # + 4 audio embedders (ast, clap_general, whisper_encoder, paraspeechclap).
-        assert len(embedders) == 21
+        assert len(embedders) == 22
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -875,6 +885,7 @@ class TestAllEmbeddersRegistration:
             "dinov3_patch",
             "eupe_single",
             "eupe_patch",
+            "sift_vlad",
             "videomae",
             "ast",
             "whisper_encoder",
@@ -901,6 +912,7 @@ class TestAllEmbeddersRegistration:
             "dinov3_patch",
             "eupe_single",
             "eupe_patch",
+            "sift_vlad",
             "e5",
             "bge",
             "xclip",
@@ -930,6 +942,7 @@ class TestAllEmbeddersRegistration:
             "dinov3_patch",
             "eupe_single",
             "eupe_patch",
+            "sift_vlad",
             "face",
         }
 
@@ -961,15 +974,17 @@ class TestAllEmbeddersRegistration:
         dicts = all_embedders_dict()
         # 7 original + 8 image embedders (clip, siglip2, plus single/patch
         # variants for dinov2, dinov3, eupe) + 1 face embedder
+        # + 1 structural image embedder (sift_vlad)
         # + 1 vision-only video embedder (videomae)
         # + 4 audio embedders (ast, clap_general, whisper_encoder, paraspeechclap).
-        assert len(dicts) == 21
+        assert len(dicts) == 22
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
             assert "is_default" in d
             assert "supports_text" in d
             assert "supports_patch_regions" in d
+            assert "supports_geometric_verification" in d
             assert "license_notice" in d
 
 

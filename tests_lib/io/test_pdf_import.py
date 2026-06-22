@@ -375,7 +375,7 @@ class TestPdfSymlinkDiscovery:
         """PDFs inside a symlinked subdirectory should be found and rendered."""
         from contextlib import ExitStack
 
-        from vtscore.datasets.importers.server_folder import _load_pdf_images
+        from vtscore.datasets.pdf import load_pdf_images_into as _load_pdf_images
 
         root = tmp_path / "root"
         root.mkdir()
