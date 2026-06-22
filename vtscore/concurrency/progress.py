@@ -163,6 +163,8 @@ class ProgressTracker:
         else:
             self._overall_max = raw
 
+        # Past the new-job guard above, the overall clock is always running.
+        assert self._overall_start_time is not None
         elapsed = now - self._overall_start_time
         progressed = raw - self._overall_start_frac
         if elapsed < self._ETA_MIN_ELAPSED or progressed <= 0 or raw >= 1.0:
