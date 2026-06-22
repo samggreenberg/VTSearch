@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 
 from vtscore.datasets.importers._npz_vectors import read_npz_embedder_name, read_npz_filenames_and_vectors
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
     _read_npz_paths_file,
@@ -274,8 +275,8 @@ class TestServerFilesNpzRunsEndToEnd:
         # Index medias by their original source path so we can pair each
         # with its expected vector.
         by_source = {m["origin_name"]: m for m in medias.values()}
-        np.testing.assert_array_equal(by_source[str(src_a)]["embedding"], vec_a)
-        np.testing.assert_array_equal(by_source[str(src_b)]["embedding"], vec_b)
+        np.testing.assert_array_equal(media_embedding(by_source[str(src_a)]), vec_a)
+        np.testing.assert_array_equal(media_embedding(by_source[str(src_b)]), vec_b)
         # Origin still points at the npz so subsequent reloads work.
         for media in medias.values():
             assert media["origin"]["importer"] == "server_files"
@@ -324,7 +325,7 @@ class TestServerFilesNpzRunsEndToEnd:
 
         assert len(medias) == 1
         media = next(iter(medias.values()))
-        np.testing.assert_array_equal(media["embedding"], vec)
+        np.testing.assert_array_equal(media_embedding(media), vec)
 
 
 # ---------------------------------------------------------------------------

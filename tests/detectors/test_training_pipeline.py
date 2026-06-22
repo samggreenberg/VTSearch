@@ -115,7 +115,7 @@ class TestCollectMediaOrigins:
 
 class TestTrainAndScore:
     def test_empty_votes_returns_empty(self):
-        clips = {1: {"id": 1, "embedding": np.ones(8, dtype=np.float32)}}
+        clips = {1: {"id": 1, "embedder": "clap", "embeddings": {"clap": np.ones(8, dtype=np.float32)}}}
         results, threshold, model = train_and_score(clips, {}, {})
         assert results == []
         assert threshold == 0.5

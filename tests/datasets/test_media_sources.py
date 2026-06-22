@@ -8,6 +8,7 @@ import pytest
 from vtscore.datasets.sources import get_source_for_origin
 from vtscore.datasets.sources.base import MediaItem
 from vtscore.datasets.sources.local_folder import LocalFolderSource
+from vtscore.embedding.media_vectors import media_embedding
 
 
 # ── MediaItem ─────────────────────────────────────────────────────────
@@ -410,7 +411,7 @@ class TestIngestViaSource:
             assert media["origin"] == origin
             assert "md5" in media
             assert "media_bytes" in media
-            assert media["embedding"] is not None
+            assert media_embedding(media) is not None
 
     def test_ingest_falls_back_when_embed_fails(self, tmp_path):
         """When embedding fails, fast path returns -1 to trigger legacy fallback."""
@@ -482,7 +483,7 @@ class TestIngestViaSource:
         media = next(iter(medias.values()))
         # Ingest L2-normalizes the source's vector at the write chokepoint,
         # so the stored embedding is the unit-norm form of precomputed_emb.
-        assert np.allclose(media["embedding"], precomputed_emb / np.linalg.norm(precomputed_emb))
+        assert np.allclose(media_embedding(media), precomputed_emb / np.linalg.norm(precomputed_emb))
         assert media["embedder"] == "test-embedder"
         assert media["duration"] == 3.5
 

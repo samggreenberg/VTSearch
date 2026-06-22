@@ -10,6 +10,7 @@ import numpy as np
 import app as app_module
 import vtsearch.state as _state
 import vtscore.state.core as _core
+from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.state import (
     medias,
     vote_click_times,
@@ -165,7 +166,7 @@ class TestLabelFileSortModelSelection:
         not hardcode embed_audio_file / CLAP."""
         # Determine the current media type from loaded test medias
         media_type = next(iter(medias.values())).get("media_type", "audio")
-        embedding_dim = next(iter(medias.values()))["embedding"].shape[0]
+        embedding_dim = media_embedding(next(iter(medias.values()))).shape[0]
 
         # Create fake media files on disk
         good_file = tmp_path / "good.bin"

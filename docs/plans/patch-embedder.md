@@ -754,9 +754,11 @@ slot + routing).
 V3 lands as a sequence of behavior-preserving substrate phases (so each
 commit is reviewable and the single-embedder world keeps working) followed by
 the user-visible binding.  Ordering is by dependency: each phase needs the one
-above it.  **Status: Phases 2a-2b.5 shipped; 2c (drop the singular mirror)
-remains, then the create-time picker that binds the text / patch / structural
-trio (three role pickers; at least one slot filled).**
+above it.  **Status: Phases 2a-2c shipped; the singular mirror is gone
+(``media["embeddings"]`` is the sole per-media vector store).  What remains is
+the create-time picker that binds the text / patch / structural trio (three
+role pickers; at least one slot filled), plus the ``structural`` binding slot +
+routing role it depends on.**
 
 **Shipped:**
 
@@ -862,11 +864,26 @@ trio (three role pickers; at least one slot filled).**
   the cross-dataset-Find follow-up already tracked under "Open follow-ups (from
   2b.4)".
 
+- **Phase 2c - drop the singular mirror.** The legacy `media["embedding"]`
+  primary mirror is gone: `media["embeddings"]` (the per-embedder dict) is the
+  sole vector store.  Every read site routes through the `media_embedding`
+  accessor (which no longer falls back to the singular key); `set_media_embedding`
+  writes only the dict; every media-creation site builds `media["embeddings"]`
+  (an empty dict for deferred embeds, `{name: vec}` when the vector is known);
+  and the pickle exporter writes only `embeddings`.  Old single-vector pickles
+  still load: `ensure_embeddings_dict` (run on load) re-keys their singular
+  vector into the dict and drops the singular key, so the migration is
+  read-time and one-way.  Behavior is byte-for-byte unchanged for every
+  single-embedder dataset (the dict has one entry, which is what the primary
+  mirror used to hold).
+
 **Remaining, in order:**
 
-- **Phase 2c - drop the singular mirror.** Once every read site routes through
-  the accessor with an explicit embedder, remove the `media["embedding"]`
-  primary mirror (read-time re-key on load handles old pickles).
+- **Create-time three-role picker + `structural` binding slot.** See "Open
+  follow-ups (from 2b.3)": the binding model and `routed_embedder` know only
+  text/patch, so the structural role and the score precedence
+  structural ▸ patch ▸ text still need wiring before the frontend picker can
+  bind a full trio.
 
 ### Open follow-ups (from 2b.4)
 

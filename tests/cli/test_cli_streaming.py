@@ -39,6 +39,7 @@ def _make_audio_media(media_id: int) -> dict:
         "file_size": len(raw),
         "md5": hashlib.md5(raw).hexdigest(),
         "embedding": [e0, e1],
+        "embedder": "clap",
         "media_bytes": None,
         "media_string": None,
         "media_path": None,

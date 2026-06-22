@@ -110,7 +110,7 @@ class TestScoreAllMediaNaNSafety:
         clips: dict[int, dict] = {}
         for cid in (1, 2, 3):
             clips[cid] = {
-                "embedding": rng.standard_normal(8).astype(np.float32),
+                "embeddings": {"test": rng.standard_normal(8).astype(np.float32)},
                 "embedder": "test",
             }
         model = _NaNProducingModel(input_dim=8).eval()
@@ -184,7 +184,7 @@ class TestLabelsetTrainAndScoreNaNSafety:
         # IDs 100+ to avoid clashing with the conftest-loaded test medias (1-20).
         clips_dict = {
             cid: {
-                "embedding": rng.standard_normal(dim).astype(np.float32),
+                "embeddings": {"test": rng.standard_normal(dim).astype(np.float32)},
                 "embedder": "test",
                 "media_type": "audio",
                 "md5": f"m{cid:031d}",

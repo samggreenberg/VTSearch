@@ -985,7 +985,7 @@ class TestBuildDiversityTreeForContext:
         for i in range(10):
             ctx.medias[i] = {
                 "id": i,
-                "embedding": rng.standard_normal(128).astype(np.float32),
+                "embeddings": {"e5": rng.standard_normal(128).astype(np.float32)},
             }
 
         build_diversity_tree_for_context(ctx)
@@ -1030,7 +1030,7 @@ class TestBackgroundLoadThreadContext:
             # stub media a real embedding so the load pipeline's
             # ``_drop_none_embeddings_stage`` (M11 finalize) doesn't
             # remove it before we can assert on it.
-            get_active_context().medias[1] = {"id": 1, "embedding": np.ones(4, dtype=np.float32)}
+            get_active_context().medias[1] = {"id": 1, "embeddings": {"e5": np.ones(4, dtype=np.float32)}}
             ran.set()
 
         task_id = _run_origin_load_in_background(

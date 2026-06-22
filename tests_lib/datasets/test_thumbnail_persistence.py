@@ -69,7 +69,7 @@ class TestThumbnailSurvivesPickleRoundTrip:
                 "file_size": len(src),
                 "md5": "abc",
                 "embedder": "siglip",
-                "embedding": rng.standard_normal(512).astype(np.float32),
+                "embeddings": {"siglip": rng.standard_normal(512).astype(np.float32)},
                 "filename": "i.png",
                 "category": "test",
                 "media_bytes": src,

@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
+from vtscore.embedding.media_vectors import media_embedding
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +174,7 @@ class TestEmbedMissingRoutesToBulk:
         mt = _make_media_type_for_audio()
         emb = _make_bulk_embedder()
 
-        medias = {i: {"media_type": "audio", "embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
+        medias = {i: {"media_type": "audio", "embeddings": {}, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
 
         with (
             mock.patch("vtscore.media.get_by_folder_name", return_value=mt),
@@ -184,7 +185,7 @@ class TestEmbedMissingRoutesToBulk:
         assert emb.embed_media_bulk.call_count == 1
         sent = emb.embed_media_bulk.call_args.args[0]
         assert len(sent) == 3
-        assert all(m["embedding"] is not None for m in medias.values())
+        assert all(media_embedding(m) is not None for m in medias.values())
 
     def test_already_embedded_medias_are_left_alone(self):
         from vtscore.datasets.stages.embedding import embed_missing
@@ -193,8 +194,8 @@ class TestEmbedMissingRoutesToBulk:
 
         pre_vec = np.array([99.0, 99.0, 99.0], dtype=np.float32)
         medias = {
-            1: {"media_type": "audio", "embedding": pre_vec, "embedder": "external"},
-            2: {"media_type": "audio", "embedding": None, "media_path": "/tmp/2.wav"},
+            1: {"media_type": "audio", "embeddings": {"external": pre_vec}, "embedder": "external"},
+            2: {"media_type": "audio", "embeddings": {}, "media_path": "/tmp/2.wav"},
         }
 
         with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
@@ -202,16 +203,16 @@ class TestEmbedMissingRoutesToBulk:
 
         sent = emb.embed_media_bulk.call_args.args[0]
         assert len(sent) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], pre_vec)
+        np.testing.assert_array_equal(media_embedding(medias[1]), pre_vec)
         assert medias[1]["embedder"] == "external"
-        assert medias[2]["embedding"] is not None
+        assert media_embedding(medias[2]) is not None
 
     def test_no_op_when_nothing_missing(self):
         from vtscore.datasets.stages.embedding import embed_missing
 
         emb = _make_bulk_embedder()
         pre_vec = np.array([1.0], dtype=np.float32)
-        medias = {1: {"media_type": "audio", "embedding": pre_vec, "embedder": "external"}}
+        medias = {1: {"media_type": "audio", "embeddings": {"external": pre_vec}, "embedder": "external"}}
 
         with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             embed_missing(medias)
@@ -230,13 +231,13 @@ class TestEmbedMissingRoutesToBulk:
         emb = _make_bulk_embedder()
         # Mimic what a converter output looked like before the fix:
         # media_type absent, embedding still None.
-        medias = {i: {"embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
+        medias = {i: {"embeddings": {}, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
 
         with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             embed_missing(medias)
 
         emb.embed_media_bulk.assert_not_called()
-        assert all(m["embedding"] is None for m in medias.values())
+        assert all(media_embedding(m) is None for m in medias.values())
 
     def test_routes_progress_to_caller(self):
         from vtscore.datasets.stages.embedding import embed_missing
@@ -256,7 +257,7 @@ class TestEmbedMissingRoutesToBulk:
         def caller_progress(status, msg="", cur=0, tot=0):
             events.append((status, msg, cur, tot))
 
-        medias = {1: {"media_type": "audio", "embedding": None, "media_path": "/tmp/a.wav"}}
+        medias = {1: {"media_type": "audio", "embeddings": {}, "media_path": "/tmp/a.wav"}}
 
         with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             embed_missing(medias, on_progress=caller_progress)
@@ -275,15 +276,15 @@ class TestEmbedMissingRoutesToBulk:
         emb.embed_media_bulk.side_effect = _bulk
 
         medias = {
-            1: {"media_type": "audio", "embedding": None, "media_path": "/tmp/good.wav"},
-            2: {"media_type": "audio", "embedding": None, "media_path": "/tmp/bad.wav"},
+            1: {"media_type": "audio", "embeddings": {}, "media_path": "/tmp/good.wav"},
+            2: {"media_type": "audio", "embeddings": {}, "media_path": "/tmp/bad.wav"},
         }
 
         with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             embed_missing(medias)
 
-        assert medias[1]["embedding"] is not None
-        assert medias[2]["embedding"] is None
+        assert media_embedding(medias[1]) is not None
+        assert media_embedding(medias[2]) is None
 
 
 # ---------------------------------------------------------------------------

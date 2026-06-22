@@ -19,6 +19,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import torch
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.patch_embed import (
     PatchEmbedOutput,
     RegionVector,
@@ -709,14 +710,14 @@ class TestDinoAttentionBackend:
 
 class TestScoreAgainstQuery:
     def test_legacy_single_vector_returns_full_image_box(self):
-        media = {"embedding": np.array([1.0, 0.0], dtype=np.float32)}
+        media = {"embedder": "siglip", "embeddings": {"siglip": np.array([1.0, 0.0], dtype=np.float32)}}
         q = np.array([1.0, 0.0], dtype=np.float32)
         score, box = score_against_query(media, q)
         assert box == (0.0, 0.0, 1.0, 1.0)
         np.testing.assert_allclose(score, 1.0, atol=1e-5)
 
     def test_zero_query_norm_returns_zero(self):
-        media = {"embedding": np.array([1.0, 0.0], dtype=np.float32)}
+        media = {"embedder": "siglip", "embeddings": {"siglip": np.array([1.0, 0.0], dtype=np.float32)}}
         score, box = score_against_query(media, np.zeros(2, dtype=np.float32))
         assert score == 0.0
         assert box is None
@@ -733,7 +734,8 @@ class TestScoreAgainstQuery:
         )
         media = {
             "patch_regions": [rv_match, rv_other],
-            "embedding": np.array([0.5, 0.5], dtype=np.float32),
+            "embedder": "siglip",
+            "embeddings": {"siglip": np.array([0.5, 0.5], dtype=np.float32)},
         }
         q = np.array([1.0, 0.0], dtype=np.float32)
         score, box = score_against_query(media, q)
@@ -746,8 +748,8 @@ class TestCosineSortWithBoxes:
         """Snapshot of single-vector media → no best_region field on results
         (preserves SigLIP API shape exactly)."""
         snap = {
-            1: {"embedding": np.array([1.0, 0.0], dtype=np.float32)},
-            2: {"embedding": np.array([0.0, 1.0], dtype=np.float32)},
+            1: {"embedder": "siglip", "embeddings": {"siglip": np.array([1.0, 0.0], dtype=np.float32)}},
+            2: {"embedder": "siglip", "embeddings": {"siglip": np.array([0.0, 1.0], dtype=np.float32)}},
         }
         q = np.array([1.0, 0.0], dtype=np.float32)
         results, sims = cosine_sort_with_boxes(snap, q)
@@ -765,10 +767,12 @@ class TestCosineSortWithBoxes:
         snap = {
             1: {
                 "patch_regions": [rv],
-                "embedding": np.array([1.0, 0.0], dtype=np.float32),
+                "embedder": "siglip",
+                "embeddings": {"siglip": np.array([1.0, 0.0], dtype=np.float32)},
             },
             2: {
-                "embedding": np.array([0.0, 1.0], dtype=np.float32),
+                "embedder": "siglip",
+                "embeddings": {"siglip": np.array([0.0, 1.0], dtype=np.float32)},
             },
         }
         q = np.array([1.0, 0.0], dtype=np.float32)
@@ -1383,7 +1387,8 @@ class TestRegionAwareTraining:
             "id": cid,
             "md5": f"md5-{cid:04x}",
             "media_type": "image",
-            "embedding": cls,
+            "embedder": "siglip",
+            "embeddings": {"siglip": cls},
             "patch_grid": grid,
         }
 
@@ -1400,7 +1405,7 @@ class TestRegionAwareTraining:
         expected = box_to_vote_vector(media["patch_grid"], box)
         np.testing.assert_array_equal(vec, expected)
         # And the CLS vector is *not* what we got.
-        assert not np.array_equal(vec, media["embedding"])
+        assert not np.array_equal(vec, media_embedding(media))
 
     def test_train_and_score_falls_back_to_cls_without_patch_grid(self):
         """Legacy / single-vector datasets have no ``patch_grid``; even with
@@ -1411,17 +1416,18 @@ class TestRegionAwareTraining:
             "id": 1,
             "md5": "abc",
             "media_type": "image",
-            "embedding": np.array([1.0, 0.0, 0.0], dtype=np.float32),
+            "embedder": "siglip",
+            "embeddings": {"siglip": np.array([1.0, 0.0, 0.0], dtype=np.float32)},
         }
         vec = _training_vec_for_vote(media, (0.1, 0.2, 0.7, 0.8))
-        np.testing.assert_array_equal(vec, media["embedding"])
+        np.testing.assert_array_equal(vec, media_embedding(media))
 
     def test_train_and_score_falls_back_to_cls_when_no_region_box(self):
         from vtscore.detectors.training import _training_vec_for_vote
 
         media = self._media_with_patch_grid(0.99, cid=1)
         vec = _training_vec_for_vote(media, region_box=None)
-        np.testing.assert_array_equal(vec, media["embedding"])
+        np.testing.assert_array_equal(vec, media_embedding(media))
 
     def _register_synthetic_image(self, cid: int, grid_value: float = 0.99) -> dict:
         """Insert a synthetic image media into the active dataset context.
@@ -1464,7 +1470,7 @@ class TestRegionAwareTraining:
         expected = box_to_vote_vector(media["patch_grid"], (0.0, 0.0, 0.5, 0.5))
         np.testing.assert_allclose(det_ctx.label_embeddings[eid], expected, atol=1e-6)
         # And it's NOT the CLS embedding.
-        assert not np.allclose(det_ctx.label_embeddings[eid], media["embedding"])
+        assert not np.allclose(det_ctx.label_embeddings[eid], media_embedding(media))
 
     def test_populate_label_embeddings_repools_when_region_box_set(self):
         """Region-voted elements re-pool on every call so region_box edits
@@ -1543,7 +1549,7 @@ class TestRegionAwareTraining:
         eid = stable_element_id(elem)
         pooled = np.array(det_ctx.label_embeddings[eid], copy=True)
         # Sanity: the cached vector is the pooled box, not the CLS embedding.
-        assert not np.allclose(pooled, media["embedding"])
+        assert not np.allclose(pooled, media_embedding(media))
         assert det_ctx.label_embedding_regions[eid] == (0.0, 0.0, 0.5, 0.5)
 
         # Simulate the bug-triggering edit: same element identity (same eid)
@@ -1553,7 +1559,7 @@ class TestRegionAwareTraining:
         populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
         # The cached vector must now be the image-level CLS embedding, not
         # the stale top-left pooled vector.
-        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], media["embedding"])
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], media_embedding(media))
         assert det_ctx.label_embedding_regions[eid] is None
 
     def test_populate_label_embeddings_invalidates_when_region_box_added(self):
@@ -1578,7 +1584,7 @@ class TestRegionAwareTraining:
         populate_label_embeddings(det_ctx, ls, media_type="image", snap=snap)
         eid = stable_element_id(elem)
         assert det_ctx.label_embedding_regions[eid] is None
-        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], media["embedding"])
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], media_embedding(media))
 
         # User adds a region annotation to the element.
         elem.region_box = (0.5, 0.5, 1.0, 1.0)

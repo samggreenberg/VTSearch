@@ -325,14 +325,26 @@ class TestEvalTextSortEnrich:
         for _ in range(10):
             emb = cat_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "cat", "media_type": "image"}
+            medias[media_id] = {
+                "id": media_id,
+                "embedder": "siglip",
+                "embeddings": {"siglip": emb},
+                "category": "cat",
+                "media_type": "image",
+            }
             media_id += 1
         dog_dir = np.zeros(16)
         dog_dir[1] = 1.0
         for _ in range(10):
             emb = dog_dir + rng.normal(0, 0.05, 16)
             emb /= np.linalg.norm(emb)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": "dog", "media_type": "image"}
+            medias[media_id] = {
+                "id": media_id,
+                "embedder": "siglip",
+                "embeddings": {"siglip": emb},
+                "category": "dog",
+                "media_type": "image",
+            }
             media_id += 1
         return medias, cat_dir, dog_dir
 
