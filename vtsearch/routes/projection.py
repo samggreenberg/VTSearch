@@ -289,7 +289,7 @@ def _build_subset(ctx, requested_ids: list[int], bin_shape: str, *, force: bool 
     from vtscore.embedding.matrix import get_embedding_submatrix
     from vtscore.projection import build_pyramid
 
-    sorted_ids, matrix = get_embedding_submatrix(ctx, requested_ids)
+    sorted_ids, matrix = get_embedding_submatrix(ctx, requested_ids, ctx.routed_embedder("score"))
     if matrix.size == 0:
         abort(409, message="None of the selected items have embeddings — nothing to project.")
 
@@ -417,7 +417,9 @@ def build_projection():
         abort(409, message="Dataset is empty — nothing to project.")
 
     try:
-        sorted_ids, matrix = get_embedding_matrix(ctx)
+        # The diversity tree / projection clusters in the score embedder's
+        # space (patch-else-text; the v3 routing table).
+        sorted_ids, matrix = get_embedding_matrix(ctx, ctx.routed_embedder("score"))
     except ValueError as exc:
         abort(409, message=str(exc))
 

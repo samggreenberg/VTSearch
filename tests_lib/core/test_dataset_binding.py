@@ -167,6 +167,49 @@ class TestDatasetContextExplicitBinding:
         assert ctx.patch_embedder is None
 
 
+class TestRoutedEmbedder:
+    """The v3 routing table: which bound embedder serves each operation role."""
+
+    def test_text_dataset_roles(self, fake_caps):
+        ctx = _ctx_with_embedder("faketext")
+        assert ctx.routed_embedder("text") == "faketext"
+        assert ctx.routed_embedder("patch") is None
+        assert ctx.routed_embedder("score") == "faketext"
+
+    def test_patch_dataset_roles(self, fake_caps):
+        ctx = _ctx_with_embedder("fakepatch")
+        assert ctx.routed_embedder("text") is None
+        assert ctx.routed_embedder("patch") == "fakepatch"
+        assert ctx.routed_embedder("score") == "fakepatch"
+
+    def test_single_vector_dataset_routes_nothing(self, fake_caps):
+        # A slot-less single-vector dataset (e.g. dinov2_single) binds neither
+        # role; score falls through to None so the matrix layer reads the
+        # primary vector rather than 400-ing.
+        ctx = _ctx_with_embedder("fakesingle")
+        assert ctx.routed_embedder("text") is None
+        assert ctx.routed_embedder("patch") is None
+        assert ctx.routed_embedder("score") is None
+
+    def test_score_prefers_patch_over_text(self, fake_caps):
+        ctx = DatasetContext("dual")
+        ctx.bind_embedders(text_embedder="faketext", patch_embedder="fakepatch")
+        assert ctx.routed_embedder("text") == "faketext"
+        assert ctx.routed_embedder("patch") == "fakepatch"
+        # score = patch-if-set-else-text
+        assert ctx.routed_embedder("score") == "fakepatch"
+
+    def test_score_falls_back_to_text_when_no_patch(self, fake_caps):
+        ctx = DatasetContext("texty")
+        ctx.bind_embedders(text_embedder="faketext", patch_embedder=None)
+        assert ctx.routed_embedder("score") == "faketext"
+
+    def test_unknown_role_raises(self, fake_caps):
+        ctx = _ctx_with_embedder("faketext")
+        with pytest.raises(ValueError, match="unknown embedder routing role"):
+            ctx.routed_embedder("bogus")
+
+
 class TestRealRegisteredEmbedder:
     """Smoke test against the live registry.  Reading the capability flags
     does not load model weights, so this is cheap and CPU-only."""

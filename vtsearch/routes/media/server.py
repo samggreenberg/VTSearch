@@ -438,7 +438,14 @@ def example_sort_by_id(body: dict):
             finally:
                 tmp.unlink(missing_ok=True)
         else:
-            embedding = media.get("embedding")
+            # Sort by this media's own vector in the score embedder's space
+            # (patch-else-text; the v3 routing table), so the query matches the
+            # haystack _cosine_sort scores against.
+            from vtscore.embedding.media_vectors import media_embedding
+            from vtscore.state.core import get_active_context
+
+            score_name = get_active_context().routed_embedder("score")
+            embedding = media_embedding(media, score_name)
             if embedding is None:
                 abort(400, message="Media has no embedding (cannot sort)")
             results, thresh = _cosine_sort(embedding)

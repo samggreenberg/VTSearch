@@ -28,11 +28,34 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vtscore.embedding.media_vectors import media_embedding
+from vtscore.embedding.media_vectors import media_embedding, primary_embedder_name
 from vtscore.state.core import _state_lock
 
 if TYPE_CHECKING:
     from vtscore.state.core import DatasetContext
+
+
+def _collapse_to_primary(medias: dict[int, dict[str, Any]], embedder_name: str | None) -> str | None:
+    """Map a routed embedder name to ``None`` when it is the dataset's primary.
+
+    The routing layer (``DatasetContext.routed_embedder``) hands callers an
+    explicit embedder name even for the common single-embedder dataset, where
+    that name *is* the primary mirror.  The named matrix path builds fresh on
+    every call; the primary path is cached on the context.  Since a name equal
+    to the primary yields byte-for-byte the same vectors as the primary path
+    (the singular ``embedding`` mirrors the recorded embedder's vector), we
+    collapse it to ``None`` here so the cache is reused - keeping the
+    single-embedder hot path unchanged after routing threads names through.
+
+    A name that differs from the primary (a genuine second bound embedder)
+    passes through unchanged and takes the uncached named path.
+    """
+    if embedder_name is None or not medias:
+        return embedder_name
+    first = next(iter(medias.values()))
+    if embedder_name == primary_embedder_name(first):
+        return None
+    return embedder_name
 
 
 def _require_embedding(cid: int, media: dict[str, Any], embedder_name: str | None = None) -> Any:
@@ -86,6 +109,8 @@ def get_embedding_matrix(ctx: "DatasetContext", embedder_name: str | None = None
     # numpy stack and stall every other request's before_request state-sync.
     with _state_lock:
         sorted_ids = sorted(ctx.medias.keys())
+        # A routed name equal to the primary collapses to the cached path.
+        embedder_name = _collapse_to_primary(ctx.medias, embedder_name)
         if embedder_name is None:
             cached_matrix = ctx._emb_matrix
             if cached_matrix is not None and ctx._emb_matrix_ids == sorted_ids:
@@ -275,6 +300,11 @@ def get_embedding_matrix_for_snap(
     sorted_ids = sorted(snap.keys())
     if not sorted_ids:
         return [], np.empty((0, 0), dtype=np.float32)
+
+    # A routed name equal to the snapshot's primary collapses to the cached
+    # primary path (matching get_embedding_matrix), so single-embedder
+    # snapshots keep reusing the context cache after routing names through.
+    embedder_name = _collapse_to_primary(snap, embedder_name)
 
     ctx = get_active_context()
     matches_active = sorted_ids == sorted(ctx.medias.keys())

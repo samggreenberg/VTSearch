@@ -23,6 +23,21 @@ if TYPE_CHECKING:
     import torch.nn as nn
 
 
+def _active_score_embedder() -> str | None:
+    """Resolve the active dataset's score embedder (patch-else-text).
+
+    The detector MLP trains and scores against this embedder's vectors (the v3
+    routing table; see :meth:`DatasetContext.routed_embedder`).  Returns
+    ``None`` for a slot-less single-vector dataset, where the matrix layer
+    falls back to each media's primary vector.  For a single-embedder dataset
+    the resolved name equals the primary, which the matrix layer collapses to
+    the cached primary path.
+    """
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
+
+    return get_active_context().routed_embedder("score")
+
+
 def validate_good_bad_split(y_list: list[float]) -> tuple[int, int]:
     """Check that *y_list* contains at least one good and one bad label.
 
@@ -106,7 +121,7 @@ def train_and_threshold(
         # `safe` is only True when `snap` is truthy (see assignment above),
         # so the narrowing is real even though pyright can't track it.
         assert snap is not None
-        _all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+        _all_ids, all_embs = get_embedding_matrix_for_snap(snap, _active_score_embedder())
         X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
             X_all = X_all.to(next(model.parameters()).device)
@@ -157,15 +172,19 @@ def pool_box_from_media(
 def _training_vec_for_vote(
     media: dict[str, Any],
     region_box: tuple[float, float, float, float] | None,
+    embedder_name: str | None = None,
 ) -> np.ndarray:
     """Return the training vector for one vote on *media*.
 
     Region-pools via :func:`pool_box_from_media` when the vote designated a
-    box and *media* carries a ``patch_grid``; otherwise falls back to
-    ``media["embedding"]`` - the v1/legacy image-level vector.
+    box and *media* carries a ``patch_grid``; otherwise falls back to the
+    image-level vector of *embedder_name* (the score embedder) - or the
+    primary vector when ``None``.
     """
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
     pooled = pool_box_from_media(media, region_box)
-    return pooled if pooled is not None else media["embedding"]
+    return pooled if pooled is not None else media_embedding(media, embedder_name)
 
 
 def _build_vote_xy(
@@ -182,15 +201,20 @@ def _build_vote_xy(
     (:func:`_train_and_score_xy`) enforces the ≥2-samples / ≥1-good /
     ≥1-bad guard.
     """
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    # Train against the dataset's score embedder so the MLP shares the space
+    # _score_all_media scores against (the v3 routing table).
+    embedder_name = _active_score_embedder()
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     for cid in good_votes:
         if cid in clips_dict:
-            X_list.append(_training_vec_for_vote(clips_dict[cid], region_boxes.get(cid)))
+            X_list.append(_training_vec_for_vote(clips_dict[cid], region_boxes.get(cid), embedder_name))
             y_list.append(1.0)
     for cid in bad_votes:
         if cid in clips_dict:
-            X_list.append(clips_dict[cid]["embedding"])
+            X_list.append(media_embedding(clips_dict[cid], embedder_name))
             y_list.append(0.0)
     return X_list, y_list
 
@@ -224,7 +248,7 @@ def _score_all_media(
         # a multi-hundred-thousand-row matrix on every vote.
         all_ids, X_np, media_index_per_row, region_index_per_row = get_region_matrix_for_snap(clips_dict)
     else:
-        all_ids, X_np = get_embedding_matrix_for_snap(clips_dict)
+        all_ids, X_np = get_embedding_matrix_for_snap(clips_dict, _active_score_embedder())
         n = len(all_ids)
         media_index_per_row = np.arange(n, dtype=np.int64)
         region_index_per_row = np.zeros(n, dtype=np.int64)

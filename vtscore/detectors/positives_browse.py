@@ -145,7 +145,7 @@ def build_positives_browse_context(
 
     if on_progress is not None:
         on_progress(total, total, "Building projection…")
-    sorted_ids, matrix = get_embedding_matrix(ctx)
+    sorted_ids, matrix = get_embedding_matrix(ctx, ctx.routed_embedder("score"))
     proj = fit_projection(matrix, sorted_ids)
     pyr = build_pyramid(proj, bin_shape=bin_shape)
     ctx._projection = proj
