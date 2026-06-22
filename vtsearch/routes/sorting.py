@@ -19,6 +19,7 @@ import json
 import logging
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from flask import request
 from flask_smorest import Blueprint, abort
@@ -74,6 +75,9 @@ from vtsearch.state import (
 )
 from vtscore.concurrency.progress import update_sort_progress
 
+if TYPE_CHECKING:
+    from vtscore.media.embedder import MediaEmbedder
+
 sorting_bp = Blueprint(
     "sorting",
     __name__,
@@ -124,7 +128,7 @@ def _get_embedder_for_loaded_data():
     return get_embedder_for_medias(snapshot_medias())
 
 
-def _score_embedder_for_loaded_data() -> tuple[object | None, str | None]:
+def _score_embedder_for_loaded_data() -> tuple["MediaEmbedder | None", str | None]:
     """Return ``(embedder, embedder_name)`` for the dataset's score embedder.
 
     The score embedder is the patch slot if bound, else the text slot (the v3
@@ -208,8 +212,7 @@ def sort_clips(body: dict):
         abort(
             400,
             message=(
-                f"Embedder '{primary}' does not support text queries. "
-                "Use learned sort or load a saved sort instead."
+                f"Embedder '{primary}' does not support text queries. Use learned sort or load a saved sort instead."
             ),
         )
 
