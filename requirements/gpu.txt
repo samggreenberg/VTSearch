@@ -1,9 +1,10 @@
 # VTSearch: GPU dependencies (CUDA)
 #
 # Used by docker/Dockerfile.gpu (which pins cu121 at install time) and
-# scripts/install-gpu.sh (which passes the chosen CUDA tag's
-# --extra-index-url on the pip command line). Like requirements/base.txt
-# this forwards to pyproject.toml; `[project.dependencies]` plus the
-# `dev` extra.
+# scripts/install-gpu.sh. Both first install torch/torchvision/torchaudio
+# from the chosen CUDA tag's index with --index-url (so PyPI can't override
+# the build with a mismatched-arch wheel), then install the rest of this file
+# with --extra-index-url. Like requirements/base.txt this forwards to
+# pyproject.toml; `[project.dependencies]` plus the `dev` extra.
 
 -e .[dev]

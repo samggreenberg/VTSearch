@@ -41,7 +41,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=_progress.sh
 source "$SCRIPT_DIR/_progress.sh"
 
-vts_progress_init 4 "Installing VTSearch GPU dependencies (CUDA tag: ${CUDA_TAG})"
+vts_progress_init 5 "Installing VTSearch GPU dependencies (CUDA tag: ${CUDA_TAG})"
 
 vts_progress_step "Checking Python version (>= 3.10)"
 source "$SCRIPT_DIR/_check-python.sh"
@@ -56,7 +56,23 @@ pip install --only-binary :all: \
   "scipy" \
   --progress-bar on
 
-vts_progress_step "Installing all dependencies via ${EXTRA_INDEX} (this may take several minutes)"
+# Pin torch/torchvision/torchaudio to the chosen CUDA index with --index-url
+# (NOT --extra-index-url). With --extra-index-url, PyPI stays in the candidate
+# set, and when PyPI ships a *newer* torch than this CUDA index tops out at
+# (e.g. cu124 caps at 2.6.0 while PyPI has 2.7.x, a cu126 build), pip prefers
+# the higher version and silently installs the wrong-arch wheel -- which then
+# fails with cudaErrorNoKernelImageForDevice on older GPUs. Installing from the
+# CUDA index alone forces the matching +${CUDA_TAG} build; the PyTorch index
+# mirrors torch's dependency closure, so a sole --index-url resolves cleanly.
+vts_progress_step "Installing CUDA torch from ${CUDA_TAG} index (pinned so PyPI can't substitute a mismatched build)"
+pip install --index-url "$EXTRA_INDEX" \
+  --prefer-binary \
+  torch torchvision torchaudio \
+  --progress-bar on
+
+# Install everything else. torch is already satisfied by the pinned build above,
+# so this --extra-index-url pass won't replace it (no --upgrade).
+vts_progress_step "Installing remaining dependencies via ${EXTRA_INDEX} (this may take several minutes)"
 pip install --extra-index-url "$EXTRA_INDEX" \
   --prefer-binary \
   -r "$REPO_ROOT/requirements/gpu.txt" \
