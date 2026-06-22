@@ -34,6 +34,7 @@ import numpy as np
 def score_against_query(
     media: dict,
     query_vec: np.ndarray,
+    embedder_name: Optional[str] = None,
 ) -> tuple[float, Optional[tuple[float, float, float, float]]]:
     """Return ``(max_cosine_similarity, best_region_box)`` for *media*.
 
@@ -46,9 +47,12 @@ def score_against_query(
     which are already unit-norm.
 
     For patch-region media, we score every region vector and return the max
-    along with that region's bounding box.  For legacy single-vector media,
-    we score ``media["embedding"]`` and return ``(score, (0, 0, 1, 1))``.  A
-    zero/empty query, or a missing embedding, yields ``(0.0, None)``.
+    along with that region's bounding box.  For single-vector media we score
+    the full-image vector and return ``(score, (0, 0, 1, 1))``.  *embedder_name*
+    selects which bound embedder's full-image vector to use (the region path is
+    always against the patch embedder that owns ``patch_regions``); ``None``
+    reads the media's primary vector.  A zero/empty query, or a missing
+    embedding, yields ``(0.0, None)``.
     """
     if float(np.linalg.norm(query_vec)) == 0:
         return 0.0, None
@@ -65,7 +69,9 @@ def score_against_query(
                 best_box = r.box
         return (best_score if best_box is not None else 0.0), best_box
 
-    emb = media.get("embedding")
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    emb = media_embedding(media, embedder_name)
     if emb is None:
         return 0.0, None
     emb_arr = np.asarray(emb, dtype=np.float32)
@@ -89,12 +95,29 @@ def _snapshot_has_patch_regions(snap: dict[Any, dict]) -> bool:
 def cosine_sort_with_boxes(
     snap: dict[Any, dict],
     query_vec: np.ndarray,
+    embedder_name: Optional[str] = None,
+    *,
+    region_aware: Optional[bool] = None,
 ) -> tuple[list[dict], list[float]]:
     """Score every media in *snap* against *query_vec*, return per-media dicts.
 
-    Each result dict has ``id``, ``similarity``, and (only when the active
-    snapshot is patch-region-aware) ``best_region`` - a 4-tuple
+    Each result dict has ``id``, ``similarity``, and (only when the
+    snapshot is scored region-aware) ``best_region`` - a 4-tuple
     ``(x0, y0, x1, y1)`` in normalised image coordinates.
+
+    *embedder_name* selects which bound embedder's vectors to score against
+    (``None`` = the media's primary vector); for a single-embedder dataset
+    the routing layer collapses this to the cached primary path.
+
+    *region_aware* gates the per-region max-pool path.  Region vectors
+    (``patch_regions``) belong to the dataset's **patch** embedder, so the
+    region path is valid only when *query_vec* was embedded by that same
+    embedder.  Callers pass ``region_aware=True`` when the resolved
+    *embedder_name* is the dataset's patch embedder (cosine example sort,
+    text sort on a patch-capable embedder), and ``region_aware=False`` for a
+    text query against a separate text embedder on a dual-embedder dataset.
+    ``None`` (the default) means "use regions if the snapshot has any" - the
+    legacy single-embedder behaviour.
 
     Returns ``(results, raw_similarities)`` - *results* sorted descending
     by similarity, *raw_similarities* in the original snapshot order
@@ -109,11 +132,12 @@ def cosine_sort_with_boxes(
     if not snap:
         return [], []
 
-    if _snapshot_has_patch_regions(snap):
+    use_regions = _snapshot_has_patch_regions(snap) if region_aware is None else region_aware
+    if use_regions and _snapshot_has_patch_regions(snap):
         results: list[dict] = []
         sims: list[float] = []
         for cid, m in snap.items():
-            sim, box = score_against_query(m, query_vec)
+            sim, box = score_against_query(m, query_vec, embedder_name)
             entry = {"id": cid, "similarity": round(sim, 4)}
             if box is not None:
                 entry["best_region"] = list(box)
@@ -131,7 +155,7 @@ def cosine_sort_with_boxes(
     # active DatasetContext cache when available.
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap, embedder_name)
     similarities = np.dot(all_embs, query_vec)
     sims_list = similarities.tolist()
     results = [{"id": cid, "similarity": round(float(sim), 4)} for cid, sim in zip(all_ids, similarities, strict=True)]

@@ -612,8 +612,9 @@ def auto_detect(body: dict):
         abort(400, message=f"No Auto-Find detectors found for media type: {media_type}")
 
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.state.core import get_active_context  # noqa: PLC0415
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap)
+    all_ids, all_embs = get_embedding_matrix_for_snap(snap, get_active_context().routed_embedder("score"))
     X_all = torch.from_numpy(all_embs)
 
     embed_dim = int(all_embs.shape[1]) if all_embs.ndim > 1 else 0

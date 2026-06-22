@@ -401,6 +401,36 @@ class DatasetContext:
         """Name of the bound patch-capable embedder, or ``None``."""
         return self._resolve_binding()[1]
 
+    def routed_embedder(self, role: str) -> str | None:
+        """Resolve which bound embedder serves *role* (the v3 routing table).
+
+        Roles (see "Routing rules" in ``docs/plans/patch-embedder.md``):
+
+        * ``"text"`` - text queries (``POST /api/sort``): the text slot, or
+          ``None`` (the caller 400s with ``supports_text=False``).
+        * ``"patch"`` - region similarity / voting (``/api/find-label`` region
+          overlays, region votes): the patch slot, or ``None`` (the caller 400s;
+          region ops need a patch embedder).
+        * ``"score"`` - cosine example sort, the detector MLP (train + score),
+          and the diversity tree: the patch slot if bound, else the text slot,
+          else ``None``.  ``None`` means a slot-less single-vector dataset (e.g.
+          ``dinov2_single``); the matrix layer then reads each media's primary
+          vector, so cosine sort / MLP scoring keep working rather than 400-ing.
+
+        Returns an embedder *name* (or ``None``).  Pass the result straight to
+        the embedder-aware matrix layer: a name equal to the dataset's primary
+        embedder collapses to the cached primary path there, so the
+        single-embedder hot path is unchanged byte-for-byte.
+        """
+        text, patch = self._resolve_binding()
+        if role == "text":
+            return text
+        if role == "patch":
+            return patch
+        if role == "score":
+            return patch or text
+        raise ValueError(f"unknown embedder routing role: {role!r}")
+
     @property
     def supports_text(self) -> bool:
         """Whether this dataset can answer text queries (text slot is bound)."""

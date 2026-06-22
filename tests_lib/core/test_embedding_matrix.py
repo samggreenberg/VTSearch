@@ -153,6 +153,30 @@ class TestEmbedderAwareMatrix:
         with pytest.raises(ValueError, match=r"media 2.*has no embedding for embedder 'dinov3_patch'"):
             get_embedding_matrix(ctx, "dinov3_patch")
 
+    def test_primary_name_collapses_to_cache(self):
+        """Routing hands a name even for single-embedder datasets; a name equal
+        to the primary must collapse to the cached primary path, not the
+        uncached named path - keeping the hot path byte-for-byte unchanged."""
+        ctx = self._ctx()
+        # "siglip" is the primary (the recorded ``embedder``).
+        ids, mat = get_embedding_matrix(ctx, "siglip")
+        assert ids == [1, 2, 3]
+        # Primary's vectors (1,2,3), not dinov3's (101,...).
+        assert mat[0, 0] == 1.0
+        # ...and the cache was populated (the named path would not cache).
+        assert ctx._emb_matrix is not None
+        assert ctx._emb_matrix_ids == [1, 2, 3]
+
+    def test_primary_name_snap_collapses_to_cache(self):
+        ctx = self._ctx()
+        set_thread_dataset_context(ctx)
+        invalidate_embedding_matrix(ctx)
+        snap = {cid: ctx.medias[cid] for cid in ctx.medias}
+        ids, mat = get_embedding_matrix_for_snap(snap, "siglip")
+        assert ids == [1, 2, 3]
+        assert mat[0, 0] == 1.0
+        assert ctx._emb_matrix is not None
+
     def test_submatrix_named_embedder(self):
         ctx = self._ctx()
         ids, mat = get_embedding_submatrix(ctx, [3, 1], "dinov3_patch")

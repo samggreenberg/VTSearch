@@ -680,7 +680,8 @@ plumbing, not modelling.
 V3 lands as a sequence of behavior-preserving substrate phases (so each
 commit is reviewable and the single-embedder world keeps working) followed by
 the user-visible binding.  Ordering is by dependency: each phase needs the one
-above it.
+above it.  **Status: Phases 2a-2b.4 shipped; 2b.5 (MLP keying) and 2c (drop
+the singular mirror) remain, then the create-time dual-picker.**
 
 **Shipped:**
 
@@ -734,23 +735,52 @@ above it.
   keying would be a ≤1-entry dict); dict-keying them is deferred to whenever a
   second patch slot is actually allowed.  See "Open follow-ups".
 
+- **Phase 2b.4 - routing.** `DatasetContext.routed_embedder(role)` is the one
+  place that encodes the routing table: ``"text"`` → text slot (else the caller
+  400s), ``"patch"`` → patch slot, ``"score"`` → patch-else-text (else ``None``).
+  Each active-dataset consumer resolves its role and threads the name into the
+  embedder-aware matrix layer: text sort (`/api/sort`, role text), example /
+  by-id cosine sort (`/api/example-sort`, role score), label-file sort (embeds
+  *and* scores with the score embedder so they share a space), the detector MLP
+  (`_score_all_media`, `_build_vote_xy`, `train_and_threshold` safe-scoring, the
+  labelset embed name, and Auto-Find scoring), and the diversity tree /
+  projection (full + subset + load-stage + positives-browse).  The query side is
+  routed too: example/by-id sort embeds the example with the score embedder, and
+  text sort embeds the query with the text slot.  **Single-vector gap handled:**
+  a `*_single` embedder binds neither slot, so `score` resolves to ``None`` and
+  the matrix layer reads the primary vector (cosine sort / MLP scoring keep
+  working rather than 400-ing).  **Cache preserved:** a routed name equal to the
+  dataset's primary collapses to the cached primary path
+  (`matrix._collapse_to_primary`), so the single-embedder hot path is
+  byte-for-byte unchanged.  Region-aware cosine scoring is gated on the resolved
+  embedder being the patch embedder, so a text query on a dual dataset scores
+  against the text embedder's full-image vectors, not the patch tree.  See "Open
+  follow-ups" for the cross-dataset Find / CLI-chunk scoring still on primary.
+
 **Remaining, in order:**
 
-- **Phase 2b.4 - routing.** Wire the routing table (text sort → `text_embedder`;
-  cosine/region ops → `patch_embedder`); pass the resolved embedder name into
-  the now-embedder-aware matrix layer at each consumer.  See "Routing rules".
-  **Watch the single-vector gap:** a `*_single` embedder (e.g. `dinov2_single`,
-  `supports_text=False`, `supports_patch_regions=False`) binds *neither* role
-  slot, so the routing table's "patch_embedder if set, else text_embedder" rule
-  resolves to nothing for those datasets.  The 2b.2 binding leaves them working
-  via each media's primary vector (the per-media read path is untouched);
-  routing must keep a primary-vector fallback for cosine sort / MLP scoring on
-  no-slot datasets rather than 400-ing them.
 - **Phase 2b.5 - MLP keying.** Key MLPs by `(detector, dataset, embedder)`.
   See "Detector MLP keying".
 - **Phase 2c - drop the singular mirror.** Once every read site routes through
   the accessor with an explicit embedder, remove the `media["embedding"]`
   primary mirror (read-time re-key on load handles old pickles).
+
+### Open follow-ups (from 2b.4)
+
+- **Cross-dataset Find and CLI-chunk scoring stay on the primary vector.**
+  `find._score_dataset` / `_score_with_cold_detector` score *other* datasets'
+  `temp_medias`, and `cli._score_medias_with_detectors` scores per-chunk
+  subsets - neither is the active `DatasetContext`, so they keep building the
+  matrix from each media's primary vector (no `routed_embedder` call).  This is
+  correct for every single-embedder dataset (primary == score embedder) and
+  only matters once a dual-embedder dataset can be created and Find-scored; wire
+  a binding derived from those medias' own embedder names when the create-time
+  dual path lands.
+- **Region-less media in a region matrix fall back to the primary vector.**
+  `matrix._build_region_arrays` sources a region-less media's single row from
+  `media["embedding"]` (primary), not the patch embedder's vector.  On a real
+  patch dataset every media has `patch_regions`, so this branch is unreachable
+  today; revisit if a dual dataset ever mixes patch and non-patch media.
 
 ### Open follow-ups (from 2b.3)
 

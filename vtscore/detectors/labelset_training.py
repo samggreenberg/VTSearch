@@ -32,13 +32,22 @@ ProgressCallback = Callable[[str, int, int], None]
 def _embedder_for_active_dataset(snap: dict[int, dict[str, Any]] | None) -> str:
     """Return the embedder name to use for fresh resolve+embed work.
 
-    Prefers the active dataset's recorded embedder so that newly embedded
-    cross-dataset vectors line up with the existing in-dataset vectors.
+    Prefers the **score** embedder (patch-else-text; the v3 routing table)
+    *derived from the medias in snap* so that newly embedded cross-dataset
+    vectors line up with the in-dataset vectors the MLP is scored against.
+    Derived from the snap's own embedder names rather than the active context
+    so a non-active snapshot resolves correctly.  Falls back to the recorded
+    primary embedder for a slot-less single-vector dataset (where the two
+    coincide), and ``""`` when *snap* is empty.
     """
     if not snap:
         return ""
+    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
+
     first = next(iter(snap.values()), {})
-    return first.get("embedder", "") or ""
+    text, patch = derive_binding_from_names(media_embedder_names(first))
+    return patch or text or first.get("embedder", "") or ""
 
 
 def _patch_pooled_from_file(

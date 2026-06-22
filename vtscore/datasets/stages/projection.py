@@ -74,7 +74,8 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
         )
 
     try:
-        sorted_ids, matrix = get_embedding_matrix(ctx)
+        # Cluster in the score embedder's space (patch-else-text; v3 routing).
+        sorted_ids, matrix = get_embedding_matrix(ctx, ctx.routed_embedder("score"))
     except ValueError:
         return
     if matrix.size == 0:
