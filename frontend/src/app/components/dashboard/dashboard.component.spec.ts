@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -414,7 +414,7 @@ describe('DashboardComponent', () => {
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   });
 
-  it('should delete a dataset after confirmation', fakeAsync(() => {
+  it('should delete a dataset after confirmation', async () => {
     const datasets = [{ id: 'd1', name: 'ToDelete', media_type: 'audio' }];
     flushInitialRequests(datasets);
     component.selectedDatasetIds.add('d1');
@@ -423,7 +423,8 @@ describe('DashboardComponent', () => {
     vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
 
     component.deleteDataset(datasets[0]);
-    tick();
+    // Drain the confirm() promise continuation that issues the DELETE.
+    await new Promise<void>((resolve) => setTimeout(resolve));
 
     const req = httpMock.expectOne('/api/datasets/registry/d1');
     expect(req.request.method).toBe('DELETE');
@@ -433,7 +434,7 @@ describe('DashboardComponent', () => {
 
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
-  }));
+  });
 
   it('should open and close importer modal via NewThingFlowsService', () => {
     flushInitialRequests();

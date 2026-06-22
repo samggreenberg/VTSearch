@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DatasetCardComponent } from './dataset-card.component';
 
 describe('DatasetCardComponent', () => {
@@ -72,15 +72,16 @@ describe('DatasetCardComponent', () => {
     expect(el.querySelector('.inline-edit')).toBeTruthy();
   });
 
-  it('should focus the rename input after clicking rename', fakeAsync(() => {
+  it('should focus the rename input after clicking rename', async () => {
     const el = fixture.nativeElement as HTMLElement;
     const renameBtn = el.querySelector('.edit-btn') as HTMLElement;
     renameBtn.click();
     fixture.detectChanges();
-    tick();
+    // Drain the focus setTimeout queued when editing mode opens.
+    await new Promise<void>((resolve) => setTimeout(resolve));
     const input = el.querySelector('.inline-edit') as HTMLInputElement;
     expect(document.activeElement).toBe(input);
-  }));
+  });
 
   it('should emit rename on Enter key', () => {
     vi.spyOn(component.rename, 'emit');

@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, tick, discardPeriodicTasks } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { VoteStateService } from './vote-state.service';
@@ -50,62 +50,73 @@ describe('VoteStateService', () => {
     expect(service.learnedScores).toEqual({ '1': 0.9 });
   });
 
-  it('startPolling should periodically fetch votes', fakeAsync(() => {
-    service.startPolling(1000);
+  it('startPolling should periodically fetch votes', async () => {
+    vi.useFakeTimers();
+    try {
+      service.startPolling(1000);
 
-    // First poll at t=0 (timer(0, …) emits on a macrotask; flush it).
-    tick(0);
-    httpMock.expectOne('/api/votes').flush(mockVotes);
-    expect(service.goodVotes.size).toBe(2);
+      // First poll at t=0 (timer(0, …) emits on a macrotask; flush it).
+      await vi.advanceTimersByTimeAsync(0);
+      httpMock.expectOne('/api/votes').flush(mockVotes);
+      expect(service.goodVotes.size).toBe(2);
 
-    // Second poll at t=1000
-    tick(1000);
-    httpMock.expectOne('/api/votes').flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
-    expect(service.goodVotes.size).toBe(1);
+      // Second poll at t=1000
+      await vi.advanceTimersByTimeAsync(1000);
+      httpMock.expectOne('/api/votes').flush({ good: [1], bad: [], click_times: {}, learned_scores: {} });
+      expect(service.goodVotes.size).toBe(1);
 
-    service.stopPolling();
-    discardPeriodicTasks();
-  }));
+      service.stopPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-  it('stopPolling should stop periodic fetches', fakeAsync(() => {
-    service.startPolling(1000);
-    tick(0);
-    httpMock.expectOne('/api/votes').flush(mockVotes);
+  it('stopPolling should stop periodic fetches', async () => {
+    vi.useFakeTimers();
+    try {
+      service.startPolling(1000);
+      await vi.advanceTimersByTimeAsync(0);
+      httpMock.expectOne('/api/votes').flush(mockVotes);
 
-    service.stopPolling();
-    tick(1000);
-    httpMock.expectNone('/api/votes');
-
-    discardPeriodicTasks();
-  }));
+      service.stopPolling();
+      await vi.advanceTimersByTimeAsync(1000);
+      httpMock.expectNone('/api/votes');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   // Regression for logical-bug-audit H24: a single /api/votes failure
   // (502 from a proxy, stale X-Dataset-Id after a context switch, etc.)
   // used to terminate the entire polling chain and leave `polling` stuck
   // at true, freezing vote state for the rest of the session.
-  it('polling survives a transient /api/votes error and keeps polling', fakeAsync(() => {
-    service.startPolling(1000);
+  it('polling survives a transient /api/votes error and keeps polling', async () => {
+    vi.useFakeTimers();
+    try {
+      service.startPolling(1000);
 
-    // First tick: server is unreachable. Pre-fix this would tear the
-    // whole observable down.
-    tick(0);
-    httpMock.expectOne('/api/votes').flush(null, { status: 502, statusText: 'Bad Gateway' });
+      // First tick: server is unreachable. Pre-fix this would tear the
+      // whole observable down.
+      await vi.advanceTimersByTimeAsync(0);
+      httpMock.expectOne('/api/votes').flush(null, { status: 502, statusText: 'Bad Gateway' });
 
-    // Local state must NOT be clobbered to empty on a failed tick.
-    // (Without the EMPTY shortcut, an empty stub VotesResponse here
-    // would silently erase optimistic votes.)
-    service.applyOptimisticState(99, 'good');
-    expect(service.goodVotes.has(99)).toBe(true);
+      // Local state must NOT be clobbered to empty on a failed tick.
+      // (Without the EMPTY shortcut, an empty stub VotesResponse here
+      // would silently erase optimistic votes.)
+      service.applyOptimisticState(99, 'good');
+      expect(service.goodVotes.has(99)).toBe(true);
 
-    // Second tick: server is back. The chain must still be alive.
-    tick(1000);
-    httpMock.expectOne('/api/votes').flush(mockVotes);
-    expect(service.goodVotes.has(1)).toBe(true);
-    expect(service.goodVotes.has(2)).toBe(true);
+      // Second tick: server is back. The chain must still be alive.
+      await vi.advanceTimersByTimeAsync(1000);
+      httpMock.expectOne('/api/votes').flush(mockVotes);
+      expect(service.goodVotes.has(1)).toBe(true);
+      expect(service.goodVotes.has(2)).toBe(true);
 
-    service.stopPolling();
-    discardPeriodicTasks();
-  }));
+      service.stopPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('clear should reset all state', () => {
     service.loadVotes();
