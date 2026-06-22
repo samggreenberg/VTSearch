@@ -25,6 +25,9 @@ capabilities" (and is therefore ineligible for either slot).
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any
+
+from vtscore.embedding.media_vectors import media_embedder_names
 
 
 def _capabilities(embedder_name: str) -> tuple[bool, bool]:
@@ -82,6 +85,43 @@ def derive_binding_from_names(embedder_names: Iterable[str | None]) -> tuple[str
         if supports_patch and patch_embedder is None:
             patch_embedder = name
     return (text_embedder, patch_embedder)
+
+
+def score_marker_embedder(media: dict[str, Any]) -> str:
+    """Concrete embedder name a detector MLP is keyed to for *media*.
+
+    This is the v3 model-keying marker (the "embedder" component of the
+    ``(detector, dataset, embedder)`` MLP key in ``docs/plans/patch-embedder.md``).
+    It resolves to the **score** embedder (patch-else-text, the routing
+    table) when a role slot is bound, and falls back to *media*'s primary
+    embedder *name* for a slot-less single-vector dataset (e.g.
+    ``dinov2_single``).  ``""`` only when *media* carries no embedder at all.
+
+    Unlike :meth:`DatasetContext.routed_embedder`, which returns ``None`` for
+    a slot-less dataset so the matrix layer collapses to the cached primary
+    path, this always returns a concrete name so it can be stamped on and
+    compared against ``DetectorContext.embedder`` (a ``str``).  The two never
+    disagree about which vector space a model was trained against: for a
+    single-embedder dataset both name the same embedder; for a dual dataset
+    both pick the patch-else-text slot; only the slot-less fallback differs
+    (a name here vs ``None`` there), and that name *is* the primary the
+    matrix layer reads in that case.
+    """
+    text, patch = derive_binding_from_names(media_embedder_names(media))
+    return patch or text or media.get("embedder", "") or ""
+
+
+def score_marker_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str:
+    """:func:`score_marker_embedder` for the first media in a *snap* dict.
+
+    Returns ``""`` when *snap* is empty.  Used by the model-invalidation and
+    cross-dataset training paths, which derive the marker from the medias they
+    are about to score rather than from the active context's binding (a
+    non-active snapshot resolves correctly this way).
+    """
+    if not snap:
+        return ""
+    return score_marker_embedder(next(iter(snap.values()), {}))
 
 
 def validate_binding(text_embedder: str | None, patch_embedder: str | None) -> None:

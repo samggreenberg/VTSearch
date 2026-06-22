@@ -680,8 +680,8 @@ plumbing, not modelling.
 V3 lands as a sequence of behavior-preserving substrate phases (so each
 commit is reviewable and the single-embedder world keeps working) followed by
 the user-visible binding.  Ordering is by dependency: each phase needs the one
-above it.  **Status: Phases 2a-2b.4 shipped; 2b.5 (MLP keying) and 2c (drop
-the singular mirror) remain, then the create-time dual-picker.**
+above it.  **Status: Phases 2a-2b.5 shipped; 2c (drop the singular mirror)
+remains, then the create-time dual-picker.**
 
 **Shipped:**
 
@@ -757,10 +757,38 @@ the singular mirror) remain, then the create-time dual-picker.**
   against the text embedder's full-image vectors, not the patch tree.  See "Open
   follow-ups" for the cross-dataset Find / CLI-chunk scoring still on primary.
 
+- **Phase 2b.5 - MLP keying.** The cached detector MLP (`DetectorContext.model`)
+  is now keyed to the **score embedder** (patch-else-text; the v3 routing table),
+  not the per-media singular `media["embedder"]` mirror.  A single canonical
+  marker resolver - `vtscore.embedding.binding.score_marker_embedder` (and its
+  `*_for_snap` sibling) - returns `patch or text or primary`, where the primary
+  *name* is the slot-less single-vector fallback so the marker is always a
+  concrete string to stamp on / compare against `DetectorContext.embedder`.
+  Every site that writes the marker (`learned_sort.update_det_ctx_with_trained_model`,
+  `workflow.apply_and_retrain`, `labelset_training.populate_label_embeddings`,
+  `embedder_sync`) and every site that computes the "new embedder" to compare it
+  against (`dataset_sync._embedder_of_active_dataset`, `model_loading`'s
+  Auto-Find defensive check, `embedder_sync.active_dataset_embedder_name`) now
+  routes through that one helper, so `invalidate_detector_model_on_embedder_mismatch`,
+  `_maybe_clear_cache_on_embedder_switch`, and `maybe_start_label_reembed` all
+  compare apples-to-apples.  **Effect:** keying by the embedder *name* (which
+  fully determines the vector space; votes re-derive from the dataset-agnostic
+  labelset) is sufficient for the `(detector, dataset, embedder)` key - a stale
+  cross-space MLP is dropped and retrained on any switch where the score
+  embedder changes.  Byte-for-byte unchanged for every single-embedder dataset
+  (there score-marker == primary); the only behavior change is on a dual
+  dataset, where the primary mirror (text) and the scored space (patch) differ -
+  previously the stale text-keyed MLP would survive a switch onto the patch
+  scoring space.  The cross-dataset Find / cold-train path
+  (`model_loading.resolve_or_train_detector`, lines that build `md5_to_emb` from
+  the primary `c["embedding"]`) is deliberately left on the primary vector - it
+  pairs both the in-snap vectors and the origin-resolved vectors in the same
+  primary space, so it stays self-consistent; wiring it to the score embedder is
+  the cross-dataset-Find follow-up already tracked under "Open follow-ups (from
+  2b.4)".
+
 **Remaining, in order:**
 
-- **Phase 2b.5 - MLP keying.** Key MLPs by `(detector, dataset, embedder)`.
-  See "Detector MLP keying".
 - **Phase 2c - drop the singular mirror.** Once every read site routes through
   the accessor with an explicit embedder, remove the `media["embedding"]`
   primary mirror (read-time re-key on load handles old pickles).

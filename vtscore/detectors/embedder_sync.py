@@ -29,14 +29,18 @@ SpawnFn = Callable[..., Any]
 
 
 def active_dataset_embedder_name() -> str:
-    """Return the embedder name recorded on the active dataset's medias, or ``""``."""
+    """Return the active dataset's model-keying marker embedder, or ``""``.
+
+    The **score** embedder (patch-else-text; the v3 routing table) the
+    detector's label cache is built against - matching what the training
+    paths stamp on ``DetectorContext.embedder`` so the re-embed mismatch
+    check here agrees with the model-invalidation check.  See
+    ``score_marker_embedder`` and patch-embedder.md Phase 2b.5.
+    """
+    from vtscore.embedding.binding import score_marker_embedder_for_snap
     from vtscore.state import snapshot_medias
 
-    snap = snapshot_medias()
-    if not snap:
-        return ""
-    first = next(iter(snap.values()), {})
-    return first.get("embedder", "") or ""
+    return score_marker_embedder_for_snap(snapshot_medias())
 
 
 def embedder_display_name(embedder_name: str) -> str:

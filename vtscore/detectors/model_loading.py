@@ -47,8 +47,12 @@ def resolve_or_train_detector(  # noqa: C901
         # Defense against H5: scoring Auto-Find detectors iterates contexts
         # that aren't the active one, so the before_request hook can't
         # have invalidated their stale MLPs.  Drop them here so the next
-        # branch trains fresh against *snap*'s embedder.
-        snap_embedder = next(iter(snap.values()), {}).get("embedder", "") or "" if snap else ""
+        # branch trains fresh against *snap*'s embedder.  Compare the
+        # score-embedder marker (patch-else-text), matching what training
+        # stamps - the per-media primary diverges on a dual dataset.
+        from vtscore.embedding.binding import score_marker_embedder_for_snap
+
+        snap_embedder = score_marker_embedder_for_snap(snap)
         invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
     if det_ctx is not None and det_ctx.model is not None:
         return det_ctx.model, det_ctx.threshold, None
