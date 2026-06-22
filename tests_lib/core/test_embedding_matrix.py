@@ -256,9 +256,7 @@ class TestEmbeddingMatrixLockScoping:
 
     def test_get_embedding_submatrix_builds_outside_state_lock(self, monkeypatch):
         ctx = self._ctx()
-        self._assert_lock_free_during_build(
-            monkeypatch, lambda: get_embedding_submatrix(ctx, [1, 2, 3, 4])
-        )
+        self._assert_lock_free_during_build(monkeypatch, lambda: get_embedding_submatrix(ctx, [1, 2, 3, 4]))
 
     def test_stale_matrix_not_cached_when_medias_change_during_build(self, monkeypatch):
         """Phase-3 double-check: a media-set change during the unlocked build
