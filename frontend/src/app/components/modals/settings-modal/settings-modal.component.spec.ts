@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { SettingsModalComponent } from './settings-modal.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('SettingsModalComponent', () => {
   let component: SettingsModalComponent;
@@ -33,7 +35,7 @@ describe('SettingsModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SettingsModalComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SettingsModalComponent);
@@ -45,8 +47,11 @@ describe('SettingsModalComponent', () => {
     httpMock.verify();
   });
 
-  function flushInit(): void {
-    fixture.detectChanges();
+  // Settle runs ngOnInit, whose forkJoin issues the four parallel GETs (plain
+  // HTTP subscribes don't hold the app unstable, so whenStable resolves before
+  // the flush). Settle again afterwards so the resolved signals repaint.
+  async function flushInit(): Promise<void> {
+    await settleZoneless(fixture);
     // forkJoin makes all requests in parallel: settings, media types,
     // embedders, and version.
     const settingsReq = httpMock.expectOne('/api/settings');
@@ -59,27 +64,28 @@ describe('SettingsModalComponent', () => {
     mediaTypesReq.flush(mockMediaTypes);
     embeddersReq.flush({ embedders: [] });
     versionReq.flush({ version: '2026-05-07T00:00:00Z' });
+    await settleZoneless(fixture);
   }
 
-  it('should create', () => {
-    flushInit();
+  it('should create', async () => {
+    await flushInit();
     expect(component).toBeTruthy();
   });
 
-  it('should load settings on init', () => {
-    flushInit();
+  it('should load settings on init', async () => {
+    await flushInit();
     expect(component.settings().theme).toBe('dark');
     expect(component.loading()).toBe(false);
   });
 
-  it('should load media types and set active view tab', () => {
-    flushInit();
+  it('should load media types and set active view tab', async () => {
+    await flushInit();
     expect(component.mediaTypes().length).toBe(2);
     expect(component.activeViewTab()).toBe('audio');
   });
 
-  it('should update theme and save', () => {
-    flushInit();
+  it('should update theme and save', async () => {
+    await flushInit();
     component.onThemeChange('light');
     expect(component.settings().theme).toBe('light');
     // onThemeChange persists twice: ThemeService.setTheme issues its own
@@ -89,36 +95,36 @@ describe('SettingsModalComponent', () => {
     reqs.forEach((r) => r.flush(mockSettings));
   });
 
-  it('should toggle boolean setting and save', () => {
-    flushInit();
+  it('should toggle boolean setting and save', async () => {
+    await flushInit();
     component.onToggle('show_animations', false);
     expect(component.settings().show_animations).toBe(false);
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
-  it('should update number setting and save', () => {
-    flushInit();
+  it('should update number setting and save', async () => {
+    await flushInit();
     component.onNumberChange('calibrate_count', 100);
     expect(component.settings().calibrate_count).toBe(100);
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
-  it('should update per-media-type view mode and save', () => {
-    flushInit();
+  it('should update per-media-type view mode and save', async () => {
+    await flushInit();
     component.onViewModeChange('view_mode_left', 'audio', 'grid');
     const dict = component.settings().view_mode_left as Record<string, string>;
     expect(dict['audio']).toBe('grid');
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
-  it('should get view mode for a media type', () => {
-    flushInit();
+  it('should get view mode for a media type', async () => {
+    await flushInit();
     expect(component.getViewMode('view_mode_left', 'audio')).toBe('list');
     expect(component.getViewMode('view_mode_right', 'audio')).toBe('grid');
   });
 
   it('should reset to defaults after confirmation', async () => {
-    flushInit();
+    await flushInit();
     vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
     component.resetDefaults();
     // Drain the confirm() promise continuation that issues the GET.
@@ -133,41 +139,41 @@ describe('SettingsModalComponent', () => {
   });
 
   it('should not reset when confirmation is declined', async () => {
-    flushInit();
+    await flushInit();
     vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(false));
     component.resetDefaults();
     await new Promise<void>((resolve) => setTimeout(resolve));
     httpMock.expectNone('/api/settings/defaults');
   });
 
-  it('should use preselectedViewTab when valid', () => {
-    component.preselectedViewTab = 'image';
-    flushInit();
+  it('should use preselectedViewTab when valid', async () => {
+    fixture.componentRef.setInput('preselectedViewTab', 'image');
+    await flushInit();
     expect(component.activeViewTab()).toBe('image');
     expect(component.activeSettingsTab()).toBe('appearance');
   });
 
-  it('should ignore preselectedViewTab when not in mediaTypes', () => {
-    component.preselectedViewTab = 'video';
-    flushInit();
+  it('should ignore preselectedViewTab when not in mediaTypes', async () => {
+    fixture.componentRef.setInput('preselectedViewTab', 'video');
+    await flushInit();
     expect(component.activeViewTab()).toBe('audio');
   });
 
-  it('should ignore empty preselectedViewTab', () => {
-    component.preselectedViewTab = '';
-    flushInit();
+  it('should ignore empty preselectedViewTab', async () => {
+    fixture.componentRef.setInput('preselectedViewTab', '');
+    await flushInit();
     expect(component.activeViewTab()).toBe('audio');
   });
 
-  it('should emit closed on close', () => {
-    flushInit();
+  it('should emit closed on close', async () => {
+    await flushInit();
     vi.spyOn(component.closed, 'emit');
     component.close();
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
-  it('should handle init error gracefully', () => {
-    fixture.detectChanges();
+  it('should handle init error gracefully', async () => {
+    await settleZoneless(fixture);
     const settingsReq = httpMock.expectOne('/api/settings');
     const mediaTypesReq = httpMock.expectOne('/api/media-types');
     const embeddersReq = httpMock.expectOne('/api/embedders');

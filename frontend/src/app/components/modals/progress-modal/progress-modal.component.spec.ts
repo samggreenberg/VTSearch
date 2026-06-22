@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ProgressModalComponent } from './progress-modal.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
 
 describe('ProgressModalComponent', () => {
   let component: ProgressModalComponent;
@@ -11,7 +12,7 @@ describe('ProgressModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ProgressModalComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ProgressModalComponent);
@@ -43,7 +44,8 @@ describe('ProgressModalComponent', () => {
     vi.useFakeTimers();
     try {
       component.metric = 'smart';
-      fixture.detectChanges();
+      // TestBed.tick() runs ngOnInit (kicks off the train POST) under zoneless.
+      TestBed.tick();
       expect(component.analyzing).toBe(true);
 
       // Progress now arrives over the `eval` SSE channel, not via HTTP polling.
