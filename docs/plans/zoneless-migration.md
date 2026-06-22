@@ -4,9 +4,13 @@ Status: **Phases 0–4 COMPLETE. Production is zoneless (Phase 3 shipped). Phase
 browser QA was run live against the GRID instance via Chrome MCP (2026-06-22) and
 PASSED — no staleness bugs on any interactive surface, zero console errors; see
 "Phase 4 — results" below. Phase 5 cleanup is underway: the no-op `NgZone.run`
-wrappers in `browse-canvas` + `panel-resize.directive` are now removed; the
-remaining Phase 5 items (per-component zoneless `TestBed` spec migration, dropping
-the `vitest-patch` bridge, explicit `OnPush`) stay optional. One unrelated
+wrappers in `browse-canvas` + `panel-resize.directive` are removed, and the
+`vitest-patch` bridge is dropped (all 43 fakeAsync occurrences migrated to native
+`async` + Vitest fake timers; `zone.js/testing` + `vitest-patch` removed from the
+`build:test` polyfills). Base `zone.js` stays in the test build until the
+remaining default-TestBed specs adopt the zoneless `TestBed`. The other Phase 5
+items (per-component zoneless `TestBed` spec migration, explicit `OnPush`) stay
+optional. One unrelated
 pre-existing bug surfaced during QA — `vt-modal` only closes on `Esc` when focus
 is inside it (the `(keydown)` Esc handler lives on the never-focused
 `.modal-backdrop`); tracked under "Open follow-ups", not a zoneless regression.**
@@ -790,10 +794,21 @@ unrelated to zoneless — see Open follow-ups.
 
 ### Phase 5 — Cleanup / follow-ups
 
-- Migrate the residual fakeAsync/timer specs to native `async` + Vitest fake
-  timers and drop `zone.js/plugins/vitest-patch` (and finally `zone.js` from
-  `package.json`) — Angular's recommended long-term direction (Appendix C #7).
-  Optional, separable, no prod impact.
+- **Migrate the residual fakeAsync/timer specs to native `async` + Vitest fake
+  timers and drop `zone.js/plugins/vitest-patch`. ✅ DONE.** All 43 fakeAsync
+  occurrences (11 files) now use native `async` tests: timer-delay cases
+  (vote/browse-prep pollers, progress-modal's 50 ms) use `vi.useFakeTimers()` +
+  `vi.advanceTimersByTimeAsync(...)`; microtask/macrotask drains (dialog
+  promises, focus `setTimeout`s, the `timer(0,…)` poll first-emissions) use a
+  real macrotask flush (`await new Promise(r => setTimeout(r))`). `zone.js/testing`
+  and `zone.js/plugins/vitest-patch` are removed from the `build:test` polyfills,
+  and the ProxyZone-bridge note in `src/test-setup.ts` is gone. Full Vitest suite
+  green (854 passed / 91 files). **`zone.js` itself stays** (in the `build:test`
+  polyfills and `package.json`): the ~36 spec files that still create a component
+  fixture on the **default zone-based TestBed** need `NgZone` to exist —
+  empirically, emptying the test polyfills fails 31 tests across 15 files
+  (NG0205/CD errors). So the final `zone.js` drop is blocked on the
+  TestBed-migration follow-up below, not on the fakeAsync work, which is finished.
 - Adopt `ChangeDetectionStrategy.OnPush` explicitly on components for clarity
   (under zoneless they already behave OnPush-like; this is documentation/intent,
   not a functional change).
@@ -837,9 +852,15 @@ unrelated to zoneless — see Open follow-ups.
     TestBed with `detectChanges`, so they are not yet staleness oracles. (Heavy
     containers — left-panel, dashboard, right-panel, app — deadlock `whenStable()`
     via their child rxResources; those need stubbed/lightweight harnesses.)
-  - **Drop the `vitest-patch` bridge** (convert the 43 fakeAsync occurrences to
-    native `async` + Vitest fake timers, then remove `zone.js` from the
-    `build:test` polyfills and `package.json`).
+    **This is now also the last blocker on removing `zone.js` entirely:** those
+    ~36 fixture-creating specs need `NgZone` from the default TestBed, so the test
+    polyfills cannot drop base `zone.js` until they move to the zoneless TestBed.
+  - **Drop the `vitest-patch` bridge. ✅ DONE.** Converted all 43 fakeAsync
+    occurrences (11 files) to native `async` + Vitest fake timers and removed
+    `zone.js/testing` + `zone.js/plugins/vitest-patch` from the `build:test`
+    polyfills. Base `zone.js` is **not yet** removed (from `build:test` polyfills
+    or `package.json`): the default-TestBed specs above still need it — emptying
+    the test polyfills fails 31 tests / 15 files (NG0205). Full Vitest suite green.
   - **Adopt explicit `ChangeDetectionStrategy.OnPush`** on components for intent
     (redundant under zoneless; documentation only).
 - **Phase 1 complete; Phases 2.1 + 2.2 + 2.3 + 2.4 + 2.5 shipped; Phases 2.6–9 shipped; Phase 3 shipped.**

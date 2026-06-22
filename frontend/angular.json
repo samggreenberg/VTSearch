@@ -125,9 +125,10 @@
             // `development`, so the test polyfills are decoupled from the
             // production build. The @angular/build:unit-test builder has no
             // `polyfills` option of its own; it inherits them from this
-            // buildTarget. Dropping "zone.js" from the base production polyfills
-            // (zoneless flip, Phase 3 of docs/plans/zoneless-migration.md) then
-            // cannot silently break fakeAsync, because build:test pins its own.
+            // buildTarget. The base production build dropped "zone.js" at the
+            // zoneless flip (Phase 3 of docs/plans/zoneless-migration.md); the
+            // test build still pins its own "zone.js" for the default-TestBed
+            // specs (Phase 5), so the two cannot drift.
             "buildTarget": "frontend:build:test",
             "runner": "vitest",
             "runnerConfig": "vitest.config.ts",
