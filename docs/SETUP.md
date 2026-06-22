@@ -192,17 +192,23 @@ bash scripts/install-cpu.sh
 **For GPU** (NVIDIA CUDA-compatible systems):
 
 ```bash
-bash scripts/install-gpu.sh          # defaults to CUDA 12.4 (cu124)
+bash scripts/install-gpu.sh          # defaults to CUDA 12.4 (cu124; spans Volta..Hopper)
 bash scripts/install-gpu.sh cu118    # for CUDA 11.8 (older drivers)
-bash scripts/install-gpu.sh cu128    # for CUDA 12.8 (Blackwell GPUs)
+bash scripts/install-gpu.sh cu128    # for CUDA 12.8 (Blackwell; drops Volta)
 ```
 
 The CUDA tag picks a torch wheel that only ships kernels for certain GPU
-architectures, so match it to your hardware: Ampere/Ada on `cu118`+, Hopper
-(H100) on `cu121`+, Blackwell on `cu128`+. A mismatched wheel imports fine
-and then raises `cudaErrorNoKernelImageForDevice` on the first GPU op;
-VTSearch detects this at runtime and falls back to CPU (with a warning)
-rather than crashing, but you only get GPU acceleration with a matching wheel.
+architectures, so match it to your hardware. There's a **floor** — newer GPUs
+need newer tags: Ampere/Ada on `cu118`+, Hopper (H100) on `cu121`+, Blackwell
+on `cu128`+ — and a **ceiling**: the newest wheels *drop* the oldest
+architectures, so "just use the latest tag" is wrong for old hardware. For
+example, `cu128` dropped Volta (`sm_70`), so a **Tesla V100 needs `cu124`**
+(or `cu121`/`cu118`), not `cu128`. Rule of thumb: pick the oldest tag your
+driver supports that still covers your GPU; `cu124` is a safe default spanning
+Volta through Hopper. A mismatched wheel imports fine and then raises
+`cudaErrorNoKernelImageForDevice` on the first GPU op; VTSearch detects this at
+runtime and falls back to CPU (with a warning) rather than crashing, but you
+only get GPU acceleration with a matching wheel.
 
 Both scripts run `pip install -r requirements/{base,gpu}.txt`, which
 installs every runtime + dev dep and editable-installs the `vtsearch`
@@ -440,6 +446,28 @@ with a shared filesystem.
    The scripts default to a venv named `.venv` in the project dir; override with
    `VTS_VENV` if yours differs.
 
+   > **Module-based Python (e.g. the HLTCOE Grid).** Many clusters ship Python
+   > only via environment modules, and the system `python3` may be too old
+   > (VTSearch needs 3.10+). Load a recent one first, and build the venv with
+   > the **versioned** interpreter name so a `pyenv` shim on your `PATH` can't
+   > shadow it:
+   >
+   > ```bash
+   > module avail python                 # find an available 3.10+ module
+   > module load python/3.12.3
+   > which python3.12                     # should be the module's, not a pyenv shim
+   > python3.12 -m venv .venv
+   > source .venv/bin/activate
+   > python --version                     # confirm 3.12.x before installing
+   > bash scripts/install-gpu.sh cu124
+   > ```
+   >
+   > A venv built this way is **not** self-contained — its `python` needs the
+   > module's `libpython` at runtime — so the launcher must load the module
+   > before activating the venv. Set `VTS_MODULE` (see
+   > [Tuning](#tuning-the-allocation)) so `vtsearch` does this for you:
+   > `VTS_MODULE="python/3.12.3" vtsearch` (or `export` it in `~/.bashrc`).
+
 3. **Build the frontend** (needs Node.js 22+; see [Building the
    frontend](#building-the-frontend)):
 
@@ -530,6 +558,7 @@ inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
 |----------|---------|---------|
 | `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Path to the VTSearch checkout on the cluster |
 | `VTS_VENV` | `.venv` | Virtualenv to activate (relative to `VTS_DIR`, or absolute) |
+| `VTS_MODULE` | (none) | Environment module(s) to `module load` before activating the venv (space-separated). Needed when your venv is built from a module-provided Python, e.g. `VTS_MODULE="python/3.12.3"` |
 | `VTS_PART` | `gpu` | SLURM partition |
 | `VTS_GPU` | `l40s` | GPU type requested via `--gres=gpu:<type>:1` |
 | `VTS_CPUS` | `8` | CPU cores |
@@ -546,8 +575,11 @@ inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
 | `VTS_PORT` | (cluster-computed) | Forwarded port; defaults to the same per-user value the launcher binds. Set it only if you overrode `VTS_PORT` on the cluster too |
 
 Adjust `VTS_GPU`, `VTS_PART`, and the CUDA wheel in `install-gpu.sh` to match
-your cluster's hardware. Check what's available with `sinfo` and your cluster's
-documentation.
+your cluster's hardware. To find the exact GPU type string for `VTS_GPU`, check
+a node's gres: `scontrol show node <node> | grep -i Gres` (e.g. `Gres=gpu:v100:8`
+→ use `VTS_GPU=v100`) or list partition gres with `sinfo -o '%P %G'`. Note
+`VTS_GPU` takes just the type (`v100`), not the full `gpu:v100:8` spec — the
+launcher adds the `gpu:` prefix and `:1` count itself.
 
 ## Running the tests
 

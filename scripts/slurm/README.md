@@ -24,6 +24,13 @@ cp scripts/slurm/vtsearch-slurm.sh ~/.local/bin/vtsearch && chmod +x ~/.local/bi
 vtsearch          # allocates a GPU node and starts the app; leave it running
 ```
 
+> On clusters whose Python comes from environment modules (e.g. the HLTCOE
+> Grid), set `VTS_MODULE` so the launcher loads it before activating the venv,
+> e.g. `VTS_MODULE="python/3.12.3" vtsearch`. See
+> [`docs/SETUP.md`](../../docs/SETUP.md#running-on-a-slurm-gpu-cluster) for the
+> full module-based setup. Pick the CUDA wheel to match your GPU — older cards
+> like the V100 need `cu124`, *not* the newest `cu128` (which drops Volta).
+
 On your local machine (after adding a `cluster` host to `~/.ssh/config`):
 
 ```bash
