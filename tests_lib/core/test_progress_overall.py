@@ -82,6 +82,46 @@ class TestOverallFraction:
         assert t.get()["overall"] is None
 
 
+class TestWeightedOverall:
+    def test_weights_shape_the_fraction(self):
+        t = _tracker()
+        t.set_step_weights([0.25, 0.15, 0.50, 0.10])
+        # Step 1 fully done -> the download slice (0.25) of the whole job.
+        t.update("downloading", "dl", current=100, total=100, step=1, total_steps=4)
+        assert t.get()["overall"] == pytest.approx(0.25)
+        # Step 3 (embed, weight 0.50) half done -> 0.25 + 0.15 + 0.50*0.5 = 0.65.
+        t.update("embedding", "emb", current=5, total=10, step=3, total_steps=4)
+        assert t.get()["overall"] == pytest.approx(0.65)
+        # Final step fully done -> 1.0.
+        t.update("loading", "fin", current=1, total=1, step=4, total_steps=4)
+        assert t.get()["overall"] == pytest.approx(1.0)
+
+    def test_heavy_step_advances_bar_more(self):
+        # The same within-step progress on a heavier step should move the bar
+        # further than on a lighter step.
+        light = _tracker()
+        light.set_step_weights([0.1, 0.9])
+        light.update("a", "x", current=1, total=1, step=1, total_steps=2)
+        heavy = _tracker()
+        heavy.set_step_weights([0.9, 0.1])
+        heavy.update("a", "x", current=1, total=1, step=1, total_steps=2)
+        assert heavy.get()["overall"] > light.get()["overall"]
+
+    def test_length_mismatch_falls_back_to_equal(self):
+        t = _tracker()
+        t.set_step_weights([0.5, 0.5])  # only 2 weights for a 4-step job
+        t.update("embedding", "emb", current=0, total=0, step=3, total_steps=4)
+        # Falls back to equal weighting: (3 - 1) / 4 = 0.5.
+        assert t.get()["overall"] == pytest.approx(0.5)
+
+    def test_clearing_weights_restores_equal(self):
+        t = _tracker()
+        t.set_step_weights([0.9, 0.1])
+        t.set_step_weights(None)
+        t.update("a", "x", current=0, total=0, step=2, total_steps=2)
+        assert t.get()["overall"] == pytest.approx(0.5)
+
+
 class TestOverallEta:
     def test_overall_eta_spans_whole_job(self, monkeypatch):
         t = _tracker()

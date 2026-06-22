@@ -391,12 +391,15 @@ def load_detector_route(body: dict):  # noqa: C901
     register_detector_context(det_ctx)
 
     _LOAD_STEPS = 3  # restore labels, seed examples, train MLP
+    # MLP training dominates; label restore + example seeding are quick I/O.
+    _LOAD_STEP_WEIGHTS = [0.15, 0.15, 0.70]
     task_id = f"_detload_{detector_id[:8]}"
     tracker = detector_loading_tasks.create_task(
         task_id,
         entry.get("name", detector_id),
         detector_id=detector_id,
         media_type=entry.get("media_type", ""),
+        step_weights=_LOAD_STEP_WEIGHTS,
     )
     tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
 

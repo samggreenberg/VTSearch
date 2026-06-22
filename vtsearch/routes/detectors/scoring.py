@@ -73,12 +73,17 @@ def find_label(body: dict):  # noqa: C901
 
     # Total high-level steps: resolve(1) + optional train(2) + score(3) + apply(4)
     _FIND_LABEL_STEPS = 4
+    # Train + score carry the cost; resolve/apply are quick. Paces the unified
+    # whole-job bar (ETA self-corrects from the real rate).
+    #                       resolve  train  score  apply
+    _FIND_LABEL_STEP_WEIGHTS = [0.10, 0.45, 0.40, 0.05]
 
     detector_id = body["detector_id"]
 
     # Clear a leftover cancel flag from a previously-cancelled run so
     # the new operation doesn't trip on it immediately.
     find_progress.reset_cancel()
+    find_progress.set_step_weights(_FIND_LABEL_STEP_WEIGHTS)
 
     update_find_progress(
         "running",

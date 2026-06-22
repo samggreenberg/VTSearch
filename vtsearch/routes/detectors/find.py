@@ -38,6 +38,10 @@ detector_find_bp = Blueprint(
 
 # Number of high-level Find steps: prepare detectors, load data, score.
 _FIND_STEPS = 3
+# Scoring dominates; loading datasets from pkl is moderate; preparing detector
+# configs is quick. Paces the unified whole-job bar (ETA self-corrects).
+#                  prepare  load  score
+_FIND_STEP_WEIGHTS = [0.10, 0.30, 0.60]
 
 
 def _load_pkl_for_check(pkl_path: str) -> dict | None:
@@ -518,6 +522,7 @@ def multi_find(body: dict):
     # Clear a leftover cancel flag from a previously-cancelled run so
     # the new operation doesn't trip on it immediately.
     find_progress.reset_cancel()
+    find_progress.set_step_weights(_FIND_STEP_WEIGHTS)
 
     update_find_progress(
         "running",
