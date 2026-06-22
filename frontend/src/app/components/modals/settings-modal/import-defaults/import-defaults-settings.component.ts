@@ -19,7 +19,7 @@ import {
   ClipperSelection,
 } from '../../../dashboard/clipper-chooser/clipper-chooser.component';
 
-/** Settings tab body for "Data Imports": lets the user pick a
+/** Settings tab body for "Import Defaults": lets the user pick a
  *  per-mediaType default embedder, clipper, and converter-row set.
  *  Mirrors the Add Dataset modal's "Advanced ▾" block but standalone,
  *  always expanded, and not tied to a specific importer.  Whatever the

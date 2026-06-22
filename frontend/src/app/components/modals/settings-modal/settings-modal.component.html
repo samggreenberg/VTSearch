@@ -14,35 +14,19 @@
         </button>
         <button
           class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'autopilot'"
-          (click)="activeSettingsTab.set('autopilot')"
-          title="Configure the guided autopilot labeling workflow">
-          <vt-icon type="steering-wheel" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autopilot'"></vt-icon>
-          Autopilot
-        </button>
-        <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'sorting'"
-          (click)="activeSettingsTab.set('sorting')"
-          title="Options that control how learned sorting and calibration behave">
-          <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'sorting'"></vt-icon>
-          Sorting
-        </button>
-        <button
-          class="settings-tab"
-          [class.settings-tab--active]="activeSettingsTab() === 'imports'"
-          (click)="activeSettingsTab.set('imports')"
-          title="Default embedder, clipper, and converters to apply when importing each kind of dataset">
-          <vt-icon type="import" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'imports'"></vt-icon>
-          Data Imports
-        </button>
-        <button
-          class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab() === 'autofind'"
           (click)="activeSettingsTab.set('autofind')"
           title="Detectors that auto-run on import, and what to do with their results">
           <vt-icon type="auto-find" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autofind'"></vt-icon>
           Auto-Find
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab() === 'autopilot'"
+          (click)="activeSettingsTab.set('autopilot')"
+          title="Configure the guided autopilot labeling workflow">
+          <vt-icon type="steering-wheel" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'autopilot'"></vt-icon>
+          Autopilot
         </button>
         <button
           class="settings-tab"
@@ -54,11 +38,27 @@
         </button>
         <button
           class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab() === 'imports'"
+          (click)="activeSettingsTab.set('imports')"
+          title="Default embedder, clipper, and converters to apply when importing each kind of dataset">
+          <vt-icon type="import" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'imports'"></vt-icon>
+          Import Defaults
+        </button>
+        <button
+          class="settings-tab"
           [class.settings-tab--active]="activeSettingsTab() === 'server'"
           (click)="activeSettingsTab.set('server')"
           title="Settings fixed when the server started; shared by everyone and read-only here">
           <vt-icon type="server" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'server'"></vt-icon>
           Server
+        </button>
+        <button
+          class="settings-tab"
+          [class.settings-tab--active]="activeSettingsTab() === 'sorting'"
+          (click)="activeSettingsTab.set('sorting')"
+          title="Options that control how learned sorting and calibration behave">
+          <vt-icon type="sort-descending" [size]="14" class="settings-tab-icon" [class.settings-tab-icon--active]="activeSettingsTab() === 'sorting'"></vt-icon>
+          Sorting
         </button>
       </nav>
 
@@ -73,21 +73,6 @@
               <option value="dark">Dark</option>
               <option value="light">Light</option>
               <option value="highviz">High Visibility</option>
-            </select>
-          </div>
-          <div class="form-group" title="Streamline the UI for a single media type. Importer and detector flows will hide their media-type pickers and lock to this type; converters that produce other types are filtered out.">
-            <label class="form-label">Solo media type@if (soloMediaTypeNote) {
-              <vt-field-hint-icon [hint]="soloMediaTypeNote"></vt-field-hint-icon>
-            }</label>
-            <select
-              class="form-select"
-              [ngModel]="soloMediaTypeSelectValue"
-              (ngModelChange)="onSoloMediaTypeChange($event)"
-              aria-label="Solo media type">
-              <option value="">Show everything</option>
-              @for (mt of mediaTypes(); track mt.type_id) {
-                <option [value]="mt.type_id">{{ mt.name }}</option>
-              }
             </select>
           </div>
           <label class="checkbox-row" title="Turn decorative motion on or off across the whole app">
@@ -214,9 +199,24 @@
           </div>
         }
 
-        <!-- Data Imports -->
+        <!-- Import Defaults -->
         @if (activeSettingsTab() === 'imports') {
-          <h3>Data Imports<vt-field-hint-icon hint="Default import settings per media type. These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type."></vt-field-hint-icon></h3>
+          <h3>Import Defaults<vt-field-hint-icon hint="Default import settings per media type. These defaults auto-fill the Add Dataset modal whenever you start an import whose output is the matching media type."></vt-field-hint-icon></h3>
+          <div class="form-group" title="Streamline the UI for a single media type. Importer and detector flows will hide their media-type pickers and lock to this type; converters that produce other types are filtered out.">
+            <label class="form-label">Solo media type@if (soloMediaTypeNote) {
+              <vt-field-hint-icon [hint]="soloMediaTypeNote"></vt-field-hint-icon>
+            }</label>
+            <select
+              class="form-select"
+              [ngModel]="soloMediaTypeSelectValue"
+              (ngModelChange)="onSoloMediaTypeChange($event)"
+              aria-label="Solo media type">
+              <option value="">Show everything</option>
+              @for (mt of mediaTypes(); track mt.type_id) {
+                <option [value]="mt.type_id">{{ mt.name }}</option>
+              }
+            </select>
+          </div>
           <vt-import-defaults-settings
             [mediaTypes]="mediaTypes()"
             [defaults]="importDefaults"

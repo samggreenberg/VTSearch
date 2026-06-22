@@ -161,7 +161,7 @@ export interface SourceSpec {
 /** Saved per-mediaType defaults for the Add Dataset advanced panel:
  *  the embedder, clipper (+ params), and converter rows the user wants
  *  applied automatically every time they import a dataset whose output
- *  is the matching mediaType. Edited from Settings > Data Imports;
+ *  is the matching mediaType. Edited from Settings > Import Defaults;
  *  silently auto-filled into the importer form on importer selection. */
 export interface ImportDefaultsForMediaType {
   embedder?: string;

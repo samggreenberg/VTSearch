@@ -84,7 +84,7 @@
 // Scroll Style's two-side layout sits inside the shared `.view-tab-content`
 // panel (base styling in `_components.scss`). Encapsulation scopes this
 // grid override to ScrollStyle's tab content only; other consumers
-// (e.g. Data Imports) keep their own inner layout.
+// (e.g. Import Defaults) keep their own inner layout.
 .view-tab-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -210,6 +210,16 @@
 .settings-tab-icon {
   transition: transform var(--transition-slow) ease;
   transform: rotate(0deg);
+  // Pin the pivot to the icon's center so the rotation never translates,
+  // and keep the element on its own compositing layer for the whole
+  // animation. Without the layer hint the browser promotes the icon to a
+  // GPU layer while the transition runs, then demotes it on completion —
+  // the sub-pixel re-rounding on demotion is the "shifts up a little at
+  // the end" jump. `will-change` + `backface-visibility` keep it composited
+  // in both the rest and active states, so there is no demotion snap.
+  transform-origin: center center;
+  backface-visibility: hidden;
+  will-change: transform;
 
   &--active {
     transform: rotate(22.5deg);
