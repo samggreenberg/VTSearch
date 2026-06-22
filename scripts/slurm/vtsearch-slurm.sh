@@ -23,6 +23,13 @@ set -u
 DIR=${VTS_DIR:-/exp/$USER/projects/VTSearch}
 # Path (relative to $DIR, or absolute) to the Python virtualenv to activate.
 VENV=${VTS_VENV:-.venv}
+# Optional environment module(s) to `module load` before activating the venv.
+# Needed on clusters whose Python comes from `module load python/X.Y` -- a venv
+# built from a module interpreter is NOT self-contained (its python needs the
+# module's libpython/LD_LIBRARY_PATH at runtime), so the module must be loaded
+# in the job shell too. Space-separated; empty = don't touch modules.
+# e.g.  VTS_MODULE="python/3.12.3" vtsearch
+MODULE=${VTS_MODULE:-}
 PART=${VTS_PART:-gpu}       # SLURM partition
 GPU=${VTS_GPU:-l40s}        # GPU type for --gres=gpu:<type>:1
 CPUS=${VTS_CPUS:-8}         # CPU cores
@@ -39,7 +46,7 @@ echo ">>> (this may queue; once it lands, VTSearch starts and prints its node + 
 
 # Export the resolved dir/venv/port so they survive into the srun child shell.
 # app.py reads VTSEARCH_PORT for the dev server's bind port.
-export VTS_DIR="$DIR" VTS_VENV="$VENV" VTSEARCH_PORT="$PORT"
+export VTS_DIR="$DIR" VTS_VENV="$VENV" VTS_MODULE="$MODULE" VTSEARCH_PORT="$PORT"
 
 exec srun --job-name=vtsearch --pty \
     -p "$PART" --gres=gpu:${GPU}:1 -c "$CPUS" --mem "$MEM" -t "$TIME" \
@@ -48,6 +55,9 @@ exec srun --job-name=vtsearch --pty \
         # letting child processes (python) take the default SIGINT and die.
         trap ":" INT
         cd "$VTS_DIR" || { echo "project dir missing: $VTS_DIR (set VTS_DIR)"; exit 1; }
+        # Load environment modules first if requested: a venv built from a
+        # module-provided python needs that module loaded at runtime too.
+        [ -n "$VTS_MODULE" ] && { module load $VTS_MODULE || { echo "module load failed: $VTS_MODULE (set VTS_MODULE)"; exit 1; }; }
         source "$VTS_VENV/bin/activate" || { echo "venv missing: $VTS_VENV (set VTS_VENV)"; exit 1; }
         node=$(hostname)
         echo
