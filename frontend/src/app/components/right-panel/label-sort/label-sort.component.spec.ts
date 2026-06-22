@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LabelSortComponent, LabelSortMode } from './label-sort.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('LabelSortComponent', () => {
   let component: LabelSortComponent;
@@ -8,11 +10,12 @@ describe('LabelSortComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LabelSortComponent],
+      providers: [...provideZoneless()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LabelSortComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    await settleZoneless(fixture);
   });
 
   it('should create', () => {
@@ -44,9 +47,9 @@ describe('LabelSortComponent', () => {
     expect(values).toContain('id-asc');
   });
 
-  it('should accept mode input', () => {
-    component.mode = 'confidence-desc';
-    fixture.detectChanges();
+  it('should accept mode input', async () => {
+    fixture.componentRef.setInput('mode', 'confidence-desc');
+    await settleZoneless(fixture);
     expect(component.mode).toBe('confidence-desc');
   });
 });
