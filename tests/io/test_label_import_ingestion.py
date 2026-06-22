@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from vtscore.embedding.media_vectors import media_embedding
+
 
 # ---------------------------------------------------------------------------
 # API – POST /api/label-importers/ingest-missing
@@ -222,7 +224,7 @@ class TestIngestMissingClips:
         assert existing[1]["origin"] == origin
         # Ingest L2-normalizes at the write chokepoint, so the stored vector
         # is the unit-norm form of the resolver's embedding (not the same object).
-        assert np.allclose(existing[1]["embedding"], fake_embedding / np.linalg.norm(fake_embedding))
+        assert np.allclose(media_embedding(existing[1]), fake_embedding / np.linalg.norm(fake_embedding))
 
     def test_ingest_via_resolver_returns_neg1_for_unknown_media_type(self):
         """_ingest_via_resolver returns -1 when media type can't be determined."""
@@ -261,7 +263,8 @@ class TestIngestMissingClips:
                 "duration": 0,
                 "file_size": 10,
                 "md5": "existing_md5",
-                "embedding": np.zeros(768),
+                "embedder": "e5",
+                "embeddings": {"e5": np.zeros(768)},
                 "media_bytes": None,
                 "media_string": "existing",
                 "filename": "existing.txt",
@@ -288,7 +291,7 @@ class TestIngestMissingClips:
         # New media should have id=2 (next after existing)
         assert 2 in existing_clips
         assert existing_clips[2]["origin_name"] == "hello.txt"
-        assert existing_clips[2]["embedding"] is not None
+        assert media_embedding(existing_clips[2]) is not None
 
 
 # ---------------------------------------------------------------------------

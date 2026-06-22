@@ -1162,7 +1162,7 @@ class TestReCallerMultiMedia:
                     "media_bytes": None,
                     "media_path": None,
                     "media_url": media.get("media_url"),
-                    "embedding": media["embedding"],
+                    "embeddings": {media["embedder"]: media_embedding(media)},
                     "embedder": media["embedder"],
                     "md5": f"{media['md5']}_{k}",
                     "duration": 0,

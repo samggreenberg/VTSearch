@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import app as app_module
+from vtscore.embedding.media_vectors import media_embedding
 
 SAMPLE_RESULTS = {
     "media_type": "audio",
@@ -429,7 +430,9 @@ class TestCliScoringNegativeHits:
             broken[10_000 + cid] = dict(snap[cid])
         victim_cid = next(iter(broken))
         broken[victim_cid] = dict(broken[victim_cid])
-        broken[victim_cid]["embedding"] = None
+        # Drop the victim's only vector so media_embedding() resolves to None,
+        # which is exactly the M11 "media has no embedding" failure mode.
+        broken[victim_cid]["embeddings"] = {}
 
         detector_mlps = {"test": {"mlp": mlp, "threshold": threshold}}
         with pytest.raises(ValueError, match=r"has no embedding"):

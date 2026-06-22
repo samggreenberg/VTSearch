@@ -91,14 +91,14 @@ class TestSecondEmbedderPass:
 
             embed_missing(medias, "emb_patch")
 
-        # The second embedder ran over every item even though the singular
-        # mirror was already set (its missing-detection is per-embedder).
+        # The second embedder ran over every item even though the first
+        # embedder's key was already set (its missing-detection is per-embedder).
         assert patch_emb.embed_media_bulk.call_count == 1
         assert len(patch_emb.embed_media_bulk.call_args.args[0]) == 3
 
         for i, m in medias.items():
             assert set(m["embeddings"]) == {"emb_text", "emb_patch"}
-            # First embedder's vectors untouched; mirror still on the primary.
+            # First embedder's vectors untouched; primary still recorded.
             np.testing.assert_array_equal(m["embeddings"]["emb_text"], first_vecs[i])
             assert m["embedder"] == "emb_text"
             np.testing.assert_array_equal(media_embedding(m, "emb_text"), m["embeddings"]["emb_text"])
@@ -106,15 +106,15 @@ class TestSecondEmbedderPass:
 
     def test_single_embedder_path_unchanged(self):
         emb = _fake_embedder("solo")
-        medias = {i: {"media_type": "audio", "embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
+        medias = {i: {"media_type": "audio", "embeddings": {}, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
 
         with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             embed_missing(medias)
 
         assert emb.embed_media_bulk.call_count == 1
         for m in medias.values():
-            assert m["embedding"] is not None
-            assert m["embeddings"] == {"solo": m["embedding"]}
+            assert media_embedding(m) is not None
+            assert m["embeddings"] == {"solo": media_embedding(m)}
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +133,6 @@ def _two_embedder_text_media(mid: int) -> dict:
         "file_size": 10,
         "md5": f"md5{mid}",
         "embedder": "emb_text",
-        "embedding": a,
         "embeddings": {"emb_text": a, "emb_patch": b},
         "media_string": f"document {mid}",
         "filename": f"doc{mid}.txt",
