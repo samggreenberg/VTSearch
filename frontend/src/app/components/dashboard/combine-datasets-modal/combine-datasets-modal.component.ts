@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, inject, output } from '@angular/core';
+import { Component, Input, OnInit, inject, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -33,9 +33,11 @@ export class CombineDatasetsModalComponent implements OnInit {
   readonly combineStarted = output<void>();
 
   rows: CombineRow[] = [];
-  mediaTypes: MediaTypeInfo[] = [];
-  submitting = false;
-  error = '';
+  // Signals: written from the media-types / combine subscribes (async, not a
+  // zoneless CD trigger) yet read in the template, so they must repaint on emit.
+  readonly mediaTypes = signal<MediaTypeInfo[]>([]);
+  readonly submitting = signal(false);
+  readonly error = signal('');
   name = '';
 
   ngOnInit(): void {
@@ -53,7 +55,7 @@ export class CombineDatasetsModalComponent implements OnInit {
 
     this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
-        this.mediaTypes = res.media_types || [];
+        this.mediaTypes.set(res.media_types || []);
       },
     });
   }
@@ -92,12 +94,12 @@ export class CombineDatasetsModalComponent implements OnInit {
   }
 
   mediaTypeLabel(typeId: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === typeId);
+    const mt = this.mediaTypes().find((m) => m.type_id === typeId);
     return mt?.name || typeId;
   }
 
   mediaTypeIcon(typeId: string): string {
-    const mt = this.mediaTypes.find((m) => m.type_id === typeId);
+    const mt = this.mediaTypes().find((m) => m.type_id === typeId);
     return mt?.icon || '';
   }
 
@@ -107,18 +109,18 @@ export class CombineDatasetsModalComponent implements OnInit {
 
   submit(): void {
     if (!this.canCombine) return;
-    this.submitting = true;
-    this.error = '';
+    this.submitting.set(true);
+    this.error.set('');
     const paths = this.rows.map((r) => r.pkl_path);
     const name = (this.name || '').trim() || this.defaultName();
     this.datasetsCrudApi.combineDatasets({ datasets: paths, name }).subscribe({
       next: () => {
-        this.submitting = false;
+        this.submitting.set(false);
         this.combineStarted.emit();
       },
       error: (err) => {
-        this.submitting = false;
-        this.error = (err?.error?.error as string) || 'Combine failed';
+        this.submitting.set(false);
+        this.error.set((err?.error?.error as string) || 'Combine failed');
       },
     });
   }

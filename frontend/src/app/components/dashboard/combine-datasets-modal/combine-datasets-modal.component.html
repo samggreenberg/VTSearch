@@ -19,7 +19,7 @@
           class="name-input"
           [(ngModel)]="name"
           placeholder="Combined dataset name"
-          [disabled]="submitting"
+          [disabled]="submitting()"
         />
       </label>
 
@@ -83,21 +83,21 @@
         </p>
       }
 
-      @if (error) {
-        <p class="error-text">{{ error }}</p>
+      @if (error()) {
+        <p class="error-text">{{ error() }}</p>
       }
     }
   </div>
 
   <div class="form-actions" modal-footer>
-    <button class="btn btn--secondary" (click)="close()" [disabled]="submitting">Cancel</button>
+    <button class="btn btn--secondary" (click)="close()" [disabled]="submitting()">Cancel</button>
     <button
       class="btn btn--primary"
       (click)="submit()"
-      [disabled]="submitting || !canCombine"
+      [disabled]="submitting() || !canCombine"
       [title]="disabledReason || 'Combine these datasets into a new one'"
     >
-      @if (submitting) {
+      @if (submitting()) {
         Combining...
       } @else {
         Combine
