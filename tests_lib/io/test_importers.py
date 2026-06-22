@@ -1218,6 +1218,72 @@ class TestReCallerMultiMedia:
         assert observed_params == [{"n_clips": 2}]
 
 
+class TestSourceSpecParamValidation:
+    """``_parse_multi_media_specs`` validates converter params via the same
+    normalization the conversion path uses, so a blank optional field (e.g.
+    ``seconds_per_frame`` left unset in favour of ``n_clips``) is accepted
+    rather than rejected as "Not a valid number".
+    """
+
+    def test_blank_optional_number_param_accepted(self):
+        from vtscore.datasets.importers.base.specs import _parse_multi_media_specs
+
+        # The frontend seeds every declared param from its default and the
+        # ``clears=`` UI logic blanks the inactive peer, so a normal
+        # video→image import ships ``seconds_per_frame: ""`` alongside
+        # ``n_clips``.  This must validate cleanly (regression for the
+        # "Invalid params for converter 'video2image': {'seconds_per_frame':
+        # ['Not a valid number.']}" failure).
+        specs = _parse_multi_media_specs(
+            [
+                {
+                    "source_type": "video",
+                    "converter": "video2image",
+                    "params": {"n_clips": "10", "seconds_per_frame": ""},
+                }
+            ],
+            "image",
+        )
+        assert len(specs) == 1
+        assert specs[0].converter == "video2image"
+
+    def test_non_numeric_param_still_rejected(self):
+        import pytest
+
+        from vtscore.datasets.importers.base.specs import _parse_multi_media_specs
+
+        # A genuinely non-numeric value is not "unset" and must still fail.
+        with pytest.raises(ValueError, match="Invalid params"):
+            _parse_multi_media_specs(
+                [
+                    {
+                        "source_type": "video",
+                        "converter": "video2image",
+                        "params": {"seconds_per_frame": "abc"},
+                    }
+                ],
+                "image",
+            )
+
+    def test_out_of_range_param_still_rejected(self):
+        import pytest
+
+        from vtscore.datasets.importers.base.specs import _parse_multi_media_specs
+
+        # ``n_clips`` declares max="1000"; the Range validator must still fire.
+        with pytest.raises(ValueError, match="Invalid params"):
+            _parse_multi_media_specs(
+                [
+                    {
+                        "source_type": "video",
+                        "converter": "video2image",
+                        "params": {"n_clips": "99999"},
+                    }
+                ],
+                "image",
+            )
+
+
 # ---------------------------------------------------------------------------
 # _ingest_spec_stream: media_type stamping
 # ---------------------------------------------------------------------------
