@@ -5,6 +5,7 @@ import { provideRouter } from '@angular/router';
 import { DashboardComponent } from './dashboard.component';
 import { LabelSessionService } from '../../services/label-session.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
+import { provideZoneless } from '../../testing/zoneless-testbed';
 
 describe('DashboardComponent', () => {
   let component: DashboardComponent;
@@ -14,7 +15,7 @@ describe('DashboardComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DashboardComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DashboardComponent);
@@ -53,7 +54,7 @@ describe('DashboardComponent', () => {
     detectors: any[] = [],
     importers: any[] = [],
   ): void {
-    fixture.detectChanges();
+    TestBed.tick();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors });
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers, tabs: [] });
@@ -448,7 +449,7 @@ describe('DashboardComponent', () => {
 
   it('should render empty state when no datasets', () => {
     flushInitialRequests();
-    fixture.detectChanges();
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     const empty = el.querySelector('.empty-state');
     expect(empty).toBeTruthy();
@@ -458,7 +459,7 @@ describe('DashboardComponent', () => {
   it('should render dataset table when datasets exist', () => {
     const datasets = [{ id: 'd1', name: 'Test', media_type: 'audio', num_items: 5 }];
     flushInitialRequests(datasets);
-    fixture.detectChanges();
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.dash-table')).toBeTruthy();
   });

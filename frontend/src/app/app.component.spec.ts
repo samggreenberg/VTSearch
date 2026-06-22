@@ -6,12 +6,14 @@ import { AppComponent } from './app.component';
 import { provideRouter } from '@angular/router';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
+import { provideZoneless } from './testing/zoneless-testbed';
 
 describe('AppComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AppComponent],
       providers: [
+        ...provideZoneless(),
         provideRouter([]),
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -33,7 +35,7 @@ describe('AppComponent', () => {
 
   it('should render header with title', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
+    TestBed.tick();
     const compiled = fixture.nativeElement as HTMLElement;
     // Branding is rendered as the logo image (alt text), not an <h1>.
     const logo = compiled.querySelector('header .header-logo') as HTMLImageElement;
@@ -42,7 +44,7 @@ describe('AppComponent', () => {
 
   it('should render logo in header', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
+    TestBed.tick();
     const compiled = fixture.nativeElement as HTMLElement;
     const logo = compiled.querySelector('header .header-logo') as HTMLImageElement;
     expect(logo).toBeTruthy();
@@ -52,7 +54,7 @@ describe('AppComponent', () => {
 
   it('should render main content area with router outlet', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
+    TestBed.tick();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.main-content')).toBeTruthy();
   });
@@ -64,7 +66,7 @@ describe('AppComponent', () => {
 
   it('should toggle menu open on burger button click', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
+    TestBed.tick();
     const btn = fixture.nativeElement.querySelector('.burger-btn') as HTMLElement;
     btn.click();
     expect(fixture.componentInstance.menuOpen).toBe(true);
@@ -72,7 +74,7 @@ describe('AppComponent', () => {
 
   it('should toggle menu closed on second burger button click', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
+    TestBed.tick();
     const btn = fixture.nativeElement.querySelector('.burger-btn') as HTMLElement;
     btn.click();
     btn.click();
@@ -81,7 +83,7 @@ describe('AppComponent', () => {
 
   it('should close menu on document click', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
+    TestBed.tick();
     fixture.componentInstance.menuOpen = true;
     fixture.componentInstance.onDocumentClick(new Event('click'));
     expect(fixture.componentInstance.menuOpen).toBe(false);
@@ -89,7 +91,7 @@ describe('AppComponent', () => {
 
   it('should render all menu items', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
+    TestBed.tick();
     const items = fixture.nativeElement.querySelectorAll('.burger-item');
     expect(items.length).toBe(4);
     expect(items[0].textContent).toContain('Dashboard');
@@ -101,7 +103,7 @@ describe('AppComponent', () => {
   it('should disable dataset-dependent items when not on label view', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.componentInstance.isOnLabelView.set(false);
-    fixture.detectChanges();
+    TestBed.tick();
     const items = fixture.nativeElement.querySelectorAll('.burger-item');
     // Only Dashboard is dataset-dependent and gets disabled off the label view.
     expect(items[0].classList).toContain('disabled');
@@ -114,7 +116,7 @@ describe('AppComponent', () => {
   it('should enable dataset-dependent items when on label view', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.componentInstance.isOnLabelView.set(true);
-    fixture.detectChanges();
+    TestBed.tick();
     const items = fixture.nativeElement.querySelectorAll('.burger-item');
     expect(items[0].classList).not.toContain('disabled');
     expect(items[1].classList).not.toContain('disabled');
@@ -143,7 +145,7 @@ describe('AppComponent', () => {
 
   it('should close menu on Escape keydown', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    fixture.detectChanges();
+    TestBed.tick();
     fixture.componentInstance.menuOpen = true;
     const dropdown = fixture.nativeElement.querySelector('.burger-dropdown') as HTMLElement;
     const event = new KeyboardEvent('keydown', { key: 'Escape' });

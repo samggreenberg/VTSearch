@@ -3,6 +3,7 @@ import { ElementRef } from '@angular/core';
 import { ImageViewerComponent, RegionBox } from './image-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { Media } from '../../../models/api.models';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
 
 describe('ImageViewerComponent', () => {
   let component: ImageViewerComponent;
@@ -19,7 +20,7 @@ describe('ImageViewerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ImageViewerComponent],
-      providers: [ActiveContextService],
+      providers: [...provideZoneless(), ActiveContextService],
     }).compileComponents();
     fixture = TestBed.createComponent(ImageViewerComponent);
     component = fixture.componentInstance;
@@ -102,7 +103,7 @@ describe('ImageViewerComponent', () => {
   it('should render image element', () => {
     component.media = mockMedia;
     component.imageSrc = '/api/medias/2/image';
-    fixture.detectChanges();
+    TestBed.tick();
     expect(fixture.nativeElement.querySelector('img')).toBeTruthy();
   });
 

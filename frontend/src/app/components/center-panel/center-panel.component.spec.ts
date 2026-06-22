@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { CenterPanelComponent } from './center-panel.component';
 import { EmbedderInfo, Media } from '../../models/api.models';
 import { RegionBox } from './image-viewer/image-viewer.component';
+import { provideZoneless } from '../../testing/zoneless-testbed';
 
 describe('CenterPanelComponent', () => {
   let component: CenterPanelComponent;
@@ -21,7 +22,7 @@ describe('CenterPanelComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [CenterPanelComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
     fixture = TestBed.createComponent(CenterPanelComponent);
     component = fixture.componentInstance;
@@ -37,13 +38,13 @@ describe('CenterPanelComponent', () => {
   });
 
   it('should show placeholder when no media selected', () => {
-    fixture.detectChanges();
+    TestBed.tick();
     expect(fixture.nativeElement.textContent).toContain('Select a media item to view');
   });
 
   it('should show audio player for audio media', () => {
     component.media = mockMedia;
-    fixture.detectChanges();
+    TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-audio-player')).toBeTruthy();
   });
 
@@ -61,13 +62,13 @@ describe('CenterPanelComponent', () => {
 
   it('should show video player for video media', () => {
     component.media = { ...mockMedia, media_type: 'video' };
-    fixture.detectChanges();
+    TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-video-player')).toBeTruthy();
   });
 
   it('should show text viewer for text media', () => {
     component.media = { ...mockMedia, media_type: 'text' };
-    fixture.detectChanges();
+    TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-text-viewer')).toBeTruthy();
     // The rendered text-viewer fetches its paragraph on init; flush it so the
     // afterEach httpMock.verify() sees no dangling request.
@@ -76,19 +77,19 @@ describe('CenterPanelComponent', () => {
 
   it('should show document viewer for document media', () => {
     component.media = { ...mockMedia, media_type: 'document' };
-    fixture.detectChanges();
+    TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-document-viewer')).toBeTruthy();
   });
 
   it('should show voting overlay when media is selected', () => {
     component.media = mockMedia;
-    fixture.detectChanges();
+    TestBed.tick();
     expect(fixture.nativeElement.querySelector('vt-voting-overlay')).toBeTruthy();
   });
 
   it('should display metadata', () => {
     component.media = mockMedia;
-    fixture.detectChanges();
+    TestBed.tick();
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('test.wav');
     expect(text).toContain('MD5');
@@ -98,7 +99,7 @@ describe('CenterPanelComponent', () => {
   it('should send vote request on castVote', () => {
     component.media = mockMedia;
     component.showAnimations.set(false);
-    fixture.detectChanges();
+    TestBed.tick();
 
     let emitted: { id: number; vote: string } | undefined;
     component.mediaVoted.subscribe((e: { id: number; vote: string }) => (emitted = e));
@@ -119,7 +120,7 @@ describe('CenterPanelComponent', () => {
   it('should prevent double voting', () => {
     component.media = mockMedia;
     component.showAnimations.set(false);
-    fixture.detectChanges();
+    TestBed.tick();
     component.isVoting.set(true);
     component.castVote('good');
     httpMock.expectNone('/api/medias/1/vote');
@@ -136,7 +137,7 @@ describe('CenterPanelComponent', () => {
 
   it('should clear swipe class when media changes', () => {
     component.media = mockMedia;
-    fixture.detectChanges();
+    TestBed.tick();
     // Simulate swipe ending
     component.swipeClass.set('swipe-right');
 

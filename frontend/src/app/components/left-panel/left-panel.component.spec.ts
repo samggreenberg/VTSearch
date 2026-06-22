@@ -8,6 +8,7 @@ import { SimpleChange } from '@angular/core';
 import { LeftPanelComponent } from './left-panel.component';
 import type { Media } from '../../models/api.models';
 import { settleResource } from '../../testing/settle-resource';
+import { provideZoneless } from '../../testing/zoneless-testbed';
 
 describe('LeftPanelComponent', () => {
   let component: LeftPanelComponent;
@@ -16,12 +17,12 @@ describe('LeftPanelComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LeftPanelComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LeftPanelComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    TestBed.tick();
   });
 
   it('should create', () => {
@@ -36,7 +37,7 @@ describe('LeftPanelComponent', () => {
     const fresh = TestBed.createComponent(LeftPanelComponent);
     const comp = fresh.componentInstance;
     vi.spyOn(comp.autopilotStart, 'emit');
-    fresh.detectChanges();
+    TestBed.tick();
     expect(comp.autopilotStart.emit).toHaveBeenCalled();
   });
 
@@ -50,7 +51,7 @@ describe('LeftPanelComponent', () => {
     const comp = fresh.componentInstance;
     comp.autopilotEnabled = false;
     vi.spyOn(comp.autopilotStart, 'emit');
-    fresh.detectChanges();
+    TestBed.tick();
     expect(comp.activeTab).toBe('manual');
     expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
   });
@@ -60,7 +61,7 @@ describe('LeftPanelComponent', () => {
     const comp = fresh.componentInstance;
     comp.autopilotDisabled = true;
     vi.spyOn(comp.autopilotStart, 'emit');
-    fresh.detectChanges();
+    TestBed.tick();
     expect(comp.activeTab).toBe('manual');
     expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
   });
@@ -88,7 +89,7 @@ describe('LeftPanelComponent', () => {
 
   it('should disable the autopilot tab button when autopilotDisabled', () => {
     component.autopilotDisabled = true;
-    fixture.detectChanges();
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     const tabs = el.querySelectorAll<HTMLButtonElement>('.left-tab');
     // Second tab is Autopilot.
@@ -103,7 +104,7 @@ describe('LeftPanelComponent', () => {
 
   it('should render manual tab content when switched', () => {
     component.setTab('manual');
-    fixture.detectChanges();
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.tab-panel-manual')).toBeTruthy();
     expect(el.querySelector('.tab-panel-autopilot')).toBeNull();
@@ -117,7 +118,7 @@ describe('LeftPanelComponent', () => {
     expect(tabs[1].classList.contains('active')).toBe(true);
 
     component.setTab('manual');
-    fixture.detectChanges();
+    TestBed.tick();
     const tabsAfter = el.querySelectorAll('.left-tab');
     expect(tabsAfter[0].classList.contains('active')).toBe(true);
     expect(tabsAfter[1].classList.contains('active')).toBe(false);

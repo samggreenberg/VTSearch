@@ -8,6 +8,7 @@ import { ActiveContextService } from './active-context.service';
 import { ContextSwitchService } from './context-switch.service';
 import { ProgressEventsService } from './progress-events.service';
 import { ProjectionApiService } from './projection-api.service';
+import { configureZoneless } from '../testing/zoneless-testbed';
 import { LoadingTask } from '../models/api.models';
 import type { ProjectionBuildResponse, ProjectionMeta } from '../models/projection.models';
 
@@ -74,7 +75,7 @@ describe('BrowsePrepService', () => {
       build: (): Observable<ProjectionBuildResponse> => buildProvider(),
     };
 
-    TestBed.configureTestingModule({
+    configureZoneless({
       providers: [
         provideRouter([]),
         { provide: ContextSwitchService, useValue: contextSwitchStub },

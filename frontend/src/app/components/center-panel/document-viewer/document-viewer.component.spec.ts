@@ -4,6 +4,7 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { DocumentViewerComponent } from './document-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { Media } from '../../../models/api.models';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
 
 describe('DocumentViewerComponent', () => {
   let component: DocumentViewerComponent;
@@ -20,7 +21,7 @@ describe('DocumentViewerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DocumentViewerComponent],
-      providers: [ActiveContextService],
+      providers: [...provideZoneless(), ActiveContextService],
     }).compileComponents();
     fixture = TestBed.createComponent(DocumentViewerComponent);
     component = fixture.componentInstance;

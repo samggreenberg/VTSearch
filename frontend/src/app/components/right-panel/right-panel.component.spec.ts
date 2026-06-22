@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { RightPanelComponent } from './right-panel.component';
 import { VoteStateService } from '../../services/vote-state.service';
+import { provideZoneless } from '../../testing/zoneless-testbed';
 
 describe('RightPanelComponent', () => {
   let component: RightPanelComponent;
@@ -12,7 +13,7 @@ describe('RightPanelComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [RightPanelComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(RightPanelComponent);
@@ -29,7 +30,7 @@ describe('RightPanelComponent', () => {
   }
 
   async function flushInit(): Promise<void> {
-    fixture.detectChanges();
+    TestBed.tick();
     // Allow the votes poll's `timer(0, …)` first emission to fire on a real
     // macrotask (and drain microtasks) so its GET is issued.
     await new Promise<void>((resolve) => setTimeout(resolve));
@@ -59,7 +60,7 @@ describe('RightPanelComponent', () => {
   // the value commits. See docs/plans/httpresource-migration.md.
   it('should load view mode from settings on init', async () => {
     component.medias = [{ id: 1, media_type: 'audio', filename: 'a.wav', md5: 'x', custom_metadata: {} }];
-    fixture.detectChanges();
+    TestBed.tick();
     TestBed.tick(); // run the rxResource loader effect so the GET is issued
     httpMock.expectOne('/api/settings').flush({ volume: 1, view_mode_right: { audio: 'list', image: 'grid' } });
     // Drain the resource's promise-based value commit, then flush effects so the
@@ -74,7 +75,7 @@ describe('RightPanelComponent', () => {
   });
 
   it('should default viewMode to grid when not in settings', async () => {
-    fixture.detectChanges();
+    TestBed.tick();
     await new Promise<void>((resolve) => setTimeout(resolve));
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
@@ -84,7 +85,7 @@ describe('RightPanelComponent', () => {
   });
 
   it('should poll for votes on init', async () => {
-    fixture.detectChanges();
+    TestBed.tick();
     await new Promise<void>((resolve) => setTimeout(resolve));
     TestBed.tick(); // flush the SettingsStateService rxResource loader (root effect)
     httpMock.expectOne('/api/settings').flush({ volume: 1 });
@@ -150,7 +151,7 @@ describe('RightPanelComponent', () => {
   it('should render detector context bar when trainMode set', async () => {
     component.trainMode = { model: { name: 'Test Detector', registry_id: 'r1' } };
     await flushInit();
-    fixture.detectChanges();
+    TestBed.tick();
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.train-context-bar')).toBeTruthy();
@@ -160,7 +161,7 @@ describe('RightPanelComponent', () => {
   it('should not render detector context bar when trainMode is null', async () => {
     component.trainMode = null;
     await flushInit();
-    fixture.detectChanges();
+    TestBed.tick();
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.train-context-bar')).toBeFalsy();
@@ -169,7 +170,7 @@ describe('RightPanelComponent', () => {
 
   it('should render both good and bad label lists', async () => {
     await flushInit();
-    fixture.detectChanges();
+    TestBed.tick();
 
     const el = fixture.nativeElement as HTMLElement;
     const labelLists = el.querySelectorAll('vt-label-list');
@@ -179,7 +180,7 @@ describe('RightPanelComponent', () => {
 
   it('should render label sort dropdown', async () => {
     await flushInit();
-    fixture.detectChanges();
+    TestBed.tick();
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('vt-label-sort')).toBeTruthy();
