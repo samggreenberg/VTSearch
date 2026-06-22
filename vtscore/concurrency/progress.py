@@ -60,6 +60,14 @@ class ProgressTracker:
         self._phase_start: float | None = None
         self._phase_current_start: int = 0
         self._smoothed_eta: float | None = None
+        # Overall (whole-job) progress state, used when the caller reports a
+        # ``step``/``total_steps`` structure.  See :meth:`_compute_overall`.
+        self._overall_start_time: float | None = None
+        self._overall_start_frac: float = 0.0
+        self._overall_max: float = 0.0
+        self._overall_smoothed_eta: float | None = None
+        self._overall_last_step: int | None = None
+        self._overall_total_steps: int | None = None
 
     def _compute_eta(self, status: str, current: int, total: int) -> Optional[float]:
         """Compute the smoothed ETA in seconds for the current bar.
@@ -94,6 +102,80 @@ class ProgressTracker:
             self._smoothed_eta = alpha * raw_eta + (1.0 - alpha) * self._smoothed_eta
         return self._smoothed_eta
 
+    def _compute_overall(
+        self, current: int, total: int, step: Any, total_steps: Any
+    ) -> tuple[Optional[float], Optional[float]]:
+        """Compute the whole-job completion fraction and a true overall ETA.
+
+        When a caller declares a ``step``/``total_steps`` structure, the bar
+        should advance once across the *entire* job instead of resetting at
+        every phase. We model this with equal weight per step plus the
+        within-step ``current``/``total`` fraction::
+
+            overall = ((step - 1) + within_step) / total_steps
+
+        Equal-per-step weighting is deliberate: the exact cost split between
+        phases is unpredictable (a cached load skips the download; a tiny
+        dataset embeds in a blink) and matters far less than simply knowing
+        *how many* phases there are. The overall ETA self-corrects regardless,
+        since it is derived from the actual elapsed-vs-fraction rate.
+
+        Returns ``(overall, eta_seconds)``. Both are ``None`` when no step
+        structure is present (the caller falls back to the per-phase
+        :meth:`_compute_eta`). The fraction is clamped to be monotonic
+        non-decreasing within a job so the bar never visibly retreats; a step
+        going *backwards* (or ``total_steps`` changing) is read as a brand-new
+        job and resets the overall clock.
+        """
+        if not step or not total_steps or total_steps <= 0:
+            self._overall_start_time = None
+            self._overall_last_step = None
+            self._overall_total_steps = None
+            self._overall_smoothed_eta = None
+            return None, None
+
+        s = min(max(int(step), 1), int(total_steps))
+        within = 0.0
+        if total and total > 0:
+            within = min(max(current / total, 0.0), 1.0)
+        raw = min(max(((s - 1) + within) / total_steps, 0.0), 1.0)
+
+        now = time.monotonic()
+        new_job = (
+            self._overall_start_time is None
+            or self._overall_total_steps != total_steps
+            or (self._overall_last_step is not None and s < self._overall_last_step)
+        )
+        if new_job:
+            self._overall_start_time = now
+            self._overall_start_frac = raw
+            self._overall_max = raw
+            self._overall_smoothed_eta = None
+            self._overall_last_step = s
+            self._overall_total_steps = total_steps
+            return raw, None
+
+        self._overall_last_step = s
+        # Clamp to monotonic non-decreasing so within-step jitter never rewinds
+        # the unified bar.
+        if raw < self._overall_max:
+            raw = self._overall_max
+        else:
+            self._overall_max = raw
+
+        elapsed = now - self._overall_start_time
+        progressed = raw - self._overall_start_frac
+        if elapsed < self._ETA_MIN_ELAPSED or progressed <= 0 or raw >= 1.0:
+            # Not enough signal yet (or done): hold the last smoothed estimate.
+            return raw, self._overall_smoothed_eta
+        raw_eta = elapsed * (1.0 - raw) / progressed
+        if self._overall_smoothed_eta is None:
+            self._overall_smoothed_eta = raw_eta
+        else:
+            alpha = self._ETA_SMOOTHING_ALPHA
+            self._overall_smoothed_eta = alpha * raw_eta + (1.0 - alpha) * self._overall_smoothed_eta
+        return raw, self._overall_smoothed_eta
+
     def update(
         self,
         status: str,
@@ -120,8 +202,22 @@ class ProgressTracker:
             for key in self._extra_defaults:
                 if key in kwargs:
                     self._data[key] = kwargs[key]
+            # When the caller reports a multi-step structure, surface a single
+            # whole-job ``overall`` fraction (0..1) and a true overall ETA so
+            # the bar fills once across the entire job instead of resetting at
+            # each phase. Otherwise fall back to the per-phase ETA.
+            overall = None
+            overall_eta = None
+            if "overall" in self._extra_defaults or "eta_seconds" in self._extra_defaults:
+                overall, overall_eta = self._compute_overall(
+                    current, total, self._data.get("step"), self._data.get("total_steps")
+                )
+            if "overall" in self._extra_defaults:
+                self._data["overall"] = overall
             if "eta_seconds" in self._extra_defaults:
-                self._data["eta_seconds"] = self._compute_eta(status, current, total)
+                self._data["eta_seconds"] = (
+                    overall_eta if overall is not None else self._compute_eta(status, current, total)
+                )
             snapshot = dict(self._data)
         self._notify(snapshot)
 
@@ -237,6 +333,10 @@ _PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
     "total_steps": None,
     "error": None,
     "eta_seconds": None,
+    # Whole-job completion fraction (0..1) for multi-step operations, computed
+    # by :meth:`ProgressTracker._compute_overall`. ``None`` for single-phase
+    # operations (the frontend then falls back to ``current``/``total``).
+    "overall": None,
 }
 
 

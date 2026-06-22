@@ -528,7 +528,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((prog: ProgressEvent) => {
         if (prog.status === 'running') {
           this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
-          this.sortState.setSortProgress(prog.current ?? 0, prog.total ?? 0);
+          this.sortState.setSortProgress(
+            prog.current ?? 0,
+            prog.total ?? 0,
+            prog.overall ?? null,
+            prog.eta_seconds ?? null,
+          );
         }
       });
   }

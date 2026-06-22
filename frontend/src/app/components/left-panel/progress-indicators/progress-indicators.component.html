@@ -5,10 +5,13 @@
         <span class="sort-overlay-status">{{ sortStatus }}</span>
       }
       <vt-progress-bar
-        [indeterminate]="isIndeterminate"
-        [value]="sortProgress()"
-        [max]="sortProgressTotal()"
+        [indeterminate]="sortBar.indeterminate"
+        [value]="sortBar.value"
+        [max]="sortBar.max"
       />
+      @if (sortEta) {
+        <span class="sort-overlay-status">{{ sortEta }}</span>
+      }
       <button
         class="btn btn--cancel btn--sm"
         (click)="onCancel()"

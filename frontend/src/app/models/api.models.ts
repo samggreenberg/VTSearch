@@ -77,6 +77,14 @@ export interface ProgressEvent {
    * enough (>5s) with a known total. ``null`` means "no estimate yet".
    */
   eta_seconds?: number | null;
+  /**
+   * Whole-job completion fraction (0..1) for multi-step operations, computed
+   * by ``ProgressTracker._compute_overall``. When present, the progress bar
+   * fills once across the entire job (download → load → embed → finalize)
+   * instead of resetting at each phase. ``null`` for single-phase operations,
+   * where consumers fall back to ``current``/``total``.
+   */
+  overall?: number | null;
   /** Dataset-only: payload returned by combine-datasets staging. */
   staging_result?: unknown;
   [key: string]: unknown;

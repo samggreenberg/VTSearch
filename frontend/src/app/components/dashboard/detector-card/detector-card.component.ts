@@ -4,9 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import {
+  ProgressBarState,
   ProgressHeader,
   formatProgressHeader,
-  isProgressIndeterminate,
+  progressBarState,
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
@@ -275,10 +276,10 @@ export class DetectorCardComponent implements OnChanges {
     }
   }
 
-  taskIsIndeterminate(): boolean {
+  taskBar(): ProgressBarState {
     const t = this.loadingTask;
-    if (!t) return true;
-    return isProgressIndeterminate(t);
+    if (!t) return { value: 0, max: 1, indeterminate: true };
+    return progressBarState(t);
   }
 
   get taskProgressInfo(): ProgressHeader {

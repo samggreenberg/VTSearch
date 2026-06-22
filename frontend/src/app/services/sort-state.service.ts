@@ -35,6 +35,12 @@ export class SortStateService {
   private readonly _sortStatus = signal('');
   private readonly _sortProgress = signal(0);
   private readonly _sortProgressTotal = signal(0);
+  // Whole-job fraction (0..1) and overall ETA for multi-step scoring jobs
+  // (Find / detector sort), so the bar fills once across all phases instead of
+  // resetting per phase. ``null`` for single-phase sorts (fall back to
+  // current/total). See ProgressEvent.overall / ProgressTracker._compute_overall.
+  private readonly _sortOverall = signal<number | null>(null);
+  private readonly _sortEtaSeconds = signal<number | null>(null);
   private readonly _inclusion = signal(0);
   private readonly _loadSortLabel = signal('');
   private readonly _textQuery = signal('');
@@ -71,6 +77,14 @@ export class SortStateService {
     return this._sortProgressTotal();
   }
 
+  get sortOverall(): number | null {
+    return this._sortOverall();
+  }
+
+  get sortEtaSeconds(): number | null {
+    return this._sortEtaSeconds();
+  }
+
   get inclusion(): number {
     return this._inclusion();
   }
@@ -104,9 +118,16 @@ export class SortStateService {
     this._sortStatus.set(status);
   }
 
-  setSortProgress(current: number, total: number): void {
+  setSortProgress(
+    current: number,
+    total: number,
+    overall: number | null = null,
+    etaSeconds: number | null = null,
+  ): void {
     this._sortProgress.set(current);
     this._sortProgressTotal.set(total);
+    this._sortOverall.set(overall);
+    this._sortEtaSeconds.set(etaSeconds);
   }
 
   setInclusion(value: number): void {
@@ -130,6 +151,8 @@ export class SortStateService {
     this._sortStatus.set('');
     this._sortProgress.set(0);
     this._sortProgressTotal.set(0);
+    this._sortOverall.set(null);
+    this._sortEtaSeconds.set(null);
     this._inclusion.set(0);
     this._loadSortLabel.set('');
     this._textQuery.set('');

@@ -26,7 +26,12 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { ProgressEvent } from '../../models/api.models';
-import { formatProgressMessage } from '../../utils/format-progress';
+import {
+  ProgressBarState,
+  formatEta,
+  formatProgressMessage,
+  progressBarState,
+} from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 
 @Component({
@@ -285,6 +290,21 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private progressPollSub: Subscription | null = null;
 
+  /** Unified bar state for the scoring overlay: prefers the whole-job
+   *  ``overall`` fraction so the bar fills once across all Find phases. */
+  get sortBar(): ProgressBarState {
+    return progressBarState({
+      current: this.sortState.sortProgress,
+      total: this.sortState.sortProgressTotal,
+      overall: this.sortState.sortOverall,
+    });
+  }
+
+  /** Overall ETA chip for the scoring overlay (empty when unavailable). */
+  get sortEta(): string {
+    return formatEta(this.sortState.sortEtaSeconds);
+  }
+
   private startProgressPolling(): void {
     this.stopProgressPolling();
     this.progressPollSub = this.progressEvents.find$
@@ -292,7 +312,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .subscribe((prog: ProgressEvent) => {
         if (prog.status === 'running') {
           this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
-          this.sortState.setSortProgress(prog.current ?? 0, prog.total ?? 0);
+          this.sortState.setSortProgress(
+            prog.current ?? 0,
+            prog.total ?? 0,
+            prog.overall ?? null,
+            prog.eta_seconds ?? null,
+          );
         }
       });
   }

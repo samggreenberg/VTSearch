@@ -14,6 +14,8 @@
       [sortStatus]="sortState.sortStatus"
       [sortProgress]="sortState.sortProgress"
       [sortProgressTotal]="sortState.sortProgressTotal"
+      [sortOverall]="sortState.sortOverall"
+      [sortEtaSeconds]="sortState.sortEtaSeconds"
       [labelingStatus]="null"
       [viewMode]="viewModeLeft()"
       [gridGoalWidth]="gridGoalWidthLeft()"
@@ -44,12 +46,15 @@
         <div class="find-wait-content">
           <p class="find-wait-message">Please wait: scoring dataset with detector…</p>
           <vt-progress-bar
-            [indeterminate]="sortState.sortProgressTotal <= 0"
-            [value]="sortState.sortProgress"
-            [max]="sortState.sortProgressTotal"
+            [indeterminate]="sortBar.indeterminate"
+            [value]="sortBar.value"
+            [max]="sortBar.max"
           />
           @if (sortState.sortProgressTotal > 0) {
             <span class="find-wait-count">{{ sortState.sortProgress | number }} / {{ sortState.sortProgressTotal | number }}</span>
+          }
+          @if (sortEta) {
+            <span class="find-wait-count">{{ sortEta }}</span>
           }
           <button class="btn btn--secondary btn--sm" (click)="onSortCancel()">Cancel</button>
         </div>
