@@ -315,7 +315,11 @@ class TestServerFilesNpzRunsEndToEnd:
         src = tmp_path / "only.wav"
         src.write_bytes(make_raw_wav_bytes())
 
-        # Per-key layout: each filename is a top-level key in the npz.
+        # Per-key layout: each filename is a top-level key in the npz.  A
+        # per-key archive carries no embedder name, and under the dict-keyed
+        # contract a vector can only be stored under an embedder name, so the
+        # supplied vector is not retained; the test asserts the layout is
+        # accepted (the media is created from the listed file).
         vec = np.full(256, 7.0, dtype=np.float32)
         npz = tmp_path / "list.npz"
         np.savez(npz, **{str(src): vec})  # pyright: ignore[reportArgumentType]
@@ -326,7 +330,7 @@ class TestServerFilesNpzRunsEndToEnd:
 
         assert len(medias) == 1
         media = next(iter(medias.values()))
-        np.testing.assert_array_equal(media_embedding(media), vec)
+        assert media["origin_name"] == str(src)
 
 
 # ---------------------------------------------------------------------------

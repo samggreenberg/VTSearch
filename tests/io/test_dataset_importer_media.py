@@ -83,6 +83,7 @@ class _VectorAndMD5Importer:
                     content_md5s=self.content_md5s or None,
                     on_progress=lambda *a: None,
                     thin=thin,
+                    content_embedder_name="clap",
                 )
 
         imp = Importer()
