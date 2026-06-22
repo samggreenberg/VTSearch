@@ -42,24 +42,91 @@ TORCH_THREADS = max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1")))
 DEVICE = os.environ.get("VTSEARCH_DEVICE", "auto").lower()
 
 
+# Per-device cache for the CUDA smoke-test below.  ``None`` until probed;
+# the probe runs once per device string per process and is cheap thereafter.
+_cuda_runnable: dict[str, bool] = {}
+
+
+def _cuda_can_run(device: str = "cuda") -> bool:
+    """Return ``True`` only if torch can actually launch a kernel on *device*.
+
+    ``torch.cuda.is_available()`` is necessary but **not** sufficient: it
+    reports ``True`` whenever a driver and a CUDA device are visible, even when
+    the installed torch wheel was compiled without a kernel image for that GPU's
+    compute capability.  In that case every real op raises
+    ``cudaErrorNoKernelImageForDevice`` (``torch.AcceleratorError``), which is
+    exactly what makes a "switched GPU" host 500 on every MLP train.
+
+    We force one tiny kernel launch + synchronize so the failure surfaces here,
+    once, instead of deep inside training.  The result is cached per device so
+    the rest of the app can fall back to CPU and keep working rather than
+    crash-looping on a GPU it cannot use.  This keeps VTSearch resilient across
+    heterogeneous fleets: the same install runs on whatever node it lands on,
+    using the GPU when the wheel supports it and CPU when it doesn't.
+    """
+    import logging  # noqa: PLC0415
+
+    cached = _cuda_runnable.get(device)
+    if cached is not None:
+        return cached
+
+    ok = False
+    try:
+        import torch  # noqa: PLC0415
+
+        if torch.cuda.is_available():
+            # A real launch + sync: allocation alone can succeed lazily, so we
+            # add and reduce to force the kernel and then block on the result.
+            probe = torch.zeros(1, device=device)
+            _ = (probe + 1).sum().item()
+            torch.cuda.synchronize(probe.device)
+            ok = True
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "CUDA reports a usable device but torch cannot run a kernel on %s "
+            "(the installed torch build likely lacks a kernel image for this "
+            "GPU's compute capability); falling back to CPU. Reinstall a torch "
+            "build that matches this GPU (see scripts/install-gpu.sh, e.g. a "
+            "newer CUDA tag such as cu124/cu128) or set VTSEARCH_DEVICE=cpu to "
+            "silence this warning.",
+            device,
+            exc_info=True,
+        )
+        ok = False
+
+    _cuda_runnable[device] = ok
+    return ok
+
+
 def resolve_device() -> str:
     """Resolve :data:`DEVICE` to a concrete ``torch.device`` string.
 
     Imports torch lazily so that simply importing this module does not pull
     torch in.  Returns ``"cpu"`` if torch is unavailable.
+
+    Whether ``DEVICE`` is ``"auto"`` or an explicit ``"cuda"``/``"cuda:N"``,
+    the chosen CUDA device is smoke-tested via :func:`_cuda_can_run` before it
+    is returned; a device that cannot actually execute a kernel (wrong/missing
+    kernel image for the GPU) falls back to ``"cpu"`` so the app degrades
+    gracefully instead of crashing on every train.
     """
-    if DEVICE != "auto":
-        return DEVICE
     try:
         import torch  # noqa: PLC0415
-
-        if torch.cuda.is_available():
-            return "cuda"
-        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-            return "mps"
-        return "cpu"
     except ImportError:
         return "cpu"
+
+    if DEVICE != "auto":
+        # Honour an explicit pin, but still refuse a CUDA device the wheel
+        # can't run on - a hard crash helps nobody, and CPU keeps the app up.
+        if DEVICE.startswith("cuda") and not _cuda_can_run(DEVICE):
+            return "cpu"
+        return DEVICE
+
+    if torch.cuda.is_available() and _cuda_can_run("cuda"):
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 # Server-side file access is governed by the active login provider, not a

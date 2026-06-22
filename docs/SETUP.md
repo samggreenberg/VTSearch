@@ -192,10 +192,17 @@ bash scripts/install-cpu.sh
 **For GPU** (NVIDIA CUDA-compatible systems):
 
 ```bash
-bash scripts/install-gpu.sh          # defaults to CUDA 11.8 (cu118)
-bash scripts/install-gpu.sh cu121    # for CUDA 12.1
-bash scripts/install-gpu.sh cu124    # for CUDA 12.4
+bash scripts/install-gpu.sh          # defaults to CUDA 12.4 (cu124)
+bash scripts/install-gpu.sh cu118    # for CUDA 11.8 (older drivers)
+bash scripts/install-gpu.sh cu128    # for CUDA 12.8 (Blackwell GPUs)
 ```
+
+The CUDA tag picks a torch wheel that only ships kernels for certain GPU
+architectures, so match it to your hardware: Ampere/Ada on `cu118`+, Hopper
+(H100) on `cu121`+, Blackwell on `cu128`+. A mismatched wheel imports fine
+and then raises `cudaErrorNoKernelImageForDevice` on the first GPU op;
+VTSearch detects this at runtime and falls back to CPU (with a warning)
+rather than crashing, but you only get GPU acceleration with a matching wheel.
 
 Both scripts run `pip install -r requirements/{base,gpu}.txt`, which
 installs every runtime + dev dep and editable-installs the `vtsearch`
@@ -427,7 +434,7 @@ with a shared filesystem.
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   bash scripts/install-gpu.sh cu124     # or cu121 / cu118 to match your cluster
+   bash scripts/install-gpu.sh cu124     # or cu118 / cu121 / cu128 to match your node's GPU
    ```
 
    The scripts default to a venv named `.venv` in the project dir; override with

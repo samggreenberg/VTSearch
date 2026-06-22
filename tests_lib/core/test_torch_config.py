@@ -29,6 +29,16 @@ def reset_torch_configured_flag():
     torch_setup._torch_configured = False
 
 
+@pytest.fixture(autouse=True)
+def reset_cuda_probe_cache():
+    """Clear the per-process CUDA smoke-test cache so each test re-probes."""
+    import vtscore.config as config
+
+    config._cuda_runnable.clear()
+    yield
+    config._cuda_runnable.clear()
+
+
 def test_torch_threads_constant_default(monkeypatch):
     """``TORCH_THREADS`` defaults to 1 when the env var is unset."""
     monkeypatch.delenv("VTSEARCH_TORCH_THREADS", raising=False)
@@ -95,17 +105,85 @@ def test_get_torch_device_honours_explicit_cpu(monkeypatch):
 
 
 def test_get_torch_device_returns_cuda_when_available(monkeypatch):
-    """``auto`` resolves to cuda when torch reports CUDA is available."""
+    """``auto`` resolves to cuda when CUDA is available AND a kernel can run."""
     monkeypatch.setenv("VTSEARCH_DEVICE", "auto")
     import vtscore.config as config
     import vtscore.embedding.loader as loader
 
     importlib.reload(config)
     importlib.reload(loader)
-    with mock.patch.object(torch.cuda, "is_available", return_value=True):
+    with (
+        mock.patch.object(torch.cuda, "is_available", return_value=True),
+        mock.patch.object(config, "_cuda_can_run", return_value=True),
+    ):
         dev = loader.get_torch_device()
 
     assert dev.type == "cuda"
+
+
+def test_auto_falls_back_to_cpu_when_kernel_cannot_run(monkeypatch):
+    """CUDA visible but no runnable kernel image -> CPU under ``auto``.
+
+    Reproduces the ``cudaErrorNoKernelImageForDevice`` case: the wheel was
+    built without a kernel image for this GPU, so ``is_available()`` is True
+    but the smoke-test launch raises. The host must degrade to CPU, not crash.
+    """
+    monkeypatch.setenv("VTSEARCH_DEVICE", "auto")
+    import vtscore.config as config
+    import vtscore.embedding.loader as loader
+
+    importlib.reload(config)
+    importlib.reload(loader)
+    with (
+        mock.patch.object(torch.cuda, "is_available", return_value=True),
+        mock.patch.object(config, "_cuda_can_run", return_value=False),
+    ):
+        dev = loader.get_torch_device()
+
+    assert dev.type == "cpu"
+
+
+def test_explicit_cuda_pin_falls_back_when_kernel_cannot_run(monkeypatch):
+    """Even an explicit ``VTSEARCH_DEVICE=cuda`` pin degrades to CPU if unusable."""
+    monkeypatch.setenv("VTSEARCH_DEVICE", "cuda")
+    import vtscore.config as config
+    import vtscore.embedding.loader as loader
+
+    importlib.reload(config)
+    importlib.reload(loader)
+    with mock.patch.object(config, "_cuda_can_run", return_value=False):
+        dev = loader.get_torch_device()
+
+    assert dev.type == "cpu"
+
+
+def test_cuda_can_run_returns_false_when_launch_raises(monkeypatch):
+    """``_cuda_can_run`` swallows a kernel-launch error and caches False."""
+    import vtscore.config as config
+
+    importlib.reload(config)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("no kernel image is available for execution on the device")
+
+    with (
+        mock.patch.object(torch.cuda, "is_available", return_value=True),
+        mock.patch.object(torch, "zeros", side_effect=_boom),
+    ):
+        assert config._cuda_can_run("cuda") is False
+        # Cached: a second call doesn't re-probe (would raise if it did, but
+        # the cache short-circuits before touching torch).
+        assert config._cuda_can_run("cuda") is False
+    assert config._cuda_runnable["cuda"] is False
+
+
+def test_cuda_can_run_false_without_cuda(monkeypatch):
+    """No CUDA at all -> ``_cuda_can_run`` is False without launching anything."""
+    import vtscore.config as config
+
+    importlib.reload(config)
+    with mock.patch.object(torch.cuda, "is_available", return_value=False):
+        assert config._cuda_can_run("cuda") is False
 
 
 def test_train_model_places_model_on_selected_device(monkeypatch):
