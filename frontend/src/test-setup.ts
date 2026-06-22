@@ -89,16 +89,11 @@ const canvasContextStub = new Proxy(
 HTMLCanvasElement.prototype.getContext = (() =>
   canvasContextStub) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 
-// --- fakeAsync / ProxyZone bridge ------------------------------------------
-// Angular's fakeAsync()/tick() require each test to run inside a Zone forked
-// with a ProxyZoneSpec. zone.js/testing only auto-wires that for Jasmine,
-// Mocha and Jest — its jest patch bails with `typeof jest === 'undefined'`,
-// and Vitest is none of those — so without help every fakeAsync() spec throws
-// "Expected to be running in 'ProxyZone'".
-//
-// `zone.js/plugins/vitest-patch` (loaded ahead of this file via the test
-// target's polyfills in angular.json) is the Angular-maintained bridge that
-// wires Vitest's describe/it/hooks into the sync/proxy zones, replacing the
-// hand-rolled replica that used to live here. It is explicitly transitional;
-// the long-term direction is native async + Vitest fake timers (zoneless
-// migration Phase 5). Nothing further is needed here.
+// --- no fakeAsync / ProxyZone bridge ---------------------------------------
+// The specs no longer use Angular's fakeAsync()/tick(); they drive time with
+// native async + Vitest fake timers (vi.useFakeTimers / advanceTimersByTimeAsync)
+// and real macrotask drains instead. So neither "zone.js/testing" nor the
+// "zone.js/plugins/vitest-patch" bridge is loaded any more (see the build:test
+// polyfills in angular.json and docs/plans/zoneless-migration.md, Phase 5).
+// Base "zone.js" stays in the test polyfills only for the specs that still use
+// the default zone-based TestBed; nothing in this setup file needs it.
