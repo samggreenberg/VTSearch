@@ -78,7 +78,7 @@ describe('LabelViewComponent', () => {
     );
   }
 
-  afterEach(() => {
+  afterEach(async () => {
     component.ngOnDestroy();
     // Kill the shared VoteStateService poll explicitly. Under zoneless (no
     // zone.js patching test timers) a leftover `timer(0, N)` poll keeps firing
@@ -95,11 +95,20 @@ describe('LabelViewComponent', () => {
     httpMock.match(() => true).forEach(req => {
       if (!req.cancelled) req.flush([]);
     });
-    // Destroy the fixture so the component injector — and the medias/settings
-    // rxResource loaders bound to it — are disposed. Without this a pending
-    // resource reload can fire an HTTP request after the next spec resets the
-    // TestBed, whose interceptor then runs in a destroyed injector (NG0205).
+    // Destroy the fixture so the component view + its child views are gone (no
+    // template can be re-checked) and the component injector — with the
+    // medias/settings rxResource loaders bound to it — is disposed.
     fixture.destroy();
+    // Drain one macrotask while the TestBed injector is still alive. Without
+    // zone.js the framework no longer tracks the app's timers/microtasks, so the
+    // SSE pollers' `timer(0, N)` first emissions and root-singleton rxResource
+    // reloads fire on a macrotask AFTER this teardown; letting them land now
+    // (injector alive, the reset happens in the next spec's beforeEach) turns
+    // what would be a post-reset NG0205 into a harmless unflushed request.
+    await new Promise<void>((resolve) => setTimeout(resolve));
+    httpMock.match(() => true).forEach(req => {
+      if (!req.cancelled) req.flush([]);
+    });
   });
 
   it('should create', () => {

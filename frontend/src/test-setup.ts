@@ -10,7 +10,7 @@
  */
 
 import { getTestBed } from '@angular/core/testing';
-import { afterEach as vitestAfterEach, beforeEach as vitestBeforeEach } from 'vitest';
+import { beforeEach as vitestBeforeEach } from 'vitest';
 
 // --- TestBed cascade guard --------------------------------------------------
 // The Angular TestBed is a module-level singleton reset by an afterEach hook.
@@ -31,22 +31,6 @@ vitestBeforeEach(() => {
     // A throwing teardown from the previous spec is itself a reported failure;
     // swallow it here so it cannot mask the upcoming test.
   }
-});
-
-// --- zoneless async-leak drain ----------------------------------------------
-// Without zone.js, the test framework no longer tracks/auto-cleans the timers
-// and microtasks the app schedules (the SSE pollers' `timer(0, N)` first
-// emissions, rxResource reloads, etc.). A straggler that fires *after* the next
-// spec's `beforeEach` resets the TestBed runs through a destroyed injector and
-// throws an unhandled NG0205 ("Injector has already been destroyed"), e.g. when
-// an HTTP poller's `switchMap` issues a request. This setup-file `afterEach`
-// registers FIRST, so it runs LAST (Vitest runs afterEach hooks in reverse
-// registration order) — after each spec's own teardown (ngOnDestroy /
-// fixture.destroy). Draining one macrotask here lets any such straggler fire
-// while the injector is still alive (the reset happens in the *next*
-// beforeEach), turning a post-reset NG0205 into a harmless unflushed request.
-vitestAfterEach(async () => {
-  await new Promise<void>((resolve) => setTimeout(resolve));
 });
 
 // --- EventSource (Server-Sent Events) --------------------------------------
