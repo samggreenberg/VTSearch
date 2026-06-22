@@ -16,3 +16,26 @@
   font-size: 0.75rem;
   opacity: 0.6;
 }
+
+// `.subhead` headings carry a trailing `(?)` help icon whose `title`
+// holds the longer explanation (previously rendered as visible
+// paragraphs). Align it inline with the heading text and dim it so it
+// reads as a secondary affordance.
+.subhead {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  cursor: help;
+  opacity: 0.7;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+  }
+}
