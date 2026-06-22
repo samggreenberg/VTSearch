@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { DatasetImporterModalComponent } from './dataset-importer-modal.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('DatasetImporterModalComponent', () => {
   let component: DatasetImporterModalComponent;
@@ -129,7 +131,7 @@ describe('DatasetImporterModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DatasetImporterModalComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DatasetImporterModalComponent);
@@ -161,7 +163,7 @@ describe('DatasetImporterModalComponent', () => {
   }
 
   function flushImporters(): void {
-    fixture.detectChanges();
+    TestBed.tick(); // run ngOnInit under zoneless (issues the init GETs)
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers: mockImporters, tabs: mockTabs });
     flushInitRequests();
   }
@@ -215,9 +217,9 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.importers().length).toBe(7);
   });
 
-  it('should start with no top-level tab selected and a blank content area', () => {
+  it('should start with no top-level tab selected and a blank content area', async () => {
     flushImporters();
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     expect(component.activeImporterTab()).toBe('');
     expect(component.selectedImporter()).toBeNull();
     const el = fixture.nativeElement as HTMLElement;
@@ -236,9 +238,9 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.activeImporterTab()).toBe('');
   });
 
-  it('should always render the Services tab even when no importers populate it', () => {
+  it('should always render the Services tab even when no importers populate it', async () => {
     flushImporters();
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
     const tabLabels = Array.from(el.querySelectorAll('.importer-tab')).map(
       (b) => (b.textContent || '').trim(),
@@ -250,10 +252,10 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.importersForActiveTab.length).toBe(0);
   });
 
-  it('should render inner importer sub-tabs for the active category', () => {
+  it('should render inner importer sub-tabs for the active category', async () => {
     flushImporters();
     component.selectImporterTab('local');
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
     const subtabs = el.querySelectorAll('.importer-subtab');
     expect(subtabs.length).toBe(2);
@@ -264,7 +266,7 @@ describe('DatasetImporterModalComponent', () => {
     // clears the prior importer selection so the user must click again.
     component.selectImporterTab('server');
     expect(component.selectedImporter()).toBeNull();
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     const serverSubtabs = el.querySelectorAll('.importer-subtab');
     expect(serverSubtabs.length).toBe(2);
     expect(serverSubtabs[0].textContent).toContain('Folder');
@@ -272,7 +274,7 @@ describe('DatasetImporterModalComponent', () => {
   });
 
   it('should hide importers marked hidden_from_picker', () => {
-    fixture.detectChanges();
+    TestBed.tick();
     const importersWithHidden = [
       ...mockImporters,
       { name: 'recaller', display_name: 'ReCaller', hidden_from_picker: true, fields: [] },
@@ -586,11 +588,11 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.closed.emit).toHaveBeenCalled();
   });
 
-  it('should hide the demo tab bar in favor of a dropdown above the grid', () => {
+  it('should hide the demo tab bar in favor of a dropdown above the grid', async () => {
     flushImporters();
     openAndFlushDemoPicker();
 
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     // The inner media-type tabs are replaced by a <vt-import-config>
@@ -603,7 +605,7 @@ describe('DatasetImporterModalComponent', () => {
 
     // Switching to the 'image' tab swaps in that tab's single row.
     selectDemoTabAndFlush('image', mockImageEmbedders);
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     expect(el.querySelectorAll('.demo-row').length).toBe(1);
   });
 
