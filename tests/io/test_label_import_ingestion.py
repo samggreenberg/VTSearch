@@ -193,7 +193,19 @@ class TestIngestMissingClips:
             }
         ]
 
-        existing: dict = {}
+        # Seed one already-embedded image so ingest can derive the dataset's
+        # embedder name for the new media (the dict-keyed store needs a name;
+        # with an empty dataset there is no embedder to key the vector under).
+        existing: dict = {
+            1: {
+                "id": 1,
+                "media_type": "image",
+                "embedder": "siglip",
+                "embeddings": {"siglip": rng.standard_normal(512).astype(np.float32)},
+                "md5": "seed_md5",
+                "origin_name": "seed.jpg",
+            }
+        }
 
         def noop_progress(status, message, current, total):
             pass
@@ -219,12 +231,13 @@ class TestIngestMissingClips:
             result = _ingest_via_resolver(origin, entries, existing, noop_progress)
 
         assert result == 1
-        assert 1 in existing
-        assert existing[1]["origin_name"] == "cat/test_001.jpg"
-        assert existing[1]["origin"] == origin
+        # The new media is appended after the seed (id 2).
+        assert 2 in existing
+        assert existing[2]["origin_name"] == "cat/test_001.jpg"
+        assert existing[2]["origin"] == origin
         # Ingest L2-normalizes at the write chokepoint, so the stored vector
         # is the unit-norm form of the resolver's embedding (not the same object).
-        assert np.allclose(media_embedding(existing[1]), fake_embedding / np.linalg.norm(fake_embedding))
+        assert np.allclose(media_embedding(existing[2]), fake_embedding / np.linalg.norm(fake_embedding))
 
     def test_ingest_via_resolver_returns_neg1_for_unknown_media_type(self):
         """_ingest_via_resolver returns -1 when media type can't be determined."""

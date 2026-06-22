@@ -541,6 +541,7 @@ class TestMultiFindCrossDatasetFallback:
             target_medias[i] = {
                 "id": i,
                 "media_type": "audio",
+                "embedder": "clap",
                 "embedding": emb,
                 "md5": f"target_md5_{i}",
                 "filename": f"target_{i}.wav",
@@ -650,6 +651,7 @@ class TestMultiFindCrossDatasetFallback:
             target_medias[i] = {
                 "id": i,
                 "media_type": "audio",
+                "embedder": "clap",
                 "embedding": emb,
                 "md5": f"mt_md5_{i}",
                 "filename": f"mt_{i}.wav",
@@ -740,6 +742,7 @@ class TestMultiFindCrossDatasetFallback:
             target_medias[i] = {
                 "id": i,
                 "media_type": "image",
+                "embedder": "siglip",
                 "embedding": emb,
                 "md5": f"nr_md5_{i}",
                 "filename": f"nr_{i}.jpg",

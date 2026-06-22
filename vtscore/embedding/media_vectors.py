@@ -23,6 +23,15 @@ from typing import Any
 
 EMBEDDINGS_KEY = "embeddings"
 
+#: Dict key for a pre-computed vector whose producing embedder is unknown — an
+#: externally-supplied ``content_vectors`` / ``custom_metadata_map`` /
+#: NPZ-vectors entry that ships a vector but no embedder name.  Kept distinct
+#: from a real embedder name (it is the empty string) so role derivation skips
+#: it (a nameless vector binds no role) and the embed stage's *named* "missing"
+#: check still treats the media as lacking that named embedder's vector, while
+#: :func:`media_embedding` still resolves this sole entry as the primary vector.
+UNKNOWN_EMBEDDER_KEY = ""
+
 
 def primary_embedder_name(media: dict[str, Any]) -> str | None:
     """Return the media's primary embedder name, or ``None`` if unknown.
@@ -63,15 +72,21 @@ def media_embedder_names(media: dict[str, Any]) -> list[str]:
 def init_embeddings(embedder_name: str | None, vec: Any) -> dict[str, Any]:
     """Build a fresh ``embeddings`` dict for a media being created.
 
-    Returns ``{embedder_name: vec}`` when both are present, else an empty dict
-    (the deferred-embed placeholder a creation site uses when the vector is
-    filled later by the embed stage via :func:`set_media_embedding`).  This is
-    the construction-time counterpart of :func:`set_media_embedding`; use it in
+    * ``vec is None`` → ``{}`` (the deferred-embed placeholder a creation site
+      uses when the vector is filled later by the embed stage via
+      :func:`set_media_embedding`).
+    * vector present, ``embedder_name`` set → ``{embedder_name: vec}``.
+    * vector present, ``embedder_name`` empty/``None`` → ``{UNKNOWN_EMBEDDER_KEY:
+      vec}``: a pre-computed externally-supplied vector (``content_vectors`` /
+      ``custom_metadata_map`` / NPZ) with no embedder name is still stored, not
+      dropped, under the sentinel key.
+
+    Construction-time counterpart of :func:`set_media_embedding`; use it in
     media-dict literals in place of the old ``"embedding": vec`` field.
     """
-    if vec is None or not embedder_name:
+    if vec is None:
         return {}
-    return {embedder_name: vec}
+    return {embedder_name or UNKNOWN_EMBEDDER_KEY: vec}
 
 
 def media_embedding(media: dict[str, Any], embedder_name: str | None = None) -> Any:
