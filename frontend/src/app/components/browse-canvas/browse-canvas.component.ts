@@ -1096,7 +1096,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     }
     if (this.maxCount !== this.lastEmittedMax) {
       this.lastEmittedMax = this.maxCount;
-      this.ngZone.run(() => this.densityMaxChanged.emit(this.maxCount));
+      this.densityMaxChanged.emit(this.maxCount);
     }
 
     // Resolve the colormap against the live theme once per frame, not per cell.
@@ -1634,14 +1634,12 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.clearHover();
     const cell = this.hitTest(mx, my);
     const members = cell ? this.cellMembers(cell) : [];
-    this.ngZone.run(() =>
-      this.contextMenu.emit({
-        clientX: event.clientX,
-        clientY: event.clientY,
-        members,
-        bounds: rect,
-      }),
-    );
+    this.contextMenu.emit({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      members,
+      bounds: rect,
+    });
   }
 
   /** Canvas-relative ``[x, y]`` for a mouse event. */
@@ -1660,8 +1658,9 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     const cell = this.hitTest(mx, my);
     if (!cell) return;
     const members = this.cellMembers(cell);
-    // Mutate inside the zone so the selection panel's count updates.
-    this.ngZone.run(() => this.selection.toggleBin(members));
+    // The selection store is signal-backed, so the write schedules change
+    // detection on its own — no NgZone re-entry needed under zoneless.
+    this.selection.toggleBin(members);
     this.requestRedraw();
   }
 
@@ -1687,7 +1686,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       }
     }
     if (ids.length > 0) {
-      this.ngZone.run(() => this.selection.addAll(ids));
+      this.selection.addAll(ids);
     }
   }
 
@@ -1831,13 +1830,11 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     this.hoveredCell = hit;
     if (hit) {
       if (hit.q !== prevQ || hit.r !== prevR) {
-        this.ngZone.run(() => {
-          this.hexHover.emit({ cell: hit, screenX: clientX, screenY: clientY });
-        });
+        this.hexHover.emit({ cell: hit, screenX: clientX, screenY: clientY });
         this.requestRedraw();
       }
     } else if (prevQ != null) {
-      this.ngZone.run(() => this.hexHover.emit(null));
+      this.hexHover.emit(null);
       this.requestRedraw();
     }
   }
@@ -1854,7 +1851,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
       this.emitHoverHit(this.lastMouseX, this.lastMouseY, this.lastClientX, this.lastClientY);
     } else if (this.hoveredCell) {
       this.hoveredCell = null;
-      this.ngZone.run(() => this.hexHover.emit(null));
+      this.hexHover.emit(null);
       this.requestRedraw();
     }
   }
@@ -1870,7 +1867,7 @@ export class BrowseCanvasComponent implements OnInit, OnChanges, OnDestroy {
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.hoveredCell) {
       this.hoveredCell = null;
-      this.ngZone.run(() => this.hexHover.emit(null));
+      this.hexHover.emit(null);
       this.requestRedraw();
     }
   }

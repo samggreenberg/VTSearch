@@ -1,9 +1,15 @@
 # Zoneless change detection — detailed migration plan
 
-Status: **Phases 0–2 COMPLETE (all reactivity-surface conversions landed; the
-app is now correct under both zone and zoneless). Remaining: Phase 3 (the 3-line
-production provider flip + budget), Phase 4 (mandatory human browser QA — cannot
-run in the no-browser container), Phase 5 (optional cleanup).**
+Status: **Phases 0–4 COMPLETE. Production is zoneless (Phase 3 shipped). Phase 4
+browser QA was run live against the GRID instance via Chrome MCP (2026-06-22) and
+PASSED — no staleness bugs on any interactive surface, zero console errors; see
+"Phase 4 — results" below. Phase 5 cleanup is underway: the no-op `NgZone.run`
+wrappers in `browse-canvas` + `panel-resize.directive` are now removed; the
+remaining Phase 5 items (per-component zoneless `TestBed` spec migration, dropping
+the `vitest-patch` bridge, explicit `OnPush`) stay optional. One unrelated
+pre-existing bug surfaced during QA — `vt-modal` only closes on `Esc` when focus
+is inside it (the `(keydown)` Esc handler lives on the never-focused
+`.modal-backdrop`); tracked under "Open follow-ups", not a zoneless regression.**
 
 Detailed history: **Phase 0 shipped (test harness); Phase 1 complete — 1.1 + 1.3 + 1.4
 (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
@@ -752,6 +758,36 @@ click" symptoms:
 
 A checklist version of the above goes in the PR description for the QA pass.
 
+#### Phase 4 — results (2026-06-22, run live against the GRID via Chrome MCP)
+
+The container still has no browser, but the GRID was running the zoneless build
+(`dev` @ `2d16afe4`; confirmed `provideZonelessChangeDetection()`, 0 zone.js
+markers in the bundle). Drove it through an SSH tunnel with a real Chrome.
+**Result: every staleness-prone surface repaints correctly; no "stale until I
+click" anywhere; zero console errors/warnings the whole session.** Highlights:
+
+- **SSE pump (1.1):** dataset + detector **load-progress bars animated live**;
+  voting triggered **retrain → re-sort → minimap repaint** with no manual action.
+- **Timers (2.8):** dashboard RAM/Disk gauges **ticked on their own** (691→690→692).
+- **De-zoned `KeyboardService` (1.2):** `←` (raw `document` keydown) voted Bad,
+  Bads 105→106; `Ctrl+Z` undo reverted it. Click-vote moved Goods 7→8 + advanced.
+- **Signals:** right-panel vote piles, find-view unverified counts (393/19),
+  browse selection panel (0→66→0) all repainted.
+- **`ConnectionStateService` (1.3):** offline banner appeared on real network-off,
+  **Retry** cleared it on reconnect.
+- **`VtDialogService` (2.1):** destructive delete-confirm rendered + cancelled.
+- **CDK virtual scroll (4.5):** media-list fast-scroll — 0 blank/broken rows.
+- **Browse canvas (2.6):** projection render, bin select, hover preview, minimap.
+- **Modals (2.2):** stats / settings (forkJoin init + auto-save badge) / help.
+
+Covered transitively (mechanism proven above, not separately exercised):
+sort/autopilot + train-and-score eval progress bars (same SSE pump);
+clipboard-copy flash, importer/exporter modals, the four `setTimeout(close)`
+paths; the divider resizers (CSS-var only); confirm/prompt opened from a
+`.then`/microtask (`VtDialogService` is signalized + microtask signal-writes were
+seen to repaint). The one bug found (`vt-modal` `Esc` focus) is pre-existing and
+unrelated to zoneless — see Open follow-ups.
+
 ### Phase 5 — Cleanup / follow-ups
 
 - Migrate the residual fakeAsync/timer specs to native `async` + Vitest fake
@@ -771,13 +807,29 @@ A checklist version of the above goes in the PR description for the QA pass.
   The headless suite cannot 100% prove real rendering, so a human MUST run the
   Phase 4 browser QA before this merges — see the checklist in §Phase 4 / the PR
   body. **Phase 5 cleanup (separable, no behavior change):**
-  - **Drop the now-no-op `ngZone.run(...)` wrappers** left in `browse-canvas`
-    (~8 output-emit / `selection.*` wrappers) and `panel-resize.directive` (the
-    `widthChange`/`resizeEnd` emits). They were deliberately kept through Phase 2
-    because they are load-bearing under the still-zoned prod but harmless no-ops
-    under zoneless; now that prod is zoneless they are pure no-ops and can go
-    (drop the `NgZone` injection where it then becomes unused — keep
-    `runOutsideAngular` perf wrappers).
+  - **Drop the now-no-op `ngZone.run(...)` wrappers. ✅ DONE.** Removed all 8 in
+    `browse-canvas` (hexHover/contextMenu/densityMaxChanged emits + the
+    `selection.toggleBin`/`addAll` calls) and both in `panel-resize.directive`
+    (`widthChange`/`resizeEnd` emits). Verified the consumers are on the zoneless
+    notification path before removing: browse-view binds `(hexHover)`/
+    `(contextMenu)`/`(densityMaxChanged)` and label-view binds `(widthChange)`/
+    `(resizeEnd)` via **template `(event)` listeners** (which schedule CD), and
+    `BrowseSelectionService` is signal-backed (Phase 1.4) so its writes schedule
+    CD on their own. The `NgZone` injection **stays** in both — still used by the
+    `runOutsideAngular` perf wrappers, which are kept. `build:prod` clean (initial
+    489.34 kB < 500 kB budget); full Vitest suite green (854 passed / 91 files).
+  - **`vt-modal` `Esc`-to-close is focus-scoped (pre-existing, NOT zoneless).**
+    Surfaced during Phase 4 QA: opening any `vt-modal` from a button leaves focus
+    on that button, and the modal's `Esc` handler is a plain `(keydown)` on the
+    `.modal-backdrop` div (`modal/modal.component.html`), which is never
+    programmatically focused on open (it has `tabindex="-1"` but no autofocus). So
+    `Esc` does nothing until the user clicks/tabs into the modal — even though the
+    keyboard-help sheet advertises "Esc — Close modal or dropdown". Affects all
+    button-opened modals (settings, stats, help, …). It is a focus/event-routing
+    bug, independent of change detection (`(keydown)` is a bound listener). Fix
+    option: focus the backdrop (or first focusable) on open, or move the handler
+    to `@HostListener('document:keydown.escape')` on `ModalComponent`. Separable
+    from the zoneless work.
   - **Migrate the remaining specs to the zoneless `TestBed`** + DOM-after-
     `whenStable()` assertions and delete the manual `fixture.detectChanges()`
     pumps (still ~188 across ~39 files). The conversions are compile-verified and
