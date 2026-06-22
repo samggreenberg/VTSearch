@@ -37,6 +37,14 @@ from vtscore.security.path_validation import (
 
 logger = logging.getLogger(__name__)
 
+#: Embeddings-dict key for a pre-computed vector whose producing embedder is
+#: unknown (externally-supplied ``content_vectors`` / ``custom_metadata_map``
+#: with no embedder name).  Kept distinct from a real embedder name so the
+#: framework embed stage's name-keyed "missing" check still treats the media as
+#: lacking *its* vector, while ``media_embedding`` still resolves this sole
+#: entry as the media's primary vector.
+UNKNOWN_EMBEDDER_KEY = ""
+
 
 def _scan_files(folder: Path, pattern: str, recursive: bool) -> list[Path]:
     """Find files in *folder* matching *pattern*, optionally recursing."""
@@ -383,7 +391,18 @@ def _build_folder_media_data(
         "embedder": embedder_id,
         "file_size": file_size,
         "md5": md5,
-        "embeddings": init_embeddings(embedder_id, embedding),
+        # A pre-computed content/custom-metadata vector may arrive with no
+        # known embedder name (the common case for externally-supplied
+        # ``content_vectors``).  ``init_embeddings`` only keys a vector when a
+        # name is present, so fall back to a stable sentinel key for the
+        # unnamed-but-present case; otherwise the supplied vector would be
+        # silently dropped.  ``media_embedding`` resolves a sole entry
+        # regardless of its key, so the vector reads back correctly.
+        "embeddings": (
+            init_embeddings(embedder_id, embedding)
+            if embedder_id or embedding is None
+            else {UNKNOWN_EMBEDDER_KEY: embedding}
+        ),
         "filename": rel_path,
         "category": "custom",
         "origin": media_origin,

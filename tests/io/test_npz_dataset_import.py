@@ -265,6 +265,7 @@ class TestServerFilesNpzRunsEndToEnd:
             npz,
             filenames=np.array([str(src_a), str(src_b)]),
             vectors=np.stack([vec_a, vec_b]),
+            embedder_name=np.array("clap"),
         )
 
         imp = ServerFilesDatasetImporter()
