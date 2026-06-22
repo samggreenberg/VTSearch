@@ -18,6 +18,15 @@ _STATUS_TO_STEP = {
 }
 _TOTAL_LOAD_STEPS = 4  # download, load model, embed, finalize
 
+# Rough typical wall-clock split across the four load phases, used to pace the
+# unified whole-job progress bar (see ProgressTracker.set_step_weights).
+# Embedding dominates almost any real dataset; the model load is a roughly
+# fixed one-time cost; finalize (dedup + diversity tree + registry) is short.
+# These only shape the bar's pacing — the overall ETA self-corrects from the
+# real rate — so they need only be in the right ballpark.
+#               download  model  embed  finalize
+_LOAD_STEP_WEIGHTS = [0.25, 0.15, 0.50, 0.10]
+
 
 def _origin_to_str(origin: dict | None) -> str:
     """Convert an origin dict to a human-readable string."""

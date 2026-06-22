@@ -70,6 +70,8 @@
           [sortStatus]="sortStatus()"
           [sortProgress]="sortProgress()"
           [sortProgressTotal]="sortProgressTotal()"
+          [sortOverall]="sortOverall()"
+          [sortEtaSeconds]="sortEtaSeconds()"
           (cancel)="sortCancel.emit()"
         />
       }
@@ -153,6 +155,8 @@
           [sortStatus]="sortStatus()"
           [sortProgress]="sortProgress()"
           [sortProgressTotal]="sortProgressTotal()"
+          [sortOverall]="sortOverall()"
+          [sortEtaSeconds]="sortEtaSeconds()"
           (indicatorClick)="indicatorClick.emit($event)"
           (cancel)="sortCancel.emit()"
         />

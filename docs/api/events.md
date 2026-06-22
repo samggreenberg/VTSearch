@@ -38,14 +38,23 @@ tracker, so clients do not need a separate REST bootstrap call.
   "message": "Embedding medias…",
   "current": 50,
   "total": 500,
-  "step": 1,
-  "total_steps": 3,
+  "step": 3,
+  "total_steps": 4,
+  "overall": 0.625,
+  "eta_seconds": 30.0,
   "error": null
 }
 ```
 
-Optional fields (`step`, `total_steps`, `error`, `staging_result`) are
-included only for trackers that declare them.
+Optional fields (`step`, `total_steps`, `overall`, `eta_seconds`, `error`,
+`staging_result`) are included only for trackers that declare them.
+
+When a tracker reports a `step`/`total_steps` structure, it also exposes a
+single whole-job completion fraction in `overall` (0..1) and an `eta_seconds`
+estimate for the *entire* job. `overall` advances once across all phases
+(e.g. download → load model → embed → finalize) instead of resetting at each
+phase, so consumers should prefer it for the progress bar and fall back to
+`current`/`total` only when `overall` is `null` (single-phase operations).
 
 ### Task object shape (`loading-tasks` / `detector-loading-tasks`)
 

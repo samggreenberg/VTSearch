@@ -121,9 +121,9 @@
                           <span class="progress-msg">{{ info.detail }}</span>
                         }
                         <vt-progress-bar
-                          [value]="task.current"
-                          [max]="task.total"
-                          [indeterminate]="taskIsIndeterminate(task)"
+                          [value]="taskBar(task).value"
+                          [max]="taskBar(task).max"
+                          [indeterminate]="taskBar(task).indeterminate"
                         />
                         @if (info.eta) {
                           <span class="progress-eta">{{ info.eta }}</span>

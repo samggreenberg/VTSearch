@@ -1,6 +1,11 @@
 import { Component, Input, input, output } from '@angular/core';
 
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import {
+  ProgressBarState,
+  formatEta,
+  progressBarState,
+} from '../../../utils/format-progress';
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 
 @Component({
@@ -16,6 +21,11 @@ export class ProgressIndicatorsComponent {
   @Input() sortStatus = '';
   readonly sortProgress = input(0);
   readonly sortProgressTotal = input(0);
+  /** Whole-job fraction (0..1) for multi-step scoring; ``null`` falls back to
+   *  current/total. See ProgressEvent.overall. */
+  readonly sortOverall = input<number | null>(null);
+  /** Overall remaining-seconds estimate; ``null`` hides the ETA chip. */
+  readonly sortEtaSeconds = input<number | null>(null);
 
   readonly indicatorClick = output<string>();
   readonly cancel = output<void>();
@@ -24,8 +34,23 @@ export class ProgressIndicatorsComponent {
     this.cancel.emit();
   }
 
+  /** Unified bar state: prefers the whole-job ``overall`` fraction so the bar
+   *  fills once across all phases instead of resetting per phase. */
+  get sortBar(): ProgressBarState {
+    return progressBarState({
+      current: this.sortProgress(),
+      total: this.sortProgressTotal(),
+      overall: this.sortOverall(),
+    });
+  }
+
+  /** Overall ETA chip (empty when no estimate is available). */
+  get sortEta(): string {
+    return formatEta(this.sortEtaSeconds());
+  }
+
   get isIndeterminate(): boolean {
-    return this.sortProgressTotal() <= 0;
+    return this.sortBar.indeterminate;
   }
 
   get smartStatus(): string {

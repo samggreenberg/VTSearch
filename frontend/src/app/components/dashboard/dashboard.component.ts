@@ -24,10 +24,12 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { DatasetRegistryEntry, DemoDataset, DetectorRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import {
+  ProgressBarState,
   ProgressHeader,
   formatProgressHeader,
   formatProgressMessage,
   isProgressIndeterminate,
+  progressBarState,
 } from '../../utils/format-progress';
 import {
   DashboardColumnsService,
@@ -1063,8 +1065,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return formatProgressHeader(task, 'dataset', task.embedder);
   }
 
-  taskIsIndeterminate(task: LoadingTask): boolean {
-    return isProgressIndeterminate(task);
+  taskBar(task: LoadingTask): ProgressBarState {
+    return progressBarState(task);
   }
 
   // --- Sorting ---

@@ -4,10 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import {
+  ProgressBarState,
   ProgressHeader,
   ProgressKind,
   formatProgressHeader,
-  isProgressIndeterminate,
+  progressBarState,
 } from '../../../utils/format-progress';
 import { formatTimestamp } from '../../../utils/format-date';
 import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/context-menu.component';
@@ -222,10 +223,10 @@ export class DatasetCardComponent implements OnChanges {
     return formatProgressHeader(task, this.taskKind(), task.embedder);
   }
 
-  get taskIsIndeterminate(): boolean {
+  get taskBar(): ProgressBarState {
     const task = this.loadingTask;
-    if (!task) return true;
-    return isProgressIndeterminate(task);
+    if (!task) return { value: 0, max: 1, indeterminate: true };
+    return progressBarState(task);
   }
 
   onCancelTask(event: MouseEvent): void {

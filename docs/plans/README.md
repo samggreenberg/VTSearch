@@ -43,6 +43,10 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 - [server-import-ux.md](server-import-ux.md): Server/Services import UX (Phase 1 shipped; UX follow-ups open)
 - [RCDatasetImporter.md](RCDatasetImporter.md): RCDatasetImporter / Holder / PullWrest extension (scaffolds only; API clients open)
 
+## Progress / UX
+
+- [progress-bar-consolidation.md](progress-bar-consolidation.md): one whole-job progress bar + overall ETA + step count for multi-phase loads (shipped; text-sort unification + a few cleanups open)
+
 ## Audits / tooling / methodology
 
 - [angular-21-upgrade.md](angular-21-upgrade.md): Angular 19→21 bump (clears npm-audit highs) + Vitest spec migration to restore runnable frontend tests (all phases shipped; kept as the migration reference for future bumps)

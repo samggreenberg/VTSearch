@@ -60,6 +60,17 @@ class ProgressTracker:
         self._phase_start: float | None = None
         self._phase_current_start: int = 0
         self._smoothed_eta: float | None = None
+        # Overall (whole-job) progress state, used when the caller reports a
+        # ``step``/``total_steps`` structure.  See :meth:`_compute_overall`.
+        self._overall_start_time: float | None = None
+        self._overall_start_frac: float = 0.0
+        self._overall_max: float = 0.0
+        self._overall_smoothed_eta: float | None = None
+        self._overall_last_step: int | None = None
+        self._overall_total_steps: int | None = None
+        # Optional per-step weights (one per step) reflecting each phase's
+        # typical share of total wall-clock time. ``None`` => equal weight.
+        self._step_weights: list[float] | None = None
 
     def _compute_eta(self, status: str, current: int, total: int) -> Optional[float]:
         """Compute the smoothed ETA in seconds for the current bar.
@@ -94,6 +105,109 @@ class ProgressTracker:
             self._smoothed_eta = alpha * raw_eta + (1.0 - alpha) * self._smoothed_eta
         return self._smoothed_eta
 
+    def _overall_raw_fraction(self, within: float, s: int, total_steps: int) -> float:
+        """Map a within-step fraction to a whole-job fraction in ``[0, 1]``.
+
+        Uses per-step weights when :meth:`set_step_weights` has supplied a list
+        matching ``total_steps`` (so phases known to dominate wall-clock time —
+        embedding, MLP training — get a proportionally larger slice of the
+        bar), otherwise falls back to equal weight per step::
+
+            weighted: (Σ weights[:s-1] + weights[s-1] * within) / Σ weights
+            equal:    ((s - 1) + within) / total_steps
+
+        The weights only shape how the bar *paces*; the overall ETA is derived
+        from the actual elapsed-vs-fraction rate, so it self-corrects no matter
+        how rough the weights are.
+        """
+        weights = self._step_weights
+        if weights and len(weights) == total_steps:
+            total_w = sum(weights)
+            if total_w > 0:
+                completed = sum(weights[: s - 1])
+                return min(max((completed + weights[s - 1] * within) / total_w, 0.0), 1.0)
+        return min(max(((s - 1) + within) / total_steps, 0.0), 1.0)
+
+    def set_step_weights(self, weights: Optional[list[float]]) -> None:
+        """Declare per-step weights for the whole-job ``overall`` fraction.
+
+        *weights* must hold one non-negative value per step (its length should
+        equal the job's ``total_steps``); a length mismatch is ignored and the
+        bar falls back to equal weighting. Pass ``None`` to clear. Set this once
+        at the start of a job (before the first :meth:`update`).
+        """
+        with self._lock:
+            self._step_weights = [float(w) for w in weights] if weights else None
+
+    def _compute_overall(
+        self, current: int, total: int, step: Any, total_steps: Any
+    ) -> tuple[Optional[float], Optional[float]]:
+        """Compute the whole-job completion fraction and a true overall ETA.
+
+        When a caller declares a ``step``/``total_steps`` structure, the bar
+        should advance once across the *entire* job instead of resetting at
+        every phase. The within-step ``current``/``total`` fraction is mapped
+        into the job's overall span by :meth:`_overall_raw_fraction` (weighted
+        per step when weights were supplied, else equal weight).
+
+        Returns ``(overall, eta_seconds)``. Both are ``None`` when no step
+        structure is present (the caller falls back to the per-phase
+        :meth:`_compute_eta`). The fraction is clamped to be monotonic
+        non-decreasing within a job so the bar never visibly retreats; a step
+        going *backwards* (or ``total_steps`` changing) is read as a brand-new
+        job and resets the overall clock.
+        """
+        if not step or not total_steps or total_steps <= 0:
+            self._overall_start_time = None
+            self._overall_last_step = None
+            self._overall_total_steps = None
+            self._overall_smoothed_eta = None
+            return None, None
+
+        s = min(max(int(step), 1), int(total_steps))
+        within = 0.0
+        if total and total > 0:
+            within = min(max(current / total, 0.0), 1.0)
+        raw = self._overall_raw_fraction(within, s, total_steps)
+
+        now = time.monotonic()
+        new_job = (
+            self._overall_start_time is None
+            or self._overall_total_steps != total_steps
+            or (self._overall_last_step is not None and s < self._overall_last_step)
+        )
+        if new_job:
+            self._overall_start_time = now
+            self._overall_start_frac = raw
+            self._overall_max = raw
+            self._overall_smoothed_eta = None
+            self._overall_last_step = s
+            self._overall_total_steps = total_steps
+            return raw, None
+
+        self._overall_last_step = s
+        # Clamp to monotonic non-decreasing so within-step jitter never rewinds
+        # the unified bar.
+        if raw < self._overall_max:
+            raw = self._overall_max
+        else:
+            self._overall_max = raw
+
+        # Past the new-job guard above, the overall clock is always running.
+        assert self._overall_start_time is not None
+        elapsed = now - self._overall_start_time
+        progressed = raw - self._overall_start_frac
+        if elapsed < self._ETA_MIN_ELAPSED or progressed <= 0 or raw >= 1.0:
+            # Not enough signal yet (or done): hold the last smoothed estimate.
+            return raw, self._overall_smoothed_eta
+        raw_eta = elapsed * (1.0 - raw) / progressed
+        if self._overall_smoothed_eta is None:
+            self._overall_smoothed_eta = raw_eta
+        else:
+            alpha = self._ETA_SMOOTHING_ALPHA
+            self._overall_smoothed_eta = alpha * raw_eta + (1.0 - alpha) * self._overall_smoothed_eta
+        return raw, self._overall_smoothed_eta
+
     def update(
         self,
         status: str,
@@ -120,8 +234,22 @@ class ProgressTracker:
             for key in self._extra_defaults:
                 if key in kwargs:
                     self._data[key] = kwargs[key]
+            # When the caller reports a multi-step structure, surface a single
+            # whole-job ``overall`` fraction (0..1) and a true overall ETA so
+            # the bar fills once across the entire job instead of resetting at
+            # each phase. Otherwise fall back to the per-phase ETA.
+            overall = None
+            overall_eta = None
+            if "overall" in self._extra_defaults or "eta_seconds" in self._extra_defaults:
+                overall, overall_eta = self._compute_overall(
+                    current, total, self._data.get("step"), self._data.get("total_steps")
+                )
+            if "overall" in self._extra_defaults:
+                self._data["overall"] = overall
             if "eta_seconds" in self._extra_defaults:
-                self._data["eta_seconds"] = self._compute_eta(status, current, total)
+                self._data["eta_seconds"] = (
+                    overall_eta if overall is not None else self._compute_eta(status, current, total)
+                )
             snapshot = dict(self._data)
         self._notify(snapshot)
 
@@ -237,6 +365,10 @@ _PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
     "total_steps": None,
     "error": None,
     "eta_seconds": None,
+    # Whole-job completion fraction (0..1) for multi-step operations, computed
+    # by :meth:`ProgressTracker._compute_overall`. ``None`` for single-phase
+    # operations (the frontend then falls back to ``current``/``total``).
+    "overall": None,
 }
 
 
@@ -294,12 +426,17 @@ class LoadingTasksTracker:
         media_type: str = "",
         detector_id: str = "",
         embedder: str = "",
+        step_weights: list[float] | None = None,
     ) -> ProgressTracker:
         """Create and register a new loading task.
 
-        Returns the per-task :class:`ProgressTracker` instance.
+        *step_weights* (one weight per step) tunes how the whole-job ``overall``
+        bar paces across phases; omit for equal weighting. Returns the per-task
+        :class:`ProgressTracker` instance.
         """
         tracker = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+        if step_weights is not None:
+            tracker.set_step_weights(step_weights)
         tracker.subscribe(lambda _snapshot: self._notify())
         with self._lock:
             self._tasks[task_id] = {

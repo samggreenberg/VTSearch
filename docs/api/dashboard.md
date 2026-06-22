@@ -104,7 +104,9 @@ Find progress streams on the `find` channel of
 ```
 
 `status` is `"idle"` or `"running"`. `step` / `total_steps` track the
-high-level Find phases (prepare detectors, load data, score).
+high-level Find phases (prepare detectors, load data, score), and `overall`
+(0..1) plus `eta_seconds` give a single whole-job progress fraction and ETA
+across all phases (see [Events](events.md#progress-object-shape)).
 
 ### Apply labels from detector (Find Label)
 
