@@ -93,7 +93,11 @@ describe('MediaListComponent', () => {
   });
 
   it('should show empty message when no medias', () => {
-    component.medias = [];
+    // Drive the input through setInput so ngOnChanges rebuilds the ordered-items
+    // cache to empty (a direct field write leaves the cache stale, which under
+    // zoneless surfaces as an NG0100 during the verify pass) and the host view
+    // is marked dirty so the tick repaints.
+    fixture.componentRef.setInput('medias', []);
     TestBed.tick();
     expect(fixture.nativeElement.querySelector('.empty-list')?.textContent).toContain('No media loaded');
   });

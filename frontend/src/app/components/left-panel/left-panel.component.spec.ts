@@ -88,7 +88,10 @@ describe('LeftPanelComponent', () => {
   });
 
   it('should disable the autopilot tab button when autopilotDisabled', () => {
-    component.autopilotDisabled = true;
+    // setInput fires ngOnChanges and marks the host dirty so the tick repaints
+    // consistently (a direct field write leaves derived tab state unsettled,
+    // which under zoneless surfaces as an NG0100 in the verify pass).
+    fixture.componentRef.setInput('autopilotDisabled', true);
     TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     const tabs = el.querySelectorAll<HTMLButtonElement>('.left-tab');
@@ -103,21 +106,25 @@ describe('LeftPanelComponent', () => {
   });
 
   it('should render manual tab content when switched', () => {
-    component.setTab('manual');
-    TestBed.tick();
+    // Drive the switch through the tab button's (click) — a bound listener that
+    // marks the view dirty — so the panel repaints cleanly under zoneless
+    // (calling setTab() directly leaves the host undirtied and the tab
+    // conditional unsettled across the verify pass).
     const el = fixture.nativeElement as HTMLElement;
+    (el.querySelectorAll<HTMLButtonElement>('.left-tab')[0]).click(); // Manual
+    TestBed.tick();
     expect(el.querySelector('.tab-panel-manual')).toBeTruthy();
     expect(el.querySelector('.tab-panel-autopilot')).toBeNull();
   });
 
   it('should show active class on selected tab', () => {
     const el = fixture.nativeElement as HTMLElement;
-    const tabs = el.querySelectorAll('.left-tab');
+    const tabs = el.querySelectorAll<HTMLButtonElement>('.left-tab');
     // Default: autopilot is active (second tab)
     expect(tabs[0].classList.contains('active')).toBe(false);
     expect(tabs[1].classList.contains('active')).toBe(true);
 
-    component.setTab('manual');
+    tabs[0].click(); // Manual
     TestBed.tick();
     const tabsAfter = el.querySelectorAll('.left-tab');
     expect(tabsAfter[0].classList.contains('active')).toBe(true);

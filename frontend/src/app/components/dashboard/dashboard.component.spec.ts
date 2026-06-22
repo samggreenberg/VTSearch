@@ -449,6 +449,11 @@ describe('DashboardComponent', () => {
 
   it('should render empty state when no datasets', () => {
     flushInitialRequests();
+    // DatasetStateService is BehaviorSubject-backed, so the registry flush
+    // updates the dashboard's view state through plain (non-signal) reads that
+    // don't dirty the host under zoneless. markForCheck() marks it dirty so the
+    // subsequent tick repaints over the now-settled state in one clean pass.
+    fixture.changeDetectorRef.markForCheck();
     TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     const empty = el.querySelector('.empty-state');
@@ -459,6 +464,7 @@ describe('DashboardComponent', () => {
   it('should render dataset table when datasets exist', () => {
     const datasets = [{ id: 'd1', name: 'Test', media_type: 'audio', num_items: 5 }];
     flushInitialRequests(datasets);
+    fixture.changeDetectorRef.markForCheck();
     TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.dash-table')).toBeTruthy();

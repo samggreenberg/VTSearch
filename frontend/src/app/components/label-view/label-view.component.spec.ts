@@ -80,6 +80,11 @@ describe('LabelViewComponent', () => {
 
   afterEach(() => {
     component.ngOnDestroy();
+    // Kill the shared VoteStateService poll explicitly. Under zoneless (no
+    // zone.js patching test timers) a leftover `timer(0, N)` poll keeps firing
+    // real macrotasks across spec boundaries; once the TestBed injector is reset
+    // its next tick issues an HTTP request through a destroyed injector (NG0205).
+    TestBed.inject(VoteStateService).stopPolling();
     // Drain any outstanding polling requests from right-panel or label-view
     // (the timer-driven /api/votes and /api/labeling-status pollers, the
     // metadata-batch fetch from selectMedia, plus anything a test left in
@@ -90,6 +95,11 @@ describe('LabelViewComponent', () => {
     httpMock.match(() => true).forEach(req => {
       if (!req.cancelled) req.flush([]);
     });
+    // Destroy the fixture so the component injector — and the medias/settings
+    // rxResource loaders bound to it — are disposed. Without this a pending
+    // resource reload can fire an HTTP request after the next spec resets the
+    // TestBed, whose interceptor then runs in a destroyed injector (NG0205).
+    fixture.destroy();
   });
 
   it('should create', () => {
@@ -687,6 +697,7 @@ describe('LabelViewComponent', () => {
 
     freshFixture.componentInstance.ngOnDestroy();
     httpMock.match(() => true);
+    freshFixture.destroy();
   });
 
   it('should clear stale vote state so autopilot starts in good phase', () => {
@@ -715,5 +726,6 @@ describe('LabelViewComponent', () => {
 
     freshFixture.componentInstance.ngOnDestroy();
     httpMock.match(() => true);
+    freshFixture.destroy();
   });
 });
