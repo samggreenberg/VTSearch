@@ -130,6 +130,37 @@ class TestValidateChain:
         with pytest.raises(ValueError, match="expects input type 'audio'"):
             validate_chain(steps, "text")
 
+    def test_accepts_blank_optional_converter_param(self):
+        from vtscore.datasets.clipper_chain import validate_chain
+
+        # video2image's ``seconds_per_frame`` is an optional number left
+        # blank in favour of ``n_clips``; the gate must accept the empty
+        # string the way the apply path (convert_normalized) does, not
+        # reject it as "Not a valid number".
+        steps = [
+            {
+                "kind": "converter",
+                "name": "video2image",
+                "params": {"n_clips": "10", "seconds_per_frame": ""},
+            }
+        ]
+        assert validate_chain(steps, "video") == "image"
+
+    def test_rejects_invalid_converter_param(self):
+        from vtscore.datasets.clipper_chain import validate_chain
+
+        # A non-numeric (non-empty) value is not "unset" and must still fail,
+        # carrying the chain-step context.
+        steps = [
+            {
+                "kind": "converter",
+                "name": "video2image",
+                "params": {"seconds_per_frame": "abc"},
+            }
+        ]
+        with pytest.raises(ValueError, match=r"chain step 0 \(converter 'video2image'\)"):
+            validate_chain(steps, "video")
+
 
 # ---------------------------------------------------------------------------
 # Apply chain: origin stamping + final clips

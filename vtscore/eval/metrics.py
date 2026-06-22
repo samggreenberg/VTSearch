@@ -38,6 +38,21 @@ class LearnedSortMetrics:
 
 
 @dataclass
+class RegionLocalizationMetrics:
+    """Weakly-supervised localization metrics for region/patch detectors.
+
+    Each evaluated image contributes one predicted region box (the detector's
+    best-scoring region) and one ground-truth box.  ``corloc`` maps an IoU
+    threshold to the fraction of images whose predicted box overlaps the
+    ground-truth box by at least that IoU (CorLoc / "Correct Localization").
+    """
+
+    mean_iou: float
+    corloc: dict[float, float] = field(default_factory=dict)
+    num_localizable: int = 0
+
+
+@dataclass
 class DatasetResult:
     """Aggregated results for one eval dataset."""
 
@@ -227,3 +242,50 @@ def compute_binary_classification_metrics(
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return accuracy, precision, recall, f1
+
+
+Box = tuple[float, float, float, float]
+
+
+def box_iou(a: Box, b: Box) -> float:
+    """Intersection-over-union of two ``(x0, y0, x1, y1)`` boxes.
+
+    Coordinates are in any consistent space (the app uses normalised
+    ``[0, 1]``).  Returns 0.0 when the boxes are disjoint or when either box
+    is degenerate (non-positive area).
+    """
+    ax0, ay0, ax1, ay1 = a
+    bx0, by0, bx1, by1 = b
+    area_a = max(0.0, ax1 - ax0) * max(0.0, ay1 - ay0)
+    area_b = max(0.0, bx1 - bx0) * max(0.0, by1 - by0)
+    if area_a <= 0.0 or area_b <= 0.0:
+        return 0.0
+
+    inter_w = max(0.0, min(ax1, bx1) - max(ax0, bx0))
+    inter_h = max(0.0, min(ay1, by1) - max(ay0, by0))
+    inter = inter_w * inter_h
+    union = area_a + area_b - inter
+    return inter / union if union > 0.0 else 0.0
+
+
+def compute_localization_metrics(
+    pairs: list[tuple[Box | None, Box]],
+    iou_thresholds: tuple[float, ...] = (0.3, 0.5, 0.7),
+) -> RegionLocalizationMetrics:
+    """Compute CorLoc@IoU and mean IoU for predicted vs ground-truth boxes.
+
+    Args:
+        pairs: One ``(predicted_box, ground_truth_box)`` per ground-truth-positive
+            image that carries a box.  ``predicted_box`` may be ``None`` when the
+            detector emitted no region; that pair scores IoU 0.0.
+        iou_thresholds: IoU cut-offs for the CorLoc sweep.
+
+    Returns:
+        A :class:`RegionLocalizationMetrics`.  All values are 0.0 when *pairs*
+        is empty.
+    """
+    ious = [box_iou(pred, gt) if pred is not None else 0.0 for pred, gt in pairs]
+    n = len(ious)
+    mean_iou = float(np.mean(ious)) if n else 0.0
+    corloc = {t: (sum(iou >= t for iou in ious) / n if n else 0.0) for t in iou_thresholds}
+    return RegionLocalizationMetrics(mean_iou=mean_iou, corloc=corloc, num_localizable=n)

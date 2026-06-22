@@ -187,9 +187,12 @@ def validate_chain(steps: list[ChainStep], source_media_type: str) -> str:
             if conv is None:
                 raise ValueError(f"chain step {i}: unknown converter {name!r}")
             try:
-                conv.validate_params(step.get("params") or {})
-            except ValidationError as e:
-                raise ValueError(f"chain step {i} (converter {name!r}): invalid params: {e.messages}") from e
+                # Normalize (scrub empty optionals, then validate) so the
+                # gate matches what :meth:`convert_normalized` accepts at
+                # apply time; raises ``ValueError`` on a bad value.
+                conv.normalize_params(step.get("params") or {})
+            except ValueError as e:
+                raise ValueError(f"chain step {i} (converter {name!r}): {e}") from e
             in_type = conv.source_type
             out_type = conv.target_type
         if in_type != current:
