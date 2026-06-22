@@ -20,8 +20,9 @@ geometric re-rank); **SIFT for v1 with a pluggable matching backend** so learned
 local features drop in later; **the full vote-trained detector ships in v1** (both
 the example/region similarity flow and the match-statistic verification classifier,
 just like patch); **planar-only** matching; **image-only v1 with audio as the next
-media target**; **dual-embedder coexistence deferred** to patch v3 (one structural
-embedder per dataset for now); **a fixed, shipped VLAD vocabulary** for v1 (no
+media target**; **multi-embedder coexistence is the third role of the active patch
+v3 trio** (text + patch + structural; one structural embedder per dataset until the
+v3 create-time picker lands); **a fixed, shipped VLAD vocabulary** for v1 (no
 per-dataset codebook fit); **similarity-transform** geometric matching (4 DoF:
 translation, rotation, uniform scale — no shear, no perspective).
 
@@ -297,22 +298,34 @@ Structural embedders set `supports_text = False`, `is_default = False`
   structural datasets the copy nudges "box the pattern you want to match."
 - **No new region-vote affordance** beyond what patch v2 already ships.
 
-## Single embedder per dataset (dual-embedder deferred)
+## Single embedder per dataset today; the third v3 role next
 
-For now a structural embedder is **one embedder per dataset**, exactly like patch:
-the dataset is bound to it at creation, and both the example/region similarity
-flow and the vote-trained detector run against that single embedder. This is the
-whole v1/v2 scope — no coexistence with a text embedder.
+**Today** a structural embedder is **one embedder per dataset**, exactly like
+patch: the dataset is bound to it at creation, and both the example/region
+similarity flow and the vote-trained detector run against that single embedder.
+This is the whole v1/v2 scope — no coexistence with a text embedder yet.
 
-`supports_text = False` does mean a structural dataset can be seeded *only* by
-example/region, never by a text query. That's an accepted limitation for now, the
-same way a `dinov*_patch` dataset has no text sort today. The longer-term fix —
-binding a text-capable embedder (SigLIP) *and* a structural embedder on the same
-dataset so text-seeded discovery and instance matching coexist — is patch
-v3's **dual-embedder** territory (a structural embedder would slot in as a third
-role-type alongside `text_embedder` / `patch_embedder`). **Deferred; we'll take it
-up when patch v3 lands.** Nothing in v1/v2 forecloses it: the per-media `embedding`
-field collapses cleanly into the v3 dict-keyed schema, just as the patch fields do.
+`supports_text = False` means a *structural-only* dataset can be seeded *only* by
+example/region, never by a text query — the same way a `dinov*_patch` dataset has
+no text sort today. The fix is now an **active part of patch v3**, not a vague
+"someday": structural is the **third role** in the v3 **text / patch / structural
+trio**. A dataset binds up to one embedder per role (`text_embedder` /
+`patch_embedder` / `structural_embedder`), so SigLIP-text-seeded discovery and
+SIFT/VLAD instance matching coexist on one dataset. The structural slot routes
+the geometric-verification role; it also participates in the shared **score**
+role at precedence **structural ▸ patch ▸ text** (a structural embedder is a
+deliberate specialist pick, so when bound it's treated as the intended detector
+behaviour — see patch-embedder.md "Routing rules" and open question #3). Nothing
+in v1/v2 forecloses this: the per-media `embedding` field already collapses
+cleanly into the v3 dict-keyed `media["embeddings"]`, and `local_features` stays
+single-valued (one structural slot) just as `patch_regions` does for the one
+patch slot.
+
+The v3 substrate (`media["embeddings"]` dict, name-keyed MLPs) has shipped
+(patch-embedder.md Phases 2a–2b.5); what remains for the structural slot is the
+`structural_embedder` field on the binding, a `structural` routing role, and the
+create-time picker exposing it. See patch-embedder.md "V3 - implementation
+status" / "Open follow-ups (from 2b.3)".
 
 ## Non-goals
 
@@ -397,10 +410,14 @@ an interface rewrite. The capability flag is `supports_geometric_verification`
   `StructuralMatcher` protocol + `supports_geometric_verification` flag — the
   next media target, sequenced here because the image work proves out the
   abstraction it reuses.
-- **Later (deferred):** structural embedder as a third role in the patch-v3
-  dual-embedder schema (text + patch + structural slots per dataset), so a dataset
-  can offer text-seeded discovery *and* instance-matching detectors simultaneously.
-  Picked up when patch v3 lands; not scheduled here.
+- **Patch v3 (active):** structural embedder as the **third role** in the v3
+  **text / patch / structural trio** (one embedder per role bound on a single
+  dataset), so a dataset can offer text-seeded discovery *and* region voting
+  *and* instance-matching detectors simultaneously. The v3 substrate has shipped
+  (patch-embedder.md Phases 2a–2b.5: `media["embeddings"]` dict +
+  score-embedder-keyed MLPs); the remaining structural-specific work is the
+  `structural_embedder` binding slot, a `structural` routing role, and the
+  create-time picker exposing it. Tracked in patch-embedder.md, not here.
 
 ## Tests
 
@@ -626,5 +643,8 @@ entry point that stopped at coarse VLAD retrieval (CPU-tested in
 - Keep the `StructuralMatcher` protocol media-agnostic from day one so the audio
   (constellation-fingerprint) backend — the next media target — lands in v2 without
   reshaping the interface.
-- Dual-embedder coexistence (structural + text on one dataset) is deferred to patch
-  v3; not scheduled here.
+- Multi-embedder coexistence (structural alongside text and/or patch on one
+  dataset) is the **third role of the active v3 trio**, tracked in
+  patch-embedder.md ("V3 - design" / "Open follow-ups (from 2b.3)"): the v3
+  substrate has shipped; the structural binding slot + `structural` routing role
+  + create-time picker are what remain. Not scheduled in this doc.
