@@ -69,14 +69,14 @@
     </div>
 
     <div class="export-row">
-      <select class="form-select" [(ngModel)]="selectedExporter" (ngModelChange)="onExporterChange()" title="Choose export destination">
-        @for (exp of exporters; track exp.name) {
+      <select class="form-select" [ngModel]="selectedExporter()" (ngModelChange)="selectedExporter.set($event); onExporterChange()" title="Choose export destination">
+        @for (exp of exporters(); track exp.name) {
           <option [value]="exp.name">{{ exp.display_name || exp.name }}</option>
         }
       </select>
     </div>
 
-    @for (field of exporterFields; track field.key) {
+    @for (field of exporterFields(); track field.key) {
       <div class="form-group">
         <label class="form-label">{{ field.label || field.key }}{{ field.required ? ' *' : '' }}</label>
         @if (field.field_type === 'select') {
