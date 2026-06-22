@@ -215,14 +215,22 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
 
 
 def _embedder_of_active_dataset() -> str:
-    """Return the embedder name recorded on the active dataset's medias, or ``""``."""
+    """Return the active dataset's model-keying marker embedder, or ``""``.
+
+    The **score** embedder (patch-else-text; the v3 routing table) the
+    detector MLP is trained and scored against - not the per-media primary,
+    which differs from the scored space on a dual-embedder dataset.  Matches
+    what the training paths stamp on ``DetectorContext.embedder`` so the
+    invalidation compare is apples-to-apples.  See ``score_marker_embedder``
+    and patch-embedder.md Phase 2b.5.
+    """
+    from vtscore.embedding.binding import score_marker_embedder_for_snap
     from vtscore.state.core import get_active_context
 
     ds_ctx = get_active_context()
     if not ds_ctx.dataset_id or not ds_ctx.medias:
         return ""
-    first = next(iter(ds_ctx.medias.values()), {})
-    return first.get("embedder", "") or ""
+    return score_marker_embedder_for_snap(ds_ctx.medias)
 
 
 def ensure_detector_model_matches_active_embedder() -> None:

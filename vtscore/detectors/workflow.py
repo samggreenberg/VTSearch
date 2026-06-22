@@ -164,7 +164,13 @@ def apply_and_retrain(  # noqa: C901
                     training[cid] = snap[cid]
             det_ctx.training_medias = training
             first = next(iter(snap.values()), {})
-            det_ctx.embedder = first.get("embedder", "")
+            # Stamp the model-keying marker (score embedder, patch-else-text)
+            # the MLP was trained against, not the per-media primary - they
+            # differ on a dual-embedder dataset.  See ``score_marker_embedder``
+            # and patch-embedder.md Phase 2b.5.
+            from vtscore.embedding.binding import score_marker_embedder
+
+            det_ctx.embedder = score_marker_embedder(first)
             det_ctx.media_type = first.get("media_type", "")
             from vtscore.detectors.registry import record_detector_embedder
 

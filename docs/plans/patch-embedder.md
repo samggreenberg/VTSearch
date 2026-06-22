@@ -329,13 +329,14 @@ Today a dataset is bound to **one** embedder, set at creation. The dataset's cap
 
 The dataset surface gains two getters that just delegate: `dataset.supports_text` and `dataset.supports_patch_regions`, computed from the bound embedder. The frontend's `ActiveContextService` already routes `X-Dataset-Id`; the sort-bar and (eventually) the region-vote affordance read the two capability flags off the dataset metadata response.
 
-### Future: one text embedder + one patch embedder per dataset
+### Future: the text / patch / structural trio per dataset
 
 Tracked in "V3 - design" below.  v1/v2 picked the field names
 (`media["embedding"]`, `media["patch_regions"]`, `media["patch_grid"]`)
 so that they collapse cleanly into the v3 dict schema - no rewrite of
 the v1/v2 storage decisions is needed; v3 is purely additive at the
-schema level.
+schema level.  The structural role's `media["local_features"]`
+(structural-embedder.md) slots into the same additive model.
 
 ## Backend integration points
 
@@ -465,29 +466,49 @@ fallback box is suppressed (same rule as the gallery outline). Frontend-only.
 
 ## V3 - design
 
-V3 lets a dataset bind **up to one text-capable embedder + up to one
-patch-capable embedder** instead of exactly one embedder.  Text sort
-runs against the text embedder; region similarity, region voting, and
-the detector MLP run against the patch embedder; both live side-by-
-side in the pickle.  No dataset is forced to take two embedders - a
-single-embedder dataset still works, and a dataset that doesn't
-benefit from one of the two roles simply leaves that slot empty.
+V3 lets a dataset bind **up to one embedder per role across three
+role types** - a text-capable embedder, a patch-capable embedder, and
+a structural (geometric-verification) embedder - instead of exactly
+one embedder.  Text sort runs against the text embedder; region
+similarity, region voting, and region-aware MLP scoring run against
+the patch embedder; instance retrieval + geometric re-rank run against
+the structural embedder; all bound embedders live side-by-side in the
+pickle.  No dataset is forced to take more than one - a single-embedder
+dataset still works, and a dataset that doesn't benefit from a given
+role simply leaves that slot empty (the only hard rule is that **at
+least one of the three** is set, or there's nothing to sort/search
+against).
 
 The point is to **stop forcing the user to choose** between "good
-text queries" (SigLIP/CLIP) and "good region voting + visual quality"
-(DINOv3 patch).  Today those are mutually exclusive because the
-dataset has exactly one embedder; in v3 they coexist on the same
-pickle.
+text queries" (SigLIP/CLIP), "good region voting + visual quality"
+(DINOv3 patch), and "find this exact instance" (SIFT/VLAD structural).
+Today those are mutually exclusive because the dataset has exactly one
+embedder; in v3 they coexist on the same pickle.  The three roles are
+type-distinct because they ride three independent capability flags -
+`supports_text`, `supports_patch_regions`, and
+`supports_geometric_verification` - and each populates its own per-media
+storage (full-image vectors / `patch_regions` + `patch_grid` /
+`local_features`).
 
 ### Schema change
 
 The on-disk per-media fields become dicts keyed by embedder name:
 
 ```python
-media["embeddings"]    = {"siglip": ndarray, "dinov3_patch": ndarray}   # fp16, L2-normalised, one entry per bound embedder
-media["patch_regions"] = {"dinov3_patch": [RegionVector, ...]}          # only the patch embedder(s) populate this
-media["patch_grid"]    = {"dinov3_patch": ndarray}                      # (H, W, D) fp16 per patch embedder
+media["embeddings"]     = {"siglip": ndarray, "dinov3_patch": ndarray, "sift_vlad": ndarray}  # fp16, L2-normalised, one entry per bound embedder (incl. the structural VLAD vector)
+media["patch_regions"]  = [RegionVector, ...]   # the patch embedder's HAC tree (one patch slot, so single-valued)
+media["patch_grid"]     = ndarray               # (H, W, D) fp16, the patch embedder's grid
+media["local_features"] = StructuralFeatures(...)  # the structural embedder's keypoints + descriptors (one structural slot, so single-valued)
 ```
+
+`media["embeddings"]` is the genuinely multi-valued field (one vector per
+bound embedder, including the structural embedder's Stage-1 VLAD vector).
+`patch_regions` / `patch_grid` / `local_features` stay **single-valued**:
+the binding allows at most one patch and one structural embedder, so keying
+them by name would be a perpetually ≤1-entry dict.  Each is owned by its
+role's bound embedder; dict-keying them is deferred to if "more than one
+patch (or structural) embedder per dataset" ever comes off the non-goals
+list.
 
 The legacy `media["embedding"]` (singular, scalar value) is **dropped
 from the on-disk format** in v3.  Loaders that read an older pickle
@@ -495,63 +516,81 @@ re-key it on the fly:
 
 ```python
 media["embeddings"] = {legacy_embedder_name: media.pop("embedding")}
-if legacy_embedder_supports_patch and "patch_regions" in media:
-    media["patch_regions"] = {legacy_embedder_name: media.pop("patch_regions")}
-    media["patch_grid"]    = {legacy_embedder_name: media.pop("patch_grid")}
+# patch_regions / patch_grid / local_features stay single-valued and in place;
+# they were already owned by the (single) legacy embedder, which now fills the
+# matching role slot, so there is nothing to re-key.
 ```
 
 This is a one-shot read-time migration, not a runtime compat shim.
-After the first save under v3, the legacy fields are gone.  Per
-CLAUDE.md ("Backwards Compatibility"), we don't keep a parallel
-`media["embedding"]` mirror.
+After the first save under v3, the legacy singular `media["embedding"]`
+is gone (`embeddings` replaces it).  Per CLAUDE.md ("Backwards
+Compatibility"), we don't keep a parallel `media["embedding"]` mirror.
 
 ### Dataset binding
 
-Two new fields on the dataset header (the part of the pickle that
-describes the dataset, not the per-media list):
+Three new fields on the dataset header (the part of the pickle that
+describes the dataset, not the per-media list) - one per role type:
 
 ```python
-dataset.text_embedder:  str | None   # e.g. "siglip" or "e5" or None
-dataset.patch_embedder: str | None   # e.g. "dinov3_patch" or None
+dataset.text_embedder:       str | None   # e.g. "siglip" or "e5" or None
+dataset.patch_embedder:      str | None   # e.g. "dinov3_patch" or None
+dataset.structural_embedder: str | None   # e.g. "sift_vlad" or None
 ```
 
 Constraints:
 
-- At least one of the two must be set (otherwise no sort/search/vote
-  works).
+- **At least one of the three must be set** (otherwise no
+  sort/search/vote works).  The dataset-create flow enforces this; the
+  per-slot type checks below don't.
 - `text_embedder` must point at an embedder with
   `supports_text == True`.
 - `patch_embedder` must point at an embedder with
-  `supports_patch_regions == True`.  Slots are role-typed; a
-  single-vector embedder (e.g. `dinov3_single`) is not eligible for
-  the patch slot.
-- Both slots may be filled - that's the new capability v3 unlocks.
-  The two embedders run independently at load time; their outputs
-  share nothing.
+  `supports_patch_regions == True`.
+- `structural_embedder` must point at an embedder with
+  `supports_geometric_verification == True`.
+- Slots are role-typed; a single-vector embedder (e.g.
+  `dinov2_single`) is eligible for **no** slot (it drives cosine sort /
+  the detector MLP via its primary vector, read directly rather than
+  through a role slot - see Phase 2b.4).
+- A single embedder may legitimately fill more than one slot if it
+  advertises more than one capability (a hypothetical text+patch
+  backbone fills both); each role independently takes the first bound
+  name that advertises that capability.
+- Any combination of the three slots may be filled - that's the new
+  capability v3 unlocks.  The bound embedders run independently at load
+  time; their outputs share nothing on disk.
 
 `dataset.supports_text` becomes `text_embedder is not None`;
-`dataset.supports_patch_regions` becomes `patch_embedder is not None`.
-The existing `MediaEmbedder.supports_text` /
-`supports_patch_regions` flags stay - they describe an embedder's
+`dataset.supports_patch_regions` becomes `patch_embedder is not None`;
+`dataset.supports_geometric_verification` becomes
+`structural_embedder is not None`.  The existing
+`MediaEmbedder.supports_*` flags stay - they describe an embedder's
 *capabilities*; the dataset slots record which embedder is *bound* to
 which role.
 
 ### Routing rules
 
+The shared **score embedder** (the single vector space the detector MLP,
+diversity tree, and example/by-id cosine sort run against) resolves by
+precedence: **`structural_embedder` if set, else `patch_embedder` if
+set, else `text_embedder`** (`None` for a slot-less single-vector
+dataset, where the matrix layer reads each media's primary vector).  The
+dedicated text / patch / structural roles each use their own slot:
+
 | Operation | Embedder used | Behaviour when slot empty |
 |---|---|---|
 | Text sort (`POST /api/sort`) | `text_embedder` | HTTP 400 + `supports_text: false` (already the v1 behaviour) |
-| Cosine example sort (`POST /api/example-sort`) | `patch_embedder` if set, else `text_embedder` | HTTP 400 if neither is set |
-| Region similarity (`POST /api/find-label`, etc.) | `patch_embedder` | HTTP 400 if `patch_embedder` is None |
-| Region voting / `region_box` on `LabeledElement` | `patch_embedder` | UI hides Shift-drag affordance if `patch_embedder` is None |
-| Diversity tree | `patch_embedder` if set, else `text_embedder` | One tree per dataset; rebuilt when the bound embedder changes |
-| Detector MLP scoring | `patch_embedder` if set, else `text_embedder` | Region max-pool applies only when scoring against `patch_embedder` |
+| Cosine example sort (`POST /api/example-sort`) | score embedder (structural ▸ patch ▸ text) | HTTP 400 if all three are empty |
+| Region similarity / region voting / `region_box` | `patch_embedder` | UI hides Shift-drag region affordance if None |
+| Geometric (instance) verification + Stage-2 re-rank | `structural_embedder` | re-rank skipped (coarse VLAD retrieval only) if None |
+| Diversity tree | score embedder | One tree per dataset; rebuilt when the bound score embedder changes |
+| Detector MLP scoring | score embedder | Region max-pool when score == `patch_embedder`; two-stage verify when score == `structural_embedder` |
 | Detector MLP training | same embedder as scoring (must match) | - |
-| Gallery `best_region` overlay | `patch_embedder` | Outline absent when `patch_embedder` is None (v1 behaviour) |
+| Gallery `best_region` overlay | `patch_embedder` or `structural_embedder` (whichever drove the score) | Outline absent when neither is set |
 
-The example-sort fallback to `text_embedder` is **only** for image
-uploads - text sort never falls back to the patch embedder, because
-patch embedders don't have a text encoder.  The
+The example-sort fallback chain is **only** for image
+uploads - text sort never falls back to the patch/structural embedder,
+because those have no text encoder.  The
 `MediaEmbedder.supports_text` gate already enforces this at request
 time.
 
@@ -560,54 +599,71 @@ time.
 Today an MLP is keyed by `(detector_id, dataset_id)` and trained on
 whatever vectors the dataset's single embedder produced.  In v3:
 
-- An MLP is keyed by `(detector_id, dataset_id, embedder_name)`.
+- An MLP is keyed by `(detector_id, dataset_id, embedder_name)`, where
+  `embedder_name` is the **score** embedder (structural ▸ patch ▸ text)
+  the model was trained against - **not** the per-media primary mirror,
+  which diverges from the scored space on a multi-embedder dataset.
+  (Shipped in Phase 2b.5 via the canonical `score_marker_embedder`; see
+  "V3 - implementation status".)
 - A detector that ran against `siglip` on a v2-era dataset stays
   valid post-migration - its embedder_name is the pre-migration
   embedder.
-- Switching `dataset.patch_embedder` from `None` to `dinov3_patch`
-  doesn't invalidate existing `text_embedder`-keyed MLPs; the new
-  patch-keyed MLP is trained fresh from the existing votes the next
+- Switching the bound score embedder (e.g. adding a `patch_embedder` or
+  `structural_embedder` to a previously text-only dataset) doesn't
+  invalidate existing MLPs keyed to the old embedder; the new
+  embedder-keyed MLP is trained fresh from the existing votes the next
   time the user runs Learned sort.  Votes are embedder-agnostic
   (they're `(media_id, label, region_box?)`), so they re-use cleanly.
+- A structural-keyed detector carries **two** learned objects (the
+  Stage-1 retrieval MLP on VLAD vectors + the match-statistic
+  verification classifier); both are re-derived from votes and never
+  persisted, exactly as in the structural-embedder v1 design.
 
 ### Loader / exporter / importer impact
 
 - **Pickle loaders** (`loader_pickle.py`, `loader_folder.py`) run
-  both bound embedders during ingest.  Each one writes into its own
-  key under `media["embeddings"]` / `media["patch_regions"]` /
-  `media["patch_grid"]`.  The two passes share dataset I/O (one file
-  open per media) but run their forwards independently.
+  every bound embedder during ingest (already generalised to a set in
+  Phase 2b.3).  Each writes its own vector into `media["embeddings"]`;
+  the patch embedder additionally writes `patch_regions` / `patch_grid`,
+  and the structural embedder writes `local_features`.  The passes share
+  dataset I/O (one file open per media) but run their forwards
+  independently.
 - **`ConcurrencyGate`** (`load_pipeline.py`) gates embed work; v3's
-  two embedders count as two embed phases for the same dataset.  Net
-  effect: a two-embedder dataset takes longer to ingest than a
-  single-embedder one, gated under the same `_embed_gate` limit.
+  bound embedders count as that many embed phases for the same dataset.
+  Net effect: a multi-embedder dataset takes proportionally longer to
+  ingest, gated under the same `_embed_gate` limit.
 - **Dataset pickle schema version** bumps.  Old pickles still load
   via the read-time re-key; saving from v3 always writes the new
   schema.
 - **NPZ paths-file (server_files importer)** today carries one
   `vectors` array per media.  In v3 it grows an optional
   `vectors_<embedder_name>` per-embedder layout; the existing
-  single-`vectors` layout maps to the dataset's `text_embedder` slot
-  (or `patch_embedder` if no text slot is set).
+  single-`vectors` layout maps to the dataset's score-role slot
+  (structural ▸ patch ▸ text).
 - **Combine Datasets importer**: input pickles must have identical
-  `(text_embedder, patch_embedder)` pairs to combine.  We refuse the
-  combine with a clear error otherwise - no partial-overlap
-  reconciliation in v3.
+  `(text_embedder, patch_embedder, structural_embedder)` triples to
+  combine.  We refuse the combine with a clear error otherwise - no
+  partial-overlap reconciliation in v3.
 
 ### Frontend
 
-- **Dataset-create flow**: today's single embedder picker becomes a
-  pair of pickers ("Text embedder" + "Patch embedder"), each
-  defaulted to None and filtered by the role-typed capability list.
-  The license-notice chip surfaces on whichever picker shows an
-  embedder with one.
+- **Dataset-create flow**: today's single embedder picker becomes
+  **three independent pickers** - "Text embedder", "Patch embedder",
+  and "Structural embedder" - each defaulted to None and filtered by
+  its role-typed capability list (`supports_text` /
+  `supports_patch_regions` / `supports_geometric_verification`).  The
+  user may pick one (or leave empty) per picker; the form rejects
+  submission only when **all three are empty**.  The license-notice
+  chip surfaces on whichever picker shows an embedder with one.
 - **Sort bar** continues to read `dataset.supports_text` /
-  `supports_patch_regions` - no per-component change.
+  `supports_patch_regions` (+ now `supports_geometric_verification`) -
+  no per-component change.
 - **Embedder picker page** (admin-ish): no shape change; embedder
-  cards already list `supports_text` and `supports_patch_regions`.
+  cards already list the three `supports_*` capability flags.
 - **Region-vote UI**: unchanged from v2 once the routing wires up;
-  Shift-drag continues to work whenever `dataset.patch_embedder` is
-  set.
+  Shift-drag continues to work whenever `dataset.patch_embedder` **or**
+  `dataset.structural_embedder` is set (for structural the box defines
+  the match template - see structural-embedder.md).
 
 ### Migration
 
@@ -616,12 +672,11 @@ v3:
 
 1. Read legacy `dataset.embedder: str` and `media["embedding"]:
    ndarray`.
-2. If the legacy embedder is `supports_text=True` →
-   `dataset.text_embedder = legacy_name`,
-   `dataset.patch_embedder = None`.
-   If it's `supports_patch_regions=True` →
-   `dataset.patch_embedder = legacy_name`,
-   `dataset.text_embedder = None`.
+2. Role-type the legacy embedder into its matching slot, leaving the
+   others `None`: `supports_text` → `text_embedder`,
+   `supports_patch_regions` → `patch_embedder`,
+   `supports_geometric_verification` → `structural_embedder`.  (A
+   dual-capability legacy embedder fills every slot it qualifies for.)
 3. Re-key per-media fields as in "Schema change".
 4. Mark the dataset as v3-schema in memory; the next save writes the
    new format.
@@ -634,10 +689,13 @@ inconsistency window.
 
 ### Out of scope for v3
 
-- **>1 text or >1 patch embedder per dataset.**  A user wanting two
-  text embedders re-imports under a separate dataset.  The schema
-  (dict keyed by name) is forward-compatible with this, but the
-  binding rules (`text_embedder: str | None`) intentionally aren't.
+- **>1 embedder of the same role per dataset** (two text, two patch, or
+  two structural embedders).  A user wanting two text embedders
+  re-imports under a separate dataset.  The schema (`embeddings` dict
+  keyed by name) is forward-compatible with this, but the binding rules
+  (`text_embedder: str | None`, etc.) intentionally aren't.  Binding
+  one of *each* role (text + patch + structural) **is** in scope - that
+  is the trio v3 unlocks.
 - **In-place add-an-embedder on a loaded dataset.**  Same re-import
   rule as v1.
 - **Cross-embedder MLP transfer.**  An MLP trained against `siglip`
@@ -650,38 +708,55 @@ inconsistency window.
 
 ### Open questions (v3)
 
-1. **Where in the dataset header do `text_embedder` /
-   `patch_embedder` live?**  Today's single `dataset.embedder` field
-   probably can't just be renamed without breaking labelset sync.
-   Most likely: keep the legacy field as an alias to whichever slot
-   is filled (read-only, computed) for one release, then drop it.
-   To be confirmed during impl.
-2. **Combine Datasets ergonomics.**  Strict "embedder pair must
+1. **Where in the dataset header do the three slots live?**  Today's
+   single `dataset.embedder` field probably can't just be renamed
+   without breaking labelset sync.  Most likely: keep the legacy field
+   as an alias to whichever slot the score role resolves to (read-only,
+   computed) for one release, then drop it.  To be confirmed during
+   impl.
+2. **Combine Datasets ergonomics.**  Strict "embedder triple must
    match" is the v3 rule, but if it bites enough users in practice
    we may want a "combine on the text slot only" variant.  Punt
    until we see real demand.
-3. **Diversity-tree backbone preference.**  The routing table picks
-   `patch_embedder` over `text_embedder` when both are set, on the
-   theory that patch backbones (DINO/EUPE) cluster images more
-   semantically than text-trained backbones (SigLIP).  Worth a
-   sanity check on a mixed dataset before we lock the preference
-   in.
+3. **Diversity-tree + score backbone preference (patch vs structural).**
+   The routing table resolves the shared score role as structural ▸
+   patch ▸ text.  Patch-over-text rests on patch backbones (DINO/EUPE)
+   clustering images more semantically than text backbones (SigLIP);
+   **structural-over-patch is the less obvious call** - a structural
+   embedder is a deliberate specialist pick, so if it's bound we treat
+   instance verification as the intended detector behaviour, but its
+   Stage-1 VLAD vector may cluster *worse* than patch for the diversity
+   tree.  Two sub-decisions to validate on a real patch+structural
+   dataset before locking in: (a) does the detector default to the
+   structural two-stage pipeline when both are bound, and (b) should the
+   diversity tree use a *different* preference (patch ▸ structural)
+   than the detector?  Until then, both use the single score precedence
+   above.
+4. **Patch + structural coexistence at score time.**  Storage and the
+   per-role routing already support binding both; the open piece is
+   whether a single detector can ever run *both* visual pipelines at
+   once (region max-pool MLP *and* geometric verify) rather than
+   choosing one via the score precedence.  Out of scope for the first
+   trio cut; the score precedence picks exactly one.
 
 ### V3 work plan (sketch)
 
 Filled in when we start, just like the v2 plan was a punchlist
 during impl.  Rough size estimate: backend ~2× v2 (schema +
-loader + per-embedder MLP keying), frontend ~0.5× v2 (just the
-dual-picker on dataset-create).  No new ML algorithms - v3 is
-plumbing, not modelling.
+loader + per-embedder MLP keying), frontend ~0.5× v2 (the three
+role pickers on dataset-create).  No new ML algorithms - v3 is
+plumbing, not modelling (the structural pipeline itself already
+shipped per structural-embedder.md; v3 only adds its third binding
+slot + routing).
 
 ### V3 - implementation status
 
 V3 lands as a sequence of behavior-preserving substrate phases (so each
 commit is reviewable and the single-embedder world keeps working) followed by
 the user-visible binding.  Ordering is by dependency: each phase needs the one
-above it.  **Status: Phases 2a-2b.4 shipped; 2b.5 (MLP keying) and 2c (drop
-the singular mirror) remain, then the create-time dual-picker.**
+above it.  **Status: Phases 2a-2b.5 shipped; 2c (drop the singular mirror)
+remains, then the create-time picker that binds the text / patch / structural
+trio (three role pickers; at least one slot filled).**
 
 **Shipped:**
 
@@ -757,10 +832,38 @@ the singular mirror) remain, then the create-time dual-picker.**
   against the text embedder's full-image vectors, not the patch tree.  See "Open
   follow-ups" for the cross-dataset Find / CLI-chunk scoring still on primary.
 
+- **Phase 2b.5 - MLP keying.** The cached detector MLP (`DetectorContext.model`)
+  is now keyed to the **score embedder** (patch-else-text; the v3 routing table),
+  not the per-media singular `media["embedder"]` mirror.  A single canonical
+  marker resolver - `vtscore.embedding.binding.score_marker_embedder` (and its
+  `*_for_snap` sibling) - returns `patch or text or primary`, where the primary
+  *name* is the slot-less single-vector fallback so the marker is always a
+  concrete string to stamp on / compare against `DetectorContext.embedder`.
+  Every site that writes the marker (`learned_sort.update_det_ctx_with_trained_model`,
+  `workflow.apply_and_retrain`, `labelset_training.populate_label_embeddings`,
+  `embedder_sync`) and every site that computes the "new embedder" to compare it
+  against (`dataset_sync._embedder_of_active_dataset`, `model_loading`'s
+  Auto-Find defensive check, `embedder_sync.active_dataset_embedder_name`) now
+  routes through that one helper, so `invalidate_detector_model_on_embedder_mismatch`,
+  `_maybe_clear_cache_on_embedder_switch`, and `maybe_start_label_reembed` all
+  compare apples-to-apples.  **Effect:** keying by the embedder *name* (which
+  fully determines the vector space; votes re-derive from the dataset-agnostic
+  labelset) is sufficient for the `(detector, dataset, embedder)` key - a stale
+  cross-space MLP is dropped and retrained on any switch where the score
+  embedder changes.  Byte-for-byte unchanged for every single-embedder dataset
+  (there score-marker == primary); the only behavior change is on a dual
+  dataset, where the primary mirror (text) and the scored space (patch) differ -
+  previously the stale text-keyed MLP would survive a switch onto the patch
+  scoring space.  The cross-dataset Find / cold-train path
+  (`model_loading.resolve_or_train_detector`, lines that build `md5_to_emb` from
+  the primary `c["embedding"]`) is deliberately left on the primary vector - it
+  pairs both the in-snap vectors and the origin-resolved vectors in the same
+  primary space, so it stays self-consistent; wiring it to the score embedder is
+  the cross-dataset-Find follow-up already tracked under "Open follow-ups (from
+  2b.4)".
+
 **Remaining, in order:**
 
-- **Phase 2b.5 - MLP keying.** Key MLPs by `(detector, dataset, embedder)`.
-  See "Detector MLP keying".
 - **Phase 2c - drop the singular mirror.** Once every read site routes through
   the accessor with an explicit embedder, remove the `media["embedding"]`
   primary mirror (read-time re-key on load handles old pickles).
@@ -773,9 +876,9 @@ the singular mirror) remain, then the create-time dual-picker.**
   subsets - neither is the active `DatasetContext`, so they keep building the
   matrix from each media's primary vector (no `routed_embedder` call).  This is
   correct for every single-embedder dataset (primary == score embedder) and
-  only matters once a dual-embedder dataset can be created and Find-scored; wire
-  a binding derived from those medias' own embedder names when the create-time
-  dual path lands.
+  only matters once a multi-embedder (trio) dataset can be created and
+  Find-scored; wire a binding derived from those medias' own embedder names when
+  the create-time three-role picker lands.
 - **Region-less media in a region matrix fall back to the primary vector.**
   `matrix._build_region_arrays` sources a region-less media's single row from
   `media["embedding"]` (primary), not the patch embedder's vector.  On a real
@@ -784,23 +887,27 @@ the singular mirror) remain, then the create-time dual-picker.**
 
 ### Open follow-ups (from 2b.3)
 
-- **No create-time path to bind two embedders yet.** 2b.3 makes the loader,
-  exporter, and pickle reader multi-embedder-*correct* (and exercises it via
-  the embed driver + persistence round-trip), but the standard create flow
-  still passes one `embedder` field, so production datasets remain
-  single-embedder until the frontend dual-picker (under "Frontend" in the v3
-  design) threads a `(text_embedder, patch_embedder)` pair into the load
-  pipeline.  Wire that alongside or after routing (2b.4).
-- **`patch_regions` / `patch_grid` stay singular.** The binding allows at most
-  one patch embedder, so these remain single-valued (owned by that embedder)
-  rather than dict-keyed.  Only revisit if "more than one patch embedder per
-  dataset" ever comes off the v3 non-goals list.
-- **Combine Datasets pair-match guard not added.** `combine_datasets` still
-  guards only on media type, not on the `(text_embedder, patch_embedder)`
-  pair (a pre-existing latitude — it never checked the single `embedder`
-  either).  Since nothing can create a two-embedder dataset yet, this is
-  harmless today; add the strict pair-match refusal (v3 design open question
-  #2) when the dual-picker lands.
+- **No create-time path to bind multiple embedders yet.** 2b.3 makes the
+  loader, exporter, and pickle reader multi-embedder-*correct* (and exercises
+  it via the embed driver + persistence round-trip), but the standard create
+  flow still passes one `embedder` field, so production datasets remain
+  single-embedder until the frontend **three-role picker** (under "Frontend"
+  in the v3 design) threads a `(text_embedder, patch_embedder,
+  structural_embedder)` triple into the load pipeline.  Wire that alongside or
+  after routing (2b.4).  Note the structural slot also needs the binding model
+  + `routed_embedder` to grow a `structural` role and the score precedence to
+  become structural ▸ patch ▸ text (today the code knows only text/patch).
+- **`patch_regions` / `patch_grid` / `local_features` stay singular.** The
+  binding allows at most one patch and one structural embedder, so these remain
+  single-valued (owned by that role's embedder) rather than dict-keyed.  Only
+  revisit if "more than one patch (or structural) embedder per dataset" ever
+  comes off the v3 non-goals list.
+- **Combine Datasets triple-match guard not added.** `combine_datasets` still
+  guards only on media type, not on the `(text_embedder, patch_embedder,
+  structural_embedder)` triple (a pre-existing latitude — it never checked the
+  single `embedder` either).  Since nothing can create a multi-embedder dataset
+  yet, this is harmless today; add the strict triple-match refusal (v3 design
+  open question #2) when the picker lands.
 - **NPZ per-embedder layout (`vectors_<name>`) not added.** The `server_files`
   NPZ importer still carries a single `vectors` array; the per-embedder layout
   in "Loader / exporter / importer impact" lands with the create-time
@@ -810,4 +917,4 @@ the singular mirror) remain, then the create-time dual-picker.**
 
 - **v1 (this plan):** six image embedders - single/patch pairs for DINOv2 (ungated default), DINOv3 (gated, premium), and real-EUPE (FAIR Noncommercial). `supports_patch_regions` + `license_notice` flags on `MediaEmbedder`; each `_patch` embedder populates `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw H × W × 768 fp16); the matching `_single` slug provides a fast/cheap CLS-only path on the same backbone for datasets that don't need region search. `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring; asymmetric training loss (Good = `BCE(mlp(full_image_vec), 1)` unchanged from today, Bad = `mean`-over-regions BCE) with image-level labels unchanged on disk; gallery-card region highlight; license-notice surfacing on the embedder picker. Text sort stays grey via the already-shipped `supports_text` gate. Pre-implementation experiments run on `caltech101_s` and inform `K`, `α`, and the EUPE-real attention path.
 - **v2:** region voting on image media via Shift-drag on the focus pane (single rectangular box, salient-area annotation on yes-votes only; binary fast path via `←`/`→` preserved); on-the-fly vote-vector computation from the v1-pickled `patch_grid` (no re-import needed); optional `LabeledElement.region_box`; region-level training examples; per-region label export. Touch deferred.
-- **v3:** one text embedder + one patch embedder per dataset (text queries → text embedder; region similarity / votes → patch embedder).  Schema change to dict-keyed `media["embeddings"]` / `media["patch_regions"]` / `media["patch_grid"]`; legacy `media["embedding"]` is read-migrated then dropped on next save; MLPs become keyed by `(detector, dataset, embedder)`.  Designed in "V3 - design" above; work plan filled in when impl starts.
+- **v3:** the **text / patch / structural trio** - up to one embedder per role bound on a single dataset (text queries → text embedder; region similarity / votes → patch embedder; instance retrieval + geometric re-rank → structural embedder), at least one slot filled.  Schema change to dict-keyed `media["embeddings"]` (one vector per bound embedder); `patch_regions` / `patch_grid` / `local_features` stay single-valued (one patch + one structural slot); legacy `media["embedding"]` is read-migrated then dropped on next save; MLPs become keyed by `(detector, dataset, embedder)` against the score embedder (structural ▸ patch ▸ text).  Designed in "V3 - design" above; substrate Phases 2a–2b.5 shipped (see "V3 - implementation status").

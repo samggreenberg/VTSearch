@@ -13,7 +13,13 @@ import numpy as np
 import pytest
 
 from vtscore.embedding import binding as binding_mod
-from vtscore.embedding.binding import derive_binding, derive_binding_from_names, validate_binding
+from vtscore.embedding.binding import (
+    derive_binding,
+    derive_binding_from_names,
+    score_marker_embedder,
+    score_marker_embedder_for_snap,
+    validate_binding,
+)
 from vtscore.state.core import DatasetContext
 
 # embedder name -> (supports_text, supports_patch_regions)
@@ -208,6 +214,55 @@ class TestRoutedEmbedder:
         ctx = _ctx_with_embedder("faketext")
         with pytest.raises(ValueError, match="unknown embedder routing role"):
             ctx.routed_embedder("bogus")
+
+
+class TestScoreMarkerEmbedder:
+    """The v3 model-keying marker - the embedder component of the
+    ``(detector, dataset, embedder)`` MLP key (patch-embedder.md Phase 2b.5).
+
+    The marker must equal the **score** embedder (patch-else-text) the MLP is
+    trained/scored against, falling back to the primary *name* for a slot-less
+    single-vector dataset so it is always a concrete string to compare against
+    ``DetectorContext.embedder``.
+    """
+
+    def _media(self, primary: str, names: list[str]) -> dict:
+        return {
+            "embedder": primary,
+            "embedding": np.ones(4, dtype=np.float32),
+            "embeddings": {n: np.ones(4, dtype=np.float32) for n in names},
+        }
+
+    def test_text_only_marks_text(self, fake_caps):
+        assert score_marker_embedder(self._media("faketext", ["faketext"])) == "faketext"
+
+    def test_patch_only_marks_patch(self, fake_caps):
+        assert score_marker_embedder(self._media("fakepatch", ["fakepatch"])) == "fakepatch"
+
+    def test_dual_marks_patch_not_primary(self, fake_caps):
+        # The crux of Phase 2b.5: a dual dataset's primary mirror is the text
+        # embedder, but the MLP scores against the patch embedder.  The marker
+        # must follow the scored space (patch), not media["embedder"] (text),
+        # or a stale cross-space MLP survives a dataset switch.
+        media = self._media("faketext", ["faketext", "fakepatch"])
+        assert media["embedder"] == "faketext"
+        assert score_marker_embedder(media) == "fakepatch"
+
+    def test_single_vector_falls_back_to_primary_name(self, fake_caps):
+        # routed_embedder("score") is None here, but the marker is a concrete
+        # name (the primary) so the str-compare invalidation still works.
+        assert score_marker_embedder(self._media("fakesingle", ["fakesingle"])) == "fakesingle"
+
+    def test_no_embedder_marks_empty(self, fake_caps):
+        assert score_marker_embedder({}) == ""
+
+    def test_for_snap_empty(self):
+        assert score_marker_embedder_for_snap(None) == ""
+        assert score_marker_embedder_for_snap({}) == ""
+
+    def test_for_snap_uses_first_media(self, fake_caps):
+        snap = {7: self._media("faketext", ["faketext", "fakepatch"])}
+        assert score_marker_embedder_for_snap(snap) == "fakepatch"
 
 
 class TestRealRegisteredEmbedder:
