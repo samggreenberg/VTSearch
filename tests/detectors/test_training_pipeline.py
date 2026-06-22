@@ -123,8 +123,8 @@ class TestTrainAndScore:
 
     def test_only_good_returns_empty(self):
         clips = {
-            1: {"id": 1, "embedding": np.ones(8, dtype=np.float32)},
-            2: {"id": 2, "embedding": np.zeros(8, dtype=np.float32)},
+            1: {"id": 1, "embedder": "clap", "embeddings": {"clap": np.ones(8, dtype=np.float32)}},
+            2: {"id": 2, "embedder": "clap", "embeddings": {"clap": np.zeros(8, dtype=np.float32)}},
         }
         results, threshold, model = train_and_score(clips, {1: None, 2: None}, {})
         assert results == []
@@ -132,8 +132,8 @@ class TestTrainAndScore:
 
     def test_only_bad_returns_empty(self):
         clips = {
-            1: {"id": 1, "embedding": np.ones(8, dtype=np.float32)},
-            2: {"id": 2, "embedding": np.zeros(8, dtype=np.float32)},
+            1: {"id": 1, "embedder": "clap", "embeddings": {"clap": np.ones(8, dtype=np.float32)}},
+            2: {"id": 2, "embedder": "clap", "embeddings": {"clap": np.zeros(8, dtype=np.float32)}},
         }
         results, threshold, model = train_and_score(clips, {}, {1: None, 2: None})
         assert results == []

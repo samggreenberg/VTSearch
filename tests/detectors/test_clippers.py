@@ -5,6 +5,7 @@ import wave
 
 import pytest
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.audio.audio_generator import generate_wav
 from vtscore.media.clipper import MediaClipper
 
@@ -2711,11 +2712,15 @@ class TestImageFaceClipper:
             "media_type": "image",
             "media_bytes": _make_image_bytes(640, 480),
             "md5": "deadbeef",
-            "embedding": np.zeros(8, dtype=np.float32),
+            "embedder": "siglip",
+            "embeddings": {"siglip": np.zeros(8, dtype=np.float32)},
         }
         clips = c.clip(media)
         assert len(clips) == 1
-        assert "embedding" not in clips[0]
+        # The crop must not inherit the parent's vector: the clip carries a
+        # fresh empty embeddings dict so the load-pipeline fixup re-embeds it.
+        assert clips[0]["embeddings"] == {}
+        assert media_embedding(clips[0]) is None
         assert "md5" not in clips[0]
 
     def test_with_params_overrides(self):

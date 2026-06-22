@@ -18,6 +18,7 @@ import unittest.mock as mock
 import numpy as np
 import pytest
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.audio.audio_generator import generate_wav
 
 
@@ -31,7 +32,8 @@ def _make_audio_media(media_id: int, duration: float = 5.1) -> dict:
         "media_bytes": wav,
         "duration": duration,
         "md5": hashlib.md5(wav).hexdigest(),
-        "embedding": rng.standard_normal(512).astype(np.float32),
+        "embedder": "clap",
+        "embeddings": {"clap": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/audio", "media_type": "audio"}},
         "origin_name": f"clip_{media_id}.wav",
     }

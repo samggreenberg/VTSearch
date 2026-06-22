@@ -18,6 +18,7 @@ from vtscore.detectors.positives_browse import (
     build_positives_browse_context,
     detpos_dataset_id,
 )
+from vtscore.embedding.media_vectors import media_embedding
 
 
 def _detector_data(labels):

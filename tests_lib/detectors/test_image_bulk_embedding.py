@@ -565,7 +565,7 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
         medias = {
             i: {
                 "media_type": "image",
-                "embedding": np.zeros(768, dtype=np.float32),
+                "embeddings": {"fake_patch": np.zeros(768, dtype=np.float32)},
                 "embedder": "fake_patch",
                 "media_path": f"/tmp/img_{i}.png",
             }
@@ -624,7 +624,7 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
         medias = {
             i: {
                 "media_type": "image",
-                "embedding": np.zeros(768, dtype=np.float32),
+                "embeddings": {"fake_patch": np.zeros(768, dtype=np.float32)},
                 "embedder": "fake_patch",
                 "media_path": f"/tmp/img_{i}.png",
             }

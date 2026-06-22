@@ -303,7 +303,7 @@ class TestEmbeddingMatrixLockScoping:
         def mutating_stack(sorted_ids, source, embedder_name):
             built = real_stack(sorted_ids, source, embedder_name)
             # A concurrent media insert lands while we build outside the lock.
-            ctx.medias[99] = {"id": 99, "embedding": np.full(4, 9.0, dtype=np.float32)}
+            ctx.medias[99] = {"id": 99, "embedder": "e5", "embeddings": {"e5": np.full(4, 9.0, dtype=np.float32)}}
             return built
 
         monkeypatch.setattr(matrix_mod, "_stack_embeddings", mutating_stack)

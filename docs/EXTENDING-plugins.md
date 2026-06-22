@@ -498,7 +498,8 @@ class MyServiceImporter(DatasetImporter):
             blobs = ([] if thin else
                      list(pool.map(lambda r: _api.fetch_bytes(r["url"]), records)))
         return [
-            {"media_type": "audio", "filename": r["id"], "embedding": e,
+            {"media_type": "audio", "filename": r["id"],
+             "embeddings": {"my_embedder": e}, "embedder": "my_embedder",
              "media_bytes": (None if thin else b), "media_url": r["url"]}
             for r, e, b in zip(records, embeddings, blobs or [None] * len(records))
         ]
