@@ -109,7 +109,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:  # noqa: C901
                     "media_type": dataset_media_type,
                     "embedder": dataset_embedder_name,
                     "md5": file_md5,
-                    "embedding": embedding,
+                    "embeddings": {dataset_embedder_name: embedding},
                     "media_bytes": file_bytes,
                     "filename": filename,
                     "file_size": len(file_bytes),

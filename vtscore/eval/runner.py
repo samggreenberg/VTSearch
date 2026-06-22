@@ -21,6 +21,7 @@ from typing import Any
 
 import numpy as np
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.config import EVAL_DATASETS, EvalQuery
 from vtscore.eval.metrics import (
     DatasetResult,
@@ -55,7 +56,7 @@ def _run_text_sort_query(
 
     results = []
     for media_id, media in medias.items():
-        sim = _cosine_similarity(media["embedding"], text_vec)
+        sim = _cosine_similarity(media_embedding(media), text_vec)
         results.append({"id": media_id, "similarity": sim})
 
     results.sort(key=lambda x: x["similarity"], reverse=True)

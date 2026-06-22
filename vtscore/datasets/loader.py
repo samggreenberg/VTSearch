@@ -234,11 +234,10 @@ def export_dataset_to_file(
             "file_size": media["file_size"],
             "md5": media["md5"],
             "embedder": media.get("embedder", ""),
-            "embedding": _embedding_for_pickle(media["embedding"]),
-            # Per-embedder vectors (v3 three-slot model).  A single-embedder
-            # dataset writes a one-entry dict that the load side re-keys back;
-            # a text+patch dataset writes both, which the singular ``embedding``
-            # mirror alone could not round-trip.
+            # Per-embedder vectors (v3 three-slot model) are the sole vector
+            # store: a single-embedder dataset writes a one-entry dict that the
+            # load side re-keys back; a text+patch dataset writes both.  There
+            # is no singular ``embedding`` key (Phase 2c dropped the mirror).
             "embeddings": _embeddings_dict_for_pickle(media.get("embeddings")),
             "filename": media.get("filename", f"media_{cid}.wav"),
             "category": media.get("category", "unknown"),

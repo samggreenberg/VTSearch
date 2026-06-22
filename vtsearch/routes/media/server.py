@@ -400,8 +400,8 @@ def _resolve_media_bytes(media: dict) -> bytes | None:
 def example_sort_by_id(body: dict):
     """Sort medias by similarity to an already-loaded media item.
 
-    When ``crop_params`` is absent the existing ``media["embedding"]``
-    is reused (no fetch, no re-embed).  When set, the media's bytes are
+    When ``crop_params`` is absent the existing ``media["embeddings"]``
+    vector is reused (no fetch, no re-embed).  When set, the media's bytes are
     materialised, cropped, and re-embedded before sorting.
     """
     media_id = body["media_id"]

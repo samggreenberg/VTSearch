@@ -19,6 +19,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.progress import find_progress, update_find_progress
 from vtscore.detectors.training import train_and_threshold
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.utils.scores import sigmoid_to_finite_scores
 from vtsearch.schemas.detectors import (
     FindCancelResponseSchema,
@@ -267,6 +268,7 @@ def _load_find_dataset_medias(ds: dict) -> dict[int, dict]:
     caller and freed after scoring completes.
     """
     from vtscore.datasets.container import read_container  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import ensure_embeddings_dict  # noqa: PLC0415
 
     try:
         pkl_data, _meta = read_container(ds["pkl_path"])
@@ -275,10 +277,15 @@ def _load_find_dataset_medias(ds: dict) -> dict[int, dict]:
         temp_medias: dict[int, dict] = {}
         for cid, mdata in raw_medias.items():
             mid = int(cid) if not isinstance(cid, int) else cid
-            emb = mdata.get("embedding")
-            if emb is not None:
-                emb = np.array(emb, dtype=np.float32)
-            temp_medias[mid] = {**mdata, "id": mid, "embedding": emb}
+            media = {**mdata, "id": mid}
+            # Re-key a legacy single-vector pickle into media["embeddings"] and
+            # drop the singular key, then coerce every vector to float32 (the
+            # snap is paired against origin-resolved vectors during scoring).
+            ensure_embeddings_dict(media)
+            embs = media.get("embeddings")
+            if isinstance(embs, dict) and embs:
+                media["embeddings"] = {n: np.array(v, dtype=np.float32) for n, v in embs.items()}
+            temp_medias[mid] = media
         return temp_medias
     except Exception as e:
         _abort_find(500, f"Failed to load dataset '{ds['name']}': {e}")
@@ -370,8 +377,8 @@ def _collect_cold_training_data(
                 bad_ids.append(mid)
 
     if good_ids and bad_ids:
-        good_embs = [temp_medias[i]["embedding"] for i in good_ids if i in temp_medias]
-        bad_embs = [temp_medias[i]["embedding"] for i in bad_ids if i in temp_medias]
+        good_embs = [media_embedding(temp_medias[i]) for i in good_ids if i in temp_medias]
+        bad_embs = [media_embedding(temp_medias[i]) for i in bad_ids if i in temp_medias]
         return good_embs + bad_embs, [1.0] * len(good_embs) + [0.0] * len(bad_embs)
 
     from vtscore.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415

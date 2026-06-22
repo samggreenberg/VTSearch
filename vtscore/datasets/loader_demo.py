@@ -219,15 +219,15 @@ def load_demo_dataset(  # noqa: C901
     # converted medias carry their own bytes/strings).
     # Local import avoids a circular import at module load (loader imports
     # loader_demo before this helper is defined).
-    from vtscore.datasets.loader import _embedding_for_pickle
+    from vtscore.datasets.loader import _embeddings_dict_for_pickle
 
     if external_dir is not None and not converter_name:
         pkl_data: dict[str, Any] = {
             "name": dataset_name,
             "medias": {
                 cid: {
-                    k: _embedding_for_pickle(v)
-                    if k == "embedding"
+                    k: _embeddings_dict_for_pickle(v)
+                    if k == "embeddings"
                     else (v.tolist() if isinstance(v, np.ndarray) else v)
                     for k, v in media.items()
                     if k not in ("media_bytes", "thumbnail_bytes")
@@ -241,8 +241,8 @@ def load_demo_dataset(  # noqa: C901
             "name": dataset_name,
             "medias": {
                 cid: {
-                    k: _embedding_for_pickle(v)
-                    if k == "embedding"
+                    k: _embeddings_dict_for_pickle(v)
+                    if k == "embeddings"
                     else (v.tolist() if isinstance(v, np.ndarray) else v)
                     for k, v in media.items()
                 }

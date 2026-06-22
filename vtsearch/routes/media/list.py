@@ -24,6 +24,7 @@ from typing import Any
 from flask import Response, jsonify, make_response, request, send_file
 from flask_smorest import Blueprint, abort
 
+from vtscore.embedding.media_vectors import init_embeddings
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.base import MediaResponse
 from vtsearch.schemas.media import (
@@ -848,7 +849,7 @@ def add_media_to_pile():  # noqa: C901
         "media_type": dataset_media_type,
         "embedder": dataset_embedder_name,
         "md5": file_md5,
-        "embedding": embedding,
+        "embeddings": init_embeddings(dataset_embedder_name, embedding),
         "media_bytes": file_bytes,
         "filename": original_filename,
         "file_size": len(file_bytes),

@@ -149,7 +149,7 @@ def _build_media(
         "media_type": media_type,
         "filename": content_id,
         "md5": record["md5"],
-        "embedding": embedding_info["embedding"],
+        "embeddings": {embedding_info["embedder"]: embedding_info["embedding"]},
         "embedder": embedding_info["embedder"],
         "media_bytes": media_bytes,
         "media_path": None,

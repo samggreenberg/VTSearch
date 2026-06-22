@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.memory_budget import cap_workers_by_memory
+from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.routes.processors.crud import _build_extractor, _build_localizer
 from vtsearch.schemas.processors import (
     AutoExtractResponseSchema,
@@ -92,7 +93,7 @@ def _auto_run_processors(
 
     n_items = len(snap)
     first = next(iter(snap.values()), {}) if snap else {}
-    embedding = first.get("embedding")
+    embedding = media_embedding(first)
     try:
         embed_dim = int(len(embedding)) if embedding is not None else 0
     except TypeError:

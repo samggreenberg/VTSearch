@@ -1,6 +1,6 @@
 """Lazy, cached contiguous embedding matrix on :class:`DatasetContext`.
 
-Building ``np.array([medias[cid]["embedding"] for cid in sorted(...)])``
+Building ``np.array([media_embedding(medias[cid]) for cid in sorted(...)])``
 per request copies 10k+ arrays twice (once into a list, once into the
 ``np.array(...)`` allocation) and another copy when wrapping with
 ``torch.tensor(...)``.  The matrix changes only when the set of loaded

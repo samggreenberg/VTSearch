@@ -98,7 +98,7 @@ def load_pdf_images_into(
                 "embedder": "",
                 "file_size": len(image_bytes),
                 "md5": hashlib.md5(image_bytes).hexdigest(),
-                "embedding": None,
+                "embeddings": {},
                 "filename": full_page_name,
                 "category": "custom",
                 "origin": origin,

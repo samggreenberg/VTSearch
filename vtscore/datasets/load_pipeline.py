@@ -607,7 +607,9 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 importer.run(field_values, temp_medias)
                 apply_custom_metadata_md5(temp_medias)
                 embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=update_progress)
-                temp_medias = {mid: m for mid, m in temp_medias.items() if m.get("embedding") is not None}
+                from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+                temp_medias = {mid: m for mid, m in temp_medias.items() if media_embedding(m) is not None}
 
                 if not temp_medias:
                     update_progress("idle", "", 0, 0, error="Import produced no medias.")

@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.state.core import (
     DatasetContext,
     DetectorContext,
@@ -71,7 +72,7 @@ def build_diversity_tree(
         source = media_dict if media_dict is not None else ds_ctx.medias
         vectors: dict[int, np.ndarray] = {}
         for cid, media in source.items():
-            emb = media.get("embedding")
+            emb = media_embedding(media)
             if emb is not None:
                 vectors[cid] = np.asarray(emb, dtype=np.float32)
 
@@ -102,7 +103,7 @@ def build_diversity_tree_for_context(
 
     vectors: dict[int, np.ndarray] = {}
     for cid, media in ctx.medias.items():
-        emb = media.get("embedding")
+        emb = media_embedding(media)
         if emb is not None:
             vectors[cid] = np.asarray(emb, dtype=np.float32)
 

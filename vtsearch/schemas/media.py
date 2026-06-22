@@ -340,7 +340,7 @@ class ExampleSortByIdRequestSchema(Schema):
 
     Sorts the loaded snapshot by similarity to an already-loaded media,
     identified by its in-memory ``media_id``.  When ``crop_params`` is
-    absent, the existing ``media["embedding"]`` is reused (no fetch or
+    absent, the existing ``media["embeddings"]`` vector is reused (no fetch or
     re-embed).  When set, the media's bytes are materialised, cropped,
     and re-embedded before sorting.
     """

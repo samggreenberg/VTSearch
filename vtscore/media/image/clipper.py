@@ -626,10 +626,12 @@ class ImageFaceClipper(MediaClipper):
             clip["file_size"] = len(crop_bytes)
             clip["clip_index"] = idx
             clip["clip_box"] = [x1, y1, x2, y2]
-            # Drop parent-inherited md5 + embedding so the load pipeline's
+            # Reset parent-inherited embeddings + md5 so the load pipeline's
             # fixup recomputes them from the cropped bytes even in the
-            # single-face case (where is_real_clip is False).
-            clip.pop("embedding", None)
+            # single-face case (where is_real_clip is False).  A fresh dict
+            # (not a pop) is required because the clip is a shallow copy that
+            # shares the parent's ``embeddings`` dict by reference.
+            clip["embeddings"] = {}
             clip.pop("md5", None)
             results_list.append(clip)
         return results_list

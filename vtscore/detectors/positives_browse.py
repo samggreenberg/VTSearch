@@ -76,7 +76,7 @@ def _materialize_positive(
         return None
     return {
         "media_type": media_type,
-        "embedding": np.asarray(emb, dtype=np.float32),
+        "embeddings": {embedder_name: np.asarray(emb, dtype=np.float32)},
         "media_bytes": media_bytes,
         "filename": elem.filename or elem.origin_name or "",
         "origin_name": elem.origin_name or "",

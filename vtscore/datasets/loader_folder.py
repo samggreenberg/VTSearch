@@ -27,6 +27,7 @@ from vtscore.datasets.loader import (
     _pop_md5_key,
     _streaming_md5,
 )
+from vtscore.embedding.media_vectors import init_embeddings
 from vtscore.security.path_validation import (
     glob_top_level,
     iter_glob_top_level,
@@ -382,7 +383,7 @@ def _build_folder_media_data(
         "embedder": embedder_id,
         "file_size": file_size,
         "md5": md5,
-        "embedding": embedding,
+        "embeddings": init_embeddings(embedder_id, embedding),
         "filename": rel_path,
         "category": "custom",
         "origin": media_origin,

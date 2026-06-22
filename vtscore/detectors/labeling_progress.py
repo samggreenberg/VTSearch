@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.training.mlp import train_model
 from vtscore.training.thresholds import find_optimal_threshold
 
@@ -153,9 +154,9 @@ def inject_live_model(
 def _build_diversity_tree(clips_dict: dict[int, dict[str, Any]]) -> Any:
     """Build a DiversityTree from clip embeddings, or ``None`` if no embeddings."""
     vectors: dict[int, np.ndarray] = {
-        cid: np.asarray(media["embedding"], dtype=np.float32)
+        cid: np.asarray(media_embedding(media), dtype=np.float32)
         for cid, media in clips_dict.items()
-        if media.get("embedding") is not None
+        if media_embedding(media) is not None
     }
     if not vectors:
         return None
@@ -209,12 +210,12 @@ def _collect_training_data(
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     for cid in _cache_good_ids:
-        if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
-            X_list.append(clips_dict[cid]["embedding"])
+        if cid in clips_dict and media_embedding(clips_dict[cid]) is not None:
+            X_list.append(media_embedding(clips_dict[cid]))
             y_list.append(1.0)
     for cid in _cache_bad_ids:
-        if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
-            X_list.append(clips_dict[cid]["embedding"])
+        if cid in clips_dict and media_embedding(clips_dict[cid]) is not None:
+            X_list.append(media_embedding(clips_dict[cid]))
             y_list.append(0.0)
     return X_list, y_list
 
@@ -233,13 +234,13 @@ def _compute_step_stability(
 
     labeled_ids = _cache_good_ids | _cache_bad_ids
     unlabeled_ids = [
-        cid for cid in all_media_ids if cid not in labeled_ids and clips_dict.get(cid, {}).get("embedding") is not None
+        cid for cid in all_media_ids if cid not in labeled_ids and media_embedding(clips_dict.get(cid, {})) is not None
     ]
 
     if not unlabeled_ids:
         return {"time_index": t, "num_labels": num_labels, "num_flips": 0, "num_unlabeled": 0}
 
-    unlabeled_embs = np.array([clips_dict[cid]["embedding"] for cid in unlabeled_ids])
+    unlabeled_embs = np.array([media_embedding(clips_dict[cid]) for cid in unlabeled_ids])
     X_unlabeled = torch.tensor(unlabeled_embs, dtype=torch.float32)
 
     with torch.no_grad():
@@ -431,8 +432,8 @@ def _eval_cached_models(  # noqa: C901
     eval_embs: list[np.ndarray] = []
     eval_labels: list[float] = []
     for cid, lbl in current_labels.items():
-        if cid in clips_dict and clips_dict[cid].get("embedding") is not None:
-            eval_embs.append(clips_dict[cid]["embedding"])
+        if cid in clips_dict and media_embedding(clips_dict[cid]) is not None:
+            eval_embs.append(media_embedding(clips_dict[cid]))
             eval_labels.append(lbl)
 
     if not eval_embs:

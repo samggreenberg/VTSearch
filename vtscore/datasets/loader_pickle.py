@@ -22,21 +22,28 @@ logger = logging.getLogger(__name__)
 
 
 def _load_embeddings_dict(media_info: dict[str, Any]) -> dict[str, Any] | None:
-    """Re-key a pickle entry's per-embedder vectors, L2-normalising each.
+    """Build a media's per-embedder ``{name: vector}`` dict, L2-normalising each.
 
-    Returns the ``{name: vector}`` dict (v3 pickles carry one entry per bound
-    embedder) or ``None`` for legacy single-vector pickles, where the embed
-    stage materialises the dict from the singular ``embedding`` on load via
-    :func:`vtscore.embedding.media_vectors.ensure_embeddings_dict`.
+    A v3 pickle carries the dict under ``embeddings`` (one entry per bound
+    embedder); a legacy single-vector pickle carries only the singular
+    ``embedding`` plus the recorded ``embedder`` name, which is re-keyed into a
+    one-entry dict here (the Phase 2c migration — the singular key never enters
+    the in-memory media).  Returns ``None`` when no usable vector is present.
     """
     embs = media_info.get("embeddings")
-    if not isinstance(embs, dict) or not embs:
-        return None
-    out: dict[str, Any] = {}
-    for name, vec in embs.items():
-        if name and vec is not None:
-            out[name] = l2_normalize(vec)
-    return out or None
+    if isinstance(embs, dict) and embs:
+        out: dict[str, Any] = {}
+        for name, vec in embs.items():
+            if name and vec is not None:
+                out[name] = l2_normalize(vec)
+        return out or None
+    # Legacy single-vector pickle: re-key the singular vector under its
+    # recorded embedder name.
+    vec = media_info.get("embedding")
+    name = media_info.get("embedder")
+    if vec is not None and name:
+        return {name: l2_normalize(vec)}
+    return None
 
 
 def _read_pickle_dataset(file_path: Path) -> dict[str, Any]:
@@ -142,7 +149,6 @@ def _build_pickle_thin_media(
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", 0),
         "md5": media_info.get("md5", ""),
-        "embedding": l2_normalize(media_info["embedding"]),
         "media_bytes": None,
         "media_string": None,
         "embeddings": _load_embeddings_dict(media_info),
@@ -178,7 +184,6 @@ def _build_pickle_full_media(
         "duration": media_info.get("duration", 0),
         "file_size": media_info.get("file_size", len(media_bytes)),
         "md5": media_info.get("md5") or hashlib.md5(media_bytes).hexdigest(),
-        "embedding": l2_normalize(media_info["embedding"]),
         "embeddings": _load_embeddings_dict(media_info),
         "media_bytes": media_bytes,
         "media_string": media_string,
@@ -215,13 +220,13 @@ def _convert_one_pickle_media(
     media_type = media_info.get("media_type", "audio")
     extra_fields = extra_fields_map.get(media_type, [])
 
-    # Treat missing key and explicit ``None`` identically: both mean
-    # "no usable embedding".  Without this check ``np.array(None)``
-    # would silently produce a 0-d ``dtype=object`` array that survives
-    # the ``is None`` guards scattered across the codebase and later
-    # poisons every embedding-matrix consumer with a confusing
-    # ``TypeError: float() argument must be a real number, not 'NoneType'``.
-    if media_info.get("embedding") is None:
+    # No usable vector → skip the entry.  A v3 pickle carries the per-embedder
+    # ``embeddings`` dict; a legacy pickle carries the singular ``embedding`` +
+    # ``embedder`` name (re-keyed by :func:`_load_embeddings_dict`).  Resolving
+    # the dict once here also guards against an explicit ``None`` vector that
+    # would otherwise become a 0-d ``dtype=object`` array and poison every
+    # embedding-matrix consumer downstream.
+    if _load_embeddings_dict(media_info) is None:
         return None, True
 
     if thin:

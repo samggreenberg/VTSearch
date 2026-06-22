@@ -75,10 +75,9 @@ def embed_missing(  # noqa: C901
 
     Multi-embedder note: "missing" and the patch / structural back-fills are
     keyed to *this* embedder's per-media vector (``media["embeddings"][name]``,
-    via :func:`media_embedding`), not the singular ``media["embedding"]``
-    mirror.  So a second bound embedder run over an already-text-embedded
-    dataset still embeds every item (it has no vector under its own key yet)
-    without disturbing the first embedder's vectors.
+    via :func:`media_embedding`).  So a second bound embedder run over an
+    already-text-embedded dataset still embeds every item (it has no vector
+    under its own key yet) without disturbing the first embedder's vectors.
     """
     # Resolve the media type from any media so the patch-region back-fill
     # below can run even when every image already carries an embedding (e.g. a
@@ -130,7 +129,7 @@ def embed_missing(  # noqa: C901
     if embedder_name:
         missing = [(mid, m) for mid, m in medias.items() if media_embedding(m, emb.name) is None]
     else:
-        missing = [(mid, m) for mid, m in medias.items() if m.get("embedding") is None]
+        missing = [(mid, m) for mid, m in medias.items() if media_embedding(m) is None]
 
     # Patch-capable embedders attach a per-image HAC region tree + patch grid
     # alongside the CLS ``embedding``.  That side-channel must exist for any
@@ -250,10 +249,9 @@ def embed_missing(  # noqa: C901
                     continue
                 media["local_features"] = feats.compact()
 
-    # Materialize the dict-keyed representation (Phase 2 substrate): every
-    # media with a known embedder gets media["embeddings"][name] = vec.  The
-    # singular media["embedding"] stays as the primary mirror / legacy fallback
-    # for read sites not yet converted to the media_vectors accessor.
+    # Re-key any legacy single-vector media into the dict-keyed representation
+    # and drop the singular media["embedding"] mirror (Phase 2c): afterward
+    # media["embeddings"] is the sole per-media vector store.
     for media in medias.values():
         ensure_embeddings_dict(media)
 

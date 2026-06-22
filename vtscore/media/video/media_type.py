@@ -772,7 +772,7 @@ class VideoMediaType(MediaType):
                 "duration": media_fields["duration"],
                 "file_size": len(video_bytes),
                 "md5": hashlib.md5(video_bytes).hexdigest(),
-                "embedding": embedding,
+                "embeddings": {embedder.name: embedding},
                 "media_bytes": video_bytes,
                 "thumbnail_bytes": media_fields.get("thumbnail_bytes"),
                 "filename": rel_name,

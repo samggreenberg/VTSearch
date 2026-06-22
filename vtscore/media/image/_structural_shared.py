@@ -3,8 +3,8 @@
 A structural embedder produces *two* per-image artifacts (design:
 ``docs/plans/structural-embedder.md``):
 
-* a fixed-D **VLAD vector** that rides the existing single-vector pipeline as
-  ``media["embedding"]`` (Stage 1 retrieval), and
+* a fixed-D **VLAD vector** that rides the existing per-embedder pipeline as
+  ``media["embeddings"]`` (Stage 1 retrieval), and
 * a set of **local features** (keypoints + descriptors) stored as
   ``media["local_features"]`` for the geometric re-rank + match-stat classifier
   (Stage 2 verification).
