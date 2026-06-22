@@ -12,6 +12,30 @@
   pointer-events: none;
 }
 
+.toast-stack__controls {
+  pointer-events: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.toast-stack__dismiss-all {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  padding: var(--space-2xs) var(--space-md);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--error);
+    background: var(--bad-bg);
+  }
+}
+
 .toast {
   pointer-events: auto;
   min-width: min(420px, calc(100vw - 24px));

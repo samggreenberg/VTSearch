@@ -42,6 +42,13 @@ export class ToastContainerComponent implements OnDestroy {
     this.toastService.dismiss(t.id);
   }
 
+  /** Clear the whole stack at once. Surfaced only when more than one toast
+   *  is showing, so a burst of errors (e.g. one backend condition surfacing
+   *  from several endpoints) doesn't force the user to close them one by one. */
+  dismissAll(): void {
+    this.toastService.dismissAll();
+  }
+
   /** Fire a toast's action button. The toast is dismissed regardless of
    *  whether the handler throws so the user never sees a stuck toast
    *  with a clicked action. */
