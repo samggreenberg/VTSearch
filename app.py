@@ -247,7 +247,16 @@ def _set_user_context():
 # spinner feed) from piling up behind a long lock-holder and exhausting
 # the worker's threads (2026-06-19: one stuck job parked 23 threads on
 # the futex and froze the whole UI).
-_STATE_SYNC_EXEMPT_PREFIXES = ("/api/jobs/active",)
+#
+# `/api/events` is the SSE progress stream: a long-lived, read-only request
+# that only subscribes to the *global* progress trackers and yields their
+# snapshots. It needs no per-request vote rehydration, and gating it on
+# `_state_lock` is self-defeating — while a long Find/load holds the worker
+# busy, the EventSource's reconnect would block in this hook on the very
+# lock the long job contends, so progress events never reach the client and
+# the bar sits indeterminate. Exempting it keeps progress flowing during
+# exactly the long operations the bar exists to report.
+_STATE_SYNC_EXEMPT_PREFIXES = ("/api/jobs/active", "/api/events")
 
 
 @app.before_request

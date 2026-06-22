@@ -568,4 +568,61 @@ describe('DashboardComponent', () => {
     // startProgressPolling subscribes to the SSE channel; no further HTTP
     // is issued until a loading-task event arrives, so nothing else to flush.
   });
+
+  describe('loadDataset / loadDetector → active context', () => {
+    // Loading from a dashboard card should make the item the active context
+    // so the top-bar selector reflects it — but only *after* the load
+    // settles (the SSE task reaches idle without error), never before, so we
+    // don't reintroduce the H25 race where the interceptor tags requests
+    // with an id the backend hasn't finished loading.
+
+    it('promotes the loaded dataset to active only after the load settles', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'image' }];
+      flushInitialRequests(datasets);
+
+      const activeCtx = component['activeContext'];
+      const setActive = vi.spyOn(activeCtx, 'setActivePair');
+      // Capture the completion callback instead of running the real SSE poll.
+      let onComplete: (() => void) | undefined;
+      vi.spyOn(component['loadingTasksSvc'], 'startProgressPolling').mockImplementation(
+        (_taskId?: string, cb?: () => void) => {
+          onComplete = cb;
+        },
+      );
+
+      component.loadDataset(datasets[0] as any);
+      httpMock.expectOne('/api/datasets/registry/d1/load').flush({ task_id: 't1' });
+
+      // Still not active mid-load.
+      expect(setActive).not.toHaveBeenCalled();
+      expect(onComplete).toBeTypeOf('function');
+
+      onComplete!();
+      expect(setActive).toHaveBeenCalledWith('d1', '');
+    });
+
+    it('promotes the loaded detector to active (preserving the dataset half) after settle', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'image', loaded: true }];
+      const models = [{ id: 'm1', name: 'M', media_type: 'image' }];
+      flushInitialRequests(datasets, models);
+
+      const activeCtx = component['activeContext'];
+      // A dataset is already active; loading a detector must keep it.
+      activeCtx.setActivePair('d1', '');
+      const setActive = vi.spyOn(activeCtx, 'setActivePair');
+      let onComplete: (() => void) | undefined;
+      vi.spyOn(component['loadingTasksSvc'], 'startDetectorProgressPolling').mockImplementation(
+        (cb?: () => void) => {
+          onComplete = cb;
+        },
+      );
+
+      component.loadDetector(models[0] as any);
+      httpMock.expectOne('/api/detectors/registry/load').flush({ task_id: 't2' });
+
+      expect(setActive).not.toHaveBeenCalled();
+      onComplete!();
+      expect(setActive).toHaveBeenCalledWith('d1', 'm1');
+    });
+  });
 });

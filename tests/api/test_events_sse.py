@@ -336,3 +336,48 @@ class TestEventsRoute:
             assert any(t["task_id"] == "evt_test" for t in payload)
         finally:
             loading_tasks.remove_task("evt_test")
+
+
+class TestEventsStateSyncExemption:
+    """`/api/events` must skip the lock-taking ``before_request`` state-sync.
+
+    The SSE stream is read-only — it only subscribes to the *global*
+    progress trackers and yields their snapshots — so it never needs the
+    per-request vote rehydration. Gating its (re)connect on ``_state_lock``
+    is self-defeating: while a long Find/load holds the worker busy, the
+    EventSource reconnect would block on the very lock the long job
+    contends, and the progress events the bar needs would never arrive.
+    So it is exempt exactly like the jobs/active spinner poll.
+    """
+
+    def _spy_state_sync(self, monkeypatch) -> list[str]:
+        """Replace the two before_request state-sync helpers with recorders.
+
+        ``_set_request_context`` imports them from
+        ``vtscore.detectors.dataset_sync`` at call time, so patching the
+        source module is what the hook actually sees.
+        """
+        calls: list[str] = []
+        import vtscore.detectors.dataset_sync as ds
+
+        monkeypatch.setattr(ds, "ensure_votes_match_active_dataset", lambda: calls.append("votes"))
+        monkeypatch.setattr(ds, "ensure_detector_model_matches_active_embedder", lambda: calls.append("embedder"))
+        return calls
+
+    def test_events_skips_lock_taking_state_sync(self, client, monkeypatch):
+        calls = self._spy_state_sync(monkeypatch)
+        resp = client.get("/api/events", buffered=False)
+        try:
+            assert resp.status_code == 200
+        finally:
+            resp.close()
+        # Exempt prefix → the lock-taking rehydrate never ran for this request.
+        assert calls == []
+
+    def test_non_exempt_endpoint_still_runs_state_sync(self, client, monkeypatch):
+        """Control: a normal (non-exempt) endpoint still triggers the sync,
+        proving the empty result above is the exemption, not a dead spy."""
+        calls = self._spy_state_sync(monkeypatch)
+        resp = client.get("/api/version")
+        assert resp.status_code == 200
+        assert "votes" in calls and "embedder" in calls

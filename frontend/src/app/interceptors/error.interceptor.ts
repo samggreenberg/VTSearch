@@ -32,9 +32,13 @@ export const SKIP_ERROR_TOAST = new HttpContextToken<boolean>(() => false);
  * response with the active dataset/detector IDs and the server-side
  * request_id (from the response body and/or ``X-Request-Id`` header).
  *
- * Repeating the same endpoint+status (e.g. a retry loop hammering a
- * broken backend) replaces the existing toast via dedup key rather
- * than stacking duplicates.
+ * Repeating the same error (e.g. a retry loop hammering a broken
+ * backend, or one backend condition surfacing from several in-flight
+ * endpoints at once) replaces the existing toast via dedup key rather
+ * than stacking duplicates. The key is the status + human message, not
+ * the endpoint URL: a single condition like "Dataset is not loaded" can
+ * be returned by several endpoints simultaneously, and the user should
+ * see it once, not once per endpoint that happened to be in flight.
  *
  * This interceptor is also the chokepoint for the connection circuit
  * breaker ({@link ConnectionStateService}): it feeds every outcome to the
@@ -112,7 +116,10 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         message: errorCtx.message,
         detail: errorCtx.detail,
         errorContext: errorCtx,
-        dedupKey: `http:${req.method}:${url}:${err.status}`,
+        // Dedup on status + message (not the endpoint URL): the same
+        // backend condition often surfaces from multiple endpoints at
+        // once, and the user wants one toast for it, not one per URL.
+        dedupKey: `http:${err.status}:${errorCtx.message}`,
       });
       return throwError(() => err);
     }),

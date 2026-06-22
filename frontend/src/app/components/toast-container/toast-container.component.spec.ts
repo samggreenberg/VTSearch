@@ -50,4 +50,27 @@ describe('ToastContainerComponent', () => {
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.toast')).toBeNull();
   });
+
+  it('shows a Dismiss-all control only when more than one toast is stacked', async () => {
+    toast.error({ message: 'First' });
+    await settleZoneless(fixture);
+    expect(fixture.nativeElement.querySelector('.toast-stack__dismiss-all')).toBeNull();
+
+    toast.error({ message: 'Second' });
+    await settleZoneless(fixture);
+    const btn = fixture.nativeElement.querySelector('.toast-stack__dismiss-all');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toContain('Dismiss all (2)');
+  });
+
+  it('clears the whole stack when Dismiss all is clicked', async () => {
+    toast.error({ message: 'First' });
+    toast.error({ message: 'Second' });
+    await settleZoneless(fixture);
+    expect(fixture.nativeElement.querySelectorAll('.toast').length).toBe(2);
+
+    fixture.nativeElement.querySelector('.toast-stack__dismiss-all').click();
+    await settleZoneless(fixture);
+    expect(fixture.nativeElement.querySelectorAll('.toast').length).toBe(0);
+  });
 });
