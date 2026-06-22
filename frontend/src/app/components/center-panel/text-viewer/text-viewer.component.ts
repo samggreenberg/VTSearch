@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, SimpleChanges, inject } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, SimpleChanges, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MediasApiService } from '../../../services/medias-api.service';
 import { Media } from '../../../models/api.models';
@@ -14,7 +14,9 @@ export class TextViewerComponent implements OnChanges, OnDestroy {
 
   @Input() media!: Media;
 
-  text = 'Loading...';
+  // Signal so the HTTP response (written from a `.subscribe()` callback, which is
+  // not on the zoneless CD-notification path) repaints the view.
+  readonly text = signal('Loading...');
   private sub: Subscription | null = null;
   // See ImageViewerComponent.lastMediaId; avoid re-fetching the text payload
   // every time the metadata cache hydrates a new reference for the same id.
@@ -33,13 +35,13 @@ export class TextViewerComponent implements OnChanges, OnDestroy {
 
   private loadText(): void {
     this.sub?.unsubscribe();
-    this.text = 'Loading...';
+    this.text.set('Loading...');
     this.sub = this.mediasApi.getText(this.media.id).subscribe({
       next: (data) => {
-        this.text = data.content || '';
+        this.text.set(data.content || '');
       },
       error: () => {
-        this.text = 'Error loading text content.';
+        this.text.set('Error loading text content.');
       },
     });
   }
