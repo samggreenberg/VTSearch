@@ -313,7 +313,7 @@ class TestCliScoringNegativeHits:
         from vtsearch.state import medias
 
         first_cid = next(iter(medias))
-        emb = np.asarray(medias[first_cid]["embedding"], dtype=np.float32)
+        emb = np.asarray(media_embedding(medias[first_cid]), dtype=np.float32)
         dim = int(emb.shape[-1])
 
         # Stub the matrix builder so it claims 2 ids but only 1 row of
@@ -349,7 +349,7 @@ class TestCliScoringNegativeHits:
         snap = snapshot_medias()
         good_ids = [1, 2, 3]
         bad_ids = [18, 19, 20]
-        X = [snap[i]["embedding"] for i in good_ids + bad_ids]
+        X = [media_embedding(snap[i]) for i in good_ids + bad_ids]
         y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
         mlp, threshold = train_and_threshold(X, y, snap=snap)
         # Round-trip through serialize_weights to mirror the production path.
@@ -383,7 +383,7 @@ class TestCliScoringNegativeHits:
         snap = snapshot_medias()
         good_ids = [1, 2, 3]
         bad_ids = [18, 19, 20]
-        X = [snap[i]["embedding"] for i in good_ids + bad_ids]
+        X = [media_embedding(snap[i]) for i in good_ids + bad_ids]
         y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
         mlp, threshold = train_and_threshold(X, y, snap=snap)
 
@@ -415,7 +415,7 @@ class TestCliScoringNegativeHits:
         snap = snapshot_medias()
         good_ids = [1, 2, 3]
         bad_ids = [18, 19, 20]
-        X = [snap[i]["embedding"] for i in good_ids + bad_ids]
+        X = [media_embedding(snap[i]) for i in good_ids + bad_ids]
         y = [1.0] * len(good_ids) + [0.0] * len(bad_ids)
         mlp, threshold = train_and_threshold(X, y, snap=snap)
 

@@ -41,13 +41,13 @@ def _fake_embedder(name: str, dim: int = 3):
 
 class TestOrderedLoadEmbedders:
     def test_fresh_create_uses_requested_only(self):
-        medias = {1: {"media_type": "audio", "embedding": None}}
+        medias = {1: {"media_type": "audio", "embeddings": {}}}
         assert _ordered_load_embedders(medias, "siglip") == ["siglip"]
 
     def test_fresh_create_no_pick_falls_back_to_blank(self):
         # No embedder anywhere → [""], which lets embed_missing resolve the
         # media-type default (single-embedder create path, unchanged).
-        medias = {1: {"media_type": "audio", "embedding": None}}
+        medias = {1: {"media_type": "audio", "embeddings": {}}}
         assert _ordered_load_embedders(medias, "") == [""]
 
     def test_reload_runs_present_embedders(self):
@@ -76,14 +76,14 @@ class TestSecondEmbedderPass:
         patch_emb = _fake_embedder("emb_patch")
         by_name = {"emb_text": text_emb, "emb_patch": patch_emb}
 
-        medias = {i: {"media_type": "audio", "embedding": None, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
+        medias = {i: {"media_type": "audio", "embeddings": {}, "media_path": f"/tmp/{i}.wav"} for i in range(1, 4)}
 
         with (
             mock.patch("vtscore.media.get_embedder", side_effect=lambda n: by_name[n]),
             mock.patch("vtscore.media.embedders_for_type", return_value=[text_emb]),
         ):
             embed_missing(medias, "emb_text")
-            # Singular mirror + first key now belong to emb_text.
+            # Primary + first key now belong to emb_text.
             for m in medias.values():
                 assert m["embedder"] == "emb_text"
                 assert "emb_text" in m["embeddings"]

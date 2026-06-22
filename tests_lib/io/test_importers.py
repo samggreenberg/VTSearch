@@ -951,7 +951,7 @@ class TestImporterBulkHooks:
         records = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
 
         def fetch_one(record, _fv, _thin):
-            return {"media_type": "audio", "filename": record["name"], "embedding": None}
+            return {"media_type": "audio", "filename": record["name"], "embeddings": {}}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
         medias: dict = {}
@@ -967,7 +967,7 @@ class TestImporterBulkHooks:
 
         def fetch_one(record, _fv, _thin):
             # fetch_record may omit origin / origin_name; run() fills them in.
-            return {"media_type": "audio", "filename": record["name"], "embedding": None}
+            return {"media_type": "audio", "filename": record["name"], "embeddings": {}}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
         medias: dict = {}
@@ -982,7 +982,7 @@ class TestImporterBulkHooks:
         def fetch_one(record, _fv, _thin):
             if record == "skip":
                 return None
-            return {"media_type": "audio", "filename": record, "embedding": None}
+            return {"media_type": "audio", "filename": record, "embeddings": {}}
 
         imp = self._make_importer(records=records, fetch_one=fetch_one)
         medias: dict = {}
@@ -998,7 +998,7 @@ class TestImporterBulkHooks:
 
         def fetch_one(record, _fv, _thin):
             seen.append(record)
-            return {"media_type": "audio", "filename": record, "embedding": None}
+            return {"media_type": "audio", "filename": record, "embeddings": {}}
 
         imp = self._make_importer(records=["x", "y"], fetch_one=fetch_one)
         out = imp.fetch_records_bulk(["x", "y"], {})
@@ -1014,11 +1014,11 @@ class TestImporterBulkHooks:
 
         def fetch_one(record, _fv, _thin):
             per_item_calls.append(record)
-            return {"media_type": "audio", "filename": record, "embedding": None}
+            return {"media_type": "audio", "filename": record, "embeddings": {}}
 
         def fetch_bulk(records, _fv, _thin):
             # Pretend we did one batched call.
-            return [{"media_type": "audio", "filename": f"bulk:{r}", "embedding": None} for r in records]
+            return [{"media_type": "audio", "filename": f"bulk:{r}", "embeddings": {}} for r in records]
 
         imp = self._make_importer(records=["a", "b"], fetch_one=fetch_one, fetch_bulk=fetch_bulk)
         medias: dict = {}
