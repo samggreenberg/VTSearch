@@ -160,31 +160,41 @@ class TestPersistenceRoundTrip:
             assert not np.allclose(ta, pa)
             np.testing.assert_allclose(np.linalg.norm(ta), 1.0, atol=1e-5)
 
-    def test_legacy_single_vector_pickle_has_no_dict(self, tmp_path):
-        # A media with only a singular vector writes no "embeddings" key; the
-        # embed stage's ensure_embeddings_dict materialises it later.
+    def test_legacy_single_vector_pickle_migrates_to_dict(self, tmp_path):
+        # A legacy on-disk pickle carries only the singular ``embedding`` +
+        # ``embedder`` name (the pre-v3 serialized form).  The loader re-keys it
+        # into the per-embedder ``embeddings`` dict on load; the live media has
+        # no singular ``embedding`` key afterward (Phase 2c — dict is the sole
+        # vector store).
+        import pickle
+
+        from vtscore.datasets.container import write_container
+
         rng = np.random.default_rng(7)
         v = rng.standard_normal(4).astype(np.float32)
-        media = {
+        legacy_entry = {
             "id": 1,
             "media_type": "text",
             "duration": 0,
             "file_size": 10,
             "md5": "m",
             "embedder": "solo",
-            "embedding": v,
+            "embedding": v,  # legacy singular form (serialized only)
             "media_string": "doc",
             "filename": "doc.txt",
             "category": "unknown",
         }
-        data = export_dataset_to_file({1: media}, embedder="solo", media_type="text", name="legacy")
         pkl = tmp_path / "legacy.pkl"
-        pkl.write_bytes(data)
+        write_container(pkl, pickle.dumps({"medias": {1: legacy_entry}}), {"format_version": 1})
 
         loaded: dict[int, dict] = {}
         load_dataset_from_pickle(pkl, loaded)
-        assert loaded[1].get("embeddings") is None
+        # The singular vector was re-keyed into the dict under its embedder name;
+        # the live media exposes no singular ``embedding`` key.
+        assert "embedding" not in loaded[1]
+        assert set(loaded[1]["embeddings"]) == {"solo"}
         assert media_embedder_names(loaded[1]) == ["solo"]
+        np.testing.assert_array_equal(media_embedding(loaded[1]), media_embedding(loaded[1], "solo"))
 
 
 def test_meta_records_binding_slots(tmp_path):

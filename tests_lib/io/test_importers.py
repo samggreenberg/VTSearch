@@ -21,6 +21,7 @@ import zipfile
 import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
+from vtscore.embedding.media_vectors import media_embedding, set_media_embedding
 
 
 # ---------------------------------------------------------------------------
@@ -1333,7 +1334,7 @@ class TestIngestSpecStreamMediaType:
 
         assert len(medias) == 2
         assert all(m["media_type"] == "image" for m in medias.values())
-        assert all(m.get("embedding") is None for m in medias.values())
+        assert all(media_embedding(m) is None for m in medias.values())
 
         fake_emb = mock.MagicMock()
         fake_emb.name = "fake_image_emb"
@@ -1348,7 +1349,7 @@ class TestIngestSpecStreamMediaType:
             embed_missing(medias)
 
         fake_emb.embed_media_bulk.assert_called_once()
-        assert all(m["embedding"] is not None for m in medias.values())
+        assert all(media_embedding(m) is not None for m in medias.values())
 
 
 # ---------------------------------------------------------------------------
@@ -1430,7 +1431,7 @@ class TestIngestSpecStreamRequiredFields:
         imp.run({"media_type": "image", "source_specs": source_specs}, medias)
 
         m = medias[1]
-        assert m.get("embedding") is None
+        assert media_embedding(m) is None
         assert m.get("embedder") == ""
         assert m.get("category") == "custom"
 
@@ -1580,7 +1581,7 @@ class TestConverterOutputEndToEnd:
         medias = self._run_v2i(monkeypatch, [{"filename": "clip.mp4", "media_bytes": b"VID"}])
 
         rng = np.random.default_rng(1)
-        medias[1]["embedding"] = rng.standard_normal(512).astype(np.float32)
+        set_media_embedding(medias[1], "siglip", rng.standard_normal(512).astype(np.float32))
 
         data = export_dataset_to_file(medias)  # must not raise
         assert len(data) > 0
@@ -1593,7 +1594,7 @@ class TestConverterOutputEndToEnd:
 
         medias = self._run_v2i(monkeypatch, [{"filename": "clip.mp4", "media_bytes": b"VID"}])
         rng = np.random.default_rng(2)
-        medias[1]["embedding"] = rng.standard_normal(512).astype(np.float32)
+        set_media_embedding(medias[1], "siglip", rng.standard_normal(512).astype(np.float32))
 
         assert "duration" in medias[1]
         export_dataset_to_file(medias)  # hard access on media["duration"] must not KeyError
@@ -1618,7 +1619,7 @@ class TestConverterOutputEndToEnd:
         )
 
         rng = np.random.default_rng(3)
-        medias[1]["embedding"] = rng.standard_normal(128).astype(np.float32)
+        set_media_embedding(medias[1], "siglip", rng.standard_normal(128).astype(np.float32))
 
         pkl_path = tmp_path / "frames.pkl"
         pkl_path.write_bytes(export_dataset_to_file(medias))
@@ -1633,8 +1634,9 @@ class TestConverterOutputEndToEnd:
         assert m["md5"] == hashlib.md5(png).hexdigest()
         assert m["duration"] == 0
         assert m["category"] == "custom"
-        assert m["embedder"] == ""
-        assert m["embedding"] is not None
+        # set_media_embedding stamped the embedder name when storing the vector.
+        assert m["embedder"] == "siglip"
+        assert media_embedding(m) is not None
 
     # ------------------------------------------------------------------
     # Multiple frames from one video
@@ -1655,7 +1657,7 @@ class TestConverterOutputEndToEnd:
 
         rng = np.random.default_rng(4)
         for m in medias.values():
-            m["embedding"] = rng.standard_normal(64).astype(np.float32)
+            set_media_embedding(m, "siglip", rng.standard_normal(64).astype(np.float32))
 
         export_dataset_to_file(medias)  # must not raise
 
@@ -1768,7 +1770,7 @@ class TestConverterOutputEndToEnd:
         )
 
         rng = np.random.default_rng(5)
-        medias[1]["embedding"] = rng.standard_normal(64).astype(np.float32)
+        set_media_embedding(medias[1], "e5", rng.standard_normal(64).astype(np.float32))
         export_dataset_to_file(medias)  # must not raise
 
     # ------------------------------------------------------------------
