@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DetectorCardComponent } from './detector-card.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('DetectorCardComponent', () => {
   let component: DetectorCardComponent;
@@ -18,16 +20,17 @@ describe('DetectorCardComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DetectorCardComponent],
+      providers: [...provideZoneless()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DetectorCardComponent);
     component = fixture.componentInstance;
-    component.detector = { ...mockDetector };
+    fixture.componentRef.setInput('detector', { ...mockDetector });
     // The card only renders middle columns listed in columnOrder; the
     // dashboard supplies this ordering. Provide a representative set so the
     // media-type and training-count cells render.
-    component.columnOrder = ['media_type', 'num_training', 'last_trained_at'];
-    fixture.detectChanges();
+    fixture.componentRef.setInput('columnOrder', ['media_type', 'num_training', 'last_trained_at']);
+    await settleZoneless(fixture);
   });
 
   it('should create', () => {
@@ -50,11 +53,11 @@ describe('DetectorCardComponent', () => {
     expect(el.textContent).toContain('50');
   });
 
-  it('should enter rename mode on rename button click', () => {
+  it('should enter rename mode on rename button click', async () => {
     const el = fixture.nativeElement as HTMLElement;
     const renameBtn = el.querySelector('.edit-btn') as HTMLElement;
     renameBtn.click();
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     expect(component.editing).toBe(true);
     expect(el.querySelector('.inline-edit')).toBeTruthy();
   });
@@ -63,9 +66,8 @@ describe('DetectorCardComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     const renameBtn = el.querySelector('.edit-btn') as HTMLElement;
     renameBtn.click();
-    fixture.detectChanges();
-    // Drain the focus setTimeout queued when editing mode opens.
-    await new Promise<void>((resolve) => setTimeout(resolve));
+    await settleZoneless(fixture);
+    await settleZoneless(fixture);
     const input = el.querySelector('.inline-edit') as HTMLInputElement;
     expect(document.activeElement).toBe(input);
   });
@@ -99,9 +101,9 @@ describe('DetectorCardComponent', () => {
     expect(component.formatDate(null)).toBe('-');
   });
 
-  it('should apply selected class via host binding', () => {
-    component.selected = true;
-    fixture.detectChanges();
+  it('should apply selected class via host binding', async () => {
+    fixture.componentRef.setInput('selected', true);
+    await settleZoneless(fixture);
     expect(fixture.nativeElement.classList.contains('selected')).toBe(true);
   });
 });

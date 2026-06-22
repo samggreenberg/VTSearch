@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MediaItemComponent } from './media-item.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { Media } from '../../../models/api.models';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('MediaItemComponent', () => {
   let component: MediaItemComponent;
@@ -18,13 +20,13 @@ describe('MediaItemComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MediaItemComponent],
-      providers: [ActiveContextService],
+      providers: [...provideZoneless(), ActiveContextService],
     }).compileComponents();
 
     fixture = TestBed.createComponent(MediaItemComponent);
     component = fixture.componentInstance;
-    component.media = mockMedia;
-    fixture.detectChanges();
+    fixture.componentRef.setInput('media', mockMedia);
+    await settleZoneless(fixture);
   });
 
   it('should create', () => {
@@ -51,21 +53,21 @@ describe('MediaItemComponent', () => {
     expect(component.select.emit).toHaveBeenCalledWith(1);
   });
 
-  it('should add active class when active', () => {
-    component.active = true;
-    fixture.detectChanges();
+  it('should add active class when active', async () => {
+    fixture.componentRef.setInput('active', true);
+    await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.media-item.active')).toBeTruthy();
   });
 
-  it('should add labeled-good class when vote is good', () => {
-    component.voteLabel = 'good';
-    fixture.detectChanges();
+  it('should add labeled-good class when vote is good', async () => {
+    fixture.componentRef.setInput('voteLabel', 'good');
+    await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.media-item.labeled-good')).toBeTruthy();
   });
 
-  it('should add labeled-bad class when vote is bad', () => {
-    component.voteLabel = 'bad';
-    fixture.detectChanges();
+  it('should add labeled-bad class when vote is bad', async () => {
+    fixture.componentRef.setInput('voteLabel', 'bad');
+    await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.media-item.labeled-bad')).toBeTruthy();
   });
 
@@ -99,15 +101,15 @@ describe('MediaItemComponent', () => {
     expect(component.thumbnailUrl).toBe('/api/medias/2/thumbnail');
   });
 
-  it('should show score when provided', () => {
-    component.score = 0.85;
-    fixture.detectChanges();
+  it('should show score when provided', async () => {
+    fixture.componentRef.setInput('score', 0.85);
+    await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.media-score')).toBeTruthy();
   });
 
-  it('should not show score when null', () => {
-    component.score = null;
-    fixture.detectChanges();
+  it('should not show score when null', async () => {
+    fixture.componentRef.setInput('score', null);
+    await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelector('.media-score')).toBeNull();
   });
 });

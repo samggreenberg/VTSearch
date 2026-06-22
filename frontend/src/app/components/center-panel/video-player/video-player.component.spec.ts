@@ -3,6 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { VideoPlayerComponent } from './video-player.component';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { Media } from '../../../models/api.models';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('VideoPlayerComponent', () => {
   let component: VideoPlayerComponent;
@@ -19,7 +21,7 @@ describe('VideoPlayerComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [VideoPlayerComponent],
-      providers: [ActiveContextService],
+      providers: [...provideZoneless(), ActiveContextService],
     }).compileComponents();
     fixture = TestBed.createComponent(VideoPlayerComponent);
     component = fixture.componentInstance;
@@ -37,10 +39,9 @@ describe('VideoPlayerComponent', () => {
     expect(component.videoSrc).toBe('/api/medias/3/video');
   });
 
-  it('should render video element', () => {
-    component.media = mockMedia;
-    component.videoSrc = '/api/medias/3/video';
-    fixture.detectChanges();
+  it('should render video element', async () => {
+    fixture.componentRef.setInput('media', mockMedia);
+    await settleZoneless(fixture);
     const video = fixture.nativeElement.querySelector('video');
     expect(video).toBeTruthy();
     expect(video.hasAttribute('controls')).toBe(true);

@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DatasetCardComponent } from './dataset-card.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('DatasetCardComponent', () => {
   let component: DatasetCardComponent;
@@ -18,16 +20,17 @@ describe('DatasetCardComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DatasetCardComponent],
+      providers: [...provideZoneless()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DatasetCardComponent);
     component = fixture.componentInstance;
-    component.dataset = { ...mockDataset };
+    fixture.componentRef.setInput('dataset', { ...mockDataset });
     // The card only renders middle columns listed in columnOrder; the
     // dashboard supplies this ordering. Provide a representative set so the
     // media-type and item-count cells render.
-    component.columnOrder = ['media_type', 'num_items', 'created_at'];
-    fixture.detectChanges();
+    fixture.componentRef.setInput('columnOrder', ['media_type', 'num_items', 'created_at']);
+    await settleZoneless(fixture);
   });
 
   it('should create', () => {
@@ -55,18 +58,18 @@ describe('DatasetCardComponent', () => {
     expect(el.querySelector('.load-btn')).toBeFalsy();
   });
 
-  it('should show the load button when not loaded', () => {
-    component.dataset = { ...mockDataset, loaded: false };
-    fixture.detectChanges();
+  it('should show the load button when not loaded', async () => {
+    fixture.componentRef.setInput('dataset', { ...mockDataset, loaded: false });
+    await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.load-btn')).toBeTruthy();
   });
 
-  it('should enter rename mode on rename button click', () => {
+  it('should enter rename mode on rename button click', async () => {
     const el = fixture.nativeElement as HTMLElement;
     const renameBtn = el.querySelector('.edit-btn') as HTMLElement;
     renameBtn.click();
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     expect(component.editing).toBe(true);
     expect(component.editName).toBe('Test Dataset');
     expect(el.querySelector('.inline-edit')).toBeTruthy();
@@ -76,9 +79,10 @@ describe('DatasetCardComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     const renameBtn = el.querySelector('.edit-btn') as HTMLElement;
     renameBtn.click();
-    fixture.detectChanges();
-    // Drain the focus setTimeout queued when editing mode opens.
-    await new Promise<void>((resolve) => setTimeout(resolve));
+    // Settle renders the .inline-edit input; the focus setTimeout queued in
+    // beginRename() then runs against the live element.
+    await settleZoneless(fixture);
+    await settleZoneless(fixture);
     const input = el.querySelector('.inline-edit') as HTMLInputElement;
     expect(document.activeElement).toBe(input);
   });
@@ -126,9 +130,9 @@ describe('DatasetCardComponent', () => {
     expect(component.browse.emit).toHaveBeenCalled();
   });
 
-  it('should emit browse for non-audio datasets too', () => {
-    component.dataset = { ...mockDataset, media_type: 'image' };
-    fixture.detectChanges();
+  it('should emit browse for non-audio datasets too', async () => {
+    fixture.componentRef.setInput('dataset', { ...mockDataset, media_type: 'image' });
+    await settleZoneless(fixture);
     vi.spyOn(component.browse, 'emit');
     const el = fixture.nativeElement as HTMLElement;
     const browseBtn = el.querySelector('.browse-btn') as HTMLButtonElement;
@@ -143,9 +147,9 @@ describe('DatasetCardComponent', () => {
     expect(component.formatDate(0)).toBe('-');
   });
 
-  it('should apply selected class via host binding', () => {
-    component.selected = true;
-    fixture.detectChanges();
+  it('should apply selected class via host binding', async () => {
+    fixture.componentRef.setInput('selected', true);
+    await settleZoneless(fixture);
     expect(fixture.nativeElement.classList.contains('selected')).toBe(true);
   });
 });

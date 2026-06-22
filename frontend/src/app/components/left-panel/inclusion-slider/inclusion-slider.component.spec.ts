@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { InclusionSliderComponent } from './inclusion-slider.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('InclusionSliderComponent', () => {
   let component: InclusionSliderComponent;
@@ -8,11 +10,12 @@ describe('InclusionSliderComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [InclusionSliderComponent],
+      providers: [...provideZoneless()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(InclusionSliderComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    await settleZoneless(fixture);
   });
 
   it('should create', () => {

@@ -847,13 +847,39 @@ unrelated to zoneless — see Open follow-ups.
     from the zoneless work.
   - **Migrate the remaining specs to the zoneless `TestBed`** + DOM-after-
     `whenStable()` assertions and delete the manual `fixture.detectChanges()`
-    pumps (still ~188 across ~39 files). The conversions are compile-verified and
-    a handful of canaries exist, but most specs still run on the default (zoned)
-    TestBed with `detectChanges`, so they are not yet staleness oracles. (Heavy
-    containers — left-panel, dashboard, right-panel, app — deadlock `whenStable()`
-    via their child rxResources; those need stubbed/lightweight harnesses.)
-    **This is now also the last blocker on removing `zone.js` entirely:** those
-    ~36 fixture-creating specs need `NgZone` from the default TestBed, so the test
+    pumps. **In progress — the tractable leaf/modal/list specs are DONE (22 spec
+    files migrated in one pass).** Migrated to `provideZoneless()` +
+    `settleZoneless()`/`setInput()`/`TestBed.tick()` (no manual `detectChanges`):
+    `progress-bar`, `select-mode`, `inclusion-slider`, `stripe-overview`,
+    `label-sort`, `media-item`, `audio-player`, `video-player`, `text-viewer`,
+    `progress-indicators`, `detector-context-bar`, `modal`, `sort-bar`,
+    `autopilot-panel`, `dataset-card`, `detector-card`, `load-sort-modal`,
+    `autodetect-results-modal`, `autodetect-progress-modal`, `settings-modal`,
+    `export-modal`, `progress-modal`, `new-detector-modal`, `examples-editor-modal`,
+    `combine-datasets-modal`, `dataset-importer-modal`, `label-list`. Pattern notes:
+    drive `@Input`/signal inputs through `componentRef.setInput()` (a CD trigger,
+    so a plain field write on a top-level fixture host won't schedule CD — the
+    `modal` host uses signals); plain `ngOnInit` HTTP subscribes don't block
+    `whenStable()` so `settleZoneless()` works, but **rxResource-backed init must
+    use `TestBed.tick()` + `settleResource()`** (a loading resource holds the app
+    unstable and deadlocks `whenStable()`). This pass also surfaced and **fixed
+    five real zoneless staleness bugs** the oracle exposed — plain fields written
+    from HTTP `.subscribe()` callbacks yet read in the template, now signals
+    (Recipe B): `text-viewer.text`, `autodetect-results-modal`
+    (`exporters`/`selectedExporter`/`exporterFields`), `examples-editor-modal`
+    (`examples`/`loading`/`saving`), `combine-datasets-modal`
+    (`mediaTypes`/`submitting`/`error`), and `label-list.sortedEntries` (rebuilt
+    from the `metadataCache.version$` subscribe).
+    **Still remaining (the hard classes, untouched):**
+    - **Contract specs** deliberately kept on the default TestBed (paired with a
+      `.zoneless.spec.ts` canary): `label-view.component` (16),
+      `center-panel.component` (10), `image-viewer.component` (1).
+    - **Heavy containers** that deadlock `whenStable()` via their child
+      rxResources and need stubbed/lightweight harnesses: `app.component` (10),
+      `right-panel.component` (8), `left-panel.component` (7), `media-list` (5),
+      `dashboard.component` (3).
+    **This is also the last blocker on removing `zone.js` entirely:** those
+    fixture-creating specs need `NgZone` from the default TestBed, so the test
     polyfills cannot drop base `zone.js` until they move to the zoneless TestBed.
   - **Drop the `vitest-patch` bridge. ✅ DONE.** Converted all 43 fakeAsync
     occurrences (11 files) to native `async` + Vitest fake timers and removed

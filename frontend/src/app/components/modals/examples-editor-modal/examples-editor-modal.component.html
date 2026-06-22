@@ -1,12 +1,12 @@
 <vt-modal title="Edit Examples" [open]="true" (closed)="close()">
-  @if (loading) {
+  @if (loading()) {
     <p class="empty-state">Loading examples...</p>
   } @else {
     <div class="examples-sections">
       <div class="examples-section">
         <h3>Good Examples ({{ goodExamples.length }})</h3>
         <div class="examples-grid">
-          @for (ex of examples; track $index; let i = $index) {
+          @for (ex of examples(); track $index; let i = $index) {
             @if (ex.type === 'good') {
               <div class="example-card">
                 <span class="example-label">{{ ex.label || 'Example ' + (i + 1) }}</span>
@@ -24,7 +24,7 @@
       <div class="examples-section">
         <h3>Bad Examples ({{ badExamples.length }})</h3>
         <div class="examples-grid">
-          @for (ex of examples; track $index; let i = $index) {
+          @for (ex of examples(); track $index; let i = $index) {
             @if (ex.type === 'bad') {
               <div class="example-card">
                 <span class="example-label">{{ ex.label || 'Example ' + (i + 1) }}</span>
@@ -50,8 +50,8 @@
 
   <div class="editor-actions" modal-footer>
     <button class="btn btn--secondary" (click)="close()">Cancel</button>
-    <button class="btn btn--primary" (click)="save()" [disabled]="saving">
-      {{ saving ? 'Saving...' : 'Save' }}
+    <button class="btn btn--primary" (click)="save()" [disabled]="saving()">
+      {{ saving() ? 'Saving...' : 'Save' }}
     </button>
   </div>
 </vt-modal>

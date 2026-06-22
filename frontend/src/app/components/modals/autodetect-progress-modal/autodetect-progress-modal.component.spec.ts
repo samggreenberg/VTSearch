@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AutoDetectProgressModalComponent } from './autodetect-progress-modal.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('AutoDetectProgressModalComponent', () => {
   let component: AutoDetectProgressModalComponent;
@@ -8,21 +10,22 @@ describe('AutoDetectProgressModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AutoDetectProgressModalComponent],
+      providers: [...provideZoneless()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AutoDetectProgressModalComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    await settleZoneless(fixture);
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should display progress percentage', () => {
-    component.progress = 75;
-    component.statusText = 'Running detector 2 of 3...';
-    fixture.detectChanges();
+  it('should display progress percentage', async () => {
+    fixture.componentRef.setInput('progress', 75);
+    fixture.componentRef.setInput('statusText', 'Running detector 2 of 3...');
+    await settleZoneless(fixture);
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('75%');
     expect(el.textContent).toContain('Running detector 2 of 3');

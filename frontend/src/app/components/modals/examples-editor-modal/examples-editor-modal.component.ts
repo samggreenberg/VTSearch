@@ -23,67 +23,65 @@ export class ExamplesEditorModalComponent implements OnInit, OnDestroy {
   readonly closed = output<void>();
   readonly saved = output<void>();
 
-  examples: Example[] = [];
-  loading = true;
-  saving = false;
-  // Written from the load/save subscribes (async); template-bound.
+  // Signals: all written from the load/save subscribes (async, not a zoneless CD
+  // trigger) and read in the template, so they must repaint on emit.
+  readonly examples = signal<Example[]>([]);
+  readonly loading = signal(true);
+  readonly saving = signal(false);
   readonly error = signal('');
   readonly status = signal('');
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
     if (!this.modelName) {
-      this.loading = false;
+      this.loading.set(false);
       return;
     }
     this.detectorsCrudApi.get(this.modelName).subscribe({
       next: (data: any) => {
-        this.examples = data.examples || [];
-        this.loading = false;
+        this.examples.set(data.examples || []);
+        this.loading.set(false);
       },
       error: () => {
-        this.loading = false;
+        this.loading.set(false);
         this.error.set('Failed to load examples');
       },
     });
   }
 
   get goodExamples(): Example[] {
-    return this.examples.filter((e) => e.type === 'good');
+    return this.examples().filter((e) => e.type === 'good');
   }
 
   get badExamples(): Example[] {
-    return this.examples.filter((e) => e.type === 'bad');
+    return this.examples().filter((e) => e.type === 'bad');
   }
 
   removeExample(index: number): void {
-    this.examples.splice(index, 1);
+    this.examples.update((list) => list.filter((_, i) => i !== index));
   }
 
   onFileSelected(event: Event, type: 'good' | 'bad'): void {
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
     const file = input.files[0];
-    this.examples.push({
-      type,
-      label: file.name,
-    });
+    this.examples.update((list) => [...list, { type, label: file.name }]);
     input.value = '';
   }
 
   save(): void {
-    this.saving = true;
+    this.saving.set(true);
     this.error.set('');
     this.status.set('');
-    this.detectorsCrudApi.setExamples(this.modelName, this.examples).subscribe({
+    this.detectorsCrudApi.setExamples(this.modelName, this.examples()).subscribe({
       next: () => {
-        this.saving = false;
+        this.saving.set(false);
         this.status.set('Saved.');
         this.saved.emit();
         this.closeTimer = setTimeout(() => this.close(), 600);
       },
       error: (err) => {
-        this.saving = false;
+        this.saving.set(false);
         this.error.set(err.error?.error || 'Failed to save');
       },
     });

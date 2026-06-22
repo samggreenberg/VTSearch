@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SelectModeComponent } from './select-mode.component';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('SelectModeComponent', () => {
   let component: SelectModeComponent;
@@ -8,11 +10,12 @@ describe('SelectModeComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SelectModeComponent],
+      providers: [...provideZoneless()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SelectModeComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    await settleZoneless(fixture);
   });
 
   it('should create', () => {
@@ -34,9 +37,9 @@ describe('SelectModeComponent', () => {
     expect(component.selectModeChange.emit).toHaveBeenCalledWith('hard');
   });
 
-  it('should mark active radio with active class', () => {
-    component.selectMode = 'hard';
-    fixture.detectChanges();
+  it('should mark active radio with active class', async () => {
+    fixture.componentRef.setInput('selectMode', 'hard');
+    await settleZoneless(fixture);
     const labels = fixture.nativeElement.querySelectorAll('.sort-radio');
     expect(labels[1].classList.contains('active')).toBe(true);
   });

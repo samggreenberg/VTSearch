@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AutopilotPanelComponent } from './autopilot-panel.component';
 import { AutopilotStateService } from '../../../services/autopilot-state.service';
+import { provideZoneless } from '../../../testing/zoneless-testbed';
+import { settleZoneless } from '../../../testing/settle-resource';
 
 describe('AutopilotPanelComponent', () => {
   let component: AutopilotPanelComponent;
@@ -10,12 +12,13 @@ describe('AutopilotPanelComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AutopilotPanelComponent],
+      providers: [...provideZoneless()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AutopilotPanelComponent);
     component = fixture.componentInstance;
     autopilotState = TestBed.inject(AutopilotStateService);
-    fixture.detectChanges();
+    await settleZoneless(fixture);
   });
 
   afterEach(() => {
@@ -31,12 +34,12 @@ describe('AutopilotPanelComponent', () => {
     expect(component.running).toBe(true);
   });
 
-  it('should emit started on init', () => {
+  it('should emit started on init', async () => {
     autopilotState.clear();
     const fresh = TestBed.createComponent(AutopilotPanelComponent);
     const comp = fresh.componentInstance;
     vi.spyOn(comp.started, 'emit');
-    fresh.detectChanges();
+    await settleZoneless(fresh);
     expect(comp.started.emit).toHaveBeenCalled();
   });
 
@@ -166,7 +169,6 @@ describe('AutopilotPanelComponent', () => {
     autopilotState.checkPhaseTransition(10, 10);
     expect(component.state.phase).toBe('new');
 
-    fixture.detectChanges();
     const steps = component.steps;
     const newStep = steps.find((s: any) => s.phase === 'new');
     // The diversity (new) phase runs after smart + stable are already green,
@@ -243,9 +245,9 @@ describe('AutopilotPanelComponent', () => {
     expect(stepLabels[3].title).toContain('Diversity exploration');
   });
 
-  it('should show phase intent tooltip on each collapsed-step dot', () => {
+  it('should show phase intent tooltip on each collapsed-step dot', async () => {
     fixture.componentRef.setInput('collapsed', true);
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     const dots = fixture.nativeElement.querySelectorAll('.collapsed-step');
     expect(dots.length).toBe(5);
     expect(dots[0].title).toContain('Phase 1');
@@ -256,32 +258,32 @@ describe('AutopilotPanelComponent', () => {
     expect(dots[2].title).toContain('uncertain items');
   });
 
-  it('should emit refocus when clicking the active step', () => {
+  it('should emit refocus when clicking the active step', async () => {
     vi.spyOn(component.refocus, 'emit');
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     const activeStep = fixture.nativeElement.querySelector('.ap-step.active');
     activeStep.click();
     expect(component.refocus.emit).toHaveBeenCalled();
   });
 
-  it('should not emit refocus when clicking a future step', () => {
+  it('should not emit refocus when clicking a future step', async () => {
     vi.spyOn(component.refocus, 'emit');
-    fixture.detectChanges();
+    await settleZoneless(fixture);
     const futureSteps = fixture.nativeElement.querySelectorAll('.ap-step.future');
     futureSteps[0].click();
     expect(component.refocus.emit).not.toHaveBeenCalled();
   });
 
-  it('activate without labelset labels should not enter retrain mode', () => {
+  it('activate without labelset labels should not enter retrain mode', async () => {
     autopilotState.clear();
     const fresh = TestBed.createComponent(AutopilotPanelComponent);
     fresh.componentInstance.labelsetGoodCount = 0;
     fresh.componentInstance.labelsetBadCount = 0;
-    fresh.detectChanges();
+    await settleZoneless(fresh);
     expect(fresh.componentInstance.state.retrainMode).toBe(false);
   });
 
-  it('activate with detector labels from another dataset should enter retrain mode', () => {
+  it('activate with detector labels from another dataset should enter retrain mode', async () => {
     autopilotState.clear();
     const fresh = TestBed.createComponent(AutopilotPanelComponent);
     // Simulate "trained on DatasetA, switched to DatasetB with 0 votes here":
@@ -290,7 +292,7 @@ describe('AutopilotPanelComponent', () => {
     fresh.componentInstance.labelsetBadCount = 4;
     fresh.componentInstance.goodVotes = new Set();
     fresh.componentInstance.badVotes = new Set();
-    fresh.detectChanges();
+    await settleZoneless(fresh);
     expect(fresh.componentInstance.state.retrainMode).toBe(true);
     // Still in 'good' phase since current-dataset votes are below threshold.
     expect(fresh.componentInstance.state.phase).toBe('good');
