@@ -395,11 +395,21 @@ class TestEvalLearnedSort:
         media_id = 1
         for _ in range(n_per_cat):
             emb = rng.normal(1.0, 0.3, dim).astype(np.float32)
-            medias[media_id] = {"id": media_id, "embeddings": {"siglip": emb}, "category": "cat_a", "media_type": "image"}
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": emb},
+                "category": "cat_a",
+                "media_type": "image",
+            }
             media_id += 1
         for _ in range(n_per_cat):
             emb = rng.normal(-1.0, 0.3, dim).astype(np.float32)
-            medias[media_id] = {"id": media_id, "embeddings": {"siglip": emb}, "category": "cat_b", "media_type": "image"}
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"siglip": emb},
+                "category": "cat_b",
+                "media_type": "image",
+            }
             media_id += 1
         return medias
 
@@ -425,8 +435,18 @@ class TestEvalLearnedSort:
     def test_learned_sort_skips_tiny_categories(self):
         """Categories with < 2 medias should be skipped."""
         medias = {
-            1: {"id": 1, "embeddings": {"siglip": np.ones(8, dtype=np.float32)}, "category": "rare", "media_type": "image"},
-            2: {"id": 2, "embeddings": {"siglip": -np.ones(8, dtype=np.float32)}, "category": "common", "media_type": "image"},
+            1: {
+                "id": 1,
+                "embeddings": {"siglip": np.ones(8, dtype=np.float32)},
+                "category": "rare",
+                "media_type": "image",
+            },
+            2: {
+                "id": 2,
+                "embeddings": {"siglip": -np.ones(8, dtype=np.float32)},
+                "category": "common",
+                "media_type": "image",
+            },
         }
         queries = [EvalQuery("rare stuff", "rare")]
         results = eval_learned_sort(medias, queries, train_fraction=0.5)
