@@ -108,13 +108,16 @@ describe('DatasetStateService', () => {
   });
 
   it('refresh should record error on registry fetch failure and clear on retry success', () => {
+    // `error` is signal-backed; sample it after each step (the `error$`
+    // `toObservable` bridge emits asynchronously, so polling the synchronous
+    // getter is the deterministic way to capture the state transitions).
     const errors: (string | null)[] = [];
-    service.error$.subscribe((e) => errors.push(e));
 
     service.refresh();
     // forkJoin cancels the sibling detectors request when datasets errors.
     httpMock.expectOne('/api/detectors/registry');
     httpMock.expectOne('/api/datasets/registry').error(new ProgressEvent('Network error'));
+    errors.push(service.error);
     expect(service.error).toBe("Couldn't load datasets and detectors.");
 
     // A second refresh after the failure should still work; the
@@ -122,9 +125,10 @@ describe('DatasetStateService', () => {
     service.refresh();
     httpMock.expectOne('/api/datasets/registry').flush({ datasets: [{ id: '1', name: 'ok' }] });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+    errors.push(service.error);
     expect(service.datasets.length).toBe(1);
     expect(service.error).toBeNull();
-    // Sanity: we saw both error and success emissions.
+    // Sanity: we saw both the error and the cleared (success) state.
     expect(errors).toContain("Couldn't load datasets and detectors.");
     expect(errors[errors.length - 1]).toBeNull();
   });
