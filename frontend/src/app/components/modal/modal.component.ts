@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, Input, input, output } from '@angular/core';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,8 +23,17 @@ export class ModalComponent {
     this.closed.emit();
   }
 
-  onKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
+  /**
+   * Close on Escape. Listening on `document` (not the backdrop) is required
+   * because opening a modal from a button leaves focus on that button, so a
+   * `(keydown)` bound to the never-focused backdrop never fired — Esc did
+   * nothing until the user clicked into the modal. The `open()` guard ensures
+   * only a currently-open modal reacts. Mirrors the `context-menu` /
+   * `browse-bin-popup` `document:keydown.escape` pattern.
+   */
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.open()) {
       this.close();
     }
   }

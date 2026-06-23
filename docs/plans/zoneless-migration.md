@@ -12,12 +12,29 @@ migrated to the zoneless `TestBed`, so `zone.js` is now dropped end to end** —
 (it remains only as `@angular/core`'s optional peer, never bundled or loaded). The
 final 14 specs (9 fixture-creating contract/container specs + 5 service/guard
 specs that transitively inject NgZone services) now run under
-`provideZonelessChangeDetection()`. `./run-tests.sh frontend` is green (858 tests,
-0 errors). The only remaining (optional) Phase 5 item is explicit
-`ChangeDetectionStrategy.OnPush` annotations (documentation/intent only). One
-unrelated pre-existing bug surfaced during QA — `vt-modal` only closes on `Esc`
-when focus is inside it (the `(keydown)` Esc handler lives on the never-focused
-`.modal-backdrop`); tracked under "Open follow-ups", not a zoneless regression.**
+`provideZonelessChangeDetection()`. `./run-tests.sh frontend` is green (860 tests,
+0 errors).
+
+**Phase 5 is now fully shipped, including the last two items:**
+- **Explicit `ChangeDetectionStrategy.OnPush` on all 86 components. ✅ DONE.**
+  This turned out *not* to be documentation-only: it exposed that two hot
+  services were still `BehaviorSubject`-backed and read non-reactively in the
+  dashboard template (`DatasetStateService` → `datasets`/`loading`/`loaded`/…;
+  `DashboardLoadingTasksService` → `loadingTasks`/`orphanLoadingTasks`/
+  `inlineTaskMap`). Under the old default (CheckAlways) strategy they got "free"
+  repaints on any CD pass; under OnPush the host only re-checks when dirtied, so
+  both services were signalized (Recipe B: private `signal` + value-returning
+  getter that is *tracked* when read in templates, mirroring the Phase-2.5
+  SortState/VoteState pattern). `DatasetStateService` keeps its `$` observables as
+  `toObservable` bridges so the RxJS consumers (context-pulldown, app.component,
+  active-context-watcher, the route guards) are unchanged; `toObservable` emits
+  on the next CD pass rather than synchronously, so four spec files were updated
+  to `TestBed.tick()` past the bridge. `DashboardLoadingTasksService`'s unused
+  `$` observables were dropped.
+- **`vt-modal` `Esc`-to-close fixed. ✅ DONE.** Replaced the never-firing
+  backdrop-scoped `(keydown)` with `@HostListener('document:keydown.escape')`
+  (guarded by `open()`), mirroring the `context-menu` / `browse-bin-popup`
+  pattern, so Esc closes a button-opened modal regardless of focus.**
 
 Detailed history: **Phase 0 shipped (test harness); Phase 1 complete — 1.1 + 1.3 + 1.4
 (ProgressEventsService SSE pump + ConnectionStateService + BrowseSelectionService
@@ -846,10 +863,23 @@ unrelated to zoneless — see Open follow-ups.
     *global* drain in `test-setup.ts` was tried first but rejected: it let a
     pending autoDetect re-check teardown-state leaf components (audio/video-player
     with `media` undefined) and crash their templates.
-- Adopt `ChangeDetectionStrategy.OnPush` explicitly on components for clarity
-  (under zoneless they already behave OnPush-like; this is documentation/intent,
-  not a functional change). **Still optional / not done** — the only remaining
-  Phase 5 item.
+- Adopt `ChangeDetectionStrategy.OnPush` explicitly on components. **✅ DONE —
+  all 86 components.** Expected to be documentation/intent, but it surfaced a
+  real gap: components reading a *non-signal* `BehaviorSubject` service getter
+  directly in their template (the dashboard ↔ `DatasetStateService` /
+  `DashboardLoadingTasksService`) relied on the default CheckAlways strategy for
+  "free" repaints. Under OnPush the host only re-checks when dirtied, so those
+  two services were signalized (Recipe B; private `signal` + value-returning
+  getter, which is tracked when read during template evaluation — the same
+  getter-signal trick proven for SortState/VoteState in Phase 2.5). The blanket
+  add was mechanical (`changeDetection: ChangeDetectionStrategy.OnPush` as the
+  first `@Component` property + the `@angular/core` import). `DatasetStateService`
+  retained its `$` observables as `toObservable` bridges (RxJS consumers
+  unchanged); since `toObservable` emits on the next CD pass rather than
+  synchronously like a `BehaviorSubject`, the dashboard / active-context-watcher /
+  active-context-guard / dataset-state service specs gained `TestBed.tick()`
+  calls past the bridge. Full suite green (`./run-tests.sh` 5026 passed;
+  `./run-tests.sh frontend` 860 tests).
 
 ### Open follow-ups
 
@@ -871,18 +901,19 @@ unrelated to zoneless — see Open follow-ups.
     CD on their own. The `NgZone` injection **stays** in both — still used by the
     `runOutsideAngular` perf wrappers, which are kept. `build:prod` clean (initial
     489.34 kB < 500 kB budget); full Vitest suite green (854 passed / 91 files).
-  - **`vt-modal` `Esc`-to-close is focus-scoped (pre-existing, NOT zoneless).**
-    Surfaced during Phase 4 QA: opening any `vt-modal` from a button leaves focus
-    on that button, and the modal's `Esc` handler is a plain `(keydown)` on the
-    `.modal-backdrop` div (`modal/modal.component.html`), which is never
-    programmatically focused on open (it has `tabindex="-1"` but no autofocus). So
-    `Esc` does nothing until the user clicks/tabs into the modal — even though the
-    keyboard-help sheet advertises "Esc — Close modal or dropdown". Affects all
-    button-opened modals (settings, stats, help, …). It is a focus/event-routing
-    bug, independent of change detection (`(keydown)` is a bound listener). Fix
-    option: focus the backdrop (or first focusable) on open, or move the handler
-    to `@HostListener('document:keydown.escape')` on `ModalComponent`. Separable
-    from the zoneless work.
+  - **`vt-modal` `Esc`-to-close is focus-scoped (pre-existing, NOT zoneless).
+    ✅ FIXED.** Surfaced during Phase 4 QA: opening any `vt-modal` from a button
+    leaves focus on that button, and the modal's `Esc` handler was a plain
+    `(keydown)` on the `.modal-backdrop` div, which is never programmatically
+    focused on open — so `Esc` did nothing until the user clicked/tabbed into the
+    modal. Fixed by moving the handler to `@HostListener('document:keydown.escape')`
+    on `ModalComponent` (guarded by `open()`), mirroring the existing
+    `context-menu` / `browse-bin-popup` `document:keydown.escape` pattern; the
+    backdrop `(keydown)` was removed so it can't double-emit `closed`. The
+    focus-the-backdrop alternative was rejected because several modals use
+    `autofocus` / programmatic input focus that it would fight. Two regression
+    canaries added to `modal.component.spec.ts` (Esc dispatched at `document`
+    level closes an open modal; Esc is inert when closed).
   - **Migrate the remaining specs to the zoneless `TestBed`** + DOM-after-
     `whenStable()` assertions and delete the manual `fixture.detectChanges()`
     pumps. **✅ DONE — all fixture-creating specs now run under the zoneless
