@@ -1,4 +1,4 @@
-import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, Input, input, OnDestroy, OnInit, output, ViewChild } from '@angular/core';
 
 import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
@@ -17,6 +17,7 @@ import type { EvalTrainAndScoreResponse } from '../../../generated/api-client/mo
 export type ProgressMetric = 'smart' | 'stable' | 'diverse';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-progress-modal',
   standalone: true,
   imports: [ModalComponent, ProgressBarComponent],

@@ -1,8 +1,9 @@
-import { Component, ElementRef, Input, ViewChild, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Input, output, ViewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-detector-context-bar',
   standalone: true,
   imports: [FormsModule],

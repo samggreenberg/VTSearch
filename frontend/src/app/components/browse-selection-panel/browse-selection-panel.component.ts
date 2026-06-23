@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -35,6 +35,7 @@ interface SelectionEntry {
  * stays in step with the Find right panel.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-selection-panel',
   standalone: true,
   imports: [CommonModule, FormsModule, ViewControlsComponent],

@@ -1,7 +1,8 @@
-import { Component, ElementRef, Input, ViewChild, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Input, input, output, ViewChild } from '@angular/core';
 
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-drop-zone',
   standalone: true,
   imports: [],

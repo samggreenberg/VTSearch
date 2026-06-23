@@ -1,4 +1,4 @@
-import { Component, OnChanges, OnInit, SimpleChanges, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnChanges, OnInit, output, SimpleChanges } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { map } from 'rxjs/operators';
@@ -17,6 +17,7 @@ import {
  *  controls open/close state and binds a ``/api/browse``-backed
  *  ``browseFn`` to the unified browser. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-file-browser',
   standalone: true,
   imports: [FormsModule, FolderBrowserComponent],

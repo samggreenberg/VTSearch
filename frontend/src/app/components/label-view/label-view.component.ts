@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit, effect, inject, signal, untracked } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, ViewChild } from '@angular/core';
 
 import { EMPTY, Subject, timer, Subscription, pairwise } from 'rxjs';
 import { catchError, takeUntil, switchMap, filter, take } from 'rxjs/operators';
@@ -41,6 +41,7 @@ import { LabelViewPanelStateService } from './label-view-panel-state.service';
 import { buildMediaContextMenuItems } from './media-context-menu-items';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-view',
   standalone: true,
   imports: [

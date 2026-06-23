@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, Input, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, Input, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../icon/icon.component';
@@ -23,6 +23,7 @@ import { IconComponent } from '../../../icon/icon.component';
  *  cannot host markup.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-import-config',
   standalone: true,
   imports: [FormsModule, IconComponent],

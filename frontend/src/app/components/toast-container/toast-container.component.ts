@@ -1,4 +1,4 @@
-import { Component, OnDestroy, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnDestroy, signal } from '@angular/core';
 
 import { AsyncPipe } from '@angular/common';
 import { Toast, ToastService } from '../../services/toast.service';
@@ -10,6 +10,7 @@ import { Toast, ToastService } from '../../services/toast.service';
  * info actions (preserves the old global-error-banner UX).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-toast-container',
   standalone: true,
   imports: [AsyncPipe],

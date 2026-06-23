@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit, SecurityContext, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, output, SecurityContext, signal } from '@angular/core';
 
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -41,6 +41,7 @@ const THEME_VARIANT_RE = /\.(light|dark)\.(png|jpe?g|webp|gif|avif)$/i;
 const ABSOLUTE_SRC_RE = /^([a-z]+:)?\/\//i;
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-keyboard-help-modal',
   standalone: true,
   imports: [ModalComponent],

@@ -1,4 +1,4 @@
-import { AfterViewChecked, Component, ElementRef, OnChanges, SimpleChanges, ViewChild, inject, input, output } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, Component, ElementRef, inject, input, OnChanges, output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type { DetectorLabelView } from '../../../generated/api-client/models/detector-label-view';
 import { LabelSortMode } from '../label-sort/label-sort.component';
@@ -9,6 +9,7 @@ interface SortedElement extends DetectorLabelView {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-labelset-list',
   standalone: true,
   imports: [CommonModule],

@@ -1,4 +1,4 @@
-import { Component, OnChanges, OnInit, SimpleChanges, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnChanges, OnInit, output, SimpleChanges } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -31,6 +31,7 @@ import {
  *  Edits are emitted as a full :type:`ImportDefaultsByMediaType` map so
  *  the parent can persist them with the rest of the settings dict. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-import-defaults-settings',
   standalone: true,
   imports: [FormsModule, IconComponent, SourceSpecsPickerComponent, ClipperChooserComponent],

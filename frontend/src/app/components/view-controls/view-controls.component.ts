@@ -1,4 +1,4 @@
-import { Component, OnChanges, OnInit, SimpleChanges, effect, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 
 import { SettingsStateService } from '../../services/settings-state.service';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
@@ -9,6 +9,7 @@ const ICON_SIZES = ['XS', 'S', 'M', 'L', 'XL'] as const;
 type IconSize = (typeof ICON_SIZES)[number];
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-view-controls',
   standalone: true,
   imports: [IconComponent],

@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, inject, input, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -42,6 +42,7 @@ interface PulldownRow {
  * ArrowDown to navigate, Enter to pick, Escape to close.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-context-pulldown',
   standalone: true,
   imports: [],

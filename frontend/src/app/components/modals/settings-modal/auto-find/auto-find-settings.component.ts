@@ -1,4 +1,4 @@
-import { Component, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnChanges, OnDestroy, OnInit, output, SimpleChanges } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -42,6 +42,7 @@ export interface AutoFindExporterChange {
  *     `autofind_exporter` / `autofind_exporter_field_values`.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-auto-find-settings',
   standalone: true,
   imports: [FormsModule, IconComponent],

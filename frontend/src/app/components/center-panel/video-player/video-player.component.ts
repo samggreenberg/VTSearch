@@ -1,9 +1,10 @@
-import { Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, Input, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
 
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-video-player',
   standalone: true,
   imports: [],

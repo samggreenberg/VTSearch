@@ -1,4 +1,4 @@
-import { Component, OnChanges, SimpleChanges, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, OnChanges, output, SimpleChanges } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -10,6 +10,7 @@ export interface ClipperSelection {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-clipper-chooser',
   standalone: true,
   imports: [FormsModule, ModalComponent],

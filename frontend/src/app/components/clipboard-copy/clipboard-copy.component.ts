@@ -1,4 +1,4 @@
-import { Component, OnChanges, OnDestroy, SimpleChanges, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, OnChanges, OnDestroy, signal, SimpleChanges } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -27,6 +27,7 @@ interface DelimiterOption {
  * component stays agnostic about the source model (LabeledElement, hit, …).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-clipboard-copy',
   standalone: true,
   imports: [FormsModule],

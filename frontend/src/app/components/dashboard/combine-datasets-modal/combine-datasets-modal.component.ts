@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, Input, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -16,6 +16,7 @@ interface CombineRow {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-combine-datasets-modal',
   standalone: true,
   imports: [CommonModule, FormsModule, ModalComponent, IconComponent],

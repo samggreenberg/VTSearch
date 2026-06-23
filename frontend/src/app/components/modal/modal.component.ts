@@ -1,6 +1,7 @@
-import { Component, Input, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, input, output } from '@angular/core';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-modal',
   standalone: true,
   templateUrl: './modal.component.html',

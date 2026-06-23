@@ -1,4 +1,4 @@
-import { Component, OnDestroy, computed, inject, signal, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, output, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
@@ -12,6 +12,7 @@ import type { SettingsImporterEntry } from '../../../generated/api-client/models
 type ModalView = 'picker' | 'form';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-settings-importer-modal',
   standalone: true,
   imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],

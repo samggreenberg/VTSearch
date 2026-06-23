@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, OnDestroy, OnInit, signal } from '@angular/core';
 import {
   gradientStops,
   resolveColormap,
@@ -28,6 +28,7 @@ interface LegendTick {
  * the canvas is painting — Heat, Ocean, or Grayscale, light or dark.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-legend',
   standalone: true,
   template: `

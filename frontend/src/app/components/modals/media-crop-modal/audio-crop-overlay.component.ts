@@ -1,12 +1,13 @@
 import {
   AfterViewInit,
+  ChangeDetectionStrategy,
   Component,
   ElementRef,
   Input,
-  OnDestroy,
-  ViewChild,
   input,
-  output
+  OnDestroy,
+  output,
+  ViewChild,
 } from '@angular/core';
 
 
@@ -20,6 +21,7 @@ type DragMode = 'none' | 'start' | 'end' | 'move';
 const HANDLE_HIT_PX = 12;
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-audio-crop-overlay',
   standalone: true,
   imports: [],

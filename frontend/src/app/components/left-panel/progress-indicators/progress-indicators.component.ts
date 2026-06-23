@@ -1,4 +1,4 @@
-import { Component, Input, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, input, output } from '@angular/core';
 
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import {
@@ -9,6 +9,7 @@ import {
 import type { LabelingStatusResponse } from '../../../generated/api-client/models/labeling-status-response';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-progress-indicators',
   standalone: true,
   imports: [ProgressBarComponent],

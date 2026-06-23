@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, Input, OnDestroy, OnInit, output, signal } from '@angular/core';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 
@@ -10,6 +10,7 @@ interface Example {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-examples-editor-modal',
   standalone: true,
   imports: [ModalComponent],

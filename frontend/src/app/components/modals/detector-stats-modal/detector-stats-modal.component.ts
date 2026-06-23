@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsRegistryApiService } from '../../../services/detectors-registry-api.service';
@@ -11,6 +11,7 @@ import { formatTimestamp as formatTs } from '../../../utils/format-date';
  *  detector's creation/provenance metadata. Counts only — no embeddings
  *  or MLP weights are read (see the "No Persisted Vectors" rule). */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-detector-stats-modal',
   standalone: true,
   imports: [CommonModule, ModalComponent],
