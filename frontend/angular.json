@@ -83,18 +83,20 @@
               // production build (which dropped zone.js entirely at the Phase 3
               // zoneless flip — see docs/plans/zoneless-migration.md).
               //
-              // The fakeAsync/tick bridge (zone.js/testing + the Angular
-              // vitest-patch plugin) was removed in Phase 5: every spec now uses
-              // native async + Vitest fake timers, so no spec needs ProxyZone.
-              // Base "zone.js" stays only because the spec files that have not
-              // yet adopted the zoneless TestBed still rely on zone-based change
-              // detection in the default TestBed (manual fixture.detectChanges()
-              // alone is fine, but the default TestBed requires NgZone to exist).
-              // It drops once those specs migrate (plan Phase 5).
+              // The polyfills array is now EMPTY: Phase 5 finished migrating
+              // every fixture-creating spec to the zoneless `TestBed`
+              // (`provideZonelessChangeDetection()` via the `provideZoneless()`
+              // helper), so no spec relies on zone-based change detection or
+              // needs `NgZone` from the default TestBed any more. The
+              // fakeAsync/tick bridge (zone.js/testing + the Angular
+              // vitest-patch plugin) was already removed earlier in Phase 5 —
+              // every spec uses native async + Vitest fake timers. zone.js is
+              // gone from the app end to end (prod build, test build, and
+              // package.json).
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true,
-              "polyfills": ["zone.js"]
+              "polyfills": []
             }
           },
           "defaultConfiguration": "production"

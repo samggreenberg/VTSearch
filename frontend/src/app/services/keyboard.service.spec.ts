@@ -1,11 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { KeyboardService, KeyboardAction } from './keyboard.service';
+import { configureZoneless } from '../testing/zoneless-testbed';
 
 describe('KeyboardService', () => {
   let service: KeyboardService;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    configureZoneless({});
     service = TestBed.inject(KeyboardService);
   });
 

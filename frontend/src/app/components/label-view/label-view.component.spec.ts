@@ -9,6 +9,7 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { settleResource } from '../../testing/settle-resource';
+import { provideZoneless } from '../../testing/zoneless-testbed';
 
 describe('LabelViewComponent', () => {
   let component: LabelViewComponent;
@@ -19,6 +20,7 @@ describe('LabelViewComponent', () => {
     await TestBed.configureTestingModule({
       imports: [LabelViewComponent],
       providers: [
+        ...provideZoneless(),
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
@@ -38,7 +40,7 @@ describe('LabelViewComponent', () => {
   // after the synchronous test body returns, so they are NOT flushed here —
   // they are drained by `afterEach`'s catch-all instead.
   function flushInitialRequests(): void {
-    fixture.detectChanges();
+    TestBed.tick();
     // The medias and settings reads ride `rxResource`, whose loader runs in a
     // root effect rather than synchronously during `detectChanges()`; tick so
     // the GETs are actually issued before we match them.
@@ -76,8 +78,13 @@ describe('LabelViewComponent', () => {
     );
   }
 
-  afterEach(() => {
+  afterEach(async () => {
     component.ngOnDestroy();
+    // Kill the shared VoteStateService poll explicitly. Under zoneless (no
+    // zone.js patching test timers) a leftover `timer(0, N)` poll keeps firing
+    // real macrotasks across spec boundaries; once the TestBed injector is reset
+    // its next tick issues an HTTP request through a destroyed injector (NG0205).
+    TestBed.inject(VoteStateService).stopPolling();
     // Drain any outstanding polling requests from right-panel or label-view
     // (the timer-driven /api/votes and /api/labeling-status pollers, the
     // metadata-batch fetch from selectMedia, plus anything a test left in
@@ -85,6 +92,20 @@ describe('LabelViewComponent', () => {
     // which cancels their in-flight requests; cancelled requests can't be
     // flushed, so skip them. Flush an empty array so the metadata-batch
     // handler (which iterates the body) doesn't choke on a non-iterable.
+    httpMock.match(() => true).forEach(req => {
+      if (!req.cancelled) req.flush([]);
+    });
+    // Destroy the fixture so the component view + its child views are gone (no
+    // template can be re-checked) and the component injector — with the
+    // medias/settings rxResource loaders bound to it — is disposed.
+    fixture.destroy();
+    // Drain one macrotask while the TestBed injector is still alive. Without
+    // zone.js the framework no longer tracks the app's timers/microtasks, so the
+    // SSE pollers' `timer(0, N)` first emissions and root-singleton rxResource
+    // reloads fire on a macrotask AFTER this teardown; letting them land now
+    // (injector alive, the reset happens in the next spec's beforeEach) turns
+    // what would be a post-reset NG0205 into a harmless unflushed request.
+    await new Promise<void>((resolve) => setTimeout(resolve));
     httpMock.match(() => true).forEach(req => {
       if (!req.cancelled) req.flush([]);
     });
@@ -109,7 +130,7 @@ describe('LabelViewComponent', () => {
 
   it('should render 3-panel layout', () => {
     flushInitialRequests();
-    fixture.detectChanges();
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.panel-left')).toBeTruthy();
     expect(el.querySelector('.panel-center')).toBeTruthy();
@@ -237,14 +258,14 @@ describe('LabelViewComponent', () => {
 
   it('should render center panel component', () => {
     flushInitialRequests();
-    fixture.detectChanges();
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('vt-center-panel')).toBeTruthy();
   });
 
   it('should render right panel component', () => {
     flushInitialRequests();
-    fixture.detectChanges();
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('vt-right-panel')).toBeTruthy();
   });
@@ -325,7 +346,7 @@ describe('LabelViewComponent', () => {
 
     // Now trigger init which loads medias. The medias GET rides an rxResource
     // loader effect, so tick to issue it before flushing.
-    fixture.detectChanges();
+    TestBed.tick();
     TestBed.tick();
     httpMock.match('/api/medias/ids').forEach(req =>
       req.flush([{ id: 1, media_type: 'audio' }]),
@@ -377,7 +398,7 @@ describe('LabelViewComponent', () => {
     // Load a dataset whose media were embedded by a vision-only encoder
     // (DINOv3, supports_text=false) so the text-support checks resolve false.
     function loadNoTextDataset(): void {
-      fixture.detectChanges();
+      TestBed.tick();
       TestBed.tick();
       httpMock.match('/api/medias/ids').forEach(req =>
         req.flush([{ id: 1, media_type: 'image', embedder: 'dinov3' }]),
@@ -445,16 +466,16 @@ describe('LabelViewComponent', () => {
 
     // Activate autopilot → good phase
     autopilot.activate();
-    fixture.detectChanges();
+    TestBed.tick();
 
     // Transition good → bad
     autopilot.checkPhaseTransition(3, 0);
-    fixture.detectChanges();
+    TestBed.tick();
     expect(autopilot.state.phase).toBe('bad');
 
     // Transition bad → hard: should trigger learned sort
     autopilot.checkPhaseTransition(3, 4);
-    fixture.detectChanges();
+    TestBed.tick();
     expect(autopilot.state.phase).toBe('hard');
     expect(sortState.selectMode).toBe('hard');
     expect(sortState.sortMode).toBe('learned');
@@ -484,11 +505,11 @@ describe('LabelViewComponent', () => {
 
     // Activate and advance to new phase
     autopilot.activate();
-    fixture.detectChanges();
+    TestBed.tick();
     autopilot.checkPhaseTransition(3, 0); // good → bad
-    fixture.detectChanges();
+    TestBed.tick();
     autopilot.checkPhaseTransition(3, 4); // bad → hard
-    fixture.detectChanges();
+    TestBed.tick();
     // Flush learned sort from hard transition
     httpMock.expectOne('/api/learned-sort').flush({
       status: 'done',
@@ -505,7 +526,7 @@ describe('LabelViewComponent', () => {
       span: { status: 'yellow' },
     });
     autopilot.checkPhaseTransition(10, 10); // hard → new
-    fixture.detectChanges();
+    TestBed.tick();
     expect(autopilot.state.phase).toBe('new');
     expect(sortState.selectMode).toBe('new');
 
@@ -519,7 +540,7 @@ describe('LabelViewComponent', () => {
       span: { status: 'yellow' },
     });
     autopilot.checkPhaseTransition(12, 12); // new → hard
-    fixture.detectChanges();
+    TestBed.tick();
     expect(autopilot.state.phase).toBe('hard');
     expect(sortState.selectMode).toBe('hard');
     expect(sortState.sortMode).toBe('learned');
@@ -677,7 +698,7 @@ describe('LabelViewComponent', () => {
 
     // Creating a new label-view should clear stale state
     const freshFixture = TestBed.createComponent(LabelViewComponent);
-    freshFixture.detectChanges();
+    TestBed.tick();
 
     // After init, autopilot should be in 'good' phase (cleared then re-activated
     // by the child autopilot panel), NOT stuck in 'bad' from the old session
@@ -685,6 +706,7 @@ describe('LabelViewComponent', () => {
 
     freshFixture.componentInstance.ngOnDestroy();
     httpMock.match(() => true);
+    freshFixture.destroy();
   });
 
   it('should clear stale vote state so autopilot starts in good phase', () => {
@@ -705,7 +727,7 @@ describe('LabelViewComponent', () => {
     // Creating a new label-view should clear stale votes before autopilot
     // activates, so it starts in 'good' phase (NOT 'hard'/Refine Boundary)
     const freshFixture = TestBed.createComponent(LabelViewComponent);
-    freshFixture.detectChanges();
+    TestBed.tick();
 
     expect(voteState.goodVotes.size).toBe(0);
     expect(voteState.badVotes.size).toBe(0);
@@ -713,5 +735,6 @@ describe('LabelViewComponent', () => {
 
     freshFixture.componentInstance.ngOnDestroy();
     httpMock.match(() => true);
+    freshFixture.destroy();
   });
 });

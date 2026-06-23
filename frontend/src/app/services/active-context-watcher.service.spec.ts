@@ -7,6 +7,7 @@ import { ActiveContextService } from './active-context.service';
 import { DatasetStateService } from './dataset-state.service';
 import { ToastService } from './toast.service';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.models';
+import { configureZoneless } from '../testing/zoneless-testbed';
 
 describe('ActiveContextWatcherService', () => {
   let watcher: ActiveContextWatcherService;
@@ -34,7 +35,7 @@ describe('ActiveContextWatcherService', () => {
   }
 
   beforeEach(() => {
-    TestBed.configureTestingModule({
+    configureZoneless({
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     });
     watcher = TestBed.inject(ActiveContextWatcherService);

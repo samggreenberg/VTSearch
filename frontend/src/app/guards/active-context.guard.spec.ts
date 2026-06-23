@@ -18,6 +18,7 @@ import { ContextSwitchService } from '../services/context-switch.service';
 import { DatasetStateService } from '../services/dataset-state.service';
 import { ToastService } from '../services/toast.service';
 import { DatasetRegistryEntry, DetectorRegistryEntry } from '../models/api.models';
+import { configureZoneless } from '../testing/zoneless-testbed';
 
 describe('activeContextGuard', () => {
   let router: Router;
@@ -64,7 +65,7 @@ describe('activeContextGuard', () => {
   }
 
   beforeEach(() => {
-    TestBed.configureTestingModule({
+    configureZoneless({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),

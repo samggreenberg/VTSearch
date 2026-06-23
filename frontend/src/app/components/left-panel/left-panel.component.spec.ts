@@ -8,6 +8,7 @@ import { SimpleChange } from '@angular/core';
 import { LeftPanelComponent } from './left-panel.component';
 import type { Media } from '../../models/api.models';
 import { settleResource } from '../../testing/settle-resource';
+import { provideZoneless } from '../../testing/zoneless-testbed';
 
 describe('LeftPanelComponent', () => {
   let component: LeftPanelComponent;
@@ -16,12 +17,12 @@ describe('LeftPanelComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LeftPanelComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [...provideZoneless(), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LeftPanelComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    TestBed.tick();
   });
 
   it('should create', () => {
@@ -36,7 +37,7 @@ describe('LeftPanelComponent', () => {
     const fresh = TestBed.createComponent(LeftPanelComponent);
     const comp = fresh.componentInstance;
     vi.spyOn(comp.autopilotStart, 'emit');
-    fresh.detectChanges();
+    TestBed.tick();
     expect(comp.autopilotStart.emit).toHaveBeenCalled();
   });
 
@@ -50,7 +51,7 @@ describe('LeftPanelComponent', () => {
     const comp = fresh.componentInstance;
     comp.autopilotEnabled = false;
     vi.spyOn(comp.autopilotStart, 'emit');
-    fresh.detectChanges();
+    TestBed.tick();
     expect(comp.activeTab).toBe('manual');
     expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
   });
@@ -60,7 +61,7 @@ describe('LeftPanelComponent', () => {
     const comp = fresh.componentInstance;
     comp.autopilotDisabled = true;
     vi.spyOn(comp.autopilotStart, 'emit');
-    fresh.detectChanges();
+    TestBed.tick();
     expect(comp.activeTab).toBe('manual');
     expect(comp.autopilotStart.emit).not.toHaveBeenCalled();
   });
@@ -87,8 +88,11 @@ describe('LeftPanelComponent', () => {
   });
 
   it('should disable the autopilot tab button when autopilotDisabled', () => {
-    component.autopilotDisabled = true;
-    fixture.detectChanges();
+    // setInput fires ngOnChanges and marks the host dirty so the tick repaints
+    // consistently (a direct field write leaves derived tab state unsettled,
+    // which under zoneless surfaces as an NG0100 in the verify pass).
+    fixture.componentRef.setInput('autopilotDisabled', true);
+    TestBed.tick();
     const el = fixture.nativeElement as HTMLElement;
     const tabs = el.querySelectorAll<HTMLButtonElement>('.left-tab');
     // Second tab is Autopilot.
@@ -102,22 +106,26 @@ describe('LeftPanelComponent', () => {
   });
 
   it('should render manual tab content when switched', () => {
-    component.setTab('manual');
-    fixture.detectChanges();
+    // Drive the switch through the tab button's (click) — a bound listener that
+    // marks the view dirty — so the panel repaints cleanly under zoneless
+    // (calling setTab() directly leaves the host undirtied and the tab
+    // conditional unsettled across the verify pass).
     const el = fixture.nativeElement as HTMLElement;
+    (el.querySelectorAll<HTMLButtonElement>('.left-tab')[0]).click(); // Manual
+    TestBed.tick();
     expect(el.querySelector('.tab-panel-manual')).toBeTruthy();
     expect(el.querySelector('.tab-panel-autopilot')).toBeNull();
   });
 
   it('should show active class on selected tab', () => {
     const el = fixture.nativeElement as HTMLElement;
-    const tabs = el.querySelectorAll('.left-tab');
+    const tabs = el.querySelectorAll<HTMLButtonElement>('.left-tab');
     // Default: autopilot is active (second tab)
     expect(tabs[0].classList.contains('active')).toBe(false);
     expect(tabs[1].classList.contains('active')).toBe(true);
 
-    component.setTab('manual');
-    fixture.detectChanges();
+    tabs[0].click(); // Manual
+    TestBed.tick();
     const tabsAfter = el.querySelectorAll('.left-tab');
     expect(tabsAfter[0].classList.contains('active')).toBe(true);
     expect(tabsAfter[1].classList.contains('active')).toBe(false);

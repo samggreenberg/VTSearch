@@ -10,6 +10,7 @@ import { DatasetStateService } from './dataset-state.service';
 import { DatasetsRegistryApiService } from './datasets-registry-api.service';
 import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 import { ProgressEventsService } from './progress-events.service';
+import { configureZoneless } from '../testing/zoneless-testbed';
 import {
   DatasetRegistryEntry,
   DetectorRegistryEntry,
@@ -125,7 +126,7 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
       detectorLoadingTasks: (): LoadingTask[] => detectorLoadingTasks$.value,
     };
 
-    TestBed.configureTestingModule({
+    configureZoneless({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
