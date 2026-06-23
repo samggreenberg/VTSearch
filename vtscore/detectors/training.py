@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | None:
-    """Resolve the score embedder (patch-else-text) for the medias in *snap*.
+    """Resolve the score embedder (structural ▸ patch ▸ text) for the medias in *snap*.
 
     The detector MLP trains and scores against this embedder's vectors (the v3
     routing table).  Derived from the embedder names *those* medias carry
@@ -42,8 +42,8 @@ def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | No
     from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
 
     first = next(iter(snap.values()))
-    text, patch = derive_binding_from_names(media_embedder_names(first))
-    return patch or text
+    text, patch, structural = derive_binding_from_names(media_embedder_names(first))
+    return structural or patch or text
 
 
 def validate_good_bad_split(y_list: list[float]) -> tuple[int, int]:

@@ -212,3 +212,4 @@ def test_meta_records_binding_slots(tmp_path):
     # exist so external readers can rely on the schema.
     assert "text_embedder" in meta
     assert "patch_embedder" in meta
+    assert "structural_embedder" in meta
