@@ -274,9 +274,7 @@ def export_dataset_to_file(
     text_embedder = patch_embedder = structural_embedder = None
     if medias:
         first = next(iter(medias.values()))
-        text_embedder, patch_embedder, structural_embedder = derive_binding_from_names(
-            media_embedder_names(first)
-        )
+        text_embedder, patch_embedder, structural_embedder = derive_binding_from_names(media_embedder_names(first))
 
     meta = {
         "format_version": 1,
