@@ -278,6 +278,21 @@ def _flask_response(mr: MediaResponse) -> Response:
     return send_file(io.BytesIO(mr.data), mimetype=mr.mimetype, download_name=mr.download_name)
 
 
+def _attach_embedder_fields(out: dict[str, Any], media: dict[str, Any]) -> None:
+    """Copy a media's embedder identity onto a serialized payload *out*.
+
+    Sets the singular ``embedder`` (the recorded primary) when present and the
+    full ``embedders`` list (every bound embedder name, v3 trio) so the frontend
+    can resolve dataset capabilities across the whole binding, not just the
+    primary.  Both are omitted when the media carries no embedder.
+    """
+    if media.get("embedder"):
+        out["embedder"] = media["embedder"]
+    names = media_embedder_names(media)
+    if names:
+        out["embedders"] = names
+
+
 @medias_bp.route("/api/medias/ids")
 @medias_bp.response(200, MediaIdsListResponseSchema(many=True))
 def list_media_ids():
@@ -298,12 +313,7 @@ def list_media_ids():
     result: list[dict[str, Any]] = []
     for c in snapshot_medias().values():
         item: dict[str, Any] = {"id": c["id"], "media_type": c.get("media_type", "audio")}
-        embedder = c.get("embedder")
-        if embedder:
-            item["embedder"] = embedder
-        names = media_embedder_names(c)
-        if names:
-            item["embedders"] = names
+        _attach_embedder_fields(item, c)
         result.append(item)
     return result
 
@@ -352,11 +362,7 @@ def batch_medias(body: dict):
             media_data["origin_name"] = c["origin_name"]
         if "description" in c:
             media_data["description"] = c["description"]
-        if c.get("embedder"):
-            media_data["embedder"] = c["embedder"]
-        names = media_embedder_names(c)
-        if names:
-            media_data["embedders"] = names
+        _attach_embedder_fields(media_data, c)
         for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
             if clip_key in c:
                 media_data[clip_key] = c[clip_key]
