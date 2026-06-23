@@ -267,22 +267,25 @@ def _attach_patch_regions_to_media(media: dict, patch_out) -> None:
     media["patch_grid"] = patch_out.patch_grid.astype(np.float16, copy=False)
 
 
-def _ordered_load_embedders(medias: dict[int, dict[str, Any]], requested: str) -> list[str]:
+def _ordered_load_embedders(medias: dict[int, dict[str, Any]], requested: list[str]) -> list[str]:
     """Resolve the ordered set of embedders to run over *medias* at load.
 
-    The *requested* embedder (the create-time pick, if any) leads, followed by
-    any embedders already present on the medias that it doesn't cover — the
-    reload case, where a v3 pickle restores one vector per bound embedder under
-    ``media["embeddings"]`` and each must have its in-memory patch / structural
-    side-channels re-derived.
+    The *requested* embedders (the create-time picks, if any) lead in order,
+    followed by any embedders already present on the medias that they don't
+    cover — the reload case, where a v3 pickle restores one vector per bound
+    embedder under ``media["embeddings"]`` and each must have its in-memory
+    patch / structural side-channels re-derived.
 
-    Returns ``[requested]`` (possibly ``[""]``, which lets
-    :func:`embed_missing` resolve the media-type default) when the medias carry
-    no embedder yet — the single-embedder create path, unchanged.
+    *requested* is the create-time embedder list (v3 trio: text / patch /
+    structural picks).  A single-embedder create passes a one-element list; a
+    bare ``[""]`` (or empty list) with no embedders present on the medias falls
+    back to ``[""]``, which lets :func:`embed_missing` resolve the media-type
+    default — the single-embedder create path, unchanged.
     """
     names: list[str] = []
-    if requested:
-        names.append(requested)
+    for r in requested:
+        if r and r not in names:
+            names.append(r)
     for m in medias.values():
         present = media_embedder_names(m)
         if present:
@@ -290,20 +293,21 @@ def _ordered_load_embedders(medias: dict[int, dict[str, Any]], requested: str) -
                 if name not in names:
                     names.append(name)
             break
-    return names or [requested]
+    return names or [""]
 
 
 def _embed_missing_stage(
     ctx: DatasetContext,
     tracker,
-    embedder_name: str,
+    requested_embedders: list[str],
 ) -> None:
     """Run every bound embedder over the context's medias (tracker-routed progress).
 
     Single-embedder datasets resolve to one name and behave exactly as before;
-    a dataset bound to both a text and a patch embedder runs each in turn, so
-    ``media["embeddings"]`` carries a per-embedder vector and the patch
-    embedder also populates ``patch_regions`` / ``patch_grid``.
+    a v3 trio (text + patch + structural picks) runs each in turn, so
+    ``media["embeddings"]`` carries a per-embedder vector, the patch embedder
+    also populates ``patch_regions`` / ``patch_grid``, and the structural
+    embedder populates ``local_features``.
     """
 
     def _emb_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
@@ -311,6 +315,6 @@ def _embed_missing_stage(
         step = _STATUS_TO_STEP.get(status, _STATUS_TO_STEP["embedding"])
         tracker.update(status, message, current, total, step=step, total_steps=_TOTAL_LOAD_STEPS)
 
-    for name in _ordered_load_embedders(ctx.medias, embedder_name):
+    for name in _ordered_load_embedders(ctx.medias, requested_embedders):
         embed_missing(ctx.medias, name, on_progress=_emb_progress)
     invalidate_embedding_matrix(ctx)

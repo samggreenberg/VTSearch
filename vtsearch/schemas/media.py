@@ -59,6 +59,7 @@ class _MediaIdEntrySchema(Schema):
     id = fields.Integer(required=True)
     media_type = fields.String(required=True)
     embedder = fields.String()
+    embedders = fields.List(fields.String())
 
 
 class MediaIdsListResponseSchema(Schema):
@@ -72,6 +73,7 @@ class MediaIdsListResponseSchema(Schema):
     id = fields.Integer(required=True)
     media_type = fields.String(required=True)
     embedder = fields.String()
+    embedders = fields.List(fields.String())
 
     class Meta:
         # The list shape is signalled by ``many=True`` at the decorator
@@ -105,6 +107,7 @@ class _MediaBatchEntrySchema(Schema):
     origin_name = fields.String()
     description = fields.String()
     embedder = fields.String()
+    embedders = fields.List(fields.String())
     clip_start = fields.Float()
     clip_end = fields.Float()
     clip_index = fields.Integer()

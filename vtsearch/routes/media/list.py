@@ -24,7 +24,7 @@ from typing import Any
 from flask import Response, jsonify, make_response, request, send_file
 from flask_smorest import Blueprint, abort
 
-from vtscore.embedding.media_vectors import init_embeddings
+from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.base import MediaResponse
 from vtsearch.schemas.media import (
@@ -301,6 +301,9 @@ def list_media_ids():
         embedder = c.get("embedder")
         if embedder:
             item["embedder"] = embedder
+        names = media_embedder_names(c)
+        if names:
+            item["embedders"] = names
         result.append(item)
     return result
 
@@ -351,6 +354,9 @@ def batch_medias(body: dict):
             media_data["description"] = c["description"]
         if c.get("embedder"):
             media_data["embedder"] = c["embedder"]
+        names = media_embedder_names(c)
+        if names:
+            media_data["embedders"] = names
         for clip_key in ("clip_start", "clip_end", "clip_index", "clip_box"):
             if clip_key in c:
                 media_data[clip_key] = c[clip_key]

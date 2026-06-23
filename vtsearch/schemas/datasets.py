@@ -341,6 +341,17 @@ class DatasetLoadDemoRequestSchema(Schema):
 
     name = fields.String(required=True, validate=validate.Length(min=1))
     embedder = fields.String(load_default="")
+    embedders = fields.List(
+        fields.String(),
+        load_default=None,
+        metadata={
+            "description": (
+                "v3 trio of create-time embedder picks (text / patch / structural). "
+                "When set, every name is embedded so a multi-embedder dataset is produced; "
+                "omitted falls back to the single `embedder`."
+            )
+        },
+    )
     clipper = fields.String(load_default="")
     converter = fields.String(load_default="")
     dataset_name = fields.String(load_default="")
