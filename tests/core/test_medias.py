@@ -313,10 +313,10 @@ class TestListMediaIds:
         assert len(data) == app_module.NUM_MEDIAS
 
     def test_stub_fields_only(self, client):
-        """Each stub carries id + media_type and (optionally) embedder; nothing else."""
+        """Each stub carries id + media_type and (optionally) embedder(s); nothing else."""
         resp = client.get("/api/medias/ids")
         data = resp.get_json()
-        allowed = {"id", "media_type", "embedder"}
+        allowed = {"id", "media_type", "embedder", "embedders"}
         for media in data:
             assert "id" in media
             assert "media_type" in media
