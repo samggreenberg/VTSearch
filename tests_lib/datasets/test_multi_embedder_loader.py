@@ -42,13 +42,30 @@ def _fake_embedder(name: str, dim: int = 3):
 class TestOrderedLoadEmbedders:
     def test_fresh_create_uses_requested_only(self):
         medias = {1: {"media_type": "audio", "embeddings": {}}}
-        assert _ordered_load_embedders(medias, "siglip") == ["siglip"]
+        assert _ordered_load_embedders(medias, ["siglip"]) == ["siglip"]
 
     def test_fresh_create_no_pick_falls_back_to_blank(self):
         # No embedder anywhere → [""], which lets embed_missing resolve the
         # media-type default (single-embedder create path, unchanged).
         medias = {1: {"media_type": "audio", "embeddings": {}}}
-        assert _ordered_load_embedders(medias, "") == [""]
+        assert _ordered_load_embedders(medias, [""]) == [""]
+        assert _ordered_load_embedders(medias, []) == [""]
+
+    def test_fresh_create_trio_runs_all_picks_in_order(self):
+        # A v3 create with a text + patch + structural pick runs each in turn.
+        medias = {1: {"media_type": "image", "embeddings": {}}}
+        assert _ordered_load_embedders(medias, ["siglip", "dinov3_patch", "sift_vlad"]) == [
+            "siglip",
+            "dinov3_patch",
+            "sift_vlad",
+        ]
+
+    def test_requested_picks_dedupe(self):
+        medias = {1: {"media_type": "image", "embeddings": {}}}
+        assert _ordered_load_embedders(medias, ["siglip", "", "siglip", "dinov3_patch"]) == [
+            "siglip",
+            "dinov3_patch",
+        ]
 
     def test_reload_runs_present_embedders(self):
         # A reloaded two-embedder pickle: no requested pick, run both present.
@@ -58,11 +75,11 @@ class TestOrderedLoadEmbedders:
                 "embeddings": {"siglip": np.ones(3), "dinov3_patch": np.ones(3)},
             }
         }
-        assert _ordered_load_embedders(medias, "") == ["siglip", "dinov3_patch"]
+        assert _ordered_load_embedders(medias, [""]) == ["siglip", "dinov3_patch"]
 
     def test_requested_leads_then_present(self):
         medias = {1: {"embeddings": {"dinov3_patch": np.ones(3)}}}
-        assert _ordered_load_embedders(medias, "siglip") == ["siglip", "dinov3_patch"]
+        assert _ordered_load_embedders(medias, ["siglip"]) == ["siglip", "dinov3_patch"]
 
 
 # ---------------------------------------------------------------------------
