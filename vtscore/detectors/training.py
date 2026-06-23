@@ -472,7 +472,7 @@ def train_and_score(
             media has a stored ``patch_grid``, the training vector for that
             vote is pooled on-the-fly via
             :func:`vtscore.media.patch_embed.box_to_vote_vector` instead
-            of using ``media["embedding"]``.  Falls back to the full-image
+            of using ``media["embeddings"]``.  Falls back to the full-image
             vector when the media lacks a patch grid (legacy datasets,
             single-vector embedders) or when the box is missing.  Patch-
             embedder v2.

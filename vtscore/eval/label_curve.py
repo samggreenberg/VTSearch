@@ -46,6 +46,8 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 import numpy as np
 
+from vtscore.embedding.media_vectors import media_embedding
+
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -243,7 +245,7 @@ def _build_split_pool(
         return None
 
     def _stack(ids: np.ndarray) -> np.ndarray:
-        return np.stack([np.asarray(clips[int(cid)]["embedding"], dtype=np.float32) for cid in ids])
+        return np.stack([np.asarray(media_embedding(clips[int(cid)]), dtype=np.float32) for cid in ids])
 
     sim_pos = _stack(sim_pos_ids)
     sim_neg = _stack(sim_neg_ids)

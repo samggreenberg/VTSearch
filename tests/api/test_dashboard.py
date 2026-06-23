@@ -737,6 +737,7 @@ class TestFindProgress:
                 "id": i,
                 "media_type": "audio",
                 "embedding": emb,
+                "embedder": "clap",
                 "md5": f"prog_md5_{i}",
                 "filename": f"prog_{i}.wav",
                 "origin_name": f"prog_{i}.wav",

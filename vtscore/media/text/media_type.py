@@ -603,7 +603,7 @@ class TextMediaType(MediaType):
                 "duration": 0,
                 "file_size": len(text_bytes),
                 "md5": hashlib.md5(text_bytes).hexdigest(),
-                "embedding": embedding,
+                "embeddings": {embedder.name: embedding},
                 "media_bytes": None,
                 "media_string": text_content,
                 "filename": fname,

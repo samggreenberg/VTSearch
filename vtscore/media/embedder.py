@@ -567,7 +567,7 @@ class MediaEmbedder(ABC):
         Patch-based image encoders (DINOv2, DINOv3, EUPE) return ``True``; the
         dataset loader then asks them for a :class:`PatchEmbedOutput` per image
         and stores a hierarchical region set plus the raw patch grid alongside
-        the usual ``media["embedding"]``.  Single-vector embedders return
+        the usual ``media["embeddings"]`` vector.  Single-vector embedders return
         ``False`` and the patch-region pipeline is skipped entirely.
         """
         return False
@@ -580,7 +580,7 @@ class MediaEmbedder(ABC):
         later) return ``True``; the dataset loader then asks them for a
         :class:`~vtscore.media.structural.StructuralFeatures` per image and
         stores it as ``media["local_features"]`` alongside the VLAD
-        ``media["embedding"]``, enabling the geometric re-rank + match-stat
+        ``media["embeddings"]`` vector, enabling the geometric re-rank + match-stat
         verification paths.  All other embedders return ``False`` and the
         structural pipeline is skipped entirely.
 

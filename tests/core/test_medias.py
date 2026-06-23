@@ -5,6 +5,7 @@ import wave
 import numpy as np
 
 import app as app_module
+from vtscore.embedding.media_vectors import media_embedding
 
 
 class TestInitMedias:
@@ -26,7 +27,7 @@ class TestInitMedias:
 
     def test_media_has_embedding(self):
         for media in app_module.medias.values():
-            emb = media["embedding"]
+            emb = media_embedding(media)
             assert isinstance(emb, np.ndarray)
             assert len(emb) > 0
 
@@ -51,7 +52,7 @@ class TestInitMedias:
         embedding = embed_audio_file(temp_path)
         temp_path.unlink(missing_ok=True)
         assert embedding is not None
-        np.testing.assert_array_almost_equal(embedding, media["embedding"])
+        np.testing.assert_array_almost_equal(embedding, media_embedding(media))
 
 
 class TestMediaMD5:
@@ -636,7 +637,7 @@ class TestAddToPile:
         assert new_media["md5"] == hashlib.md5(wav_bytes).hexdigest()
         assert new_media["filename"] == "new_sound.wav"
         assert new_media["origin"]["importer"] == "add_to_pile"
-        assert isinstance(new_media["embedding"], np.ndarray)
+        assert isinstance(media_embedding(new_media), np.ndarray)
 
     def test_add_new_media_to_bad(self, client):
         """Uploading a new file and voting it bad."""

@@ -22,6 +22,7 @@ from typing import Any, Callable
 import numpy as np
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet
+from vtscore.embedding.media_vectors import media_embedding
 
 
 log = logging.getLogger(__name__)
@@ -194,7 +195,7 @@ def _resolve_uncached_embedding(
         if cid is not None and cid in snap:
             media = snap[cid]
             pooled = pool_box_from_media(media, elem.region_box)
-            emb = pooled if pooled is not None else media.get("embedding")
+            emb = pooled if pooled is not None else media_embedding(media)
             if emb is not None:
                 return np.asarray(emb)
 
@@ -222,7 +223,7 @@ def populate_label_embeddings(
     Resolution per element (skipping if already cached):
 
     1. Element resolves to a cid in the active dataset → reuse
-       ``snap[cid]["embedding"]`` (no I/O).
+       ``snap[cid]``'s primary vector (no I/O).
     2. Element's origin can be resolved to a file via its importer → embed
        the file with the active dataset's embedder (or the media type's
        default).
@@ -570,7 +571,7 @@ def update_cache_for_cid(
     target_key = media_element_key(media)
     if target_key is None:
         return
-    embedding = media.get("embedding")
+    embedding = media_embedding(media)
     if embedding is None:
         return
     for elem in labelset.elements:

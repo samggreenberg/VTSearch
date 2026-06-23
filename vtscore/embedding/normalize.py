@@ -4,7 +4,7 @@ VTSearch is direction-only nearly everywhere: every similarity comparison
 treats embeddings as points on the unit sphere.  Rather than re-normalizing
 on every comparison (the old per-call cost in
 :mod:`vtscore.training.region_similarity`), we make the unit vector the
-*stored* form: every embedding written into ``medias[cid]["embedding"]`` and
+*stored* form: every embedding written into ``medias[cid]["embeddings"]`` and
 every text-query vector is L2-normalized exactly once, at ingest.
 
 This module is the **one** place that performs that normalization.  It is

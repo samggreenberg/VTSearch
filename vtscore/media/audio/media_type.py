@@ -608,7 +608,7 @@ class AudioMediaType(MediaType):
                 "duration": media_fields["duration"],
                 "file_size": len(wav_bytes),
                 "md5": hashlib.md5(wav_bytes).hexdigest(),
-                "embedding": embedding,
+                "embeddings": {embedder.name: embedding},
                 "media_bytes": wav_bytes,
                 "thumbnail_bytes": media_fields.get("thumbnail_bytes"),
                 "filename": rel_name,

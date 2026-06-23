@@ -443,7 +443,7 @@ load_dataset_from_folder(
     medias=medias,
     on_progress=lambda s, m, c, t: print(f"{m} {c}/{t}"),
 )
-# medias is now {1: {"id": 1, "embedding": ..., "media_bytes": ..., ...}, ...}
+# medias is now {1: {"id": 1, "embeddings": {name: ...}, "media_bytes": ..., ...}, ...}
 ```
 
 ### Progress tracking

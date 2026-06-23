@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     import pandas as pd
     import torch
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.training.mlp import train_model
 from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
@@ -85,7 +86,7 @@ def _evaluate_on_test(
     if not test_ids:
         return {"cost": float("nan"), "fpr": float("nan"), "fnr": float("nan")}
 
-    embs = np.array([clips_dict[cid]["embedding"] for cid in test_ids])
+    embs = np.array([media_embedding(clips_dict[cid]) for cid in test_ids])
     X = torch.tensor(embs, dtype=torch.float32)
 
     with torch.no_grad():
@@ -174,7 +175,7 @@ def simulate_voting_iterations(
     # and the reported metrics are biased upward.
     if safe_thresholds:
         gmm_media_ids = sorted(sim_ids)
-        gmm_clip_embs = np.array([clips_dict[cid]["embedding"] for cid in gmm_media_ids])
+        gmm_clip_embs = np.array([media_embedding(clips_dict[cid]) for cid in gmm_media_ids])
         X_all_clips = torch.tensor(gmm_clip_embs, dtype=torch.float32)
 
     good_votes: dict[int, None] = {}
@@ -195,10 +196,10 @@ def simulate_voting_iterations(
         X_list: list[np.ndarray] = []
         y_list: list[float] = []
         for vid in good_votes:
-            X_list.append(clips_dict[vid]["embedding"])
+            X_list.append(media_embedding(clips_dict[vid]))
             y_list.append(1.0)
         for vid in bad_votes:
-            X_list.append(clips_dict[vid]["embedding"])
+            X_list.append(media_embedding(clips_dict[vid]))
             y_list.append(0.0)
 
         X = torch.tensor(np.array(X_list), dtype=torch.float32)

@@ -413,13 +413,14 @@ Most importers delegate to `load_dataset_from_folder()` after downloading
 files to a local directory.  However, importers whose data comes from
 API calls (not files on disk) can build media dicts directly in `run()`.
 
-**Importers do not embed.** Set `embedding=None` and `embedder=""`; the
-framework `embed_missing` stage embeds every item still at `None` after
-`run()` returns, using the user-selected embedder (or the default for
-the media type).  Only set `embedding` to a real vector when your data
+**Importers do not embed.** Set `embeddings={}` (an empty per-embedder dict)
+and `embedder=""`; the framework `embed_missing` stage embeds every item with
+no vector after `run()` returns, using the user-selected embedder (or the
+default for the media type).  Only pre-populate `embeddings` when your data
 source ships pre-computed vectors that are dimension-compatible with the
-embedder the user picked; in that case also set `embedder` to the name
-of that embedder.
+embedder the user picked: set `embeddings={"<name>": vec}` and `embedder="<name>"`
+naming that embedder.  (There is no singular `embedding` key any more —
+`media["embeddings"]` is the sole per-media vector store.)
 
 ```python
 def run(self, field_values, medias, thin=False):
@@ -429,7 +430,7 @@ def run(self, field_values, medias, thin=False):
             "media_type": "audio",
             "filename": item["id"],
             "md5": item["md5"],                  # pre-computed by the service
-            "embedding": None,                   # framework embed stage fills this in
+            "embeddings": {},                    # framework embed stage fills this in
             "embedder": "",                      # framework embed stage stamps this
             "media_bytes": data if not thin else None,
             "media_path": None,
@@ -480,7 +481,8 @@ class MyServiceImporter(DatasetImporter):
         return {
             "media_type": "audio",
             "filename": record["id"],
-            "embedding": _api.get_embedding(record["id"]),
+            "embeddings": {"my_embedder": _api.get_embedding(record["id"])},
+            "embedder": "my_embedder",
             "media_bytes": None if thin else _api.fetch_bytes(record["url"]),
             "media_url": record["url"],
             # origin / origin_name auto-filled from build_origin if omitted
@@ -496,7 +498,8 @@ class MyServiceImporter(DatasetImporter):
             blobs = ([] if thin else
                      list(pool.map(lambda r: _api.fetch_bytes(r["url"]), records)))
         return [
-            {"media_type": "audio", "filename": r["id"], "embedding": e,
+            {"media_type": "audio", "filename": r["id"],
+             "embeddings": {"my_embedder": e}, "embedder": "my_embedder",
              "media_bytes": (None if thin else b), "media_url": r["url"]}
             for r, e, b in zip(records, embeddings, blobs or [None] * len(records))
         ]

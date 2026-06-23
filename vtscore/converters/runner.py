@@ -119,7 +119,7 @@ def _build_converted_media_dict(
         "embedder": "",
         "file_size": len(output.get("media_bytes", b"") or output.get("media_string", "").encode()),
         "md5": _compute_md5(output),
-        "embedding": None,
+        "embeddings": {},
         "filename": origin_name,
         "category": category,
         "origin": origin,

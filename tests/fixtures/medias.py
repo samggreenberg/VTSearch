@@ -84,7 +84,7 @@ def init_medias():
             "duration": duration,
             "file_size": len(wav_bytes),
             "md5": hashlib.md5(wav_bytes).hexdigest(),
-            "embedding": embedding,
+            "embeddings": {"clap": embedding},
             "media_bytes": wav_bytes,
             "thumbnail_bytes": generate_waveform_thumbnail(wav_bytes),
             "filename": fname,
@@ -101,5 +101,5 @@ def init_medias():
     if new_embeddings or not cached_embeddings:
         save_data = {"cache_key": np.array(cache_key)}
         for i in range(1, NUM_MEDIAS + 1):
-            save_data[f"emb_{i}"] = medias[i]["embedding"]
+            save_data[f"emb_{i}"] = medias[i]["embeddings"]["clap"]
         np.savez(cache_path, **save_data)  # pyright: ignore[reportArgumentType]

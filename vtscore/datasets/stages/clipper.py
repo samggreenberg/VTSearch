@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
+from vtscore.embedding.media_vectors import media_embedding
 
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
 
@@ -209,7 +210,7 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
     for clip_idx, (clip, recompute) in enumerate(zip(clips, needs_recompute)):
         # Also embed clips that have no embedding (e.g. when the import
         # phase skipped embedding because a clipper was specified).
-        needs_embed = recompute or clip.get("embedding") is None
+        needs_embed = recompute or media_embedding(clip) is None
         if not needs_embed:
             continue
 
@@ -284,7 +285,15 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
 
     for slot, vec in zip(embed_indices, vectors):
         if vec is not None:
-            clips[slot]["embedding"] = vec
+            # Assign a *fresh* embeddings dict rather than mutating in place:
+            # clips are shallow copies (``dict(media)``) that share the parent's
+            # ``embeddings`` dict by reference, so an in-place write would corrupt
+            # the parent's vector.  A re-embedded clip is single-embedder by
+            # construction (the resolved clip embedder), so a one-entry dict is
+            # the complete store.
+            clip = clips[slot]
+            clip["embeddings"] = {embedder.name: vec}
+            clip["embedder"] = embedder.name
 
     if on_progress:
         on_progress(total_clips, total_clips, "embedding")

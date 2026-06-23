@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from vtscore.concurrency.progress import update_find_progress
+from vtscore.embedding.media_vectors import media_embedding
 
 
 def resolve_or_train_detector(  # noqa: C901
@@ -80,7 +81,7 @@ def resolve_or_train_detector(  # noqa: C901
     y_list: list[float] = []
     md5_to_emb = {}
     if snap:
-        md5_to_emb = {c["md5"]: c["embedding"] for c in snap.values()}
+        md5_to_emb = {c["md5"]: media_embedding(c) for c in snap.values()}
 
     # Match origin-resolved label vectors to the snap's embedder space so
     # the two paths don't produce a mixed-space training set (silently

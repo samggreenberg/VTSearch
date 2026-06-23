@@ -27,6 +27,7 @@ import numpy as np
 import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
+from vtscore.embedding.media_vectors import media_embedding
 
 
 def _make_bulk_embedder(embed_return_dim: int = 3):
@@ -90,7 +91,7 @@ class TestRelPathVsBasenameConflictWarns:
 
         assert len(medias) == 1
         only = next(iter(medias.values()))
-        np.testing.assert_array_equal(only["embedding"], rel_vec)
+        np.testing.assert_array_equal(media_embedding(only), rel_vec)
 
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert any(
@@ -172,7 +173,7 @@ class TestRelPathVsBasenameConflictWarns:
 
         assert len(medias) == 1
         only = next(iter(medias.values()))
-        np.testing.assert_array_equal(only["embedding"], rel_vec)
+        np.testing.assert_array_equal(media_embedding(only), rel_vec)
         assert only["md5"] == "a" * 32
 
         warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
@@ -271,7 +272,7 @@ class TestAmbiguousBasenameKeyRaises:
                 on_progress=lambda *a: None,
             )
 
-        by_filename = {m["filename"]: m["embedding"] for m in medias.values()}
+        by_filename = {m["filename"]: media_embedding(m) for m in medias.values()}
         np.testing.assert_array_equal(by_filename["class_a/foo.wav"], vec_a)
         np.testing.assert_array_equal(by_filename["class_b/foo.wav"], vec_b)
 
@@ -297,4 +298,4 @@ class TestAmbiguousBasenameKeyRaises:
             )
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(next(iter(medias.values()))["embedding"], vec)
+        np.testing.assert_array_equal(media_embedding(next(iter(medias.values()))), vec)

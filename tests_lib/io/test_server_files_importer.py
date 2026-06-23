@@ -19,6 +19,7 @@ from vtscore.datasets.importers.server_files import (
     _read_paths_file,
     _symlink_paths,
 )
+from vtscore.embedding.media_vectors import media_embedding
 
 
 class TestReadPathsFile:
@@ -222,7 +223,7 @@ class TestRunEndToEnd:
             assert media["origin_name"] in {str(src_a), str(src_b)}
             assert Path(media["origin_name"]).is_file()
             # The loader leaves embedding=None; framework embed_missing fills it.
-            assert media["embedding"] is None
+            assert media_embedding(media) is None
 
 
 class TestRunWithSymlinkEntries:

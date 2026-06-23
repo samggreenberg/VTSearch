@@ -6,7 +6,7 @@ the **two-stage** rule, the way :func:`score_against_query` is the one place
 that knows max-over-regions for patch embedders.
 
 * **Stage 1** is the ordinary VLAD retrieval - it rides
-  ``media["embedding"]`` through the MLP / cosine sort unchanged and produces a
+  ``media["embeddings"]`` through the MLP / cosine sort unchanged and produces a
   ranked candidate list.
 * **Stage 2** (here) takes the top-*K* of that list and, for each candidate,
   geometrically verifies it against the **templates** derived from the user's

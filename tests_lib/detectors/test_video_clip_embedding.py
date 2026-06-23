@@ -21,6 +21,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from vtscore.embedding.media_vectors import media_embedding
+
 
 # ---------------------------------------------------------------------------
 # _frame_index_range: boundary math
@@ -304,7 +306,7 @@ def _make_tiled_video_clips() -> list[dict]:
                 "clip_end": t1,
                 "filename": "parent.mp4",
                 "origin_name": "parent.mp4",
-                "embedding": None,
+                "embeddings": {},
             }
         )
     return tiles
@@ -353,7 +355,7 @@ class TestFixupClipMd5AndEmbeddingsVideo:
         ):
             _fixup_clip_md5_and_embeddings(clips, [True] * len(clips), "video")
 
-        embs = [c["embedding"] for c in clips]
+        embs = [media_embedding(c) for c in clips]
         assert all(e is not None for e in embs)
         # Tile boundaries: (0,2), (2,4), (4,6) -> vectors must all differ.
         assert {tuple(e.tolist()) for e in embs} == {(0.0, 2.0), (2.0, 4.0), (4.0, 6.0)}

@@ -11004,7 +11004,7 @@
     },
     "/api/example-sort-by-id": {
       "post": {
-        "description": "When ``crop_params`` is absent the existing ``media[\"embedding\"]``\nis reused (no fetch, no re-embed).  When set, the media's bytes are\nmaterialised, cropped, and re-embedded before sorting.",
+        "description": "When ``crop_params`` is absent the existing ``media[\"embeddings\"]``\nvector is reused (no fetch, no re-embed).  When set, the media's bytes are\nmaterialised, cropped, and re-embedded before sorting.",
         "operationId": "example_sort_by_id",
         "requestBody": {
           "content": {

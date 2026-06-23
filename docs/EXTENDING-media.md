@@ -395,10 +395,12 @@ Importer code that has already built a `dict[int, dict]` of medias
 
 ```python
 # medias: dict[int, dict] keyed by 1-based media ID
+from vtscore.embedding.media_vectors import set_media_embedding
+
 vectors = emb.embed_medias(medias)  # -> dict[int, Optional[np.ndarray]]
 for media_id, vec in vectors.items():
     if vec is not None:
-        medias[media_id]["embedding"] = vec
+        set_media_embedding(medias[media_id], emb.name, vec)
 ```
 
 `embed_medias` delegates to `embed_media_bulk` internally. Subclasses

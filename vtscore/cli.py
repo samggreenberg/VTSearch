@@ -569,9 +569,10 @@ def _embed_and_filter_chunk(chunk: dict[int, dict[str, Any]]) -> dict[int, dict[
     pipeline's drop-none stage, so the strict scorer never sees a ``None``.
     """
     from vtscore.datasets.load_pipeline import embed_missing  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
     embed_missing(chunk, "")
-    return {cid: m for cid, m in chunk.items() if m.get("embedding") is not None}
+    return {cid: m for cid, m in chunk.items() if media_embedding(m) is not None}
 
 
 def _score_chunk(

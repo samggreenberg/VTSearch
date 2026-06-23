@@ -18,6 +18,7 @@ import unittest.mock as mock
 import numpy as np
 import pytest
 
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.audio.audio_generator import generate_wav
 
 
@@ -31,7 +32,8 @@ def _make_audio_media(media_id: int, duration: float = 5.1) -> dict:
         "media_bytes": wav,
         "duration": duration,
         "md5": hashlib.md5(wav).hexdigest(),
-        "embedding": rng.standard_normal(512).astype(np.float32),
+        "embedder": "clap",
+        "embeddings": {"clap": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/audio", "media_type": "audio"}},
         "origin_name": f"clip_{media_id}.wav",
     }
@@ -53,7 +55,8 @@ def _make_image_media(media_id: int, width: int = 300, height: int = 100) -> dic
         "width": width,
         "height": height,
         "md5": hashlib.md5(img_bytes).hexdigest(),
-        "embedding": rng.standard_normal(512).astype(np.float32),
+        "embedder": "siglip",
+        "embeddings": {"siglip": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/images", "media_type": "image"}},
         "origin_name": f"img_{media_id}.png",
     }
@@ -69,7 +72,8 @@ def _make_text_media(media_id: int, text: str = "First sentence. Second sentence
         "media_string": text,
         "media_bytes": text_bytes,
         "md5": hashlib.md5(text_bytes).hexdigest(),
-        "embedding": rng.standard_normal(512).astype(np.float32),
+        "embedder": "e5",
+        "embeddings": {"e5": rng.standard_normal(512).astype(np.float32)},
         "origin": {"importer": "server_folder", "params": {"path": "/data/texts", "media_type": "text"}},
         "origin_name": f"text_{media_id}.txt",
     }
@@ -141,7 +145,7 @@ class TestBulkClipReembed:
         ordered = list(clips_dict.values())
         for slot_idx, clip in enumerate(ordered):
             expected = np.full(512, float(slot_idx + 1), dtype=np.float32)
-            np.testing.assert_array_equal(clip["embedding"], expected)
+            np.testing.assert_array_equal(media_embedding(clip), expected)
 
 
 class TestClipReembedLoadingProgressPassthrough:
@@ -208,7 +212,7 @@ class TestBulkClipReembedFailureFallback:
         from vtscore.datasets.stages.clipper import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
-        parent_vec = parent["embedding"].copy()
+        parent_vec = media_embedding(parent).copy()
 
         emb = mock.MagicMock()
         emb._on_progress = lambda *a, **kw: None
@@ -220,13 +224,13 @@ class TestBulkClipReembedFailureFallback:
 
         assert emb.embed_media_bulk.call_count == 1
         for clip in clips_dict.values():
-            np.testing.assert_array_equal(clip["embedding"], parent_vec)
+            np.testing.assert_array_equal(media_embedding(clip), parent_vec)
 
     def test_bulk_exception_leaves_parent_embedding_intact(self):
         from vtscore.datasets.stages.clipper import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
-        parent_vec = parent["embedding"].copy()
+        parent_vec = media_embedding(parent).copy()
 
         emb = mock.MagicMock()
         emb._on_progress = lambda *a, **kw: None
@@ -237,20 +241,20 @@ class TestBulkClipReembedFailureFallback:
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
         for clip in clips_dict.values():
-            np.testing.assert_array_equal(clip["embedding"], parent_vec)
+            np.testing.assert_array_equal(media_embedding(clip), parent_vec)
 
     def test_no_embedders_registered_skips_bulk_and_keeps_parent(self):
         from vtscore.datasets.stages.clipper import _apply_clipper
 
         parent = _make_audio_media(1, duration=5.1)
-        parent_vec = parent["embedding"].copy()
+        parent_vec = media_embedding(parent).copy()
 
         clips_dict = {1: parent}
         with mock.patch("vtscore.media.embedders_for_type", return_value=[]):
             _apply_clipper(clips_dict, "sound_tiling", {"duration": 2.0})
 
         for clip in clips_dict.values():
-            np.testing.assert_array_equal(clip["embedding"], parent_vec)
+            np.testing.assert_array_equal(media_embedding(clip), parent_vec)
 
 
 class TestBulkClipReembedMD5UnchangedByRefactor:

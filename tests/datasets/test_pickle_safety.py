@@ -190,7 +190,8 @@ class TestSafePickleRoundTrip:
                 "duration": 1.0,
                 "file_size": 1024,
                 "md5": "abc123",
-                "embedding": np.random.RandomState(42).randn(512).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": np.random.RandomState(42).randn(512).astype(np.float32)},
                 "filename": "test.wav",
                 "category": "test",
                 "origin": {"importer": "test", "params": {}},
@@ -226,7 +227,8 @@ class TestSafePickleRoundTrip:
                 "file_size": 0,
                 "md5": "abc",
                 # Pass a plain list to prove the exporter coerces to float32.
-                "embedding": [float(j) for j in range(16)],
+                "embedder": "e5",
+                "embeddings": {"e5": [float(j) for j in range(16)]},
                 "filename": "t.txt",
                 "category": "test",
                 "media_string": "hi",
@@ -237,7 +239,7 @@ class TestSafePickleRoundTrip:
         pkl_path.write_bytes(export_dataset_to_file(medias))
 
         data, _meta = read_container(pkl_path)
-        emb = data["medias"][1]["embedding"]
+        emb = data["medias"][1]["embeddings"]["e5"]
         assert isinstance(emb, np.ndarray)
         assert emb.dtype == np.float32
         assert emb.shape == (16,)
@@ -252,7 +254,8 @@ class TestSafePickleRoundTrip:
                 "duration": 1.0,
                 "file_size": 1024,
                 "md5": f"md5_{i}",
-                "embedding": np.random.RandomState(42).randn(512).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": np.random.RandomState(42).randn(512).astype(np.float32)},
                 "filename": f"test_{i}.wav",
                 "category": "test",
                 "origin": None,

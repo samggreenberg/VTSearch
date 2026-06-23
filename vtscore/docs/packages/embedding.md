@@ -265,8 +265,8 @@ the cache. `get_embedding_matrix(ctx)` (`vtscore/embedding/matrix.py:29`):
 3. If `sorted_ids == ctx._emb_matrix_ids`, returns the cached
    `(ids, matrix)` directly - no rebuild.
 4. Otherwise, allocates an `(N, D) float32` array, fills it row by
-   row from `ctx.medias[cid]["embedding"]`, and stores it on the
-   context.
+   row from `media_embedding(ctx.medias[cid])` (the per-embedder
+   `media["embeddings"]` dict), and stores it on the context.
 
 Convert to torch with `torch.from_numpy(matrix)` for a zero-copy
 view. The matrix is contiguous, so it's safe to slice without

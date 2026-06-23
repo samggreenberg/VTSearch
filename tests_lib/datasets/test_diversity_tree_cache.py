@@ -18,6 +18,7 @@ from PIL import Image
 from vtscore.datasets.loader import export_dataset_to_file
 from vtscore.datasets.loader_pickle import load_dataset_from_pickle
 from vtscore.state.core import DatasetContext
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.state.diversity import restore_diversity_tree_from_cache
 from vtscore.state.diversity_tree import DiversityTree
 
@@ -41,7 +42,7 @@ def _image_dataset(n: int) -> dict[int, dict]:
             "file_size": len(src),
             "md5": f"md5-{i}",
             "embedder": "siglip",
-            "embedding": rng.standard_normal(64).astype(np.float32),
+            "embeddings": {"siglip": rng.standard_normal(64).astype(np.float32)},
             "filename": f"{i}.png",
             "category": "test",
             "media_bytes": src,
@@ -53,7 +54,7 @@ def _image_dataset(n: int) -> dict[int, dict]:
 
 def test_tree_round_trips_through_pickle(tmp_path: Path):
     medias = _image_dataset(120)
-    vectors = {cid: m["embedding"] for cid, m in medias.items()}
+    vectors = {cid: media_embedding(m) for cid, m in medias.items()}
     tree = DiversityTree(vectors, k=3, min_node_size=10)
 
     container = export_dataset_to_file(

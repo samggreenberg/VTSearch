@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.state import build_diversity_tree_for_context, collapse_duplicates
 
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
@@ -31,7 +32,7 @@ def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
     dict, and surface the count to the progress tracker so the user
     knows N is lower than the importer reported.
     """
-    none_ids = [cid for cid, media in ctx.medias.items() if media.get("embedding") is None]
+    none_ids = [cid for cid, media in ctx.medias.items() if media_embedding(media) is None]
     if not none_ids:
         return
 

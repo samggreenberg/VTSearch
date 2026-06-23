@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from vtscore.datasets.importers.base import SourceSpec
+from vtscore.embedding.media_vectors import media_embedding
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -455,7 +456,7 @@ class TestRunConvertersOnFolder:
         assert media["media_type"] == "image"
 
         # Embedding is deferred to the framework embed stage.
-        assert media["embedding"] is None
+        assert media_embedding(media) is None
         # media_bytes flows through from the converter output so the
         # framework embed stage can embed without a tempfile.
         assert media["media_bytes"] is not None

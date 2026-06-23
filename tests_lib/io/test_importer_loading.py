@@ -17,6 +17,7 @@ import zipfile
 import pytest
 
 from helpers import make_raw_wav_bytes as _make_wav_bytes
+from vtscore.embedding.media_vectors import media_embedding
 
 
 class TestLoadDatasetContentVectors:
@@ -84,7 +85,7 @@ class TestLoadDatasetContentVectors:
             )
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], pre_vector)
+        np.testing.assert_array_equal(media_embedding(medias[1]), pre_vector)
         mt._mock_embedder.embed_media.assert_not_called()
 
     def test_leaves_embedding_none_when_not_in_content_vectors(self, tmp_path):
@@ -102,7 +103,7 @@ class TestLoadDatasetContentVectors:
             load_dataset_from_folder(tmp_path, "audio", medias, content_vectors={}, on_progress=lambda *a: None)
 
         assert len(medias) == 1
-        assert medias[1]["embedding"] is None
+        assert media_embedding(medias[1]) is None
         assert medias[1]["embedder"] == ""
         mt._mock_embedder.embed_media.assert_not_called()
         mt._mock_embedder.embed_media_bulk.assert_not_called()
@@ -129,7 +130,7 @@ class TestLoadDatasetContentVectors:
             )
 
         assert len(medias) == 2
-        embeddings = {c["filename"]: c["embedding"] for c in medias.values()}
+        embeddings = {c["filename"]: media_embedding(c) for c in medias.values()}
         np.testing.assert_array_equal(embeddings["a.wav"], pre_vector)
         assert embeddings["b.wav"] is None
         mt._mock_embedder.embed_media_bulk.assert_not_called()
@@ -149,7 +150,7 @@ class TestLoadDatasetContentVectors:
             load_dataset_from_folder(tmp_path, "audio", medias, on_progress=lambda *a: None)
 
         assert len(medias) == 1
-        assert medias[1]["embedding"] is None
+        assert media_embedding(medias[1]) is None
         assert medias[1]["embedder"] == ""
         mt._mock_embedder.embed_media.assert_not_called()
         mt._mock_embedder.embed_media_bulk.assert_not_called()
@@ -186,7 +187,7 @@ class TestLoadDatasetContentVectors:
         by_name = {m["filename"]: m for m in medias.values()}
         assert by_name["pre.wav"]["embedder"] == ""
         assert by_name["model.wav"]["embedder"] == ""
-        assert by_name["model.wav"]["embedding"] is None
+        assert media_embedding(by_name["model.wav"]) is None
 
     def test_content_vector_file_carries_vector_through(self, tmp_path):
         """A file with a content vector is always included with its supplied vector."""
@@ -214,7 +215,7 @@ class TestLoadDatasetContentVectors:
             )
 
         assert len(medias) == 1
-        np.testing.assert_array_equal(medias[1]["embedding"], pre_vector)
+        np.testing.assert_array_equal(media_embedding(medias[1]), pre_vector)
 
 
 # ---------------------------------------------------------------------------
@@ -475,7 +476,7 @@ class TestLoadDatasetRelativePaths:
                 tmp_path, "audio", medias, content_vectors={"x.wav": pre}, on_progress=lambda *a: None
             )
 
-        np.testing.assert_array_equal(medias[1]["embedding"], pre)
+        np.testing.assert_array_equal(media_embedding(medias[1]), pre)
 
     def test_chunked_preserves_relative_paths(self, tmp_path):
         """Chunked loader should also preserve relative paths."""

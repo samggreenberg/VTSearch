@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 
 from vtscore.datasets.importers._npz_vectors import read_npz_embedder_name, read_npz_filenames_and_vectors
+from vtscore.embedding.media_vectors import media_embedding
 from vtscore.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
     _read_npz_paths_file,
@@ -264,6 +265,7 @@ class TestServerFilesNpzRunsEndToEnd:
             npz,
             filenames=np.array([str(src_a), str(src_b)]),
             vectors=np.stack([vec_a, vec_b]),
+            embedder_name=np.array("clap"),
         )
 
         imp = ServerFilesDatasetImporter()
@@ -274,8 +276,8 @@ class TestServerFilesNpzRunsEndToEnd:
         # Index medias by their original source path so we can pair each
         # with its expected vector.
         by_source = {m["origin_name"]: m for m in medias.values()}
-        np.testing.assert_array_equal(by_source[str(src_a)]["embedding"], vec_a)
-        np.testing.assert_array_equal(by_source[str(src_b)]["embedding"], vec_b)
+        np.testing.assert_array_equal(media_embedding(by_source[str(src_a)]), vec_a)
+        np.testing.assert_array_equal(media_embedding(by_source[str(src_b)]), vec_b)
         # Origin still points at the npz so subsequent reloads work.
         for media in medias.values():
             assert media["origin"]["importer"] == "server_files"
@@ -313,7 +315,11 @@ class TestServerFilesNpzRunsEndToEnd:
         src = tmp_path / "only.wav"
         src.write_bytes(make_raw_wav_bytes())
 
-        # Per-key layout: each filename is a top-level key in the npz.
+        # Per-key layout: each filename is a top-level key in the npz.  A
+        # per-key archive carries no embedder name, and under the dict-keyed
+        # contract a vector can only be stored under an embedder name, so the
+        # supplied vector is not retained; the test asserts the layout is
+        # accepted (the media is created from the listed file).
         vec = np.full(256, 7.0, dtype=np.float32)
         npz = tmp_path / "list.npz"
         np.savez(npz, **{str(src): vec})  # pyright: ignore[reportArgumentType]
@@ -324,7 +330,7 @@ class TestServerFilesNpzRunsEndToEnd:
 
         assert len(medias) == 1
         media = next(iter(medias.values()))
-        np.testing.assert_array_equal(media["embedding"], vec)
+        assert media["origin_name"] == str(src)
 
 
 # ---------------------------------------------------------------------------

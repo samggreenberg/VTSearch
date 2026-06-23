@@ -32,11 +32,11 @@ def _make_separable_clips(dim=16, n_per_cat=20, seed=0):
     media_id = 1
     for _ in range(n_per_cat):
         emb = rng.normal(1.0, 0.2, dim).astype(np.float32)
-        medias[media_id] = {"id": media_id, "embedding": emb, "category": "alpha"}
+        medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": "alpha"}
         media_id += 1
     for _ in range(n_per_cat):
         emb = rng.normal(-1.0, 0.2, dim).astype(np.float32)
-        medias[media_id] = {"id": media_id, "embedding": emb, "category": "beta"}
+        medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": "beta"}
         media_id += 1
     return medias
 
@@ -52,11 +52,11 @@ def _make_overlapping_clips(dim=16, n_per_cat=20, seed=0):
     media_id = 1
     for _ in range(n_per_cat):
         emb = rng.normal(0.3, 1.0, dim).astype(np.float32)
-        medias[media_id] = {"id": media_id, "embedding": emb, "category": "alpha"}
+        medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": "alpha"}
         media_id += 1
     for _ in range(n_per_cat):
         emb = rng.normal(-0.3, 1.0, dim).astype(np.float32)
-        medias[media_id] = {"id": media_id, "embedding": emb, "category": "beta"}
+        medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": "beta"}
         media_id += 1
     return medias
 
@@ -70,7 +70,7 @@ def _make_three_category_clips(dim=16, n_per_cat=15, seed=0):
     for cat, centre in centres.items():
         for _ in range(n_per_cat):
             emb = rng.normal(centre, 0.2, dim).astype(np.float32)
-            medias[media_id] = {"id": media_id, "embedding": emb, "category": cat}
+            medias[media_id] = {"id": media_id, "embeddings": {"emb": emb}, "category": cat}
             media_id += 1
     return medias
 
@@ -224,10 +224,10 @@ class TestSimulateVotingIterations:
         """If all medias of target category land in sim, test set has no positives -> empty."""
         # Only 1 media of target category; likely all end up in sim with 50% split
         medias = {
-            1: {"id": 1, "embedding": np.ones(8, dtype=np.float32), "category": "rare"},
-            2: {"id": 2, "embedding": -np.ones(8, dtype=np.float32), "category": "common"},
-            3: {"id": 3, "embedding": -np.ones(8, dtype=np.float32) * 0.9, "category": "common"},
-            4: {"id": 4, "embedding": -np.ones(8, dtype=np.float32) * 0.8, "category": "common"},
+            1: {"id": 1, "embeddings": {"emb": np.ones(8, dtype=np.float32)}, "category": "rare"},
+            2: {"id": 2, "embeddings": {"emb": -np.ones(8, dtype=np.float32)}, "category": "common"},
+            3: {"id": 3, "embeddings": {"emb": -np.ones(8, dtype=np.float32) * 0.9}, "category": "common"},
+            4: {"id": 4, "embeddings": {"emb": -np.ones(8, dtype=np.float32) * 0.8}, "category": "common"},
         }
         rows = simulate_voting_iterations(medias, "rare", seed=42, sim_fraction=0.5)
         # Might be empty or not depending on split; just shouldn't crash

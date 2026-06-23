@@ -39,6 +39,7 @@ def _make_audio_media(media_id: int) -> dict:
         "md5": md5,
         # Two-dim embedding keeps the trained MLP trivially small.
         "embedding": [float(media_id), float(media_id) + 0.5],
+        "embedder": "clap",
         "media_bytes": None,
         "media_string": None,
         "media_path": None,

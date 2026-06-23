@@ -115,7 +115,7 @@ class TestCollectMediaOrigins:
 
 class TestTrainAndScore:
     def test_empty_votes_returns_empty(self):
-        clips = {1: {"id": 1, "embedding": np.ones(8, dtype=np.float32)}}
+        clips = {1: {"id": 1, "embedder": "clap", "embeddings": {"clap": np.ones(8, dtype=np.float32)}}}
         results, threshold, model = train_and_score(clips, {}, {})
         assert results == []
         assert threshold == 0.5
@@ -123,8 +123,8 @@ class TestTrainAndScore:
 
     def test_only_good_returns_empty(self):
         clips = {
-            1: {"id": 1, "embedding": np.ones(8, dtype=np.float32)},
-            2: {"id": 2, "embedding": np.zeros(8, dtype=np.float32)},
+            1: {"id": 1, "embedder": "clap", "embeddings": {"clap": np.ones(8, dtype=np.float32)}},
+            2: {"id": 2, "embedder": "clap", "embeddings": {"clap": np.zeros(8, dtype=np.float32)}},
         }
         results, threshold, model = train_and_score(clips, {1: None, 2: None}, {})
         assert results == []
@@ -132,8 +132,8 @@ class TestTrainAndScore:
 
     def test_only_bad_returns_empty(self):
         clips = {
-            1: {"id": 1, "embedding": np.ones(8, dtype=np.float32)},
-            2: {"id": 2, "embedding": np.zeros(8, dtype=np.float32)},
+            1: {"id": 1, "embedder": "clap", "embeddings": {"clap": np.ones(8, dtype=np.float32)}},
+            2: {"id": 2, "embedder": "clap", "embeddings": {"clap": np.zeros(8, dtype=np.float32)}},
         }
         results, threshold, model = train_and_score(clips, {}, {1: None, 2: None})
         assert results == []
@@ -148,7 +148,8 @@ class TestTrainAndScore:
             center = 1.0 if i <= 5 else -1.0
             clips[i] = {
                 "id": i,
-                "embedding": (center + rng.standard_normal(8) * 0.05).astype(np.float32),
+                "embedder": "clap",
+                "embeddings": {"clap": (center + rng.standard_normal(8) * 0.05).astype(np.float32)},
             }
         good = {1: None, 2: None}
         bad = {6: None, 7: None}

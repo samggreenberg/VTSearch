@@ -18,6 +18,7 @@ from vtscore.datasets.loader_pickle import (
     _build_pickle_full_media,
     _build_pickle_thin_media,
 )
+from vtscore.embedding.media_vectors import media_embedding
 
 
 def _raw_info() -> dict:
@@ -40,8 +41,8 @@ def test_full_media_embedding_is_unit_norm():
         media_path=None,
         extra_fields=[],
     )
-    np.testing.assert_allclose(np.linalg.norm(media["embedding"]), 1.0, atol=1e-6)
-    assert media["embedding"].dtype == np.float32
+    np.testing.assert_allclose(np.linalg.norm(media_embedding(media)), 1.0, atol=1e-6)
+    assert media_embedding(media).dtype == np.float32
 
 
 def test_thin_media_embedding_is_unit_norm():
@@ -52,5 +53,5 @@ def test_thin_media_embedding_is_unit_norm():
         media_path=None,
         extra_fields=[],
     )
-    np.testing.assert_allclose(np.linalg.norm(media["embedding"]), 1.0, atol=1e-6)
-    assert media["embedding"].dtype == np.float32
+    np.testing.assert_allclose(np.linalg.norm(media_embedding(media)), 1.0, atol=1e-6)
+    assert media_embedding(media).dtype == np.float32
