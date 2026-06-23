@@ -1117,6 +1117,15 @@
             "default": "",
             "type": "string"
           },
+          "embedders": {
+            "default": null,
+            "description": "v3 trio of create-time embedder picks (text / patch / structural). When set, every name is embedded so a multi-embedder dataset is produced; omitted falls back to the single `embedder`.",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
           "name": {
             "minLength": 1,
             "type": "string"
@@ -3694,6 +3703,12 @@
           "embedder": {
             "type": "string"
           },
+          "embedders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "filename": {
             "type": "string"
           },
@@ -3724,6 +3739,12 @@
         "properties": {
           "embedder": {
             "type": "string"
+          },
+          "embedders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "id": {
             "type": "integer"
@@ -5597,6 +5618,10 @@
             "default": null,
             "nullable": true
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "name": {
             "default": "",
             "type": "string"
@@ -5637,6 +5662,10 @@
           "embedder": {
             "default": "",
             "type": "string"
+          },
+          "embedders": {
+            "default": null,
+            "nullable": true
           },
           "name": {
             "enum": [
@@ -5758,6 +5787,10 @@
             "default": null,
             "nullable": true
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "media_type": {
             "default": "audio",
             "enum": [
@@ -5806,6 +5839,10 @@
             "default": null,
             "nullable": true
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "source_specs": {
             "default": null,
             "nullable": true
@@ -5833,6 +5870,10 @@
             "nullable": true
           },
           "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "embedders": {
             "default": null,
             "nullable": true
           },
@@ -5866,6 +5907,10 @@
             "nullable": true
           },
           "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "embedders": {
             "default": null,
             "nullable": true
           },
@@ -5914,6 +5959,10 @@
             "nullable": true
           },
           "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "embedders": {
             "default": null,
             "nullable": true
           },
@@ -5968,6 +6017,10 @@
             "default": null,
             "nullable": true
           },
+          "embedders": {
+            "default": null,
+            "nullable": true
+          },
           "media_type": {
             "default": "audio",
             "enum": [
@@ -6016,6 +6069,10 @@
             "nullable": true
           },
           "embedder": {
+            "default": null,
+            "nullable": true
+          },
+          "embedders": {
             "default": null,
             "nullable": true
           },

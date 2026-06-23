@@ -227,8 +227,9 @@ export class LeftPanelComponent implements OnInit, OnChanges {
    * hide a working feature.
    */
   private updateTextSortAvailable(): void {
-    const embedderName = this.medias.length > 0 ? this.medias[0].embedder ?? '' : '';
-    this.textSortAvailable.set(this.embedderCaps.supportsText(embedderName));
+    const first = this.medias.length > 0 ? this.medias[0] : null;
+    const names = first?.embedders ?? (first?.embedder ? [first.embedder] : []);
+    this.textSortAvailable.set(this.embedderCaps.supportsTextAny(names));
   }
 
   /**

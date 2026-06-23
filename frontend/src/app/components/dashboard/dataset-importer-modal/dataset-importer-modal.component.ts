@@ -70,6 +70,12 @@ export class DatasetImporterModalComponent implements OnInit {
   allEmbedders: EmbedderInfo[] = [];
   readonly availableEmbedders = signal<EmbedderInfo[]>([]);
   readonly selectedEmbedder = signal('');
+  // Optional v3 trio extras for each flow: a patch embedder (region search) and
+  // a structural embedder (instance match) bound alongside the primary above.
+  // Empty = not bound (the single-embedder path).  One pair per flow, mirroring
+  // the per-flow primary signals (form / demo / server-folder / local-*).
+  readonly selectedPatchEmbedder = signal('');
+  readonly selectedStructuralEmbedder = signal('');
 
   // Demo picker state
   readonly demos = signal<DemoDataset[]>([]);
@@ -79,6 +85,8 @@ export class DatasetImporterModalComponent implements OnInit {
   readonly demoLoading = signal(false);
   readonly demoEmbedders = signal<EmbedderInfo[]>([]);
   readonly selectedDemoEmbedder = signal('');
+  readonly selectedDemoPatchEmbedder = signal('');
+  readonly selectedDemoStructuralEmbedder = signal('');
   demoEmbedder = '';
   readonly demoClippers = signal<ClipperInfo[]>([]);
   readonly selectedDemoClipper = signal('');
@@ -126,6 +134,8 @@ export class DatasetImporterModalComponent implements OnInit {
   lfMediaTypeOptions: string[] = [];
   readonly lfEmbedders = signal<EmbedderInfo[]>([]);
   readonly lfSelectedEmbedder = signal('');
+  readonly lfSelectedPatchEmbedder = signal('');
+  readonly lfSelectedStructuralEmbedder = signal('');
   readonly lfClippers = signal<ClipperInfo[]>([]);
   readonly lfSelectedClipper = signal('');
   lfClipperParams: ClipperParameter[] = [];
@@ -154,6 +164,8 @@ export class DatasetImporterModalComponent implements OnInit {
   sfMediaTypeOptions: string[] = [];
   readonly sfEmbedders = signal<EmbedderInfo[]>([]);
   readonly sfSelectedEmbedder = signal('');
+  readonly sfSelectedPatchEmbedder = signal('');
+  readonly sfSelectedStructuralEmbedder = signal('');
   readonly sfClippers = signal<ClipperInfo[]>([]);
   readonly sfSelectedClipper = signal('');
   sfClipperParams: ClipperParameter[] = [];
@@ -909,6 +921,11 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   private loadEmbedders(mediaType: string): void {
+    // The optional trio extras are role-typed to the current media type's
+    // embedders; clear them on every (re)load so an image patch/structural pick
+    // never carries into a different media type.
+    this.selectedPatchEmbedder.set('');
+    this.selectedStructuralEmbedder.set('');
     if (!mediaType) {
       this.availableEmbedders.set([]);
       this.selectedEmbedder.set('');
@@ -994,6 +1011,8 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   private loadDemoEmbedders(mediaType: string): void {
+    this.selectedDemoPatchEmbedder.set('');
+    this.selectedDemoStructuralEmbedder.set('');
     if (!mediaType) {
       this.demoEmbedders.set([]);
       this.selectedDemoEmbedder.set('');
@@ -1232,9 +1251,15 @@ export class DatasetImporterModalComponent implements OnInit {
     const demo = this.selectedDemo;
     if (!demo) return;
     const userName = (this.demoDatasetName || '').trim();
+    const demoEmbedders = this.composeEmbedders(
+      this.selectedDemoEmbedder(),
+      this.selectedDemoPatchEmbedder(),
+      this.selectedDemoStructuralEmbedder(),
+    );
     this.demoSelected.emit({
       ...demo,
       embedder: this.selectedDemoEmbedder(),
+      ...(demoEmbedders ? { embedders: demoEmbedders } : {}),
       clipper: this.selectedDemoClipper(),
       dataset_name: userName,
       build_projection: this.buildProjection,
@@ -1402,6 +1427,8 @@ export class DatasetImporterModalComponent implements OnInit {
   }
 
   private lfLoadEmbedders(mediaType: string): void {
+    this.lfSelectedPatchEmbedder.set('');
+    this.lfSelectedStructuralEmbedder.set('');
     if (!mediaType) {
       this.lfEmbedders.set([]);
       this.lfSelectedEmbedder.set('');
@@ -1557,6 +1584,14 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.lfSelectedEmbedder()) {
       formData.append('embedder', this.lfSelectedEmbedder());
+    }
+    const lfEmbedders = this.composeEmbedders(
+      this.lfSelectedEmbedder(),
+      this.lfSelectedPatchEmbedder(),
+      this.lfSelectedStructuralEmbedder(),
+    );
+    if (lfEmbedders) {
+      formData.append('embedders', JSON.stringify(lfEmbedders));
     }
     if (this.lfSelectedClipper()) {
       formData.append('clipper', this.lfSelectedClipper());
@@ -1900,6 +1935,8 @@ export class DatasetImporterModalComponent implements OnInit {
   onFormSpecsChange(specs: SourceSpec[]): void { this.formSourceSpecs = specs; }
 
   private sfLoadEmbedders(mediaType: string): void {
+    this.sfSelectedPatchEmbedder.set('');
+    this.sfSelectedStructuralEmbedder.set('');
     if (!mediaType) {
       this.sfEmbedders.set([]);
       this.sfSelectedEmbedder.set('');
@@ -2025,6 +2062,14 @@ export class DatasetImporterModalComponent implements OnInit {
     if (this.sfSelectedEmbedder()) {
       params['embedder'] = this.sfSelectedEmbedder();
     }
+    const sfEmbedders = this.composeEmbedders(
+      this.sfSelectedEmbedder(),
+      this.sfSelectedPatchEmbedder(),
+      this.sfSelectedStructuralEmbedder(),
+    );
+    if (sfEmbedders) {
+      params['embedders'] = sfEmbedders;
+    }
     if (this.sfSelectedClipper()) {
       params['clipper'] = this.sfSelectedClipper();
       if (this.sfClipperParams.length > 0 && Object.keys(this.sfClipperParamValues()).length > 0) {
@@ -2077,6 +2122,19 @@ export class DatasetImporterModalComponent implements OnInit {
     return true;
   }
 
+  /** Compose the v3 embedder trio request value from a flow's three role picks.
+   *  Returns the deduped, non-empty union with the *primary* first, or ``null``
+   *  when only the primary is bound — then the single ``embedder`` field carries
+   *  it (the unchanged pre-trio single-embedder path). */
+  private composeEmbedders(primary: string, patch: string, structural: string): string[] | null {
+    const list: string[] = [];
+    for (const candidate of [primary, patch, structural]) {
+      const name = (candidate || '').trim();
+      if (name && !list.includes(name)) list.push(name);
+    }
+    return list.length > 1 ? list : null;
+  }
+
   submit(): void {
     if (!this.selectedImporter()) return;
     this.submitting.set(true);
@@ -2092,6 +2150,14 @@ export class DatasetImporterModalComponent implements OnInit {
     }
     if (this.selectedEmbedder()) {
       submitValues['embedder'] = this.selectedEmbedder();
+    }
+    const formEmbedders = this.composeEmbedders(
+      this.selectedEmbedder(),
+      this.selectedPatchEmbedder(),
+      this.selectedStructuralEmbedder(),
+    );
+    if (formEmbedders) {
+      submitValues['embedders'] = formEmbedders;
     }
     if (this.formSourceSpecs.length > 0) {
       submitValues['source_specs'] = this.formSourceSpecs;

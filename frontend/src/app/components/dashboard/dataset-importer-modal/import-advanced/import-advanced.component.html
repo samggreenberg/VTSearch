@@ -53,6 +53,42 @@
   }
 }
 
+@if (advancedOpen && patchEmbedderOptions.length > 0) {
+  <label class="form-label" for="import-advanced-patch-embedder" title="Optionally bind a second, patch-based embedder (DINOv2/v3, EUPE) so the dataset also supports region search and region voting. Leave as None to skip.">Region embedder (optional)</label>
+  <select
+    id="import-advanced-patch-embedder"
+    class="form-select"
+    [ngModel]="selectedPatchEmbedder()"
+    (ngModelChange)="onPatchEmbedderChange($event)"
+  >
+    <option [value]="''">None</option>
+    @for (embedder of patchEmbedderOptions; track embedder.name) {
+      <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+    }
+  </select>
+  @if (patchLicenseNotice; as notice) {
+    <div class="license-warning" role="note">⚠ {{ notice }}</div>
+  }
+}
+
+@if (advancedOpen && structuralEmbedderOptions.length > 0) {
+  <label class="form-label" for="import-advanced-structural-embedder" title="Optionally bind a structural embedder (SIFT/VLAD) so the dataset also supports instance retrieval with geometric verification — finding a specific object or logo. Leave as None to skip.">Instance embedder (optional)</label>
+  <select
+    id="import-advanced-structural-embedder"
+    class="form-select"
+    [ngModel]="selectedStructuralEmbedder()"
+    (ngModelChange)="onStructuralEmbedderChange($event)"
+  >
+    <option [value]="''">None</option>
+    @for (embedder of structuralEmbedderOptions; track embedder.name) {
+      <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+    }
+  </select>
+  @if (structuralLicenseNotice; as notice) {
+    <div class="license-warning" role="note">⚠ {{ notice }}</div>
+  }
+}
+
 @if (showStandaloneClipperButton) {
   <label class="form-label" title="Pre-processing clipper applied before embedding (e.g. clips audio into shorter segments)">Clipper</label>
   <button

@@ -1006,12 +1006,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // through a permissive cast.
     const extras = demo as DemoDataset & {
       embedder?: string;
+      embedders?: string[];
       clipper?: string;
       dataset_name?: string;
       build_projection?: boolean;
     };
-    const params: Record<string, string> = {};
+    const params: Record<string, string | string[]> = {};
     if (extras.embedder) params['embedder'] = extras.embedder;
+    if (extras.embedders && extras.embedders.length > 0) params['embedders'] = extras.embedders;
     if (extras.clipper) params['clipper'] = extras.clipper;
     const userName = (extras.dataset_name || '').trim();
     if (userName) params['dataset_name'] = userName;
