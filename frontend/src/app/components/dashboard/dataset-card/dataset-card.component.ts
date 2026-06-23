@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostBinding, HostListener, Input, OnChanges, SimpleChanges, ViewChild, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListener, Input, input, OnChanges, output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
@@ -15,6 +15,7 @@ import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/contex
 import { buildDatasetCardMenuItems } from '../card-context-menu-items';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dataset-card',
   standalone: true,
   imports: [CommonModule, FormsModule, ProgressBarComponent, ContextMenuComponent],

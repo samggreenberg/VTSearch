@@ -1,4 +1,4 @@
-import { Component, HostListener, Input, OnInit, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, Input, input, OnInit, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -34,6 +34,7 @@ type ModalTab = 'blank' | 'trained';
 type TrainedSubView = 'picker' | 'form';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
   imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, FieldHintIconComponent],

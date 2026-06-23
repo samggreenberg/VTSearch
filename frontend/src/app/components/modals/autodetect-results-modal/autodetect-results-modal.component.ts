@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, Input, OnDestroy, OnInit, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -17,6 +17,7 @@ import {
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autodetect-results-modal',
   standalone: true,
   imports: [FormsModule, ModalComponent, ClipboardCopyComponent],

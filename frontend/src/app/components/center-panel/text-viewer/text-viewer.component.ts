@@ -1,9 +1,10 @@
-import { Component, Input, OnChanges, OnDestroy, SimpleChanges, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, Input, OnChanges, OnDestroy, signal, SimpleChanges } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MediasApiService } from '../../../services/medias-api.service';
 import { Media } from '../../../models/api.models';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-text-viewer',
   standalone: true,
   templateUrl: './text-viewer.component.html',

@@ -1,4 +1,4 @@
-import { Component, Input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 export type LabelSortMode =
@@ -11,6 +11,7 @@ export type LabelSortMode =
   | 'id-asc';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-sort',
   standalone: true,
   imports: [FormsModule],

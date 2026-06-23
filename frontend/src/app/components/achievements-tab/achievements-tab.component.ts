@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, OnDestroy, OnInit } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -26,6 +26,7 @@ interface AchievementRow extends AchievementEntry {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-achievements-tab',
   standalone: true,
   imports: [FormsModule, AchievementBadgeComponent],

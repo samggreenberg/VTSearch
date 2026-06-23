@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 export interface UsageBytes {
   total: number;
@@ -7,6 +7,7 @@ export interface UsageBytes {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-usage-bar',
   standalone: true,
   imports: [],

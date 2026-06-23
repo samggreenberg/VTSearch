@@ -58,9 +58,15 @@ describe('DashboardComponent', () => {
     httpMock.expectOne('/api/datasets/registry').flush({ datasets });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors });
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers, tabs: [] });
-    // Auto-selecting a single dataset synchronously kicks off an embedder
-    // preload; drain it (and any usage polls already in flight) here so
-    // tests that don't assert on them stay clean.
+    // DatasetStateService is signal-backed and exposes `datasets$`/`detectors$`
+    // as `toObservable` bridges, which emit on the next change-detection pass
+    // (not synchronously when the signal is set). Tick once more so the
+    // dashboard's `datasets$`/`detectors$` subscriptions (registry auto-select)
+    // run before the test asserts on the resulting selection state.
+    TestBed.tick();
+    // Auto-selecting a single dataset kicks off an embedder preload; drain it
+    // (and any usage polls already in flight) here so tests that don't assert
+    // on them stay clean.
     drainBackgroundRequests();
   }
 
@@ -112,6 +118,8 @@ describe('DashboardComponent', () => {
       ],
     });
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+    // Let the `datasets$` bridge deliver the new registry to the auto-select sub.
+    TestBed.tick();
 
     expect(component.selectedDatasetIds.has('d1')).toBe(false);
     expect(component.selectedDatasetIds.has('d2')).toBe(true);
@@ -131,6 +139,8 @@ describe('DashboardComponent', () => {
         { id: 'm2', name: 'Second' },
       ],
     });
+    // Let the `detectors$` bridge deliver the new registry to the auto-select sub.
+    TestBed.tick();
 
     // Adding items after the initial load clears the prior selection and
     // selects only the new ones (same behavior as datasets above).

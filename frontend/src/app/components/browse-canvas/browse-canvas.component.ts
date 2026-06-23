@@ -1,4 +1,4 @@
-import { Component, ElementRef, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild, effect, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, NgZone, OnChanges, OnDestroy, OnInit, output, SimpleChanges, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -48,6 +48,7 @@ export interface BrowseContextMenuEvent {
 const HOVER_RADIUS_SCALE = 1.38;
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-canvas',
   standalone: true,
   templateUrl: './browse-canvas.component.html',

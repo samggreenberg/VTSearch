@@ -1,7 +1,8 @@
-import { Component, OnDestroy, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, OnDestroy, output, signal } from '@angular/core';
 import { IconComponent } from '../../icon/icon.component';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-voting-overlay',
   standalone: true,
   imports: [IconComponent],

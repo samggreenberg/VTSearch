@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -24,6 +24,7 @@ import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-
  *  emits :prop:`clipperChooserRequested` and the parent opens it.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-import-advanced',
   standalone: true,
   imports: [FormsModule, SourceSpecsPickerComponent],

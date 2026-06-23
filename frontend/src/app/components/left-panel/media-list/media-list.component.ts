@@ -1,4 +1,4 @@
-import { Component, Input, ElementRef, ViewChild, AfterViewChecked, ChangeDetectorRef, NgZone, OnChanges, OnDestroy, OnInit, SimpleChanges, computed, inject, input, output } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, ElementRef, inject, Input, input, NgZone, OnChanges, OnDestroy, OnInit, output, SimpleChanges, ViewChild } from '@angular/core';
 
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subject } from 'rxjs';
@@ -55,6 +55,7 @@ interface OrderedItem {
 type GridRow = { kind: 'items'; items: OrderedItem[] } | { kind: 'threshold' };
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-media-list',
   standalone: true,
   imports: [ScrollingModule, MediaItemComponent, SkeletonComponent],

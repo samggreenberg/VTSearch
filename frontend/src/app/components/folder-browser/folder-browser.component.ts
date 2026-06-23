@@ -1,16 +1,17 @@
 
 import {
   AfterViewInit,
+  ChangeDetectionStrategy,
   Component,
   ElementRef,
   HostListener,
+  input,
   OnChanges,
   OnDestroy,
   OnInit,
+  output,
   SimpleChanges,
   ViewChild,
-  input,
-  output
 } from '@angular/core';
 import { Observable, Subscription } from 'rxjs';
 
@@ -71,6 +72,7 @@ const TYPEAHEAD_RESET_MS = 800;
  *  ``/api/browse-media-files``, ...).  The component never imports an
  *  API service directly. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-folder-browser',
   standalone: true,
   imports: [IconComponent],

@@ -1,4 +1,4 @@
-import { Component, Input, computed, inject, signal, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, Input, input, output, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
@@ -7,6 +7,7 @@ import { SortingApiService } from '../../../services/sorting-api.service';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-exporter-modal',
   standalone: true,
   imports: [ModalComponent, IconComponent],

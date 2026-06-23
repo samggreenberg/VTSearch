@@ -1,8 +1,9 @@
-import { Component, Input, OnChanges, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, input, OnChanges, output } from '@angular/core';
 
 import { SortedItem } from '../left-panel.component';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-stripe-overview',
   standalone: true,
   imports: [],

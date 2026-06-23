@@ -1,4 +1,4 @@
-import { Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, Input, OnChanges, OnDestroy, output, signal, SimpleChanges, ViewChild } from '@angular/core';
 import { NgStyle } from '@angular/common';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
@@ -15,6 +15,7 @@ type DragMode =
 const MIN_BOX_SIZE = 0.01; // 1% of the image; below this we treat a draw as a stray click
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-image-viewer',
   standalone: true,
   imports: [NgStyle],

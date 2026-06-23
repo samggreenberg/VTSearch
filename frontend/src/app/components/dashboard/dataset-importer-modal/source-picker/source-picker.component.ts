@@ -1,4 +1,4 @@
-import { Component, Input, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../icon/icon.component';
@@ -45,6 +45,7 @@ import { ManagedColumns } from '../../../../utils/managed-columns';
  *    the local-folder / local-files flows.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-source-picker',
   standalone: true,
   imports: [CommonModule, FormsModule, IconComponent, DropZoneComponent],

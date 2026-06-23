@@ -1,13 +1,14 @@
 import {
+  ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  OnDestroy,
-  ViewChild,
   computed,
+  ElementRef,
   inject,
   input,
+  OnDestroy,
   output,
   signal,
+  ViewChild,
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 
@@ -24,6 +25,7 @@ import type { LabelImporterEntry } from '../../../generated/api-client/models/la
 type ModalView = 'picker' | 'form';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-label-importer-modal',
   standalone: true,
   imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],

@@ -83,6 +83,23 @@ describe('ModalComponent', () => {
     expect(host.closeCalled).toBe(false);
   });
 
+  it('should close on Escape dispatched at document level (focus not in the modal)', async () => {
+    // Regression: modals open from a button, so focus stays on the button and a
+    // backdrop-scoped (keydown) never fired. The document-level handler must
+    // close an open modal regardless of where focus is.
+    host.isOpen.set(true);
+    await settleZoneless(fixture);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(host.closeCalled).toBe(true);
+  });
+
+  it('should ignore Escape when the modal is closed', async () => {
+    host.isOpen.set(false);
+    await settleZoneless(fixture);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(host.closeCalled).toBe(false);
+  });
+
   it('should hide close button when showCloseButton is false', async () => {
     host.isOpen.set(true);
     host.showCloseButton.set(false);

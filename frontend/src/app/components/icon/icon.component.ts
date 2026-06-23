@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnChanges, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, input, OnChanges } from '@angular/core';
 
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
@@ -75,6 +75,7 @@ function emojiToType(icon: string): string {
 const sanitizedCache = new Map<string, SafeHtml>();
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-icon',
   standalone: true,
   imports: [],

@@ -1,8 +1,9 @@
-import { Component, Input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, output } from '@angular/core';
 
 import { SelectMode } from '../left-panel.component';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-select-mode',
   standalone: true,
   imports: [],

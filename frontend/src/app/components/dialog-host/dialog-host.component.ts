@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../modal/modal.component';
@@ -6,6 +6,7 @@ import { IconComponent } from '../icon/icon.component';
 import { VtDialogService } from '../../services/dialog.service';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dialog-host',
   standalone: true,
   imports: [FormsModule, ModalComponent, IconComponent],

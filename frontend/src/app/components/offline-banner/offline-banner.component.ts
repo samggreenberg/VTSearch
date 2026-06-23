@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ConnectionStateService } from '../../services/connection-state.service';
 
 /**
@@ -10,6 +10,7 @@ import { ConnectionStateService } from '../../services/connection-state.service'
  * the SSE stream stay paused until the user reconnects.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-offline-banner',
   standalone: true,
   imports: [],

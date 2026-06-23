@@ -1,5 +1,5 @@
-import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, Subject } from 'rxjs';
+import { Injectable, inject, signal } from '@angular/core';
+import { Subject } from 'rxjs';
 import { filter, takeUntil } from 'rxjs/operators';
 import { LoadingTask } from '../models/api.models';
 import { AchievementsService } from './achievements.service';
@@ -37,11 +37,12 @@ export class DashboardLoadingTasksService {
   private datasetState = inject(DatasetStateService);
   private achievements = inject(AchievementsService);
 
-  private readonly loadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
-  private readonly detectorLoadingTasksSubject = new BehaviorSubject<LoadingTask[]>([]);
-
-  readonly loadingTasks$ = this.loadingTasksSubject.asObservable();
-  readonly detectorLoadingTasks$ = this.detectorLoadingTasksSubject.asObservable();
+  // Signals (not BehaviorSubjects) so the dashboard's template reads of
+  // `loadingTasks`/`orphanLoadingTasks`/`inlineTaskMap` repaint under zoneless
+  // OnPush change detection: a `.set()` from the SSE-driven poller schedules CD
+  // because the value is read (through getters) during template evaluation.
+  private readonly _loadingTasks = signal<LoadingTask[]>([]);
+  private readonly _detectorLoadingTasks = signal<LoadingTask[]>([]);
 
   private polling$ = new Subject<void>();
   private detectorPolling$ = new Subject<void>();
@@ -79,17 +80,17 @@ export class DashboardLoadingTasksService {
     this.completedModelTaskIds.clear();
     this.datasetPollingActive = false;
     this.detectorPollingActive = false;
-    this.loadingTasksSubject.next([]);
-    this.detectorLoadingTasksSubject.next([]);
+    this._loadingTasks.set([]);
+    this._detectorLoadingTasks.set([]);
     this.datasetState.setLoading(false);
   }
 
   get loadingTasks(): LoadingTask[] {
-    return this.loadingTasksSubject.value;
+    return this._loadingTasks();
   }
 
   get detectorLoadingTasks(): LoadingTask[] {
-    return this.detectorLoadingTasksSubject.value;
+    return this._detectorLoadingTasks();
   }
 
   /** Map dataset_id → LoadingTask for tasks that match an existing dataset row. */
@@ -152,7 +153,7 @@ export class DashboardLoadingTasksService {
           const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
           const failed = errored.filter((t) => t.error !== 'Cancelled');
 
-          this.loadingTasksSubject.next([...active, ...failed]);
+          this._loadingTasks.set([...active, ...failed]);
 
           // Detect tasks that just completed successfully so we can
           // refresh the registry immediately (not only when ALL finish).
@@ -201,7 +202,7 @@ export class DashboardLoadingTasksService {
           const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
           const failed = errored.filter((t) => t.error !== 'Cancelled');
 
-          this.detectorLoadingTasksSubject.next([...active, ...failed]);
+          this._detectorLoadingTasks.set([...active, ...failed]);
 
           // Detect tasks that just completed successfully
           const justFinished = tasks.filter(
@@ -234,7 +235,7 @@ export class DashboardLoadingTasksService {
   }
 
   dismissLoadingTask(taskId: string): void {
-    this.loadingTasksSubject.next(this.loadingTasks.filter((t) => t.task_id !== taskId));
+    this._loadingTasks.set(this.loadingTasks.filter((t) => t.task_id !== taskId));
   }
 
   cancelDetectorLoadingTask(taskId: string): void {
@@ -242,7 +243,7 @@ export class DashboardLoadingTasksService {
   }
 
   dismissDetectorLoadingTask(taskId: string): void {
-    this.detectorLoadingTasksSubject.next(
+    this._detectorLoadingTasks.set(
       this.detectorLoadingTasks.filter((t) => t.task_id !== taskId),
     );
   }

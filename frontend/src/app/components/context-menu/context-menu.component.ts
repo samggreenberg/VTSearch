@@ -1,5 +1,5 @@
 
-import { Component, ElementRef, HostListener, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, input, output } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 export interface ContextMenuItem {
@@ -20,6 +20,7 @@ export interface ContextMenuItem {
  * (`vt-label-view`) and the dashboard grids.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-context-menu',
   standalone: true,
   imports: [],

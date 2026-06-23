@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, Input, input, OnChanges, OnDestroy, output, signal, SimpleChanges, untracked, ViewChild } from '@angular/core';
 import { KeyValuePipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { EmbedderInfo, Media } from '../../models/api.models';
@@ -17,6 +17,7 @@ import { VotingOverlayComponent } from './voting-overlay/voting-overlay.componen
 import { prefersReducedMotion } from '../../utils/reduced-motion';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-center-panel',
   standalone: true,
   imports: [

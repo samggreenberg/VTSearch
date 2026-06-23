@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, OnDestroy, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, HostListener, inject, OnDestroy, OnInit, signal } from '@angular/core';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -51,6 +51,7 @@ import { IconComponent } from '../icon/icon.component';
 import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dashboard',
   standalone: true,
   imports: [
