@@ -223,33 +223,44 @@ export class CenterPanelComponent implements OnChanges, OnDestroy {
     return this.media?.media_type || 'audio';
   }
 
-  /** The capability listing for the focused media's embedder, or ``undefined``
-   *  when the embedders haven't loaded yet or the media carries no embedder. */
-  private activeEmbedderInfo(): EmbedderInfo | undefined {
-    const name = this.media?.embedder;
+  /** The embedder names bound to the focused media (the v3 trio).  Prefers the
+   *  full ``embeddings`` key set the backend now ships under ``embedders``;
+   *  falls back to the singular primary for older payloads. */
+  private boundEmbedderNames(): string[] {
+    const m = this.media;
+    if (!m) return [];
+    if (m.embedders && m.embedders.length > 0) return m.embedders;
+    return m.embedder ? [m.embedder] : [];
+  }
+
+  /** Capability listing for an embedder name, or ``undefined`` when unknown. */
+  private infoFor(name: string): EmbedderInfo | undefined {
     if (!name || this.embedderInfos.length === 0) return undefined;
     return this.embedderInfos.find((e) => e.name === name);
   }
 
-  /** Whether the active dataset's embedder emits a best-match region overlay.
-   *  Gates the Highlight toggle: patch-region embedders (DINOv2/v3, EUPE) emit
-   *  the argmax-patch region and structural embedders (SIFT/VLAD) emit the
-   *  RANSAC inlier box — both ride the same ``best_region`` overlay machinery,
-   *  so either capability shows the toggle. Defaults to false when the embedder
-   *  is unknown (embedders not yet loaded, or the media carries no embedder
-   *  field) so a dead toggle never appears. */
+  /** Whether ANY embedder bound to the active dataset emits a best-match region
+   *  overlay.  Gates the Highlight toggle: patch-region embedders (DINOv2/v3,
+   *  EUPE) emit the argmax-patch region and structural embedders (SIFT/VLAD)
+   *  emit the RANSAC inlier box — both ride the same ``best_region`` overlay
+   *  machinery, so either capability shows the toggle.  Checking the whole trio
+   *  (not just the primary) means a dataset whose primary is a text embedder but
+   *  also binds a patch/structural one still offers the overlay.  Defaults to
+   *  false when the embedders are unknown so a dead toggle never appears. */
   get regionOverlayCapable(): boolean {
-    const info = this.activeEmbedderInfo();
-    return info?.supports_patch_regions === true || info?.supports_geometric_verification === true;
+    return this.boundEmbedderNames().some((n) => {
+      const info = this.infoFor(n);
+      return info?.supports_patch_regions === true || info?.supports_geometric_verification === true;
+    });
   }
 
-  /** Whether the active dataset's embedder is structural (instance matching).
+  /** Whether the active dataset binds a structural embedder (instance matching).
    *  Drives the marquee copy: for structural datasets the region box is
    *  constitutive — it *defines* the template to match — so the affordance
    *  nudges "box the pattern you want to match" rather than the generic
    *  salient-area region hint. */
   get structuralDataset(): boolean {
-    return this.activeEmbedderInfo()?.supports_geometric_verification === true;
+    return this.boundEmbedderNames().some((n) => this.infoFor(n)?.supports_geometric_verification === true);
   }
 
   /** Marquee button tooltip. Structural datasets nudge toward boxing the

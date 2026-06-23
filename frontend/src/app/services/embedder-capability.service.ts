@@ -57,4 +57,45 @@ export class EmbedderCapabilityService {
     const info = infos.find((e) => e.name === embedderName);
     return info ? info.supports_text !== false : true;
   }
+
+  /** Capability metadata for *name*, or `undefined` when unknown / unloaded. */
+  private infoFor(name: string): EmbedderInfo | undefined {
+    const infos = this.infos();
+    if (!infos || !name) return undefined;
+    return infos.find((e) => e.name === name);
+  }
+
+  /**
+   * Whether ANY of *names* can embed text queries (the v3 trio: a dataset bound
+   * to a text embedder alongside vision-only ones still offers text sort).
+   * Defaults to `true` for an empty/unknown list so a working feature is never
+   * hidden on missing metadata.
+   */
+  supportsTextAny(names: readonly string[] | null | undefined): boolean {
+    if (!names || names.length === 0) return true;
+    return names.some((n) => this.supportsText(n));
+  }
+
+  /**
+   * Whether ANY of *names* emits a best-match region overlay — patch-region
+   * embedders (DINOv2/v3, EUPE) or structural embedders (SIFT/VLAD). Defaults
+   * to `false` (unknown / unloaded) so a dead toggle never appears.
+   */
+  supportsRegionOverlayAny(names: readonly string[] | null | undefined): boolean {
+    if (!names) return false;
+    return names.some((n) => {
+      const info = this.infoFor(n);
+      return info?.supports_patch_regions === true || info?.supports_geometric_verification === true;
+    });
+  }
+
+  /**
+   * Whether ANY of *names* is a structural (instance-matching) embedder.
+   * Defaults to `false` so the structural marquee copy only shows when a
+   * structural embedder is actually bound.
+   */
+  supportsStructuralAny(names: readonly string[] | null | undefined): boolean {
+    if (!names) return false;
+    return names.some((n) => this.infoFor(n)?.supports_geometric_verification === true);
+  }
 }

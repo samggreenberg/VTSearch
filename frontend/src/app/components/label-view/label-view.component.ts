@@ -863,7 +863,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   get textSupported(): boolean {
     const medias = this.mediaState.mediasSignal();
     if (medias.length === 0) return true;
-    return this.embedderCaps.supportsText(medias[0].embedder ?? '');
+    const first = medias[0];
+    const names = first.embedders ?? (first.embedder ? [first.embedder] : []);
+    return this.embedderCaps.supportsTextAny(names);
   }
 
   /**

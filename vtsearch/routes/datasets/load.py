@@ -34,6 +34,7 @@ import vtscore.security.path_validation as _paths
 from vtscore.config import DATA_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer
 from vtscore.datasets.load_pipeline import (
+    _parse_embedder_list,
     _run_importer_in_background,
     _run_origin_load_in_background,
     clear_dataset,
@@ -62,6 +63,20 @@ LOCAL_UPLOADS_DIR = DATA_DIR / "local_uploads"
 def _form_flag(raw: str | None) -> bool:
     """Parse a multipart checkbox value (``"true"``/``"false"``) to ``bool``."""
     return (raw or "").strip().lower() == "true"
+
+
+def _parse_form_embedders(form, primary: str) -> list[str] | None:
+    """Parse the multipart ``embedders`` field (v3 trio) into an ordered list.
+
+    The local-folder / local-files upload flows POST the bound trio as a JSON
+    array string under ``embedders``.  Returns ``None`` when absent (the caller
+    falls back to the single ``embedder`` field).  The *primary* embedder leads
+    the list even if the client omitted it from the array.
+    """
+    embedders = _parse_embedder_list(form.get("embedders"))
+    if embedders and primary and primary not in embedders:
+        embedders = [primary, *embedders]
+    return embedders
 
 
 def _parse_clipper_params(raw: str) -> dict | None:
@@ -215,6 +230,7 @@ def import_local_folder():
         clipper_params=clipper_params_out,
         chain_steps=chain_steps,
         embedder=field_values.get("embedder", ""),
+        embedders=_parse_form_embedders(request.form, field_values.get("embedder", "")),
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
         build_projection=_form_flag(request.form.get("build_projection")),
@@ -307,6 +323,7 @@ def import_local_files():
         clipper_params=clipper_params_out,
         chain_steps=chain_steps,
         embedder=field_values.get("embedder", ""),
+        embedders=_parse_form_embedders(request.form, field_values.get("embedder", "")),
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
         build_projection=_form_flag(request.form.get("build_projection")),
@@ -365,6 +382,9 @@ def load_demo_dataset_route(body: dict):
         field_values["clipper"] = clipper_name
     if embedder_name:
         field_values["embedder"] = embedder_name
+    demo_embedders = body.get("embedders")
+    if demo_embedders:
+        field_values["embedders"] = demo_embedders
 
     task_id = _run_importer_in_background(importer, field_values)
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}

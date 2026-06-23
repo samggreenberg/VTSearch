@@ -754,11 +754,12 @@ slot + routing).
 V3 lands as a sequence of behavior-preserving substrate phases (so each
 commit is reviewable and the single-embedder world keeps working) followed by
 the user-visible binding.  Ordering is by dependency: each phase needs the one
-above it.  **Status: Phases 2a-2c shipped; the singular mirror is gone
-(``media["embeddings"]`` is the sole per-media vector store).  What remains is
-the create-time picker that binds the text / patch / structural trio (three
-role pickers; at least one slot filled), plus the ``structural`` binding slot +
-routing role it depends on.**
+above it.  **Status: Phases 2a-2c shipped (the singular mirror is gone;
+``media["embeddings"]`` is the sole per-media vector store), the ``structural``
+binding slot + routing role shipped, and the create-time trio picker shipped
+(additive variant — see "Phase 3" below).  A real text + patch + structural
+dataset can now be created end-to-end.  Remaining work is the smaller
+follow-ups under "Open follow-ups".**
 
 **Shipped:**
 
@@ -877,13 +878,43 @@ routing role it depends on.**
   single-embedder dataset (the dict has one entry, which is what the primary
   mirror used to hold).
 
-**Remaining, in order:**
+- **Phase 2d - structural binding slot + routing role.** The role-typed
+  binding is now a `(text, patch, structural)` triple end to end:
+  `derive_binding` / `derive_binding_from_names` return the triple,
+  `validate_binding` checks the structural slot against
+  `supports_geometric_verification`, `DatasetContext` grows a
+  `structural_embedder` slot + `supports_geometric_verification` property + a
+  `"structural"` routing role, and the score precedence in `routed_embedder`,
+  `score_marker_embedder`, and `training._score_embedder_for_snap` became
+  **structural ▸ patch ▸ text**.  The loader meta records the structural slot.
+  Behavior-preserving for every existing single/dual-embedder dataset (the
+  triple's third element is `None` there).
 
-- **Create-time three-role picker + `structural` binding slot.** See "Open
-  follow-ups (from 2b.3)": the binding model and `routed_embedder` know only
-  text/patch, so the structural role and the score precedence
-  structural ▸ patch ▸ text still need wiring before the frontend picker can
-  bind a full trio.
+- **Phase 3 - create-time trio picker (additive).** A real text + patch +
+  structural dataset can now be created.  The load pipeline accepts an
+  `embedders` list (`_embed_missing_stage` / `_ordered_load_embedders` take the
+  list; `_run_origin_load_in_background` gains an `embedders` param); the import
+  routes (generic importer, demo, server-folder, local-folder/files) parse the
+  trio (JSON array on JSON bodies, JSON-array string on multipart) with the
+  primary picker's choice leading the embed order.  Media payloads
+  (`/api/medias/ids`, `/api/medias/batch`) expose the full bound-embedder set
+  under `embedders`, and the frontend capability surface (text-sort gate,
+  region-overlay toggle, structural marquee) ORs across the whole trio via
+  `EmbedderCapabilityService.supports*Any` rather than reading the single
+  primary.
+
+  **Design deviation (deliberate).** The v3 "Frontend" design said the single
+  embedder picker is *replaced* by three role pickers (Text / Patch /
+  Structural), rejecting submission only when all three are empty.  We shipped
+  an **additive** variant instead: the existing primary picker is unchanged
+  (any embedder, including single-vector ones like `dinov2_single` that fill no
+  role slot — these would be *unpickable* under the strict three-role design,
+  a regression), and two **optional** role pickers (Region embedder / Instance
+  embedder) appear under Advanced to bind a patch and/or structural embedder
+  alongside the primary.  This is zero-regression, preserves single-vector
+  selection, and avoids a risky rip-and-replace of the well-tested importer
+  modal.  The shared `vt-import-advanced` component carries the two optional
+  selects, so all four import flows gained them at once.
 
 ### Open follow-ups (from 2b.4)
 
@@ -904,16 +935,17 @@ routing role it depends on.**
 
 ### Open follow-ups (from 2b.3)
 
-- **No create-time path to bind multiple embedders yet.** 2b.3 makes the
-  loader, exporter, and pickle reader multi-embedder-*correct* (and exercises
-  it via the embed driver + persistence round-trip), but the standard create
-  flow still passes one `embedder` field, so production datasets remain
-  single-embedder until the frontend **three-role picker** (under "Frontend"
-  in the v3 design) threads a `(text_embedder, patch_embedder,
-  structural_embedder)` triple into the load pipeline.  Wire that alongside or
-  after routing (2b.4).  Note the structural slot also needs the binding model
-  + `routed_embedder` to grow a `structural` role and the score precedence to
-  become structural ▸ patch ▸ text (today the code knows only text/patch).
+- ~~**No create-time path to bind multiple embedders yet.**~~ **Done (Phase
+  3).** The create flow threads an `embedders` list into the load pipeline and
+  the additive trio picker binds it; the structural slot + routing role landed
+  in Phase 2d.
+- **Trio score-precedence open question (#3) not yet validated on real data.**
+  The score role resolves structural ▸ patch ▸ text everywhere, but design
+  open question #3 (does the detector default to the structural two-stage
+  pipeline when both patch and structural are bound, and should the diversity
+  tree use a *different* preference than the detector?) is still unvalidated on
+  a real patch+structural dataset.  Now that such a dataset is creatable, run
+  the spike.
 - **`patch_regions` / `patch_grid` / `local_features` stay singular.** The
   binding allows at most one patch and one structural embedder, so these remain
   single-valued (owned by that role's embedder) rather than dict-keyed.  Only
@@ -934,4 +966,4 @@ routing role it depends on.**
 
 - **v1 (this plan):** six image embedders - single/patch pairs for DINOv2 (ungated default), DINOv3 (gated, premium), and real-EUPE (FAIR Noncommercial). `supports_patch_regions` + `license_notice` flags on `MediaEmbedder`; each `_patch` embedder populates `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw H × W × 768 fp16); the matching `_single` slug provides a fast/cheap CLS-only path on the same backbone for datasets that don't need region search. `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring; asymmetric training loss (Good = `BCE(mlp(full_image_vec), 1)` unchanged from today, Bad = `mean`-over-regions BCE) with image-level labels unchanged on disk; gallery-card region highlight; license-notice surfacing on the embedder picker. Text sort stays grey via the already-shipped `supports_text` gate. Pre-implementation experiments run on `caltech101_s` and inform `K`, `α`, and the EUPE-real attention path.
 - **v2:** region voting on image media via Shift-drag on the focus pane (single rectangular box, salient-area annotation on yes-votes only; binary fast path via `←`/`→` preserved); on-the-fly vote-vector computation from the v1-pickled `patch_grid` (no re-import needed); optional `LabeledElement.region_box`; region-level training examples; per-region label export. Touch deferred.
-- **v3:** the **text / patch / structural trio** - up to one embedder per role bound on a single dataset (text queries → text embedder; region similarity / votes → patch embedder; instance retrieval + geometric re-rank → structural embedder), at least one slot filled.  Schema change to dict-keyed `media["embeddings"]` (one vector per bound embedder); `patch_regions` / `patch_grid` / `local_features` stay single-valued (one patch + one structural slot); legacy `media["embedding"]` is read-migrated then dropped on next save; MLPs become keyed by `(detector, dataset, embedder)` against the score embedder (structural ▸ patch ▸ text).  Designed in "V3 - design" above; substrate Phases 2a–2b.5 shipped (see "V3 - implementation status").
+- **v3:** the **text / patch / structural trio** - up to one embedder per role bound on a single dataset (text queries → text embedder; region similarity / votes → patch embedder; instance retrieval + geometric re-rank → structural embedder), at least one slot filled.  Schema change to dict-keyed `media["embeddings"]` (one vector per bound embedder); `patch_regions` / `patch_grid` / `local_features` stay single-valued (one patch + one structural slot); legacy `media["embedding"]` is read-migrated then dropped on next save; MLPs become keyed by `(detector, dataset, embedder)` against the score embedder (structural ▸ patch ▸ text).  Designed in "V3 - design" above; **shipped** end-to-end (substrate Phases 2a–2b.5, the structural binding slot + routing in Phase 2d, and the additive create-time trio picker in Phase 3 — see "V3 - implementation status"; the picker deviated to an additive design, documented there).

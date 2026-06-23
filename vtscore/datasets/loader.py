@@ -271,16 +271,17 @@ def export_dataset_to_file(
     from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
     from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
 
-    text_embedder = patch_embedder = None
+    text_embedder = patch_embedder = structural_embedder = None
     if medias:
         first = next(iter(medias.values()))
-        text_embedder, patch_embedder = derive_binding_from_names(media_embedder_names(first))
+        text_embedder, patch_embedder, structural_embedder = derive_binding_from_names(media_embedder_names(first))
 
     meta = {
         "format_version": 1,
         "embedder": embedder,
         "text_embedder": text_embedder,
         "patch_embedder": patch_embedder,
+        "structural_embedder": structural_embedder,
         "clipper": clipper,
         "media_type": media_type,
         "name": name,

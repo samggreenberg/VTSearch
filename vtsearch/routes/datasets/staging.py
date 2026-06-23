@@ -398,8 +398,8 @@ def importer_field_options(body: dict, importer_name: str):
 # ``stage-import``.  Body shape isn't in the OpenAPI spec, but
 # :func:`validate_plugin_args` enforces the per-plugin field types at
 # request time; pass-through keys (``source_specs``, ``clipper``,
-# ``embedder``, ``clipper_params``, ``dataset_name``) ride along on the
-# body and are preserved via ``Meta.unknown = "include"``.
+# ``embedder``, ``embedders``, ``clipper_params``, ``dataset_name``) ride
+# along on the body and are preserved via ``Meta.unknown = "include"``.
 # ---------------------------------------------------------------------------
 
 
@@ -417,7 +417,7 @@ def import_dataset(importer_name: str):
     field_values = validate_plugin_args(
         importer,
         file_mode="bytesio",
-        extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "build_projection"),
+        extra_keys=("source_specs", "clipper", "embedder", "embedders", "dataset_name", "build_projection"),
     )
 
     # ``clipper_params`` is multipart-encoded as a JSON string when the
@@ -451,7 +451,15 @@ register_plugin_typed_routes(
     path_template="/api/dataset/import/{plugin_name}",
     endpoint_prefix="import_dataset",
     delegate=import_dataset,
-    extra_keys=("source_specs", "clipper", "embedder", "dataset_name", "clipper_params", "build_projection"),
+    extra_keys=(
+        "source_specs",
+        "clipper",
+        "embedder",
+        "embedders",
+        "dataset_name",
+        "clipper_params",
+        "build_projection",
+    ),
 )
 register_plugin_typed_routes(
     datasets_staging_bp,

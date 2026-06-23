@@ -56,9 +56,22 @@ export class ImportAdvancedComponent {
   readonly sourceSpecs = input<SourceSpec[]>([]);
   readonly sourceSpecsChange = output<SourceSpec[]>();
 
-  /** Two-way bound embedder selection. */
+  /** Two-way bound embedder selection (the primary embedder; recorded as each
+   *  media's primary and the lead of the v3 trio's embed order). */
   readonly selectedEmbedder = input('');
   readonly selectedEmbedderChange = output<string>();
+
+  /** Optional second/third embedders of the v3 trio
+   *  (``docs/plans/patch-embedder.md`` → "V3").  The primary picker above can be
+   *  any embedder (including a single-vector one); these two *add* a
+   *  patch-capable embedder for region search/voting and a structural embedder
+   *  for instance matching, so a dataset can bind one of each role.  Both
+   *  default to ``''`` (None / not bound) and only appear under Advanced when
+   *  the media type actually offers an embedder of that role. */
+  readonly selectedPatchEmbedder = input('');
+  readonly selectedPatchEmbedderChange = output<string>();
+  readonly selectedStructuralEmbedder = input('');
+  readonly selectedStructuralEmbedderChange = output<string>();
 
   /** When non-empty, the embedder picker is hidden because the user has
    *  set a Solo mediaEmbedder for the current mediaType in settings (or
@@ -178,9 +191,33 @@ export class ImportAdvancedComponent {
   /** License-warning string for the current embedder, or null when the
    *  embedder has no special licensing concerns. */
   get licenseNotice(): string | null {
-    if (!this.selectedEmbedder()) return null;
-    const found = this.embedders().find((e) => e.name === this.selectedEmbedder());
-    return found?.license_notice ?? null;
+    return this.noticeFor(this.selectedEmbedder());
+  }
+
+  /** Patch-capable embedders (region search / voting); the optional v3 "Region
+   *  embedder" picker's options. */
+  get patchEmbedderOptions(): EmbedderInfo[] {
+    return this.embedders().filter((e) => e.supports_patch_regions);
+  }
+
+  /** Structural embedders (instance matching); the optional v3 "Instance
+   *  embedder" picker's options. */
+  get structuralEmbedderOptions(): EmbedderInfo[] {
+    return this.embedders().filter((e) => e.supports_geometric_verification);
+  }
+
+  /** License notice for the chosen patch / structural embedder, or null. */
+  get patchLicenseNotice(): string | null {
+    return this.noticeFor(this.selectedPatchEmbedder());
+  }
+
+  get structuralLicenseNotice(): string | null {
+    return this.noticeFor(this.selectedStructuralEmbedder());
+  }
+
+  private noticeFor(name: string): string | null {
+    if (!name) return null;
+    return this.embedders().find((e) => e.name === name)?.license_notice ?? null;
   }
 
   /** Display name for the currently selected clipper.  Defaults to
@@ -201,6 +238,16 @@ export class ImportAdvancedComponent {
   /** Fired by the embedder select on user pick. */
   onEmbedderChange(name: string): void {
     this.selectedEmbedderChange.emit(name);
+  }
+
+  /** Fired by the optional region-embedder select on user pick. */
+  onPatchEmbedderChange(name: string): void {
+    this.selectedPatchEmbedderChange.emit(name);
+  }
+
+  /** Fired by the optional instance-embedder select on user pick. */
+  onStructuralEmbedderChange(name: string): void {
+    this.selectedStructuralEmbedderChange.emit(name);
   }
 
   /** Fired by the clipper button to request the parent's chooser. */
