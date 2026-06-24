@@ -271,3 +271,37 @@ describe only the last clipper step. A chain of two clippers (e.g.
 unless the consumer reads `clipper_chain`. Phase 4 will replace the
 legacy keys; for Phase 1 this is acceptable because the resolver uses
 the JSON trail.
+
+## Demo-dataset clipping (GUI) — shipped
+
+The demo importer already exposed a clipper "Details" button in the picker,
+but `load_demo_dataset` only recorded the chosen clipper name in the pickle
+meta and never applied it. It now runs the selected clipper (with params) at
+load time via the shared `_apply_clipper` machinery, so clips inherit their
+parent's category and are re-embedded with the demo's embedder. The demo path
+sends `clipper` + `clipper_params` only when the pick is a real (non-default)
+clipper — `_effective_clipper` (backend) and `effectiveDemoClipper()`
+(frontend) share the "default = empty / `*_default` / first-in-list" rule so
+the pre-selected default stays a no-op. The single per-dataset pickle records
+the effective clipper + params; a later load with a different clipper/params
+rebuilds it. Motivating case: the long-form `tut_sound_events_2017_*` demos,
+which are meant to be cut by hand.
+
+### Open follow-ups (demo clipping)
+
+- **Params-blind status.** `GET /api/dataset/demo-list` only receives the
+  clipper *name*, so a params-only change (e.g. `duration` 2→5 on the same
+  clipper) shows "ready" until the load itself detects the drift and rebuilds.
+  Making status params-aware means threading `clipper_params` to the status
+  endpoint and into `_downgrade_for_mismatch`.
+- **One cached config.** Only a single pickle is kept per demo dataset, so
+  switching clipper/params re-embeds rather than caching each config (mirrors
+  the existing embedder-mismatch behaviour). A clipper-signature cache key
+  (like the converter's `{name}__{converter}`) would cache multiple configs at
+  the cost of status accuracy.
+- **Origin reload.** Each clip's `origin.params` carries the clipper trail, but
+  the demo importer's `reload_from_origin` only restores `name`/`converter`,
+  not the clipper. Saved clipped demos work (their clip bytes ride in the
+  pickle); re-deriving a single clip purely from its origin would not re-clip.
+- **Multi-embedder trio.** When the create-time embedder trio is used, clip
+  re-embedding uses the primary embedder only.
