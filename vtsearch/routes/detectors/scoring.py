@@ -679,7 +679,7 @@ def auto_detect(body: dict):
     if results:
         from vtsearch.achievements import record_find  # noqa: PLC0415
 
-        record_find(len(all_ids) * len(results))
+        record_find(len(default_ids) * len(results))
 
     response = {
         "media_type": media_type,
