@@ -105,11 +105,11 @@ class TestRegionGating:
         # Linear that fires on e1 (media 1's text vector) and not on e3 (the
         # shared patch region), so the chosen space changes which media wins.
         torch.manual_seed(0)
-        m = nn.Sequential(nn.Linear(DIM, 1)).eval()
+        linear = nn.Linear(DIM, 1)
         with torch.no_grad():
-            m[0].weight.copy_(torch.tensor([[10.0, 0.0, 0.0, -10.0]]))
-            m[0].bias.zero_()
-        return m
+            linear.weight.copy_(torch.tensor([[10.0, 0.0, 0.0, -10.0]]))
+            linear.bias.zero_()
+        return nn.Sequential(linear).eval()
 
     def test_text_primary_scores_text_vectors_no_region(self):
         snap = _dual_snap()
