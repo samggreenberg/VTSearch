@@ -894,6 +894,30 @@ class TestConverterAcceptsParams:
         # Default falls back to the field's declared default.
         assert c.get_param({}, "n_clips") == "10"
 
+    def test_get_param_unknown_key_returns_empty_and_warns(self, caplog):
+        """An undeclared key still returns "" (historical contract) but now
+        logs a warning so a renamed/typo'd field isn't swallowed silently (L9)."""
+        import logging
+
+        from vtscore.converters import get_converter
+
+        c = get_converter("video2image")
+        assert c is not None
+        with caplog.at_level(logging.WARNING, logger="vtscore.converters.base"):
+            assert c.get_param({}, "no_such_field") == ""
+        assert any("no field declares that key" in r.message for r in caplog.records)
+
+    def test_get_param_declared_key_does_not_warn(self, caplog):
+        import logging
+
+        from vtscore.converters import get_converter
+
+        c = get_converter("video2image")
+        assert c is not None
+        with caplog.at_level(logging.WARNING, logger="vtscore.converters.base"):
+            c.get_param({}, "n_clips")
+        assert not any("no field declares that key" in r.message for r in caplog.records)
+
 
 class TestImportAPISourceSpecs:
     def test_import_endpoint_passes_source_specs(self, client):

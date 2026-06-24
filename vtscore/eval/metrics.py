@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -212,6 +213,14 @@ def compute_binary_classification_metrics(
     tn = sum(p == 0 and gt == 0 for p, gt in zip(predictions, labels))
 
     total = tp + fp + fn + tn
+    if total == 0:
+        # Degenerate input: no predictions to score. The all-zero tuple below
+        # is not a real "0% accurate" result — flag it so a caller (or a log
+        # reader) doesn't treat the zeros as a meaningful evaluation (L7).
+        logging.getLogger(__name__).warning(
+            "compute_binary_classification_metrics called with an empty prediction set; "
+            "returning all-zero accuracy/precision/recall/F1, which are not meaningful."
+        )
     accuracy = (tp + tn) / total if total > 0 else 0.0
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0

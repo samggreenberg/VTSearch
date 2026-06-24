@@ -144,6 +144,23 @@ class TestBinaryClassification:
         acc, prec, rec, f1 = compute_binary_classification_metrics([], [])
         assert acc == 0.0
 
+    def test_empty_logs_degenerate_warning(self, caplog):
+        """An empty prediction set returns all-zero metrics, but logs a warning
+        so the zeros aren't mistaken for a real evaluation (L7)."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="vtscore.eval.metrics"):
+            acc, prec, rec, f1 = compute_binary_classification_metrics([], [])
+        assert (acc, prec, rec, f1) == (0.0, 0.0, 0.0, 0.0)
+        assert any("empty prediction set" in r.message for r in caplog.records)
+
+    def test_nonempty_does_not_warn(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="vtscore.eval.metrics"):
+            compute_binary_classification_metrics([1, 0], [1, 0])
+        assert not any("empty prediction set" in r.message for r in caplog.records)
+
 
 # =====================================================================
 # Metrics: compute_metrics (integration)
