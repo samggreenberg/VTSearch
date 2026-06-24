@@ -167,6 +167,16 @@ class TestImporterMetadata:
             "params": {"paths_file": "/a/list.txt", "media_type": "audio"},
         }
 
+    def test_reference_files_field_excluded_from_origin(self):
+        """``reference_files`` is a storage choice, not part of source identity."""
+        imp = ServerFilesDatasetImporter()
+        keys = {f.key for f in imp.fields}
+        assert "reference_files" in keys
+        origin = imp.build_origin(
+            {"paths_file": "/a/list.txt", "media_type": "audio", "reference_files": "true"}
+        )
+        assert "reference_files" not in origin["params"]
+
     def test_resolve_file_returns_origin_name_when_file_exists(self, tmp_path):
         f = tmp_path / "real.wav"
         f.write_bytes(b"x")

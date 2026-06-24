@@ -249,6 +249,11 @@ def _convert_one_pickle_media(
         ref_path = _resolve_thin_media_path(media_type, media_info, data, dir_keys)
         if ref_path and Path(ref_path).exists():
             return _build_pickle_thin_media(new_id, media_info, media_type, ref_path, extra_fields), False
+        # A reference whose file has gone counts as missing so the load-time
+        # warning fires, even when there is no companion dir for
+        # ``_load_pickle_media_payload`` to flag it against.
+        if media_info.get("media_path"):
+            return None, True
         return None, missing
     return (
         _build_pickle_full_media(
