@@ -1,9 +1,10 @@
 # Logical-Bug Audit: 2026-05
 
 **Status:** Mostly resolved; C1–C12 (critical) and H1–H34 (high) are
-shipped; ~12 medium/low items remain open (M21–M24, M28–M34, L1–L9;
-M25 and M27 shipped, M26 was a false positive). Resolved findings are
-marked as struck-through headings.
+shipped; the security trio M32–M34 and the data-integrity M21 shipped
+2026-06-24; ~8 medium/low items remain open (M29, M35, L1–L9; M22–M28,
+M30–M31 shipped or closed as not-a-bug). Resolved findings are marked as
+struck-through headings.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on
@@ -822,8 +823,18 @@ Cross-section interaction agents:
   commit `0a11d8bd`) so the failure is visible in logs instead of silent.
   The originally-flagged "embedders ignore `clip_start`/`clip_end`"
   concern was resolved separately by that same tile-embedding fix.
-- **M21.** Empty paragraph clip survives to dataset with `None` embedding;
-  embedding-matrix builder later misbehaves.
+- ~~**M21.** Empty paragraph clip survives to dataset with `None` embedding;
+  embedding-matrix builder later misbehaves.~~ **Shipped.** The text
+  clippers already filter empty *sub*-paragraphs (`if p.strip()`), and the
+  M11 work added `_drop_none_embeddings_stage` (removes `None`-embedding
+  media during load) plus a loud `ValueError` in the matrix builder, so the
+  "misbehaves silently" symptom is gone. The residual hole was a
+  whitespace-only clip whose embedder happens to return a *non-`None`*
+  garbage vector for empty input — the `None`-drop net wouldn't catch it.
+  Closed at the source: `_clip_content_bytes` now treats empty/whitespace
+  text as "no content", so a blank clip is never embedded, keeps
+  `embedding=None`, and is dropped by the existing stage. Regression tests
+  in `tests_lib/io/test_clip_reembed_bulk.py::TestBlankTextClipNotEmbedded`.
 
 ### Auth / context
 
@@ -937,12 +948,24 @@ Cross-section interaction agents:
 
 ### Security
 
-- **M32.** `sanitize_template_value` allows `...` (and worse: any non-`.` /
-  `..` token of dots).
-- **M33.** `rglob_follow_symlinks` doesn't detect cycles → CPU/RAM DoS on
-  circular link layouts.
-- **M34.** Email exporter validates "@" only; `"@example.com"` passes and
-  fails at SMTP time.
+- ~~**M32.** `sanitize_template_value` allows `...` (and worse: any non-`.` /
+  `..` token of dots).~~ **Shipped.** `sanitize_template_value` now collapses
+  empty **and any all-dots token** (`.`, `..`, `...`, …) to `_`, replacing the
+  old exact-match-on-`("", ".", "..")` check. Path separators / NUL are still
+  replaced; legitimate dotted names (`.hidden`, `v1.2.3`) pass through.
+  Tests in `tests_lib/io/test_template_sanitization.py`.
+- ~~**M33.** `rglob_follow_symlinks` doesn't detect cycles → CPU/RAM DoS on
+  circular link layouts.~~ **Shipped.** `iter_rglob_follow_symlinks` now
+  tracks the `(st_dev, st_ino)` of every directory it descends into and
+  prunes already-visited subdirectories in place, so a directory symlinked
+  back to an ancestor is walked at most once and the traversal terminates.
+  Tests in `tests_lib/io/test_importer_symlinks.py::TestRglobFollowSymlinks`.
+- ~~**M34.** Email exporter validates "@" only; `"@example.com"` passes and
+  fails at SMTP time.~~ **Shipped.** The `email_smtp` exporter now validates
+  both addresses against a pragmatic regex requiring a non-empty local part,
+  a single `@`, and a dotted domain — rejecting `"@example.com"`, `"foo@"`,
+  and `"foo@bar"` before the MX lookup. Tests in
+  `tests/io/test_exporters.py::TestEmailLabelsetExporter`.
 
 ### Eval / exporters
 

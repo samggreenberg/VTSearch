@@ -235,6 +235,37 @@ class TestRglobFollowSymlinks:
         root.mkdir()
         assert rglob_follow_symlinks(root, "*.wav") == []
 
+    def test_self_referential_symlink_cycle_terminates(self, tmp_path):
+        """A directory symlinked back to itself must not loop forever (M33)."""
+        from vtscore.security.path_validation import rglob_follow_symlinks
+
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "a.wav").write_bytes(b"a")
+        # A link pointing back at root would make os.walk(followlinks=True)
+        # recurse into root/loop/loop/loop/... without a cycle guard.
+        (root / "loop").symlink_to(root)
+
+        results = rglob_follow_symlinks(root, "*.wav")
+        names = [p.name for p in results]
+        # Terminates, and a.wav is found exactly once (the cycle is pruned,
+        # not re-walked under root/loop/...).
+        assert names == ["a.wav"]
+
+    def test_ancestor_symlink_cycle_terminates(self, tmp_path):
+        """A nested directory linked back to an ancestor terminates (M33)."""
+        from vtscore.security.path_validation import rglob_follow_symlinks
+
+        root = tmp_path / "root"
+        sub = root / "sub"
+        sub.mkdir(parents=True)
+        (sub / "b.wav").write_bytes(b"b")
+        (sub / "back").symlink_to(root)  # sub/back -> root (cycle)
+
+        results = rglob_follow_symlinks(root, "*.wav")
+        names = {p.name for p in results}
+        assert names == {"b.wav"}
+
 
 class TestGlobTopLevelSymlinks:
     """glob_top_level should pick up symlinked files at the top level."""

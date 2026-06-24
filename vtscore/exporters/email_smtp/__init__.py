@@ -10,12 +10,26 @@ Requires the ``dnspython`` package for MX record resolution.
 
 from __future__ import annotations
 
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
 from vtscore.exporters.base import ExporterField, LabelsetExporter
+
+# Pragmatic address check: a non-empty local part, a single ``@``, and a
+# dotted domain, none of which may contain whitespace.  Not full RFC 5322
+# (that's effectively un-regexable), but enough to reject the addresses the
+# bare ``"@" in`` test let through — ``"@example.com"`` (empty local part),
+# ``"foo@"`` (no domain), ``"foo@bar"`` (undotted domain) — before we spend
+# a DNS MX lookup and hand the address to a remote SMTP server.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _is_valid_email(addr: str) -> bool:
+    """Return ``True`` if *addr* looks like a deliverable email address."""
+    return bool(_EMAIL_RE.match(addr or ""))
 
 
 def _build_plain_text(results: dict[str, Any]) -> str:
@@ -116,9 +130,9 @@ class EmailLabelsetExporter(LabelsetExporter):
         from_addr = field_values["from"]
         to_addr = field_values["to"]
 
-        if "@" not in from_addr:
+        if not _is_valid_email(from_addr):
             raise ValueError("Sender email address is invalid.")
-        if "@" not in to_addr:
+        if not _is_valid_email(to_addr):
             raise ValueError("Recipient email address is invalid.")
 
         domain = to_addr.rsplit("@", 1)[1]
