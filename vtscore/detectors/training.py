@@ -46,6 +46,36 @@ def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | No
     return structural or patch or text
 
 
+def detector_score_embedder(det_ctx: Any, snap: dict[int, dict[str, Any]] | None) -> str | None:
+    """Embedder a *detector* trains and scores in.
+
+    The detector's chosen primary (``det_ctx.primary_embedder``) wins **when the
+    snap supplies it**; otherwise the dataset score precedence - the
+    legacy-migration default and the cross-dataset portability fallback (a
+    detector pointed at a dataset that lacks its primary re-embeds against that
+    dataset's space).  This is exactly :func:`keying_embedder_for_snap`.
+    Returns a concrete name (collapsed to the cached primary path by the matrix
+    layer when it equals the dataset's primary), or ``None`` when there is
+    nothing to resolve (empty snap).  See ``docs/plans/patch-embedder.md`` →
+    "Per-detector primary embedder".
+    """
+    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+
+    return keying_embedder_for_snap(det_ctx, snap) or None
+
+
+def _patch_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | None:
+    """Resolve the patch-slot embedder name for *snap*'s medias, or ``None``."""
+    if not snap:
+        return None
+    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
+
+    first = next(iter(snap.values()), {})
+    _text, patch, _structural = derive_binding_from_names(media_embedder_names(first))
+    return patch
+
+
 def validate_good_bad_split(y_list: list[float]) -> tuple[int, int]:
     """Check that *y_list* contains at least one good and one bad label.
 
@@ -63,6 +93,7 @@ def train_and_threshold(
     X_list: list,
     y_list: list[float],
     snap: dict | None = None,
+    embedder_name: str | None = None,
 ) -> tuple[Any, float]:
     """Train an MLP and compute a calibrated threshold.
 
@@ -83,6 +114,10 @@ def train_and_threshold(
         X_list: Embedding vectors (list of numpy arrays).
         y_list: Binary labels (1.0 = good, 0.0 = bad).
         snap: Optional media snapshot for safe-threshold scoring.
+        embedder_name: The detector's primary embedder, used so the
+            safe-threshold scoring pass reads vectors from the same space the
+            ``X_list`` were built in.  ``None`` falls back to the dataset score
+            precedence for *snap* (the pre-per-detector behaviour).
 
     Returns:
         ``(model, threshold)``
@@ -129,7 +164,8 @@ def train_and_threshold(
         # `safe` is only True when `snap` is truthy (see assignment above),
         # so the narrowing is real even though pyright can't track it.
         assert snap is not None
-        _all_ids, all_embs = get_embedding_matrix_for_snap(snap, _score_embedder_for_snap(snap))
+        score_emb = embedder_name if embedder_name is not None else _score_embedder_for_snap(snap)
+        _all_ids, all_embs = get_embedding_matrix_for_snap(snap, score_emb)
         X_all = torch.from_numpy(all_embs)
         with torch.no_grad():
             X_all = X_all.to(next(model.parameters()).device)
@@ -200,6 +236,7 @@ def _build_vote_xy(
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
     region_boxes: dict[int, tuple[float, float, float, float]],
+    embedder_name: str | None = None,
 ) -> tuple[list[np.ndarray], list[float]]:
     """Build ``(X_list, y_list)`` from filtered votes.
 
@@ -208,12 +245,16 @@ def _build_vote_xy(
     embedding.  Returns the raw lists - the caller
     (:func:`_train_and_score_xy`) enforces the ≥2-samples / ≥1-good /
     ≥1-bad guard.
+
+    *embedder_name* is the detector's primary embedder; when ``None`` the
+    dataset score precedence for *clips_dict* is used (the pre-per-detector
+    behaviour).  Either way the MLP trains in the same space
+    :func:`_score_all_media` scores against.
     """
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
-    # Train against the dataset's score embedder so the MLP shares the space
-    # _score_all_media scores against (the v3 routing table).
-    embedder_name = _score_embedder_for_snap(clips_dict)
+    if embedder_name is None:
+        embedder_name = _score_embedder_for_snap(clips_dict)
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     for cid in good_votes:
@@ -230,6 +271,7 @@ def _build_vote_xy(
 def _score_all_media(
     model: nn.Sequential,
     clips_dict: dict[int, dict[str, Any]],
+    embedder_name: str | None = None,
 ) -> tuple[list[int], list[float], list[int]]:
     """Score every media in *clips_dict* with the trained MLP.
 
@@ -238,6 +280,14 @@ def _score_all_media(
     running a single forward pass, then max-pooling per media - so the
     winning region's index can be surfaced for UI overlays.  Plain
     datasets fall back to the cached embedding matrix.
+
+    *embedder_name* is the detector's primary embedder (the space the MLP was
+    trained in).  When it is given, region max-pooling is used **only** if that
+    primary is the dataset's patch-slot embedder - a detector scoring in the
+    text or structural space of a multi-embedder dataset must score against
+    that space's full-image vectors, not the patch tree.  When ``None`` (the
+    pre-per-detector behaviour) any media carrying ``patch_regions`` takes the
+    region path, matching the dataset-level score precedence.
 
     Returns ``(all_ids, scores_per_media, best_region_index_per_media)``.
     """
@@ -248,7 +298,13 @@ def _score_all_media(
         get_region_matrix_for_snap,
     )
 
+    resolved = embedder_name if embedder_name is not None else _score_embedder_for_snap(clips_dict)
     has_regions = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
+    if has_regions and embedder_name is not None:
+        # Explicit per-detector primary: region-pool only when scoring in the
+        # patch space (the patch tree lives in the patch embedder's vectors).
+        patch = _patch_embedder_for_snap(clips_dict)
+        has_regions = patch is not None and resolved == patch
     if has_regions:
         # One row per (media, region) pair, built once and cached on the
         # dataset context (the region vectors never change between votes -
@@ -256,7 +312,7 @@ def _score_all_media(
         # a multi-hundred-thousand-row matrix on every vote.
         all_ids, X_np, media_index_per_row, region_index_per_row = get_region_matrix_for_snap(clips_dict)
     else:
-        all_ids, X_np = get_embedding_matrix_for_snap(clips_dict, _score_embedder_for_snap(clips_dict))
+        all_ids, X_np = get_embedding_matrix_for_snap(clips_dict, resolved)
         n = len(all_ids)
         media_index_per_row = np.arange(n, dtype=np.int64)
         region_index_per_row = np.zeros(n, dtype=np.int64)
@@ -346,6 +402,7 @@ def _format_results(
 def score_media_with_model(
     model: nn.Sequential,
     clips_dict: dict[int, dict[str, Any]],
+    embedder_name: str | None = None,
 ) -> list[dict[str, Any]]:
     """Score every media in *clips_dict* with an already-trained *model*.
 
@@ -357,8 +414,11 @@ def score_media_with_model(
     best-match highlight is populated regardless of which entry point ran the
     scoring.  Plain single-vector datasets are scored via the cached embedding
     matrix and gain no ``best_region`` field, exactly as before.
+
+    *embedder_name* is the detector's primary embedder, so the scoring space
+    matches the one the *model* was trained in (the per-detector primary).
     """
-    all_ids, scores, best_region = _score_all_media(model, clips_dict)
+    all_ids, scores, best_region = _score_all_media(model, clips_dict, embedder_name)
     return _format_results(all_ids, scores, best_region, clips_dict)
 
 
@@ -399,6 +459,11 @@ def _train_and_score_xy(
     if len(X_list) < 2 or num_good == 0 or num_bad == 0:
         return [], 0.5, None
 
+    # The detector's primary embedder (the explicit space it scores in), or the
+    # dataset score precedence when the detector has no primary yet.  Scoring
+    # reads vectors from this same space the X_list were assembled in.
+    score_emb = detector_score_embedder(det_ctx, clips_dict)
+
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
@@ -427,7 +492,7 @@ def _train_and_score_xy(
     # per labelled media, mirroring the "vote on whole images" rule.
     model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
-    all_ids, scores, best_region = _score_all_media(model, clips_dict)
+    all_ids, scores, best_region = _score_all_media(model, clips_dict, score_emb)
 
     if safe_thresholds:
         threshold = calculate_safe_threshold(threshold, scores, len(X_list))
@@ -488,7 +553,9 @@ def train_and_score(
           training was not possible).
     """
     region_boxes = vote_region_boxes or {}
-    X_list, y_list = _build_vote_xy(clips_dict, good_votes, bad_votes, region_boxes)
+    X_list, y_list = _build_vote_xy(
+        clips_dict, good_votes, bad_votes, region_boxes, detector_score_embedder(det_ctx, clips_dict)
+    )
     results, threshold, model = _train_and_score_xy(
         X_list,
         y_list,

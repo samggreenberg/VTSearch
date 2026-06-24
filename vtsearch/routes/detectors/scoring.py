@@ -165,9 +165,18 @@ def find_label(body: dict):  # noqa: C901
     # Highlight overlay can outline it - matching the learned-sort path.  Plain
     # single-vector datasets take the cached embedding-matrix path inside and
     # gain no ``best_region`` field.
-    from vtscore.detectors.training import score_media_with_model
+    from types import SimpleNamespace
 
-    results = score_media_with_model(mlp, snap)
+    from vtscore.detectors.training import score_media_with_model
+    from vtscore.embedding.binding import keying_embedder_for_snap
+
+    # Score in the same space the MLP was trained in: the detector's chosen
+    # primary when this dataset supplies it, else the dataset score precedence
+    # (keying_embedder_for_snap) - matching resolve_or_train_detector's cold
+    # path and the learned-sort cache-space marker.
+    primary = (det_data or {}).get("primary_embedder", "") or ""
+    score_emb = keying_embedder_for_snap(SimpleNamespace(primary_embedder=primary), snap)
+    results = score_media_with_model(mlp, snap, embedder_name=score_emb or None)
     update_find_progress(
         "running",
         f"Scoring {n_total} items…",
@@ -619,19 +628,46 @@ def auto_detect(body: dict):
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
     from vtscore.state.core import get_active_context  # noqa: PLC0415
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap, get_active_context().routed_embedder("score"))
-    X_all = torch.from_numpy(all_embs)
+    # Each detector scores in its own primary embedder space, so build one
+    # matrix per distinct embedder the Auto-Find detectors call for (collapsing
+    # to a single shared matrix on the common single-embedder dataset, where
+    # every primary resolves to the same name).  A detector whose chosen primary
+    # this dataset can't supply (or a legacy detector) falls back to the dataset
+    # score precedence, matching resolve_or_train_detector's cold-train space.
+    from types import SimpleNamespace  # noqa: PLC0415
 
-    embed_dim = int(all_embs.shape[1]) if all_embs.ndim > 1 else 0
+    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+
+    default_score = get_active_context().routed_embedder("score")
+    det_embedders: dict[str, str | None] = {}
+    for dname, ddata, _entry in detectors_to_run:
+        primary = (ddata.get("primary_embedder", "") or "") if ddata else ""
+        keyed = keying_embedder_for_snap(SimpleNamespace(primary_embedder=primary), snap)
+        det_embedders[dname] = keyed or default_score
+    matrices: dict[str | None, tuple[list[int], Any]] = {}
+    for emb in set(det_embedders.values()):
+        ids, embs = get_embedding_matrix_for_snap(snap, emb)
+        matrices[emb] = (ids, torch.from_numpy(embs))
+
+    default_ids, default_X = matrices[default_score]
+    embed_dim = int(default_X.shape[1]) if default_X.ndim > 1 else 0
     worker_cap = cap_workers_by_memory(
-        len(all_ids),
+        len(default_ids),
         embed_dim,
         max_workers=min(len(detectors_to_run), 8),
     )
     results: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=worker_cap) as pool:
         futures = [
-            pool.submit(_score_detector_for_auto_detect, name, data, entry, media_type, snap, all_ids, X_all)
+            pool.submit(
+                _score_detector_for_auto_detect,
+                name,
+                data,
+                entry,
+                media_type,
+                snap,
+                *matrices[det_embedders[name]],
+            )
             for name, data, entry in detectors_to_run
         ]
         for future in futures:
@@ -643,7 +679,7 @@ def auto_detect(body: dict):
     if results:
         from vtsearch.achievements import record_find  # noqa: PLC0415
 
-        record_find(len(all_ids) * len(results))
+        record_find(len(default_ids) * len(results))
 
     response = {
         "media_type": media_type,

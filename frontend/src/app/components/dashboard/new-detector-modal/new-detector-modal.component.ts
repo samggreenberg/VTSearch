@@ -13,11 +13,14 @@ import { SortingApiService } from '../../../services/sorting-api.service';
 import { LabelImportersApiService } from '../../../services/label-importers-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
 import { EmbedderCapabilityService } from '../../../services/embedder-capability.service';
+import { MediaStateService } from '../../../services/media-state.service';
 import {
   DemoDataset,
+  EmbedderInfo,
   ImporterField,
   ImporterInfo,
   ImporterPickerTab,
+  Media,
   MediaTypeInfo,
 } from '../../../models/api.models';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
@@ -51,6 +54,7 @@ export class NewDetectorModalComponent implements OnInit {
   private labelImportersApi = inject(LabelImportersApiService);
   private settingsState = inject(SettingsStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
+  private mediaState = inject(MediaStateService);
 
   /** Media type of the currently active dataset, if any. */
   @Input() defaultMediaType = '';
@@ -86,6 +90,12 @@ export class NewDetectorModalComponent implements OnInit {
   readonly mediaTypeInfos = signal<MediaTypeInfo[]>([]);
   readonly submitting = signal(false);
   readonly error = signal('');
+
+  /** The detector's chosen primary embedder (its scoring vector space). Only
+   *  meaningful when the active dataset binds more than one embedder; on the
+   *  common single-embedder dataset the server auto-resolves it and the picker
+   *  is hidden. Empty until the user picks (or there is nothing to pick). */
+  readonly primaryEmbedder = signal('');
   mediaTypeDropdownOpen = false;
   /** True when the media-type field is locked to the active dataset's type.
    *  Set on init whenever `defaultMediaType` is provided; cleared when the
@@ -211,6 +221,7 @@ export class NewDetectorModalComponent implements OnInit {
 
   ngOnInit(): void {
     this.embedderCaps.ensureLoaded();
+    this.ensurePrimaryEmbedderDefault();
     this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypeInfos.set(res.media_types || []);
@@ -357,8 +368,61 @@ export class NewDetectorModalComponent implements OnInit {
     return !!this.pendingText().trim();
   }
 
+  /** Embedder names the active dataset has vectors for (the keys of each
+   *  media's ``embeddings`` dict, surfaced as the ``embedders`` array). These
+   *  are the detector's eligible primary spaces. Falls back to the single
+   *  ``datasetEmbedder`` when the medias haven't loaded an array. */
+  get boundEmbedderNames(): string[] {
+    const medias = this.mediaState.mediasSignal() as Media[];
+    const first = medias.length > 0 ? medias[0] : null;
+    const names = first?.embedders ?? (first?.embedder ? [first.embedder] : []);
+    if (names.length > 0) return names;
+    return this.datasetEmbedder ? [this.datasetEmbedder] : [];
+  }
+
+  /** Show the embedder picker only when the active dataset binds more than one
+   *  embedder — otherwise the single space is the unambiguous default and the
+   *  server resolves it without a pick. */
+  get showEmbedderPicker(): boolean {
+    return this.boundEmbedderNames.length > 1;
+  }
+
+  /** Capability metadata for each bound embedder, for option labels + the
+   *  license-notice chip. Unknown names still render (by name) so a freshly
+   *  added embedder is never unpickable. */
+  get embedderOptions(): EmbedderInfo[] {
+    const infos = this.embedderCaps.infos() ?? [];
+    return this.boundEmbedderNames.map(
+      (name) => infos.find((e) => e.name === name) ?? ({ name } as EmbedderInfo),
+    );
+  }
+
+  embedderLabel(info: EmbedderInfo): string {
+    return info.display_name || info.name;
+  }
+
+  /** License notice of the currently-selected primary embedder, or null. */
+  get primaryLicenseNotice(): string | null {
+    const sel = this.primaryEmbedder();
+    if (!sel) return null;
+    return (this.embedderCaps.infos() ?? []).find((e) => e.name === sel)?.license_notice ?? null;
+  }
+
+  onPrimaryEmbedderChange(name: string): void {
+    this.primaryEmbedder.set(name);
+  }
+
+  /** Default the picker to the first bound embedder the first time it becomes
+   *  relevant, so a multi-embedder dataset lands on a valid pick. */
+  private ensurePrimaryEmbedderDefault(): void {
+    if (this.showEmbedderPicker && !this.primaryEmbedder()) {
+      this.primaryEmbedder.set(this.boundEmbedderNames[0]);
+    }
+  }
+
   get canSubmitBlank(): boolean {
-    return !!this.name().trim() && this.hasExample && !this.submitting();
+    const embedderOk = !this.showEmbedderPicker || !!this.primaryEmbedder();
+    return !!this.name().trim() && this.hasExample && embedderOk && !this.submitting();
   }
 
   get canSubmitTrained(): boolean {
@@ -917,6 +981,10 @@ export class NewDetectorModalComponent implements OnInit {
         text_query: textQuery,
         media_example: mediaExample,
         examples: examplesPayload,
+        // Empty when there's a single (or no) bound embedder — the server
+        // auto-resolves the only space; a concrete name on a multi-embedder
+        // dataset selects the detector's scoring space.
+        primary_embedder: this.showEmbedderPicker ? this.primaryEmbedder() : '',
       })
       .subscribe({
         next: (resp: any) => {

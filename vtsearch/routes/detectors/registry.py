@@ -145,6 +145,12 @@ def register_detector_route(body: dict):
     if not media_type or media_type == "any":
         abort(400, message="media_type is required (must be a specific type, not 'any')")
 
+    from vtscore.detectors.primary_embedder import resolve_detector_primary
+
+    primary_embedder, primary_err = resolve_detector_primary(body.get("primary_embedder", ""))
+    if primary_err:
+        abort(400, message=primary_err)
+
     det_path = _detector_path(name)
     if not det_path.exists():
         examples = body.get("examples") or []
@@ -159,6 +165,7 @@ def register_detector_route(body: dict):
             "media_type": media_type,
             "examples": examples,
             "created_at": time.time(),
+            "primary_embedder": primary_embedder,
             "labelset": {"labels": []},
         }
         _write_detector(det_path, detector_data)
@@ -428,6 +435,13 @@ def load_detector_route(body: dict):  # noqa: C901
                         )
                         det_data = _read_detector(_detector_path(det_name))
                         if det_data:
+                            # The detector's chosen primary embedder (immutable;
+                            # set at create time): load it so the label-embed /
+                            # score / invalidation paths prefer it over the
+                            # dataset precedence whenever the active dataset
+                            # supplies it.  Empty for a legacy detector → routing
+                            # falls back to the precedence.
+                            det_ctx.primary_embedder = det_data.get("primary_embedder", "") or ""
                             _restore_labels_from_detector(det_data)
 
                             tracker.check_cancelled()
@@ -886,11 +900,12 @@ def get_detector_stats(detector_id: str):
     # Embedder: the loaded context's live value wins (it reflects the space
     # the labels are currently resolved against); otherwise the registry's
     # persisted stamp.
+    persisted_primary = data.get("primary_embedder", "") or ""
     if detector_id in get_loaded_detector_ids():
         ctx = get_detector_context(detector_id)
-        embedder = (ctx.embedder if ctx is not None else "") or entry.get("embedder", "") or ""
+        embedder = (ctx.embedder if ctx is not None else "") or persisted_primary or entry.get("embedder", "") or ""
     else:
-        embedder = entry.get("embedder", "") or ""
+        embedder = persisted_primary or entry.get("embedder", "") or ""
 
     input_spec = data.get("input_spec") or {}
     raw_clipper = (input_spec.get("clipper", "") if isinstance(input_spec, dict) else "") or ""
@@ -928,14 +943,19 @@ def get_detector_stats(detector_id: str):
 # ---------------------------------------------------------------------------
 
 
-def _detector_browse_embedder(entry: dict, media_type: str) -> str:
+def _detector_browse_embedder(entry: dict, data: dict, media_type: str) -> str:
     """The embedder to project a detector's positives with.
 
-    The detector's own recorded embedder wins — browsing a detector must not
-    depend on whatever dataset is incidentally selected on the dashboard.
-    Falls back to the media type's default embedder when the detector has
-    never recorded one (e.g. never trained against a dataset).
+    The detector's own primary embedder wins — browsing a detector must not
+    depend on whatever dataset is incidentally selected on the dashboard.  The
+    persisted per-detector primary (``data["primary_embedder"]``) is preferred;
+    the registry's recorded embedder is the fallback for a legacy detector that
+    has no primary yet but has trained.  Falls back to the media type's default
+    embedder when neither is set (e.g. a brand-new detector).
     """
+    primary = (data.get("primary_embedder", "") or "") if data else ""
+    if primary:
+        return primary
     recorded = entry.get("embedder", "") or ""
     if recorded:
         return recorded
@@ -1039,7 +1059,7 @@ def browse_detector_positives(detector_id: str):
     if not any(el.label == "good" for el in labelset.elements):
         abort(409, message="This detector has no positive labels to browse.")
 
-    embedder_name = _detector_browse_embedder(entry, media_type)
+    embedder_name = _detector_browse_embedder(entry, data, media_type)
 
     # Reuse the loaded detector's cached label vectors only when they were built
     # in the same space we're about to project in; otherwise re-embed fresh.

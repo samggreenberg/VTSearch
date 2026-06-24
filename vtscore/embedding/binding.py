@@ -138,6 +138,39 @@ def score_marker_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> st
     return score_marker_embedder(next(iter(snap.values()), {}))
 
 
+def keying_embedder_for_snap(det_ctx: Any, snap: dict[int, dict[str, Any]] | None) -> str:
+    """The marker to compare against ``det_ctx.embedder`` for cache invalidation.
+
+    Under the *per-detector primary embedder* model (see
+    ``docs/plans/patch-embedder.md`` → "Per-detector primary embedder"), a
+    detector scores in its **own** explicit primary (``det_ctx.embedder``),
+    not the dataset's score precedence.  So the model/label caches stay valid
+    as long as the active dataset can still *supply* that primary embedder:
+
+    * primary set **and** present among the snap's bound embedders → return
+      the primary unchanged, so the compare against ``det_ctx.embedder`` is
+      equal and nothing is invalidated (no per-request retrain thrash on a
+      multi-embedder dataset whose precedence differs from the primary);
+    * primary set but **absent** from the snap (the dataset can't score this
+      detector) → return the snap's score precedence, which differs from the
+      primary and so invalidates the stale cache (the cold path then re-embeds
+      the labelset against the new dataset, or the detector is gated);
+    * no explicit primary yet (legacy / pre-first-train ``det_ctx``) → the
+      score precedence, the legacy-migration default.
+
+    For a legacy detector with no chosen primary (``primary_embedder`` empty)
+    this is exactly the dataset score precedence - byte-for-byte the
+    pre-per-detector behaviour - so a single-embedder dataset and every existing
+    detector are unaffected.
+    """
+    primary = (getattr(det_ctx, "primary_embedder", "") or "") if det_ctx is not None else ""
+    if primary and snap:
+        first = next(iter(snap.values()), {})
+        if primary in media_embedder_names(first):
+            return primary
+    return score_marker_embedder_for_snap(snap)
+
+
 def validate_binding(
     text_embedder: str | None,
     patch_embedder: str | None,
