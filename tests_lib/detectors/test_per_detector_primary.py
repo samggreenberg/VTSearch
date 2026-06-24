@@ -107,7 +107,10 @@ class TestRegionGating:
         torch.manual_seed(0)
         linear = nn.Linear(DIM, 1)
         with torch.no_grad():
-            linear.weight.copy_(torch.tensor([[10.0, 0.0, 0.0, -10.0]]))
+            # Fires on e1 (dim 1, media 1's text vector); zero on e2 (dim 2) and
+            # e3 (dim 3, the shared patch region) → the scored space decides the
+            # winner.
+            linear.weight.copy_(torch.tensor([[0.0, 10.0, 0.0, 0.0]]))
             linear.bias.zero_()
         return nn.Sequential(linear).eval()
 
@@ -184,9 +187,11 @@ class TestResolveDetectorPrimary:
         assert bad == ""
         assert bad_err is not None and "not bound" in bad_err.lower()
 
-    def test_no_active_dataset_leaves_empty(self):
+    def test_no_bound_embedders_leaves_empty(self):
         from vtscore.detectors.primary_embedder import resolve_detector_primary
 
-        # No active dataset → can't validate, leave empty (resolved at first train).
-        primary, err = resolve_detector_primary("")
+        # A dataset with no bound embedders (nothing to vectorise against) →
+        # can't validate, leave empty (resolved at first train via migration).
+        with self._activate([]):
+            primary, err = resolve_detector_primary("")
         assert primary == "" and err is None
