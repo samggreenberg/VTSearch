@@ -5981,6 +5981,9 @@
           "paths_file": {
             "type": "string"
           },
+          "reference_files": {
+            "default": null
+          },
           "source_specs": {
             "default": null,
             "nullable": true
@@ -6037,6 +6040,9 @@
             "type": "string"
           },
           "recursive": {
+            "default": null
+          },
+          "reference_files": {
             "default": null
           },
           "source_specs": {
@@ -6483,6 +6489,9 @@
           "paths_file": {
             "type": "string"
           },
+          "reference_files": {
+            "default": null
+          },
           "source_specs": {
             "default": null,
             "nullable": true
@@ -6519,6 +6528,9 @@
             "type": "string"
           },
           "recursive": {
+            "default": null
+          },
+          "reference_files": {
             "default": null
           },
           "source_specs": {
