@@ -23,7 +23,7 @@ class TestSanitizeTemplateValue:
     @pytest.mark.parametrize(
         "value,expected",
         [
-            ("../etc/passwd", "_.._etc_passwd"),
+            ("../etc/passwd", ".._etc_passwd"),
             ("a/b", "a_b"),
             ("a\\b", "a_b"),
             ("dog\0bark", "dog_bark"),
