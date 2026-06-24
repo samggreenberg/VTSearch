@@ -26,13 +26,15 @@ VG annotations don't fit that model:
 
 These were chosen explicitly with the user:
 
-- **Negatives — closed-world.** If one of our categories is *not* among an
-  image's annotated objects, the image counts as a **negative** for that
-  category. We accept that VG's incompleteness turns a few real-but-unannotated
-  objects into false negatives — the same accidental-overlap noise the existing
-  datasets already tolerate. Consequence: there is **no "unknown" state**; every
-  (image, category) pair is positive or negative, so a VG image just needs a
-  **set of positive categories**, not a present/absent/unknown trichotomy.
+- **Negatives — closed-world.** Membership is strictly binary: a category is
+  either in an image's annotated object set (**positive, +1**) or it isn't
+  (**negative, −1**). There is no third "unknown" value — if one of our
+  categories is not among an image's annotated objects, the image counts as a
+  negative for it, full stop. We accept that VG's incompleteness turns a few
+  real-but-unannotated objects (the unlooked-for banana) into false negatives —
+  the same accidental-overlap noise the existing datasets already tolerate. So a
+  VG image just needs a **set of positive categories**; everything outside that
+  set is negative.
 - **Scope — additive, VG-only.** Existing single-label datasets are left exactly
   as they are. The eval positive/negative test branches: if a media carries a
   `categories` list it uses set membership, otherwise it falls back to the
@@ -44,9 +46,14 @@ These were chosen explicitly with the user:
   (`LabeledElement.region_box`, `DetectorContext.vote_region_boxes`, and
   `docs/plans/patch-embedder.md`) to draw on later.
 - **Categories — top-100 by frequency.** The vocabulary is the 100 most frequent
-  VG object names (the well-known VG scene-graph object vocab), hardcoded so the
-  UI can show categories before the (large) download. Object→category matching
-  normalizes case/whitespace and folds simple plurals.
+  VG object names (the well-known VG scene-graph object vocab), kept as one
+  **static hardcoded list** (`VISUAL_GENOME_CATEGORIES`) — *not* recomputed from
+  each slice's frequencies. All four `visual_genome_{s,m,l,a}` variants share
+  that exact same list, so the category space is identical across slices; only
+  which images fall in the slice changes. A category with zero images in a small
+  slice is still one of the 100 (its queries just have no positives there). The
+  hardcoded list also lets the UI show categories before the (large) download.
+  Object→category matching normalizes case/whitespace and folds simple plurals.
 
 ## Data model (the additive bits)
 
