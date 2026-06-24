@@ -504,6 +504,46 @@ def _clip_to_bytes(file_path: Path, media_type: str, params: dict[str, Any]) -> 
     return None
 
 
+def _converter_origin_to_chain(params: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Normalize a flat ``run_converters_on_folder`` origin into a one-step chain.
+
+    The importer-level converter path (path 1 in
+    ``docs/plans/server-dedup-references.md``) stamps a *flat* origin -
+    ``converter`` / ``converter_param_<key>`` plus the Phase 2b sub-output
+    disambiguators ``converter_out_index`` / ``converter_n_out`` /
+    ``converter_content_hash`` - rather than the ``clipper_chain`` trail the
+    chain stage records.  Reshaping it into a single :class:`ChainStep` lets
+    the resolver reuse the one replay code path
+    (:func:`~vtscore.datasets.clipper_chain.replay_chain_on_file`) and the
+    shared sub-output selector, so a reference-converted label re-embeds from
+    the source file + recipe exactly like a chain-converted one.
+
+    Returns ``None`` when no ``converter`` is recorded.
+    """
+    converter = params.get("converter")
+    if not converter:
+        return None
+    prefix = "converter_param_"
+    conv_params = {k[len(prefix) :]: v for k, v in params.items() if k.startswith(prefix)}
+    entry: dict[str, Any] = {"kind": "converter", "name": str(converter), "params": conv_params}
+    out_index = params.get("converter_out_index")
+    if out_index is not None:
+        try:
+            entry["out_index"] = int(out_index)
+        except (TypeError, ValueError):
+            pass
+    n_out = params.get("converter_n_out")
+    if n_out is not None:
+        try:
+            entry["n_out"] = int(n_out)
+        except (TypeError, ValueError):
+            pass
+    content_hash = params.get("converter_content_hash")
+    if content_hash is not None:
+        entry["content_hash"] = content_hash
+    return [entry]
+
+
 def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> tuple[np.ndarray, bytes | None] | None:
     """Replay a clipper chain on *file_path*.
 
@@ -654,6 +694,19 @@ def _embed_resolved_label(
             return None
         embedding, _clip_bytes = result
         return embedding
+    # Flat converter origin (run_converters_on_folder): re-run the converter on
+    # the resolved source file and re-select the recorded sub-output, so a
+    # reference-converted label embeds the rendered page/frame, not the raw
+    # source file.  Normalized into a one-step chain to reuse the chain replay.
+    if origin is not None and params.get("converter"):
+        chain = _converter_origin_to_chain(params)
+        if chain is not None:
+            result = _replay_chain(file_path, chain, embedder_name)
+            if result is not None:
+                embedding, _clip_bytes = result
+                return embedding
+        # Replay failed (converter gone, no output matched): fall through to a
+        # whole-file embed rather than dropping the label entirely.
     return embed_file(file_path, media_type, embedder_name)
 
 

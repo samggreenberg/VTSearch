@@ -1,12 +1,15 @@
 # Reference (no-copy) dataset import
 
-Status: **Phase 1 + Phase 2a shipped; Phase 2b designed, not yet built.**
+Status: **Phase 1 + Phase 2a + Phase 2b shipped.**
 Whole-file references for the two server importers (`server_folder`,
 `server_files`) are wired end-to-end (Phase 1). **Lazy clips** for audio and
-image now let reference datasets be clipped without duplicating bytes
-(Phase 2a). **Lazy converter output** (Phase 2b) is the last transform that
-still copies bytes; the design is fully specified below under *Phase 2b
-design* and is ready to implement, but no Phase 2b code has shipped.
+image let reference datasets be clipped without duplicating bytes (Phase 2a).
+**Lazy converter output** (Phase 2b) now extends the same recipe-on-demand
+mechanism to the last duplicating transform: a converter (`document2image`,
+`video2image`, …) running in reference mode stores the source path plus a
+converter recipe instead of baking N rendered outputs into the pickle. The
+*Phase 2b design* below is the implementation spec; *What shipped (Phase 2b)*
+records what actually landed and the remaining fast-follows.
 
 ## Problem
 
@@ -105,6 +108,76 @@ re-splitting from source is fragile). Video clips are already metadata-only
 so they don't duplicate bytes and need no recipe slicing. A converter anywhere
 in the chain disables lazification (the output is no longer a slice of the
 source) — that's Phase 2b.
+
+## What shipped (Phase 2b: lazy converter output)
+
+Reference (thin) imports that run a **converter** (`server_folder` /
+`server_files` with a converter spec) no longer bake the rendered outputs into
+the pickle. Each output stores the *source* `media_path` plus a converter
+recipe in `origin.params` and re-renders on demand. This closes the last
+duplicating transform; un-converted media (Phase 1) and audio/image clips
+(Phase 2a) were already reference-clean.
+
+- **Importer stamp** (`vtscore/converters/runner.py`):
+  `_emit_converted_outputs` stamps three per-output disambiguators —
+  `converter_out_index`, `converter_n_out`, and `converter_content_hash` (a
+  12-hex md5 of the output bytes, via `clipper_chain._content_hash`). Each
+  output now gets its **own** origin dict (`_origin_with_disambiguators`)
+  rather than sharing one flat origin per source file. In reference (`thin`)
+  mode each output is tagged with `_lazy_source` and keeps its `media_bytes`
+  only for the embed stage. The disambiguators are stamped in *both* modes so
+  the cross-dataset resolver can re-select sub-outputs even for copy-mode
+  converter imports.
+- **Byte resolution** (`vtscore/media/lazy_clip.py`): `clip_recipe` learned a
+  converter branch (checked first, keyed by `converter` in `origin.params`, so
+  a `document2image` output with `media_type=image` resolves as a converter
+  output, not an image clip). `_apply_converter_recipe` re-runs the converter
+  on the source bytes and re-selects the recorded output by **delegating to
+  `clipper_chain._select_chain_output`** — identical content-hash-first,
+  drift-aware, refuse-to-guess semantics as the resolver. Returns `None`
+  (fall through, cache nothing) when nothing matches.
+- **Byte-bounded cache** (`vtscore/media/lazy_clip.py`): converter output uses
+  a new `_ByteBoundedLRU` (~256 MB ceiling) **separate** from Phase 2a's
+  count-bounded clip cache, because a rendered page / video frame is 1–8 MB and
+  varies by an order of magnitude (256 *entries* of those could be 1–2 GB). The
+  clip slice cache stays count-bounded.
+- **Re-lazify** (`vtscore/datasets/stages/clipper.py`):
+  `_relazify_reference_clips_stage` already strips any `_lazy_source`-tagged
+  media, so it covers converter outputs unchanged — only the docstring was
+  generalized. It runs after the embed / drop-none stages (existing
+  `load_pipeline` ordering), so the embed-missing safety net always sees the
+  real rendered bytes, never the source file behind the path.
+- **Cross-dataset re-embed** (`vtscore/detectors/resolver.py`): a flat
+  converter origin is normalized into a one-element chain
+  (`_converter_origin_to_chain`) and replayed through the existing
+  `replay_chain_on_file`, so a reference-converted label re-embeds the rendered
+  page/frame (not the raw source file) via a single shared replay path. Falls
+  back to a whole-file embed if the converter is gone.
+- **Pickle round-trip / HTTP serving / exporters** need no change: the recipe
+  lives in `origin.params` (round-trips), `media_path` is serialized, and
+  `_resolve_media_bytes` already consults `lazy_clip_bytes` before the
+  whole-file read.
+
+### Open follow-ups (Phase 2b)
+
+- **Demo converter path** (`apply_converter_to_demo` /
+  `_emit_converted_demo_outputs`) and **standalone PDF expansion**
+  (`load_pdf_images_into` in `vtscore/datasets/pdf.py`) do **not** yet stamp the
+  disambiguators or `_lazy_source`; they always materialize. Same recipe+resolve
+  shape — wire them through `_origin_with_disambiguators` (or share the emit
+  helper) when a reference path reaches them.
+- **Multi-step chains mixing a converter and a clipper** under reference mode
+  are still left fully materialized: `_hydrate_reference_parents` bails when a
+  chain contains a converter, and Phase 2b's first cut covers a *converter as
+  the sole reference transform*. Re-slicing converter output (converter →
+  clipper) is a later composition now that both lazy branches exist.
+- **Cache unification**: Phase 2a's clip cache and Phase 2b's converter cache
+  are two structures with two eviction policies. Migrating clips onto the
+  byte-bounded LRU (clips are just small, cheap-to-recompute entries) would
+  leave one cache; not required, noted so they don't drift.
+- **Pre-warm**: intentionally not done — re-converting on load defeats the
+  storage-only-cost trade. Revisit only if a real workload shows cold-fetch
+  latency is a problem.
 
 ## Phase 2b design: lazy converter output
 

@@ -155,6 +155,52 @@ def _run_converter_on_source(
         return None
 
 
+def _short_content_hash(output: dict[str, Any]) -> str | None:
+    """Return a 12-hex md5 of a converter output's payload, or ``None``.
+
+    Reuses :func:`vtscore.datasets.clipper_chain._content_hash` so the
+    converter recipe records the *same* authoritative disambiguator the
+    chain stage records, and the shared ``_select_chain_output`` selector
+    matches identically on replay.  This hashes bytes we are about to
+    embed (and, in reference mode, discard) - it does not persist them,
+    so it respects the no-persisted-bytes rule (the dataset MD5 already
+    stores a per-media content hash for the same reason).
+    """
+    from vtscore.datasets.clipper_chain import _content_hash  # noqa: PLC0415
+
+    return _content_hash(output)
+
+
+def _origin_with_disambiguators(
+    origin: dict[str, Any], out_index: int, n_out: int, output: dict[str, Any]
+) -> dict[str, Any]:
+    """Return a per-output copy of *origin* stamped with sub-output disambiguators.
+
+    ``run_converters_on_folder`` records a *flat* origin per source file, so
+    every output of one source would otherwise share one origin dict (and one
+    set of params).  Lazy converter resolution needs to re-run the converter
+    and pick *this* output back out, so each output carries:
+
+    - ``converter_out_index`` - this output's position in the converter's
+      returned list (page number - 1, frame segment index).
+    - ``converter_n_out`` - the output count at import time, so the resolver
+      can detect drift (source changed, library bumped) and fall back from
+      positional to content matching instead of returning the wrong page.
+    - ``converter_content_hash`` - the authoritative disambiguator: a short
+      md5 of the output bytes, preferred by ``_select_chain_output``.
+
+    All values are stored as strings, matching the ``converter_param_<key>``
+    round-trip convention; readers coerce as needed.
+    """
+    params = dict(origin.get("params", {}))
+    params["converter_out_index"] = str(out_index)
+    params["converter_n_out"] = str(n_out)
+    ch = _short_content_hash(output)
+    if ch is not None:
+        params["converter_content_hash"] = ch
+    return {**origin, "params": params}
+
+
 def _emit_converted_outputs(
     *,
     outputs: list[dict[str, Any]],
@@ -165,26 +211,39 @@ def _emit_converted_outputs(
     medias: dict[int, dict[str, Any]],
     start_id: int,
     category: str,
+    thin: bool = False,
 ) -> int:
     """Append each converter output to *medias*; return next media_id.
 
     Outputs leave with ``embedding=None``; the framework embed stage
     embeds them from ``media_bytes`` / ``media_string``.
+
+    In reference (*thin*) mode each output keeps its ``media_bytes`` for the
+    embed stage but is tagged with a ``_lazy_source`` marker carrying the
+    source file path.  ``_relazify_reference_clips_stage`` strips those bytes
+    after embedding so the saved dataset stores only the source path plus the
+    converter recipe (in ``origin.params``); the bytes are reproduced on demand
+    by :mod:`vtscore.media.lazy_clip`.
     """
     media_id = start_id
-    for output in outputs:
+    n_out = len(outputs)
+    resolved_source = str(source_path.resolve())
+    for out_index, output in enumerate(outputs):
         output_filename = output.get("filename", f"converted_{media_id}")
         origin_name = f"{source_rel}\u2192{output_filename}"
 
+        per_output_origin = _origin_with_disambiguators(origin, out_index, n_out, output)
         media_data = _build_converted_media_dict(
             media_id,
             output,
             target_type,
-            origin,
+            per_output_origin,
             origin_name,
-            str(source_path.resolve()),
+            resolved_source,
             category,
         )
+        if thin:
+            media_data["_lazy_source"] = resolved_source
         medias[media_id] = media_data
         media_id += 1
     return media_id
@@ -216,10 +275,15 @@ def run_converters_on_folder(
         target_media_type: The target media type identifier
             (e.g. ``"image"``).
         medias: The medias dict to append to (not cleared).
-        thin: When ``True``, store converter output in a temp directory
-            instead of holding bytes in memory.  Currently all converted
-            media is kept in-memory regardless, since converters produce
-            bytes directly.
+        thin: Reference mode.  When ``True``, each converted output is
+            tagged with a ``_lazy_source`` marker and keeps its
+            ``media_bytes`` only long enough for the framework embed stage;
+            ``_relazify_reference_clips_stage`` then strips those bytes so
+            the saved dataset stores the source path plus a converter recipe
+            (``converter`` / ``converter_param_*`` / ``converter_out_index``
+            / ``converter_n_out`` / ``converter_content_hash`` in
+            ``origin.params``) instead of N copies of the rendered output.
+            :mod:`vtscore.media.lazy_clip` reproduces the bytes on demand.
         on_progress: Optional progress callback.
         base_origin: The origin dict of the parent import (e.g.
             ``{"importer": "server_folder", "params": {"path": "..."}}``)
@@ -290,6 +354,7 @@ def run_converters_on_folder(
                 medias=medias,
                 start_id=media_id,
                 category="custom",
+                thin=thin,
             )
 
 
