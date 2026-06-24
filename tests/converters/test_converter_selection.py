@@ -913,6 +913,7 @@ class TestConverterAcceptsParams:
         from vtscore.converters import get_converter
 
         c = get_converter("video2image")
+        assert c is not None
         with caplog.at_level(logging.WARNING, logger="vtscore.converters.base"):
             c.get_param({}, "n_clips")
         assert not any("no field declares that key" in r.message for r in caplog.records)
