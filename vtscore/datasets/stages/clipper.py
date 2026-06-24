@@ -100,6 +100,16 @@ def _apply_clipper(  # noqa: C901
     if not steps:
         return
 
+    # Reference (thin) parents carry no bytes, so audio/image clippers - which
+    # read ``media_bytes`` to compute boundaries and slice - would early-return
+    # the media unchanged.  Transiently hydrate those parents from their source
+    # files so clipping (and the per-clip MD5/embed/thumbnail fixup below) runs
+    # exactly as it does in full mode.  Each hydrated parent is tagged with a
+    # ``_lazy_source`` marker that rides into its clips; those clips are
+    # re-lazified by ``_relazify_reference_clips_stage`` after the embed stages
+    # so the dataset never stores duplicated clip bytes.
+    _hydrate_reference_parents(clips_dict, steps)
+
     result = apply_chain_to_clips(clips_dict, steps, on_progress=on_progress)
     if result is None:
         return
@@ -113,6 +123,85 @@ def _apply_clipper(  # noqa: C901
     # (converter chains change the media_type of the carriers).
     for clip in clips_dict.values():
         clip["media_type"] = final_type
+
+
+def _hydrate_reference_parents(clips_dict: dict, steps: list[dict]) -> bool:
+    """Materialize bytes on reference (thin) parents so clippers can run.
+
+    A *reference* media carries ``media_path`` but no ``media_bytes`` /
+    ``media_string`` (it was imported with ``reference_files`` / ``thin``).
+    Audio and image clippers need the actual bytes to compute clip boundaries
+    and slice, so we load the source via the media type's ``load_media_data``
+    (which also fills ``duration`` / ``width`` / ``height`` / ``thumbnail``,
+    skipped at thin-import time) and tag the parent with a ``_lazy_source``
+    marker.  The marker rides along into every derived clip via the clipper's
+    ``dict(media)`` copy, so :func:`_relazify_reference_clips` can later strip
+    those clips back to references.
+
+    Lazy clips only apply to pure same-type clipper chains; a chain containing
+    a converter changes media type, so the clip's bytes are no longer a slice
+    of the original source file.  Such chains are left fully materialized
+    (lazy converter output is out of scope - see
+    ``docs/plans/server-dedup-references.md``).
+
+    Returns ``True`` if at least one parent was hydrated.
+    """
+    from vtscore.media.lazy_clip import LAZY_CLIP_TYPES  # noqa: PLC0415
+
+    if any(step.get("kind") == "converter" for step in steps):
+        return False
+
+    import vtscore.media as media_registry  # noqa: PLC0415
+
+    any_hydrated = False
+    for media in clips_dict.values():
+        if media.get("media_bytes") is not None or media.get("media_string") is not None:
+            continue
+        media_type = media.get("media_type")
+        if media_type not in LAZY_CLIP_TYPES:
+            continue
+        path = media.get("media_path")
+        if not path or not Path(path).exists():
+            continue
+        try:
+            mt = media_registry.get(media_type)
+            media.update(mt.load_media_data(Path(path)))
+        except Exception:
+            import logging as _logging  # noqa: PLC0415
+
+            _logging.getLogger(__name__).warning(
+                "lazy clip: failed to hydrate reference parent %s; clipping it as-is", path, exc_info=True
+            )
+            continue
+        media["_lazy_source"] = path
+        any_hydrated = True
+    return any_hydrated
+
+
+def _relazify_reference_clips_stage(ctx: DatasetContext, tracker=None) -> None:
+    """Strip materialized bytes from clips descended from a reference parent.
+
+    Each such clip carries the ``_lazy_source`` marker (inherited from its
+    hydrated parent in :func:`_hydrate_reference_parents`).  We drop its
+    ``media_bytes`` / ``media_string`` and point ``media_path`` back at the
+    source file; ``_resolve_media_bytes`` reproduces the clip's bytes on demand
+    from the recipe stored in ``origin.params`` (sliced clip) or by reading the
+    whole file (a pass-through clip the clipper returned unchanged).  The
+    per-clip MD5, embedding, and thumbnail were already computed from the real
+    bytes in the clipper stage, so the reference clip is byte-for-byte
+    equivalent without the stored payload.
+
+    Runs after the embed / drop-none stages so the embed-missing safety net
+    sees real bytes (a clip's ``media_path`` points at the *whole* source file,
+    not the slice, so embedding it lazily would embed the wrong content).
+    """
+    for clip in ctx.medias.values():
+        source = clip.pop("_lazy_source", None)
+        if source is None:
+            continue
+        clip["media_path"] = source
+        clip["media_bytes"] = None
+        clip["media_string"] = None
 
 
 def _regenerate_clip_thumbnails(  # noqa: C901
