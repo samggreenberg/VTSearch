@@ -79,25 +79,31 @@ def resolve_or_train_detector(  # noqa: C901
     from vtscore.detectors.resolver import resolve_label_embeddings
     from vtscore.detectors.training import train_and_threshold
 
-    # The detector's primary embedder (the explicit per-detector scoring space),
-    # persisted on the detector JSON.  Both the in-snap vectors and the
+    # The space to cold-train the MLP in: the detector's chosen primary when
+    # this snap supplies it, else the dataset score precedence (the legacy /
+    # cross-dataset-portability fallback).  Both the in-snap vectors and the
     # origin-resolved label vectors are read/embedded in this one space so the
-    # cold-trained MLP never mixes embedder outputs.  Empty for a legacy
-    # detector / single-embedder dataset, where it falls back to the snap's
-    # primary embedder (byte-for-byte the pre-per-detector behaviour).
+    # cold-trained MLP never mixes embedder outputs.  ``keying_embedder_for_snap``
+    # is fed a throwaway carrier for the detector's primary because an unloaded
+    # detector has no live context.
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+
     primary = (det_data.get("primary_embedder", "") or "") if det_data else ""
+    cold_embedder = keying_embedder_for_snap(SimpleNamespace(primary_embedder=primary), snap)
 
     X_list: list = []
     y_list: list[float] = []
     md5_to_emb = {}
     if snap:
-        md5_to_emb = {c["md5"]: media_embedding(c, primary or None) for c in snap.values()}
+        md5_to_emb = {c["md5"]: media_embedding(c, cold_embedder or None) for c in snap.values()}
 
-    # Match origin-resolved label vectors to the detector's primary space so
-    # the two paths don't produce a mixed-space training set (silently
-    # garbage MLP).  Empty when the snap is empty or untyped, which falls
-    # back to the media type's default embedder.
-    dataset_embedder = primary
+    # Match origin-resolved label vectors to the cold-train space so the two
+    # paths don't produce a mixed-space training set (silently garbage MLP).
+    # Empty when the snap is empty or untyped, which falls back to the media
+    # type's default embedder.
+    dataset_embedder = cold_embedder
     if not dataset_embedder and snap:
         dataset_embedder = next(iter(snap.values()), {}).get("embedder", "") or ""
 
@@ -157,7 +163,7 @@ def resolve_or_train_detector(  # noqa: C901
             total_steps=progress_total_steps,
         )
         trained_mlp, threshold = train_and_threshold(
-            X_list, y_list, snap=snap, embedder_name=primary or None
+            X_list, y_list, snap=snap, embedder_name=cold_embedder or None
         )
         return trained_mlp, threshold, None
 

@@ -158,11 +158,12 @@ def keying_embedder_for_snap(det_ctx: Any, snap: dict[int, dict[str, Any]] | Non
     * no explicit primary yet (legacy / pre-first-train ``det_ctx``) → the
       score precedence, the legacy-migration default.
 
-    For every single-embedder dataset the primary *is* that one embedder and is
-    always present, so this returns the primary unchanged - byte-for-byte the
-    pre-per-detector behaviour, where the marker equalled the precedence.
+    For a legacy detector with no chosen primary (``primary_embedder`` empty)
+    this is exactly the dataset score precedence - byte-for-byte the
+    pre-per-detector behaviour - so a single-embedder dataset and every existing
+    detector are unaffected.
     """
-    primary = (getattr(det_ctx, "embedder", "") or "") if det_ctx is not None else ""
+    primary = (getattr(det_ctx, "primary_embedder", "") or "") if det_ctx is not None else ""
     if primary and snap:
         first = next(iter(snap.values()), {})
         if primary in media_embedder_names(first):

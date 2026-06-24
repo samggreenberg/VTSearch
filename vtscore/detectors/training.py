@@ -49,21 +49,19 @@ def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | No
 def detector_score_embedder(det_ctx: Any, snap: dict[int, dict[str, Any]] | None) -> str | None:
     """Embedder a *detector* trains and scores in.
 
-    The per-detector primary (``det_ctx.embedder``, the explicit space chosen
-    at create time) wins; absent (a legacy / pre-first-train context, or no
-    detector at all) it falls back to the dataset score precedence
-    (:func:`_score_embedder_for_snap`) - the legacy-migration default, which on
-    a single-embedder dataset names that one embedder.  Returns a concrete name
-    (collapsed to the cached primary path by the matrix layer when it equals
-    the dataset's primary), or ``None`` for a slot-less single-vector dataset
-    with no explicit primary, where the matrix layer reads each media's primary
-    vector.  See ``docs/plans/patch-embedder.md`` → "Per-detector primary
-    embedder".
+    The detector's chosen primary (``det_ctx.primary_embedder``) wins **when the
+    snap supplies it**; otherwise the dataset score precedence - the
+    legacy-migration default and the cross-dataset portability fallback (a
+    detector pointed at a dataset that lacks its primary re-embeds against that
+    dataset's space).  This is exactly :func:`keying_embedder_for_snap`.
+    Returns a concrete name (collapsed to the cached primary path by the matrix
+    layer when it equals the dataset's primary), or ``None`` when there is
+    nothing to resolve (empty snap).  See ``docs/plans/patch-embedder.md`` →
+    "Per-detector primary embedder".
     """
-    primary = (getattr(det_ctx, "embedder", "") or "") if det_ctx is not None else ""
-    if primary:
-        return primary
-    return _score_embedder_for_snap(snap)
+    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+
+    return keying_embedder_for_snap(det_ctx, snap) or None
 
 
 def _patch_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | None:

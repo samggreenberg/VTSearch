@@ -49,18 +49,19 @@ def _embedder_for_active_dataset(snap: dict[int, dict[str, Any]] | None) -> str:
 def _detector_embedder(det_ctx, snap: dict[int, dict[str, Any]] | None) -> str:
     """The embedder a *detector* resolves and embeds its labels in.
 
-    The detector's explicit per-detector primary (``det_ctx.embedder``, chosen
-    at create time) wins; absent (legacy / pre-first-train) it falls back to
-    the active dataset's score precedence via
-    :func:`_embedder_for_active_dataset` - the legacy-migration default, which
-    on a single-embedder dataset names that one embedder.  Keeping a detector's
-    label cache keyed to its own primary means switching the active dataset
-    under the detector no longer invalidates the cache as long as the new
-    dataset supplies that primary.  See ``docs/plans/patch-embedder.md`` →
-    "Per-detector primary embedder".
+    The detector's chosen primary (``det_ctx.primary_embedder``) wins when the
+    active dataset supplies it; otherwise the dataset's score precedence (the
+    legacy-migration default and the cross-dataset portability fallback -
+    re-embed against whatever space the new dataset uses).  This is
+    :func:`keying_embedder_for_snap`, so it agrees with the model-invalidation
+    and re-embed checks.  Keeping a detector's label cache keyed to its own
+    primary means switching the active dataset under the detector no longer
+    invalidates the cache as long as the new dataset supplies that primary.  See
+    ``docs/plans/patch-embedder.md`` → "Per-detector primary embedder".
     """
-    primary = getattr(det_ctx, "embedder", "") or ""
-    return primary or _embedder_for_active_dataset(snap)
+    from vtscore.embedding.binding import keying_embedder_for_snap
+
+    return keying_embedder_for_snap(det_ctx, snap)
 
 
 def _patch_pooled_from_file(

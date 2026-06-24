@@ -165,13 +165,18 @@ def find_label(body: dict):  # noqa: C901
     # Highlight overlay can outline it - matching the learned-sort path.  Plain
     # single-vector datasets take the cached embedding-matrix path inside and
     # gain no ``best_region`` field.
-    from vtscore.detectors.training import score_media_with_model
+    from types import SimpleNamespace
 
-    # Score in the detector's primary embedder space (the one the MLP was
-    # trained in); falls back to the dataset score precedence for a legacy
-    # detector with no persisted primary.
+    from vtscore.detectors.training import score_media_with_model
+    from vtscore.embedding.binding import keying_embedder_for_snap
+
+    # Score in the same space the MLP was trained in: the detector's chosen
+    # primary when this dataset supplies it, else the dataset score precedence
+    # (keying_embedder_for_snap) - matching resolve_or_train_detector's cold
+    # path and the learned-sort cache-space marker.
     primary = (det_data or {}).get("primary_embedder", "") or ""
-    results = score_media_with_model(mlp, snap, embedder_name=primary or None)
+    score_emb = keying_embedder_for_snap(SimpleNamespace(primary_embedder=primary), snap)
+    results = score_media_with_model(mlp, snap, embedder_name=score_emb or None)
     update_find_progress(
         "running",
         f"Scoring {n_total} items…",
@@ -626,13 +631,19 @@ def auto_detect(body: dict):
     # Each detector scores in its own primary embedder space, so build one
     # matrix per distinct embedder the Auto-Find detectors call for (collapsing
     # to a single shared matrix on the common single-embedder dataset, where
-    # every primary resolves to the same name).  A detector with no persisted
-    # primary falls back to the dataset score precedence.
+    # every primary resolves to the same name).  A detector whose chosen primary
+    # this dataset can't supply (or a legacy detector) falls back to the dataset
+    # score precedence, matching resolve_or_train_detector's cold-train space.
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+
     default_score = get_active_context().routed_embedder("score")
     det_embedders: dict[str, str | None] = {}
     for dname, ddata, _entry in detectors_to_run:
         primary = (ddata.get("primary_embedder", "") or "") if ddata else ""
-        det_embedders[dname] = primary or default_score
+        keyed = keying_embedder_for_snap(SimpleNamespace(primary_embedder=primary), snap)
+        det_embedders[dname] = keyed or default_score
     matrices: dict[str | None, tuple[list[int], Any]] = {}
     for emb in set(det_embedders.values()):
         ids, embs = get_embedding_matrix_for_snap(snap, emb)

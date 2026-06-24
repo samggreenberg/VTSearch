@@ -435,13 +435,13 @@ def load_detector_route(body: dict):  # noqa: C901
                         )
                         det_data = _read_detector(_detector_path(det_name))
                         if det_data:
-                            # The detector's primary embedder is authoritative
-                            # (chosen at create time): load it onto the context
-                            # before any training so the label-embed / score
-                            # paths use it instead of the dataset precedence.
-                            # Empty for a legacy detector → resolved at first
-                            # train via migration.
-                            det_ctx.embedder = det_data.get("primary_embedder", "") or ""
+                            # The detector's chosen primary embedder (immutable;
+                            # set at create time): load it so the label-embed /
+                            # score / invalidation paths prefer it over the
+                            # dataset precedence whenever the active dataset
+                            # supplies it.  Empty for a legacy detector → routing
+                            # falls back to the precedence.
+                            det_ctx.primary_embedder = det_data.get("primary_embedder", "") or ""
                             _restore_labels_from_detector(det_data)
 
                             tracker.check_cancelled()
