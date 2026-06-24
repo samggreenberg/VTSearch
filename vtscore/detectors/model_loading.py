@@ -162,9 +162,7 @@ def resolve_or_train_detector(  # noqa: C901
             step=progress_step,
             total_steps=progress_total_steps,
         )
-        trained_mlp, threshold = train_and_threshold(
-            X_list, y_list, snap=snap, embedder_name=cold_embedder or None
-        )
+        trained_mlp, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=cold_embedder or None)
         return trained_mlp, threshold, None
 
     diagnostic: dict = {
