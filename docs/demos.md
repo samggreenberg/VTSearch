@@ -35,6 +35,10 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **urbansound8k_m** | Real urban field recordings across 10 UrbanSound8K categories (medium) |
 | **urbansound8k_l** | Real urban field recordings across 10 UrbanSound8K categories (large) |
 | **urbansound8k_a** | Real urban field recordings across 10 UrbanSound8K categories: air conditioner, car horn, children playing, dog bark, and more |
+| **tut_sound_events_2017_s** | Uncut ~4-minute TUT Sound Events 2017 street soundscapes, one "street" bucket (small slice of 32 recordings) |
+| **tut_sound_events_2017_m** | Uncut ~4-minute TUT street soundscapes, one "street" bucket (medium) |
+| **tut_sound_events_2017_l** | Uncut ~4-minute TUT street soundscapes, one "street" bucket (large) |
+| **tut_sound_events_2017_a** | All 32 uncut ~4-minute TUT Sound Events 2017 street recordings (dev + eval); long-form audio for hands-on clipping rather than a labeled classification set |
 
 ## Image
 

@@ -175,6 +175,7 @@ UI. They are **not** downloaded at startup.
 | GTZAN Music Genre | Audio | Internet Archive | ~600 MB |
 | Speech Commands v2 | Audio | Google | ~600 MB |
 | UrbanSound8K | Audio | Zenodo | ~600 MB |
+| TUT Sound Events 2017 | Audio | Zenodo | ~1700 MB |
 | Caltech-101 | Image | Caltech Data | ~131 MB |
 | Caltech-256 | Image | Caltech Data | ~1200 MB |
 | Oxford Flowers 102 | Image | Oxford | ~131 MB |

@@ -62,6 +62,28 @@ REUTERS21578_URL = "http://kdd.ics.uci.edu/databases/reuters21578/reuters21578.t
 GTZAN_URL = "https://huggingface.co/datasets/marsyas/gtzan/resolve/main/data/genres.tar.gz"
 SPEECH_COMMANDS_V2_URL = "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz"
 URBANSOUND8K_URL = "https://zenodo.org/records/1203745/files/UrbanSound8K.tar.gz"
+# TUT Sound Events 2017 (DCASE): long-form (~4 min) binaural street recordings.
+# Unlike the other audio demos these are full uncut soundscapes, so a single
+# file contains many sound events scattered over time - ideal for hands-on
+# clipping practice.  The development set ships as two audio zips and the
+# evaluation set as one; each entry is ``(url, slug)`` where *slug* names the
+# per-archive extraction subdirectory.  Annotations (the ``meta`` zips) are
+# intentionally not downloaded: the demo treats every recording as one
+# undifferentiated "street" bucket so the user clips it themselves.
+TUT_SOUND_EVENTS_2017_ARCHIVES = (
+    (
+        "https://zenodo.org/records/400516/files/TUT-sound-events-2017-development.audio.1.zip",
+        "development_1",
+    ),
+    (
+        "https://zenodo.org/records/400516/files/TUT-sound-events-2017-development.audio.2.zip",
+        "development_2",
+    ),
+    (
+        "https://zenodo.org/records/1040179/files/TUT-sound-events-2017-evaluation.audio.zip",
+        "evaluation",
+    ),
+)
 OXFORD_FLOWERS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/102flowers.tgz"
 OXFORD_FLOWERS_LABELS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/imagelabels.mat"
 FOOD101_URL = "http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"
@@ -111,6 +133,8 @@ REUTERS21578_DOWNLOAD_SIZE_MB = 8
 GTZAN_DOWNLOAD_SIZE_MB = 1200
 SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB = 2300
 URBANSOUND8K_DOWNLOAD_SIZE_MB = 6000
+# Dev audio.1 (~1.1 GB) + audio.2 (~213 MB) + eval audio (~388 MB).
+TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB = 1730
 OXFORD_FLOWERS_DOWNLOAD_SIZE_MB = 330
 FOOD101_DOWNLOAD_SIZE_MB = 5000
 EUROSAT_DOWNLOAD_SIZE_MB = 90

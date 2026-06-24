@@ -1,5 +1,9 @@
-"""Audio dataset downloaders: ESC-50, GTZAN, Speech Commands v2, UrbanSound8K."""
+"""Audio dataset downloaders: ESC-50, GTZAN, Speech Commands v2, UrbanSound8K,
+TUT Sound Events 2017."""
 
+import shutil
+import uuid
+import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -139,3 +143,65 @@ def download_urbansound8k(on_progress: Optional[ProgressCallback] = None) -> Pat
         on_progress=on_progress,
     )
     return extract_dir
+
+
+def download_tut_sound_events_2017(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download and extract the TUT Sound Events 2017 street recordings.
+
+    Pulls the development (two audio zips) and evaluation (one audio zip)
+    sets from Zenodo into ``DATA_DIR / "tut_sound_events_2017"``, extracting
+    only the ``.wav`` recordings (the metadata/annotation zips are skipped on
+    purpose).  Each archive's recordings land in their own subdirectory so the
+    two development zips don't collide and per-archive caching works.
+
+    The 32 recordings (24 development + 8 evaluation) are full ~4-minute
+    binaural street soundscapes, each containing many sound events scattered
+    over time - long-form material intended for hands-on clipping.
+
+    Args:
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``tut_sound_events_2017/`` directory whose subdirectories
+        hold the extracted ``.wav`` files.
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    base = _core.DATA_DIR / "tut_sound_events_2017"
+    archives = _core.TUT_SOUND_EVENTS_2017_ARCHIVES
+
+    # Cached when every archive's subdirectory already holds at least one wav.
+    if base.exists() and all((base / slug).exists() and any((base / slug).glob("*.wav")) for _url, slug in archives):
+        return base
+
+    base.mkdir(parents=True, exist_ok=True)
+    total = len(archives)
+
+    for i, (url, slug) in enumerate(archives):
+        dest_dir = base / slug
+        if dest_dir.exists() and any(dest_dir.glob("*.wav")):
+            continue  # This archive already extracted.
+
+        unique_id = uuid.uuid4().hex[:8]
+        zip_path = _core.DATA_DIR / f".dl_{unique_id}_tut_{slug}.zip"
+
+        try:
+            on_progress("downloading", f"Downloading TUT Sound Events 2017 ({slug})...", i, total)
+            _core.download_file_with_progress(url, zip_path, 0, on_progress)
+
+            on_progress("downloading", f"Extracting TUT Sound Events 2017 ({slug})...", i + 1, total)
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                for member in zf.namelist():
+                    # Extract only the audio, flattened into the archive's dir.
+                    if member.lower().endswith(".wav"):
+                        dest = dest_dir / Path(member).name
+                        if not dest.exists():
+                            with zf.open(member) as src, open(dest, "wb") as dst:
+                                shutil.copyfileobj(src, dst)
+        finally:
+            zip_path.unlink(missing_ok=True)
+
+    return base

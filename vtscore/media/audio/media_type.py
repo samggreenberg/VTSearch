@@ -282,12 +282,18 @@ class AudioMediaType(MediaType):
         "street_music",
     ]
 
+    # TUT Sound Events 2017 ships uncut ~4-minute street soundscapes.  We don't
+    # use its event annotations: every recording goes into one "street" bucket
+    # so the user clips the long files themselves.
+    _TUT_CATEGORIES = ["street"]
+
     @property
     def demo_datasets(self) -> list:
         from vtscore.datasets.downloader import (  # noqa: PLC0415
             ESC50_DOWNLOAD_SIZE_MB,
             GTZAN_DOWNLOAD_SIZE_MB,
             SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
+            TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
             URBANSOUND8K_DOWNLOAD_SIZE_MB,
         )
 
@@ -296,6 +302,10 @@ class AudioMediaType(MediaType):
         esc_desc = "Animals, nature, cities, & homes"
         sc_desc = "Spoken keyword utterances"
         us_desc = "Urban recordings"
+        # 24 development + 8 evaluation recordings, all one "street" bucket.
+        tut_folder = DATA_DIR / "tut_sound_events_2017"
+        tut_desc = "Long ~4min street soundscapes (clip them yourself)"
+        tut_total = 32
         return [
             DemoDataset(
                 id="esc50_s",
@@ -444,6 +454,54 @@ class AudioMediaType(MediaType):
                 items_per_category=873,
                 download_size_mb=URBANSOUND8K_DOWNLOAD_SIZE_MB,
             ),
+            DemoDataset(
+                id="tut_sound_events_2017_s",
+                label="TUT Sound Events 2017 (S)",
+                description=tut_desc,
+                categories=self._TUT_CATEGORIES,
+                source="tut_sound_events_2017",
+                required_folder=tut_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 7,
+                items_per_category=tut_total,
+                download_size_mb=TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="tut_sound_events_2017_m",
+                label="TUT Sound Events 2017 (M)",
+                description=tut_desc,
+                categories=self._TUT_CATEGORIES,
+                source="tut_sound_events_2017",
+                required_folder=tut_folder,
+                slice_frac_start=1 / 7,
+                slice_frac_end=3 / 7,
+                items_per_category=tut_total,
+                download_size_mb=TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="tut_sound_events_2017_l",
+                label="TUT Sound Events 2017 (L)",
+                description=tut_desc,
+                categories=self._TUT_CATEGORIES,
+                source="tut_sound_events_2017",
+                required_folder=tut_folder,
+                slice_frac_start=3 / 7,
+                slice_frac_end=None,
+                items_per_category=tut_total,
+                download_size_mb=TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="tut_sound_events_2017_a",
+                label="TUT Sound Events 2017 (A)",
+                description=tut_desc,
+                categories=self._TUT_CATEGORIES,
+                source="tut_sound_events_2017",
+                required_folder=tut_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=tut_total,
+                download_size_mb=TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
+            ),
         ]
 
     # ------------------------------------------------------------------
@@ -502,6 +560,15 @@ class AudioMediaType(MediaType):
             metadata = load_urbansound8k_metadata(us8k_dir)
             by_cat = self._group_metadata_by_category(metadata, categories, filter_to_categories=True)
             return _sliced_by_category(by_cat), us8k_dir / "audio"
+
+        if source == "tut_sound_events_2017":
+            from vtscore.datasets.downloader import download_tut_sound_events_2017  # noqa: PLC0415
+
+            audio_dir = download_tut_sound_events_2017(on_progress=on_progress)
+            # No annotations: every recording is one undifferentiated bucket.
+            category = categories[0] if categories else "street"
+            by_cat = {category: [(p, {"category": category, "path": p}) for p in sorted(audio_dir.rglob("*.wav"))]}
+            return _sliced_by_category(by_cat), audio_dir
 
         if not source or source == "esc50":
             from vtscore.datasets.downloader import download_esc50  # noqa: PLC0415
