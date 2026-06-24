@@ -177,6 +177,9 @@ export class DatasetImporterModalComponent implements OnInit {
   /** Whether archives inside the picked folder are extracted and imported.
    *  Also enables pointing the folder path directly at a single archive. */
   sfDigArchives = false;
+  /** Whether the dataset references the original files in place instead of
+   *  copying their bytes in (maps onto the loader's thin mode). */
+  sfReferenceFiles = false;
   /** Optional user-supplied dataset name for server-folder imports. */
   sfDatasetName = '';
   /** Whether the user has manually edited :prop:`sfDatasetName`. */
@@ -1613,6 +1616,7 @@ export class DatasetImporterModalComponent implements OnInit {
     this.sfSubmitting.set(false);
     this.sfRecursive = this.readRecursiveDefault(this.selectedImporter());
     this.sfDigArchives = false;
+    this.sfReferenceFiles = false;
     this.sfDatasetName = '';
     this.sfDatasetNameDirty = false;
     this.sfPathInputValue = '';
@@ -2055,6 +2059,7 @@ export class DatasetImporterModalComponent implements OnInit {
       media_type: this.sfMediaType(),
       recursive: this.sfRecursive,
       dig_archives: this.sfDigArchives,
+      reference_files: this.sfReferenceFiles,
     };
     const sfName = (this.sfDatasetName || '').trim();
     if (sfName) {

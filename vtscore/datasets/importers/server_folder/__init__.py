@@ -168,6 +168,24 @@ class ServerFolderDatasetImporter(DatasetImporter):
             default="false",
             required=False,
         ),
+        ImporterField(
+            key="reference_files",
+            label="Reference files in place (don't copy)",
+            field_type="checkbox",
+            description=(
+                "When enabled, the dataset stores a path reference to each original "
+                "file on the server instead of copying its bytes in.  Saves storage, "
+                "but the dataset depends on the source files staying put — moving or "
+                "deleting them breaks it."
+            ),
+            default="false",
+            required=False,
+            # Reference mode is a storage choice, not part of the data source's
+            # identity: the same folder referenced or copied resolves to the same
+            # files, so it must not pollute the persisted origin (which drives
+            # dedup / reload matching).
+            include_in_origin=False,
+        ),
     ]
 
     def __init__(self) -> None:

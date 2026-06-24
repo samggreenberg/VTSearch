@@ -228,6 +228,23 @@ class ServerFilesDatasetImporter(DatasetImporter):
             ),
             accept=".txt,.list,.npz",
         ),
+        ImporterField(
+            key="reference_files",
+            label="Reference files in place (don't copy)",
+            field_type="checkbox",
+            description=(
+                "When enabled, the dataset stores a path reference to each listed "
+                "file on the server instead of copying its bytes in.  Saves storage, "
+                "but the dataset depends on the listed files staying put — moving or "
+                "deleting them breaks it."
+            ),
+            default="false",
+            required=False,
+            # Reference mode is a storage choice, not part of the data source's
+            # identity (see server_folder for the rationale); keep it out of the
+            # persisted origin.
+            include_in_origin=False,
+        ),
     ]
 
     def __init__(self) -> None:

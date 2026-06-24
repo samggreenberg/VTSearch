@@ -240,6 +240,15 @@ def _convert_one_pickle_media(
         dir_keys,
     )
     if media_bytes is None:
+        # Reference dataset (imported with reference_files / thin): the pickle
+        # carries no inline bytes, but a stored ``media_path`` may still point
+        # at the original file on disk.  Keep the media lazy (load it thin)
+        # rather than dropping it, so a reference dataset survives the
+        # registry save → full-mode reopen round-trip.  ``_resolve_media_bytes``
+        # reads the bytes on demand from ``media_path`` at serve/embed time.
+        ref_path = _resolve_thin_media_path(media_type, media_info, data, dir_keys)
+        if ref_path and Path(ref_path).exists():
+            return _build_pickle_thin_media(new_id, media_info, media_type, ref_path, extra_fields), False
         return None, missing
     return (
         _build_pickle_full_media(
