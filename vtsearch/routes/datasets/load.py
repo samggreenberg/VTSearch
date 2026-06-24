@@ -331,6 +331,22 @@ def import_local_files():
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
+def _apply_demo_media_type_fields(field_values: dict, converter_name: str, demo_info: dict) -> None:
+    """Set ``media_type`` (and ``converter``) on *field_values* for a demo load.
+
+    With a converter the resulting dataset has the converter's *target* type,
+    not the demo's original type; without one it keeps the demo's native type.
+    """
+    if not converter_name:
+        field_values["media_type"] = demo_info.get("media_type", "")
+        return
+    from vtscore.converters import get_converter  # noqa: PLC0415
+
+    conv = get_converter(converter_name)
+    field_values["media_type"] = conv.target_type if conv is not None else demo_info.get("media_type", "")
+    field_values["converter"] = converter_name
+
+
 @datasets_load_bp.route("/api/dataset/load-demo", methods=["POST"])
 @datasets_load_bp.arguments(DatasetLoadDemoRequestSchema)
 @datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
@@ -347,6 +363,7 @@ def load_demo_dataset_route(body: dict):
     dataset_name = body.get("name")
     embedder_name = body.get("embedder", "")
     clipper_name = body.get("clipper", "")
+    clipper_params = body.get("clipper_params")
     converter_name = body.get("converter", "")
     user_dataset_name = (body.get("dataset_name") or "").strip()
 
@@ -365,21 +382,11 @@ def load_demo_dataset_route(body: dict):
         field_values["build_projection"] = "true"
     # Inject media_type so the loading task exposes it to the frontend,
     # allowing the "guessed type" logic to consider in-progress loads.
-    if converter_name:
-        # When a converter is used, the resulting dataset has the converter's
-        # target type, not the demo's original type.
-        from vtscore.converters import get_converter  # noqa: PLC0415
-
-        conv = get_converter(converter_name)
-        if conv is not None:
-            field_values["media_type"] = conv.target_type
-        else:
-            field_values["media_type"] = demo_info.get("media_type", "")
-        field_values["converter"] = converter_name
-    else:
-        field_values["media_type"] = demo_info.get("media_type", "")
+    _apply_demo_media_type_fields(field_values, converter_name, demo_info)
     if clipper_name:
         field_values["clipper"] = clipper_name
+        if clipper_params:
+            field_values["clipper_params"] = clipper_params
     if embedder_name:
         field_values["embedder"] = embedder_name
     demo_embedders = body.get("embedders")

@@ -26,6 +26,7 @@ def _apply_clipper(  # noqa: C901
     clipper_params: dict | None = None,
     on_progress: Callable[[int, int, str], None] | None = None,
     chain_steps: list[dict] | None = None,
+    embedder=None,
 ) -> None:
     """Apply a clipper (or full chain) to all medias in *clips_dict*, in place.
 
@@ -52,6 +53,12 @@ def _apply_clipper(  # noqa: C901
     Args:
         on_progress: Optional callback ``(current, total, phase)`` invoked
             during clipping and re-embedding so callers can report progress.
+        embedder: Optional embedder used to re-embed the produced clips.
+            When ``None`` (the default), the first registered embedder for
+            the final media type is used.  Callers that loaded the parent
+            media with a specific embedder (e.g. the demo loader honouring a
+            user-chosen embedder) pass it here so clips are embedded with the
+            same model the parents were.
     """
     from vtscore.datasets.clipper_chain import apply_chain_to_clips, normalise_chain
 
@@ -116,7 +123,7 @@ def _apply_clipper(  # noqa: C901
     final_type, needs_recompute = result
 
     clips_list = list(clips_dict.values())
-    _fixup_clip_md5_and_embeddings(clips_list, needs_recompute, final_type, on_progress=on_progress)
+    _fixup_clip_md5_and_embeddings(clips_list, needs_recompute, final_type, on_progress=on_progress, embedder=embedder)
     _regenerate_clip_thumbnails(clips_list, needs_recompute, final_type)
 
     # Update `media_type` on every clip so downstream code sees the final type
@@ -278,6 +285,7 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
     needs_recompute: list[bool],
     media_type: str,
     on_progress: Callable[[int, int, str], None] | None = None,
+    embedder=None,
 ) -> None:
     """Recompute MD5 and embeddings for clips that need it.
 
@@ -341,7 +349,7 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
     if on_progress:
         on_progress(0, total_clips, "embedding")
 
-    embedder = _resolve_clip_embedder(media_type)
+    embedder = embedder or _resolve_clip_embedder(media_type)
     if embedder is None:
         return
 

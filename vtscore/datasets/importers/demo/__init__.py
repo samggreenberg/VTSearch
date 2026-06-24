@@ -90,6 +90,7 @@ class DemoDatasetImporter(ImporterBase):
         embedder_name = field_values.get("embedder", "") or ""
         converter_name = field_values.get("converter", "") or ""
         clipper_name = field_values.get("clipper", "") or ""
+        clipper_params = field_values.get("clipper_params") or None
 
         load_demo_dataset(
             dataset_name,
@@ -97,6 +98,7 @@ class DemoDatasetImporter(ImporterBase):
             embedder_name=embedder_name,
             converter_name=converter_name,
             clipper_name=clipper_name,
+            clipper_params=clipper_params,
         )
 
     def origin_display(self, origin: dict[str, Any]) -> str:

@@ -91,6 +91,7 @@ export class DatasetImporterModalComponent implements OnInit {
   demoEmbedder = '';
   readonly demoClippers = signal<ClipperInfo[]>([]);
   readonly selectedDemoClipper = signal('');
+  readonly demoClipperParamValues = signal<Record<string, number | string>>({});
   /** Optional user-supplied dataset name for demo imports.  Empty means
    *  "use the demo entry's label". */
   demoDatasetName = '';
@@ -1022,6 +1023,7 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedDemoEmbedder.set('');
       this.demoClippers.set([]);
       this.selectedDemoClipper.set('');
+      this.demoClipperParamValues.set({});
       return;
     }
     this.datasetsListingsApi.getEmbedders(mediaType).subscribe({
@@ -1033,7 +1035,7 @@ export class DatasetImporterModalComponent implements OnInit {
         // The initial demo fetch had no embedder/clipper context, so re-fetch
         // with the now-known defaults for authoritative status values.
         if (this.selectedDemoEmbedder()) {
-          this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.selectedDemoClipper());
+          this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
         }
       },
     });
@@ -1041,21 +1043,34 @@ export class DatasetImporterModalComponent implements OnInit {
       next: (clippers) => {
         this.demoClippers.set(clippers);
         this.selectedDemoClipper.set(clippers.length > 0 ? clippers[0].name : '');
+        this.demoClipperParamValues.set({});
       },
     });
+  }
+
+  /** The demo clipper the user actually chose, or ``''`` when it is the
+   *  pre-selected no-op default.  Mirrors the backend's
+   *  ``_effective_clipper`` and the form path's ``isDefaultClipper`` rule so
+   *  status checks and the load request agree on when clipping happens. */
+  private effectiveDemoClipper(): string {
+    const name = this.selectedDemoClipper();
+    const clippers = this.demoClippers();
+    const isDefault =
+      !name || name.endsWith('_default') || (clippers.length > 0 && clippers[0].name === name);
+    return isDefault ? '' : name;
   }
 
   onDemoEmbedderChange(embedder: string): void {
     this.selectedDemoEmbedder.set(embedder);
     this.demoEmbedder = embedder;
     this.updateDemoStatuses();
-    this.refetchDemoStatuses(embedder, this.selectedDemoClipper());
+    this.refetchDemoStatuses(embedder, this.effectiveDemoClipper());
   }
 
   onDemoClipperChange(clipper: string): void {
     this.selectedDemoClipper.set(clipper);
     this.updateDemoStatuses();
-    this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.selectedDemoClipper());
+    this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
   }
 
   /**
@@ -1069,7 +1084,7 @@ export class DatasetImporterModalComponent implements OnInit {
    */
   private updateDemoStatuses(): void {
     const emb = this.selectedDemoEmbedder();
-    const clip = this.selectedDemoClipper();
+    const clip = this.effectiveDemoClipper();
     for (const demo of this.demos()) {
       if (demo.media_type !== this.activeTab()) continue;
       if (demo.status === 'needs_download') continue;
@@ -1260,11 +1275,12 @@ export class DatasetImporterModalComponent implements OnInit {
       this.selectedDemoPatchEmbedder(),
       this.selectedDemoStructuralEmbedder(),
     );
+    const effClipper = this.effectiveDemoClipper();
     this.demoSelected.emit({
       ...demo,
       embedder: this.selectedDemoEmbedder(),
       ...(demoEmbedders ? { embedders: demoEmbedders } : {}),
-      clipper: this.selectedDemoClipper(),
+      ...(effClipper ? { clipper: effClipper, clipper_params: { ...this.demoClipperParamValues() } } : {}),
       dataset_name: userName,
       build_projection: this.buildProjection,
     } as any);
@@ -2016,8 +2032,9 @@ export class DatasetImporterModalComponent implements OnInit {
       this.clipperParamValues.set({ ...selection.params });
     } else if (ctx === 'demo') {
       this.selectedDemoClipper.set(selection.name);
+      this.demoClipperParamValues.set({ ...selection.params });
       this.updateDemoStatuses();
-      this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.selectedDemoClipper());
+      this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
     } else if (ctx === 'sf') {
       this.sfSelectedClipper.set(selection.name);
       this.sfClipperParamValues.set({ ...selection.params });
@@ -2039,8 +2056,9 @@ export class DatasetImporterModalComponent implements OnInit {
       this.resetClipperParams();
     } else if (ctx === 'demo') {
       this.selectedDemoClipper.set(defaultName);
+      this.demoClipperParamValues.set({});
       this.updateDemoStatuses();
-      this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.selectedDemoClipper());
+      this.refetchDemoStatuses(this.selectedDemoEmbedder(), this.effectiveDemoClipper());
     } else if (ctx === 'sf') {
       this.sfSelectedClipper.set(defaultName);
       this.sfResetClipperParams();

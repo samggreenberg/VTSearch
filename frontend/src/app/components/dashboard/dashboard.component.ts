@@ -1009,13 +1009,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
       embedder?: string;
       embedders?: string[];
       clipper?: string;
+      clipper_params?: Record<string, number | string>;
       dataset_name?: string;
       build_projection?: boolean;
     };
-    const params: Record<string, string | string[]> = {};
+    const params: Record<string, string | string[] | Record<string, number | string>> = {};
     if (extras.embedder) params['embedder'] = extras.embedder;
     if (extras.embedders && extras.embedders.length > 0) params['embedders'] = extras.embedders;
-    if (extras.clipper) params['clipper'] = extras.clipper;
+    if (extras.clipper) {
+      params['clipper'] = extras.clipper;
+      if (extras.clipper_params && Object.keys(extras.clipper_params).length > 0) {
+        params['clipper_params'] = extras.clipper_params;
+      }
+    }
     const userName = (extras.dataset_name || '').trim();
     if (userName) params['dataset_name'] = userName;
     if (extras.build_projection) params['build_projection'] = 'true';

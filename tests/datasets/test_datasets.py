@@ -1038,6 +1038,167 @@ class TestDemoCacheEmbedderMismatch:
         assert 1 in medias
 
 
+class TestEffectiveClipper:
+    """`_effective_clipper` normalises the pre-selected default clipper to ''."""
+
+    def test_empty_and_default_normalise_to_blank(self):
+        from vtscore.datasets.loader_demo import _effective_clipper
+
+        assert _effective_clipper("", "audio") == ""
+        # sound_default ends with _default → the explicit "import as-is" no-op.
+        assert _effective_clipper("sound_default", "audio") == ""
+
+    def test_first_clipper_in_list_is_treated_as_default(self):
+        from vtscore.datasets.loader_demo import _effective_clipper
+        from vtscore.media import clippers_for_type
+
+        first = clippers_for_type("audio")[0].name
+        assert _effective_clipper(first, "audio") == ""
+
+    def test_real_clipper_passes_through(self):
+        from vtscore.datasets.loader_demo import _effective_clipper
+
+        assert _effective_clipper("sound_tiling", "audio") == "sound_tiling"
+
+
+class TestDemoClipperApplied:
+    """A real (non-default) clipper selected for a demo is actually applied at
+    load time, with its params and the demo's embedder; the default is a no-op."""
+
+    FAKE_INFO = {
+        "media_type": "audio",
+        "source": "fake",
+        "categories": ["a"],
+        "slice_start": 0,
+        "slice_end": None,
+    }
+
+    def _run(self, tmp_path, clipper_name, clipper_params=None):
+        from unittest.mock import MagicMock, patch
+
+        from vtscore.datasets.loader import load_demo_dataset
+
+        embeddings_dir = tmp_path / "embeddings"
+        embeddings_dir.mkdir()
+
+        fake_embedder = MagicMock()
+        fake_embedder.name = "clap"
+
+        mock_mt = MagicMock()
+        mock_mt.dir_key = "audio_dir"
+
+        def fake_load(**kwargs):
+            clips = kwargs["clips"]
+            clips[1] = {"id": 1, "media_type": "audio", "category": "a", "embeddings": {}}
+            return "/fake/dir"
+
+        mock_mt.load_demo_source.side_effect = fake_load
+
+        demo_name = "fake_audio_demo"
+        medias: dict = {}
+        with (
+            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch.dict("vtscore.datasets.loader_demo.DEMO_DATASETS", {demo_name: self.FAKE_INFO}),
+            patch("vtscore.media.embedders_for_type", return_value=[fake_embedder]),
+            patch("vtscore.media.get", return_value=mock_mt),
+            patch("vtscore.datasets.stages.clipper._apply_clipper") as mock_clip,
+        ):
+            load_demo_dataset(demo_name, medias, clipper_name=clipper_name, clipper_params=clipper_params)
+        return mock_clip, fake_embedder
+
+    def test_real_clipper_is_applied_with_params_and_embedder(self, tmp_path):
+        mock_clip, fake_embedder = self._run(tmp_path, "sound_tiling", clipper_params={"duration": 5.0})
+        mock_clip.assert_called_once()
+        args, kwargs = mock_clip.call_args
+        # _apply_clipper(medias, name, params, on_progress=..., embedder=...)
+        assert args[1] == "sound_tiling"
+        assert args[2] == {"duration": 5.0}
+        assert kwargs["embedder"] is fake_embedder
+
+    def test_default_clipper_is_a_noop(self, tmp_path):
+        from vtscore.media import clippers_for_type
+
+        first = clippers_for_type("audio")[0].name
+        mock_clip, _ = self._run(tmp_path, first)
+        mock_clip.assert_not_called()
+
+
+class TestDemoCacheClipperMismatch:
+    """The pickle cache is rebuilt when the requested clipper / params differ
+    from the cached one, and reused when they match."""
+
+    def _write_cache(self, embeddings_dir, demo_name, clipper, clipper_params):
+        import pickle
+
+        from vtscore.datasets.container import write_container
+
+        pkl_file = embeddings_dir / f"{demo_name}.pkl"
+        pkl_bytes = pickle.dumps({"name": demo_name, "medias": {1: {"embedding": [0.1]}}})
+        write_container(
+            pkl_file,
+            pkl_bytes,
+            {
+                "format_version": 1,
+                "embedder": "clap",
+                "clipper": clipper,
+                "clipper_params": clipper_params,
+                "media_type": "audio",
+            },
+        )
+
+    def test_clipper_param_change_busts_cache(self, tmp_path):
+        from unittest.mock import MagicMock, patch
+
+        from vtscore.datasets.loader import load_demo_dataset
+
+        embeddings_dir = tmp_path / "embeddings"
+        embeddings_dir.mkdir()
+        demo_name = "fake_audio_demo"
+        self._write_cache(embeddings_dir, demo_name, "sound_tiling", {"duration": 2.0})
+
+        fake_embedder = MagicMock()
+        fake_embedder.name = "clap"
+        mock_mt = MagicMock()
+        mock_mt.dir_key = "audio_dir"
+        mock_mt.load_demo_source.return_value = "/fake/dir"
+
+        with (
+            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch.dict("vtscore.datasets.loader_demo.DEMO_DATASETS", {demo_name: TestDemoClipperApplied.FAKE_INFO}),
+            patch("vtscore.media.embedders_for_type", return_value=[fake_embedder]),
+            patch("vtscore.media.get", return_value=mock_mt),
+            patch("vtscore.datasets.stages.clipper._apply_clipper"),
+        ):
+            load_demo_dataset(demo_name, {}, clipper_name="sound_tiling", clipper_params={"duration": 5.0})
+            # Param drift → cache discarded → re-embed via load_demo_source.
+            mock_mt.load_demo_source.assert_called_once()
+
+    def test_matching_clipper_uses_cache(self, tmp_path):
+        from unittest.mock import patch
+
+        import numpy as np
+
+        from vtscore.datasets.loader import load_demo_dataset
+
+        embeddings_dir = tmp_path / "embeddings"
+        embeddings_dir.mkdir()
+        demo_name = "fake_audio_demo"
+        self._write_cache(embeddings_dir, demo_name, "sound_tiling", {"duration": 2.0})
+
+        def fake_load(path, m):
+            m[1] = {"embedding": np.array([0.1]), "media_type": "audio"}
+
+        with (
+            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch.dict("vtscore.datasets.loader_demo.DEMO_DATASETS", {demo_name: TestDemoClipperApplied.FAKE_INFO}),
+            patch("vtscore.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
+        ):
+            medias: dict = {}
+            load_demo_dataset(demo_name, medias, clipper_name="sound_tiling", clipper_params={"duration": 2.0})
+
+        assert 1 in medias
+
+
 class TestCaltech101Download:
     """Verify download_caltech101 handles the nested zip→tar.gz structure."""
 

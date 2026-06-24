@@ -71,7 +71,7 @@
             (selectedStructuralEmbedderChange)="selectedDemoStructuralEmbedder.set($event)"
             [lockedEmbedder]="lockedEmbedderFor(activeTab(), demoEmbedders())"
             [selectedClipper]="selectedDemoClipper()"
-            [selectedClipperParams]="{}"
+            [selectedClipperParams]="demoClipperParamValues()"
             (clipperChooserRequested)="openClipperChooser('demo')"
             [buildProjection]="buildProjection"
             (buildProjectionChange)="buildProjection = $event"
