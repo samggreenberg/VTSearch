@@ -16,7 +16,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
-from vtscore.exporters.base import ExporterField, LabelsetExporter
+from vtscore.exporters.base import PluginField, LabelsetExporter
 
 # Pragmatic address check: a non-empty local part, a single ``@``, and a
 # dotted domain, none of which may contain whitespace.  Not full RFC 5322
@@ -109,7 +109,7 @@ class EmailLabelsetExporter(LabelsetExporter):
     description = "Email the results summary to any address."
     icon = "📧"
     fields = [
-        ExporterField(
+        PluginField(
             key="from",
             label="Sender Email",
             field_type="email",
@@ -117,7 +117,7 @@ class EmailLabelsetExporter(LabelsetExporter):
             hint=("Must be on a domain you control - most MX hosts reject mail from non-existent domains."),
             placeholder="vtsearch@your-domain.example",
         ),
-        ExporterField(
+        PluginField(
             key="to",
             label="Recipient Email",
             field_type="email",

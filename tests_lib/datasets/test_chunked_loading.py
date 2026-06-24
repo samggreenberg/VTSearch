@@ -436,14 +436,14 @@ class TestBaseImporterChunkedDefault:
     delegates to run/run_cli and yields one chunk."""
 
     def test_default_run_chunked_yields_one_chunk(self, tmp_path):
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
         class DummyImporter(DatasetImporter):
             name = "dummy"
             display_name = "Dummy"
             description = "Test"
             icon = ""
-            fields: list[ImporterField] = []
+            fields: list[PluginField] = []
 
             def run(self, field_values, medias, thin=False):
                 medias[1] = {"id": 1, "media_type": "audio", "embedder": "clap", "embeddings": {"clap": np.zeros(4)}}

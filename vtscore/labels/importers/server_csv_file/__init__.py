@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
-from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+from vtscore.labels.importers.base import LabelImporter, PluginField
 
 
 class ServerCsvLabelImporter(LabelImporter):
@@ -35,7 +35,7 @@ class ServerCsvLabelImporter(LabelImporter):
     description = "Import labels from a CSV file on the server filesystem."
     icon = "\U0001f5a5"  # desktop computer
     fields = [
-        LabelImporterField(
+        PluginField(
             key="filepath",
             label="Path or URL",
             field_type="server_path",

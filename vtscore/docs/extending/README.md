@@ -78,10 +78,9 @@ sync at the model layer.
 These cut across every family and apply to both in-tree and
 third-party plugins.
 
-**Declare inputs as `PluginField`s.** Each plugin family re-exports
-`PluginField` under a friendlier alias (`ImporterField`,
-`ExporterField`, `LabelImporterField`, …) which is a literal `=
-PluginField`. The frontend renders a form from `fields`, the CLI
+**Declare inputs as `PluginField`s.** Each plugin family's base module
+re-exports `PluginField` so you can import it alongside the family's
+base class. The frontend renders a form from `fields`, the CLI
 derives `argparse` flags from `fields`, and the marshmallow schema
 builder validates POST bodies against `fields`. See [`vtscore/plugins/__init__.py:71`](../../plugins/__init__.py)
 for the full dataclass and the [plugins package doc](../packages/plugins.md#pluginfield)

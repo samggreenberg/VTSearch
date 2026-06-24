@@ -25,7 +25,7 @@ where ``label`` is ``"good"`` or ``"bad"``.
 Example – a minimal database label importer skeleton::
 
     # vtsearch/labels/importers/postgres/__init__.py
-    from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+    from vtscore.labels.importers.base import LabelImporter, PluginField
 
     class PostgresLabelImporter(LabelImporter):
         name         = "postgres"
@@ -33,9 +33,9 @@ Example – a minimal database label importer skeleton::
         description  = "Import labels from a PostgreSQL database query."
         icon         = "🐘"
         fields = [
-            LabelImporterField("host",     "Hostname", "text"),
-            LabelImporterField("database", "Database", "text"),
-            LabelImporterField("query",    "SQL Query", "text",
+            PluginField("host",     "Hostname", "text"),
+            PluginField("database", "Database", "text"),
+            PluginField("query",    "SQL Query", "text",
                                description="Must return md5 and label columns."),
         ]
 
@@ -62,10 +62,7 @@ from typing import Any
 
 from vtscore.plugins import PluginBase, PluginField
 
-# Backward-compatible alias - existing plugins import ``LabelImporterField``.
-LabelImporterField = PluginField
-
-__all__ = ["LabelImporter", "LabelImporterField"]
+__all__ = ["LabelImporter", "PluginField"]
 
 
 class LabelImporter(PluginBase):
@@ -107,7 +104,7 @@ class LabelImporter(PluginBase):
         """Perform the import and return a list of label dicts.
 
         Args:
-            field_values: Mapping of :attr:`LabelImporterField.key` → value.
+            field_values: Mapping of :attr:`PluginField.key` → value.
                 Fields with ``field_type="file"`` receive an
                 :class:`~vtscore.plugins.uploads.UploadedFile` (Flask
                 requests pass a Werkzeug ``FileStorage`` straight

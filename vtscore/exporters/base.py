@@ -21,7 +21,7 @@ set: set :attr:`~LabelsetExporter.supports_streaming` to ``True`` and implement
 Example – a minimal SFTP exporter skeleton::
 
     # vtsearch/exporters/sftp/__init__.py
-    from vtscore.exporters.base import LabelsetExporter, ExporterField
+    from vtscore.exporters.base import LabelsetExporter, PluginField
 
     class SftpLabelsetExporter(LabelsetExporter):
         name         = "sftp"
@@ -29,10 +29,10 @@ Example – a minimal SFTP exporter skeleton::
         description  = "Upload results JSON to a remote SFTP server."
         icon         = "📡"
         fields = [
-            ExporterField("host",     "Hostname",    "text"),
-            ExporterField("user",     "Username",    "text"),
-            ExporterField("password", "Password",    "password"),
-            ExporterField("path",     "Remote Path", "text",
+            PluginField("host",     "Hostname",    "text"),
+            PluginField("user",     "Username",    "text"),
+            PluginField("password", "Password",    "password"),
+            PluginField("path",     "Remote Path", "text",
                           default="/results/autodetect.json"),
         ]
 
@@ -56,10 +56,7 @@ from typing import Any, Iterator
 
 from vtscore.plugins import PluginBase, PluginField
 
-# Backward-compatible alias - existing plugins import ``ExporterField``.
-ExporterField = PluginField
-
-__all__ = ["ExporterField", "LabelsetExporter"]
+__all__ = ["LabelsetExporter", "PluginField"]
 
 
 class LabelsetExporter(PluginBase):
@@ -106,7 +103,7 @@ class LabelsetExporter(PluginBase):
                            }
                          }
 
-            field_values: Mapping of :attr:`ExporterField.key` → value string
+            field_values: Mapping of :attr:`PluginField.key` → value string
                 supplied by the user.
 
         Returns:
@@ -178,7 +175,7 @@ class LabelsetExporter(PluginBase):
                 (NOT globally sorted by score).  Each *hit* is the dict from
                 :func:`vtscore.utils.hits.build_media_hit` plus a ``"label"``
                 key (``"good"`` for above-threshold, ``"bad"`` otherwise).
-            field_values: Mapping of :attr:`ExporterField.key` → value.
+            field_values: Mapping of :attr:`PluginField.key` → value.
 
         Returns:
             A status dict with a ``"message"`` key (and optionally

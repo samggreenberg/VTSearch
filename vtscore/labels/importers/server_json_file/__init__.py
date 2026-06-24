@@ -17,7 +17,7 @@ from typing import Any
 
 from vtscore.config import DATA_DIR
 from vtscore.io import read_server_json
-from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+from vtscore.labels.importers.base import LabelImporter, PluginField
 
 
 class ServerJsonLabelImporter(LabelImporter):
@@ -34,7 +34,7 @@ class ServerJsonLabelImporter(LabelImporter):
     description = "Import labels from a VTSearch-format JSON file on the server filesystem."
     icon = "\U0001f5a5"  # desktop computer
     fields = [
-        LabelImporterField(
+        PluginField(
             key="filepath",
             label="Path or URL",
             field_type="server_path",

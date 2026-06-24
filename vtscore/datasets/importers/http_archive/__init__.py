@@ -29,7 +29,7 @@ from uuid import uuid4
 from vtscore.config import DATA_DIR
 from vtscore.datasets.archive import extract_archive, is_archive_path, load_archive_into
 from vtscore.datasets.downloader import download_file_with_progress
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder
 
 ProgressCallback = Callable[[str, str, int, int], None]
@@ -113,7 +113,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
     icon = "\U0001f310"
     hidden_from_picker = True
     fields = [
-        ImporterField(
+        PluginField(
             key="url",
             label="Path or URL",
             field_type="url",
@@ -123,7 +123,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
                 "Supported archive formats: .zip, .tar, .tar.gz / .tgz, .tar.bz2, .rar."
             ),
         ),
-        ImporterField(
+        PluginField(
             key="media_type",
             label="Dataset MediaType",
             field_type="select",

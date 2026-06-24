@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.io import atomic_write_json, read_server_json
-from vtsearch.settings_io.sources.base import SettingsSource, SettingsSourceField
+from vtsearch.settings_io.sources.base import SettingsSource, PluginField
 
 
 class ServerFileSettingsSource(SettingsSource):
@@ -22,7 +22,7 @@ class ServerFileSettingsSource(SettingsSource):
     description = "Sync settings with a JSON file on the server filesystem."
     icon = "\U0001f5a5"  # desktop computer
     fields = [
-        SettingsSourceField(
+        PluginField(
             key="filepath",
             label="Save to (server path)",
             field_type="server_path",

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.labels.importers.base import LabelImporter, LabelImporterField
+from vtscore.labels.importers.base import LabelImporter, PluginField
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ class HolderLabelImporter(LabelImporter):
     icon = "\U0001f4e6"  # package
     hidden_from_picker = True  # flip to False once API clients are implemented
     fields = [
-        LabelImporterField(
+        PluginField(
             key="holder_id",
             label="Holder ID",
             field_type="text",

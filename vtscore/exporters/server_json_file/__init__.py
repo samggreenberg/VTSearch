@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters.base import ExporterField, LabelsetExporter
+from vtscore.exporters.base import PluginField, LabelsetExporter
 from vtscore.io import atomic_write_json
 
 _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
@@ -42,7 +42,7 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
     description = "Write the results to a JSON file on the server filesystem."
     icon = "\U0001f5a5"  # desktop computer
     fields = [
-        ExporterField(
+        PluginField(
             key="filepath",
             label="Save to (server path)",
             field_type="server_path",

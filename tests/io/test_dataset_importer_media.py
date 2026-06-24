@@ -60,7 +60,7 @@ class _VectorAndMD5Importer:
 
     @staticmethod
     def create(folder: Path, vectors: dict[str, Any], md5s: dict[str, str]):
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
         from vtscore.datasets.loader import load_dataset_from_folder
 
         class Importer(DatasetImporter):
@@ -68,8 +68,8 @@ class _VectorAndMD5Importer:
             display_name = "Test Vector+MD5"
             description = "Test importer providing vectors and MD5s."
             fields = [
-                ImporterField("media_type", "Media Type", "text", default="audio"),
-                ImporterField("path", "Path", "text"),
+                PluginField("media_type", "Media Type", "text", default="audio"),
+                PluginField("path", "Path", "text"),
             ]
 
             def run(self, field_values, medias, thin=False):
@@ -329,7 +329,7 @@ class TestImporterCustomMetadataMD5:
 
     def test_custom_metadata_md5_used_as_media_md5(self, tmp_path):
         """When custom_metadata_map has an 'md5' key, it should be used as the media's MD5."""
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
         from vtscore.datasets.loader import load_dataset_from_folder
 
         class MetadataMD5Importer(DatasetImporter):
@@ -337,8 +337,8 @@ class TestImporterCustomMetadataMD5:
             display_name = "Test CM MD5"
             description = "Test importer using custom_metadata_map for MD5."
             fields = [
-                ImporterField("media_type", "Media Type", "text", default="audio"),
-                ImporterField("path", "Path", "text"),
+                PluginField("media_type", "Media Type", "text", default="audio"),
+                PluginField("path", "Path", "text"),
             ]
 
             def run(self, field_values, medias, thin=False):
@@ -605,7 +605,7 @@ class TestImporterCustomMetadataEmbedding:
 
     def test_importer_custom_metadata_embedding_end_to_end(self, tmp_path):
         """A DatasetImporter providing embedding via custom_metadata_map should work end-to-end."""
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
         from vtscore.datasets.loader import load_dataset_from_folder
 
         rng = np.random.default_rng(77)
@@ -617,8 +617,8 @@ class TestImporterCustomMetadataEmbedding:
             display_name = "Test CM Embedding"
             description = "Test importer using custom_metadata_map for embedding."
             fields = [
-                ImporterField("media_type", "Media Type", "text", default="audio"),
-                ImporterField("path", "Path", "text"),
+                PluginField("media_type", "Media Type", "text", default="audio"),
+                PluginField("path", "Path", "text"),
             ]
 
             def run(self, field_values, medias, thin=False):

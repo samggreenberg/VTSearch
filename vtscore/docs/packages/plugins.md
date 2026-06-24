@@ -58,9 +58,8 @@ user-configurable input on a plugin. Each plugin declares its inputs as
 `fields: list[PluginField]` on the class; the frontend renders a form
 from those, the CLI derives flags from those, and the marshmallow
 schema builder validates POST bodies against those. The same dataclass
-is used by every family; each family re-exports it under a friendlier
-alias (`ImporterField`, `ExporterField`, `LabelImporterField`,
-`LabelsetSourceField`, …) which is a literal `= PluginField` assignment.
+is used by every family; each family's base module re-exports
+`PluginField` so plugins can import it alongside their base class.
 
 ### Constructor parameters
 
@@ -419,7 +418,7 @@ from __future__ import annotations
 from typing import Any
 import json
 
-from vtscore.exporters.base import LabelsetExporter, ExporterField
+from vtscore.exporters.base import LabelsetExporter, PluginField
 
 
 class StdoutLabelsetExporter(LabelsetExporter):
@@ -428,7 +427,7 @@ class StdoutLabelsetExporter(LabelsetExporter):
     description = "Print the labelset as JSON to stdout."
     icon = "\U0001f4dd"
     fields = [
-        ExporterField(
+        PluginField(
             key="indent",
             label="Indent",
             field_type="number",
