@@ -167,9 +167,38 @@ class TestSimulateVotingIterations:
             seed=42,
             dataset_name="test_ds",
         )
-        expected_keys = {"seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"}
+        expected_keys = {
+            "seed",
+            "dataset",
+            "category",
+            "t",
+            "n_good",
+            "n_bad",
+            "cost",
+            "fpr",
+            "fnr",
+            "elapsed_seconds",
+        }
         for row in rows:
             assert set(row.keys()) == expected_keys
+
+    def test_vote_counts_reported(self):
+        """Each row carries the good/bad vote counts the model was trained on.
+
+        The first scored row reflects the 1-good + 1-bad minimum, and the
+        counts never exceed the votes seen so far (t).
+        """
+        medias = _make_separable_clips(n_per_cat=10)
+        rows = simulate_voting_iterations(medias, "alpha", seed=42)
+        assert rows  # at least one scored step
+        first = rows[0]
+        assert first["n_good"] >= 1
+        assert first["n_bad"] >= 1
+        assert min(first["n_good"], first["n_bad"]) == 1  # earliest trainable step
+        for row in rows:
+            assert row["n_good"] + row["n_bad"] == row["t"]
+            assert row["n_good"] >= 1
+            assert row["n_bad"] >= 1
 
     def test_seed_determinism(self):
         medias = _make_separable_clips(n_per_cat=10)
@@ -267,7 +296,18 @@ class TestRunVotingIterationsEval:
             categories={"ds1": ["alpha"]},
         )
         assert isinstance(df, pd.DataFrame)
-        assert list(df.columns) == ["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"]
+        assert list(df.columns) == [
+            "seed",
+            "dataset",
+            "category",
+            "t",
+            "n_good",
+            "n_bad",
+            "cost",
+            "fpr",
+            "fnr",
+            "elapsed_seconds",
+        ]
 
     def test_multiple_seeds(self):
         medias = _make_separable_clips(n_per_cat=10)

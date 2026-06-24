@@ -50,6 +50,6 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 ## Audits / tooling / methodology
 
 - [angular-21-upgrade.md](angular-21-upgrade.md): Angular 19→21 bump (clears npm-audit highs) + Vitest spec migration to restore runnable frontend tests (all phases shipped; kept as the migration reference for future bumps)
-- [logical-bug-audit.md](logical-bug-audit.md): codebase logical-bug audit (C/H shipped; ~12 M/L open)
+- [logical-bug-audit.md](logical-bug-audit.md): codebase logical-bug audit (all findings resolved; kept as the audit record)
 - [browser-vision-testing.md](browser-vision-testing.md): browser-vision testing playbook (first round ran; reusable)
 - [user-docs-screenshots.md](user-docs-screenshots.md): auto-refreshable screenshots for user docs — manifest + capture harness (proposed; no shots yet)

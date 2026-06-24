@@ -251,10 +251,16 @@ Returns a list of row dicts:
 ```python
 {
     "seed": 0, "dataset": "esc50_s", "category": "dog",
-    "t": 7, "cost": 0.124, "fpr": 0.05, "fnr": 0.21,
+    "t": 7, "n_good": 3, "n_bad": 4,
+    "cost": 0.124, "fpr": 0.05, "fnr": 0.21,
     "elapsed_seconds": 12.4,
 }
 ```
+
+`n_good`/`n_bad` are the good/bad vote counts the row's model was trained
+on (they sum to `t`). The first scored step has only one of each, so its
+metrics are very noisy; carry these counts through so analysis can filter or
+weight rows by sample size instead of treating a 1-vs-1 model as reliable.
 
 Honours the same threshold knobs as the runner. When
 `safe_thresholds=True`, the GMM blend uses scores over the simulation
@@ -266,7 +272,7 @@ calibration.
 `vtscore/eval/voting_iterations.py:250`. Sweep
 `simulate_voting_iterations` over `(seed × dataset × category)` and
 return a `pandas.DataFrame` with columns `seed, dataset, category, t,
-cost, fpr, fnr, elapsed_seconds`. When `categories` is `None` or a
+n_good, n_bad, cost, fpr, fnr, elapsed_seconds`. When `categories` is `None` or a
 dataset is missing from the dict, every unique category in that
 dataset is used.
 
