@@ -179,21 +179,29 @@ def _hydrate_reference_parents(clips_dict: dict, steps: list[dict]) -> bool:
 
 
 def _relazify_reference_clips_stage(ctx: DatasetContext, tracker=None) -> None:
-    """Strip materialized bytes from clips descended from a reference parent.
+    """Strip materialized bytes from reference-derived media (clips + converter output).
 
-    Each such clip carries the ``_lazy_source`` marker (inherited from its
-    hydrated parent in :func:`_hydrate_reference_parents`).  We drop its
-    ``media_bytes`` / ``media_string`` and point ``media_path`` back at the
-    source file; ``_resolve_media_bytes`` reproduces the clip's bytes on demand
-    from the recipe stored in ``origin.params`` (sliced clip) or by reading the
-    whole file (a pass-through clip the clipper returned unchanged).  The
-    per-clip MD5, embedding, and thumbnail were already computed from the real
-    bytes in the clipper stage, so the reference clip is byte-for-byte
-    equivalent without the stored payload.
+    Two producers tag media with the ``_lazy_source`` marker carrying the
+    source file path:
+
+    * **clips** descended from a hydrated reference parent (see
+      :func:`_hydrate_reference_parents`) - audio slices, image crops.
+    * **converter output** emitted in reference mode by
+      :func:`~vtscore.converters.runner.run_converters_on_folder` - rendered
+      PDF pages, extracted video frames.
+
+    For each, we drop its ``media_bytes`` / ``media_string`` and point
+    ``media_path`` back at the source file; ``_resolve_media_bytes`` reproduces
+    the bytes on demand from the recipe in ``origin.params`` (a clip slice, a
+    converter re-render) or by reading the whole file (a pass-through clip the
+    clipper returned unchanged).  The per-item MD5, embedding, and thumbnail
+    were already computed from the real bytes, so the reference media is
+    byte-for-byte equivalent without the stored payload.
 
     Runs after the embed / drop-none stages so the embed-missing safety net
-    sees real bytes (a clip's ``media_path`` points at the *whole* source file,
-    not the slice, so embedding it lazily would embed the wrong content).
+    sees real bytes: a derived item's ``media_path`` points at the *whole*
+    source file (the parent recording, the source PDF), not the slice/page, so
+    embedding it lazily would embed the wrong content.
     """
     for clip in ctx.medias.values():
         source = clip.pop("_lazy_source", None)

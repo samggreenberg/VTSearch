@@ -18,9 +18,10 @@ from typing import Any
 import numpy as np
 import pytest
 
+from vtscore.datasets.clipper_chain import _content_hash
 from vtscore.datasets.stages import clipper as clipper_stage
 from vtscore.media.audio.clipper import _wav_slice
-from vtscore.media.lazy_clip import clip_recipe, lazy_clip_bytes
+from vtscore.media.lazy_clip import _ByteBoundedLRU, clip_recipe, lazy_clip_bytes
 
 from helpers import make_png_bytes, make_wav_bytes
 
@@ -345,3 +346,230 @@ class TestPickleRoundTrip:
             resolved = media_registry.get("audio")._resolve_media_bytes(clip)
             expected = _wav_slice(src.read_bytes(), float(params["clip_start"]), float(params["clip_end"]))
             assert resolved == expected
+
+
+# ---------------------------------------------------------------------------
+# Phase 2b: lazy converter output
+# ---------------------------------------------------------------------------
+
+
+class _FakeDoc2Image:
+    """A deterministic stand-in for a real converter (no heavy deps).
+
+    Produces one image output per "page", whose bytes are derived from the
+    source bytes so a test can predict the exact output for any out_index.
+    """
+
+    name = "doc2img"
+    source_type = "document"
+    target_type = "image"
+
+    def __init__(self, n_pages: int = 3) -> None:
+        self.n_pages = n_pages
+
+    def convert_normalized(self, media: dict[str, Any], params: dict[str, Any]) -> list[dict[str, Any]]:
+        src = media.get("media_bytes") or b""
+        n = int(params.get("pages", self.n_pages))
+        return [
+            {"filename": f"page_{i}.png", "media_bytes": src + f"|page{i}".encode(), "duration": 0} for i in range(n)
+        ]
+
+
+def _page_bytes(source: bytes, idx: int) -> bytes:
+    return source + f"|page{idx}".encode()
+
+
+def _converter_media(
+    source_path: Path,
+    *,
+    out_index: int,
+    n_out: int,
+    content_hash: str | None,
+    params: dict[str, Any] | None = None,
+    name: str = "doc2img",
+    target_type: str = "image",
+) -> dict[str, Any]:
+    """Build a byte-less reference-converted media (the re-lazified form)."""
+    p: dict[str, Any] = {
+        "converter": name,
+        "source_file": source_path.name,
+        "converter_out_index": str(out_index),
+        "converter_n_out": str(n_out),
+    }
+    if content_hash is not None:
+        p["converter_content_hash"] = content_hash
+    for k, v in (params or {}).items():
+        p[f"converter_param_{k}"] = str(v)
+    return {
+        "media_type": target_type,
+        "media_bytes": None,
+        "media_string": None,
+        "media_path": str(source_path),
+        "filename": f"{source_path.stem}_page.png",
+        "origin": {"importer": "converter", "params": p},
+    }
+
+
+@pytest.fixture
+def _fake_converter(monkeypatch):
+    fake = _FakeDoc2Image(n_pages=3)
+    monkeypatch.setattr("vtscore.converters.get_converter", lambda name: fake if name == "doc2img" else None)
+    return fake
+
+
+class TestConverterRecipe:
+    def test_recipe_recognised_by_converter_param(self):
+        media = {
+            "media_type": "image",
+            "origin": {"params": {"converter": "doc2img", "converter_out_index": "1", "converter_n_out": "3"}},
+        }
+        recipe = clip_recipe(media)
+        assert recipe is not None
+        assert recipe[0] == "converter"
+        assert recipe[1] == "doc2img"
+        assert recipe[3] == 1  # out_index coerced to int
+
+    def test_converter_params_reconstructed(self):
+        media = {
+            "media_type": "text",
+            "origin": {
+                "params": {
+                    "converter": "doc2img",
+                    "converter_out_index": "0",
+                    "converter_param_pages": "5",
+                    "converter_param_dpi": "150",
+                }
+            },
+        }
+        recipe = clip_recipe(media)
+        assert recipe is not None
+        assert dict(recipe[2]) == {"pages": "5", "dpi": "150"}
+
+    def test_no_disambiguator_is_not_lazy(self):
+        # A converter origin with neither out_index nor content_hash can't be
+        # resolved back to a specific output, so it is treated as not-lazy.
+        media = {"media_type": "image", "origin": {"params": {"converter": "doc2img"}}}
+        assert clip_recipe(media) is None
+
+    def test_converter_branch_beats_image_clip_branch(self):
+        # A converted image carries media_type=image but is NOT an image clip
+        # (no clip_box); the converter branch must win.
+        media = {
+            "media_type": "image",
+            "origin": {"params": {"converter": "doc2img", "converter_out_index": "2", "converter_n_out": "3"}},
+        }
+        recipe = clip_recipe(media)
+        assert recipe is not None
+        assert recipe[0] == "converter"
+
+
+class TestLazyConverterBytes:
+    def test_resolves_correct_page(self, tmp_path, _fake_converter):
+        src = tmp_path / "doc.pdf"
+        src.write_bytes(b"PDFBYTES")
+        ch = _content_hash({"media_bytes": _page_bytes(b"PDFBYTES", 1)})
+        media = _converter_media(src, out_index=1, n_out=3, content_hash=ch, params={"pages": 3})
+        assert lazy_clip_bytes(media) == _page_bytes(b"PDFBYTES", 1)
+
+    def test_resolve_via_media_type(self, tmp_path, _fake_converter):
+        import vtscore.media as media_registry
+
+        src = tmp_path / "doc2.pdf"
+        src.write_bytes(b"OTHER")
+        ch = _content_hash({"media_bytes": _page_bytes(b"OTHER", 0)})
+        media = _converter_media(src, out_index=0, n_out=3, content_hash=ch, params={"pages": 3})
+        # _resolve_media_bytes consults lazy_clip before the whole-file read,
+        # so the serve path gets the rendered page, not the source PDF.
+        resolved = media_registry.get("image")._resolve_media_bytes(media)
+        assert resolved == _page_bytes(b"OTHER", 0)
+
+    def test_content_hash_survives_output_count_drift(self, tmp_path, monkeypatch):
+        # Recorded with n_out=3; converter now yields 5 outputs. The content
+        # hash still pins the right page (drift falls back to content match).
+        fake = _FakeDoc2Image(n_pages=5)
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: fake if name == "doc2img" else None)
+        src = tmp_path / "drift.pdf"
+        src.write_bytes(b"DRIFT")
+        ch = _content_hash({"media_bytes": _page_bytes(b"DRIFT", 2)})
+        media = _converter_media(src, out_index=2, n_out=3, content_hash=ch, params={"pages": 5})
+        assert lazy_clip_bytes(media) == _page_bytes(b"DRIFT", 2)
+
+    def test_refuses_to_guess_on_drift_without_hash(self, tmp_path, monkeypatch):
+        # No content hash + output-count drift => positional pick is unsafe,
+        # so resolution returns None rather than the wrong page.
+        fake = _FakeDoc2Image(n_pages=5)
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: fake if name == "doc2img" else None)
+        src = tmp_path / "drift2.pdf"
+        src.write_bytes(b"DRIFT2")
+        media = _converter_media(src, out_index=2, n_out=3, content_hash=None, params={"pages": 5})
+        assert lazy_clip_bytes(media) is None
+
+    def test_unknown_converter_returns_none(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("vtscore.converters.get_converter", lambda name: None)
+        src = tmp_path / "x.pdf"
+        src.write_bytes(b"X")
+        media = _converter_media(src, out_index=0, n_out=1, content_hash=None)
+        assert lazy_clip_bytes(media) is None
+
+    def test_cache_returns_identical_object(self, tmp_path, _fake_converter):
+        src = tmp_path / "cache.pdf"
+        src.write_bytes(b"CACHEME")
+        ch = _content_hash({"media_bytes": _page_bytes(b"CACHEME", 0)})
+        media = _converter_media(src, out_index=0, n_out=3, content_hash=ch, params={"pages": 3})
+        first = lazy_clip_bytes(media)
+        second = lazy_clip_bytes(media)
+        assert first is second  # served from the byte-bounded converter cache
+
+
+class TestRelazifyConverterOutput:
+    def test_relazify_strips_converted_bytes(self, tmp_path, _fake_converter):
+        """A converter output tagged with _lazy_source is stripped to a
+        reference by the re-lazify stage, then resolves on demand."""
+        import vtscore.media as media_registry
+
+        src = tmp_path / "doc.pdf"
+        src.write_bytes(b"PDFBYTES")
+        ch = _content_hash({"media_bytes": _page_bytes(b"PDFBYTES", 2)})
+        media = _converter_media(src, out_index=2, n_out=3, content_hash=ch, params={"pages": 3})
+        # Simulate the pre-relazify state: bytes present + marker set.
+        media["media_bytes"] = _page_bytes(b"PDFBYTES", 2)
+        media["_lazy_source"] = str(src)
+
+        _relazify({1: media})
+
+        assert "_lazy_source" not in media
+        assert media["media_bytes"] is None
+        assert media["media_path"] == str(src)
+        resolved = media_registry.get("image")._resolve_media_bytes(media)
+        assert resolved == _page_bytes(b"PDFBYTES", 2)
+
+
+class TestByteBoundedLRU:
+    def test_evicts_oldest_until_under_ceiling(self):
+        cache = _ByteBoundedLRU(max_bytes=10)
+        cache.put(("a",), b"xxxxx")  # 5 bytes
+        cache.put(("b",), b"yyyyy")  # 10 total
+        assert cache.get(("a",)) == b"xxxxx"
+        cache.put(("c",), b"zzzzz")  # 15 -> evict oldest (b, since a was just touched)
+        assert cache.get(("b",)) is None
+        assert cache.get(("a",)) == b"xxxxx"
+        assert cache.get(("c",)) == b"zzzzz"
+
+    def test_keeps_single_oversized_entry(self):
+        cache = _ByteBoundedLRU(max_bytes=4)
+        big = b"0123456789"  # 10 bytes > ceiling
+        cache.put(("big",), big)
+        # The just-inserted entry is kept so the immediate fetch hits.
+        assert cache.get(("big",)) == big
+        # A later insert evicts the oversized entry.
+        cache.put(("small",), b"ab")
+        assert cache.get(("big",)) is None
+        assert cache.get(("small",)) == b"ab"
+
+    def test_update_existing_key_adjusts_total(self):
+        cache = _ByteBoundedLRU(max_bytes=10)
+        cache.put(("k",), b"xxxxx")
+        cache.put(("k",), b"yy")  # replace; total should be 2, not 7
+        cache.put(("j",), b"zzzzzzz")  # 2 + 7 = 9 <= 10, both fit
+        assert cache.get(("k",)) == b"yy"
+        assert cache.get(("j",)) == b"zzzzzzz"
