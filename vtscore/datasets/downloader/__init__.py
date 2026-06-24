@@ -89,6 +89,12 @@ from vtscore.datasets.downloader.core import (
     URBANSOUND8K_DOWNLOAD_SIZE_MB,
     URBANSOUND8K_URL,
     VIDEO_DIR,
+    VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB,
+    VISUAL_GENOME_IMAGES2_URL,
+    VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB,
+    VISUAL_GENOME_IMAGES_URL,
+    VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB,
+    VISUAL_GENOME_OBJECTS_URL,
     ProgressCallback,
     _default_progress,
     _download_and_extract,
@@ -116,6 +122,7 @@ from vtscore.datasets.downloader.images import (
     download_places365,
     download_roxford5k,
     download_stanford_dogs,
+    download_visual_genome,
 )
 
 # Video downloaders
@@ -219,6 +226,12 @@ __all__ = [
     "URBANSOUND8K_DOWNLOAD_SIZE_MB",
     "URBANSOUND8K_URL",
     "VIDEO_DIR",
+    "VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB",
+    "VISUAL_GENOME_IMAGES2_URL",
+    "VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB",
+    "VISUAL_GENOME_IMAGES_URL",
+    "VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB",
+    "VISUAL_GENOME_OBJECTS_URL",
     "download_file_with_progress",
     # Audio
     "download_esc50",
@@ -235,6 +248,7 @@ __all__ = [
     "download_places365",
     "download_roxford5k",
     "download_stanford_dogs",
+    "download_visual_genome",
     # Video
     "download_hmdb51",
     "download_kth",

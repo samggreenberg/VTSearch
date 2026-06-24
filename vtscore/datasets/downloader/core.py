@@ -85,6 +85,15 @@ UCSF_IDL_DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 ROXFORD_IMAGES_URL = "https://thor.robots.ox.ac.uk/oxbuildings/oxbuild_images-v1.tgz"
 ROXFORD_GND_URL = "https://cmp.felk.cvut.cz/revisitop/data/datasets/roxford5k/gnd_roxford5k.pkl"
 
+# Visual Genome (v1.4): a multi-label scene dataset of ~108k dense-annotated
+# photos.  Images ship as two zips (the historical VG_100K / VG_100K_2 splits);
+# object annotations (per-object name + pixel bounding box) ship as a separate
+# JSON zip.  Unlike the other image demos this is multi-label ground truth — see
+# docs/plans/visual-genome-dataset.md.
+VISUAL_GENOME_IMAGES_URL = "https://cs.stanford.edu/people/rak248/VG_100K/images.zip"
+VISUAL_GENOME_IMAGES2_URL = "https://cs.stanford.edu/people/rak248/VG_100K_2/images2.zip"
+VISUAL_GENOME_OBJECTS_URL = "https://homes.cs.washington.edu/~ranjay/visualgenome/data/dataset/objects.json.zip"
+
 # HMDB51
 HMDB51_URL = "http://serre-lab.clps.brown.edu/wp-content/uploads/2013/10/hmdb51_org.rar"
 
@@ -118,6 +127,9 @@ STANFORD_DOGS_DOWNLOAD_SIZE_MB = 750
 PLACES365_DOWNLOAD_SIZE_MB = 501
 UCSF_IDL_DOWNLOAD_SIZE_MB = 50
 ROXFORD_IMAGES_DOWNLOAD_SIZE_MB = 1850
+VISUAL_GENOME_IMAGES_DOWNLOAD_SIZE_MB = 9700
+VISUAL_GENOME_IMAGES2_DOWNLOAD_SIZE_MB = 5300
+VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB = 110
 HMDB51_DOWNLOAD_SIZE_MB = 2000
 UCF101_FULL_DOWNLOAD_SIZE_MB = 6960
 KTH_DOWNLOAD_SIZE_MB = 1150
