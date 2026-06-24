@@ -582,6 +582,11 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     field_values = wrap_cli_file_fields(importer.fields, field_values)
     created_by = get_current_user()
     origin = importer.build_origin(field_values)
+    # Reference mode (server importers): store path references instead of
+    # copying media bytes.  Maps onto the loader's ``thin`` flag.  Popped so
+    # it isn't forwarded into the importer's field_values (run() takes ``thin``
+    # as a parameter, not a field).
+    reference_files = _parse_bool(field_values.pop("reference_files", None))
     clipper_name = field_values.pop("clipper", "") or ""
     clipper_params = field_values.pop("clipper_params", None)
     chain_steps = _parse_chain_field(field_values.pop("clipper_chain", None))
@@ -606,9 +611,9 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
 
     def _load(target_medias):
         if use_chunked:
-            consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size))
+            consume_chunks_into(target_medias, importer.run_chunked(field_values, chunk_size, thin=reference_files))
         else:
-            importer.run(field_values, target_medias)
+            importer.run(field_values, target_medias, thin=reference_files)
 
     return _run_origin_load_in_background(
         _load,
