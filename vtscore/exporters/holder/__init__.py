@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.exporters.base import ExporterField, LabelsetExporter
+from vtscore.exporters.base import PluginField, LabelsetExporter
 
 
 # ---------------------------------------------------------------------------
@@ -125,10 +125,10 @@ class HolderLabelsetExporter(LabelsetExporter):
     description = "Create a Holder package with Good/Bad folders of contentIDs."
     icon = "\U0001f4e6"  # package
     hidden_from_picker = True  # flip to False once API clients are implemented
-    fields: list[ExporterField] = [
+    fields: list[PluginField] = [
         # No user-supplied fields - a new package is created automatically.
         # Add Holder auth/URL fields here when needed:
-        # ExporterField(key="holder_url", label="Holder API URL", field_type="text"),
+        # PluginField(key="holder_url", label="Holder API URL", field_type="text"),
     ]
 
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:

@@ -17,13 +17,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
 
 def _make_importer(
     *,
     name: str = "fake",
-    fields: list[ImporterField] | None = None,
+    fields: list[PluginField] | None = None,
     extra_origin_keys: tuple[str, ...] = (),
     origin_suppressed: bool = False,
 ) -> DatasetImporter:
@@ -44,13 +44,13 @@ def _make_importer(
 class TestOriginSuppressed:
     def test_returns_empty_params_when_suppressed(self):
         imp = _make_importer(
-            fields=[ImporterField("k", "K", "text")],
+            fields=[PluginField("k", "K", "text")],
             origin_suppressed=True,
         )
         assert imp.build_origin({"k": "v"}) == {"importer": "fake", "params": {}}
 
     def test_default_is_not_suppressed(self):
-        imp = _make_importer(fields=[ImporterField("k", "K", "text")])
+        imp = _make_importer(fields=[PluginField("k", "K", "text")])
         assert imp.build_origin({"k": "v"})["params"] == {"k": "v"}
 
 
@@ -58,8 +58,8 @@ class TestFieldTypeDefaults:
     def test_password_field_is_excluded_by_default(self):
         imp = _make_importer(
             fields=[
-                ImporterField("user", "User", "text"),
-                ImporterField("password", "Password", "password"),
+                PluginField("user", "User", "text"),
+                PluginField("password", "Password", "password"),
             ],
         )
         params = imp.build_origin({"user": "alice", "password": "hunter2"})["params"]
@@ -68,8 +68,8 @@ class TestFieldTypeDefaults:
     def test_file_field_is_excluded_by_default(self):
         imp = _make_importer(
             fields=[
-                ImporterField("name", "Name", "text"),
-                ImporterField("upload", "Upload", "file"),
+                PluginField("name", "Name", "text"),
+                PluginField("upload", "Upload", "file"),
             ],
         )
         params = imp.build_origin({"name": "x", "upload": "/should/not/leak"})["params"]
@@ -78,7 +78,7 @@ class TestFieldTypeDefaults:
     def test_include_in_origin_overrides_default(self):
         imp = _make_importer(
             fields=[
-                ImporterField("debug_token", "Debug", "password", include_in_origin=True),
+                PluginField("debug_token", "Debug", "password", include_in_origin=True),
             ],
         )
         params = imp.build_origin({"debug_token": "ok-to-persist"})["params"]
@@ -87,8 +87,8 @@ class TestFieldTypeDefaults:
     def test_include_in_origin_can_omit_a_text_field(self):
         imp = _make_importer(
             fields=[
-                ImporterField("keep", "Keep", "text"),
-                ImporterField("drop", "Drop", "text", include_in_origin=False),
+                PluginField("keep", "Keep", "text"),
+                PluginField("drop", "Drop", "text", include_in_origin=False),
             ],
         )
         params = imp.build_origin({"keep": "a", "drop": "b"})["params"]
@@ -99,7 +99,7 @@ class TestOriginSerializer:
     def test_list_field_is_comma_joined_via_serializer(self):
         imp = _make_importer(
             fields=[
-                ImporterField(
+                PluginField(
                     "datasets",
                     "Datasets",
                     "text",
@@ -113,7 +113,7 @@ class TestOriginSerializer:
     def test_serializer_ignored_when_value_empty(self):
         imp = _make_importer(
             fields=[
-                ImporterField("k", "K", "text", origin_serializer=lambda v: f"!{v}!"),
+                PluginField("k", "K", "text", origin_serializer=lambda v: f"!{v}!"),
             ],
         )
         # Empty value is skipped before the serializer runs.
@@ -123,7 +123,7 @@ class TestOriginSerializer:
         # Without an origin_serializer, list/dict values are JSON-encoded so
         # they round-trip through the string-only origin contract.
         imp = _make_importer(
-            fields=[ImporterField("payload", "Payload", "text")],
+            fields=[PluginField("payload", "Payload", "text")],
         )
         params = imp.build_origin({"payload": [{"a": 1}]})["params"]
         assert params == {"payload": '[{"a": 1}]'}
@@ -132,7 +132,7 @@ class TestOriginSerializer:
 class TestExtraOriginKeys:
     def test_extra_origin_keys_copy_from_field_values(self):
         imp = _make_importer(
-            fields=[ImporterField("a", "A", "text")],
+            fields=[PluginField("a", "A", "text")],
             extra_origin_keys=("transient",),
         )
         params = imp.build_origin({"a": "1", "transient": "abc"})["params"]
@@ -162,8 +162,8 @@ class TestCheckboxStillSerialised:
     def test_checkbox_emits_true_false_strings(self):
         imp = _make_importer(
             fields=[
-                ImporterField("on", "On", "checkbox", default="false"),
-                ImporterField("off", "Off", "checkbox", default="false"),
+                PluginField("on", "On", "checkbox", default="false"),
+                PluginField("off", "Off", "checkbox", default="false"),
             ],
         )
         params = imp.build_origin({"on": True, "off": False})["params"]
@@ -171,7 +171,7 @@ class TestCheckboxStillSerialised:
 
     def test_checkbox_default_when_missing(self):
         imp = _make_importer(
-            fields=[ImporterField("on", "On", "checkbox", default="true")],
+            fields=[PluginField("on", "On", "checkbox", default="true")],
         )
         # Field absent from field_values; falls back to declared default.
         assert imp.build_origin({})["params"] == {"on": "true"}
@@ -187,8 +187,8 @@ class TestSubclassOverrideWins:
             display_name = "Overriding"
             description = ""
             fields = [
-                ImporterField("password", "Password", "password"),
-                ImporterField("user", "User", "text"),
+                PluginField("password", "Password", "password"),
+                PluginField("user", "User", "text"),
             ]
 
             def build_origin(self, field_values: dict[str, Any]) -> dict[str, Any]:

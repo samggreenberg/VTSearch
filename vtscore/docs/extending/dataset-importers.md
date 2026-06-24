@@ -307,7 +307,7 @@ from typing import Any
 
 import numpy as np
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+from vtscore.datasets.importers.base import DatasetImporter, PluginField
 from vtscore.security.url_validation import validate_url
 
 
@@ -317,7 +317,7 @@ class CatalogueImporter(DatasetImporter):
     description = "Import audio clips from a remote JSON-line catalogue."
     icon = "\U0001f5c3"  # card-index
     fields = [
-        ImporterField(
+        PluginField(
             key="catalogue_url",
             label="Catalogue URL",
             field_type="url",

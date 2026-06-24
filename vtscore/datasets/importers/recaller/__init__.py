@@ -65,7 +65,7 @@ from __future__ import annotations
 
 from typing import Any, Iterator
 
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 from vtscore.media import all_folder_names
 
 
@@ -186,7 +186,7 @@ class ReCallerDatasetImporter(DatasetImporter):
     # contentID); the dataset-level origin carries no actionable identity.
     origin_suppressed = True
     fields = [
-        ImporterField(
+        PluginField(
             key="media_type",
             label="Output Media Type",
             field_type="select",
@@ -195,7 +195,7 @@ class ReCallerDatasetImporter(DatasetImporter):
             description="The media type this dataset will hold.  Source-type rows below specify which ReCaller record types to pull in and how to convert them to this output type.",
             required=False,
         ),
-        ImporterField(
+        PluginField(
             key="query_id",
             label="Query ID",
             field_type="select",

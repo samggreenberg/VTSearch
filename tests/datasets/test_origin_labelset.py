@@ -356,16 +356,16 @@ class TestLabelSet:
 
 class TestBuildOrigin:
     def test_build_origin_from_fields(self):
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
         class TestImporter(DatasetImporter):
             name = "test"
             display_name = "Test"
             description = "Test importer."
             fields = [
-                ImporterField("path", "Path", "folder"),
-                ImporterField("media_type", "Media Type", "select", options=["audio", "image"]),
-                ImporterField("file", "File", "file"),  # Should be excluded
+                PluginField("path", "Path", "folder"),
+                PluginField("media_type", "Media Type", "select", options=["audio", "image"]),
+                PluginField("file", "File", "file"),  # Should be excluded
             ]
 
             def run(self, field_values, medias):
@@ -376,15 +376,15 @@ class TestBuildOrigin:
         assert origin == {"importer": "test", "params": {"path": "/data/audio", "media_type": "audio"}}
 
     def test_build_origin_excludes_empty_values(self):
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
         class TestImporter(DatasetImporter):
             name = "t"
             display_name = "T"
             description = "T"
             fields = [
-                ImporterField("path", "Path", "folder"),
-                ImporterField("opt", "Opt", "text", required=False),
+                PluginField("path", "Path", "folder"),
+                PluginField("opt", "Opt", "text", required=False),
             ]
 
             def run(self, field_values, medias):

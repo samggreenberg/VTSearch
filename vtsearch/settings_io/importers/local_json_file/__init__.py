@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from vtsearch.settings_io.importers.base import SettingsImporter, SettingsImporterField
+from vtsearch.settings_io.importers.base import SettingsImporter, PluginField
 
 
 class LocalFileSettingsImporter(SettingsImporter):
@@ -20,7 +20,7 @@ class LocalFileSettingsImporter(SettingsImporter):
     description = "Import settings from a JSON file on your computer."
     icon = "\U0001f4c1"  # file folder
     fields = [
-        SettingsImporterField(
+        PluginField(
             key="file",
             label="Upload a file",
             field_type="file",

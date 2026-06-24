@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from vtscore.io import read_server_json
-from vtsearch.settings_io.importers.base import SettingsImporter, SettingsImporterField
+from vtsearch.settings_io.importers.base import SettingsImporter, PluginField
 
 
 class ServerFileSettingsImporter(SettingsImporter):
@@ -20,7 +20,7 @@ class ServerFileSettingsImporter(SettingsImporter):
     description = "Import settings from a JSON file on the server filesystem."
     icon = "\U0001f5a5"  # desktop computer
     fields = [
-        SettingsImporterField(
+        PluginField(
             key="filepath",
             label="Path or URL",
             field_type="server_path",

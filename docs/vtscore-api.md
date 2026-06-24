@@ -146,8 +146,6 @@ class DatasetImporter(PluginBase):
     conversion and ingestion for hooks 1–3; subclasses never call
     `get_converter()`."""
 
-ImporterField = PluginField
-"""Alias kept for clarity at import sites; identical to vtscore.plugins.PluginField."""
 
 def get_importer(name: str) -> DatasetImporter:
     """Look up a registered importer by its `name` attribute; raises KeyError."""
@@ -407,9 +405,6 @@ class LabelsetSource(SyncSource[LabelSet, LabelSet]):
     """Bidirectional sync target for a detector's labelset. Implements
     `load(field_values) -> LabelSet` and `save(labelset, field_values) -> None`,
     with optional `load_full()` for richer detector metadata."""
-
-LabelImporterField = PluginField
-LabelsetSourceField = PluginField
 
 def get_label_importer(name: str) -> LabelImporter: ...
 def list_label_importers() -> list[LabelImporter]: ...
@@ -1151,8 +1146,6 @@ class LabelsetExporter(PluginBase):
     `supports_streaming = True` and implementing
     `export_cli_streaming(header, records, field_values)`. See
     EXTENDING-plugins.md and docs/plans/cli-stream-massive-images.md."""
-
-ExporterField = PluginField  # backwards-compat alias
 
 def get_exporter(name: str) -> LabelsetExporter: ...
 def list_exporters() -> list[LabelsetExporter]: ...

@@ -22,9 +22,7 @@ if TYPE_CHECKING:
     # noqa suppresses an otherwise-correct F401.
     from vtscore.datasets.labelset import LabelSet  # noqa: F401
 
-LabelsetSourceField = PluginField
-
-__all__ = ["LabelsetSource", "LabelsetSourceField"]
+__all__ = ["LabelsetSource", "PluginField"]
 
 
 class LabelsetSource(SyncSource[list[dict[str, str]], "LabelSet"]):

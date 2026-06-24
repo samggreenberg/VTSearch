@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from vtscore.config import DATA_DIR
 from vtscore.io import atomic_write_json, read_server_json
-from vtscore.labels.sources.base import LabelsetSource, LabelsetSourceField
+from vtscore.labels.sources.base import LabelsetSource, PluginField
 
 if TYPE_CHECKING:
     from vtscore.datasets.labelset import LabelSet
@@ -25,7 +25,7 @@ class ServerFileLabelsetSource(LabelsetSource):
     description = "Sync detector labels with a JSON file on the server filesystem."
     icon = "\U0001f5a5"  # desktop computer
     fields = [
-        LabelsetSourceField(
+        PluginField(
             key="filepath",
             label="Save to (server path)",
             field_type="server_path",

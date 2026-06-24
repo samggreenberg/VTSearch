@@ -93,7 +93,7 @@ class DatasetImporter(ImporterBase):
         media dict did not already set one.
 
         Args:
-            field_values: Mapping of :attr:`ImporterField.key` → value.
+            field_values: Mapping of :attr:`PluginField.key` → value.
                 Fields with ``field_type="file"`` receive an
                 :class:`~vtscore.plugins.uploads.UploadedFile` (Flask
                 requests pass a Werkzeug ``FileStorage`` straight

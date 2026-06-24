@@ -360,14 +360,14 @@ class TestImporterDatasetName:
         from vtscore.datasets.importers.base import (
             DATASET_NAME_FIELD_KEY,
             DatasetImporter,
-            ImporterField,
+            PluginField,
         )
 
         class Imp(DatasetImporter):
             name = "imp"
             display_name = "Imp"
             description = "."
-            fields = [ImporterField("path", "Path", "text")]
+            fields = [PluginField("path", "Path", "text")]
 
             def run(self, field_values, medias):
                 pass
@@ -381,13 +381,13 @@ class TestImporterDatasetName:
     def test_class_fields_attribute_unchanged_by_to_dict(self):
         """to_dict() appends dataset_name only on the serialised payload;
         the class-level ``fields`` attribute remains as the developer wrote it."""
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
         class Imp(DatasetImporter):
             name = "imp2"
             display_name = "Imp"
             description = "."
-            fields = [ImporterField("path", "Path", "text")]
+            fields = [PluginField("path", "Path", "text")]
 
             def run(self, field_values, medias):
                 pass
@@ -1238,16 +1238,14 @@ class TestIngestSpecStreamMediaType:
     @staticmethod
     def _make_importer(records: list[dict]):
         """Return a DatasetImporter subclass that yields *records* for any spec."""
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 
         class _Imp(DatasetImporter):
             name = "test_stamp"
             display_name = "Test"
             description = "Test importer."
             fields = [
-                ImporterField(
-                    "media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"
-                ),
+                PluginField("media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"),
             ]
 
             def fetch_source_media(self, spec: SourceSpec, field_values: dict, thin: bool = False):
@@ -1379,16 +1377,14 @@ class TestIngestSpecStreamRequiredFields:
 
     @staticmethod
     def _make_importer(records: list[dict]):
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 
         class _Imp(DatasetImporter):
             name = "test_fields"
             display_name = "Test"
             description = "Test importer."
             fields = [
-                ImporterField(
-                    "media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"
-                ),
+                PluginField("media_type", "Media Type", "select", options=["image", "video", "audio"], default="image"),
             ]
 
             def fetch_source_media(self, spec: SourceSpec, field_values: dict, thin: bool = False):
@@ -1524,14 +1520,14 @@ class TestConverterOutputEndToEnd:
 
     @staticmethod
     def _make_importer(records: list[dict]):
-        from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 
         class _Imp(DatasetImporter):
             name = "test_e2e"
             display_name = "Test"
             description = "Test importer."
             fields = [
-                ImporterField(
+                PluginField(
                     "media_type",
                     "Media Type",
                     "select",

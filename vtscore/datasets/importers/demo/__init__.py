@@ -15,7 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from vtscore.datasets.importers.base import ImporterBase, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, PluginField
 from vtscore.datasets.loader import load_demo_dataset
 
 
@@ -37,13 +37,13 @@ class DemoDatasetImporter(ImporterBase):
     category = "demo"
 
     fields = [
-        ImporterField(
+        PluginField(
             key="name",
             label="Dataset",
             field_type="select",
             description="Which demo dataset to load.",
         ),
-        ImporterField(
+        PluginField(
             key="embedder",
             label="Embedder",
             field_type="text",
@@ -51,7 +51,7 @@ class DemoDatasetImporter(ImporterBase):
             required=False,
             include_in_origin=False,
         ),
-        ImporterField(
+        PluginField(
             key="converter",
             label="Converter",
             field_type="text",

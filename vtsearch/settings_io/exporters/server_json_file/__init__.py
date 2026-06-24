@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.io import atomic_write_json
-from vtsearch.settings_io.exporters.base import SettingsExporter, SettingsExporterField
+from vtsearch.settings_io.exporters.base import SettingsExporter, PluginField
 
 
 class ServerFileSettingsExporter(SettingsExporter):
@@ -21,7 +21,7 @@ class ServerFileSettingsExporter(SettingsExporter):
     description = "Write settings to a JSON file on the server filesystem."
     icon = "\U0001f5a5"  # desktop computer
     fields = [
-        SettingsExporterField(
+        PluginField(
             key="filepath",
             label="Save to (server path)",
             field_type="server_path",

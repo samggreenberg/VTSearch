@@ -35,7 +35,7 @@ The base is split across submodules:
 Example – a minimal SFTP importer skeleton::
 
     # vtsearch/datasets/importers/sftp/__init__.py
-    from vtscore.datasets.importers.base import DatasetImporter, ImporterField
+    from vtscore.datasets.importers.base import DatasetImporter, PluginField
 
     from vtscore.media import all_folder_names
 
@@ -44,11 +44,11 @@ Example – a minimal SFTP importer skeleton::
         display_name = "SFTP Server"
         description  = "Download media files from an SFTP server."
         fields = [
-            ImporterField("host",       "Hostname",    "text"),
-            ImporterField("user",       "Username",    "text"),
-            ImporterField("password",   "Password",    "password"),
-            ImporterField("path",       "Remote Path", "text"),
-            ImporterField(
+            PluginField("host",       "Hostname",    "text"),
+            PluginField("user",       "Username",    "text"),
+            PluginField("password",   "Password",    "password"),
+            PluginField("path",       "Remote Path", "text"),
+            PluginField(
                 "media_type", "Media Type", "select",
                 options=all_folder_names(),
                 default="audio",
@@ -77,14 +77,11 @@ from .dataset_importer import DatasetImporter
 from .origin import DATASET_NAME_FIELD_KEY
 from .specs import PickerView, SourceSpec
 
-# Backward-compatible alias; existing plugins import ``ImporterField``.
-ImporterField = PluginField
-
 __all__ = [
     "DATASET_NAME_FIELD_KEY",
     "DatasetImporter",
     "ImporterBase",
-    "ImporterField",
     "PickerView",
+    "PluginField",
     "SourceSpec",
 ]

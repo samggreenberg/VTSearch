@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.datasets.importers._npz_vectors import read_npz_embedder_name, read_npz_filenames_and_vectors
-from vtscore.datasets.importers.base import DatasetImporter, ImporterField, SourceSpec
+from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
 
 logger = logging.getLogger(__name__)
@@ -202,7 +202,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
     picker_view = "form"
     category = "server"
     fields = [
-        ImporterField(
+        PluginField(
             key="media_type",
             label="Dataset MediaType",
             field_type="select",
@@ -214,7 +214,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
             default="audio",
             required=False,
         ),
-        ImporterField(
+        PluginField(
             key="paths_file",
             label="Paths file",
             field_type="server_path",
@@ -228,7 +228,7 @@ class ServerFilesDatasetImporter(DatasetImporter):
             ),
             accept=".txt,.list,.npz",
         ),
-        ImporterField(
+        PluginField(
             key="reference_files",
             label="Reference files in place (don't copy)",
             field_type="checkbox",

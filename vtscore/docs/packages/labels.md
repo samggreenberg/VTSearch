@@ -18,7 +18,7 @@ auto-discovers them.
 
 ```python
 from vtscore.labels.importers import (
-    LabelImporter, LabelImporterField,
+    LabelImporter, PluginField,
     get_label_importer, list_label_importers,
 )
 
@@ -52,16 +52,16 @@ collisions.
 
 ```python
 # my_pkg/postgres_label_importer.py
-from vtscore.labels.importers import LabelImporter, LabelImporterField
+from vtscore.labels.importers import LabelImporter, PluginField
 
 class PostgresLabelImporter(LabelImporter):
     name = "postgres"
     display_name = "PostgreSQL Query"
     description = "Import labels from a PostgreSQL query."
     fields = [
-        LabelImporterField("host",     "Host",     "text"),
-        LabelImporterField("database", "Database", "text"),
-        LabelImporterField("query",    "Query",    "text",
+        PluginField("host",     "Host",     "text"),
+        PluginField("database", "Database", "text"),
+        PluginField("query",    "Query",    "text",
                            description="Must return md5 and label columns."),
     ]
 
@@ -141,15 +141,15 @@ resolve a path for a non-active detector (notably detector rename).
 ```python
 # my_pkg/redis_labelset_source.py
 from vtscore.datasets.labelset import LabelSet
-from vtscore.labels.sources import LabelsetSource, LabelsetSourceField
+from vtscore.labels.sources import LabelsetSource, PluginField
 
 class RedisLabelsetSource(LabelsetSource):
     name = "redis"
     display_name = "Redis Key"
     description = "Sync detector labels with a Redis key."
     fields = [
-        LabelsetSourceField("host", "Host", "text", default="localhost"),
-        LabelsetSourceField("key",  "Key",  "text",
+        PluginField("host", "Host", "text", default="localhost"),
+        PluginField("key",  "Key",  "text",
                             description="Supports {detector_id} and {detector_name}."),
     ]
 

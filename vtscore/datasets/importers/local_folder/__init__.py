@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.datasets.importers.base import ImporterBase, ImporterField
+from vtscore.datasets.importers.base import ImporterBase, PluginField
 
 
 class LocalFolderDatasetImporter(ImporterBase):
@@ -44,7 +44,7 @@ class LocalFolderDatasetImporter(ImporterBase):
     picker_view = "local_folder"
     category = "local"
     fields = [
-        ImporterField(
+        PluginField(
             key="recursive",
             label="Include subfolders",
             field_type="checkbox",

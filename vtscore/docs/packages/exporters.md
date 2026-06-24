@@ -22,7 +22,7 @@ external source) are not here; they live in
 - [Registry and accessors](#registry-and-accessors)
 - [`LabelsetExporter` ABC](#labelsetexporter-abc)
 - [The export contract](#the-export-contract)
-- [`ExporterField`](#exporterfield)
+- [`PluginField`](#exporterfield)
 - [Built-in exporters](#built-in-exporters)
 - [Template variables in path fields](#template-variables-in-path-fields)
 - [Writing a custom exporter](#writing-a-custom-exporter)
@@ -72,14 +72,14 @@ the standard `PluginBase` class attributes (`name`, `display_name`,
 `"\U0001f4e4"` (outbox tray).
 
 ```python
-from vtscore.exporters.base import LabelsetExporter, ExporterField
+from vtscore.exporters.base import LabelsetExporter, PluginField
 
 
 class MyExporter(LabelsetExporter):
     name = "my_exporter"
     display_name = "My Exporter"
     description = "..."
-    fields = [ExporterField("path", "Path", "server_path")]
+    fields = [PluginField("path", "Path", "server_path")]
 
     def export(self, results: dict, field_values: dict) -> dict:
         ...
@@ -152,19 +152,18 @@ delegating to `export()`. Override it when CLI invocation needs a
 different behaviour - the GUI exporter does this so it can print to
 stdout instead of asking the (nonexistent) frontend to render.
 
-## `ExporterField`
+## `PluginField`
 
-A backwards-compatibility alias for `PluginField`:
+`vtscore/exporters/base.py` re-exports `PluginField` so exporters can
+import it alongside `LabelsetExporter`:
 
 ```python
-# vtscore/exporters/base.py:54
-ExporterField = PluginField
+from vtscore.exporters.base import LabelsetExporter, PluginField
 ```
 
-Use whichever name reads better at the call site; the two are
-literally identical. Field semantics - `field_type` literals,
-`dynamic_options`, `depends_on`, number-field type inference - are
-documented in detail in [`plugins.md#pluginfield`](plugins.md#pluginfield).
+Field semantics - `field_type` literals, `dynamic_options`,
+`depends_on`, number-field type inference - are documented in detail in
+[`plugins.md#pluginfield`](plugins.md#pluginfield).
 
 ## Built-in exporters
 
@@ -246,7 +245,7 @@ from typing import Any
 
 import paramiko
 
-from vtscore.exporters.base import LabelsetExporter, ExporterField
+from vtscore.exporters.base import LabelsetExporter, PluginField
 
 
 class SftpLabelsetExporter(LabelsetExporter):
@@ -255,10 +254,10 @@ class SftpLabelsetExporter(LabelsetExporter):
     description = "Upload the results JSON to a remote SFTP server."
     icon = "\U0001f4e1"
     fields = [
-        ExporterField("host",     "Hostname",    "text"),
-        ExporterField("user",     "Username",    "text"),
-        ExporterField("password", "Password",    "password"),
-        ExporterField(
+        PluginField("host",     "Hostname",    "text"),
+        PluginField("user",     "Username",    "text"),
+        PluginField("password", "Password",    "password"),
+        PluginField(
             "path", "Remote Path", "text",
             default="/results/autodetect.json",
         ),
