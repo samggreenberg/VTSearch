@@ -1,9 +1,10 @@
 # Reference (no-copy) dataset import
 
-Status: **Phase 1 shipped.** Whole-file references for the two server
-importers (`server_folder`, `server_files`) are wired end-to-end. Phase 2
-(lazy clips **and** lazy converter output) is deferred — see *Open
-follow-ups*.
+Status: **Phase 1 + Phase 2a shipped.** Whole-file references for the two
+server importers (`server_folder`, `server_files`) are wired end-to-end
+(Phase 1). **Lazy clips** for audio and image now let reference datasets be
+clipped without duplicating bytes (Phase 2a). **Lazy converter output**
+(Phase 2b) is deferred — see *Open follow-ups*.
 
 ## Problem
 
@@ -65,53 +66,85 @@ today). This is the explicit trade the option exists to make.
   The option is not offered there.
 - **Clippers and converters** still materialize bytes (see below).
 
-## Open follow-ups (Phase 2: lazy clips AND lazy converter output)
+## What shipped (Phase 2a: lazy clips)
 
-Phase 1 only avoids duplication for media imported **as-is**. Two transforms
-still copy bytes into the dataset, and both should learn a lazy/reference
-form. Treat them together — they share the same shape (reference the
-original + a recipe, resolve on demand) and the same set of downstream
-consumers to update.
+Reference (thin) datasets can now be **clipped** without duplicating bytes.
+Before this, a reference import that also chose a clipper silently produced
+*no* clips: audio/image clippers early-return the media unchanged when
+`media_bytes` is absent, so the clipper stage was a no-op on thin parents.
 
-1. **Lazy clips.** Clippers (`vtscore/media/audio/clipper.py`,
-   `vtscore/media/video/clipper.py`, text clippers) eagerly slice real bytes
-   into each clip's `media_bytes` (e.g. `_wav_slice`). A clip already records
-   `clip_start` / `clip_end`, so the data model is half-built. A *lazy clip*
-   would set `media_bytes=None`, keep the original `media_path` + range, and
-   have the byte-resolution path slice on demand.
+- **`vtscore/media/lazy_clip.py`** — a *lazy clip* carries no `media_bytes`;
+  it keeps `media_path` (the source file) plus a *recipe* read from
+  `origin.params` (`clip_start`/`clip_end` for audio, `clip_box` for image)
+  and reproduces its bytes on demand. A small process-scoped LRU cache holds
+  resolved slices (never persisted, per the no-persisted-bytes rule). Only
+  audio and image participate — they're the types whose clippers actually
+  re-slice bytes.
+- **`MediaType._resolve_media_bytes`** (`vtscore/media/base.py`) consults
+  `lazy_clip_bytes` before the plain `media_path` read, so HTTP serving,
+  exporters, and any other byte consumer transparently get the sliced clip.
+- **Clipper stage** (`vtscore/datasets/stages/clipper.py`) gained
+  `_hydrate_reference_parents` (transiently load a thin parent's bytes so the
+  clipper can compute boundaries and the existing MD5/embed/thumbnail fixup
+  runs unchanged) and `_relazify_reference_clips_stage` (strip the
+  materialized bytes back off the derived clips). The re-lazify step runs in
+  `load_pipeline` **after** the embed/drop-none stages, so the embed-missing
+  safety net never mis-embeds a clip's *whole* source file behind its path.
+- **Cross-dataset re-embed** needed no change: `resolver.py` already
+  re-derives clips from the source file + recipe; lazy clips just make the
+  in-dataset path match.
+- **Pickle round-trip** works because the recipe lives in `origin.params`
+  (which already round-trips) and `media_path` is serialized; reopening a
+  reference clip stays lazy and resolves on demand.
 
-2. **Lazy converter output.** Converters (`vtscore/converters/`, e.g.
+Text clips stay materialized (a sliced string is tiny — no storage win and
+re-splitting from source is fragile). Video clips are already metadata-only
+(they share the parent's bytes; the player seeks via `clip_start`/`clip_end`),
+so they don't duplicate bytes and need no recipe slicing. A converter anywhere
+in the chain disables lazification (the output is no longer a slice of the
+source) — that's Phase 2b.
+
+## Open follow-ups (Phase 2b: lazy converter output)
+
+Phase 1 + 2a avoid duplication for media imported **as-is** and for
+audio/image **clips**. One transform still copies bytes into the dataset:
+
+1. **Lazy converter output.** Converters (`vtscore/converters/`, e.g.
    document→image, video→frame) similarly produce derived media with
    materialized bytes via `run_converters_on_folder`. The reference form
    would store the source `media_path` + the converter name/params and
    re-run the conversion (or a cached slice) on demand. PDF page expansion
    (`load_pdf_images_into`) is the same pattern.
 
-### Phase 2 design notes / ripple points
+### Phase 2b design notes / ripple points
 
-Both lazy clips and lazy converters need the same machinery, so build it
-once:
+Lazy converter output reuses the same shape Phase 2a built for clips
+(reference the source + a recipe, resolve on demand), but the recipe is a
+converter name+params rather than a clip range, and the open problems are
+harder:
 
-- A way to mark a media as "derived/virtual" carrying `(source ref,
-  recipe)` where recipe is a clip range or a converter+params.
-- **Byte resolution** (`MediaType._resolve_media_bytes` /
-  `_resolve_media_string`) must detect a virtual media and produce bytes by
-  resolving the source then applying the recipe (slice / convert), ideally
-  with a small process-scoped cache (per the no-persisted-bytes rule — never
-  serialize the materialized result).
-- **Embedding** pulls bytes through the same resolution path, so it works for
-  free once resolution does — but verify the embed stage doesn't assume
-  inline bytes.
-- **Origin → re-embed rederivation** (`vtscore/detectors/resolver.py`)
-  currently resolves an origin to the *whole* original file; for virtual
-  media it must re-apply the clip range / converter to reproduce the exact
-  derived bytes the embedding was trained on.
-- **HTTP serving** and **exporters** (anything that streams `media_bytes`)
-  go through resolution, so confirm each consumer tolerates on-demand
-  materialization (latency, partial-range requests for audio/video scrub).
-- **Pickle round-trip**: the same full-mode-honors-reference fix applies, but
-  the recipe must serialize too (it's not a vector or an MLP, so it's allowed
-  to persist).
+- **Recipe channel.** Phase 2a reads the clip recipe from `origin.params`
+  (`clip_start`/`clip_end`/`clip_box`), which already round-trips. A converter
+  recipe (converter name + params + which sub-output) would ride the same
+  `origin.params` / `clipper_chain` trail, but the byte-resolution detection in
+  `vtscore.media.lazy_clip` would need a converter branch (and a way to pick
+  the right sub-output, à la `clipper_chain._select_chain_output`).
+- **Byte resolution cost.** A clip slice is cheap (a `_wav_slice` / PIL crop).
+  Re-running document→image or video→frame on every cold `media_bytes` fetch is
+  expensive, and partial-range/scrub requests amplify it. The process-scoped
+  cache in `lazy_clip.py` helps within a process but the latency story needs
+  real thought (pre-warm? larger cache? bounded by bytes not count?).
+- **Embedding** already works for clips because the clipper-stage fixup embeds
+  from the materialized bytes before re-lazification; a converter path would
+  follow the same "hydrate → convert → embed → re-lazify" ordering. Verify the
+  embed-missing safety net (which reads `media_path` as the *whole* file) is
+  never reached for a converted media — same hazard Phase 2a dodged by
+  re-lazifying after the embed stages.
+- **Origin → re-embed rederivation** (`vtscore/detectors/resolver.py`) already
+  re-applies converters for cross-dataset training, so that path is reusable.
+- **HTTP serving** and **exporters** stream through `_resolve_media_bytes`, so
+  they get converter output for free once resolution learns the converter
+  branch — modulo the latency concern above.
 
-These are deferred; Phase 1 delivers the bulk of the storage win for
-un-clipped, un-converted server datasets.
+Phase 2b is deferred; Phase 1 + 2a deliver the storage win for un-converted
+server datasets, clipped or not.
