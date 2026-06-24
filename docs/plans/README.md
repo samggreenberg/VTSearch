@@ -22,9 +22,9 @@ it can't drift far. (Point-in-time UI review/audit reports live in
 ## Scalability
 
 - [scalability.md](scalability.md): brainstorm defining the `S#` IDs (reference)
-- [scalability-plan.md](scalability-plan.md): phased implementation plan (§3.3, Phase 1.2 GMM subsampling, CLI streaming shipped; rest open)
+- [scalability-plan.md](scalability-plan.md): phased implementation plan (§3.3, Phase 1.2 GMM subsampling, Phase 2.2 label-sync debounce, CLI streaming shipped; Phases 1.3/1.4/2.3 + 2.1 fast-builds open)
 - [cli-stream-massive-images.md](cli-stream-massive-images.md): CLI streaming for huge media sources (Phase 1 shipped)
-- [server-dedup-references.md](server-dedup-references.md): reference (no-copy) server import + lazy clips (Phase 1 + 2a shipped; Phase 2b lazy converter output designed only)
+- [server-dedup-references.md](server-dedup-references.md): reference (no-copy) server import + lazy clips + lazy converter output (Phases 1, 2a, 2b all shipped; fast-follows open)
 
 ## Detectors / embedders / clippers
 
