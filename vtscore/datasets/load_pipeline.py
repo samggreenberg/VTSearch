@@ -42,7 +42,7 @@ from vtscore.datasets.stages._common import (
     _TOTAL_LOAD_STEPS,
     _origin_to_str,
 )
-from vtscore.datasets.stages.clipper import _apply_clipper_stage
+from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
 from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
     _build_diversity_tree_stage,
@@ -484,6 +484,10 @@ def _run_origin_load_in_background(
                     _apply_clipper_stage(ctx, tracker, clipper, clipper_params, chain_steps)
                     _embed_missing_stage(ctx, tracker, embedders if embedders else [embedder])
                     _drop_none_embeddings_stage(ctx, tracker)
+                    # Re-lazify clips from reference (thin) parents now that
+                    # embedding is done: strip their materialized bytes so the
+                    # dataset stores recipes, not duplicated clip payloads.
+                    _relazify_reference_clips_stage(ctx, tracker)
                     _collapse_duplicates_stage(ctx, tracker)
                     _build_diversity_tree_stage(ctx, tracker)
                     tracker.check_cancelled()
