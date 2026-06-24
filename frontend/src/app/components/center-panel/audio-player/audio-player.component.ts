@@ -1,6 +1,7 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, Input, input, OnChanges, OnDestroy, output, SimpleChanges, ViewChild } from '@angular/core';
 import { Media } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { decodeAudioBuffer } from '../../../utils/decode-audio';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,7 +24,6 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
 
   audioSrc = '';
 
-  private audioCtx: AudioContext | null = null;
   private waveformAbort: AbortController | null = null;
   private viewReady = false;
   // See ImageViewerComponent.lastMediaId: the `media` input reference changes
@@ -61,9 +61,6 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
       audio.pause();
       audio.removeAttribute('src');
       audio.load();
-    }
-    if (this.audioCtx && this.audioCtx.state !== 'closed') {
-      this.audioCtx.close();
     }
   }
 
@@ -152,10 +149,7 @@ export class AudioPlayerComponent implements OnChanges, OnDestroy, AfterViewInit
       const arrayBuffer = await response.arrayBuffer();
       if (abort.signal.aborted) return;
 
-      if (!this.audioCtx || this.audioCtx.state === 'closed') {
-        this.audioCtx = new AudioContext();
-      }
-      const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+      const audioBuffer = await decodeAudioBuffer(arrayBuffer);
       if (abort.signal.aborted) return;
 
       const channelData = audioBuffer.getChannelData(0);

@@ -1,11 +1,12 @@
 # Logical-Bug Audit: 2026-05
 
-**Status:** Mostly resolved; C1–C12 (critical) and H1–H34 (high) are
-shipped; the security trio M32–M34 and the data-integrity M21 shipped
-2026-06-24, and the L1–L9 low batch was triaged the same day (L7/L9 fixed,
-the rest closed as stale / hypothetical / by-design). Only **M29** (audio
-context cleanup) and **M35** (one-vote eval metrics) remain open. Resolved
-findings are marked as struck-through headings.
+**Status:** Resolved. C1–C12 (critical) and H1–H34 (high) are shipped; the
+security trio M32–M34 and the data-integrity M21 shipped 2026-06-24, and the
+L1–L9 low batch was triaged the same day (L7/L9 fixed, the rest closed as
+stale / hypothetical / by-design). The last two open mediums — **M29** (audio
+context cleanup) and **M35** (one-vote eval metrics) — shipped 2026-06-25. No
+open findings remain; this doc is kept as the audit record. Resolved findings
+are marked as struck-through headings.
 
 **Scope:** Multi-agent audit (10 per-subsystem + 5 cross-section
 interaction passes) of the entire VTSearch codebase, focused on
@@ -922,8 +923,19 @@ Cross-section interaction agents:
   `response.ok`, and logs the underlying error via `console.warn` instead of
   swallowing it. `AbortError` is suppressed so rapid swiping doesn't spam the
   console or overwrite the next media's canvas.
-- **M29.** `AudioContext` not cleaned up on rapid navigation → resource
-  exhaustion.
+- ~~**M29.** `AudioContext` not cleaned up on rapid navigation → resource
+  exhaustion.~~ **Shipped.** Root cause: both the audio player and the
+  audio-crop overlay spun up a full hardware `AudioContext` purely to decode
+  audio for a static waveform. Chrome caps live contexts at ~6 and `close()`
+  is async, so rapid media navigation could create them faster than they tear
+  down (`NotSupportedError: number of hardware contexts reached maximum`); the
+  crop overlay additionally leaked its context whenever `decodeAudioData`
+  threw (the `catch` never called `close()`). Both now decode via a shared
+  `decodeAudioBuffer` helper (`frontend/src/app/utils/decode-audio.ts`) backed
+  by a throwaway `OfflineAudioContext`, which is purely computational — no
+  hardware allocation, no per-page cap, nothing to clean up. The audio
+  player's persistent `audioCtx` field and its `ngOnDestroy` close were
+  dropped.
 - ~~**M30.** Autopilot phase transitions can oscillate
   (`hard → new → hard → new`) when smart/stable status flickers.~~
   **Won't fix.** Evaluated and closed. The current derivation in
@@ -970,8 +982,15 @@ Cross-section interaction agents:
 
 ### Eval / exporters
 
-- **M35.** `voting_iterations.py` reports F1/FPR with one good + one bad vote
-  as if reliable.
+- ~~**M35.** `voting_iterations.py` reports F1/FPR with one good + one bad vote
+  as if reliable.~~ **Shipped.** `simulate_voting_iterations` emits a metrics
+  row as soon as ≥1 good and ≥1 bad vote exist, but that 1-vs-1 row was
+  indistinguishable from a 50-vs-50 row in the output. Rather than silently
+  drop early rows (lossy), each row now carries `n_good`/`n_bad` (the per-class
+  vote counts behind it, summing to `t`), threaded through both DataFrame
+  builders and documented in `vtscore/docs/packages/eval.md`, so downstream
+  analysis can filter or weight by sample size. Test coverage in
+  `tests_lib/detectors/test_eval_voting_iterations.py`.
 
 ---
 

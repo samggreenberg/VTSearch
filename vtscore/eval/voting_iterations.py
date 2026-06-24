@@ -13,7 +13,14 @@ For each combination of seed *s*, dataset *d*, and target category *c*:
    (``fpr_weight * FPR + fnr_weight * FNR``).
 
 The result is a :class:`pandas.DataFrame` with columns
-``seed, dataset, category, t, cost, fpr, fnr``.
+``seed, dataset, category, t, n_good, n_bad, cost, fpr, fnr``.
+
+``n_good``/``n_bad`` are the number of good/bad votes the model was trained
+on for that row. The very first scored step has only one of each, so its
+``cost``/``fpr``/``fnr`` are extremely noisy; these counts let downstream
+analysis filter or weight rows by how many votes actually informed them
+rather than treating a 1-vs-1 model as if it were as reliable as a 50-vs-50
+one.
 """
 
 from __future__ import annotations
@@ -148,8 +155,10 @@ def simulate_voting_iterations(
             calibration in each split (default 0.5).
 
     Returns:
-        List of row dicts with keys
-        ``seed, dataset, category, t, cost, fpr, fnr, elapsed_seconds``.
+        List of row dicts with keys ``seed, dataset, category, t, n_good,
+        n_bad, cost, fpr, fnr, elapsed_seconds``. ``n_good``/``n_bad`` report
+        the vote counts behind each row so callers can tell apart metrics
+        learned from a 1-vs-1 model and a many-vs-many one.
     """
     import numpy as np  # noqa: PLC0415
     import torch  # noqa: PLC0415
@@ -235,6 +244,8 @@ def simulate_voting_iterations(
                 "dataset": dataset_name,
                 "category": target_category,
                 "t": t,
+                "n_good": len(good_votes),
+                "n_bad": len(bad_votes),
                 **metrics,
                 "elapsed_seconds": round(time.monotonic() - start_time, 3),
             }
@@ -278,8 +289,8 @@ def run_voting_iterations_eval(
             calibration in each split (default 0.5).
 
     Returns:
-        A :class:`~pandas.DataFrame` with columns
-        ``seed, dataset, category, t, cost, fpr, fnr, elapsed_seconds``.
+        A :class:`~pandas.DataFrame` with columns ``seed, dataset, category,
+        t, n_good, n_bad, cost, fpr, fnr, elapsed_seconds``.
     """
     import pandas as pd  # noqa: PLC0415
 
@@ -309,7 +320,9 @@ def run_voting_iterations_eval(
 
     return pd.DataFrame(
         all_rows,
-        columns=pd.Index(["seed", "dataset", "category", "t", "cost", "fpr", "fnr", "elapsed_seconds"]),
+        columns=pd.Index(
+            ["seed", "dataset", "category", "t", "n_good", "n_bad", "cost", "fpr", "fnr", "elapsed_seconds"]
+        ),
     )
 
 
@@ -339,7 +352,8 @@ def run_voting_iterations_eval_from_pickles(
 
     Returns:
         A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
-        (columns: ``seed, dataset, category, t, cost, fpr, fnr, elapsed_seconds``).
+        (columns: ``seed, dataset, category, t, n_good, n_bad, cost, fpr, fnr,
+        elapsed_seconds``).
     """
     from vtscore.datasets.loader import load_dataset_from_pickle
 
