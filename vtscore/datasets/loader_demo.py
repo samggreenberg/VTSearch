@@ -24,6 +24,30 @@ from vtscore.datasets.loader import (
 )
 
 
+def _effective_clipper(clipper_name: str, media_type_id: str) -> str:
+    """Return *clipper_name* if it is a real (non-default) clipper, else ``""``.
+
+    The demo UI always sends *a* clipper name (the first one in the
+    media-type's list is pre-selected), but the conventional "default"
+    choice is a no-op that should not split the media.  Mirrors the
+    frontend's ``isDefaultClipper`` rule so that the two sides agree on
+    when clipping actually happens: a clipper is a no-op when it is empty,
+    ends with ``_default``, or is the first clipper registered for the
+    media type (the pre-selected default).  Normalising to ``""`` here also
+    means legacy pickles that recorded the pre-selected default name (e.g.
+    ``"sound_auto"``) compare equal to "no clipper" and don't trigger a
+    needless re-embed.
+    """
+    if not clipper_name or clipper_name.endswith("_default"):
+        return ""
+    from vtscore.media import clippers_for_type  # noqa: PLC0415
+
+    clippers = clippers_for_type(media_type_id)
+    if clippers and clippers[0].name == clipper_name:
+        return ""
+    return clipper_name
+
+
 def _stamp_demo_origin(
     medias: dict[int, dict[str, Any]],
     dataset_name: str,
@@ -72,6 +96,7 @@ def load_demo_dataset(  # noqa: C901
     embedder_name: str = "",
     converter_name: str = "",
     clipper_name: str = "",
+    clipper_params: dict[str, Any] | None = None,
 ) -> None:
     """Load a named demo dataset into the medias dict, downloading and embedding as needed.
 
@@ -102,8 +127,14 @@ def load_demo_dataset(  # noqa: C901
         converter_name: Optional name of a converter (e.g. ``"video2image"``).
             When given, the demo is loaded in its native type and then
             converted.
-        clipper_name: Optional name of a registered clipper.  Recorded in
-            the container metadata for status tracking.
+        clipper_name: Optional name of a registered clipper.  When it names
+            a real (non-default) clipper, every loaded media is split into
+            sub-clips via the shared clipper machinery and the clips are
+            re-embedded; the clipped clips inherit their parent's category
+            (and other metadata) by construction.  Recorded in the container
+            metadata so a later load with a different clipper re-derives.
+        clipper_params: Optional parameter overrides for *clipper_name*
+            (e.g. ``{"duration": 5.0}`` for a tiling clipper).
 
     Raises:
         ValueError: If ``dataset_name`` is not in ``DEMO_DATASETS``, or if the
@@ -135,8 +166,21 @@ def load_demo_dataset(  # noqa: C901
 
         cached_meta = read_meta(pkl_file)
         cached_embedder = cached_meta.get("embedder") or ""
-        if embedder_name and cached_embedder and embedder_name != cached_embedder:
-            on_progress("loading", f"Re-embedding {dataset_name} with {embedder_name}...", 0, 0)
+        embedder_mismatch = bool(embedder_name) and bool(cached_embedder) and embedder_name != cached_embedder
+        # A cached pickle built with a different clipper (or different clipper
+        # params) no longer reflects the requested split, so rebuild it.  Both
+        # names are normalised through _effective_clipper so the pre-selected
+        # default ("" vs e.g. "sound_auto") never counts as a mismatch.
+        requested_clipper = _effective_clipper(clipper_name, media_type_id)
+        cached_clipper = _effective_clipper(cached_meta.get("clipper") or "", media_type_id)
+        requested_params = clipper_params or {}
+        cached_params = cached_meta.get("clipper_params") or {}
+        clipper_mismatch = requested_clipper != cached_clipper or (
+            bool(requested_clipper) and requested_params != cached_params
+        )
+        if embedder_mismatch or clipper_mismatch:
+            reason = f"with {embedder_name}" if embedder_mismatch else "with new clipper"
+            on_progress("loading", f"Re-embedding {dataset_name} {reason}...", 0, 0)
             pkl_file.unlink()
         else:
             on_progress("loading", f"Loading {dataset_name} dataset...", 0, 0)
@@ -212,16 +256,51 @@ def load_demo_dataset(  # noqa: C901
             on_progress=on_progress,
         )
 
+    # --- Apply clipper if requested ---
+    # Splits each loaded media into sub-clips (re-embedding them) via the same
+    # machinery the regular import pipeline uses, so clips inherit their
+    # parent's category/metadata.  Skipped for the pre-selected default
+    # clipper (a no-op).  Runs after any converter so it operates on the
+    # final media type.
+    clipper_applied = bool(_effective_clipper(clipper_name, media_type_id))
+    if clipper_applied:
+        from vtscore.datasets.stages.clipper import _apply_clipper
+
+        def _clip_progress(current: int, total: int, phase: str) -> None:
+            if phase == "clipping":
+                msg = "Clipping media…"
+            elif phase == "converting":
+                msg = "Converting media…"
+            elif phase == "embedding":
+                msg = "Embedding clips…"
+            else:
+                # A loading/warmup message forwarded verbatim from the embedder.
+                msg = phase
+            on_progress("loading", msg, current, total)
+
+        _clip_progress(0, 0, "clipping")
+        _apply_clipper(
+            medias,
+            _effective_clipper(clipper_name, media_type_id),
+            clipper_params,
+            on_progress=_clip_progress,
+            embedder=embedder,
+        )
+
     # Build the pickle cache payload
     # For types with external media dirs (audio, video), exclude media_bytes
     # from the pickle and store the dir path so reloading can find the files.
     # When a converter was applied, external_dir is no longer relevant (the
-    # converted medias carry their own bytes/strings).
+    # converted medias carry their own bytes/strings).  Likewise when a clipper
+    # split the media: each clip is a *slice* of its source file, not the whole
+    # file the external dir resolves by name, so its bytes must ride in the
+    # pickle (dataset pickles are the one place persisted bytes are allowed).
     # Local import avoids a circular import at module load (loader imports
     # loader_demo before this helper is defined).
     from vtscore.datasets.loader import _embeddings_dict_for_pickle
 
-    if external_dir is not None and not converter_name:
+    store_external = external_dir is not None and not converter_name and not clipper_applied
+    if store_external:
         pkl_data: dict[str, Any] = {
             "name": dataset_name,
             "medias": {
@@ -254,14 +333,18 @@ def load_demo_dataset(  # noqa: C901
 
     resolved_name = getattr(embedder, "name", "") if embedder is not None else ""
     extra_pickle_keys: dict[str, Any] = {}
-    if external_dir is not None and not converter_name:
+    if store_external:
         extra_pickle_keys[mt.dir_key] = external_dir
 
     medias_pkl_bytes = pickle.dumps(pkl_data, protocol=5)
     meta = {
         "format_version": 1,
         "embedder": resolved_name,
-        "clipper": clipper_name,
+        # Store the *effective* clipper (normalised default -> "") plus its
+        # params so a later load can tell whether the cache still matches the
+        # requested split.
+        "clipper": _effective_clipper(clipper_name, media_type_id),
+        "clipper_params": (clipper_params or {}) if clipper_applied else {},
         "media_type": media_type_id,
         "name": dataset_name,
     }

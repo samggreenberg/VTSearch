@@ -347,6 +347,7 @@ def load_demo_dataset_route(body: dict):
     dataset_name = body.get("name")
     embedder_name = body.get("embedder", "")
     clipper_name = body.get("clipper", "")
+    clipper_params = body.get("clipper_params")
     converter_name = body.get("converter", "")
     user_dataset_name = (body.get("dataset_name") or "").strip()
 
@@ -380,6 +381,8 @@ def load_demo_dataset_route(body: dict):
         field_values["media_type"] = demo_info.get("media_type", "")
     if clipper_name:
         field_values["clipper"] = clipper_name
+        if clipper_params:
+            field_values["clipper_params"] = clipper_params
     if embedder_name:
         field_values["embedder"] = embedder_name
     demo_embedders = body.get("embedders")

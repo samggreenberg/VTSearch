@@ -1105,6 +1105,13 @@
             "default": "",
             "type": "string"
           },
+          "clipper_params": {
+            "additionalProperties": {},
+            "default": null,
+            "description": "Optional parameter overrides for `clipper` (e.g. `{\"duration\": 5.0}`). Only applied when `clipper` names a real, non-default clipper.",
+            "nullable": true,
+            "type": "object"
+          },
           "converter": {
             "default": "",
             "type": "string"

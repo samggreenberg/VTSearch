@@ -353,6 +353,15 @@ class DatasetLoadDemoRequestSchema(Schema):
         },
     )
     clipper = fields.String(load_default="")
+    clipper_params = fields.Dict(
+        load_default=None,
+        metadata={
+            "description": (
+                "Optional parameter overrides for `clipper` (e.g. `{\"duration\": 5.0}`). "
+                "Only applied when `clipper` names a real, non-default clipper."
+            )
+        },
+    )
     converter = fields.String(load_default="")
     dataset_name = fields.String(load_default="")
     build_projection = fields.String(
