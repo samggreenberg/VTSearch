@@ -333,3 +333,16 @@
     font-weight: var(--weight-semibold);
   }
 }
+
+// License-notice chip for the Detector Embedder picker, shown when the chosen
+// embedder carries a restrictive licence. Mirrors the import-advanced chip.
+.license-warning {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: rgba(255, 196, 0, 0.12);
+  border: 1px solid rgba(255, 196, 0, 0.4);
+  color: var(--text-warning);
+  font-size: var(--font-sm);
+  line-height: 1.35;
+}

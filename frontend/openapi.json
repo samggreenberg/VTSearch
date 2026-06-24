@@ -1718,6 +1718,10 @@
             "minLength": 1,
             "type": "string"
           },
+          "primary_embedder": {
+            "default": "",
+            "type": "string"
+          },
           "text_query": {
             "default": "",
             "type": "string"
@@ -1814,6 +1818,9 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          },
+          "primary_embedder": {
             "type": "string"
           },
           "text_query": {
@@ -2017,6 +2024,10 @@
             "minLength": 1,
             "type": "string"
           },
+          "primary_embedder": {
+            "default": "",
+            "type": "string"
+          },
           "text_query": {
             "default": "",
             "type": "string"
@@ -2102,6 +2113,9 @@
           },
           "num_training": {
             "type": "integer"
+          },
+          "primary_embedder": {
+            "type": "string"
           },
           "readers": {
             "items": {
@@ -5247,6 +5261,9 @@
           },
           "num_labels": {
             "type": "integer"
+          },
+          "primary_embedder": {
+            "type": "string"
           },
           "text_query": {
             "type": "string"

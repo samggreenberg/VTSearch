@@ -267,6 +267,29 @@
         />
       </div>
 
+      @if (tab === 'blank' && showEmbedderPicker) {
+        <div class="form-group">
+          <label class="col-label" for="detector-embedder"
+            title="The embedder this detector trains and scores in. This dataset binds more than one, so pick the vector space for this detector.">
+            Detector Embedder
+          </label>
+          <select
+            id="detector-embedder"
+            class="form-select"
+            name="detectorEmbedder"
+            [ngModel]="primaryEmbedder()"
+            (ngModelChange)="onPrimaryEmbedderChange($event)"
+          >
+            @for (embedder of embedderOptions; track embedder.name) {
+              <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+            }
+          </select>
+          @if (primaryLicenseNotice; as notice) {
+            <div class="license-warning" role="note">⚠ {{ notice }}</div>
+          }
+        </div>
+      }
+
       @if (error()) {
         <p class="error-text">{{ error() }}</p>
       }
