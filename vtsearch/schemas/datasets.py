@@ -357,7 +357,7 @@ class DatasetLoadDemoRequestSchema(Schema):
         load_default=None,
         metadata={
             "description": (
-                "Optional parameter overrides for `clipper` (e.g. `{\"duration\": 5.0}`). "
+                'Optional parameter overrides for `clipper` (e.g. `{"duration": 5.0}`). '
                 "Only applied when `clipper` names a real, non-default clipper."
             )
         },

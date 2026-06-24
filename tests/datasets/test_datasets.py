@@ -1107,9 +1107,7 @@ class TestDemoClipperApplied:
         return mock_clip, fake_embedder
 
     def test_real_clipper_is_applied_with_params_and_embedder(self, tmp_path):
-        mock_clip, fake_embedder = self._run(
-            tmp_path, "sound_tiling", clipper_params={"duration": 5.0}
-        )
+        mock_clip, fake_embedder = self._run(tmp_path, "sound_tiling", clipper_params={"duration": 5.0})
         mock_clip.assert_called_once()
         args, kwargs = mock_clip.call_args
         # _apply_clipper(medias, name, params, on_progress=..., embedder=...)
@@ -1171,9 +1169,7 @@ class TestDemoCacheClipperMismatch:
             patch("vtscore.media.get", return_value=mock_mt),
             patch("vtscore.datasets.stages.clipper._apply_clipper"),
         ):
-            load_demo_dataset(
-                demo_name, {}, clipper_name="sound_tiling", clipper_params={"duration": 5.0}
-            )
+            load_demo_dataset(demo_name, {}, clipper_name="sound_tiling", clipper_params={"duration": 5.0})
             # Param drift → cache discarded → re-embed via load_demo_source.
             mock_mt.load_demo_source.assert_called_once()
 
@@ -1198,9 +1194,7 @@ class TestDemoCacheClipperMismatch:
             patch("vtscore.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
         ):
             medias: dict = {}
-            load_demo_dataset(
-                demo_name, medias, clipper_name="sound_tiling", clipper_params={"duration": 2.0}
-            )
+            load_demo_dataset(demo_name, medias, clipper_name="sound_tiling", clipper_params={"duration": 2.0})
 
         assert 1 in medias
 

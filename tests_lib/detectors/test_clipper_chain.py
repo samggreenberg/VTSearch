@@ -443,7 +443,7 @@ class TestApplyClipperBackwardsCompat:
 
         calls: dict[str, int] = {"fixup": 0, "thumb": 0}
 
-        def fake_fixup(clips, recompute, media_type, on_progress=None):
+        def fake_fixup(clips, recompute, media_type, on_progress=None, embedder=None):
             calls["fixup"] += 1
 
         def fake_thumb(clips, recompute, media_type):
