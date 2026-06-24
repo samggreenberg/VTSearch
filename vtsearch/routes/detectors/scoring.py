@@ -167,7 +167,11 @@ def find_label(body: dict):  # noqa: C901
     # gain no ``best_region`` field.
     from vtscore.detectors.training import score_media_with_model
 
-    results = score_media_with_model(mlp, snap)
+    # Score in the detector's primary embedder space (the one the MLP was
+    # trained in); falls back to the dataset score precedence for a legacy
+    # detector with no persisted primary.
+    primary = (det_data or {}).get("primary_embedder", "") or ""
+    results = score_media_with_model(mlp, snap, embedder_name=primary or None)
     update_find_progress(
         "running",
         f"Scoring {n_total} items…",
@@ -619,19 +623,40 @@ def auto_detect(body: dict):
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
     from vtscore.state.core import get_active_context  # noqa: PLC0415
 
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap, get_active_context().routed_embedder("score"))
-    X_all = torch.from_numpy(all_embs)
+    # Each detector scores in its own primary embedder space, so build one
+    # matrix per distinct embedder the Auto-Find detectors call for (collapsing
+    # to a single shared matrix on the common single-embedder dataset, where
+    # every primary resolves to the same name).  A detector with no persisted
+    # primary falls back to the dataset score precedence.
+    default_score = get_active_context().routed_embedder("score")
+    det_embedders: dict[str, str | None] = {}
+    for dname, ddata, _entry in detectors_to_run:
+        primary = (ddata.get("primary_embedder", "") or "") if ddata else ""
+        det_embedders[dname] = primary or default_score
+    matrices: dict[str | None, tuple[list[int], Any]] = {}
+    for emb in set(det_embedders.values()):
+        ids, embs = get_embedding_matrix_for_snap(snap, emb)
+        matrices[emb] = (ids, torch.from_numpy(embs))
 
-    embed_dim = int(all_embs.shape[1]) if all_embs.ndim > 1 else 0
+    default_ids, default_X = matrices[default_score]
+    embed_dim = int(default_X.shape[1]) if default_X.ndim > 1 else 0
     worker_cap = cap_workers_by_memory(
-        len(all_ids),
+        len(default_ids),
         embed_dim,
         max_workers=min(len(detectors_to_run), 8),
     )
     results: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=worker_cap) as pool:
         futures = [
-            pool.submit(_score_detector_for_auto_detect, name, data, entry, media_type, snap, all_ids, X_all)
+            pool.submit(
+                _score_detector_for_auto_detect,
+                name,
+                data,
+                entry,
+                media_type,
+                snap,
+                *matrices[det_embedders[name]],
+            )
             for name, data, entry in detectors_to_run
         ]
         for future in futures:

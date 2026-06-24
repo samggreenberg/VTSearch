@@ -28,19 +28,21 @@ from typing import Any, Callable
 SpawnFn = Callable[..., Any]
 
 
-def active_dataset_embedder_name() -> str:
-    """Return the active dataset's model-keying marker embedder, or ``""``.
+def active_dataset_embedder_name(det_ctx=None) -> str:
+    """Return the active dataset's model-keying marker for *det_ctx*, or ``""``.
 
-    The **score** embedder (patch-else-text; the v3 routing table) the
-    detector's label cache is built against - matching what the training
-    paths stamp on ``DetectorContext.embedder`` so the re-embed mismatch
-    check here agrees with the model-invalidation check.  See
-    ``score_marker_embedder`` and patch-embedder.md Phase 2b.5.
+    Under the per-detector primary model the marker is the detector's own
+    primary whenever the active dataset can supply it (so the cache survives a
+    dataset switch and no re-embed fires), else the dataset score precedence (so
+    a genuine mismatch schedules a re-embed against the new dataset).  This
+    agrees with the model-invalidation check in ``dataset_sync``.  See
+    :func:`keying_embedder_for_snap` and patch-embedder.md → "Per-detector
+    primary embedder".
     """
-    from vtscore.embedding.binding import score_marker_embedder_for_snap
+    from vtscore.embedding.binding import keying_embedder_for_snap
     from vtscore.state import snapshot_medias
 
-    return score_marker_embedder_for_snap(snapshot_medias())
+    return keying_embedder_for_snap(det_ctx, snapshot_medias())
 
 
 def embedder_display_name(embedder_name: str) -> str:
@@ -65,7 +67,7 @@ def maybe_start_label_reembed(det_ctx, entry: dict, *, spawn: SpawnFn) -> str | 
     *spawn* starts the background worker (see :data:`SpawnFn`); it must replay
     the caller's execution context into the new thread.
     """
-    new_embedder = active_dataset_embedder_name()
+    new_embedder = active_dataset_embedder_name(det_ctx)
     if not new_embedder or not det_ctx.embedder or new_embedder == det_ctx.embedder:
         return None
 

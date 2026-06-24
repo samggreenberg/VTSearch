@@ -109,6 +109,10 @@ class _DetectorSummarySchema(Schema):
     examples = fields.List(fields.Dict())
     num_labels = fields.Integer(required=True)
     created_at = fields.Float(required=True)
+    # The detector's primary embedder (the vector space it trains/scores in),
+    # chosen at create time.  Empty for a legacy detector (resolved at first
+    # train).  See patch-embedder.md → "Per-detector primary embedder".
+    primary_embedder = fields.String()
 
 
 class DetectorsListResponseSchema(Schema):
@@ -138,6 +142,7 @@ class DetectorDetailSchema(Schema):
     media_type = fields.String()
     examples = fields.List(fields.Dict())
     created_at = fields.Float()
+    primary_embedder = fields.String()
     labelset = fields.Nested(_LabelSetSchema)
     combined_from = fields.List(fields.String())
 
@@ -161,6 +166,11 @@ class DetectorCreateRequestSchema(Schema):
     text_query = fields.String(load_default="")
     media_example = fields.String(load_default="")
     examples = fields.List(fields.Dict(), load_default=None, allow_none=True)
+    # The detector's primary embedder (its scoring vector space).  Empty lets
+    # the server pick: the sole embedder on a single-embedder dataset, or a 400
+    # on a multi-embedder dataset (the client must choose).  A concrete name is
+    # validated against the active dataset's bound embedders.
+    primary_embedder = fields.String(load_default="")
 
 
 class DetectorCreateResponseSchema(Schema):
@@ -287,6 +297,10 @@ class DetectorRegistryEntrySchema(Schema):
     # load the detector.  Loaded contexts override the persisted value
     # when present.  Empty string for detectors that have never trained.
     embedder = fields.String()
+    # The detector's per-detector primary embedder (its scoring vector space),
+    # chosen at create time and persisted on the detector JSON.  See
+    # patch-embedder.md → "Per-detector primary embedder".
+    primary_embedder = fields.String()
 
     class Meta:
         # Registry entries may carry extension keys (e.g. future per-row
@@ -314,6 +328,11 @@ class DetectorRegistryCreateRequestSchema(Schema):
     media_example = fields.String(load_default="")
     trainable = fields.Boolean(load_default=False)
     examples = fields.List(fields.Dict(), load_default=None, allow_none=True)
+    # The detector's primary embedder (its scoring vector space).  Empty lets
+    # the server pick (sole embedder on a single-embedder dataset, else 400 on a
+    # multi-embedder dataset).  Validated against the active dataset's bound
+    # embedders.  See patch-embedder.md → "Per-detector primary embedder".
+    primary_embedder = fields.String(load_default="")
 
 
 class DetectorRegistryCreateResponseSchema(Schema):

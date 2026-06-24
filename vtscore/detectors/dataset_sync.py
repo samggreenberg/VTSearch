@@ -214,23 +214,24 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
     return True
 
 
-def _embedder_of_active_dataset() -> str:
-    """Return the active dataset's model-keying marker embedder, or ``""``.
+def _embedder_of_active_dataset(det_ctx=None) -> str:
+    """Return the active dataset's model-keying marker for *det_ctx*, or ``""``.
 
-    The **score** embedder (patch-else-text; the v3 routing table) the
-    detector MLP is trained and scored against - not the per-media primary,
-    which differs from the scored space on a dual-embedder dataset.  Matches
-    what the training paths stamp on ``DetectorContext.embedder`` so the
-    invalidation compare is apples-to-apples.  See ``score_marker_embedder``
-    and patch-embedder.md Phase 2b.5.
+    Under the per-detector primary model the marker is the detector's own
+    primary whenever the active dataset can supply it (so a valid cached model
+    survives a dataset switch), else the dataset score precedence (so a genuine
+    mismatch invalidates).  See :func:`keying_embedder_for_snap` and
+    patch-embedder.md → "Per-detector primary embedder".  For a single-embedder
+    dataset the primary *is* that one embedder, so this returns it unchanged -
+    byte-for-byte the pre-per-detector behaviour.
     """
-    from vtscore.embedding.binding import score_marker_embedder_for_snap
+    from vtscore.embedding.binding import keying_embedder_for_snap
     from vtscore.state.core import get_active_context
 
     ds_ctx = get_active_context()
     if not ds_ctx.dataset_id or not ds_ctx.medias:
         return ""
-    return score_marker_embedder_for_snap(ds_ctx.medias)
+    return keying_embedder_for_snap(det_ctx, ds_ctx.medias)
 
 
 def ensure_detector_model_matches_active_embedder() -> None:
@@ -254,7 +255,7 @@ def ensure_detector_model_matches_active_embedder() -> None:
     det_ctx = get_active_detector_context()
     if not det_ctx.detector_id:
         return
-    new_embedder = _embedder_of_active_dataset()
+    new_embedder = _embedder_of_active_dataset(det_ctx)
     invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder)
 
 

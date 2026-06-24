@@ -102,13 +102,16 @@ def update_det_ctx_with_trained_model(det_ctx, model, threshold, labelset, train
         det_ctx.training_medias = training
     if snap:
         first = next(iter(snap.values()), {})
-        # Stamp the model-keying marker (score embedder, patch-else-text) the
-        # MLP was trained against - not the per-media primary, which differs
-        # from the scored space on a dual-embedder dataset.  See
-        # ``score_marker_embedder`` and patch-embedder.md Phase 2b.5.
-        from vtscore.embedding.binding import score_marker_embedder
+        # The detector's primary embedder (``det_ctx.embedder``) is authoritative
+        # once set - chosen at create time, loaded from the detector JSON. Only
+        # stamp the dataset score-precedence marker when it's still empty (a
+        # legacy detector with no persisted primary): that one-shot migration
+        # records the space the detector was already training in.  See
+        # patch-embedder.md → "Per-detector primary embedder".
+        if not det_ctx.embedder:
+            from vtscore.embedding.binding import score_marker_embedder
 
-        det_ctx.embedder = score_marker_embedder(first)
+            det_ctx.embedder = score_marker_embedder(first)
         det_ctx.media_type = first.get("media_type", "")
 
 

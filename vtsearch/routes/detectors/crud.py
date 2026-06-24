@@ -89,6 +89,7 @@ def _list_all() -> list[dict]:
                 "examples": data.get("examples", []),
                 "num_labels": len(labels),
                 "created_at": data.get("created_at", 0),
+                "primary_embedder": data.get("primary_embedder", "") or "",
             }
         )
     return detectors
@@ -139,6 +140,12 @@ def create_detector(body: dict):
     if path.exists():
         abort(409, message=f"A detector named '{name}' already exists")
 
+    from vtscore.detectors.primary_embedder import resolve_detector_primary
+
+    primary_embedder, primary_err = resolve_detector_primary(body.get("primary_embedder", ""))
+    if primary_err:
+        abort(400, message=primary_err)
+
     # Build examples list; if text_query/media_example provided without
     # explicit examples, create a single example from it for backward compat.
     if examples is None and text_query:
@@ -153,6 +160,7 @@ def create_detector(body: dict):
         "media_type": media_type,
         "examples": examples or [],
         "created_at": time.time(),
+        "primary_embedder": primary_embedder,
         "labelset": {"labels": []},
     }
     _write_detector(path, detector_data)
@@ -388,6 +396,12 @@ def combine_detectors(body: dict):  # noqa: C901
                 text_query = s["text_query"]
                 break
 
+    # Inherit the primary embedder only when every source agrees on it; a
+    # disagreement (or any source without one) leaves it empty, resolved at
+    # first train against a dataset.
+    source_primaries = {(s.get("primary_embedder", "") or "") for s in sources}
+    combined_primary = next(iter(source_primaries)) if len(source_primaries) == 1 else ""
+
     new_data = {
         "name": new_name,
         "text_query": text_query,
@@ -395,6 +409,7 @@ def combine_detectors(body: dict):  # noqa: C901
         "media_type": media_type,
         "examples": merged_examples,
         "created_at": time.time(),
+        "primary_embedder": combined_primary,
         "labelset": merged.to_dict(),
         "combined_from": list(names),
     }
