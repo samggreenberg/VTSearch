@@ -1,7 +1,7 @@
 # VTSBrowse audit — queued fixes
 
-Status: **partially applied — #1 shipped, #2 and #3 open.** Apply the rest on a
-feature branch off `dev`.
+Status: **all shipped — #1, #2, and #3 are done on `dev`.** Nothing left to
+apply; this file is kept as the record of what the audit found and fixed.
 
 This came out of a live-driving + targeted-code audit of VTSBrowse (the hex-tile
 UMAP browse view). The feature is well-built; these are the genuinely
@@ -17,7 +17,14 @@ empties `_pyramids` inside the `_state_lock` block, so unloading a dataset frees
 its tiles and the build route can no longer serve a stale pyramid after a
 content-changing reload.
 
-### 2. Hover preview/highlight goes stale on zoom  (MEDIUM)
+### ~~2. Hover preview/highlight goes stale on zoom  (MEDIUM)~~ — SHIPPED
+
+Implemented via the **preferred fix**: `onCanvasMouseMove` records the last
+cursor position (`lastMouseX/Y`, `lastClientX/Y`, `pointerInside`), and
+`zoomBy()` / `zoomToFit()` / `setThumbnailRadius()` plus the boundary-settle
+landing all call `refreshHoverAfterZoom()`, which re-runs `hitTest()` at the
+tracked cursor and re-emits `hexHover` (or clears it when the pointer is off the
+canvas). Original write-up retained below for context.
 
 - **Where:** `frontend/src/app/components/browse-canvas/browse-canvas.component.ts`
   — `zoomBy()` (~line 502), used by the +/- buttons and the mouse wheel.
@@ -36,7 +43,14 @@ content-changing reload.
 - **Fix (minimal fallback):** clear hover at the end of `zoomBy()` —
   `this.hoveredCell = null; this.ngZone.run(() => this.hexHover.emit(null));`.
 
-### 3. Frontend hardening bundle  (LOW–MED)
+### ~~3. Frontend hardening bundle  (LOW–MED)~~ — SHIPPED
+
+All four items landed: the hover-preview text fetch stores/aborts an
+`AbortController` (incl. in `ngOnDestroy`); `pollBuildStatus` now caps retries
+(`MAX_POLL_ERRORS`) with exponential backoff (2s→30s) under `takeUntil(destroy$)`
+and clears `pollTimer` on destroy; the six canvas listeners use stable bound
+fields removed in `ngOnDestroy`; and the dead `onCanvasClick()` (plus its
+autoplay-unlock scaffolding) is gone. Original write-up retained below.
 
 - **AbortController on hover-preview text fetch** —
   `frontend/src/app/components/browse-hover-preview/browse-hover-preview.component.ts:111`.
