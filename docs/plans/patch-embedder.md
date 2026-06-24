@@ -1,14 +1,15 @@
 # Patch-based Image Embedder - Design
 
-**Status:** V1 shipped, V2 shipped, **V3 trio shipped end-to-end.** The design
-body below is the living spec for the shipped V1/V2 behaviour; the *V1 - DONE*
-and *V2 - DONE* closeouts are collapsed to struck-through lists. The V3
-text/patch/structural trio (dict-keyed `media["embeddings"]`, role binding,
-dataset-level score routing, create-time picker) is shipped - see
-"V3 - implementation status". **Remaining design-in-progress work** is
-*per-detector primary embedder* (each detector picks its own scoring space,
-superseding the dataset-level score precedence for detector operations); see
-"Per-detector primary embedder (design)".
+**Status:** V1 shipped, V2 shipped, **V3 trio shipped end-to-end**, and the
+**per-detector primary embedder shipped**. The design body below is the living
+spec for the shipped V1/V2 behaviour; the *V1 - DONE* and *V2 - DONE* closeouts
+are collapsed to struck-through lists. The V3 text/patch/structural trio
+(dict-keyed `media["embeddings"]`, role binding, dataset-level score routing,
+create-time picker) is shipped - see "V3 - implementation status". The
+per-detector primary embedder (each detector picks its own scoring space at
+create time, overriding the dataset-level score precedence for that detector's
+training/scoring) is shipped - see "Per-detector primary embedder (design)" for
+the spec, "What shipped" / "Open follow-ups" there for the close-out.
 
 ## Status of related work
 
@@ -970,10 +971,11 @@ dataset-level score precedence for detector operations) — see
 
 ## Per-detector primary embedder (design)
 
-**Status: design-in-progress.** Supersedes the *dataset-level* score
+**Status: SHIPPED.** Each detector picks one primary embedder at create time
+and trains/scores in that space, overriding the *dataset-level* score
 precedence that shipped in V3 (Phases 2b.4 / 2b.5 / 2d) for **detector**
-operations.  Nothing here is implemented yet; the shipped routing table
-above is what's live today.
+operations.  See "What shipped" and "Open follow-ups" at the end of this
+section for the close-out and the deliberate deviation from the design below.
 
 ### Motivation
 
@@ -1207,9 +1209,68 @@ we don't keep a parallel precedence-derived mirror once the field exists.
   once).  Out of scope - this is the inverse of the trio's "one space per
   detector" premise; the same exclusion as V3 open question #4.
 
+### What shipped
+
+The choice is persisted as `primary_embedder` on the detector JSON (a *name*,
+no vectors/MLPs - CLAUDE.md-compliant), resolved + validated at create time
+against the active dataset's bound embedders (`resolve_detector_primary`):
+empty auto-resolves the sole embedder on a single-embedder dataset and is
+rejected on a multi-embedder one; a concrete name must be bound.  The new
+`DetectorRegistryCreateRequestSchema.primary_embedder` / `DetectorCreateRequestSchema.primary_embedder`
+carry it; both create routes plus combine persist it.  The new-detector modal
+shows a **Detector Embedder** picker (with the license-notice chip) only when
+the active dataset binds more than one embedder, threading the pick into the
+register payload.
+
+All detector-scoped training/scoring routes through one resolver,
+`keying_embedder_for_snap(det_ctx, snap)`: the detector's primary **when the
+active dataset supplies it**, else the dataset score precedence.  This is the
+single knob behind `detector_score_embedder` (vote-driven `train_and_score` /
+`_score_all_media` / `_build_vote_xy`), the labelset embed path
+(`labelset_training._detector_embedder`), the cold-train path
+(`model_loading`), Find scoring, Auto-Find (one matrix per distinct keyed
+embedder), and the cache-invalidation / re-embed comparisons
+(`dataset_sync._embedder_of_active_dataset`, `embedder_sync`).  Region
+max-pool in `_score_all_media` is now gated on the resolved space **being the
+patch slot**, so a text-primary detector on a text+patch dataset scores the
+text full-image vectors instead of the patch tree.
+
+**Deliberate deviation from the design.** The design said
+`DetectorContext.embedder` *becomes* the authoritative per-detector primary.
+We instead added a **separate** immutable `DetectorContext.primary_embedder`
+(loaded from the JSON) and kept `DetectorContext.embedder` as the *adaptive
+cache-space marker* it already was.  Reason: collapsing the two would have
+removed the cross-embedder portability the V3 cross-embedder-switch work
+relies on - a detector pointed at a dataset that doesn't bind its primary must
+still re-embed its labelset against that dataset's space (the design's own
+"re-embeds its labelset against the dataset (if its origins resolve)"), and
+the invalidation/re-embed machinery keys on the *current* cache space, not the
+preference.  `keying_embedder_for_snap` reads `primary_embedder` and falls
+back to the precedence exactly when the dataset can't supply the primary, so
+single-embedder datasets and every existing detector are byte-for-byte
+unchanged (their `primary_embedder` is empty → pure precedence).
+
+### Open follow-ups
+
+- **In-memory primary drift across A→B→A switches.** `DetectorContext.embedder`
+  (the adaptive cache marker) is re-stamped to the dataset's space when the
+  active dataset can't supply the detector's primary.  The persisted
+  `primary_embedder` (JSON) is untouched and re-loaded on the next detector
+  load, but within one in-memory session a multi-embedder-dataset → other-space
+  dataset → back sequence can leave the detector scoring the "back" dataset via
+  the *adapted* slot rather than its primary until reload.  Exotic (rare
+  multi-embedder datasets, A→B→A); revisit if it bites.
+- **Cross-dataset Find / CLI-chunk scoring** still resolve their embedder from
+  each media's primary, not the detector's `primary_embedder` (same follow-up
+  already tracked under "Open follow-ups (from 2b.4)").  Correct for every
+  single-embedder dataset; wire to the detector primary when cross-dataset Find
+  over a real multi-embedder dataset is exercised.
+- **Per-detector diversity tree** and **changing a detector's primary after
+  creation** remain out of scope (see "Out of scope / open questions" above).
+
 ## Phasing
 
 - **v1 (this plan):** six image embedders - single/patch pairs for DINOv2 (ungated default), DINOv3 (gated, premium), and real-EUPE (FAIR Noncommercial). `supports_patch_regions` + `license_notice` flags on `MediaEmbedder`; each `_patch` embedder populates `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw H × W × 768 fp16); the matching `_single` slug provides a fast/cheap CLS-only path on the same backbone for datasets that don't need region search. `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring; asymmetric training loss (Good = `BCE(mlp(full_image_vec), 1)` unchanged from today, Bad = `mean`-over-regions BCE) with image-level labels unchanged on disk; gallery-card region highlight; license-notice surfacing on the embedder picker. Text sort stays grey via the already-shipped `supports_text` gate. Pre-implementation experiments run on `caltech101_s` and inform `K`, `α`, and the EUPE-real attention path.
 - **v2:** region voting on image media via Shift-drag on the focus pane (single rectangular box, salient-area annotation on yes-votes only; binary fast path via `←`/`→` preserved); on-the-fly vote-vector computation from the v1-pickled `patch_grid` (no re-import needed); optional `LabeledElement.region_box`; region-level training examples; per-region label export. Touch deferred.
 - **v3:** the **text / patch / structural trio** - up to one embedder per role bound on a single dataset (text queries → text embedder; region similarity / votes → patch embedder; instance retrieval + geometric re-rank → structural embedder), at least one slot filled.  Schema change to dict-keyed `media["embeddings"]` (one vector per bound embedder); `patch_regions` / `patch_grid` / `local_features` stay single-valued (one patch + one structural slot); legacy `media["embedding"]` is read-migrated then dropped on next save; MLPs become keyed by `(detector, dataset, embedder)` against the score embedder (structural ▸ patch ▸ text).  Designed in "V3 - design" above; **shipped** end-to-end (substrate Phases 2a–2b.5, the structural binding slot + routing in Phase 2d, and the additive create-time trio picker in Phase 3 — see "V3 - implementation status"; the picker deviated to an additive design, documented there).
-- **per-detector primary embedder (design-in-progress):** moves the scoring-space choice from the dataset (the V3 score precedence structural ▸ patch ▸ text) to the **detector** - each detector picks one `primary_embedder` at create time and trains/scores in that space, so different detectors on one multi-embedder dataset can use different spaces; text sort stays on the dataset text slot. Persisted as a name on the detector JSON (no vectors/MLPs persisted); legacy detectors read-migrate to their existing precedence-resolved space. Designed in "Per-detector primary embedder (design)" above; not yet implemented.
+- **per-detector primary embedder (SHIPPED):** moves the scoring-space choice from the dataset (the V3 score precedence structural ▸ patch ▸ text) to the **detector** - each detector picks one `primary_embedder` at create time and trains/scores in that space, so different detectors on one multi-embedder dataset can use different spaces; text sort stays on the dataset text slot. Persisted as a name on the detector JSON (no vectors/MLPs persisted); legacy detectors fall back to the precedence-resolved space. All detector-scoped routing funnels through `keying_embedder_for_snap` (primary when the dataset supplies it, else precedence), so single-embedder datasets stay byte-for-byte unchanged. Shipped with a separate immutable `DetectorContext.primary_embedder` field (deviation from the design's "reuse `DetectorContext.embedder`", to preserve cross-embedder portability) - see "Per-detector primary embedder (design)" → "What shipped" / "Open follow-ups".
