@@ -11,7 +11,6 @@ See ``docs/plans/server-dedup-references.md``.
 
 from __future__ import annotations
 
-import types
 import wave
 from pathlib import Path
 from typing import Any
@@ -85,7 +84,11 @@ def _stub_clip_fixup(monkeypatch):
 
 
 def _relazify(clips: dict) -> None:
-    clipper_stage._relazify_reference_clips_stage(types.SimpleNamespace(medias=clips))
+    from vtscore.state import DatasetContext  # noqa: PLC0415
+
+    ctx = DatasetContext("_test_lazy_clips")
+    ctx.medias = clips
+    clipper_stage._relazify_reference_clips_stage(ctx)
 
 
 # ---------------------------------------------------------------------------
