@@ -576,16 +576,20 @@ class AudioMediaType(MediaType):
 
             audio_dir = download_esc50(on_progress=on_progress)
             esc_metadata = load_esc50_metadata(audio_dir.parent)
-
-            by_cat: dict[str, list] = {}
-            for audio_path in sorted(audio_dir.glob("*.wav")):
-                if audio_path.name in esc_metadata:
-                    cat = esc_metadata[audio_path.name]["category"]
-                    if cat in categories:
-                        by_cat.setdefault(cat, []).append((audio_path, esc_metadata[audio_path.name]))
+            by_cat = self._esc50_by_category(audio_dir, esc_metadata, categories)
             return _sliced_by_category(by_cat), audio_dir
 
         raise ValueError(f"Unsupported audio source: {source!r}")
+
+    @staticmethod
+    def _esc50_by_category(audio_dir: Path, esc_metadata: dict, categories: list) -> dict[str, list]:
+        """Group ESC-50 wav files by their category, keeping only *categories*."""
+        by_cat: dict[str, list] = {}
+        for audio_path in sorted(audio_dir.glob("*.wav")):
+            meta = esc_metadata.get(audio_path.name)
+            if meta is not None and meta["category"] in categories:
+                by_cat.setdefault(meta["category"], []).append((audio_path, meta))
+        return by_cat
 
     @staticmethod
     def _group_metadata_by_category(
