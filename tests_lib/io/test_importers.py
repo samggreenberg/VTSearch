@@ -887,9 +887,7 @@ class TestLocalArchiveImport:
         assert str(ref.default).lower() == "false"
         # Storage choice, not source identity: must stay out of the origin.
         assert ref.include_in_origin is False
-        origin = IMPORTER.build_origin(
-            {"path": "/data/audio", "media_type": "audio", "reference_files": "true"}
-        )
+        origin = IMPORTER.build_origin({"path": "/data/audio", "media_type": "audio", "reference_files": "true"})
         assert "reference_files" not in origin["params"]
 
     def test_server_folder_run_cli_rejects_missing_path(self):

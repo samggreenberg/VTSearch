@@ -172,9 +172,7 @@ class TestImporterMetadata:
         imp = ServerFilesDatasetImporter()
         keys = {f.key for f in imp.fields}
         assert "reference_files" in keys
-        origin = imp.build_origin(
-            {"paths_file": "/a/list.txt", "media_type": "audio", "reference_files": "true"}
-        )
+        origin = imp.build_origin({"paths_file": "/a/list.txt", "media_type": "audio", "reference_files": "true"})
         assert "reference_files" not in origin["params"]
 
     def test_resolve_file_returns_origin_name_when_file_exists(self, tmp_path):
