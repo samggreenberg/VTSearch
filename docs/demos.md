@@ -67,6 +67,10 @@ Files are deterministic for a given size and cached under `data/synthetic/<media
 | **ucsf_documents_a** | Scanned industry document pages from the UCSF Industry Documents Library: tobacco, food, drug, chemical, fossil fuel, and opioids |
 | **roxford5k_s** | ~500 Oxford Buildings photos (a 1/10 slice) for instance matching — same landmark across viewpoints; best paired with the SIFT/VLAD (instance matching) embedder |
 | **roxford5k_a** | All 5,063 Revisited Oxford Buildings photos across 11 landmarks plus distractors — the canonical instance-retrieval benchmark; pair with the SIFT/VLAD (instance matching) embedder |
+| **visual_genome_s** | Dense, busy scene photos from Visual Genome (a 1/50 slice) over the 100 most common object types. **Multi-label**: one photo is a positive example of several categories at once (a street scene is in `car`, `person`, `building`, `sign`…). Also carries ground-truth object bounding boxes (stored for future region voting) |
+| **visual_genome_m** | Visual Genome scenes (a 2/50 slice) — multi-label over 100 object types, with ground-truth boxes |
+| **visual_genome_l** | Visual Genome scenes (a 4/50 slice) — multi-label over 100 object types, with ground-truth boxes |
+| **visual_genome_a** | All Visual Genome scenes — multi-label over 100 object types, with ground-truth boxes (large; ~15 GB download) |
 
 ## Text
 

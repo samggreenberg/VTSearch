@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     import torch
 
 from vtscore.embedding.media_vectors import media_embedding
+from vtscore.eval.labels import media_is_positive
 from vtscore.training.mlp import train_model
 from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
@@ -73,7 +74,7 @@ def _make_vote_sequence(
     rng: np.random.RandomState,
 ) -> list[tuple[int, str]]:
     """Build a shuffled list of ``(media_id, label)`` pairs from simulation IDs."""
-    votes = [(cid, "good" if clips_dict[cid]["category"] == target_category else "bad") for cid in sim_ids]
+    votes = [(cid, "good" if media_is_positive(clips_dict[cid], target_category) else "bad") for cid in sim_ids]
     order = rng.permutation(len(votes))
     return [votes[i] for i in order]
 
@@ -100,7 +101,7 @@ def _evaluate_on_test(
         X = X.to(next(model.parameters()).device)
         scores = torch.sigmoid(model(X)).squeeze(1).cpu().tolist()
 
-    true_labels = [1.0 if clips_dict[cid]["category"] == target_category else 0.0 for cid in test_ids]
+    true_labels = [1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in test_ids]
 
     total_pos = sum(1 for lbl in true_labels if lbl == 1.0)
     total_neg = len(true_labels) - total_pos
