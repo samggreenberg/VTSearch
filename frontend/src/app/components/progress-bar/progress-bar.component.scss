@@ -12,6 +12,14 @@
   border-radius: var(--radius-sm);
   transition: width var(--transition-slow) ease;
 
+  // Multi-stage load bar: a longer, decelerating ease so the jumps between
+  // phases (e.g. an un-measurable model-load slice filling in one step) glide
+  // gently into place instead of snapping, holding the illusion of one
+  // continuous process. Opt-in via the `smooth` input.
+  &.progress-fill--smooth {
+    transition: width 0.6s ease-out;
+  }
+
   &.indeterminate {
     width: 30% !important;
     animation: indeterminate 1.5s infinite ease-in-out;
