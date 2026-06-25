@@ -1163,37 +1163,29 @@ Cross-cutting open items that don't fit any single finding above:
   transparently) would neutralise the whole category and let the
   matrix accessor compare a single int instead of two id lists.
 
-- **M18 follow-ups: pickle peek hardening.** Two adjacent leaks
-  surfaced while closing M18 but were left out of scope:
-  (1) `_codecs.encode` is not on the `_PICKLE_SAFE_CLASSES` allowlist,
+- ~~**M18 follow-ups: pickle peek hardening.**~~ **Shipped 2026-06-25.**
+  Both adjacent leaks closed:
+  (1) `_codecs.encode` is now on the `_PICKLE_SAFE_CLASSES` allowlist,
   so protocol-0/1/2 pickles containing inline `bytes` (which pickle
-  serialises as `_codecs.encode(s, 'latin-1')`) fail outright in both
-  `_PeekUnpickler` and `RestrictedUnpickler` / `safe_pickle_load`.
-  The staging route now surfaces this as an `error` field (no longer
-  silent), but a user trying to load an externally-produced legacy
-  pickle still gets a hard reject. Add `_codecs.encode` to the
-  allowlist (low risk; it's a codec dispatcher, not RCE) if we want
-  to support those uploads.
-  (2) `BINUNICODE` / `BINUNICODE8` are not overridden, so a pickle
-  with a multi-MB inline `media_string` (a long document) is still
-  fully materialised during peek. A blanket override doesn't work
-  because the peek needs short unicode strings (dict keys, `"media_type"`
-  value); a size-bounded handler (e.g. truncate over N bytes) would
-  cap the worst case.
+  serialises as `_codecs.encode(s, 'latin-1')`) load through
+  `RestrictedUnpickler` / `safe_pickle_load` instead of being rejected
+  (it's a codec dispatcher, not an RCE vector).
+  (2) `_PeekUnpickler` overrides `BINUNICODE` / `BINUNICODE8` with a
+  size-bounded handler (`_PEEK_MAX_INLINE_STR = 4096`): short strings
+  (dict keys, `"media_type"`) decode normally, while an over-cap inline
+  `media_string` (a long document) is consumed in bounded chunks and
+  replaced by `""`, so the peek never materialises the whole body.
 
-- **H1 follow-up: labelset element vote endpoint still toggles.**
-  `POST /api/detectors/<name>/labels/<element_id>/vote` (and the
-  underlying `apply_element_vote_in_data` in
-  `vtscore/detectors/labelset_elements.py`) still takes
-  `vote: "good" | "bad"` with toggle-on-same-direction semantics; a
-  stale-view tab voting against an already-good labelset element
-  removes the element from the on-disk labelset, same kind of
-  inflation race the media-vote H1 fix eliminated.  Migrating that
-  endpoint to absolute-target (`target: "good" | "bad" | "remove"`)
-  would let the in-memory `set_vote()` mirror run idempotently too,
-  closing the same class of race on the labelset side.  Deferred
-  because the labelset element CRUD is a separate user surface
-  (`vt-labels-list` modal, not the centre-pane click flow that H1
-  was scoped to).  The on-disk labelset write is idempotent already
-  via `_write_detector`; the race is on the in-memory mirror and
-  the `num_training` registry counter.
+- ~~**H1 follow-up: labelset element vote endpoint still toggles.**~~
+  **Shipped 2026-06-25.** `POST /api/detectors/<name>/labels/<element_id>/vote`
+  and the underlying `apply_element_vote_in_data` in
+  `vtscore/detectors/labelset_elements.py` now take an absolute
+  `target: "good" | "bad" | "remove"` instead of a toggle `vote`.
+  Re-asserting an element's current label is an idempotent `"unchanged"`
+  no-op, so a stale-view tab can no longer flip an element off the
+  labelset by re-sending its current polarity — the same inflation race
+  the media-vote H1 fix eliminated. The in-memory mirror moved from
+  `toggle_vote()` to `set_vote()` with the same absolute target
+  (`"remove"` → `"none"`), so it stays idempotent too; the frontend
+  (`vt-labels-list` via `LabelsetStateService`) translates the clicked
+  direction into a target in one place, mirroring the centre-pane vote.

@@ -10,6 +10,22 @@ from vtscore.converters.base import MediaConverter
 from vtscore.plugins import PluginField
 
 
+def _compute_n_frames(frame_count: int, fps: float, n_clips: int, seconds_per_frame: float) -> int:
+    """Choose how many frames to extract from a video.
+
+    When ``seconds_per_frame`` is positive and a real ``fps`` is known, the
+    count is derived from the video's duration so longer videos yield more
+    frames; otherwise it falls back to the fixed ``n_clips``. The result is
+    capped at ``frame_count`` so we never ask for more frames than exist.
+    """
+    if seconds_per_frame > 0 and fps > 0:
+        duration = frame_count / fps
+        n = max(1, round(duration / seconds_per_frame))
+    else:
+        n = n_clips
+    return min(n, frame_count)
+
+
 class Video2ImageMediaConverter(MediaConverter):
     """Cut a video into evenly-spaced segments and extract the middle frame
     from each segment as a PNG image.
@@ -74,9 +90,13 @@ class Video2ImageMediaConverter(MediaConverter):
     def target_type(self) -> str:
         return "image"
 
-    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:  # noqa: C901
-        import tempfile  # noqa: PLC0415
+    def _resolve_frame_params(self, params: dict[str, Any] | None) -> tuple[int, float]:
+        """Parse the two frame-count knobs into ``(n_clips, seconds_per_frame)``.
 
+        ``n_clips`` is coerced to an integer of at least 1 (defaulting to 10 on
+        a missing/invalid value); ``seconds_per_frame`` is coerced to a float,
+        defaulting to ``0.0`` (meaning "use ``n_clips``") when blank or invalid.
+        """
         try:
             n_clips = int(self.get_param(params, "n_clips") or 10)
         except (TypeError, ValueError):
@@ -89,6 +109,13 @@ class Video2ImageMediaConverter(MediaConverter):
             seconds_per_frame = float(seconds_raw) if seconds_raw not in (None, "") else 0.0
         except (TypeError, ValueError):
             seconds_per_frame = 0.0
+
+        return n_clips, seconds_per_frame
+
+    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        import tempfile  # noqa: PLC0415
+
+        n_clips, seconds_per_frame = self._resolve_frame_params(params)
 
         media_bytes = media.get("media_bytes")
         media_path = media.get("media_path")
@@ -128,16 +155,8 @@ class Video2ImageMediaConverter(MediaConverter):
                 # "Seconds per frame" wins when supplied: derive the frame
                 # count from the video's duration so longer videos yield more
                 # frames.  Otherwise fall back to the fixed "frames per video".
-                if seconds_per_frame > 0:
-                    fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
-                    if fps > 0:
-                        duration = frame_count / fps
-                        n = max(1, round(duration / seconds_per_frame))
-                    else:
-                        n = n_clips
-                else:
-                    n = n_clips
-                n = min(n, frame_count)
+                fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0) if seconds_per_frame > 0 else 0.0
+                n = _compute_n_frames(frame_count, fps, n_clips, seconds_per_frame)
                 # Divide video into n equal segments, pick middle frame of each
                 segment_size = frame_count / n
                 mid_indices = [int((i + 0.5) * segment_size) for i in range(n)]

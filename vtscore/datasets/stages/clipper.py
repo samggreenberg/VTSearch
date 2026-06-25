@@ -20,7 +20,37 @@ if TYPE_CHECKING:
     from vtscore.state import DatasetContext
 
 
-def _apply_clipper(  # noqa: C901
+def _stamp_default_clipper(clips_dict: dict, clipper_name: str, clipper_params: dict | None) -> None:
+    """Stamp legacy ``clipper`` / ``clipper_<param>`` keys for a ``*_default`` clipper.
+
+    A single ``*_default`` clipper is a no-op on the data but records the
+    clipper name and its resolved parameters in every media's
+    ``origin.params``.  We copy the ``origin`` (and its ``params``) before
+    mutating so we never write through to a shared dict.  Unknown clipper
+    names are a no-op (legacy semantics).
+    """
+    from vtscore.media import get_clipper  # noqa: PLC0415
+
+    try:
+        clipper = get_clipper(clipper_name)
+    except KeyError:
+        return
+    if clipper_params:
+        clipper = clipper.with_params(clipper_params)
+    resolved_dict = clipper.to_dict()
+    base_keys = {"name", "display_name", "media_type", "parameters", "description", "creation_questions"}
+    effective_params = {k: v for k, v in resolved_dict.items() if k not in base_keys}
+    for media in clips_dict.values():
+        orig = media.get("origin")
+        if isinstance(orig, dict):
+            media["origin"] = dict(orig)
+            media["origin"]["params"] = dict(orig.get("params", {}))
+            media["origin"]["params"]["clipper"] = clipper.name
+            for pk, pv in effective_params.items():
+                media["origin"]["params"][f"clipper_{pk}"] = str(pv)
+
+
+def _apply_clipper(
     clips_dict: dict,
     clipper_name: str,
     clipper_params: dict | None = None,
@@ -73,25 +103,7 @@ def _apply_clipper(  # noqa: C901
         # origin. We don't put it in the chain (so ``clipper_chain``
         # isn't written for default-only loads) but we do preserve the
         # legacy stamp so existing readers continue to see it.
-        from vtscore.media import get_clipper  # noqa: PLC0415
-
-        try:
-            clipper = get_clipper(clipper_name)
-        except KeyError:
-            return
-        if clipper_params:
-            clipper = clipper.with_params(clipper_params)
-        resolved_dict = clipper.to_dict()
-        base_keys = {"name", "display_name", "media_type", "parameters", "description", "creation_questions"}
-        effective_params = {k: v for k, v in resolved_dict.items() if k not in base_keys}
-        for media in clips_dict.values():
-            orig = media.get("origin")
-            if isinstance(orig, dict):
-                media["origin"] = dict(orig)
-                media["origin"]["params"] = dict(orig.get("params", {}))
-                media["origin"]["params"]["clipper"] = clipper.name
-                for pk, pv in effective_params.items():
-                    media["origin"]["params"][f"clipper_{pk}"] = str(pv)
+        _stamp_default_clipper(clips_dict, clipper_name, clipper_params)
         return
 
     if not steps and clipper_name:
@@ -219,7 +231,52 @@ def _relazify_reference_clips_stage(ctx: DatasetContext, tracker=None) -> None:
         clip["media_string"] = None
 
 
-def _regenerate_clip_thumbnails(  # noqa: C901
+def _thumb_for(clip: dict, media_type: str) -> bytes | None:
+    """Compute a refreshed thumbnail for one clip, or ``None`` to leave it.
+
+    For ``audio`` clips, render a waveform thumbnail from the clip's
+    ``media_bytes`` (or its ``media_path`` when bytes aren't held).  For
+    ``video`` clips, render a frame at the midpoint of
+    ``clip_start``/``clip_end``; a clip missing either boundary yields
+    ``None``.  Other media types yield ``None``.
+    """
+    if media_type == "audio":
+        from vtscore.media.audio.media_type import (
+            generate_waveform_thumbnail,
+            generate_waveform_thumbnail_from_file,
+        )
+
+        wav = clip.get("media_bytes")
+        if wav is not None:
+            return generate_waveform_thumbnail(wav)
+        path = clip.get("media_path")
+        if path:
+            return generate_waveform_thumbnail_from_file(Path(path))
+        return None
+
+    if media_type == "video":
+        from vtscore.media.video.media_type import (
+            generate_video_thumbnail_at,
+            generate_video_thumbnail_from_file_at,
+        )
+
+        t0 = clip.get("clip_start")
+        t1 = clip.get("clip_end")
+        if t0 is None or t1 is None:
+            return None
+        mid = (float(t0) + float(t1)) / 2.0
+        video_bytes = clip.get("media_bytes")
+        if video_bytes is not None:
+            return generate_video_thumbnail_at(video_bytes, mid)
+        path = clip.get("media_path")
+        if path:
+            return generate_video_thumbnail_from_file_at(Path(path), mid)
+        return None
+
+    return None
+
+
+def _regenerate_clip_thumbnails(
     clips: list[dict],
     needs_recompute: list[bool],
     media_type: str,
@@ -233,51 +290,12 @@ def _regenerate_clip_thumbnails(  # noqa: C901
     Image clips don't go through this path; their thumbnail is the cropped
     ``media_bytes`` itself, served directly by the media-image route.
     """
-    if media_type == "audio":
-        from vtscore.media.audio.media_type import (
-            generate_waveform_thumbnail,
-            generate_waveform_thumbnail_from_file,
-        )
-
-        for clip, recompute in zip(clips, needs_recompute):
-            if not recompute:
-                continue
-            wav = clip.get("media_bytes")
-            thumb: bytes | None = None
-            if wav is not None:
-                thumb = generate_waveform_thumbnail(wav)
-            else:
-                path = clip.get("media_path")
-                if path:
-                    thumb = generate_waveform_thumbnail_from_file(Path(path))
-            if thumb is not None:
-                clip["thumbnail_bytes"] = thumb
-        return
-
-    if media_type == "video":
-        from vtscore.media.video.media_type import (
-            generate_video_thumbnail_at,
-            generate_video_thumbnail_from_file_at,
-        )
-
-        for clip, recompute in zip(clips, needs_recompute):
-            if not recompute:
-                continue
-            t0 = clip.get("clip_start")
-            t1 = clip.get("clip_end")
-            if t0 is None or t1 is None:
-                continue
-            mid = (float(t0) + float(t1)) / 2.0
-            video_bytes = clip.get("media_bytes")
-            thumb: bytes | None = None
-            if video_bytes is not None:
-                thumb = generate_video_thumbnail_at(video_bytes, mid)
-            else:
-                path = clip.get("media_path")
-                if path:
-                    thumb = generate_video_thumbnail_from_file_at(Path(path), mid)
-            if thumb is not None:
-                clip["thumbnail_bytes"] = thumb
+    for clip, recompute in zip(clips, needs_recompute):
+        if not recompute:
+            continue
+        thumb = _thumb_for(clip, media_type)
+        if thumb is not None:
+            clip["thumbnail_bytes"] = thumb
 
 
 def _fixup_clip_md5_and_embeddings(  # noqa: C901
