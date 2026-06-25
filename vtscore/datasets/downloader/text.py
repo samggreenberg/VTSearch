@@ -118,7 +118,66 @@ def download_20newsgroups(
     return texts, labels, target_names
 
 
-def download_bbc_news(  # noqa: C901
+def _ensure_bbc_extracted(extract_dir: Path, on_progress: ProgressCallback) -> None:
+    """Download and extract the BBC News archive into *extract_dir* if absent.
+
+    Downloads ``bbc-fulltext.zip`` into a uniquely-named temp file, unzips it
+    with progress reporting, locates the directory holding the category
+    subfolders, and copies it into place.  Temp artifacts are always cleaned up.
+    No-op when *extract_dir* already exists (skip-if-exists semantics).
+    """
+    if extract_dir.exists():
+        return
+
+    unique_id = uuid.uuid4().hex[:8]
+    temp_archive = _core.DATA_DIR / f".dl_{unique_id}_bbc-fulltext.zip"
+    temp_extract = _core.DATA_DIR / f".extract_{unique_id}_bbc-fulltext"
+
+    try:
+        on_progress("downloading", "Starting BBC News download...", 0, 0)
+        _core.download_file_with_progress(
+            _core.BBC_NEWS_URL,
+            temp_archive,
+            _core.BBC_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
+            on_progress,
+        )
+
+        if not extract_dir.exists():
+            on_progress("downloading", "Extracting BBC News dataset...", 0, 0)
+            raw_dir = temp_extract / "raw"
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(temp_archive, "r") as zip_ref:
+                # The zip may contain a top-level folder (e.g. "bbc/"); extract
+                # all members and then locate category directories below.
+                members = zip_ref.namelist()
+                total = len(members)
+                for i, member in enumerate(members):
+                    if i % 100 == 0 or i == total - 1:
+                        on_progress(
+                            "downloading",
+                            "Extracting BBC News dataset...",
+                            i + 1,
+                            total,
+                        )
+                    zip_ref.extract(member, raw_dir)
+
+            # Find the directory that contains the category subfolders.
+            _bbc_root = _find_bbc_root(raw_dir)
+            if _bbc_root is None:
+                raise RuntimeError(f"Could not locate BBC News category directories inside {raw_dir}")
+
+            if not extract_dir.exists():
+                try:
+                    shutil.copytree(_bbc_root, extract_dir)
+                except FileExistsError:
+                    pass  # Another download finished first
+    finally:
+        temp_archive.unlink(missing_ok=True)
+        if temp_extract.exists():
+            shutil.rmtree(temp_extract, ignore_errors=True)
+
+
+def download_bbc_news(
     on_progress: Optional[ProgressCallback] = None,
 ) -> dict[str, list[str]]:
     """Download and prepare the BBC News full-text dataset.
@@ -144,53 +203,7 @@ def download_bbc_news(  # noqa: C901
     extract_dir = _core.DATA_DIR / "bbc-fulltext"
     _core.DATA_DIR.mkdir(exist_ok=True)
 
-    if not extract_dir.exists():
-        unique_id = uuid.uuid4().hex[:8]
-        temp_archive = _core.DATA_DIR / f".dl_{unique_id}_bbc-fulltext.zip"
-        temp_extract = _core.DATA_DIR / f".extract_{unique_id}_bbc-fulltext"
-
-        try:
-            on_progress("downloading", "Starting BBC News download...", 0, 0)
-            _core.download_file_with_progress(
-                _core.BBC_NEWS_URL,
-                temp_archive,
-                _core.BBC_NEWS_DOWNLOAD_SIZE_MB * 1024 * 1024,
-                on_progress,
-            )
-
-            if not extract_dir.exists():
-                on_progress("downloading", "Extracting BBC News dataset...", 0, 0)
-                raw_dir = temp_extract / "raw"
-                raw_dir.mkdir(parents=True, exist_ok=True)
-                with zipfile.ZipFile(temp_archive, "r") as zip_ref:
-                    # The zip may contain a top-level folder (e.g. "bbc/"); extract
-                    # all members and then locate category directories below.
-                    members = zip_ref.namelist()
-                    total = len(members)
-                    for i, member in enumerate(members):
-                        if i % 100 == 0 or i == total - 1:
-                            on_progress(
-                                "downloading",
-                                "Extracting BBC News dataset...",
-                                i + 1,
-                                total,
-                            )
-                        zip_ref.extract(member, raw_dir)
-
-                # Find the directory that contains the category subfolders.
-                _bbc_root = _find_bbc_root(raw_dir)
-                if _bbc_root is None:
-                    raise RuntimeError(f"Could not locate BBC News category directories inside {raw_dir}")
-
-                if not extract_dir.exists():
-                    try:
-                        shutil.copytree(_bbc_root, extract_dir)
-                    except FileExistsError:
-                        pass  # Another download finished first
-        finally:
-            temp_archive.unlink(missing_ok=True)
-            if temp_extract.exists():
-                shutil.rmtree(temp_extract, ignore_errors=True)
+    _ensure_bbc_extracted(extract_dir, on_progress)
 
     # Read articles grouped by category directory name.
     categories_articles: dict[str, list[str]] = {}
