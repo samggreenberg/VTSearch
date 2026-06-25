@@ -373,6 +373,12 @@ class MediaType(ABC):
             clips: Dict to populate in-place.  The caller has already cleared
                 it.  Keys should be sequential integer clip IDs starting at 1.
             on_progress: Optional progress callback.
+            skip_embedding: When ``True`` (passed via ``**kwargs``), populate
+                each media with a deferred-embed placeholder (``embeddings={}``)
+                instead of embedding it here.  The demo loader sets this when a
+                clipper will split + re-embed every clip, so embedding the full
+                parent would be wasted (and, for audio, can fail on parents
+                longer than the embedder window before the clipper trims them).
 
         Returns:
             An optional external media directory path (absolute string) to

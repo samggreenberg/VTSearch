@@ -229,6 +229,18 @@ def load_demo_dataset(  # noqa: C901
     slice_frac_end = dataset_info.get("slice_frac_end")
 
     medias.clear()
+
+    # When a real (non-default) clipper is configured, the clipper stage below
+    # splits every loaded media into sub-clips and re-embeds each clip from its
+    # own bytes. Embedding the full parent during load would then be wasted work
+    # whose result is immediately discarded - and for audio it actively breaks:
+    # a parent recording longer than the embedder's window (e.g. CLAP's 10 s)
+    # could fail to embed and be dropped before the clipper ever cuts it down to
+    # an embeddable clip. So defer embedding to the clipper: load the parents
+    # with a deferred-embed placeholder and let _apply_clipper produce the
+    # vectors. Mirrors the regular import pipeline, which skips parent embedding
+    # whenever a clipper is specified.
+    clipper_applied = bool(_effective_clipper(clipper_name, media_type_id))
     external_dir = mt.load_demo_source(
         source=source,
         categories=categories,
@@ -239,6 +251,7 @@ def load_demo_dataset(  # noqa: C901
         embedder=embedder,
         slice_frac_start=slice_frac_start,
         slice_frac_end=slice_frac_end,
+        skip_embedding=clipper_applied,
     )
 
     # Stamp the demo origin on all medias
@@ -262,7 +275,6 @@ def load_demo_dataset(  # noqa: C901
     # parent's category/metadata.  Skipped for the pre-selected default
     # clipper (a no-op).  Runs after any converter so it operates on the
     # final media type.
-    clipper_applied = bool(_effective_clipper(clipper_name, media_type_id))
     if clipper_applied:
         from vtscore.datasets.stages.clipper import _apply_clipper
 

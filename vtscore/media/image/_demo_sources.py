@@ -743,25 +743,32 @@ def _ensure_image_embedder_loaded(embedder, on_progress) -> None:
             embedder._on_progress = original_cb
 
 
-def _embed_file_images(selected, clips, embedder, on_progress, demo_origin) -> None:
+def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (img_path, category) tuples into ``clips``."""
     import hashlib  # noqa: PLC0415
 
     from PIL import Image  # noqa: PLC0415
 
-    _ensure_image_embedder_loaded(embedder, on_progress)
+    if not skip_embedding:
+        _ensure_image_embedder_loaded(embedder, on_progress)
 
     clip_id = max(clips.keys(), default=0) + 1
     total = len(selected)
-    on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+    status = "loading" if skip_embedding else "embedding"
+    verb = "Loading" if skip_embedding else "Embedding"
+    on_progress(status, f"{verb} {total} images...", 0, total)
 
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
     for i, (img_path, category) in enumerate(selected):
-        on_progress("embedding", f"Embedding {category}/{img_path.name}", i + 1, total)
-        embedding = embedder.embed_media(media_from_path(img_path))
-        if embedding is None:
-            continue
+        if skip_embedding:
+            on_progress("loading", f"Loading {category}/{img_path.name}", i + 1, total)
+            embedding = None
+        else:
+            on_progress("embedding", f"Embedding {category}/{img_path.name}", i + 1, total)
+            embedding = embedder.embed_media(media_from_path(img_path))
+            if embedding is None:
+                continue
         with open(img_path, "rb") as f:
             image_bytes = f.read()
         try:
@@ -776,7 +783,7 @@ def _embed_file_images(selected, clips, embedder, on_progress, demo_origin) -> N
             "duration": 0,
             "file_size": len(image_bytes),
             "md5": hashlib.md5(image_bytes).hexdigest(),
-            "embeddings": {embedder.name: embedding},
+            "embeddings": {} if skip_embedding else {embedder.name: embedding},
             "media_bytes": image_bytes,
             "media_string": None,
             "filename": f"{category}/{img_path.name}",
@@ -789,22 +796,29 @@ def _embed_file_images(selected, clips, embedder, on_progress, demo_origin) -> N
         clip_id += 1
 
 
-def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin) -> None:
+def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (page_name, PIL.Image, category) tuples into ``clips``."""
     import hashlib  # noqa: PLC0415
     import io as _io  # noqa: PLC0415
 
-    _ensure_image_embedder_loaded(embedder, on_progress)
+    if not skip_embedding:
+        _ensure_image_embedder_loaded(embedder, on_progress)
 
     clip_id = max(clips.keys(), default=0) + 1
     total = len(selected_pages)
-    on_progress("embedding", f"Starting embedding for {total} document pages...", 0, total)
+    status = "loading" if skip_embedding else "embedding"
+    verb = "Loading" if skip_embedding else "Embedding"
+    on_progress(status, f"{verb} {total} document pages...", 0, total)
 
     for i, (page_name, pil_image, category) in enumerate(selected_pages):
-        on_progress("embedding", f"Embedding {page_name}", i + 1, total)
-        embedding = cast(Any, embedder).embed_pil_image(pil_image)
-        if embedding is None:
-            continue
+        if skip_embedding:
+            on_progress("loading", f"Loading {page_name}", i + 1, total)
+            embedding = None
+        else:
+            on_progress("embedding", f"Embedding {page_name}", i + 1, total)
+            embedding = cast(Any, embedder).embed_pil_image(pil_image)
+            if embedding is None:
+                continue
         img_buffer = _io.BytesIO()
         pil_image.save(img_buffer, format="PNG")
         image_bytes = img_buffer.getvalue()
@@ -816,7 +830,7 @@ def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin) 
             "duration": 0,
             "file_size": len(image_bytes),
             "md5": hashlib.md5(image_bytes).hexdigest(),
-            "embeddings": {embedder.name: embedding},
+            "embeddings": {} if skip_embedding else {embedder.name: embedding},
             "media_bytes": image_bytes,
             "media_string": None,
             "filename": f"{rel_name}.png",
@@ -829,28 +843,34 @@ def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin) 
         clip_id += 1
 
 
-def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin) -> None:
+def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (image_array, category) tuples into ``clips``."""
     import hashlib  # noqa: PLC0415
     import io as _io  # noqa: PLC0415
 
     from PIL import Image  # noqa: PLC0415
 
-    _ensure_image_embedder_loaded(embedder, on_progress)
+    if not skip_embedding:
+        _ensure_image_embedder_loaded(embedder, on_progress)
 
     clip_id = max(clips.keys(), default=0) + 1
     total = len(selected)
-    on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+    status = "loading" if skip_embedding else "embedding"
+    verb = "Loading" if skip_embedding else "Embedding"
+    on_progress(status, f"{verb} {total} images...", 0, total)
 
     for i, (image_array, category) in enumerate(selected):
-        on_progress("embedding", f"Embedding {category}", i + 1, total)
+        on_progress(status, f"{verb} {category}", i + 1, total)
         img = Image.fromarray(image_array.astype("uint8"), "RGB")
         img_buffer = _io.BytesIO()
         img.save(img_buffer, format="PNG")
         image_bytes = img_buffer.getvalue()
-        embedding = cast(Any, embedder).embed_pil_image(img)
-        if embedding is None:
-            continue
+        if skip_embedding:
+            embedding = None
+        else:
+            embedding = cast(Any, embedder).embed_pil_image(img)
+            if embedding is None:
+                continue
         fname = f"{category}/{category}_{clip_id}.png"
         clips[clip_id] = {
             "id": clip_id,
@@ -859,7 +879,7 @@ def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin) -> 
             "duration": 0,
             "file_size": len(image_bytes),
             "md5": hashlib.md5(image_bytes).hexdigest(),
-            "embeddings": {embedder.name: embedding},
+            "embeddings": {} if skip_embedding else {embedder.name: embedding},
             "media_bytes": image_bytes,
             "media_string": None,
             "filename": fname,
@@ -892,7 +912,7 @@ def _normalize_regions(pixel_regions, width, height) -> list:
     return out
 
 
-def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin) -> None:
+def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed Visual Genome images, stamping multi-label categories + regions.
 
     ``selected`` is a list of ``(img_path, positive_categories, pixel_regions)``.
@@ -906,18 +926,25 @@ def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin) -> Non
 
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
 
-    _ensure_image_embedder_loaded(embedder, on_progress)
+    if not skip_embedding:
+        _ensure_image_embedder_loaded(embedder, on_progress)
 
     clip_id = max(clips.keys(), default=0) + 1
     total = len(selected)
-    on_progress("embedding", f"Starting embedding for {total} images...", 0, total)
+    status = "loading" if skip_embedding else "embedding"
+    verb = "Loading" if skip_embedding else "Embedding"
+    on_progress(status, f"{verb} {total} images...", 0, total)
 
     for i, (img_path, positive_categories, pixel_regions) in enumerate(selected):
         primary = positive_categories[0]
-        on_progress("embedding", f"Embedding {primary}/{img_path.name}", i + 1, total)
-        embedding = embedder.embed_media(media_from_path(img_path))
-        if embedding is None:
-            continue
+        if skip_embedding:
+            on_progress("loading", f"Loading {primary}/{img_path.name}", i + 1, total)
+            embedding = None
+        else:
+            on_progress("embedding", f"Embedding {primary}/{img_path.name}", i + 1, total)
+            embedding = embedder.embed_media(media_from_path(img_path))
+            if embedding is None:
+                continue
         with open(img_path, "rb") as f:
             image_bytes = f.read()
         try:
@@ -932,7 +959,7 @@ def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin) -> Non
             "duration": 0,
             "file_size": len(image_bytes),
             "md5": hashlib.md5(image_bytes).hexdigest(),
-            "embeddings": {embedder.name: embedding},
+            "embeddings": {} if skip_embedding else {embedder.name: embedding},
             "media_bytes": image_bytes,
             "media_string": None,
             "filename": img_path.name,
@@ -972,6 +999,11 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
             raise ValueError(f"No embedders registered for media type {_MEDIA_TYPE_ID!r}")
         embedder = avail[0]
 
+    # When a clipper will re-embed every produced crop, skip embedding the full
+    # parent images here (the result would be discarded) - see skip_embedding in
+    # load_demo_dataset.
+    skip_embedding = bool(kwargs.get("skip_embedding", False))
+
     demo_origin: dict = {"importer": "demo", "params": {}}
     slice_args = (slice_start, slice_end, slice_frac_start, slice_frac_end)
 
@@ -982,6 +1014,7 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
             embedder,
             on_progress,
             demo_origin,
+            skip_embedding=skip_embedding,
         )
         return None
 
@@ -992,6 +1025,7 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
             embedder,
             on_progress,
             demo_origin,
+            skip_embedding=skip_embedding,
         )
         return None
 
@@ -1002,6 +1036,7 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
             embedder,
             on_progress,
             demo_origin,
+            skip_embedding=skip_embedding,
         )
         return None
 
@@ -1012,6 +1047,7 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
             embedder,
             on_progress,
             demo_origin,
+            skip_embedding=skip_embedding,
         )
         return None
 
@@ -1022,6 +1058,7 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
             embedder,
             on_progress,
             demo_origin,
+            skip_embedding=skip_embedding,
         )
         return None
 
@@ -1032,6 +1069,7 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
             embedder,
             on_progress,
             demo_origin,
+            skip_embedding=skip_embedding,
         )
         return None
 
@@ -1042,6 +1080,7 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
             embedder,
             on_progress,
             demo_origin,
+            skip_embedding=skip_embedding,
         )
         return None
 
@@ -1052,6 +1091,7 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
             embedder,
             on_progress,
             demo_origin,
+            skip_embedding=skip_embedding,
         )
         return None
 
