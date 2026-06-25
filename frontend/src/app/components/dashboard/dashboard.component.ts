@@ -36,7 +36,7 @@ import {
   DatasetColumn,
   DetectorColumn,
 } from '../../services/dashboard-columns.service';
-import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
+import { JobProgressComponent } from '../job-progress/job-progress.component';
 import { SkeletonComponent } from '../skeleton/skeleton.component';
 import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
@@ -55,7 +55,7 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
   selector: 'vt-dashboard',
   standalone: true,
   imports: [
-    ProgressBarComponent,
+    JobProgressComponent,
     AutoDetectResultsModalComponent,
     DatasetCardComponent,
     DetectorCardComponent,

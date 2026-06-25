@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListen
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
-import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { JobProgressComponent } from '../../job-progress/job-progress.component';
 import {
   ProgressBarState,
   ProgressHeader,
@@ -18,7 +18,7 @@ import { buildDatasetCardMenuItems } from '../card-context-menu-items';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dataset-card',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProgressBarComponent, ContextMenuComponent],
+  imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent],
   templateUrl: './dataset-card.component.html',
   styleUrl: './dataset-card.component.scss',
 })
@@ -230,8 +230,8 @@ export class DatasetCardComponent implements OnChanges {
     return progressBarState(task);
   }
 
-  onCancelTask(event: MouseEvent): void {
-    event.stopPropagation();
+  // `vt-job-progress` stops the click before it reaches the row, so no event.
+  onCancelTask(): void {
     if (this.loadingTask) {
       this.cancelTask.emit(this.loadingTask.task_id);
     }

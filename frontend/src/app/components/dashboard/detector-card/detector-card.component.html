@@ -32,31 +32,21 @@
 </td>
 @if (loadingTask && !loadingTask.error) {
   <td [attr.colspan]="columnOrder.length + 1">
-    <div class="loading-task-progress">
-      <div class="progress-context">
-        <div class="progress-header">{{ taskProgressInfo.header }}</div>
-        <div class="progress-subtitle">{{ taskProgressInfo.subtitle }}</div>
-      </div>
-      <!-- Variable text lives on its own reserved-height line so the bar below
-           keeps a fixed position as the detail/ETA change between stages. -->
-      <div class="progress-meta">
-        <span class="progress-msg">{{ taskProgressInfo.detail }}</span>
-        <span class="progress-eta">{{ taskProgressInfo.eta }}</span>
-      </div>
-      <div class="progress-row">
-        <vt-progress-bar
-          [value]="taskBar().value"
-          [max]="taskBar().max"
-          [indeterminate]="taskBar().indeterminate"
-          [smooth]="true"
-        />
-        <button class="btn btn--cancel btn--sm" (click)="onCancelTask($event)" title="Cancel loading">Cancel</button>
-      </div>
-    </div>
+    <vt-job-progress
+      [cell]="true"
+      [header]="taskProgressInfo.header"
+      [description]="taskProgressInfo.subtitle"
+      [detail]="taskProgressInfo.detail"
+      [eta]="taskProgressInfo.eta"
+      [bar]="taskBar()"
+      [smooth]="true"
+      cancelTitle="Cancel loading"
+      (cancel)="onCancelTask()"
+    />
   </td>
 } @else if (loadingTask?.error) {
   <td [attr.colspan]="columnOrder.length + 1">
-    <div class="loading-task-progress loading-task-failed">
+    <div class="loading-task-failed">
       <span class="error-msg">Failed: {{ loadingTask?.error }}</span>
       <button class="btn btn--cancel btn--sm" (click)="onDismissTask($event)" title="Dismiss error">Dismiss</button>
     </div>

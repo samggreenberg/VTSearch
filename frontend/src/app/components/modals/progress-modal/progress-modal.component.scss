@@ -7,22 +7,6 @@
   }
 }
 
-.progress-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-
-  vt-progress-bar {
-    flex: 1;
-  }
-}
-
-.progress-text {
-  margin-top: var(--space-md);
-  font-size: var(--font-md);
-  color: var(--text-secondary);
-}
-
 .chart-container {
   display: flex;
   justify-content: center;

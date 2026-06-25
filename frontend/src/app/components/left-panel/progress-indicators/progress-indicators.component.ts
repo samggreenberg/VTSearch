@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, Input, input, output } from '@angular/core';
 
-import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { JobProgressComponent } from '../../job-progress/job-progress.component';
 import {
   ProgressBarState,
   formatEta,
@@ -12,7 +12,7 @@ import type { LabelingStatusResponse } from '../../../generated/api-client/model
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-progress-indicators',
   standalone: true,
-  imports: [ProgressBarComponent],
+  imports: [JobProgressComponent],
   templateUrl: './progress-indicators.component.html',
   styleUrl: './progress-indicators.component.scss',
 })

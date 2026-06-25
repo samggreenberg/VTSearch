@@ -1,0 +1,39 @@
+<div class="jp">
+  <div class="jp__top">
+    <span class="jp__title">
+      <span class="jp__header" [title]="header">{{ header }}</span>
+      @if (description) {
+        <span
+          class="jp__info"
+          tabindex="0"
+          role="img"
+          [attr.aria-label]="description"
+          [title]="description"
+          >?</span
+        >
+      }
+    </span>
+    @if (cancelTitle !== null) {
+      <button
+        type="button"
+        class="btn btn--cancel btn--sm jp__cancel"
+        (click)="onCancelClick($event)"
+        [title]="cancelTitle"
+      >
+        {{ cancelLabel }}
+      </button>
+    }
+  </div>
+  <!-- Detail is a fixed-width, ellipsized column and the ETA hugs the right
+       edge, so the bar between them keeps both edges still as the text changes. -->
+  <div class="jp__bottom">
+    <span class="jp__detail" [title]="detail">{{ detail }}</span>
+    <vt-progress-bar
+      [value]="bar.value"
+      [max]="bar.max"
+      [indeterminate]="bar.indeterminate"
+      [smooth]="smooth"
+    />
+    <span class="jp__eta">{{ eta }}</span>
+  </div>
+</div>

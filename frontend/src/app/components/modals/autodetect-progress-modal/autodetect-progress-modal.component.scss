@@ -1,29 +1,3 @@
 .autodetect-progress {
-  text-align: center;
   padding: var(--space-2xl);
-
-  p {
-    margin-bottom: var(--space-xl);
-  }
-
-  // Reserve two lines for the status so a one- vs two-line message never shifts
-  // the bar below it as the auto-detect steps through detectors.
-  .progress-status {
-    line-height: 1.4;
-    min-height: 2.8em;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-  }
-
-  .progress-pct {
-    margin-top: var(--space-md);
-    font-size: var(--font-md);
-    color: var(--text-secondary);
-    font-variant-numeric: tabular-nums;
-  }
-
-  button {
-    margin-top: var(--space-xl);
-  }
 }

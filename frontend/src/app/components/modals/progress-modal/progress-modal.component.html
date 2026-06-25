@@ -4,16 +4,14 @@
       @if (useCachedHistory()) {
         <p aria-live="polite">Loading indicator history...</p>
       } @else {
-        <p aria-live="polite">Training detectors over label history...</p>
-        <div class="progress-row">
-          <vt-progress-bar [value]="analysisProgress" [max]="100"></vt-progress-bar>
-          <button
-            class="btn btn--cancel btn--sm"
-            (click)="onCancel()"
-            title="Cancel the running analysis"
-          >Cancel</button>
-        </div>
-        <p class="progress-text">{{ analysisProgress }}%</p>
+        <vt-job-progress
+          aria-live="polite"
+          header="Training detectors over label history"
+          [eta]="analysisProgress + '%'"
+          [bar]="{ value: analysisProgress, max: 100, indeterminate: false }"
+          cancelTitle="Cancel the running analysis"
+          (cancel)="onCancel()"
+        />
       }
     </div>
   } @else if (emptyHistory) {

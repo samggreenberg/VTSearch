@@ -38,27 +38,17 @@
        waggle while their job runs; a plain dataset load replaces the actions
        column too. -->
   <td [attr.colspan]="taskKind() === 'projection' ? columnOrder.length : columnOrder.length + 1">
-    <div class="inline-loading-progress">
-      <div class="progress-context">
-        <div class="progress-header">{{ taskProgressInfo.header }}</div>
-        <div class="progress-subtitle">{{ taskProgressInfo.subtitle }}</div>
-      </div>
-      <!-- Variable text lives on its own reserved-height line so the bar below
-           keeps a fixed position as the detail/ETA change between stages. -->
-      <div class="progress-meta">
-        <span class="progress-msg">{{ taskProgressInfo.detail }}</span>
-        <span class="progress-eta">{{ taskProgressInfo.eta }}</span>
-      </div>
-      <div class="progress-row">
-        <vt-progress-bar
-          [value]="taskBar.value"
-          [max]="taskBar.max"
-          [indeterminate]="taskBar.indeterminate"
-          [smooth]="true"
-        />
-        <button class="btn btn--cancel btn--sm" (click)="onCancelTask($event)" [title]="taskKind() === 'projection' ? 'Cancel building the projection' : 'Cancel this dataset load'">Cancel</button>
-      </div>
-    </div>
+    <vt-job-progress
+      [cell]="true"
+      [header]="taskProgressInfo.header"
+      [description]="taskProgressInfo.subtitle"
+      [detail]="taskProgressInfo.detail"
+      [eta]="taskProgressInfo.eta"
+      [bar]="taskBar"
+      [smooth]="true"
+      [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the projection' : 'Cancel this dataset load'"
+      (cancel)="onCancelTask()"
+    />
   </td>
   @if (taskKind() === 'projection') {
     <td class="actions-col">
@@ -75,7 +65,7 @@
 } @else if (loadingTask && loadingTask.error) {
   <!-- Inline error: replace remaining columns (middle + actions) with error message -->
   <td [attr.colspan]="columnOrder.length + 1">
-    <div class="inline-loading-progress inline-loading-failed">
+    <div class="inline-loading-failed">
       <span class="error-msg">Failed: {{ loadingTask.error }}</span>
       <button class="btn btn--cancel btn--sm" (click)="onDismissTask($event)" title="Dismiss this error">Dismiss</button>
     </div>

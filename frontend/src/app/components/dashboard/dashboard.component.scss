@@ -243,12 +243,6 @@
     text-overflow: ellipsis;
   }
 
-  .loading-task-progress .progress-msg {
-    font-size: var(--font-xs);
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   &.loading-task-error {
     background: var(--error-bg);
   }

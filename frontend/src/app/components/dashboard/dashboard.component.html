@@ -103,34 +103,23 @@
                 </td>
                 <td [attr.colspan]="visibleDatasetColumns.length + 1">
                   @if (task.error) {
-                    <div class="loading-task-progress loading-task-failed">
+                    <div class="loading-task-failed">
                       <span class="error-msg">Failed: {{ task.error }}</span>
                       <button class="btn btn--cancel btn--sm" (click)="loadingTasksSvc.dismissLoadingTask(task.task_id)" title="Dismiss this error">Dismiss</button>
                     </div>
                   } @else {
                     @let info = taskProgressInfo(task);
-                    <div class="loading-task-progress">
-                      <div class="progress-context">
-                        <div class="progress-header">{{ info.header }}</div>
-                        <div class="progress-subtitle">{{ info.subtitle }}</div>
-                      </div>
-                      <!-- Variable text lives on its own reserved-height line so
-                           the bar below keeps a fixed position as the detail/ETA
-                           change between stages. -->
-                      <div class="progress-meta">
-                        <span class="progress-msg">{{ info.detail }}</span>
-                        <span class="progress-eta">{{ info.eta }}</span>
-                      </div>
-                      <div class="progress-row">
-                        <vt-progress-bar
-                          [value]="taskBar(task).value"
-                          [max]="taskBar(task).max"
-                          [indeterminate]="taskBar(task).indeterminate"
-                          [smooth]="true"
-                        />
-                        <button class="btn btn--cancel btn--sm" (click)="loadingTasksSvc.cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
-                      </div>
-                    </div>
+                    <vt-job-progress
+                      [cell]="true"
+                      [header]="info.header"
+                      [description]="info.subtitle"
+                      [detail]="info.detail"
+                      [eta]="info.eta"
+                      [bar]="taskBar(task)"
+                      [smooth]="true"
+                      cancelTitle="Cancel this dataset load"
+                      (cancel)="loadingTasksSvc.cancelLoadingTask(task.task_id)"
+                    />
                   }
                 </td>
               </tr>

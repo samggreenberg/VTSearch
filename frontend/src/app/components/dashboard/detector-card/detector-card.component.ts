@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, HostListen
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LoadingTask } from '../../../models/api.models';
-import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
+import { JobProgressComponent } from '../../job-progress/job-progress.component';
 import {
   ProgressBarState,
   ProgressHeader,
@@ -17,7 +17,7 @@ import { buildDetectorCardMenuItems } from '../card-context-menu-items';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-detector-card',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProgressBarComponent, ContextMenuComponent],
+  imports: [CommonModule, FormsModule, JobProgressComponent, ContextMenuComponent],
   templateUrl: './detector-card.component.html',
   styleUrl: './detector-card.component.scss',
 })
@@ -263,8 +263,8 @@ export class DetectorCardComponent implements OnChanges {
     this.unload.emit();
   }
 
-  onCancelTask(event: MouseEvent): void {
-    event.stopPropagation();
+  // `vt-job-progress` stops the click before it reaches the row, so no event.
+  onCancelTask(): void {
     if (this.loadingTask) {
       this.cancelTask.emit(this.loadingTask.task_id);
     }
