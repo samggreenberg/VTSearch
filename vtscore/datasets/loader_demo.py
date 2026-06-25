@@ -89,7 +89,99 @@ def _stamp_media_type(
             media["media_type"] = expected
 
 
-def load_demo_dataset(  # noqa: C901
+def _try_load_cached(
+    pkl_file: Any,
+    dataset_name: str,
+    media_type_id: str,
+    medias: dict[int, dict[str, Any]],
+    on_progress: ProgressCallback,
+    embedder_name: str,
+    converter_name: str,
+    clipper_name: str,
+    clipper_params: dict[str, Any] | None,
+) -> bool:
+    """Try to satisfy the load from the cached ``.pkl`` file.
+
+    Returns ``True`` when the cache was a hit: *medias* has been populated,
+    origins/media-types stamped, and the final "Loaded" progress emitted, so
+    the caller should return immediately.  Returns ``False`` when the cache
+    was missing, stale (embedder/clipper mismatch), or empty on load; in that
+    case the stale pickle (if any) has been unlinked and the caller should
+    rebuild from scratch.
+    """
+    from vtscore.datasets import loader as _loader
+
+    if not pkl_file.exists():
+        return False
+
+    # If the caller explicitly requested an embedder, verify the cached
+    # pickle was produced by the same one.  When *embedder_name* is empty
+    # (meaning "use default"), accept whatever is cached.
+    from vtscore.datasets.container import read_meta
+
+    cached_meta = read_meta(pkl_file)
+    cached_embedder = cached_meta.get("embedder") or ""
+    embedder_mismatch = bool(embedder_name) and bool(cached_embedder) and embedder_name != cached_embedder
+    # A cached pickle built with a different clipper (or different clipper
+    # params) no longer reflects the requested split, so rebuild it.  Both
+    # names are normalised through _effective_clipper so the pre-selected
+    # default ("" vs e.g. "sound_tiling") never counts as a mismatch.
+    requested_clipper = _effective_clipper(clipper_name, media_type_id)
+    cached_clipper = _effective_clipper(cached_meta.get("clipper") or "", media_type_id)
+    requested_params = clipper_params or {}
+    cached_params = cached_meta.get("clipper_params") or {}
+    clipper_mismatch = requested_clipper != cached_clipper or (
+        bool(requested_clipper) and requested_params != cached_params
+    )
+    if embedder_mismatch or clipper_mismatch:
+        reason = f"with {embedder_name}" if embedder_mismatch else "with new clipper"
+        on_progress("loading", f"Re-embedding {dataset_name} {reason}...", 0, 0)
+        pkl_file.unlink()
+        return False
+
+    on_progress("loading", f"Loading {dataset_name} dataset...", 0, 0)
+    _loader.load_dataset_from_pickle(pkl_file, medias)
+
+    # Check if any medias were actually loaded
+    if len(medias) == 0:
+        # Pickle file exists but media files are missing, delete and re-embed
+        on_progress("loading", f"Media files missing, re-embedding {dataset_name}...", 0, 0)
+        pkl_file.unlink()
+        return False
+
+    # Stamp demo origin on cached medias so that cross-dataset
+    # resolution always has the dataset name in the origin params.
+    # Old pickles (created before origin stamping) may have empty
+    # params - this ensures they are corrected on load.
+    _stamp_demo_origin(medias, dataset_name, converter_name)
+    # Fill in missing media_type: old pkls may lack the field,
+    # causing every item to fall back to the "audio" default in
+    # load_dataset_from_pickle and the dataset to register with
+    # the wrong type.
+    _stamp_media_type(medias, media_type_id, converter_name)
+    on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)
+    return True
+
+
+def _resolve_demo_embedder(embedder_name: str, media_type_id: str) -> Any:
+    """Resolve the embedder to use for a demo load.
+
+    When *embedder_name* is given, look it up (raising ``ValueError`` for an
+    unknown name).  Otherwise fall back to the first registered embedder for
+    *media_type_id*, or ``None`` when the media type has none.
+    """
+    from vtscore.media import embedders_for_type, get_embedder
+
+    if embedder_name:
+        try:
+            return get_embedder(embedder_name)
+        except KeyError:
+            raise ValueError(f"Unknown embedder: {embedder_name}")
+    avail = embedders_for_type(media_type_id)
+    return avail[0] if avail else None
+
+
+def load_demo_dataset(
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
     on_progress: Optional[ProgressCallback] = None,
@@ -158,66 +250,23 @@ def load_demo_dataset(  # noqa: C901
 
     # Check if already embedded
     pkl_file = _loader.EMBEDDINGS_DIR / f"{cache_key}.pkl"
-    if pkl_file.exists():
-        # If the caller explicitly requested an embedder, verify the cached
-        # pickle was produced by the same one.  When *embedder_name* is empty
-        # (meaning "use default"), accept whatever is cached.
-        from vtscore.datasets.container import read_meta
-
-        cached_meta = read_meta(pkl_file)
-        cached_embedder = cached_meta.get("embedder") or ""
-        embedder_mismatch = bool(embedder_name) and bool(cached_embedder) and embedder_name != cached_embedder
-        # A cached pickle built with a different clipper (or different clipper
-        # params) no longer reflects the requested split, so rebuild it.  Both
-        # names are normalised through _effective_clipper so the pre-selected
-        # default ("" vs e.g. "sound_tiling") never counts as a mismatch.
-        requested_clipper = _effective_clipper(clipper_name, media_type_id)
-        cached_clipper = _effective_clipper(cached_meta.get("clipper") or "", media_type_id)
-        requested_params = clipper_params or {}
-        cached_params = cached_meta.get("clipper_params") or {}
-        clipper_mismatch = requested_clipper != cached_clipper or (
-            bool(requested_clipper) and requested_params != cached_params
-        )
-        if embedder_mismatch or clipper_mismatch:
-            reason = f"with {embedder_name}" if embedder_mismatch else "with new clipper"
-            on_progress("loading", f"Re-embedding {dataset_name} {reason}...", 0, 0)
-            pkl_file.unlink()
-        else:
-            on_progress("loading", f"Loading {dataset_name} dataset...", 0, 0)
-            _loader.load_dataset_from_pickle(pkl_file, medias)
-
-            # Check if any medias were actually loaded
-            if len(medias) == 0:
-                # Pickle file exists but media files are missing, delete and re-embed
-                on_progress("loading", f"Media files missing, re-embedding {dataset_name}...", 0, 0)
-                pkl_file.unlink()
-            else:
-                # Stamp demo origin on cached medias so that cross-dataset
-                # resolution always has the dataset name in the origin params.
-                # Old pickles (created before origin stamping) may have empty
-                # params - this ensures they are corrected on load.
-                _stamp_demo_origin(medias, dataset_name, converter_name)
-                # Fill in missing media_type: old pkls may lack the field,
-                # causing every item to fall back to the "audio" default in
-                # load_dataset_from_pickle and the dataset to register with
-                # the wrong type.
-                _stamp_media_type(medias, media_type_id, converter_name)
-                on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)
-                return
+    if _try_load_cached(
+        pkl_file,
+        dataset_name,
+        media_type_id,
+        medias,
+        on_progress,
+        embedder_name,
+        converter_name,
+        clipper_name,
+        clipper_params,
+    ):
+        return
 
     # Resolve the embedder
-    from vtscore.media import embedders_for_type, get as media_get, get_embedder
+    from vtscore.media import get as media_get
 
-    embedder = None
-    if embedder_name:
-        try:
-            embedder = get_embedder(embedder_name)
-        except KeyError:
-            raise ValueError(f"Unknown embedder: {embedder_name}")
-    else:
-        avail = embedders_for_type(media_type_id)
-        if avail:
-            embedder = avail[0]
+    embedder = _resolve_demo_embedder(embedder_name, media_type_id)
 
     mt = media_get(media_type_id)
 
@@ -299,47 +348,68 @@ def load_demo_dataset(  # noqa: C901
             embedder=embedder,
         )
 
-    # Build the pickle cache payload
-    # For types with external media dirs (audio, video), exclude media_bytes
-    # from the pickle and store the dir path so reloading can find the files.
-    # When a converter was applied, external_dir is no longer relevant (the
-    # converted medias carry their own bytes/strings).  Likewise when a clipper
-    # split the media: each clip is a *slice* of its source file, not the whole
-    # file the external dir resolves by name, so its bytes must ride in the
-    # pickle (dataset pickles are the one place persisted bytes are allowed).
+    _write_demo_cache(
+        pkl_file=pkl_file,
+        dataset_name=dataset_name,
+        media_type_id=media_type_id,
+        medias=medias,
+        mt=mt,
+        embedder=embedder,
+        external_dir=external_dir,
+        converter_name=converter_name,
+        clipper_name=clipper_name,
+        clipper_params=clipper_params,
+        clipper_applied=clipper_applied,
+    )
+
+    on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)
+
+
+def _write_demo_cache(
+    *,
+    pkl_file: Any,
+    dataset_name: str,
+    media_type_id: str,
+    medias: dict[int, dict[str, Any]],
+    mt: Any,
+    embedder: Any,
+    external_dir: Any,
+    converter_name: str,
+    clipper_name: str,
+    clipper_params: dict[str, Any] | None,
+    clipper_applied: bool,
+) -> None:
+    """Serialize the freshly built demo dataset to its pickle container.
+
+    For types with external media dirs (audio, video), excludes media_bytes
+    from the pickle and stores the dir path so reloading can find the files.
+    When a converter was applied, external_dir is no longer relevant (the
+    converted medias carry their own bytes/strings).  Likewise when a clipper
+    split the media: each clip is a *slice* of its source file, not the whole
+    file the external dir resolves by name, so its bytes must ride in the
+    pickle (dataset pickles are the one place persisted bytes are allowed).
+    """
+    from vtscore.datasets import loader as _loader
+
     # Local import avoids a circular import at module load (loader imports
     # loader_demo before this helper is defined).
     from vtscore.datasets.loader import _embeddings_dict_for_pickle
 
     store_external = external_dir is not None and not converter_name and not clipper_applied
+
+    def _pickle_media(media: dict[str, Any]) -> dict[str, Any]:
+        return {
+            k: _embeddings_dict_for_pickle(v) if k == "embeddings" else (v.tolist() if isinstance(v, np.ndarray) else v)
+            for k, v in media.items()
+            if not (store_external and k in ("media_bytes", "thumbnail_bytes"))
+        }
+
+    pkl_data: dict[str, Any] = {
+        "name": dataset_name,
+        "medias": {cid: _pickle_media(media) for cid, media in medias.items()},
+    }
     if store_external:
-        pkl_data: dict[str, Any] = {
-            "name": dataset_name,
-            "medias": {
-                cid: {
-                    k: _embeddings_dict_for_pickle(v)
-                    if k == "embeddings"
-                    else (v.tolist() if isinstance(v, np.ndarray) else v)
-                    for k, v in media.items()
-                    if k not in ("media_bytes", "thumbnail_bytes")
-                }
-                for cid, media in medias.items()
-            },
-            mt.dir_key: external_dir,
-        }
-    else:
-        pkl_data = {
-            "name": dataset_name,
-            "medias": {
-                cid: {
-                    k: _embeddings_dict_for_pickle(v)
-                    if k == "embeddings"
-                    else (v.tolist() if isinstance(v, np.ndarray) else v)
-                    for k, v in media.items()
-                }
-                for cid, media in medias.items()
-            },
-        }
+        pkl_data[mt.dir_key] = external_dir
 
     _loader.EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -363,5 +433,3 @@ def load_demo_dataset(  # noqa: C901
     from vtscore.datasets.container import write_container
 
     write_container(pkl_file, medias_pkl_bytes, meta, extra_pickle_keys=extra_pickle_keys)
-
-    on_progress("idle", f"Loaded {dataset_name} dataset", 0, 0)

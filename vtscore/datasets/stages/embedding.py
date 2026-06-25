@@ -53,7 +53,172 @@ def _first_stored_embedder(medias: dict[int, dict[str, Any]]) -> str:
     return ""
 
 
-def embed_missing(  # noqa: C901
+def _resolve_embedder(
+    medias: dict[int, dict[str, Any]],
+    embedder_name: str,
+    media_type: str,
+):
+    """Resolve the embedder for this load: explicit pick → stored → default.
+
+    Returns the resolved embedder, or ``None`` when no embedder is available.
+
+    An explicit *embedder_name* is looked up directly; if it resolves, that
+    wins.  Otherwise (only when no explicit name was given) we honour the
+    embedder the media were already embedded with (a pickle reload /
+    content-vector importer records it on the media) so a patch-embedded
+    dataset re-binds to its patch embedder rather than the single-vector
+    media-type default — the default would report
+    ``supports_patch_regions=False`` and silently skip the region back-fill.
+    Failing both, fall back to the first embedder registered for *media_type*.
+    """
+    from vtscore.media import embedders_for_type, get_embedder  # noqa: PLC0415
+
+    emb = None
+    if embedder_name:
+        try:
+            emb = get_embedder(embedder_name)
+        except KeyError:
+            emb = None
+    if emb is None and not embedder_name:
+        stored = _first_stored_embedder(medias)
+        if stored:
+            try:
+                emb = get_embedder(stored)
+            except KeyError:
+                emb = None
+    if emb is None:
+        avail = embedders_for_type(media_type)
+        emb = avail[0] if avail else None
+    return emb
+
+
+def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+    """Progress sink used when no ``on_progress`` callback was supplied."""
+    return None
+
+
+def _ensure_model_loaded(emb, on_progress: Callable[[str, str, int, int], None]) -> None:
+    """Load the embedder's models if not already loaded, announcing progress."""
+    if getattr(emb, "_model", None) is None:
+        on_progress("loading", "Loading embedding model…", 0, 0)
+        emb.load_models()
+
+
+def _missing_for_embedder(
+    medias: dict[int, dict[str, Any]],
+    emb,
+    embedder_name: str,
+) -> list[tuple[int, dict[str, Any]]]:
+    """Return the ``(mid, media)`` items still needing *this* embedder's vector.
+
+    When the caller named an embedder explicitly (the bound-set driver and the
+    reload path both do), "missing" is keyed to that embedder's own per-media
+    entry, so a second bound embedder embeds items the first already covered
+    (their singular vector belongs to the first model).
+
+    When no embedder was named (bare default-resolution call), keep the legacy
+    contract: only items with *no* vector at all are embedded, so a dataset
+    already populated by some other source isn't re-embedded under the resolved
+    default.
+    """
+    if embedder_name:
+        return [(mid, m) for mid, m in medias.items() if media_embedding(m, emb.name) is None]
+    return [(mid, m) for mid, m in medias.items() if media_embedding(m) is None]
+
+
+def _needs_side_channel(m: dict[str, Any], embedder_name: str, key: str) -> bool:
+    """Whether *m* was embedded by *embedder_name* but lacks side-channel *key*.
+
+    The embedder must have produced a CLS/VLAD vector for the image (so we
+    never re-derive a side channel for an image it never embedded), keyed off
+    its own per-embedder entry rather than the singular mirror: in a
+    multi-embedder dataset the mirror may belong to a *different* model.
+    """
+    return media_embedding(m, embedder_name) is not None and m.get(key) is None
+
+
+def _run_embed_pass(
+    emb,
+    medias: dict[int, dict[str, Any]],
+    media_type: str,
+    missing: list[tuple[int, dict[str, Any]]],
+    on_progress: Callable[[str, str, int, int], None],
+    original_cb,
+) -> None:
+    """Bulk-embed the *missing* items and attach each non-``None`` vector.
+
+    Announces progress, routes the embedder's callback through *on_progress*
+    (restoring *original_cb* afterward), and on a bulk-embed failure logs and
+    attaches nothing (items stay at ``None`` for the drop-none stage).  Items
+    whose media vanished from *medias* during the call are skipped.
+    """
+    if not missing:
+        return
+    total = len(missing)
+    on_progress("embedding", f"Embedding {total} item(s)…", 0, total)
+
+    inputs = [m for _, m in missing]
+    emb._on_progress = on_progress
+    try:
+        vectors = emb.embed_media_bulk(inputs)
+    except Exception:
+        logging.getLogger(__name__).exception("Bulk embed failed for media_type=%s (%d items)", media_type, total)
+        vectors = None
+    finally:
+        emb._on_progress = original_cb
+
+    if vectors is None:
+        return
+    embedder_id = emb.name
+    for (mid, _), vec in zip(missing, vectors):
+        if vec is None:
+            continue
+        media = medias.get(mid)
+        if media is None:
+            continue
+        set_media_embedding(media, embedder_id, vec)
+
+
+def _run_backfill_pass(
+    emb,
+    medias: dict[int, dict[str, Any]],
+    media_type: str,
+    on_progress: Callable[[str, str, int, int], None],
+    original_cb,
+    *,
+    needs: Callable[[dict[str, Any]], bool],
+    forward: Callable[[list[dict[str, Any]]], list],
+    attach: Callable[[dict[str, Any], Any], None],
+    fail_message: str,
+) -> None:
+    """Run one side-channel back-fill pass over every media still needing it.
+
+    Filters *medias* by *needs*, bulk-forwards them through *forward* (routing
+    progress through *on_progress* and restoring *original_cb* afterward), and
+    attaches each non-``None`` output via *attach*.  On a *forward* failure the
+    pass logs *fail_message* and attaches nothing (every output is treated as
+    ``None``).  Runs over every matching media, including ones that arrived
+    already-embedded — not only the items embedded in this load.
+    """
+    inputs = [m for m in medias.values() if needs(m)]
+    if not inputs:
+        return
+    emb._on_progress = on_progress
+    try:
+        outputs = forward(inputs)
+    except Exception:
+        logging.getLogger(__name__).exception(fail_message, media_type, len(inputs))
+        outputs = [None] * len(inputs)
+    finally:
+        emb._on_progress = original_cb
+
+    for media, out in zip(inputs, outputs):
+        if out is None:
+            continue
+        attach(media, out)
+
+
+def embed_missing(
     medias: dict[int, dict[str, Any]],
     embedder_name: str = "",
     on_progress: Callable[[str, str, int, int], None] | None = None,
@@ -87,49 +252,12 @@ def embed_missing(  # noqa: C901
     if not media_type:
         return
 
-    from vtscore.media import embedders_for_type, get_embedder  # noqa: PLC0415
-
-    emb = None
-    if embedder_name:
-        try:
-            emb = get_embedder(embedder_name)
-        except KeyError:
-            emb = None
-    if emb is None and not embedder_name:
-        # No explicit embedder for this load: honour the one the media were
-        # already embedded with (set on a pickle reload / content-vector
-        # importer) before falling back to the media-type default.  Without
-        # this a patch-embedded dataset reloaded with no embedder pick would
-        # resolve to the single-vector default and skip the patch-region
-        # back-fill below, so the best-match highlight and region voting have
-        # no region data to work with.
-        stored = _first_stored_embedder(medias)
-        if stored:
-            try:
-                emb = get_embedder(stored)
-            except KeyError:
-                emb = None
-    if emb is None:
-        avail = embedders_for_type(media_type)
-        emb = avail[0] if avail else None
+    emb = _resolve_embedder(medias, embedder_name, media_type)
     if emb is None:
         return
 
     # Which items still need *this* embedder's vector.
-    #
-    # When the caller named an embedder explicitly (the bound-set driver and
-    # the reload path both do), "missing" is keyed to that embedder's own
-    # per-media entry, so a second bound embedder embeds items the first
-    # already covered (their singular vector belongs to the first model).
-    #
-    # When no embedder was named (bare default-resolution call), keep the
-    # legacy contract: only items with *no* vector at all are embedded, so a
-    # dataset already populated by some other source isn't re-embedded under
-    # the resolved default.
-    if embedder_name:
-        missing = [(mid, m) for mid, m in medias.items() if media_embedding(m, emb.name) is None]
-    else:
-        missing = [(mid, m) for mid, m in medias.items() if media_embedding(m) is None]
+    missing = _missing_for_embedder(medias, emb, embedder_name)
 
     # Patch-capable embedders attach a per-image HAC region tree + patch grid
     # alongside the CLS ``embedding``.  That side-channel must exist for any
@@ -144,11 +272,7 @@ def embed_missing(  # noqa: C901
     patch_capable = getattr(emb, "supports_patch_regions", False) is True
 
     def _needs_patch(m: dict[str, Any]) -> bool:
-        # This embedder must have produced a CLS vector for the image (so we
-        # never re-pool regions for an image it never embedded), but key off
-        # its own per-embedder entry rather than the singular mirror: in a
-        # multi-embedder dataset the mirror may belong to a *different* model.
-        return media_embedding(m, emb.name) is not None and m.get("patch_regions") is None
+        return _needs_side_channel(m, emb.name, "patch_regions")
 
     # Structural embedders (SIFT/VLAD) attach a per-image keypoint+descriptor set
     # alongside the VLAD ``embedding``, on the same back-fill terms as patch
@@ -158,7 +282,7 @@ def embed_missing(  # noqa: C901
     structural_capable = getattr(emb, "supports_geometric_verification", False) is True
 
     def _needs_local_features(m: dict[str, Any]) -> bool:
-        return media_embedding(m, emb.name) is not None and m.get("local_features") is None
+        return _needs_side_channel(m, emb.name, "local_features")
 
     has_patch_backfill = patch_capable and any(_needs_patch(m) for m in medias.values())
     has_structural_backfill = structural_capable and any(_needs_local_features(m) for m in medias.values())
@@ -167,87 +291,45 @@ def embed_missing(  # noqa: C901
         return
 
     if on_progress is None:
-
-        def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-            return None
-
         on_progress = _noop_progress
 
-    if getattr(emb, "_model", None) is None:
-        on_progress("loading", "Loading embedding model…", 0, 0)
-        emb.load_models()
+    _ensure_model_loaded(emb, on_progress)
 
     original_cb = emb._on_progress
 
-    if missing:
-        total = len(missing)
-        on_progress("embedding", f"Embedding {total} item(s)…", 0, total)
-
-        inputs = [m for _, m in missing]
-        emb._on_progress = on_progress
-        try:
-            vectors = emb.embed_media_bulk(inputs)
-        except Exception:
-            logging.getLogger(__name__).exception("Bulk embed failed for media_type=%s (%d items)", media_type, total)
-            vectors = None
-        finally:
-            emb._on_progress = original_cb
-
-        if vectors is not None:
-            embedder_id = emb.name
-            for (mid, _), vec in zip(missing, vectors):
-                if vec is None:
-                    continue
-                media = medias.get(mid)
-                if media is None:
-                    continue
-                set_media_embedding(media, embedder_id, vec)
+    _run_embed_pass(emb, medias, media_type, missing, on_progress, original_cb)
 
     # Patch-region pass for embedders that support it (DINOv2/v3/EUPE).  Runs
     # over every patch-capable image still lacking a region tree, including
     # ones that arrived already-embedded - not just the items embedded above.
     if patch_capable:
-        patch_inputs = [m for m in medias.values() if _needs_patch(m)]
-        if patch_inputs:
-            emb._on_progress = on_progress
-            try:
-                outputs = emb.patch_forward_bulk(patch_inputs)
-            except Exception:
-                logging.getLogger(__name__).exception(
-                    "Bulk patch-forward failed for media_type=%s (%d items)", media_type, len(patch_inputs)
-                )
-                outputs = [None] * len(patch_inputs)
-            finally:
-                emb._on_progress = original_cb
-
-            for media, patch_out in zip(patch_inputs, outputs):
-                if patch_out is None:
-                    continue
-                _attach_patch_regions_to_media(media, patch_out)
+        _run_backfill_pass(
+            emb,
+            medias,
+            media_type,
+            on_progress,
+            original_cb,
+            needs=_needs_patch,
+            forward=emb.patch_forward_bulk,
+            attach=_attach_patch_regions_to_media,
+            fail_message="Bulk patch-forward failed for media_type=%s (%d items)",
+        )
 
     # Local-features pass for structural embedders (SIFT/VLAD).  Same back-fill
     # shape as the patch pass: detect+describe every structural image still
     # missing ``local_features`` and store the compact (fp16/uint8) form.
     if structural_capable:
-        structural_inputs = [m for m in medias.values() if _needs_local_features(m)]
-        if structural_inputs:
-            emb._on_progress = on_progress
-            try:
-                features = emb.local_features_forward_bulk(structural_inputs)
-            except Exception:
-                logging.getLogger(__name__).exception(
-                    "Bulk local-feature detection failed for media_type=%s (%d items)",
-                    media_type,
-                    len(structural_inputs),
-                )
-                features = [None] * len(structural_inputs)
-            finally:
-                emb._on_progress = original_cb
-
-            for media, feats in zip(structural_inputs, features):
-                if feats is None:
-                    continue
-                media["local_features"] = feats.compact()
+        _run_backfill_pass(
+            emb,
+            medias,
+            media_type,
+            on_progress,
+            original_cb,
+            needs=_needs_local_features,
+            forward=emb.local_features_forward_bulk,
+            attach=lambda media, feats: media.__setitem__("local_features", feats.compact()),
+            fail_message="Bulk local-feature detection failed for media_type=%s (%d items)",
+        )
 
     # Re-key any legacy single-vector media into the dict-keyed representation
     # and drop the singular media["embedding"] mirror (Phase 2c): afterward

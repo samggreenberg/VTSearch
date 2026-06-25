@@ -71,13 +71,68 @@ def _display_path(entry: Path, root: Path) -> str:
     return rel
 
 
+def _parse_allowed_exts(extensions_param: str) -> set[str] | None:
+    """Parse the comma-separated ``extensions`` query param.
+
+    Returns a normalized set of lowercase, dot-prefixed extensions, or
+    ``None`` when no extension filter was supplied (param empty).
+    """
+    if not extensions_param:
+        return None
+    allowed_exts: set[str] = set()
+    for ext in extensions_param.split(","):
+        ext = ext.strip().lower()
+        if ext and not ext.startswith("."):
+            ext = "." + ext
+        if ext:
+            allowed_exts.add(ext)
+    return allowed_exts
+
+
+def _entry_to_listing(entry: Path, root: Path, allowed_exts: set[str] | None) -> tuple[str, dict] | None:
+    """Classify *entry* under *root* and build its listing dict.
+
+    Returns ``("dir", dict)`` for a directory, ``("file", dict)`` for a
+    file, or ``None`` when the entry should be skipped (hidden name,
+    out-of-root symlink, or a file filtered out by *allowed_exts*).
+    """
+    if entry.name.startswith("."):
+        return None
+    # is_dir() / is_file() / stat() follow symlinks by default, so an
+    # in-root symlink pointing outside root would otherwise be listed
+    # like an ordinary entry and leak the target's name/size/mtime.
+    # Resolve symlinks up front and skip any that escape root.
+    if entry.is_symlink():
+        try:
+            entry.resolve(strict=True).relative_to(root)
+        except (OSError, ValueError):
+            return None
+    rel = _display_path(entry, root)
+    if entry.is_dir():
+        return "dir", {"name": entry.name, "path": rel, "modified_at": format_mtime(entry)}
+    if entry.is_file():
+        if allowed_exts is not None and entry.suffix.lower() not in allowed_exts:
+            return None
+        try:
+            size = entry.stat().st_size
+        except OSError:
+            size = 0
+        return "file", {
+            "name": entry.name,
+            "path": rel,
+            "size_bytes": size,
+            "modified_at": format_mtime(entry),
+        }
+    return None
+
+
 @file_browser_bp.route("/api/browse")
 @file_browser_bp.arguments(BrowseQuerySchema, location="query")
 @file_browser_bp.response(200, BrowseResponseSchema)
 @file_browser_bp.alt_response(400, description="Invalid path (traversal blocked).")
 @file_browser_bp.alt_response(403, description="Permission denied reading the requested directory.")
 @file_browser_bp.alt_response(404, description="Directory not found within the allowed root.")
-def browse(query: dict):  # noqa: C901
+def browse(query: dict):
     """List directories and files at a relative path.
 
     Returns a directories+files listing with names, relative paths,
@@ -89,15 +144,7 @@ def browse(query: dict):  # noqa: C901
 
     root = _get_browse_root().resolve()
 
-    allowed_exts: set[str] | None = None
-    if extensions_param:
-        allowed_exts = set()
-        for ext in extensions_param.split(","):
-            ext = ext.strip().lower()
-            if ext and not ext.startswith("."):
-                ext = "." + ext
-            if ext:
-                allowed_exts.add(ext)
+    allowed_exts = _parse_allowed_exts(extensions_param)
 
     if subpath:
         target = (root / subpath).resolve()
@@ -121,28 +168,14 @@ def browse(query: dict):  # noqa: C901
         abort(403, message="Permission denied")
 
     for entry in entries:
-        if entry.name.startswith("."):
+        listing = _entry_to_listing(entry, root, allowed_exts)
+        if listing is None:
             continue
-        # is_dir() / is_file() / stat() follow symlinks by default, so an
-        # in-root symlink pointing outside root would otherwise be listed
-        # like an ordinary entry and leak the target's name/size/mtime.
-        # Resolve symlinks up front and skip any that escape root.
-        if entry.is_symlink():
-            try:
-                entry.resolve(strict=True).relative_to(root)
-            except (OSError, ValueError):
-                continue
-        rel = _display_path(entry, root)
-        if entry.is_dir():
-            directories.append({"name": entry.name, "path": rel, "modified_at": format_mtime(entry)})
-        elif entry.is_file():
-            if allowed_exts is not None and entry.suffix.lower() not in allowed_exts:
-                continue
-            try:
-                size = entry.stat().st_size
-            except OSError:
-                size = 0
-            files.append({"name": entry.name, "path": rel, "size_bytes": size, "modified_at": format_mtime(entry)})
+        kind, item = listing
+        if kind == "dir":
+            directories.append(item)
+        else:
+            files.append(item)
 
     current_path = _display_path(target, root) if target != root else ""
 

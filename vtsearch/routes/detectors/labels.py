@@ -180,11 +180,52 @@ def save_detector_labels(name: str):
 # ---------------------------------------------------------------------------
 
 
+def _merge_entries_into_labelset(existing_ls, label_entries: list[dict]) -> tuple[int, int, list[dict]]:
+    """Merge imported label entries into ``existing_ls`` in place, deduping.
+
+    Iterates ``label_entries``, skipping entries whose label isn't ``good`` or
+    ``bad`` and entries whose ``(md5, label)`` pair already exists in the
+    labelset.  Each accepted entry is appended to ``existing_ls.elements`` and
+    recorded so the caller can resolve/apply it later.
+
+    Returns ``(applied, skipped, new_entries)`` matching the legacy counts and
+    list that the route built inline.
+    """
+    from vtscore.datasets.labelset import LabeledElement
+
+    # Build a set of existing (md5, label) pairs for dedup
+    existing_keys: set[tuple[str, str]] = set()
+    for el in existing_ls.elements:
+        if el.md5:
+            existing_keys.add((el.md5, el.label))
+
+    applied = 0
+    skipped = 0
+    new_entries: list[dict] = []
+    for entry in label_entries:
+        label = entry.get("label", "")
+        if label not in ("good", "bad"):
+            skipped += 1
+            continue
+        md5 = entry.get("md5", "")
+        if md5 and (md5, label) in existing_keys:
+            skipped += 1
+            continue
+        elem = LabeledElement.from_dict(entry)
+        existing_ls.elements.append(elem)
+        new_entries.append(entry)
+        if md5:
+            existing_keys.add((md5, label))
+        applied += 1
+
+    return applied, skipped, new_entries
+
+
 @detectors_labels_bp.route(
     "/api/detectors/<name>/import-labels/<importer_name>",
     methods=["POST"],
 )
-def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
+def import_labels_into_detector(name: str, importer_name: str):
     """Run a label importer and merge results into this detector's labelset.
 
     Unlike the regular ``/api/label-importers/import/`` route, this does
@@ -228,34 +269,11 @@ def import_labels_into_detector(name: str, importer_name: str):  # noqa: C901
     # ------------------------------------------------------------------
     # 1) Merge into the persisted labelset (always, whether loaded or not)
     # ------------------------------------------------------------------
-    from vtscore.datasets.labelset import LabeledElement, LabelSet
+    from vtscore.datasets.labelset import LabelSet
 
     existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 
-    # Build a set of existing (md5, label) pairs for dedup
-    existing_keys: set[tuple[str, str]] = set()
-    for el in existing_ls.elements:
-        if el.md5:
-            existing_keys.add((el.md5, el.label))
-
-    applied = 0
-    skipped = 0
-    new_entries: list[dict] = []
-    for entry in label_entries:
-        label = entry.get("label", "")
-        if label not in ("good", "bad"):
-            skipped += 1
-            continue
-        md5 = entry.get("md5", "")
-        if md5 and (md5, label) in existing_keys:
-            skipped += 1
-            continue
-        elem = LabeledElement.from_dict(entry)
-        existing_ls.elements.append(elem)
-        new_entries.append(entry)
-        if md5:
-            existing_keys.add((md5, label))
-        applied += 1
+    applied, skipped, new_entries = _merge_entries_into_labelset(existing_ls, label_entries)
 
     data["labelset"] = existing_ls.to_dict()
     _write_detector(path, data)

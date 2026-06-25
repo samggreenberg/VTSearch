@@ -147,7 +147,7 @@ def _reject_traversal(extract_dir_resolved: Path, member_name: str) -> None:
         raise ValueError(f"Path traversal detected in archive: {member_name}")
 
 
-def extract_archive(  # noqa: C901
+def extract_archive(
     archive_path: Path,
     extract_dir: Path,
     on_progress: Optional[ProgressCallback] = None,
