@@ -331,6 +331,55 @@ class TestLoadDemoSourceGtzan:
         categories_seen = {c["category"] for c in clips.values()}
         assert categories_seen == {"blues", "rock"}
 
+    def test_skip_embedding_defers_to_clipper(self, tmp_path):
+        """skip_embedding=True keeps every media with a deferred-embed placeholder.
+
+        Regression: a clipper-driven demo import must not embed (or drop) the
+        full parent recordings. Even when the embedder would return None for a
+        parent (e.g. a recording longer than CLAP's window), the media must
+        survive with ``embeddings={}`` so the clipper can re-embed its clips.
+        """
+        from vtscore.datasets import downloader as dl_module
+        from vtscore.datasets import loader as loader_module
+        from vtscore.media.audio.media_type import AudioMediaType
+
+        fake_metadata = {
+            "blues/blues.00001.wav": {"category": "blues", "path": tmp_path / "blues.00001.wav"},
+            "rock/rock.00001.wav": {"category": "rock", "path": tmp_path / "rock.00001.wav"},
+        }
+        for meta in fake_metadata.values():
+            meta["path"].write_bytes(b"RIFF" + b"\x00" * 40)
+
+        mt = AudioMediaType()
+        mt.load_media_data = MagicMock(return_value={"media_bytes": b"", "duration": 1.0})
+        mock_emb = self._make_mock_embedder()
+        # Simulate the full-parent embed failing; with skip_embedding it must
+        # never be called, so no media is dropped.
+        mock_emb.embed_media = MagicMock(return_value=None)
+        mock_emb.load_models = MagicMock()
+        clips: dict = {}
+
+        with (
+            patch.object(dl_module, "download_gtzan", return_value=tmp_path),
+            patch.object(loader_module, "load_audio_metadata_from_folders", return_value=fake_metadata),
+        ):
+            mt.load_demo_source(
+                source="gtzan",
+                categories=["blues", "rock"],
+                slice_start=0,
+                slice_end=10,
+                clips=clips,
+                on_progress=lambda *a: None,
+                embedder=mock_emb,
+                skip_embedding=True,
+            )
+
+        assert len(clips) == 2
+        mock_emb.embed_media.assert_not_called()
+        for clip in clips.values():
+            assert clip["embeddings"] == {}
+            assert clip["embedder"] == "clap"
+
     def test_gtzan_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits files per category."""
         from vtscore.datasets import downloader as dl_module
