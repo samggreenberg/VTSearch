@@ -30,15 +30,21 @@
   color: var(--color-good);
 }
 
+// Reserve the lines even when empty so toggling the count/detail never
+// re-centers the column and shifts the bar above.
 .browse-status-count {
   font-size: var(--font-sm);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  min-height: 1.4em;
 }
 
 .browse-status-detail {
   font-size: var(--font-sm);
   color: var(--text-muted);
+  line-height: 1.4;
+  min-height: 1.4em;
 }
 
 // Top-left overlay cluster, anchored to ``.browse-main`` like the other

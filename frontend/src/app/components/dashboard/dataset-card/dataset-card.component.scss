@@ -272,9 +272,39 @@ td.select-col {
     font-weight: var(--weight-medium);
   }
 
+  // Reserve one line so a phase whose subtitle is empty doesn't shift the bar up.
   .progress-subtitle {
     font-size: var(--font-xs);
     color: var(--text-muted);
+    line-height: 1.4;
+    min-height: 1.4em;
+  }
+
+  // Detail (left) + ETA (right) share one reserved-height line above the bar so
+  // the bar never moves as the text changes length or appears/disappears.
+  .progress-meta {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-md);
+    font-size: var(--font-xs);
+    line-height: 1.4;
+    min-height: 1.4em;
+  }
+
+  .progress-msg {
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .progress-eta {
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
   }
 
   .progress-row {
@@ -283,25 +313,8 @@ td.select-col {
     gap: var(--space-md);
   }
 
-  .progress-msg {
-    font-size: var(--font-xs);
-    color: var(--text-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-    max-width: 240px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   vt-progress-bar {
     flex: 1;
-  }
-
-  .progress-eta {
-    font-size: var(--font-xs);
-    color: var(--text-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
   }
 
   &.inline-loading-failed {

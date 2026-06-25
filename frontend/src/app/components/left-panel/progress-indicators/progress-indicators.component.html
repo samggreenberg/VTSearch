@@ -1,22 +1,24 @@
 <div class="progress-check-bar">
   @if (sortBusy) {
     <div class="sort-overlay" aria-live="polite">
-      @if (sortStatus) {
+      <!-- Status (left) + ETA (right) share one reserved-height line above the
+           bar so the bar keeps a fixed position as the text changes. -->
+      <div class="sort-overlay-meta">
         <span class="sort-overlay-status">{{ sortStatus }}</span>
-      }
-      <vt-progress-bar
-        [indeterminate]="sortBar.indeterminate"
-        [value]="sortBar.value"
-        [max]="sortBar.max"
-      />
-      @if (sortEta) {
-        <span class="sort-overlay-status">{{ sortEta }}</span>
-      }
-      <button
-        class="btn btn--cancel btn--sm"
-        (click)="onCancel()"
-        title="Cancel the running sort"
-      >Cancel</button>
+        <span class="sort-overlay-status sort-overlay-eta">{{ sortEta }}</span>
+      </div>
+      <div class="sort-overlay-bar">
+        <vt-progress-bar
+          [indeterminate]="sortBar.indeterminate"
+          [value]="sortBar.value"
+          [max]="sortBar.max"
+        />
+        <button
+          class="btn btn--cancel btn--sm"
+          (click)="onCancel()"
+          title="Cancel the running sort"
+        >Cancel</button>
+      </div>
     </div>
   } @else {
     <button

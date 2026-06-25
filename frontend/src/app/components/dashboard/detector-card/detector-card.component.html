@@ -35,23 +35,21 @@
     <div class="loading-task-progress">
       <div class="progress-context">
         <div class="progress-header">{{ taskProgressInfo.header }}</div>
-        @if (taskProgressInfo.subtitle) {
-          <div class="progress-subtitle">{{ taskProgressInfo.subtitle }}</div>
-        }
+        <div class="progress-subtitle">{{ taskProgressInfo.subtitle }}</div>
+      </div>
+      <!-- Variable text lives on its own reserved-height line so the bar below
+           keeps a fixed position as the detail/ETA change between stages. -->
+      <div class="progress-meta">
+        <span class="progress-msg">{{ taskProgressInfo.detail }}</span>
+        <span class="progress-eta">{{ taskProgressInfo.eta }}</span>
       </div>
       <div class="progress-row">
-        @if (taskProgressInfo.detail) {
-          <span class="progress-msg">{{ taskProgressInfo.detail }}</span>
-        }
         <vt-progress-bar
           [value]="taskBar().value"
           [max]="taskBar().max"
           [indeterminate]="taskBar().indeterminate"
           [smooth]="true"
         />
-        @if (taskProgressInfo.eta) {
-          <span class="progress-eta">{{ taskProgressInfo.eta }}</span>
-        }
         <button class="btn btn--cancel btn--sm" (click)="onCancelTask($event)" title="Cancel loading">Cancel</button>
       </div>
     </div>
