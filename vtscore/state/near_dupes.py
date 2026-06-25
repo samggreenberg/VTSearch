@@ -84,9 +84,8 @@ def phash_image(thumbnail_bytes: bytes | None) -> int | None:
     try:
         from PIL import Image  # noqa: PLC0415
 
-        resample = getattr(Image, "Resampling", Image).LANCZOS
         with Image.open(io.BytesIO(thumbnail_bytes)) as im:
-            gray = im.convert("L").resize((_DCT_N, _DCT_N), resample)
+            gray = im.convert("L").resize((_DCT_N, _DCT_N), Image.Resampling.LANCZOS)
             arr = np.asarray(gray, dtype=np.float64)
     except Exception:
         return None

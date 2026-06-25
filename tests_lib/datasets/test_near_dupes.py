@@ -26,6 +26,19 @@ from vtscore.state.near_dupes import _hamming
 
 
 # --- helpers -------------------------------------------------------------
+def _ph(thumbnail_bytes: bytes) -> int:
+    h = phash_image(thumbnail_bytes)
+    assert h is not None
+    return h
+
+
+def _sh(text: str) -> int:
+    h = simhash_text(text)
+    assert h is not None
+    return h
+
+
+
 def _img_bytes(arr: np.ndarray) -> bytes:
     """Encode a uint8 HxW(xC) array as PNG bytes."""
     buf = io.BytesIO()
@@ -83,7 +96,7 @@ class TestPhash:
     def test_deterministic_and_64_bit(self):
         b = _gradient(1)
         assert phash_image(b) == phash_image(b)
-        assert 0 <= phash_image(b) < (1 << 64)
+        assert 0 <= _ph(b) < (1 << 64)
 
     def test_none_for_missing_or_undecodable(self):
         assert phash_image(None) is None
@@ -95,14 +108,14 @@ class TestPhash:
         arr = np.asarray(Image.open(io.BytesIO(_gradient(2))).convert("RGB"))
         jpeg = io.BytesIO()
         Image.fromarray(arr).save(jpeg, format="JPEG", quality=70)
-        assert _hamming(phash_image(_gradient(2)), phash_image(jpeg.getvalue())) <= 4
+        assert _hamming(_ph(_gradient(2)), _ph(jpeg.getvalue())) <= 4
 
     def test_different_images_are_far(self):
         a = _gradient(3)
         # A distinct structural pattern (vertical bars) is far in pHash space.
         bars = np.zeros((64, 64), dtype=np.uint8)
         bars[:, ::4] = 255
-        assert _hamming(phash_image(a), phash_image(_img_bytes(bars))) > 4
+        assert _hamming(_ph(a), _ph(_img_bytes(bars))) > 4
 
 
 # --- SimHash -------------------------------------------------------------
@@ -118,12 +131,12 @@ class TestSimhash:
     def test_near_identical_text_is_close(self):
         a = "the quick brown fox jumps over the lazy dog near the river bank"
         b = "the quick brown fox jumps over the lazy dog near the river side"
-        assert _hamming(simhash_text(a), simhash_text(b)) <= 3
+        assert _hamming(_sh(a), _sh(b)) <= 3
 
     def test_unrelated_text_is_far(self):
         a = "the quick brown fox jumps over the lazy dog"
         b = "completely unrelated sentence about astrophysics and quantum mechanics"
-        assert _hamming(simhash_text(a), simhash_text(b)) > 3
+        assert _hamming(_sh(a), _sh(b)) > 3
 
 
 # --- grouping / collapse -------------------------------------------------
