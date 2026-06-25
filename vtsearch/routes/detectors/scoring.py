@@ -113,7 +113,7 @@ def _media_info_for_response(media: dict) -> dict:
 @detector_scoring_bp.alt_response(404, description="Detector not found.")
 @require_dataset_header
 @require_detector_header
-def find_label(body: dict):  # noqa: C901
+def find_label(body: dict):
     """Score all loaded medias with a detector and apply labels based on threshold.
 
     Resolves the detector from the registry, scores every loaded media, and

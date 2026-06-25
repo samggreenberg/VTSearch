@@ -361,7 +361,7 @@ def record_vote(
     mutate_user(lambda cache: _credit_vote(cache, ts, detector_id, media_type, date_str, hour))
 
 
-def _credit_vote(  # noqa: C901
+def _credit_vote(
     cache: dict[str, Any],
     ts: float,
     detector_id: str,
