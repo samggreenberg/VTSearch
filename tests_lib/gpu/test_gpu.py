@@ -528,7 +528,7 @@ class TestCLAPEmbeddingGPU:
             return_tensors="pt",
             padding="max_length",
             max_length=480000,
-            truncation=True,
+            truncation="rand_trunc",
         )
         inputs = {k: v.to(device) for k, v in inputs.items()}
         with torch.no_grad():
