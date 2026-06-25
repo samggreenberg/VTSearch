@@ -27,23 +27,22 @@ from vtscore.datasets.loader import (
 def _effective_clipper(clipper_name: str, media_type_id: str) -> str:
     """Return *clipper_name* if it is a real (non-default) clipper, else ``""``.
 
-    The demo UI always sends *a* clipper name (the first one in the
-    media-type's list is pre-selected), but the conventional "default"
-    choice is a no-op that should not split the media.  Mirrors the
-    frontend's ``isDefaultClipper`` rule so that the two sides agree on
-    when clipping actually happens: a clipper is a no-op when it is empty,
-    ends with ``_default``, or is the first clipper registered for the
-    media type (the pre-selected default).  Normalising to ``""`` here also
-    means legacy pickles that recorded the pre-selected default name (e.g.
-    ``"sound_tiling"``) compare equal to "no clipper" and don't trigger a
-    needless re-embed.
+    A clipper is a no-op (so the media is imported as-is, never split) only
+    when it is empty or its name ends with ``_default`` (the canonical
+    no-op convention: ``sound_default``, ``image_default``, etc., whose
+    ``display_name`` is "None"). This mirrors ``normalise_chain`` and the
+    frontend's ``effectiveDemoClipper`` rule so the two sides agree on when
+    clipping actually happens.
+
+    The pre-selected *default* clipper a media type offers is whatever it
+    registers first (``clippers_for_type(media_type_id)[0]``), and that can
+    be a **real** clipper - e.g. audio defaults to ``sound_tiling`` and
+    video to ``video_auto`` so demo recordings are split uniformly. Such a
+    pre-selected default must still clip, so we deliberately do *not* treat
+    "first registered" as a no-op here. The ``media_type_id`` argument is
+    retained for call-site symmetry but is no longer consulted.
     """
     if not clipper_name or clipper_name.endswith("_default"):
-        return ""
-    from vtscore.media import clippers_for_type  # noqa: PLC0415
-
-    clippers = clippers_for_type(media_type_id)
-    if clippers and clippers[0].name == clipper_name:
         return ""
     return clipper_name
 
