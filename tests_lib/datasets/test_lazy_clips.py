@@ -233,7 +233,7 @@ class TestClipperStageLazyClips:
         src = _write_wav(tmp_path, duration=1.2)
         clips = {1: _thin_audio_media(src)}
 
-        clipper_stage._apply_clipper(clips, "sound_tiling", {"duration": 0.3})
+        clipper_stage._apply_clipper(clips, "sound_tiling", {"duration": 0.3, "min_overlap": 0.0})
         assert len(clips) > 1  # actually tiled
 
         # Before re-lazify: clips carry the marker + materialized bytes.
@@ -287,7 +287,7 @@ class TestClipperStageLazyClips:
         media["media_bytes"] = src.read_bytes()  # full mode
         clips = {1: media}
 
-        clipper_stage._apply_clipper(clips, "sound_tiling", {"duration": 0.3})
+        clipper_stage._apply_clipper(clips, "sound_tiling", {"duration": 0.3, "min_overlap": 0.0})
         assert len(clips) > 1
         for clip in clips.values():
             assert "_lazy_source" not in clip  # never marked
@@ -320,7 +320,7 @@ class TestPickleRoundTrip:
 
         src = _write_wav(tmp_path, duration=1.2)
         clips = {1: _thin_audio_media(src)}
-        clipper_stage._apply_clipper(clips, "sound_tiling", {"duration": 0.3})
+        clipper_stage._apply_clipper(clips, "sound_tiling", {"duration": 0.3, "min_overlap": 0.0})
         _relazify(clips)
 
         # Attach embeddings so the loader keeps the entries (a clip with no

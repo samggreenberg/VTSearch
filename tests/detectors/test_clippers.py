@@ -2187,8 +2187,8 @@ class TestApplyClipperWithParams:
             "origin": {"importer": "test", "params": {}},
         }
         clips = {1: media}
-        # With default 2s duration: ceil(10/2) = 5 tiles
-        _apply_clipper(clips, "sound_tiling")
+        # Explicit 2s clips, no overlap: ceil(10/2) = 5 tiles
+        _apply_clipper(clips, "sound_tiling", {"duration": 2.0, "min_overlap": 0.0})
         assert len(clips) == 5
 
     def test_apply_clipper_with_overridden_duration(self):
@@ -2204,25 +2204,27 @@ class TestApplyClipperWithParams:
             "origin": {"importer": "test", "params": {}},
         }
         clips = {1: media}
-        # Override to 5s duration: ceil(10/5) = 2 tiles
-        _apply_clipper(clips, "sound_tiling", {"duration": 5.0})
+        # Override to 5s duration, no overlap: ceil(10/5) = 2 tiles
+        _apply_clipper(clips, "sound_tiling", {"duration": 5.0, "min_overlap": 0.0})
         assert len(clips) == 2
 
     def test_apply_clipper_params_none_uses_defaults(self):
         from vtscore.media.audio.audio_generator import generate_wav
         from vtscore.datasets.stages.clipper import _apply_clipper
 
-        wav = generate_wav(440, 10.0)
+        wav = generate_wav(440, 30.0)
         media = {
             "id": 1,
             "media_type": "audio",
             "media_bytes": wav,
-            "duration": 10.0,
+            "duration": 30.0,
             "origin": {"importer": "test", "params": {}},
         }
         clips = {1: media}
+        # Registered default: 10s clips, 1s min overlap. max_stride = 9,
+        # ceil((30 - 10) / 9) + 1 = 4 tiles.
         _apply_clipper(clips, "sound_tiling", None)
-        assert len(clips) == 5  # default 2s → 5 tiles
+        assert len(clips) == 4
 
     def test_apply_clipper_with_min_overlap(self):
         from vtscore.media.audio.audio_generator import generate_wav
