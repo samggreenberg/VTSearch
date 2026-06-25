@@ -380,7 +380,51 @@ def _move_tree_contents(src: Path, dst: Path) -> None:
                     shutil.copy2(child, target)
 
 
-def _download_and_extract(  # noqa: C901
+def _extract_archive(
+    archive_path: Path, archive_name: str, dest_dir: Path, dataset_name: str, on_progress: ProgressCallback
+) -> None:
+    """Extract *archive_path* into *dest_dir*, dispatching by filename suffix.
+
+    Supports ``.tar.gz`` / ``.tgz`` (gzip tar), ``.tar`` (uncompressed tar), and
+    ``.zip`` archives.  Tar members are extracted with ``filter="data"`` (which
+    rejects unsafe absolute/traversal paths); zip members are validated against
+    *dest_dir* to guard against path traversal (zip-slip).  Raises ``ValueError``
+    for an unsupported archive format.
+    """
+    suffix = archive_name.lower()
+    if suffix.endswith((".tar.gz", ".tgz", ".tar")):
+        # Iterate lazily instead of calling getmembers() - the latter must
+        # decompress the entire gzip stream just to read tar headers, then
+        # extraction decompresses it *again*.  Lazy iteration decompresses
+        # once and avoids a minutes-long stall on multi-GB archives.
+        # Use "r:*" for gzip tars to auto-detect compression - some CDNs (e.g.
+        # HuggingFace Xet) transparently decompress .tar.gz files during transfer.
+        mode = "r:" if suffix.endswith(".tar") else "r:*"
+        total_bytes = archive_path.stat().st_size
+        with open(archive_path, "rb") as raw_f:
+            with tarfile.open(fileobj=raw_f, mode=mode) as tar_ref:
+                for i, member in enumerate(tar_ref):
+                    if i % 100 == 0:
+                        on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
+                    tar_ref.extract(member, dest_dir, filter="data")
+        on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
+    elif suffix.endswith(".zip"):
+        with zipfile.ZipFile(archive_path, "r") as zip_ref:
+            members = zip_ref.namelist()
+            total = len(members)
+            for i, member in enumerate(members):
+                if i % 100 == 0 or i == total - 1:
+                    on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
+                # Guard against path traversal in zip entries
+                member_path = Path(dest_dir) / member
+                if not str(member_path.resolve()).startswith(str(Path(dest_dir).resolve())):
+                    raise ValueError(f"Path traversal detected in archive: {member}")
+                zip_ref.extract(member, dest_dir)
+    else:
+        raise ValueError(f"Unsupported archive format: {archive_name}")
+
+
+def _download_and_extract(
     *,
     url: str,
     archive_name: str,
@@ -436,45 +480,7 @@ def _download_and_extract(  # noqa: C901
         on_progress("downloading", f"Extracting {dataset_name}...", 0, 0)
         temp_extract.mkdir(parents=True, exist_ok=True)
 
-        suffix = archive_name.lower()
-        if suffix.endswith((".tar.gz", ".tgz")):
-            # Iterate lazily instead of calling getmembers() - the latter must
-            # decompress the entire gzip stream just to read tar headers, then
-            # extraction decompresses it *again*.  Lazy iteration decompresses
-            # once and avoids a minutes-long stall on multi-GB archives.
-            # Use "r:*" to auto-detect compression - some CDNs (e.g. HuggingFace
-            # Xet) transparently decompress .tar.gz files during transfer.
-            total_bytes = temp_archive.stat().st_size
-            with open(temp_archive, "rb") as raw_f:
-                with tarfile.open(fileobj=raw_f, mode="r:*") as tar_ref:
-                    for i, member in enumerate(tar_ref):
-                        if i % 100 == 0:
-                            on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
-                        tar_ref.extract(member, temp_extract, filter="data")
-            on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
-        elif suffix.endswith(".tar"):
-            total_bytes = temp_archive.stat().st_size
-            with open(temp_archive, "rb") as raw_f:
-                with tarfile.open(fileobj=raw_f, mode="r:") as tar_ref:
-                    for i, member in enumerate(tar_ref):
-                        if i % 100 == 0:
-                            on_progress("downloading", f"Extracting {dataset_name}...", raw_f.tell(), total_bytes)
-                        tar_ref.extract(member, temp_extract, filter="data")
-            on_progress("downloading", f"Extracting {dataset_name}...", total_bytes, total_bytes)
-        elif suffix.endswith(".zip"):
-            with zipfile.ZipFile(temp_archive, "r") as zip_ref:
-                members = zip_ref.namelist()
-                total = len(members)
-                for i, member in enumerate(members):
-                    if i % 100 == 0 or i == total - 1:
-                        on_progress("downloading", f"Extracting {dataset_name}...", i + 1, total)
-                    # Guard against path traversal in zip entries
-                    member_path = Path(temp_extract) / member
-                    if not str(member_path.resolve()).startswith(str(Path(temp_extract).resolve())):
-                        raise ValueError(f"Path traversal detected in archive: {member}")
-                    zip_ref.extract(member, temp_extract)
-        else:
-            raise ValueError(f"Unsupported archive format: {archive_name}")
+        _extract_archive(temp_archive, archive_name, temp_extract, dataset_name, on_progress)
 
         # Another download may have finished while we were extracting.
         if check_path.exists():

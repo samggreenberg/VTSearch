@@ -323,12 +323,170 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
 # ---------------------------------------------------------------------------
 
 
+_LOAD_STEPS = 3  # restore labels, seed examples, train MLP
+# MLP training dominates; label restore + example seeding are quick I/O.
+_LOAD_STEP_WEIGHTS = [0.15, 0.15, 0.70]
+
+
+def _run_detector_load_task(
+    *,
+    detector_id: str,
+    det_ctx,
+    thread_ds_ctx,
+    det_name: str,
+    tracker,
+    task_id: str,
+) -> None:
+    """Background worker for :func:`load_detector_route`.
+
+    Restores labels, seeds example votes, embeds + trains the MLP for the
+    detector, then marks it loaded. Cancellation and errors tear the
+    just-built context back down and surface on the task tracker. Lifted out
+    of the route's closure so the route itself stays simple; the captured
+    values are passed explicitly.
+    """
+    from vtscore.concurrency.progress import CancelledError, detector_loading_tasks
+    from vtscore.detectors.registry import add_loaded_detector_id, remove_loaded_detector_id
+    from vtscore.state.core import thread_dataset_context, thread_detector_context
+
+    try:
+        with thread_dataset_context(thread_ds_ctx), thread_detector_context(det_ctx):
+            try:
+                if det_name:
+                    tracker.check_cancelled()
+                    tracker.update(
+                        "loading",
+                        "Restoring labels…",
+                        0,
+                        0,
+                        step=1,
+                        total_steps=_LOAD_STEPS,
+                    )
+                    det_data = _read_detector(_detector_path(det_name))
+                    if det_data:
+                        # The detector's locked embedder type (immutable;
+                        # set at create time): load it so the label-embed /
+                        # score / invalidation paths resolve the concrete
+                        # embedder of that type the active dataset supplies.
+                        # Empty for a legacy detector with neither type nor
+                        # primary → routing falls back to the precedence.
+                        det_ctx.embedder_type = detector_embedder_type_from_data(det_data)
+                        _restore_labels_from_detector(det_data)
+
+                        tracker.check_cancelled()
+                        tracker.update(
+                            "loading",
+                            "Seeding examples…",
+                            0,
+                            0,
+                            step=2,
+                            total_steps=_LOAD_STEPS,
+                        )
+                        _seed_good_votes_from_examples(det_data.get("examples", []))
+
+                        tracker.check_cancelled()
+                        tracker.update(
+                            "loading",
+                            "Embedding labels…",
+                            0,
+                            0,
+                            step=3,
+                            total_steps=_LOAD_STEPS,
+                        )
+
+                        from vtscore.datasets.labelset import LabelSet
+                        from vtscore.detectors.labelset_ops import train_from_labelset
+                        from vtsearch.state import snapshot_medias as _snap_medias
+
+                        labelset = LabelSet.from_dict(det_data.get("labelset") or {})
+                        media_type = det_data.get("media_type", "") or ""
+                        snap = _snap_medias()
+
+                        det_ctx.labelset_good_count = sum(1 for el in labelset.elements if el.label == "good")
+                        det_ctx.labelset_bad_count = sum(1 for el in labelset.elements if el.label == "bad")
+                        # Cache the parsed labelset so before_request's rehydrate
+                        # hook and learned_sort don't re-read the JSON file.
+                        det_ctx.cached_labelset = labelset
+                        det_ctx.cached_labelset_media_type = media_type
+                        try:
+                            det_ctx.cached_labelset_mtime = _detector_path(det_name).stat().st_mtime
+                        except OSError:
+                            det_ctx.cached_labelset_mtime = 0.0
+
+                        def _embed_progress(name: str, done: int, total: int) -> None:
+                            tracker.check_cancelled()
+                            tracker.update(
+                                "loading",
+                                "Embedding labels…",
+                                done,
+                                total,
+                                step=3,
+                                total_steps=_LOAD_STEPS,
+                            )
+
+                        train_from_labelset(
+                            det_ctx,
+                            labelset,
+                            media_type=media_type,
+                            snap=snap,
+                            on_progress=_embed_progress,
+                        )
+
+                # Stamp the dataset whose medias the cid-keyed vote dicts were
+                # derived against, so before_request's rehydrate hook can detect
+                # subsequent dataset switches and re-derive against the new
+                # dataset's medias.
+                det_ctx.votes_dataset_id = thread_ds_ctx.dataset_id
+                add_loaded_detector_id(detector_id)
+                tracker.update("idle", "", 0, 0, step=None, total_steps=None)
+            except CancelledError:
+                from vtsearch.state import unregister_detector_context as _unreg
+
+                _unreg(detector_id)
+                remove_loaded_detector_id(detector_id)
+                tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
+            except Exception as e:
+                import traceback as _tb
+
+                _tb.print_exc()
+                from vtsearch.state import unregister_detector_context as _unreg
+
+                _unreg(detector_id)
+                remove_loaded_detector_id(detector_id)
+                error_msg = str(e) or repr(e) or "Unknown error during detector loading"
+                tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
+    finally:
+        detector_loading_tasks.mark_finished(task_id)
+
+
+def _unload_active_detector() -> dict:
+    """Tear down the active detector context (the ``detector_id=None`` path).
+
+    Used by :func:`load_detector_route` when the caller passes a null/omitted
+    ``detector_id`` to unload without loading another detector. Returns the
+    route's success payload.
+    """
+    from vtscore.detectors.registry import remove_loaded_detector_id
+    from vtsearch.state import get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    prev_id = det_ctx.detector_id if det_ctx.detector_id else None
+    if prev_id:
+        from vtsearch.state import unregister_detector_context
+
+        # Find mode lived on this detector's context (per-detector), so
+        # tearing the context down clears it; no separate global to reset.
+        unregister_detector_context(prev_id)
+        remove_loaded_detector_id(prev_id)
+    return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
+
+
 @detectors_registry_bp.route("/api/detectors/registry/load", methods=["POST"])
 @detectors_registry_bp.arguments(DetectorRegistryLoadRequestSchema)
 @detectors_registry_bp.response(200, DetectorRegistryLoadResponseSchema)
 @detectors_registry_bp.alt_response(403, description="Access denied for the current user.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
-def load_detector_route(body: dict):  # noqa: C901
+def load_detector_route(body: dict):
     """Load a detector into memory and make it active.
 
     Pass ``detector_id=null`` (or omit the field) to unload the active
@@ -360,18 +518,7 @@ def load_detector_route(body: dict):  # noqa: C901
         sync_labels_to_loaded_detector()
 
     if detector_id is None:
-        from vtscore.detectors.registry import remove_loaded_detector_id
-
-        det_ctx = get_active_detector_context()
-        prev_id = det_ctx.detector_id if det_ctx.detector_id else None
-        if prev_id:
-            from vtsearch.state import unregister_detector_context
-
-            # Find mode lived on this detector's context (per-detector), so
-            # tearing the context down clears it; no separate global to reset.
-            unregister_detector_context(prev_id)
-            remove_loaded_detector_id(prev_id)
-        return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
+        return _unload_active_detector()
 
     if is_detector_loaded(detector_id):
         # Detector is already in memory, but its cached label embeddings may
@@ -397,7 +544,7 @@ def load_detector_route(body: dict):  # noqa: C901
                 }
         return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
-    from vtscore.concurrency.progress import CancelledError, detector_loading_tasks
+    from vtscore.concurrency.progress import detector_loading_tasks
 
     det_ctx = DetectorContext(
         detector_id,
@@ -406,9 +553,6 @@ def load_detector_route(body: dict):  # noqa: C901
     )
     register_detector_context(det_ctx)
 
-    _LOAD_STEPS = 3  # restore labels, seed examples, train MLP
-    # MLP training dominates; label restore + example seeding are quick I/O.
-    _LOAD_STEP_WEIGHTS = [0.15, 0.15, 0.70]
     task_id = f"_detload_{detector_id[:8]}"
     tracker = detector_loading_tasks.create_task(
         task_id,
@@ -426,117 +570,14 @@ def load_detector_route(body: dict):  # noqa: C901
     _thread_ds_ctx = get_active_context()
 
     def load_task():
-        from vtscore.detectors.registry import add_loaded_detector_id, remove_loaded_detector_id
-        from vtscore.state.core import thread_dataset_context, thread_detector_context
-
-        try:
-            with thread_dataset_context(_thread_ds_ctx), thread_detector_context(det_ctx):
-                try:
-                    if det_name:
-                        tracker.check_cancelled()
-                        tracker.update(
-                            "loading",
-                            "Restoring labels…",
-                            0,
-                            0,
-                            step=1,
-                            total_steps=_LOAD_STEPS,
-                        )
-                        det_data = _read_detector(_detector_path(det_name))
-                        if det_data:
-                            # The detector's locked embedder type (immutable;
-                            # set at create time): load it so the label-embed /
-                            # score / invalidation paths resolve the concrete
-                            # embedder of that type the active dataset supplies.
-                            # Empty for a legacy detector with neither type nor
-                            # primary → routing falls back to the precedence.
-                            det_ctx.embedder_type = detector_embedder_type_from_data(det_data)
-                            _restore_labels_from_detector(det_data)
-
-                            tracker.check_cancelled()
-                            tracker.update(
-                                "loading",
-                                "Seeding examples…",
-                                0,
-                                0,
-                                step=2,
-                                total_steps=_LOAD_STEPS,
-                            )
-                            _seed_good_votes_from_examples(det_data.get("examples", []))
-
-                            tracker.check_cancelled()
-                            tracker.update(
-                                "loading",
-                                "Embedding labels…",
-                                0,
-                                0,
-                                step=3,
-                                total_steps=_LOAD_STEPS,
-                            )
-
-                            from vtscore.datasets.labelset import LabelSet
-                            from vtscore.detectors.labelset_ops import train_from_labelset
-                            from vtsearch.state import snapshot_medias as _snap_medias
-
-                            labelset = LabelSet.from_dict(det_data.get("labelset") or {})
-                            media_type = det_data.get("media_type", "") or ""
-                            snap = _snap_medias()
-
-                            det_ctx.labelset_good_count = sum(1 for el in labelset.elements if el.label == "good")
-                            det_ctx.labelset_bad_count = sum(1 for el in labelset.elements if el.label == "bad")
-                            # Cache the parsed labelset so before_request's rehydrate
-                            # hook and learned_sort don't re-read the JSON file.
-                            det_ctx.cached_labelset = labelset
-                            det_ctx.cached_labelset_media_type = media_type
-                            try:
-                                det_ctx.cached_labelset_mtime = _detector_path(det_name).stat().st_mtime
-                            except OSError:
-                                det_ctx.cached_labelset_mtime = 0.0
-
-                            def _embed_progress(name: str, done: int, total: int) -> None:
-                                tracker.check_cancelled()
-                                tracker.update(
-                                    "loading",
-                                    "Embedding labels…",
-                                    done,
-                                    total,
-                                    step=3,
-                                    total_steps=_LOAD_STEPS,
-                                )
-
-                            train_from_labelset(
-                                det_ctx,
-                                labelset,
-                                media_type=media_type,
-                                snap=snap,
-                                on_progress=_embed_progress,
-                            )
-
-                    # Stamp the dataset whose medias the cid-keyed vote dicts were
-                    # derived against, so before_request's rehydrate hook can detect
-                    # subsequent dataset switches and re-derive against the new
-                    # dataset's medias.
-                    det_ctx.votes_dataset_id = _thread_ds_ctx.dataset_id
-                    add_loaded_detector_id(detector_id)
-                    tracker.update("idle", "", 0, 0, step=None, total_steps=None)
-                except CancelledError:
-                    from vtsearch.state import unregister_detector_context as _unreg
-
-                    _unreg(detector_id)
-                    remove_loaded_detector_id(detector_id)
-                    tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
-                except Exception as e:
-                    import traceback as _tb
-
-                    _tb.print_exc()
-                    from vtsearch.state import unregister_detector_context as _unreg
-
-                    _unreg(detector_id)
-                    remove_loaded_detector_id(detector_id)
-                    error_msg = str(e) or repr(e) or "Unknown error during detector loading"
-                    tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
-        finally:
-            detector_loading_tasks.mark_finished(task_id)
+        _run_detector_load_task(
+            detector_id=detector_id,
+            det_ctx=det_ctx,
+            thread_ds_ctx=_thread_ds_ctx,
+            det_name=det_name,
+            tracker=tracker,
+            task_id=task_id,
+        )
 
     from vtsearch.threading import spawn
 
