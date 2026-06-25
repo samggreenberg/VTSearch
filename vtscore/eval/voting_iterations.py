@@ -104,6 +104,34 @@ def _good_training_vec(
     return media_embedding(media)
 
 
+def _blend_safe_threshold(
+    threshold: float,
+    model: torch.nn.Sequential,
+    region_aware: bool,
+    sim_clips: dict[int, dict[str, Any]] | None,
+    X_all_clips: Any,
+    n_labels: int,
+) -> float:
+    """Blend *threshold* with a GMM threshold over the simulation set's scores.
+
+    Region-aware datasets score the sim set via region max-pool (matching the
+    test-set scoring); single-vector datasets use the pre-computed whole-image
+    matrix *X_all_clips*.  Kept separate so the per-step loop stays flat.
+    """
+    import torch  # noqa: PLC0415
+
+    if region_aware:
+        from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
+
+        assert sim_clips is not None
+        all_scores = [r["score"] for r in score_media_with_model(model, sim_clips)]
+    else:
+        with torch.no_grad():
+            X_eval = X_all_clips.to(next(model.parameters()).device)
+            all_scores = torch.sigmoid(model(X_eval)).squeeze(1).cpu().tolist()
+    return calculate_safe_threshold(threshold, all_scores, n_labels)
+
+
 def _evaluate_on_test(
     model: torch.nn.Sequential,
     threshold: float,
@@ -239,15 +267,17 @@ def simulate_voting_iterations(
     # Pre-compute embeddings for safe-threshold GMM scoring.  Restrict to the
     # simulation set so the held-out ``test_ids`` never feed into the GMM that
     # picks the threshold - otherwise the test scores leak into calibration
-    # and the reported metrics are biased upward.  Region-aware datasets score
-    # the sim set via region max-pool (built per-step inside the loop) to match
-    # how the test set is scored.
-    if safe_thresholds and not region_aware:
-        gmm_media_ids = sorted(sim_ids)
-        gmm_clip_embs = np.array([media_embedding(clips_dict[cid]) for cid in gmm_media_ids])
-        X_all_clips = torch.tensor(gmm_clip_embs, dtype=torch.float32)
-    elif safe_thresholds:
+    # and the reported metrics are biased upward.  Region-aware datasets keep a
+    # sim-set snapshot and score it per-step via region max-pool (to match how
+    # the test set is scored); single-vector datasets pre-stack whole-image
+    # embeddings once.
+    sim_clips: dict[int, dict[str, Any]] | None = None
+    X_all_clips: Any = None
+    if safe_thresholds and region_aware:
         sim_clips = {cid: clips_dict[cid] for cid in sim_ids}
+    elif safe_thresholds:
+        gmm_clip_embs = np.array([media_embedding(clips_dict[cid]) for cid in sorted(sim_ids)])
+        X_all_clips = torch.tensor(gmm_clip_embs, dtype=torch.float32)
 
     good_votes: dict[int, None] = {}
     bad_votes: dict[int, None] = {}
@@ -294,16 +324,9 @@ def simulate_voting_iterations(
 
         # Apply safe threshold blending if enabled
         if safe_thresholds:
-            if region_aware:
-                from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
-
-                all_scores = [r["score"] for r in score_media_with_model(model, sim_clips)]
-            else:
-                with torch.no_grad():
-                    X_eval = X_all_clips.to(next(model.parameters()).device)
-                    all_scores = torch.sigmoid(model(X_eval)).squeeze(1).cpu().tolist()
-            n_labels = len(good_votes) + len(bad_votes)
-            threshold = calculate_safe_threshold(threshold, all_scores, n_labels)
+            threshold = _blend_safe_threshold(
+                threshold, model, region_aware, sim_clips, X_all_clips, len(good_votes) + len(bad_votes)
+            )
 
         # Evaluate on held-out test set
         metrics = _evaluate_on_test(

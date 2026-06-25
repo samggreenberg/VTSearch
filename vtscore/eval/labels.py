@@ -37,9 +37,7 @@ def media_is_positive(media: dict[str, Any], category: str) -> bool:
     return media.get("category") == category
 
 
-def region_box_for_category(
-    media: dict[str, Any], category: str
-) -> Optional[tuple[float, float, float, float]]:
+def region_box_for_category(media: dict[str, Any], category: str) -> Optional[tuple[float, float, float, float]]:
     """Return the ground-truth region box for *category* on *media*, or ``None``.
 
     Datasets like Visual Genome stamp store-only ground-truth boxes on each
