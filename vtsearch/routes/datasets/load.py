@@ -234,6 +234,7 @@ def import_local_folder():
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
         build_projection=_form_flag(request.form.get("build_projection")),
+        merge_near_duplicates=_form_flag(request.form.get("merge_near_duplicates")),
     )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
@@ -327,6 +328,7 @@ def import_local_files():
         created_by=get_current_user(),
         media_type=_normalize_media_type(media_type),
         build_projection=_form_flag(request.form.get("build_projection")),
+        merge_near_duplicates=_form_flag(request.form.get("merge_near_duplicates")),
     )
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
@@ -380,6 +382,8 @@ def load_demo_dataset_route(body: dict):
         field_values["dataset_name"] = user_dataset_name
     if _form_flag(body.get("build_projection")):
         field_values["build_projection"] = "true"
+    if _form_flag(body.get("merge_near_duplicates")):
+        field_values["merge_near_duplicates"] = "true"
     # Inject media_type so the loading task exposes it to the frontend,
     # allowing the "guessed type" logic to consider in-progress loads.
     _apply_demo_media_type_fields(field_values, converter_name, demo_info)

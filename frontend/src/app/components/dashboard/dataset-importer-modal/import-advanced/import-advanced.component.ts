@@ -109,6 +109,15 @@ export class ImportAdvancedComponent {
   readonly buildProjection = input(false);
   readonly buildProjectionChange = output<boolean>();
 
+  /** Two-way bound "merge near-duplicates" toggle.  When on, the load
+   *  pipeline runs an extra near-duplicate collapse (images + text) after
+   *  exact MD5 dedup: visually/textually near-identical items are merged into
+   *  one representative (the largest copy), keeping every member's provenance
+   *  so exporting one exports the whole set.  Defaults off; lives in Advanced
+   *  because it changes which items appear in the dataset. */
+  readonly mergeNearDuplicates = input(false);
+  readonly mergeNearDuplicatesChange = output<boolean>();
+
   /** Whether the Advanced section is currently expanded.  Local state
    *  per instance; opening Advanced in one flow does not carry over
    *  to another (the user only ever sees one flow at a time). */
@@ -259,5 +268,10 @@ export class ImportAdvancedComponent {
   /** Fired by the projection checkbox on user toggle. */
   onBuildProjectionChange(value: boolean): void {
     this.buildProjectionChange.emit(value);
+  }
+
+  /** Fired by the merge-near-duplicates checkbox on user toggle. */
+  onMergeNearDuplicatesChange(value: boolean): void {
+    this.mergeNearDuplicatesChange.emit(value);
   }
 }

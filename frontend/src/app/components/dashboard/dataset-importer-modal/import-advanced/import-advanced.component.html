@@ -110,4 +110,13 @@
     />
     Build 2-D Browse projection now
   </label>
+  <label class="form-label" for="import-advanced-near-dupes" title="Merge near-duplicate images and text (visually/textually near-identical copies — resizes, recompressions, trivial edits) in addition to exact duplicates. Keeps the largest copy of each group; exporting one member exports the whole group.">
+    <input
+      id="import-advanced-near-dupes"
+      type="checkbox"
+      [ngModel]="mergeNearDuplicates()"
+      (ngModelChange)="onMergeNearDuplicatesChange($event)"
+    />
+    Merge near-duplicates
+  </label>
 }

@@ -14,6 +14,7 @@ from vtscore.embedding.media_vectors import media_embedding
 from vtscore.state import (
     build_diversity_tree_for_context,
     collapse_duplicates,
+    collapse_near_duplicates,
     should_auto_build_diversity_tree,
 )
 
@@ -74,6 +75,33 @@ def _collapse_duplicates_stage(ctx: DatasetContext, tracker) -> None:
 
     _progress(0, 0)
     collapse_duplicates(ctx.medias, on_progress=_progress)
+    invalidate_embedding_matrix(ctx)
+
+
+def _collapse_near_duplicates_stage(ctx: DatasetContext, tracker) -> None:
+    """Opt-in pass: collapse near-duplicate images/text after exact dedup.
+
+    Gated on the transient ``ctx.merge_near_duplicates`` create-time flag
+    (set from the importer modal's "Merge near-duplicates" checkbox).  No-op
+    on every reload path, where the flag defaults off and the grouping is
+    already baked into origins.
+    """
+    if not getattr(ctx, "merge_near_duplicates", False):
+        return
+
+    def _progress(current: int, total: int) -> None:
+        tracker.check_cancelled()
+        tracker.update(
+            "loading",
+            "Merging near-duplicates…",
+            current=current,
+            total=total,
+            step=_TOTAL_LOAD_STEPS,
+            total_steps=_TOTAL_LOAD_STEPS,
+        )
+
+    _progress(0, 0)
+    collapse_near_duplicates(ctx.medias, on_progress=_progress)
     invalidate_embedding_matrix(ctx)
 
 

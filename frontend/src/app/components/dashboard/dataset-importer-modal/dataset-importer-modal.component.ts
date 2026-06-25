@@ -56,6 +56,11 @@ export class DatasetImporterModalComponent implements OnInit {
    *  carries the choice and persists it when the user switches flows).
    *  Defaults off per the opt-in cost tradeoff. */
   buildProjection = false;
+  /** "Merge near-duplicates" toggle, shared across every import flow like
+   *  ``buildProjection``.  When on, the load pipeline collapses near-duplicate
+   *  images/text (not just exact MD5 dupes) into one representative.  Defaults
+   *  off. */
+  mergeNearDuplicates = false;
   readonly submitting = signal(false);
   readonly error = signal('');
   /** Whether the user has manually edited the generic-form dataset_name
@@ -1284,6 +1289,7 @@ export class DatasetImporterModalComponent implements OnInit {
       ...(effClipper ? { clipper: effClipper, clipper_params: { ...this.demoClipperParamValues() } } : {}),
       dataset_name: userName,
       build_projection: this.buildProjection,
+      merge_near_duplicates: this.mergeNearDuplicates,
     } as any);
     this.closed.emit();
   }
@@ -1621,6 +1627,7 @@ export class DatasetImporterModalComponent implements OnInit {
       }
     }
     formData.append('build_projection', this.buildProjection ? 'true' : 'false');
+    formData.append('merge_near_duplicates', this.mergeNearDuplicates ? 'true' : 'false');
   }
 
   // --- Server folder browser ---
@@ -2129,6 +2136,7 @@ export class DatasetImporterModalComponent implements OnInit {
       params['source_specs'] = this.sfSourceSpecs();
     }
     params['build_projection'] = this.buildProjection ? 'true' : 'false';
+    params['merge_near_duplicates'] = this.mergeNearDuplicates ? 'true' : 'false';
 
     this.datasetsCrudApi.runImporter('server_folder', params).subscribe({
       next: () => {
@@ -2212,6 +2220,7 @@ export class DatasetImporterModalComponent implements OnInit {
       submitValues['source_specs'] = this.formSourceSpecs;
     }
     submitValues['build_projection'] = this.buildProjection ? 'true' : 'false';
+    submitValues['merge_near_duplicates'] = this.mergeNearDuplicates ? 'true' : 'false';
 
     // If there's a file field, use loadFile; otherwise runImporter
     const fileField = this.selectedImporter()!.fields?.find((f) => f.field_type === 'file');
