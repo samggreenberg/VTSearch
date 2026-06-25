@@ -112,23 +112,22 @@
                     <div class="loading-task-progress">
                       <div class="progress-context">
                         <div class="progress-header">{{ info.header }}</div>
-                        @if (info.subtitle) {
-                          <div class="progress-subtitle">{{ info.subtitle }}</div>
-                        }
+                        <div class="progress-subtitle">{{ info.subtitle }}</div>
+                      </div>
+                      <!-- Variable text lives on its own reserved-height line so
+                           the bar below keeps a fixed position as the detail/ETA
+                           change between stages. -->
+                      <div class="progress-meta">
+                        <span class="progress-msg">{{ info.detail }}</span>
+                        <span class="progress-eta">{{ info.eta }}</span>
                       </div>
                       <div class="progress-row">
-                        @if (info.detail) {
-                          <span class="progress-msg">{{ info.detail }}</span>
-                        }
                         <vt-progress-bar
                           [value]="taskBar(task).value"
                           [max]="taskBar(task).max"
                           [indeterminate]="taskBar(task).indeterminate"
                           [smooth]="true"
                         />
-                        @if (info.eta) {
-                          <span class="progress-eta">{{ info.eta }}</span>
-                        }
                         <button class="btn btn--cancel btn--sm" (click)="loadingTasksSvc.cancelLoadingTask(task.task_id)" title="Cancel this dataset load">Cancel</button>
                       </div>
                     </div>

@@ -50,12 +50,16 @@
             [value]="sortBar.value"
             [max]="sortBar.max"
           />
-          @if (sortState.sortProgressTotal > 0) {
-            <span class="find-wait-count">{{ sortState.sortProgress | number }} / {{ sortState.sortProgressTotal | number }}</span>
-          }
-          @if (sortEta) {
-            <span class="find-wait-count">{{ sortEta }}</span>
-          }
+          <!-- Reserved-height line so the count/ETA appearing or disappearing
+               doesn't re-center the column and shift the bar above it. -->
+          <span class="find-wait-count">
+            @if (sortState.sortProgressTotal > 0) {
+              {{ sortState.sortProgress | number }} / {{ sortState.sortProgressTotal | number }}
+            }
+            @if (sortEta) {
+              <span class="find-wait-eta">{{ sortEta }}</span>
+            }
+          </span>
           <button class="btn btn--secondary btn--sm" (click)="onSortCancel()">Cancel</button>
         </div>
       </div>
