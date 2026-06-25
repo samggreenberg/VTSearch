@@ -1664,6 +1664,30 @@ export class DatasetImporterModalComponent implements OnInit {
    *  ``sfFolderPath`` for the submit + detection helpers to consume. */
   sfPathInputValue = '';
 
+  /** Called on every keystroke in the absolute-path input.  Commits the
+   *  typed value to ``sfFolderPath`` (so the Import button enables and the
+   *  Dataset Name auto-derives live, without the user having to blur the
+   *  field first) but defers the server-side media-type detection to
+   *  :meth:`sfApplyPathInput` on blur/enter so we don't fire a request per
+   *  keystroke. */
+  sfOnPathInput(value: string): void {
+    this.sfPathInputValue = value;
+    const raw = (value || '').trim();
+    if (!raw) {
+      this.sfFolderPath = '';
+      this.sfBrowseError.set('');
+      this.sfDetection.set(null);
+      if (!this.sfDatasetNameDirty) {
+        this.sfDatasetName = '';
+      }
+      return;
+    }
+    this.sfFolderPath = raw.replace(/\/+$/, '') || '/';
+    if (!this.sfDatasetNameDirty) {
+      this.sfDatasetName = this.sfDerivedDatasetName();
+    }
+  }
+
   /** Apply the value typed into the absolute-path input. The path is not
    *  verified here - the server validates it on submit. */
   sfApplyPathInput(): void {

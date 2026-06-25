@@ -20,7 +20,7 @@
     [selectedDemoName]="selectedDemo?.name || ''"
     (demoSelected)="selectDemo($event)"
     [sfPathInputValue]="sfPathInputValue"
-    (sfPathInputValueChange)="sfPathInputValue = $event"
+    (sfPathInputValueChange)="sfOnPathInput($event)"
     (sfPathApplied)="sfApplyPathInput()"
     [lfPickerKind]="lfPickerKind"
     [lfFiles]="lfFiles"
@@ -136,7 +136,7 @@
             [ngModel]="sfDigArchives"
             (ngModelChange)="sfDigArchives = $event"
           />
-          Dig into archives
+          Include archives' contents
         </label>
       </div>
 
@@ -294,6 +294,22 @@
                 <p class="form-hint">{{ field.hint }}</p>
               }
             }
+          } @else if (field.field_type === 'checkbox') {
+          <div class="form-group">
+            <label class="form-label" [for]="'field-' + field.key"
+              [title]="field.description || field.label || field.key">
+              <input
+                [id]="'field-' + field.key"
+                type="checkbox"
+                [checked]="formValues[field.key] === true || formValues[field.key] === 'true'"
+                (change)="formValues[field.key] = $any($event.target).checked ? 'true' : 'false'"
+              />
+              {{ field.label || field.key }}
+              @if (field.hint) {
+                <vt-field-hint-icon [hint]="field.hint"></vt-field-hint-icon>
+              }
+            </label>
+          </div>
           } @else {
           <div class="form-group">
             <label class="form-label" [for]="'field-' + field.key"
@@ -321,13 +337,6 @@
                 class="form-input"
                 [accept]="field.accept || ''"
                 (change)="onFileSelected($event, field.key)"
-              />
-            } @else if (field.field_type === 'checkbox') {
-              <input
-                [id]="'field-' + field.key"
-                type="checkbox"
-                [checked]="formValues[field.key] === true || formValues[field.key] === 'true'"
-                (change)="formValues[field.key] = $any($event.target).checked ? 'true' : 'false'"
               />
             } @else if (field.field_type === 'select') {
               <select

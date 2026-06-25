@@ -158,7 +158,7 @@ class ServerFolderDatasetImporter(DatasetImporter):
         ),
         PluginField(
             key="dig_archives",
-            label="Dig into archives",
+            label="Include archives' contents",
             field_type="checkbox",
             description=(
                 "When enabled, archives (.zip, .tar, .rar …) found inside the chosen "
