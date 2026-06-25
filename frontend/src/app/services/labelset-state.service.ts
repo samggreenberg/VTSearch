@@ -65,34 +65,50 @@ export class LabelsetStateService implements OnDestroy {
     this.fetch$().subscribe();
   }
 
-  vote(elementId: string, vote: 'good' | 'bad'): void {
+  /**
+   * Apply a clicked Good/Bad direction to a labelset element.
+   *
+   * The click direction is translated into an absolute ``target`` (the
+   * desired end state) before it leaves the client, mirroring the
+   * center-pane media vote: re-clicking an element's current label removes
+   * it, the opposite label flips it. Sending an absolute target keeps
+   * repeated requests from stale tabs idempotent on the server
+   * (logical-bug-audit H1).
+   */
+  vote(elementId: string, clickedDirection: 'good' | 'bad'): void {
     if (!this.modelName) return;
     const name = this.modelName;
-    this.applyOptimisticVote(elementId, vote);
-    this.api.voteLabelElement(name, elementId, vote).subscribe({
+    const target = this.targetFor(elementId, clickedDirection);
+    this.applyOptimisticState(elementId, target);
+    this.api.voteLabelElement(name, elementId, target).subscribe({
       next: () => this.refresh(),
       error: () => this.refresh(),
     });
   }
 
-  /** Optimistic: flip the element's label or remove it on same-vote toggle. */
-  private applyOptimisticVote(elementId: string, vote: 'good' | 'bad'): void {
+  /** Translate a clicked direction into an absolute target by the element's
+   *  current label: same label → ``'remove'``, otherwise the clicked label. */
+  private targetFor(elementId: string, clickedDirection: 'good' | 'bad'): 'good' | 'bad' | 'remove' {
+    const elem = [...this.goodSubject.value, ...this.badSubject.value].find((e) => e.id === elementId);
+    return elem?.label === clickedDirection ? 'remove' : clickedDirection;
+  }
+
+  /** Optimistically move the element to its absolute target state. */
+  private applyOptimisticState(elementId: string, target: 'good' | 'bad' | 'remove'): void {
     const allCurrent = [...this.goodSubject.value, ...this.badSubject.value];
     const elem = allCurrent.find((e) => e.id === elementId);
     if (!elem) return;
 
     const nextGood = this.goodSubject.value.filter((e) => e.id !== elementId);
     const nextBad = this.badSubject.value.filter((e) => e.id !== elementId);
-    if (elem.label === vote) {
-      // Same vote → remove
+    if (target === 'remove') {
       this.goodSubject.next(nextGood);
       this.badSubject.next(nextBad);
       return;
     }
-    // Flip
-    const flipped: DetectorLabelView = { ...elem, label: vote };
-    if (vote === 'good') nextGood.push(flipped);
-    else nextBad.push(flipped);
+    const updated: DetectorLabelView = { ...elem, label: target };
+    if (target === 'good') nextGood.push(updated);
+    else nextBad.push(updated);
     this.goodSubject.next(nextGood);
     this.badSubject.next(nextBad);
   }

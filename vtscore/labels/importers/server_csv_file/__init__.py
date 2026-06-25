@@ -75,7 +75,43 @@ class ServerCsvLabelImporter(LabelImporter):
         )
 
 
-def _parse_csv_bytes(raw: bytes) -> list[dict[str, Any]]:  # noqa: C901
+# Optional columns that enrich resolution (origin_name, filename, category, origin)
+_OPTIONAL_COLS = ("origin_name", "filename", "category")
+
+
+def _row_to_entry(row: dict[str, Any], normalised: dict[str, str]) -> dict[str, Any] | None:
+    """Build a label entry from one CSV *row*, or ``None`` to skip it.
+
+    *normalised* maps lower-cased/stripped header names to the original
+    field names.  A row is skipped (returns ``None``) when its ``md5`` or
+    ``label`` cell is empty.  Present optional columns are copied through,
+    and an ``origin`` cell is parsed as JSON (a non-object or invalid value
+    is ignored).
+    """
+    md5 = row.get(normalised["md5"], "").strip()
+    label = row.get(normalised["label"], "").strip().lower()
+    if not (md5 and label):
+        return None
+    entry: dict[str, Any] = {"md5": md5, "label": label}
+    for col in _OPTIONAL_COLS:
+        if col in normalised:
+            val = row.get(normalised[col], "").strip()
+            if val:
+                entry[col] = val
+    # Parse origin dict from JSON if present
+    if "origin" in normalised:
+        origin_raw = row.get(normalised["origin"], "").strip()
+        if origin_raw:
+            try:
+                origin = json.loads(origin_raw)
+                if isinstance(origin, dict):
+                    entry["origin"] = origin
+            except (json.JSONDecodeError, ValueError):
+                pass
+    return entry
+
+
+def _parse_csv_bytes(raw: bytes) -> list[dict[str, Any]]:
     """Decode *raw* bytes as CSV and extract ``md5``/``label`` pairs."""
     try:
         text = raw.decode("utf-8-sig")  # strip BOM if present
@@ -96,30 +132,10 @@ def _parse_csv_bytes(raw: bytes) -> list[dict[str, Any]]:  # noqa: C901
     if "md5" not in normalised or "label" not in normalised:
         raise ValueError("CSV must have 'md5' and 'label' column headers.")
 
-    # Optional columns that enrich resolution (origin_name, filename, category, origin)
-    optional_cols = ("origin_name", "filename", "category")
-
     results = []
     for row in reader:
-        md5 = row.get(normalised["md5"], "").strip()
-        label = row.get(normalised["label"], "").strip().lower()
-        if md5 and label:
-            entry: dict[str, Any] = {"md5": md5, "label": label}
-            for col in optional_cols:
-                if col in normalised:
-                    val = row.get(normalised[col], "").strip()
-                    if val:
-                        entry[col] = val
-            # Parse origin dict from JSON if present
-            if "origin" in normalised:
-                origin_raw = row.get(normalised["origin"], "").strip()
-                if origin_raw:
-                    try:
-                        origin = json.loads(origin_raw)
-                        if isinstance(origin, dict):
-                            entry["origin"] = origin
-                    except (json.JSONDecodeError, ValueError):
-                        pass
+        entry = _row_to_entry(row, normalised)
+        if entry is not None:
             results.append(entry)
     return results
 

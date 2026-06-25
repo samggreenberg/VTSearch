@@ -3,9 +3,9 @@
 These cover three concerns introduced together so that a detector loaded
 against a different dataset still shows its training labels on the right:
 
-* ``POST /api/detectors/<name>/labels/<id>/vote``; toggle on a
-* ``POST /api/detectors/<name>/labels/<id>/vote`` - toggle on a
-  saved labelset element (origin-keyed, dataset-agnostic).
+* ``POST /api/detectors/<name>/labels/<id>/vote`` - set an absolute
+  ``target`` (``good`` / ``bad`` / ``remove``) on a saved labelset element
+  (origin-keyed, dataset-agnostic), idempotent under stale-tab repeats.
 * ``sync_labels_to_loaded_detector`` is now non-destructive across datasets:
   a vote in dataset B no longer wipes labels saved from dataset A.
 """
@@ -188,11 +188,11 @@ class TestLabelElementVote:
     def test_flip_label(self, client):
         _seed_cross_dataset_model()
         detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
-        target = detail["good"][0]
+        elem = detail["good"][0]
 
         res = client.post(
-            f"/api/detectors/cross-ds-model/labels/{target['id']}/vote",
-            json={"vote": "bad"},
+            f"/api/detectors/cross-ds-model/labels/{elem['id']}/vote",
+            json={"target": "bad"},
         )
         assert res.status_code == 200
         assert res.get_json()["action"] == "flipped"
@@ -200,16 +200,16 @@ class TestLabelElementVote:
         after = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         assert len(after["good"]) == 1
         assert len(after["bad"]) == 2
-        assert any(e["id"] == target["id"] for e in after["bad"])
+        assert any(e["id"] == elem["id"] for e in after["bad"])
 
-    def test_same_vote_removes_element(self, client):
+    def test_remove_target_removes_element(self, client):
         _seed_cross_dataset_model()
         detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
-        target = detail["good"][0]
+        elem = detail["good"][0]
 
         res = client.post(
-            f"/api/detectors/cross-ds-model/labels/{target['id']}/vote",
-            json={"vote": "good"},
+            f"/api/detectors/cross-ds-model/labels/{elem['id']}/vote",
+            json={"target": "remove"},
         )
         assert res.status_code == 200
         assert res.get_json()["action"] == "removed"
@@ -217,27 +217,48 @@ class TestLabelElementVote:
         after = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
         assert len(after["good"]) == 1
         assert len(after["bad"]) == 1
-        assert not any(e["id"] == target["id"] for e in after["good"] + after["bad"])
+        assert not any(e["id"] == elem["id"] for e in after["good"] + after["bad"])
+
+    def test_reassert_current_label_is_idempotent_noop(self, client):
+        """H1: target == current label leaves the element in place.
+
+        A stale tab re-asserting an element's existing label must not flip it
+        off the labelset (the toggle bug the absolute-target migration closed).
+        """
+        _seed_cross_dataset_model()
+        detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
+        elem = detail["good"][0]
+
+        res = client.post(
+            f"/api/detectors/cross-ds-model/labels/{elem['id']}/vote",
+            json={"target": "good"},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["action"] == "unchanged"
+
+        after = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
+        assert len(after["good"]) == 2
+        assert any(e["id"] == elem["id"] for e in after["good"])
 
     def test_unknown_id_404(self, client):
         _seed_cross_dataset_model()
         res = client.post(
             "/api/detectors/cross-ds-model/labels/deadbeef/vote",
-            json={"vote": "good"},
+            json={"target": "good"},
         )
         assert res.status_code == 404
 
-    def test_invalid_vote_value_422(self, client):
+    def test_invalid_target_value_422(self, client):
         _seed_cross_dataset_model()
         detail = client.get("/api/detectors/cross-ds-model/labels-detail").get_json()
-        target = detail["good"][0]
+        elem = detail["good"][0]
         res = client.post(
-            f"/api/detectors/cross-ds-model/labels/{target['id']}/vote",
-            json={"vote": "maybe"},
+            f"/api/detectors/cross-ds-model/labels/{elem['id']}/vote",
+            json={"target": "maybe"},
         )
         # Schema-level OneOf validation → 422 with the standard errors envelope.
         assert res.status_code == 422
-        assert "vote" in res.get_json()["errors"]["json"]
+        assert "target" in res.get_json()["errors"]["json"]
 
 
 # ---------------------------------------------------------------------------

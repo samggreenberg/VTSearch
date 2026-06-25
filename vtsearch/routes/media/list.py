@@ -64,6 +64,15 @@ medias_bp = Blueprint(
 # Extensions the browser's <video> element can play natively.
 _BROWSER_VIDEO_EXTS = {".mp4", ".m4v", ".webm", ".ogg", ".ogv"}
 
+# Image filename extension -> served mimetype. Unlisted extensions fall back to
+# ``image/jpeg`` (see :func:`_resolve_display_image`).
+_MIMETYPE_BY_EXT = {
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+}
+
 
 def _parse_region_box(raw: Any) -> tuple[float, float, float, float] | None:
     """Validate a ``region_box`` field from a vote request body.
@@ -445,7 +454,7 @@ def media_video(media_id: int):
     return _send_video_bytes(media_bytes, mimetype, f"media_{media_id}{ext}")
 
 
-def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:  # noqa: C901
+def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
     """Resolve the displayable image for a media item.
 
     Returns ``(image_bytes, mimetype, download_name)`` for the bytes the
@@ -482,18 +491,10 @@ def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:  # noqa: C9
 
     # Determine mimetype based on filename extension
     filename = c.get("filename", "")
-    if filename.endswith(".png"):
-        mimetype = "image/png"
-    elif filename.endswith(".gif"):
-        mimetype = "image/gif"
-    elif filename.endswith(".webp"):
-        mimetype = "image/webp"
-    elif filename.endswith(".bmp"):
-        mimetype = "image/bmp"
-    else:
-        mimetype = "image/jpeg"
+    suffix = Path(filename).suffix if filename and Path(filename).suffix else ""
+    mimetype = _MIMETYPE_BY_EXT.get(suffix, "image/jpeg")
 
-    suffix = Path(filename).suffix if filename and Path(filename).suffix else ".jpg"
+    suffix = suffix or ".jpg"
     return media_bytes, mimetype, f"media_{media_id}{suffix}"
 
 

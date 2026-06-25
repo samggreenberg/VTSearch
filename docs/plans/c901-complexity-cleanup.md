@@ -1,6 +1,6 @@
 # C901 complexity-marker cleanup
 
-**Status:** First pass shipped (stale-marker removal + the McCabe ≥16 tier refactored). Remaining refactor candidates deferred; see Open follow-ups.
+**Status:** Complete (2026-06-25). First pass (stale-marker removal + the McCabe ≥16 tier) and the deferred refactor tier are both shipped. Every audited *refactorable* function now passes McCabe ≤10 with its `# noqa: C901` removed; the only markers left are the **justified-intrinsic** set below. No open follow-ups.
 
 ## Background
 
@@ -60,23 +60,28 @@ aggregated `def`s sharing captured state (`_make_per_side_setting`,
 `intercept_tqdm_progress`, `stream_progress_events`, `_resolve_context`,
 `_transcode_to_mp4`, `media_type.load_demo_source`).
 
-## Open follow-ups
+## Second pass — shipped (2026-06-25)
 
-Refactorable but deferred (the audit found a clean extraction for each; not done in
-this pass). Each drops under 10 with the named helper:
+The deferred tier below is now refactored. Each function dropped under McCabe 10
+behaviour-preservingly and lost its `# noqa: C901`. Most took the single
+extraction the audit predicted; three needed a second cohesive block (noted),
+and one lived at a different path than the original table guessed (corrected).
 
-| Function | McCabe | Suggested extraction |
+| Function | McCabe → | Helper(s) extracted |
 |---|---|---|
-| `media/list._resolve_display_image` | 11 | `_MIMETYPE_BY_EXT` dict lookup |
-| `converters/video2image.convert` | 14 | `_compute_n_frames(...)` |
-| `concurrency/progress.list_tasks` | 14 | `_build_snapshot(task_id, entry)` (de-dup branches) |
-| `detectors/labeling_progress._ensure_cache` | 11 | `_resolve_step_model(...)` |
-| `detectors/labeling_progress._eval_cached_models` | 14 | `_score_step(...)` |
-| `detectors/label_restoration.restore_labels_from_detector` | 15 | `_resolve_unmatched(...)` |
-| `detectors/media_seeding.seed_good_votes_from_examples` | 14 | `_ensure_embedder(...)` |
-| `routes/labels/vote.fill_labels_from_sort` | 15 | `_partition_candidates(...)` |
-| `labels/importers/server_csv_file._parse_csv_bytes` | 13 | `_row_to_entry(...)` |
-| `datasets/stages/clipper._apply_clipper` | 12 | `_stamp_default_clipper(...)` |
-| `datasets/stages/clipper._regenerate_clip_thumbnails` | 14 | `_thumb_for(clip, media_type)` over one loop |
-| `downloader/images.download_caltech101` | 14 | `_extract_members(...)` |
-| `media/image/clipper.clip` | 14 | `_box_from_detection(det, w, h)` |
+| `routes/media/list._resolve_display_image` (was listed under `media/list`) | 11 → ≤10 | module-level `_MIMETYPE_BY_EXT` dict + `.get(suffix, "image/jpeg")` lookup |
+| `converters/video2image.convert` | 14 → ≤10 | `_compute_n_frames(...)` **+** `_resolve_frame_params(...)` (second block) |
+| `concurrency/progress.list_tasks` | 14 → ≤10 | `_build_snapshot(task_id, entry)` |
+| `detectors/labeling_progress._ensure_cache` | 11 → ≤10 | `_resolve_step_model(...)` |
+| `detectors/labeling_progress._eval_cached_models` | 14 → ≤10 | `_score_step(...)` **+** `_build_eval_set(...)` (second block) |
+| `detectors/label_restoration.restore_labels_from_detector` | 15 → ≤10 | `_resolve_unmatched(...)` |
+| `detectors/media_seeding.seed_good_votes_from_examples` | 14 → ≤10 | `_ensure_embedder(...)` |
+| `routes/labels/vote.fill_labels_from_sort` | 15 → 7 | `_partition_candidates(...)` |
+| `labels/importers/server_csv_file._parse_csv_bytes` | 13 → 6 | `_row_to_entry(...)` + module-level `_OPTIONAL_COLS` |
+| `datasets/stages/clipper._apply_clipper` | 12 → 7 | `_stamp_default_clipper(...)` |
+| `datasets/stages/clipper._regenerate_clip_thumbnails` | 14 → 4 | `_thumb_for(clip, media_type)` (two media-type loops collapse to one) |
+| `downloader/images.download_caltech101` | 14 → 10 | `_extract_members(..., start=...)` (preserves both passes' progress cadence) |
+| `media/image/clipper.clip` (`ImageFaceClipper`) | 14 → ≤10 | `_box_from_detection(det, w, h)` |
+
+The remaining `# noqa: C901` markers (e.g. `clipper._fixup_clip_md5_and_embeddings`,
+`media_type._transcode_to_mp4`) are in the **Justified** set above and stay flagged.
