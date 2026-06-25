@@ -100,6 +100,7 @@ def register_detector(
     media_example: str = "",
     created_by: str = "default",
     embedder: str = "",
+    embedder_type: str = "",
     readers: list[str] | None = None,
 ) -> dict[str, Any]:
     """Add a new detector to the registry and persist.
@@ -118,6 +119,9 @@ def register_detector(
             (see :func:`record_detector_embedder`).  Read by the smart
             preload predictor so the right model is warmed at startup
             instead of the media type's default.
+        embedder_type: The detector's locked embedder *type* ("semantic" /
+            "patch_semantic" / "structural"), resolved at create time.  Drives
+            detector/dataset compatibility gating without loading the detector.
 
     Returns:
         The newly created entry dict.
@@ -134,6 +138,7 @@ def register_detector(
         "created_by": created_by,
         "created_at": time.time(),
         "embedder": embedder,
+        "embedder_type": embedder_type,
         # Access list (mirrors datasets): usernames allowed to see/load this
         # detector besides the creator. Empty = private to the creator;
         # ``["*"]`` = visible to everyone. See ``can_user_access_detector``.

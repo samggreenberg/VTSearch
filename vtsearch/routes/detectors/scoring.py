@@ -44,6 +44,46 @@ detector_scoring_bp = Blueprint(
 _HEAVYWEIGHT_KEYS = ("embedding", "media_bytes", "media_string", "thumbnail_bytes")
 
 
+def _detector_type(det_data: dict | None) -> str:
+    """The locked embedder type of a detector JSON (legacy-migrated)."""
+    from vtscore.detectors.embedder_type import detector_embedder_type_from_data  # noqa: PLC0415
+
+    return detector_embedder_type_from_data(det_data or {})
+
+
+def _dataset_bound_embedders(snap: dict) -> list[str]:
+    """The embedder names the active snap binds (keys of the first media's vectors)."""
+    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
+
+    return media_embedder_names(next(iter(snap.values()), {})) if snap else []
+
+
+def _dataset_supplies_detector_type(det_data: dict | None, snap: dict) -> bool:
+    """Whether the active snap binds an embedder of the detector's locked type.
+
+    A detector scores its labels in the concrete embedder of its locked type the
+    active dataset supplies; when the dataset binds no embedder of that type the
+    labels would re-embed in a foreign space (garbage scores), so the pair is
+    incompatible.  A legacy/typeless detector is always compatible (resolved at
+    first train via the score precedence).
+    """
+    from vtscore.embedding.binding import detector_dataset_compatible  # noqa: PLC0415
+
+    return detector_dataset_compatible(_detector_type(det_data), _dataset_bound_embedders(snap))
+
+
+def _type_incompatible_message(det_data: dict | None) -> str:
+    """Human-facing 409 message for a type-incompatible detector/dataset pair."""
+    from vtscore.embedding.binding import EMBEDDER_TYPE_LABELS  # noqa: PLC0415
+
+    det_type = _detector_type(det_data)
+    label = EMBEDDER_TYPE_LABELS.get(det_type, det_type or "compatible")
+    return (
+        f"This detector scores in a {label} embedder space, which the active "
+        "dataset doesn't provide. Load a dataset that binds a matching embedder type."
+    )
+
+
 def _media_info_for_response(media: dict) -> dict:
     """Return a copy of *media* without heavyweight fields."""
     return {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
@@ -108,6 +148,12 @@ def find_label(body: dict):  # noqa: C901
     det_path = _detector_path(d["name"])
     det_data = _read_detector(det_path)
 
+    # Type gate: the active dataset must bind an embedder of the detector's
+    # locked type before we spend a train/score in the wrong space.
+    if not _dataset_supplies_detector_type(det_data, snap):
+        update_find_progress("idle", "")
+        abort(409, message=_type_incompatible_message(det_data))
+
     mlp, threshold, diagnostic = resolve_or_train_detector(
         detector_id,
         det_data,
@@ -170,12 +216,11 @@ def find_label(body: dict):  # noqa: C901
     from vtscore.detectors.training import score_media_with_model
     from vtscore.embedding.binding import keying_embedder_for_snap
 
-    # Score in the same space the MLP was trained in: the detector's chosen
-    # primary when this dataset supplies it, else the dataset score precedence
-    # (keying_embedder_for_snap) - matching resolve_or_train_detector's cold
-    # path and the learned-sort cache-space marker.
-    primary = (det_data or {}).get("primary_embedder", "") or ""
-    score_emb = keying_embedder_for_snap(SimpleNamespace(primary_embedder=primary), snap)
+    # Score in the same space the MLP was trained in: the concrete embedder of
+    # the detector's locked type this dataset supplies, else the dataset score
+    # precedence (keying_embedder_for_snap) - matching resolve_or_train_detector's
+    # cold path and the learned-sort cache-space marker.
+    score_emb = keying_embedder_for_snap(SimpleNamespace(embedder_type=_detector_type(det_data)), snap)
     results = score_media_with_model(mlp, snap, embedder_name=score_emb or None)
     update_find_progress(
         "running",
@@ -625,15 +670,32 @@ def auto_detect(body: dict):
             )
         abort(400, message=f"No Auto-Find detectors found for media type: {media_type}")
 
+    # Type gate: drop Auto-Find detectors whose locked embedder type the active
+    # dataset can't supply - scoring their labels in a foreign space would be
+    # garbage.  (A legacy/typeless detector stays, resolved via the precedence.)
+    detectors_to_run = [
+        (dname, ddata, entry)
+        for (dname, ddata, entry) in detectors_to_run
+        if _dataset_supplies_detector_type(ddata, snap)
+    ]
+    if not detectors_to_run:
+        abort(
+            400,
+            message=(
+                "No Auto-Find detectors are compatible with the active dataset's "
+                "embedder types."
+            ),
+        )
+
     from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
     from vtscore.state.core import get_active_context  # noqa: PLC0415
 
-    # Each detector scores in its own primary embedder space, so build one
-    # matrix per distinct embedder the Auto-Find detectors call for (collapsing
-    # to a single shared matrix on the common single-embedder dataset, where
-    # every primary resolves to the same name).  A detector whose chosen primary
-    # this dataset can't supply (or a legacy detector) falls back to the dataset
-    # score precedence, matching resolve_or_train_detector's cold-train space.
+    # Each detector scores in the concrete embedder of its locked type, so build
+    # one matrix per distinct embedder the Auto-Find detectors call for
+    # (collapsing to a single shared matrix on the common single-embedder
+    # dataset, where every type resolves to the same name).  A legacy/typeless
+    # detector falls back to the dataset score precedence, matching
+    # resolve_or_train_detector's cold-train space.
     from types import SimpleNamespace  # noqa: PLC0415
 
     from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
@@ -641,8 +703,7 @@ def auto_detect(body: dict):
     default_score = get_active_context().routed_embedder("score")
     det_embedders: dict[str, str | None] = {}
     for dname, ddata, _entry in detectors_to_run:
-        primary = (ddata.get("primary_embedder", "") or "") if ddata else ""
-        keyed = keying_embedder_for_snap(SimpleNamespace(primary_embedder=primary), snap)
+        keyed = keying_embedder_for_snap(SimpleNamespace(embedder_type=_detector_type(ddata)), snap)
         det_embedders[dname] = keyed or default_score
     matrices: dict[str | None, tuple[list[int], Any]] = {}
     for emb in set(det_embedders.values()):

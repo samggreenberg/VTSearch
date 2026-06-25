@@ -109,10 +109,12 @@ class _DetectorSummarySchema(Schema):
     examples = fields.List(fields.Dict())
     num_labels = fields.Integer(required=True)
     created_at = fields.Float(required=True)
-    # The detector's primary embedder (the vector space it trains/scores in),
-    # chosen at create time.  Empty for a legacy detector (resolved at first
-    # train).  See patch-embedder.md → "Per-detector primary embedder".
-    primary_embedder = fields.String()
+    # The detector's locked embedder type (the *kind* of vector space it
+    # trains/scores in): "semantic" / "patch_semantic" / "structural".  Chosen at
+    # create time, immutable.  Empty for a legacy detector that has neither a
+    # type nor a (migratable) primary name.  See patch-embedder.md →
+    # "Per-detector embedder type".
+    embedder_type = fields.String()
 
 
 class DetectorsListResponseSchema(Schema):
@@ -142,7 +144,7 @@ class DetectorDetailSchema(Schema):
     media_type = fields.String()
     examples = fields.List(fields.Dict())
     created_at = fields.Float()
-    primary_embedder = fields.String()
+    embedder_type = fields.String()
     labelset = fields.Nested(_LabelSetSchema)
     combined_from = fields.List(fields.String())
 
@@ -166,11 +168,11 @@ class DetectorCreateRequestSchema(Schema):
     text_query = fields.String(load_default="")
     media_example = fields.String(load_default="")
     examples = fields.List(fields.Dict(), load_default=None, allow_none=True)
-    # The detector's primary embedder (its scoring vector space).  Empty lets
-    # the server pick: the sole embedder on a single-embedder dataset, or a 400
-    # on a multi-embedder dataset (the client must choose).  A concrete name is
-    # validated against the active dataset's bound embedders.
-    primary_embedder = fields.String(load_default="")
+    # The detector's locked embedder type ("semantic" / "patch_semantic" /
+    # "structural").  Empty lets the server pick: the sole type a
+    # single-type dataset supplies, or a 400 on a multi-type dataset (the client
+    # must choose).  A concrete embedder name is also accepted and classified.
+    embedder_type = fields.String(load_default="")
 
 
 class DetectorCreateResponseSchema(Schema):
@@ -297,10 +299,11 @@ class DetectorRegistryEntrySchema(Schema):
     # load the detector.  Loaded contexts override the persisted value
     # when present.  Empty string for detectors that have never trained.
     embedder = fields.String()
-    # The detector's per-detector primary embedder (its scoring vector space),
-    # chosen at create time and persisted on the detector JSON.  See
-    # patch-embedder.md → "Per-detector primary embedder".
-    primary_embedder = fields.String()
+    # The detector's locked embedder type ("semantic" / "patch_semantic" /
+    # "structural"), chosen at create time.  Drives the dashboard's
+    # type-based detector/dataset compatibility gate.  See patch-embedder.md →
+    # "Per-detector embedder type".
+    embedder_type = fields.String()
 
     class Meta:
         # Registry entries may carry extension keys (e.g. future per-row
@@ -328,11 +331,12 @@ class DetectorRegistryCreateRequestSchema(Schema):
     media_example = fields.String(load_default="")
     trainable = fields.Boolean(load_default=False)
     examples = fields.List(fields.Dict(), load_default=None, allow_none=True)
-    # The detector's primary embedder (its scoring vector space).  Empty lets
-    # the server pick (sole embedder on a single-embedder dataset, else 400 on a
-    # multi-embedder dataset).  Validated against the active dataset's bound
-    # embedders.  See patch-embedder.md → "Per-detector primary embedder".
-    primary_embedder = fields.String(load_default="")
+    # The detector's locked embedder type ("semantic" / "patch_semantic" /
+    # "structural").  Empty lets the server pick (sole type a single-type
+    # dataset supplies, else 400 on a multi-type dataset).  A concrete embedder
+    # name is also accepted and classified.  See patch-embedder.md →
+    # "Per-detector embedder type".
+    embedder_type = fields.String(load_default="")
 
 
 class DetectorRegistryCreateResponseSchema(Schema):
@@ -479,6 +483,10 @@ class DetectorRegistryStatsResponseSchema(Schema):
     num_positive_resolved = fields.Integer(required=True)
     active_dataset_name = fields.String(required=True)
     embedder = fields.String(required=True)
+    # The detector's locked embedder type ("semantic" / "patch_semantic" /
+    # "structural"); ``""`` for a legacy detector with neither type nor a
+    # migratable primary name.
+    embedder_type = fields.String(required=True)
     text_query = fields.String(required=True)
     media_example = fields.String(required=True)
     clipper = fields.String(required=True)

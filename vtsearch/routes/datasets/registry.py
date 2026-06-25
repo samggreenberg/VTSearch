@@ -103,6 +103,14 @@ def list_registered_datasets():
         entry.setdefault("num_dupes", 0)
         entry.setdefault("embedder", "")
         entry.setdefault("readers", [])
+        # The embedder types this dataset supplies, for the detector/dataset
+        # compatibility gate.  Fall back to classifying the single primary
+        # embedder for legacy entries registered before the field existed.
+        if not entry.get("embedder_types"):
+            from vtscore.embedding.binding import embedder_type
+
+            t = embedder_type(entry.get("embedder", ""))
+            entry["embedder_types"] = [t] if t else []
         # Resolve clipper name to display name; default clippers show as "-"
         raw_clipper = entry.get("clipper", "")
         if raw_clipper:

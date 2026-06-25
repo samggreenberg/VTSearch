@@ -79,19 +79,19 @@ def resolve_or_train_detector(  # noqa: C901
     from vtscore.detectors.resolver import resolve_label_embeddings
     from vtscore.detectors.training import train_and_threshold
 
-    # The space to cold-train the MLP in: the detector's chosen primary when
-    # this snap supplies it, else the dataset score precedence (the legacy /
-    # cross-dataset-portability fallback).  Both the in-snap vectors and the
-    # origin-resolved label vectors are read/embedded in this one space so the
-    # cold-trained MLP never mixes embedder outputs.  ``keying_embedder_for_snap``
-    # is fed a throwaway carrier for the detector's primary because an unloaded
-    # detector has no live context.
+    # The space to cold-train the MLP in: the concrete embedder of the
+    # detector's locked type that this snap supplies, else the dataset score
+    # precedence (the legacy / cross-dataset-portability fallback).  Both the
+    # in-snap vectors and the origin-resolved label vectors are read/embedded in
+    # this one space so the cold-trained MLP never mixes embedder outputs.
+    # ``keying_embedder_for_snap`` is fed a throwaway carrier for the detector's
+    # type because an unloaded detector has no live context.
     from types import SimpleNamespace  # noqa: PLC0415
 
     from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
 
-    primary = (det_data.get("primary_embedder", "") or "") if det_data else ""
-    cold_embedder = keying_embedder_for_snap(SimpleNamespace(primary_embedder=primary), snap)
+    det_type = (det_data.get("embedder_type", "") or "") if det_data else ""
+    cold_embedder = keying_embedder_for_snap(SimpleNamespace(embedder_type=det_type), snap)
 
     X_list: list = []
     y_list: list[float] = []

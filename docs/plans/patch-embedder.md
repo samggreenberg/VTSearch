@@ -969,13 +969,30 @@ dataset-level score precedence for detector operations) — see
   in "Loader / exporter / importer impact" lands with the create-time
   multi-embed path that would populate it.
 
-## Per-detector primary embedder (design)
+## Per-detector embedder type (design)
 
-**Status: SHIPPED.** Each detector picks one primary embedder at create time
-and trains/scores in that space, overriding the *dataset-level* score
-precedence that shipped in V3 (Phases 2b.4 / 2b.5 / 2d) for **detector**
-operations.  See "What shipped" and "Open follow-ups" at the end of this
-section for the close-out and the deliberate deviation from the design below.
+**Status: SHIPPED, then revised to a *type* lock.** Each detector locks one
+embedder **type** at create time — `semantic` / `patch_semantic` / `structural`
+(the buckets of `vtscore/embedding/binding.py::embedder_type`) — and
+trains/scores in whichever *concrete* embedder of that type the active dataset
+binds, overriding the *dataset-level* score precedence that shipped in V3
+(Phases 2b.4 / 2b.5 / 2d) for **detector** operations.
+
+> **Revision (type, not name).** This section was first written and shipped
+> with each detector locking a concrete primary embedder **name** (`siglip`,
+> `dinov3_patch`) and a compatibility rule of *exact-name match*. That was the
+> wrong granularity: a detector's persisted artifact is its labels/votes (and,
+> for patch detectors, normalized region boxes), and the "No Persisted Vectors
+> or MLPs" rule re-derives the MLP against whatever embedder the active dataset
+> supplies — so the labels are portable across any embedder of the **same
+> type** (SigLIP↔CLIP, DinoV2↔DinoV3). The shipped behavior now locks the
+> **type** and gates compatibility on *same-type*, not same-name. Read the
+> name-based prose below as the original motivation; the **What shipped /
+> Open follow-ups** close-out at the end of this section is authoritative for
+> current behavior.
+
+See "What shipped" and "Open follow-ups" at the end of this section for the
+close-out and the deviations from the name-based design below.
 
 ### Motivation
 
@@ -1265,12 +1282,48 @@ unchanged (their `primary_embedder` is empty → pure precedence).
   already tracked under "Open follow-ups (from 2b.4)").  Correct for every
   single-embedder dataset; wire to the detector primary when cross-dataset Find
   over a real multi-embedder dataset is exercised.
-- **Per-detector diversity tree** and **changing a detector's primary after
+- **Per-detector diversity tree** and **changing a detector's type after
   creation** remain out of scope (see "Out of scope / open questions" above).
+
+### What shipped — revised to embedder *type* (authoritative)
+
+The name-based "What shipped" prose above describes the **original** design.
+The current, shipped behavior locks an embedder **type**, not a name:
+
+- **Taxonomy.** `vtscore/embedding/binding.py::embedder_type(name)` classifies
+  every embedder into exactly one of three buckets, precedence
+  `structural ▸ patch_semantic ▸ semantic`: `structural` =
+  `supports_geometric_verification` (sift_vlad); `patch_semantic` =
+  `supports_patch_regions` (dinov2/3_patch, eupe_patch, face); `semantic` =
+  every global single-vector embedder (siglip, clip, clap, e5, dinov2_single,
+  ast, …), text-capable or not. The buckets partition the registry (no embedder
+  sets more than one flag). `dataset_supplied_types`, `embedder_of_type`, and
+  `detector_dataset_compatible` build on it.
+- **Persisted form.** The detector JSON carries `embedder_type` (one of the
+  three), not a concrete name. `DetectorContext.embedder_type` is the immutable
+  lock; `DetectorContext.embedder` stays the adaptive concrete cache marker.
+  Legacy detectors with a `primary_embedder` name are migration-read via
+  `detector_embedder_type_from_data` (classify the old name → type).
+- **Resolution at create.** `resolve_detector_embedder_type` validates/auto-
+  selects against the *types the active dataset supplies*: one type →
+  auto-select; multiple → the client must choose (400 listing the options);
+  none / no dataset → empty (resolved at first train). The new-detector modal's
+  picker is now a **Detector Embedder Type** dropdown, shown only when the
+  dataset supplies more than one type.
+- **Compatibility gate (the substantive change).** A detector is compatible
+  with a dataset iff same `media_type` **and** the dataset binds an embedder of
+  the detector's type. Find-label refuses an incompatible pair (409); Auto-Find
+  silently skips incompatible detectors. `keying_embedder_for_snap` resolves the
+  concrete embedder of the detector's type the dataset supplies, so switching
+  between two datasets of the same type re-derives the MLP in the new space
+  (SigLIP→CLIP; DinoV2→DinoV3, with region boxes re-pooled against the new grid
+  by the existing `box_to_vote_vector`). The frontend gates the same pairs via
+  `embedder_types` on the dataset registry entry and `embedder_type` on the
+  detector entry (`utils/context-compat.ts`).
 
 ## Phasing
 
 - **v1 (this plan):** six image embedders - single/patch pairs for DINOv2 (ungated default), DINOv3 (gated, premium), and real-EUPE (FAIR Noncommercial). `supports_patch_regions` + `license_notice` flags on `MediaEmbedder`; each `_patch` embedder populates `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw H × W × 768 fp16); the matching `_single` slug provides a fast/cheap CLS-only path on the same backbone for datasets that don't need region search. `PatchEmbedOutput` protocol; max-region similarity; region-aware MLP scoring; asymmetric training loss (Good = `BCE(mlp(full_image_vec), 1)` unchanged from today, Bad = `mean`-over-regions BCE) with image-level labels unchanged on disk; gallery-card region highlight; license-notice surfacing on the embedder picker. Text sort stays grey via the already-shipped `supports_text` gate. Pre-implementation experiments run on `caltech101_s` and inform `K`, `α`, and the EUPE-real attention path.
 - **v2:** region voting on image media via Shift-drag on the focus pane (single rectangular box, salient-area annotation on yes-votes only; binary fast path via `←`/`→` preserved); on-the-fly vote-vector computation from the v1-pickled `patch_grid` (no re-import needed); optional `LabeledElement.region_box`; region-level training examples; per-region label export. Touch deferred.
 - **v3:** the **text / patch / structural trio** - up to one embedder per role bound on a single dataset (text queries → text embedder; region similarity / votes → patch embedder; instance retrieval + geometric re-rank → structural embedder), at least one slot filled.  Schema change to dict-keyed `media["embeddings"]` (one vector per bound embedder); `patch_regions` / `patch_grid` / `local_features` stay single-valued (one patch + one structural slot); legacy `media["embedding"]` is read-migrated then dropped on next save; MLPs become keyed by `(detector, dataset, embedder)` against the score embedder (structural ▸ patch ▸ text).  Designed in "V3 - design" above; **shipped** end-to-end (substrate Phases 2a–2b.5, the structural binding slot + routing in Phase 2d, and the additive create-time trio picker in Phase 3 — see "V3 - implementation status"; the picker deviated to an additive design, documented there).
-- **per-detector primary embedder (SHIPPED):** moves the scoring-space choice from the dataset (the V3 score precedence structural ▸ patch ▸ text) to the **detector** - each detector picks one `primary_embedder` at create time and trains/scores in that space, so different detectors on one multi-embedder dataset can use different spaces; text sort stays on the dataset text slot. Persisted as a name on the detector JSON (no vectors/MLPs persisted); legacy detectors fall back to the precedence-resolved space. All detector-scoped routing funnels through `keying_embedder_for_snap` (primary when the dataset supplies it, else precedence), so single-embedder datasets stay byte-for-byte unchanged. Shipped with a separate immutable `DetectorContext.primary_embedder` field (deviation from the design's "reuse `DetectorContext.embedder`", to preserve cross-embedder portability) - see "Per-detector primary embedder (design)" → "What shipped" / "Open follow-ups".
+- **per-detector embedder type (SHIPPED):** moves the scoring-space choice from the dataset (the V3 score precedence structural ▸ patch ▸ text) to the **detector** - each detector locks one embedder **type** (`semantic` / `patch_semantic` / `structural`) at create time and trains/scores in whichever concrete embedder of that type the active dataset binds, so different detectors on one multi-embedder dataset can use different spaces and a detector's labels are portable across same-type datasets (SigLIP↔CLIP, DinoV2↔DinoV3); text sort stays on the dataset text slot. Persisted as a type on the detector JSON (no vectors/MLPs persisted); legacy detectors migration-read their old `primary_embedder` name into a type, else fall back to the precedence-resolved space. All detector-scoped routing funnels through `keying_embedder_for_snap` (the dataset's concrete embedder of the detector's type, else precedence), so single-embedder datasets stay byte-for-byte unchanged. Compatibility gates on *same type* (find-label 409s, Auto-Find skips, frontend greys) - see "Per-detector embedder type (design)" → "What shipped — revised to embedder type" / "Open follow-ups". (First shipped as a per-detector primary *name*, then revised to a type lock.)
