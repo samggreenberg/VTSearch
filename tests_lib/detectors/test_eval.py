@@ -599,3 +599,92 @@ class TestEvalMultiLabel:
         results = eval_learned_sort(medias, [EvalQuery("an apple", "apple")], seed=42)
         assert len(results) == 1
         assert results[0].f1 > 0.7  # generous threshold for small synthetic data
+
+
+class TestRegionBoxForCategory:
+    """Ground-truth box lookup that feeds region voting in the eval harness."""
+
+    def test_single_box(self):
+        from vtscore.eval.labels import region_box_for_category
+
+        media = {"regions": [{"box": [0.1, 0.2, 0.3, 0.4], "label": "apple"}]}
+        assert region_box_for_category(media, "apple") == (0.1, 0.2, 0.3, 0.4)
+
+    def test_multiple_boxes_returns_minimal_cover(self):
+        from vtscore.eval.labels import region_box_for_category
+
+        # Two apples in one image -> the smallest box covering both, not an
+        # arbitrary pick of one.
+        media = {
+            "regions": [
+                {"box": [0.10, 0.20, 0.30, 0.40], "label": "apple"},
+                {"box": [0.50, 0.10, 0.90, 0.60], "label": "apple"},
+                {"box": [0.00, 0.00, 1.00, 1.00], "label": "man"},  # different label, ignored
+            ]
+        }
+        assert region_box_for_category(media, "apple") == (0.10, 0.10, 0.90, 0.60)
+
+    def test_no_regions_returns_none(self):
+        from vtscore.eval.labels import region_box_for_category
+
+        assert region_box_for_category({"category": "apple"}, "apple") is None
+        assert region_box_for_category({"regions": []}, "apple") is None
+
+    def test_no_matching_label_returns_none(self):
+        from vtscore.eval.labels import region_box_for_category
+
+        media = {"regions": [{"box": [0.1, 0.2, 0.3, 0.4], "label": "man"}]}
+        assert region_box_for_category(media, "apple") is None
+
+
+class TestRegionVotingLearnedSort:
+    """eval_learned_sort wires ground-truth boxes into train_and_score."""
+
+    def _make_region_clips(self, n_per_cat=10):
+        """Positive (apple) images carry a ground-truth box; negatives don't."""
+        rng = np.random.RandomState(7)
+        medias = {}
+        media_id = 1
+        for _ in range(n_per_cat):
+            emb = rng.normal(1.0, 0.3, 16).astype(np.float32)
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"dinov3_patch": emb},
+                "category": "apple",
+                "media_type": "image",
+                "regions": [{"box": [0.2, 0.2, 0.6, 0.6], "label": "apple"}],
+            }
+            media_id += 1
+        for _ in range(n_per_cat):
+            emb = rng.normal(-1.0, 0.3, 16).astype(np.float32)
+            medias[media_id] = {
+                "id": media_id,
+                "embeddings": {"dinov3_patch": emb},
+                "category": "other",
+                "media_type": "image",
+            }
+            media_id += 1
+        return medias
+
+    def test_passes_groundtruth_boxes_only_when_region_voting(self):
+        captured: list[dict | None] = []
+
+        def _fake_train_and_score(medias, good, bad, **kwargs):
+            captured.append(kwargs.get("vote_region_boxes"))
+            # Score every media as its embedding's first component (separable).
+            scored = [{"id": cid, "score": 1.0 if medias[cid]["category"] == "apple" else 0.0} for cid in medias]
+            return scored, 0.5, None
+
+        medias = self._make_region_clips()
+        query = [EvalQuery("an apple", "apple")]
+
+        with patch("vtscore.detectors.training.train_and_score", _fake_train_and_score):
+            eval_learned_sort(medias, query, train_fraction=0.5, seed=1, region_voting=True)
+            eval_learned_sort(medias, query, train_fraction=0.5, seed=1, region_voting=False)
+
+        boxes_on, boxes_off = captured
+        # Region voting: every trained Good (apple) media contributes its box.
+        assert boxes_on
+        assert all(b == (0.2, 0.2, 0.6, 0.6) for b in boxes_on.values())
+        # Baseline: no boxes passed at all.
+        assert boxes_off is None

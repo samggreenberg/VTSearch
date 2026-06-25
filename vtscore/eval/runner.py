@@ -114,6 +114,7 @@ def eval_learned_sort(
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     start_time: float | None = None,
+    region_voting: bool = False,
 ) -> list[LearnedSortMetrics]:
     """Run learned-sort evaluation via simulated voting.
 
@@ -139,11 +140,19 @@ def eval_learned_sort(
             calibration in each split (default 0.5).
         start_time: Monotonic timestamp from the start of the eval run.
             When provided, each result records ``elapsed_seconds``.
+        region_voting: When ``True``, each Good vote passes the media's
+            ground-truth region box for the target category to
+            ``train_and_score`` (the minimal box covering every annotated
+            instance), so the positive is region-pooled instead of trained on
+            the whole image.  Requires a patch dataset with stored ``regions``
+            and ``patch_grid``; on any other dataset the boxes are absent and
+            this is a no-op.
 
     Returns:
         List of :class:`LearnedSortMetrics`, one per query.
     """
     from vtscore.detectors.training import train_and_score
+    from vtscore.eval.labels import region_box_for_category
 
     rng = np.random.RandomState(seed)
     results: list[LearnedSortMetrics] = []
@@ -175,6 +184,18 @@ def eval_learned_sort(
         good_votes: dict[int, None] = {cid: None for cid in train_good}
         bad_votes: dict[int, None] = {cid: None for cid in train_bad}
 
+        # When region voting, a Good vote carries the ground-truth box for the
+        # target category (minimal box over all annotated instances); media
+        # without an annotated box are simply omitted and train_and_score falls
+        # back to their whole-image vector.
+        vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None
+        if region_voting:
+            vote_region_boxes = {
+                cid: box
+                for cid in train_good
+                if (box := region_box_for_category(medias[cid], query.target_category)) is not None
+            }
+
         # Run train_and_score
         scored, threshold, _model = train_and_score(
             medias,
@@ -183,6 +204,7 @@ def eval_learned_sort(
             safe_thresholds=safe_thresholds,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
+            vote_region_boxes=vote_region_boxes,
         )
 
         # Evaluate on test set
@@ -220,6 +242,8 @@ def run_eval(
     safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
+    embedder_name: str = "",
+    region_voting: bool = False,
 ) -> list[DatasetResult]:
     """Run evaluation on one or more eval datasets.
 
@@ -242,6 +266,14 @@ def run_eval(
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
             calibration in each split (default 0.5).
+        embedder_name: Optional embedder to build each demo dataset with
+            (empty = the media type's default).  Pass a patch embedder
+            (e.g. ``"dinov3_patch"``) to make ``region_voting`` meaningful -
+            only patch embedders produce the ``patch_grid`` region pooling
+            needs.
+        region_voting: When ``True``, learned-sort Good votes are region-pooled
+            from each media's ground-truth box (see :func:`eval_learned_sort`).
+            Only affects patch datasets with stored ``regions`` (Visual Genome).
 
     Returns:
         List of :class:`DatasetResult`, one per evaluated dataset.
@@ -277,7 +309,7 @@ def run_eval(
         # Load the demo dataset into a fresh medias dict
         medias: dict[int, dict] = {}
         try:
-            load_demo_dataset(demo_id, medias)
+            load_demo_dataset(demo_id, medias, embedder_name=embedder_name)
         except Exception as e:
             print(f"ERROR loading dataset {demo_id}: {e}", file=sys.stderr)
             continue
@@ -318,6 +350,7 @@ def run_eval(
                 calibrate_count=calibrate_count,
                 calibration_fraction=calibration_fraction,
                 start_time=start_time,
+                region_voting=region_voting,
             )
             ds_result.learned_sort = learned_results
 
