@@ -23,12 +23,12 @@ describe('JobProgressComponent', () => {
   });
 
   it('renders the header, detail and eta', async () => {
-    fixture.componentRef.setInput('header', 'Loading dataset · step 2 of 4 · downloading source');
-    fixture.componentRef.setInput('detail', '(012/345) FileABC.img');
+    fixture.componentRef.setInput('header', 'Loading dataset · Step 2 of 4 · Downloading source');
+    fixture.componentRef.setInput('detail', '012/345 FileABC.img');
     fixture.componentRef.setInput('eta', '~5.5 min left');
     await settleZoneless(fixture);
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('downloading source');
+    expect(text).toContain('Downloading source');
     expect(text).toContain('FileABC.img');
     expect(text).toContain('~5.5 min left');
   });

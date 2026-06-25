@@ -179,13 +179,19 @@ export function isProgressIndeterminate(
  * ``[Step 3/4] Loading embedding model…`` is uninformative to users who have
  * no mental model of the load steps. ``formatProgressHeader`` instead returns:
  *
- *   - ``header``: ``"<what> · <phase>"``, e.g. ``"Loading dataset · embedding model"``.
+ *   - ``header``: ``"<What> · <Phase>"``, e.g. ``"Loading dataset · Embedding model"``.
+ *     Each ``·``-separated segment is capitalized so the line reads like a row
+ *     of labels ("Loading dataset · Step 3 of 4 · Embedding files") rather than
+ *     a run-on sentence.
  *   - ``subtitle``: a plain-English one-liner explaining what the phase actually does.
- *   - ``detail``: the original message + ``(current/total)`` counts, with the
- *     redundant ``[Step S/T]`` prefix stripped (the header conveys the phase).
- *     The ETA tail is omitted here; it is returned separately as ``eta`` so the
- *     UI can pin it to the right of the progress bar where it stays visible
- *     even when a long file path ellipsizes the detail.
+ *   - ``detail``: the per-item line — ``current/total`` counts (no parentheses)
+ *     followed by the item identifier, e.g. ``"012/345 cats/img.png"``. The
+ *     leading action verb is stripped because the header already names the phase
+ *     ("· Embedding files"); repeating "Embedding" in the narrow, ellipsized
+ *     detail slot would just eat the characters the filename needs. The ETA tail
+ *     is omitted here; it is returned separately as ``eta`` so the UI can pin it
+ *     to the right of the progress bar where it stays visible even when a long
+ *     file path ellipsizes the detail.
  *   - ``eta``: the bare ``~5.5 min left`` chip, or empty when no estimate is available.
  */
 export interface ProgressHeader {
@@ -227,8 +233,21 @@ function prettifyEmbedder(name: string | undefined): string {
   return EMBEDDER_PRETTY[key] ?? name;
 }
 
-function stripStepPrefix(msg: string): string {
-  return msg.replace(/^\[Step \d+\/\d+\]\s*/, '');
+/**
+ * Strip a leading action verb (a gerund like "Embedding"/"Converting"/"Loading",
+ * optionally "Re-…") from a per-item progress message. The structured header
+ * already names the phase ("· Embedding files"), so the verb is redundant in the
+ * narrow detail slot — dropping it leaves the whole width for the filename, which
+ * is the only part that actually varies per item. ``"Embedding cats/img.png"`` →
+ * ``"cats/img.png"``. A message with no leading gerund is returned unchanged.
+ */
+function stripActionVerb(msg: string): string {
+  return msg.replace(/^(?:re-?)?[a-z]+ing\s+/i, '');
+}
+
+/** Capitalize the first character of a string (leaving the rest untouched). */
+function capitalize(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
 /**
@@ -324,16 +343,25 @@ export function formatProgressHeader(
       : 'Setting up the load pipeline.';
   }
 
-  // Surface the step count in the header ("step 3 of 4") so the user always
+  // Surface the step count in the header ("Step 3 of 4") so the user always
   // knows how many phases the whole job has — per the consolidation brief, the
-  // job count matters more than any single phase's fine detail. The redundant
-  // "[Step S/T]" text is stripped from the detail line below.
+  // job count matters more than any single phase's fine detail. Each segment is
+  // capitalized so the line reads as a row of labels, not a sentence.
   const step = prog.step;
   const totalSteps = prog.total_steps;
   const stepPart =
-    step != null && totalSteps != null && totalSteps > 1 ? `step ${step} of ${totalSteps}` : '';
-  const header = [what, stepPart, phase].filter(Boolean).join(' · ');
-  const detail = stripStepPrefix(formatProgressMessage(progress, '', { includeEta: false }));
+    step != null && totalSteps != null && totalSteps > 1 ? `Step ${step} of ${totalSteps}` : '';
+  const header = [what, stepPart, capitalize(phase)].filter(Boolean).join(' · ');
+
+  // Detail = bare "current/total" (no parentheses — characters are precious in
+  // the narrow, ellipsized slot) + the item identifier with its redundant
+  // leading verb stripped (the header already names the phase).
+  const current = prog.current;
+  const total = prog.total;
+  const counts =
+    current != null && total != null && total > 0 ? formatProgressFraction(current, total) : '';
+  const item = stripActionVerb(message);
+  const detail = [counts, item].filter(Boolean).join(' ');
   const eta = formatEta(prog.eta_seconds);
   return { header, subtitle, detail, eta };
 }
