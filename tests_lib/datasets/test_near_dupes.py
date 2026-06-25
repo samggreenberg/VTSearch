@@ -207,8 +207,7 @@ class TestCollapseNearDuplicates:
         assert md5s == ["A", "A", "B"]
         # No nested dupe_set origins leaked into the member list.
         assert all(
-            not (isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set")
-            for m in members
+            not (isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set") for m in members
         )
 
 

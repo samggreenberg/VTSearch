@@ -166,46 +166,49 @@ def _band_offsets(bands: int, total_bits: int = 64) -> list[tuple[int, int]]:
     return offsets
 
 
-def _connected_components(hashes: dict[int, int], threshold: int) -> list[list[int]]:
-    """Group ids by Hamming-distance closeness of their 64-bit *hashes*.
-
-    Uses the pigeonhole banding trick: two hashes within Hamming distance
-    ``threshold`` must share at least one of ``threshold + 1`` disjoint bands
-    exactly, so we only verify pairs that collide within a band rather than
-    all O(n^2) pairs.  Identical hashes are unioned up front so a giant bucket
-    of duplicates (e.g. all-black thumbnails) doesn't blow up pair checking.
+def _union_exact(dsu: _DSU, hashes: dict[int, int]) -> list[tuple[int, int]]:
+    """Union ids that share an identical hash; return one ``(id, hash)`` per
+    distinct hash value.  Folding exact duplicates up front keeps a giant
+    bucket of identical hashes (e.g. all-black thumbnails) from blowing up the
+    pairwise band check below.
     """
-    cids = list(hashes.keys())
-    dsu = _DSU(cids)
-
     by_exact: dict[int, list[int]] = {}
-    for cid in cids:
-        by_exact.setdefault(hashes[cid], []).append(cid)
+    for cid, h in hashes.items():
+        by_exact.setdefault(h, []).append(cid)
     distinct: list[tuple[int, int]] = []
     for h, grp in by_exact.items():
-        first = grp[0]
         for c in grp[1:]:
-            dsu.union(first, c)
-        distinct.append((first, h))
+            dsu.union(grp[0], c)
+        distinct.append((grp[0], h))
+    return distinct
 
-    bands = threshold + 1
-    for off, width in _band_offsets(bands):
+
+def _union_within_bands(dsu: _DSU, distinct: list[tuple[int, int]], threshold: int) -> None:
+    """Union ``(id, hash)`` pairs within Hamming *threshold* via banding.
+
+    Pigeonhole: two hashes within Hamming distance ``threshold`` must share at
+    least one of ``threshold + 1`` disjoint bands exactly, so we only verify
+    pairs that collide within a band rather than all O(n^2) pairs.
+    """
+    for off, width in _band_offsets(threshold + 1):
         mask = (1 << width) - 1
         buckets: dict[int, list[tuple[int, int]]] = {}
         for cid, h in distinct:
             buckets.setdefault((h >> off) & mask, []).append((cid, h))
         for bucket in buckets.values():
-            if len(bucket) < 2:
-                continue
             for i in range(len(bucket)):
                 ci, hi = bucket[i]
-                for j in range(i + 1, len(bucket)):
-                    cj, hj = bucket[j]
+                for cj, hj in bucket[i + 1 :]:
                     if _hamming(hi, hj) <= threshold:
                         dsu.union(ci, cj)
 
+
+def _connected_components(hashes: dict[int, int], threshold: int) -> list[list[int]]:
+    """Group ids by Hamming-distance closeness of their 64-bit *hashes*."""
+    dsu = _DSU(list(hashes.keys()))
+    _union_within_bands(dsu, _union_exact(dsu, hashes), threshold)
     comps: dict[int, list[int]] = {}
-    for cid in cids:
+    for cid in hashes:
         comps.setdefault(dsu.find(cid), []).append(cid)
     return [sorted(v) for v in comps.values()]
 
@@ -268,6 +271,36 @@ def _choose_representative(media_dict: dict[int, dict[str, Any]], comp: list[int
     return min(comp, key=sort_key)
 
 
+def _find_near_dup_groups(media_dict: dict[int, dict[str, Any]]) -> list[list[int]]:
+    """Return the near-dup groups (size >= 2) across supported media types."""
+    by_type: dict[str, list[int]] = {}
+    for cid, m in media_dict.items():
+        mt = m.get("media_type")
+        if mt in _THRESHOLDS:
+            by_type.setdefault(mt, []).append(cid)
+
+    groups: list[list[int]] = []
+    for mt, cids in by_type.items():
+        hashes = {cid: h for cid in cids if (h := _hash_for(media_dict[cid], mt)) is not None}
+        groups.extend(comp for comp in _connected_components(hashes, _THRESHOLDS[mt]) if len(comp) >= 2)
+    return groups
+
+
+def _collapse_group(media_dict: dict[int, dict[str, Any]], comp: list[int]) -> None:
+    """Collapse one near-dup group into a ``dupe_set`` representative."""
+    rep_id = _choose_representative(media_dict, comp)
+    members: list[dict[str, Any]] = []
+    for cid in [rep_id, *(c for c in comp if c != rep_id)]:
+        members.extend(_members_of(media_dict[cid]))
+    rep = media_dict[rep_id]
+    first_name = rep.get("origin_name", rep.get("filename", ""))
+    rep["origin"] = {"importer": "dupe_set", "params": {"name": first_name}, "members": members}
+    rep["origin_name"] = first_name
+    for cid in comp:
+        if cid != rep_id:
+            del media_dict[cid]
+
+
 def collapse_near_duplicates(
     media_dict: dict[int, dict[str, Any]],
     on_progress: Callable[[int, int], None] | None = None,
@@ -284,44 +317,12 @@ def collapse_near_duplicates(
     Only ``image`` and ``text`` media are considered; other types are left
     untouched.  Returns the number of near-dup groups collapsed.
     """
-    by_type: dict[str, list[int]] = {}
-    for cid, m in media_dict.items():
-        mt = m.get("media_type")
-        if mt in _THRESHOLDS:
-            by_type.setdefault(mt, []).append(cid)
-
-    groups: list[list[int]] = []
-    for mt, cids in by_type.items():
-        hashes: dict[int, int] = {}
-        for cid in cids:
-            h = _hash_for(media_dict[cid], mt)
-            if h is not None:
-                hashes[cid] = h
-        for comp in _connected_components(hashes, _THRESHOLDS[mt]):
-            if len(comp) >= 2:
-                groups.append(comp)
-
+    groups = _find_near_dup_groups(media_dict)
     total = len(groups)
     for idx, comp in enumerate(groups):
         if on_progress and idx % 50 == 0:
             on_progress(idx, total)
-        rep_id = _choose_representative(media_dict, comp)
-        ordered = [rep_id] + [c for c in comp if c != rep_id]
-        members: list[dict[str, Any]] = []
-        for cid in ordered:
-            members.extend(_members_of(media_dict[cid]))
-        rep = media_dict[rep_id]
-        first_name = rep.get("origin_name", rep.get("filename", ""))
-        rep["origin"] = {
-            "importer": "dupe_set",
-            "params": {"name": first_name},
-            "members": members,
-        }
-        rep["origin_name"] = first_name
-        for cid in comp:
-            if cid != rep_id:
-                del media_dict[cid]
-
+        _collapse_group(media_dict, comp)
     if on_progress:
         on_progress(total, total)
     return total
