@@ -19,7 +19,7 @@
         <input type="checkbox" [ngModel]="d.autofind" (ngModelChange)="toggleDetector(d, $event)" />
         {{ d.name }}
         @if (d.media_type) {
-          <span class="detector-type">{{ d.media_type }}</span>
+          <span class="detector-type">{{ d.media_type | titlecase }}</span>
         }
       </label>
     }

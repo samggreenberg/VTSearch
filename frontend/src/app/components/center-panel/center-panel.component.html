@@ -91,7 +91,7 @@
           </div>
           <div class="metadata-item">
             <span class="metadata-label">Media Type</span>
-            <span class="metadata-value">{{ mediaType }}</span>
+            <span class="metadata-value">{{ mediaType | titlecase }}</span>
           </div>
           @for (entry of customMetadata | keyvalue; track entry.key) {
             <div class="metadata-item">

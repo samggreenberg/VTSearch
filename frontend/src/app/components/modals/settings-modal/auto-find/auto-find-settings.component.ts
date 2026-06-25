@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, input, OnChanges, OnDestroy, OnInit, output, SimpleChanges } from '@angular/core';
+import { TitleCasePipe } from '@angular/common';
 
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
@@ -45,7 +46,7 @@ export interface AutoFindExporterChange {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-auto-find-settings',
   standalone: true,
-  imports: [FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent, TitleCasePipe],
   templateUrl: './auto-find-settings.component.html',
   styleUrl: './auto-find-settings.component.scss',
 })
